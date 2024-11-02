@@ -1,0 +1,9 @@
+.DS_Store
+
+/game-wrapper/dist
+/game-wrapper/build
+/second-chance-app/dist
+/second-chance-app/build
+/installers
+/built-apps
+/tmp
