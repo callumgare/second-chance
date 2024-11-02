@@ -21,12 +21,12 @@ stay_tuned__game_engine_to_use='scummvm'
 haunted_mansion__game_title="Message in a Haunted Mansion"
 haunted_mansion__disk_count=1
 haunted_mansion__game_engine_to_use='scummvm'
-haunted_mansion__has_steam_drm="false"
+haunted_mansion__steam_drm="no"
 
 royal_tower__game_title="Treasure in the Royal Tower"
 royal_tower__disk_count=1
 royal_tower__game_engine_to_use='scummvm'
-royal_tower__has_steam_drm="false"
+royal_tower__steam_drm="no"
 
 final_scene__game_title="The Final Scene"
 final_scene__disk_count=1
@@ -43,7 +43,7 @@ ghost_dogs__game_title="Ghost Dogs of Moon Lake"
 ghost_dogs__disk_count=1
 ghost_dogs__use_autoit_for_install='true'
 ghost_dogs__internal_game_exe_path='/Program Files (x86)/Nancy Drew/Ghost Dogs of Moon Lake/Game.exe'
-ghost_dogs__has_steam_drm="true"
+ghost_dogs__steam_drm="yes-launch-when-steam-running"
 
 haunted_carousel__game_title="The Haunted Carousel"
 haunted_carousel__disk_count="1"
@@ -59,24 +59,24 @@ shadow_ranch__game_title="The Secret of Shadow Ranch"
 shadow_ranch__disk_count=1
 shadow_ranch__use_autoit_for_install='true'
 shadow_ranch__internal_game_exe_path='/Nancy Drew/Secret of Shadow Ranch/Game.exe'
-shadow_ranch__has_steam_drm="false"
+shadow_ranch__steam_drm="no"
 
 blackmoor_manor__game_title="Curse of Blackmoor Manor"
 blackmoor_manor__disk_count="1"
 blackmoor_manor__use_autoit_for_install='true'
-blackmoor_manor__has_steam_drm="true"
+blackmoor_manor__steam_drm="yes-launch-when-steam-running"
 blackmoor_manor__internal_game_exe_path="/Nancy Drew/The Curse of Blackmoor Manor/Game.exe"
 
 old_clock__game_title="Secret of the Old Clock"
 old_clock__disk_count="1"
 old_clock__use_autoit_for_install='true'
 old_clock__internal_game_exe_path="/Nancy Drew/Secret of the Old Clock/Game.exe"
-old_clock__has_steam_drm="false"
+old_clock__steam_drm="no"
 
 blue_moon__game_title="Last Train to Blue Moon Canyon"
 blue_moon__disk_count=2
 blue_moon__internal_game_exe_path='/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon/Game.exe'
-blue_moon__has_steam_drm="true"
+blue_moon__steam_drm="yes-launch-when-steam-running"
 
 danger_by_design__game_title="Danger by Design"
 danger_by_design__disk_count="2"
@@ -109,7 +109,7 @@ seven_ships__internal_game_exe_path="/Program Files (x86)/Nancy Drew/Ransom of t
 waverly_academy__game_title="Warnings at Waverly Academy"
 waverly_academy__disk_count="2"
 waverly_academy__internal_game_exe_path="/Program Files (x86)/Nancy Drew/Warnings at Waverly Academy/Waverly.exe"
-waverly_academy__has_steam_drm="true"
+waverly_academy__steam_drm="yes-launch-when-steam-running"
 
 trail_of_the_twister__game_title="Trail of the Twister"
 trail_of_the_twister__disk_count="2"
@@ -118,7 +118,7 @@ trail_of_the_twister__internal_game_exe_path="/Program Files (x86)/Nancy Drew/Tr
 waters_edge__game_title="Shadow at the Water's Edge"
 waters_edge__disk_count="2"
 waters_edge__internal_game_exe_path="/Program Files (x86)/Nancy Drew/Shadow at the Water's Edge/Shadow.exe"
-waters_edge____has_steam_drm="true"
+waters_edge____steam_drm="yes-launch-when-steam-running"
 
 captive_curse__game_title="The Captive Curse"
 captive_curse__disk_count="1"
@@ -139,6 +139,7 @@ deadly_device__internal_game_exe_path="/Program Files (x86)/Her Interactive/The 
 thornton_hall__game_title="Ghost of Thornton Hall"
 thornton_hall__disk_count="1"
 thornton_hall__internal_game_exe_path="/Program Files (x86)/Her Interactive/Ghost of Thornton Hall/Thornton.exe"
+thornton_hall__steam_drm="yes-launch-via-steam-only"
 
 silent_spy__game_title="The Silent Spy"
 silent_spy__disk_count="1"

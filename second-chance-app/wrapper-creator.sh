@@ -330,6 +330,8 @@ main () {
             install_winetrick steam
             save_cached_wrapper_if_requested "steam-client-installed"
         fi
+            
+        steam_common_apps_path="$tmp_wrapper_drive_c_path/Program Files (x86)/Steam/steamapps/common"
         
         # For some weird reason steam often won't full download a game if esync/msync is enabled
         # See: https://www.reddit.com/r/macgaming/comments/187ntsl/cannot_download_steam_games_on_either_crossover/
@@ -388,7 +390,7 @@ main () {
                 run_with_wine "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" || echo "Installer returned with non-zero exit code: $?" >&2
             
                 # Locate game exe after install
-                installed_steam_apps_path="$tmp_wrapper_drive_c_path/Program Files (x86)/Steam/steamapps/common"
+                installed_steam_apps_path="$steam_common_apps_path"
                 exe_paths_after_install="$(
                     [ -e "$installed_steam_apps_path" ] && find "$installed_steam_apps_path" -iname '*.exe' || echo ""
                 )"
@@ -427,19 +429,31 @@ main () {
         
         game_slug=$(detect_game_slug "steam" "$game_exe_path")
         echo "Detected game slug: $game_slug"
+        
+        game_dir_name=$(echo "${game_exe_path#"$steam_common_apps_path"}" | awk -F'/' '{print $2}')
+        steam_id=$(
+            grep "\\$game_dir_name" "$tmp_wrapper_drive_c_path/Program Files (x86)/Steam/logs/content_log.txt" \
+                | sed -E 's/.*AppID ([0-9]+) .*/\1/'
+        )
+        
+        echo "Detected Steam ID: $steam_id"
 
         has_steam_drm="$(get_game_info "$game_slug" "has_steam_drm")"
-        if [ "$has_steam_drm" == "true" ]; then
+        if [ "$has_steam_drm" == "yes-launch-when-steam-running" ]; then
             # If we're sure the game does have drm then we need to start steam to run the game which
             # we start in silent mode. If the game doesn't have drm but we were to try and run steam
             # in silent mode anyway the game won't start properly (not sure why, seems like a weird 
             # steam bug)
             game_engine="wine-steam-silent"
-        elif [ "$has_steam_drm" == "false" ]; then
+        elif [ "$has_steam_drm" == "no" ]; then
             # If we're sure the game doesn't have drm then we don't need bother start steam and can 
             # run directly (if it has drm running it directly will fail)
             game_engine="wine"
         else
+            if [ -z "$steam_id" ]; then
+                echo "Error: Could not detect Steam ID for the game." >&2
+                exit 1
+            fi
             # Starting steam not in silent mode is the safest bet if we don't know the drm status
             # since this method will work for both drm and non-drm games.
             game_engine=wine-steam
@@ -472,7 +486,10 @@ main () {
     plutil -replace "GameExePath" -string "$game_exe_internal_path" "$tmp_wrapper_setting_plist_path"
     plutil -replace "GameInstallerDir" -string "$(remove_prefix "$primary_install_disk_dir" "$tmp_wrapper_drive_c_path")" "$tmp_wrapper_setting_plist_path"
     plutil -replace "GameEngine" -string "$game_engine" "$tmp_wrapper_setting_plist_path"
-    plutil -replace "ScummVMGameId" -string "$(get_game_info "$game_slug" "scummvm_game_id")" "$tmp_wrapper_setting_plist_path"
+    
+    if [ -n "$steam_id" ]; then
+        plutil -replace "SteamGameId" -string "$steam_id" "$tmp_wrapper_setting_plist_path"
+    fi
 
     new_wrapper_bundle_id="$(plutil -extract "CFBundleIdentifier" raw "$tmp_wrapper_info_plist_path").$game_slug"
     new_wrapper_bundle_id_randomised="$new_wrapper_bundle_id.$((RANDOM % 100000))"
@@ -516,9 +533,11 @@ main () {
     # Sign app
     ##########################################
     # App must be fully signed for microphone access to be granted which is required by steam
-    codesign --remove-signature "$tmp_wrapper_path"
-    find "$tmp_wrapper_path/Contents/Frameworks" -type f -exec codesign -s - '{}' ';'
-    codesign -s - "$tmp_wrapper_path"
+    if which -s codesign; then
+        codesign --remove-signature "$tmp_wrapper_path"
+        find "$tmp_wrapper_path/Contents/Frameworks" -type f -exec codesign -s - '{}' ';'
+        codesign -s - "$tmp_wrapper_path"
+    fi
     
     ##########################################
     # Move wrapper to save location

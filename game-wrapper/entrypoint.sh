@@ -16,6 +16,7 @@ winePrefix="$app_path/Contents/SharedSupport/prefix"
 game_exe_path="$winePrefix/drive_c$(plutil -extract "GameExePath" raw "$setting_plist_path")"
 game_installer_dir="$winePrefix/drive_c$(plutil -extract "GameInstallerDir" raw "$setting_plist_path")"
 game_engine=$(plutil -extract "GameEngine" raw "$setting_plist_path")
+steam_game_id=$(plutil -extract "SteamGameId" raw "$setting_plist_path")
 bundle_id_for_game_title=$(plutil -extract "CFBundleIdentifierForGameTitle" raw "$info_plist_path")
 
 # shellcheck source=../shared/wine-lib.sh
@@ -105,7 +106,9 @@ main() {
         
         # May or may not launch steam depending on if game title includes DRM. If it starts steam the initial process will quit which will make the wine command end. We want to wait until all processes including the newly started steam process to end before we continue executing so we stop the wine server first so that it is implicitly started and will remain running until all wine processes have ended.
         stop_wine_server "$app_path"
-        run_with_wine "$app_path" "$game_exe_path"
+        run_with_wine "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' \
+            "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' \
+            "steam://rungameid/$steam_game_id"
             
         # Remove stdout and stderr redirect
         exec 1>&3 2>&4
