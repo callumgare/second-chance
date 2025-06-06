@@ -59,7 +59,7 @@ download_exiftool() {
 
     echo "Downloading exiftool"
     if ! [ -e "$compressed_exiftool_path" ]; then
-        curl -L "$exiftool_url" -o "$compressed_exiftool_path.tmp"
+        curl -fL "$exiftool_url" -o "$compressed_exiftool_path.tmp"
         mv "$compressed_exiftool_path.tmp" "$compressed_exiftool_path"
     fi
 

@@ -4,11 +4,6 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-
-# if [ "$debug_mode" == "true" ]; then
-#     set -x
-# fi
-
 script_dir=$(dirname "$(readlink -f "$0")")
 
 
@@ -47,6 +42,7 @@ tmp_wrapper_info_plist_path="$tmp_wrapper_path/Contents/Info.plist"
 
 install_action="${install_action:-}"
 possible_disk_1_path="${disk_1_path:-}"
+possible_installer_path="${installer_path:-}"
 disk_2_path="${disk_2_path:-}"
 dev_installer_answer_files_dir="${dev_installer_answer_files_dir:-}"
 dev_lower_case_fingerprints_info_path="${dev_game_titles_info_path:-}"
@@ -59,6 +55,11 @@ dev_unmount_source_disks="${dev_unmount_source_disks:-}"
 
 primary_install_disk_dir="$tmp_wrapper_disk_1_destination_path"
 
+if [ "$debug_mode" == "true" ]; then
+    set -x
+fi
+
+
 # shellcheck source=./support.sh
 source "$script_dir/support.sh"
 
@@ -66,6 +67,7 @@ main () {
     set -Eeuo pipefail
     local game_exe_path=""
     local game_engine=""
+    local steam_id=""
     
     echo "PROGRESS:0" >&4
     if [ "$debug_mode" != "true" ]; then
@@ -76,126 +78,162 @@ main () {
     if [ -z "$install_action" ]; then
         install_action_button=$(
             show_button_select_dialog \
-                'Welcome Detective!'$'\n\n'$'Second Chance allows you to run Nancy Drew games on a Mac. Before we begin you will need to own a copy of the Nancy Drew game that you would like to play. This can be via the original game CDs or from Steam. Which would you like to use to install the game?' \
-                'cancel button "Cancel"' \
-                "Cancel" "Steam" "Game Disk(s)"
+                'Welcome Detective!'$'\n\n'$'Second Chance allows you to play the Nancy Drew games on a Mac. It can install the game from either the original game CDs, Steam, or a windows game installer purchased from Her Interactive website. Which would you like to use?sss' \
+                '' \
+                "Game Disk(s)" "Steam" "Her Download"
         )
         if [ "$install_action_button" == "Game Disk(s)" ]; then
             install_action="disk"
         elif [ "$install_action_button" == "Steam" ]; then
             install_action="steam"
+        elif [ "$install_action_button" == "Her Download" ]; then
+            install_action="her-download"
+        else
+            echo "Unknown install type: $install_action_button" >&2
+            false
         fi
     fi
     echo "Using install action: $install_action"
 
-    if [ "$install_action" == "disk" ]; then
+    if [ "$install_action" == "disk" ] || [ "$install_action" == "her-download" ]; then
         setup_progress_indicator 7
         
         update_progress_indicator "Gathering info..."
 
-        ##########################################
-        # Get first disk location and detect game title
-        ##########################################
-        disk_1_path=""
-        while [ -z "$disk_1_path" ]; do
-            if [ -z "$possible_disk_1_path" ]; then
-                possible_disk_1_path=$(
-                    show_folder_selection_dialog \
-                        "Please select the installer disk (disk 1 if there are multiple):" \
-                        'default location "/Volumes"'
-                )
-            fi
-            path_is_install_disk "$possible_disk_1_path"
-            if [ "$(path_is_install_disk "$possible_disk_1_path")" != "true" ]; then
-                action=$(
-                    show_button_select_dialog \
-                        "The selected folder does not appear to be a valid game disk. Please try again." \
-                        'default button "Try Again" cancel button "Cancel"' \
-                        "Cancel" "Use Anyway" "Try Again" 
-                )
-                if [ "$action" == "Try Again" ]; then
-                    continue
-                fi
-            fi
-            disk_1_path="$possible_disk_1_path"
-        done
-        
-        # Attempt to gather the game info before we copy in the game installer so that we know if
-        # there are any issues detecting the game info as soon as possible in the process.
-        echo "Detecting game title..."
-        game_slug=$(detect_game_slug "disk" "$disk_1_path")
-        echo "Detected game: $game_slug"
-        
-        disk_count=$(get_game_info "$game_slug" "disk_count")
-        echo "Detected disk count: $disk_count"
-        
-        game_engine=$(get_game_info "$game_slug" "game_engine_to_use" "wine")
-        echo "Detected game engine: $game_engine"
-        
-        update_progress_indicator "Setting up wrapper"
-        cached_wrapper_game_title=""
-        if ! attempt_to_restore_cached_wrapper "game-installer-copied" "base"; then
+        if [ "$install_action" == "disk" ]; then
             ##########################################
-            # Create empty wrapper
+            # Get first disk location and detect game title
             ##########################################
-            setup_base_wrapper_app
-            save_cached_wrapper_if_requested "base"
-        fi
-        
-        update_progress_indicator "Copying in game installer"
-        if ! is_wrapper_cache_in_use "game-installer-copied"; then
-            ##########################################
-            # Copy in disks
-            ##########################################
-            mkdir -p "$tmp_wrapper_disk_1_destination_path"
-            rsync -rltDv "$disk_1_path" "$tmp_wrapper_disk_1_destination_path"
-    
-            if ! [[ $disk_count =~ ^[0-9]+$ ]]; then
-                response=$(
-                    show_button_select_dialog \
-                        "Could not detect the number of installation disks. Is there a second disk?" \
-                        'cancel button "Cancel"' \
-                        "Cancel" "Yes" "No"
-                )
-                if [ "$response" == "Yes" ]; then
-                    disk_count=2
-                else
-                    disk_count=1
-                fi
-                save_game_info_if_dev_run "$game_slug" "disk_count" "$disk_count"
-            fi
-        
-            if [ "$disk_count" -ge 2 ]; then
-                if [ -z "$disk_2_path" ]; then
-                    disk_2_path=$(
+            disk_1_path=""
+            while [ -z "$disk_1_path" ]; do
+                if [ -z "$possible_disk_1_path" ]; then
+                    possible_disk_1_path=$(
                         show_folder_selection_dialog \
-                            "Please select the second disk:" \
+                            "Please select the installer disk (disk 1 if there are multiple):" \
                             'default location "/Volumes"'
                     )
                 fi
-                mkdir -p "$tmp_wrapper_disk_2_destination_path"
-                rsync -rltDv "$disk_2_path" "$tmp_wrapper_disk_2_destination_path"
-                
-                # Create combined disk folder
-                mkdir -p "$tmp_wrapper_disk_combined_destination_path"
-                # Create symlinks to each file in disk_1
-                # set current working dir to disk so that find outputs relative paths to ensure
-                # the symlinks are relative
-                pushd "$tmp_wrapper_disk_1_destination_path"
-                find . -maxdepth 1 -exec ln -s "../disk-1/{}" "$tmp_wrapper_disk_combined_destination_path" \;
-                popd
-                pushd "$tmp_wrapper_disk_2_destination_path" 
-                find . -maxdepth 1 -exec ln -s "../disk-2/{}" "$tmp_wrapper_disk_combined_destination_path" \;
-                popd
-                primary_install_disk_dir="$tmp_wrapper_disk_combined_destination_path"
+                path_is_install_disk "$possible_disk_1_path"
+                if [ "$(path_is_install_disk "$possible_disk_1_path")" != "true" ]; then
+                    action=$(
+                        show_button_select_dialog \
+                            "The selected folder does not appear to be a valid game disk. Please try again." \
+                            'default button "Try Again" cancel button "Cancel"' \
+                            "Cancel" "Use Anyway" "Try Again" 
+                    )
+                    if [ "$action" == "Try Again" ]; then
+                        continue
+                    fi
+                fi
+                disk_1_path="$possible_disk_1_path"
+            done
+            
+            # Attempt to gather the game info before we copy in the game installer so that we know if
+            # there are any issues detecting the game info as soon as possible in the process.
+            echo "Detecting game title..."
+            game_slug=$(detect_game_slug "disk" "$disk_1_path")
+            echo "Detected game: $game_slug"
+            
+            disk_count=$(get_game_info "$game_slug" "disk_count")
+            echo "Detected disk count: $disk_count"
+            
+            game_engine=$(get_game_info "$game_slug" "game_engine_to_use" "wine")
+            echo "Detected game engine: $game_engine"
+            
+            update_progress_indicator "Setting up wrapper"
+            cached_wrapper_game_title=""
+            if ! attempt_to_restore_cached_wrapper "game-installer-copied" "base"; then
+                ##########################################
+                # Create empty wrapper
+                ##########################################
+                setup_base_wrapper_app
+                save_cached_wrapper_if_requested "base"
             fi
             
-            save_cached_wrapper_if_requested "game-installer-copied" "cached_wrapper_game_title=\"$game_slug\""
-        else
-            if [ "$game_slug" != "$cached_wrapper_game_title" ]; then
-                show_alert \
-                    "The game title detected does not match the game title of the cached wrapper. Either use the  same disks as cached in the wrapper or delete the cache."
-                exit 1
+            update_progress_indicator "Copying in game installer"
+            if ! is_wrapper_cache_in_use "game-installer-copied"; then
+                ##########################################
+                # Copy in disks
+                ##########################################
+                mkdir -p "$tmp_wrapper_disk_1_destination_path"
+                rsync -rltDv "$disk_1_path" "$tmp_wrapper_disk_1_destination_path"
+        
+                if ! [[ $disk_count =~ ^[0-9]+$ ]]; then
+                    response=$(
+                        show_button_select_dialog \
+                            "Could not detect the number of installation disks. Is there a second disk?" \
+                            'cancel button "Cancel"' \
+                            "Cancel" "Yes" "No"
+                    )
+                    if [ "$response" == "Yes" ]; then
+                        disk_count=2
+                    else
+                        disk_count=1
+                    fi
+                    save_game_info_if_dev_run "$game_slug" "disk_count" "$disk_count"
+                fi
+            
+                if [ "$disk_count" -ge 2 ]; then
+                    if [ -z "$disk_2_path" ]; then
+                        disk_2_path=$(
+                            show_folder_selection_dialog \
+                                "Please select the second disk:" \
+                                'default location "/Volumes"'
+                        )
+                    fi
+                    mkdir -p "$tmp_wrapper_disk_2_destination_path"
+                    rsync -rltDv "$disk_2_path" "$tmp_wrapper_disk_2_destination_path"
+                    
+                    # Create combined disk folder
+                    mkdir -p "$tmp_wrapper_disk_combined_destination_path"
+                    # Create symlinks to each file in disk_1
+                    # set current working dir to disk so that find outputs relative paths to ensure
+                    # the symlinks are relative
+                    pushd "$tmp_wrapper_disk_1_destination_path"
+                    find . -maxdepth 1 -exec ln -s "../disk-1/{}" "$tmp_wrapper_disk_combined_destination_path" \;
+                    popd
+                    pushd "$tmp_wrapper_disk_2_destination_path" 
+                    find . -maxdepth 1 -exec ln -s "../disk-2/{}" "$tmp_wrapper_disk_combined_destination_path" \;
+                    popd
+                    primary_install_disk_dir="$tmp_wrapper_disk_combined_destination_path"
+                fi
+                
+                save_cached_wrapper_if_requested "game-installer-copied" "cached_wrapper_game_title=\"$game_slug\""
+            else
+                if [ "$game_slug" != "$cached_wrapper_game_title" ]; then
+                    show_alert \
+                        "The game title detected does not match the game title of the cached wrapper. Either use the  same disks as cached in the wrapper or delete the cache."
+                    exit 1
+                fi
+            fi
+        elif [ "$install_action" == "her-download" ]; then
+            ##########################################
+            # Get installer location and detect game title
+            ##########################################
+            if [ -z "$possible_installer_path" ]; then
+                possible_installer_path=$(
+                    show_file_selection_dialog \
+                        "Please select the windows game installer you downloaded from the Her Interactive website:" \
+                        'of type {"com.microsoft.windows-executable"}'
+                )
+            fi
+            local installer_path="$possible_installer_path"
+            
+            echo "Detecting game title..."
+            game_slug=$(detect_game_slug "$install_action" "$installer_path")
+            echo "Detected game: $game_slug"
+            
+            game_engine=$(get_game_info "$game_slug" "game_engine_to_use" "wine")
+            echo "Detected game engine: $game_engine"
+            
+            update_progress_indicator "Setting up wrapper"
+            cached_wrapper_game_title=""
+            if ! attempt_to_restore_cached_wrapper "game-installer-copied" "base"; then
+                ##########################################
+                # Create empty wrapper
+                ##########################################
+                setup_base_wrapper_app
+                save_cached_wrapper_if_requested "base"
             fi
         fi
 
@@ -212,30 +250,34 @@ main () {
         if [ "$game_engine" == "scummvm" ]; then
             install_scummvm
         elif [ "$game_engine" == "wine" ]; then
-            echo "Disk count: $disk_count"
-            # Set register disk dirs as CD drives
-            for ((i = 1; i <= disk_count; i++)); do
-                echo "Setting up install disk-$i dir as CD drive"
-                # shellcheck disable=SC2004 # Seems to be shellcheck misunderstanding the situation
-                set -x
-                letter=$(get_letter_from_number "$(($i + 3))") # Start at "d:"
-                mount_dir_into_wine_env "$tmp_wrapper_path" "../drive_c/nancy-drew-installer/disk-$i" "$letter" "cdrom"
-                set +x
-            done
+            if [ "$install_action" == "disk" ]; then
+                echo "Disk count: $disk_count"
+                # Set register disk dirs as CD drives
+                for ((i = 1; i <= disk_count; i++)); do
+                    echo "Setting up install disk-$i dir as CD drive"
+                    # shellcheck disable=SC2004 # Seems to be shellcheck misunderstanding the situation
+                    set -x
+                    letter=$(get_letter_from_number "$(($i + 3))") # Start at "d:"
+                    mount_dir_into_wine_env "$tmp_wrapper_path" "../drive_c/nancy-drew-installer/disk-$i" "$letter" "cdrom"
+                    set +x
+                done
+            fi
         fi
         
         ##########################################
         # Run game installer if running with wine
         ##########################################
-        possible_setup_iss_path="$script_dir/../Resources/installer-answer-files/$game_slug.iss"
-        if [ -e "$possible_setup_iss_path" ]; then
-            cp "$possible_setup_iss_path" "$tmp_wrapper_setup_iss_path"
-        fi
-        
-        if [ "$(get_game_info "$game_slug" "use_autoit_for_install")" == "true" ]; then
-            cp -ac "$script_dir/../Resources/autoit" \
-                "$script_dir/../Resources/installshield-custom-dialog-automate.au3" \
-                "$tmp_wrapper_drive_c_path"
+        if [ "$install_action" == "disk" ]; then
+            possible_setup_iss_path="$script_dir/../Resources/installer-answer-files/$game_slug.iss"
+            if [ -e "$possible_setup_iss_path" ]; then
+                cp "$possible_setup_iss_path" "$tmp_wrapper_setup_iss_path"
+            fi
+            
+            if [ "$(get_game_info "$game_slug" "use_autoit_for_install")" == "true" ]; then
+                cp -ac "$script_dir/../Resources/autoit" \
+                    "$script_dir/../Resources/installshield-custom-dialog-automate.au3" \
+                    "$tmp_wrapper_drive_c_path"
+            fi
         fi
         
         exe_paths_before_install="$(find "$tmp_wrapper_drive_c_path" -iname '*.exe')"
@@ -250,7 +292,9 @@ main () {
         # Repeatedly attempt to run installer until game exe is found
         update_progress_indicator "Game installing"
         while [ "$game_engine" == "wine" ] && ! [ -f "$game_exe_path" ]; do
-            installer_path=$(get_installer_path "$game_slug" "$primary_install_disk_dir")
+            if [ "$install_action" == "disk" ]; then
+                installer_path=$(get_installer_path "$game_slug" "$primary_install_disk_dir")
+            fi
             
             if [ "$(is_silent_install "$installer_path" "$install_count" "$tmp_wrapper_setup_iss_path")" == "false" ]; then
                 echo "Showing install info"
@@ -271,6 +315,7 @@ main () {
             
             
             get_installer_args \
+                "$tmp_wrapper_path" \
                 "$installer_path" \
                 "$install_count" \
                 "$tmp_wrapper_setup_iss_path"
@@ -327,6 +372,7 @@ main () {
         fi
         
         if ! is_wrapper_cache_in_use "steam-game-installed" "steam-client-setup" "steam-client-installed"; then
+            stop_wine_server "$tmp_wrapper_path" # The winetricks steam script requires the wine server to not be running.
             install_winetrick steam
             save_cached_wrapper_if_requested "steam-client-installed"
         fi
@@ -356,7 +402,7 @@ main () {
                         'default button "I Understand" cancel button "Cancel"' \
                         "Cancel" "I Understand"
                     # https://web.archive.org/web/20240629222839/https://github.com/Gcenx/WineskinServer/wiki#steam
-                    run_with_wine "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" || echo "Installer returned with non-zero exit code: $?" >&2
+                    run_with_wine_start "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" || echo "Installer returned with non-zero exit code: $?" >&2
                     date
                     echo "Steam has closed"
                 done;
@@ -387,7 +433,7 @@ main () {
             game_exe_path=""
             while [ -z "$game_exe_path" ]; do
                 # https://web.archive.org/web/20240629222839/https://github.com/Gcenx/WineskinServer/wiki#steam
-                run_with_wine "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" || echo "Installer returned with non-zero exit code: $?" >&2
+                run_with_wine_start "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" || echo "Installer returned with non-zero exit code: $?" >&2
             
                 # Locate game exe after install
                 installed_steam_apps_path="$steam_common_apps_path"
@@ -477,7 +523,7 @@ main () {
     find "$(dirname "$game_exe_path")" -iname "*.ini" -maxdepth 1 -exec sed -i '' 's/WindowMode=0/WindowMode=2/g' '{}' ';'
     
     # Set game to save in Documents folder
-    find "$(dirname "$game_exe_path")" -iname "*.ini" -maxdepth 1 -exec sed -i '' 's|LoadSavePath=.*|LoadSavePath=\\users\\wine\\Documents|g' '{}' ';'
+    find "$(dirname "$game_exe_path")" -iname "*.ini" -maxdepth 1 -exec sed -i '' 's|LoadSavePath=.*|LoadSavePath=\\users\\'"$wine_user_name"'\\Documents|g' '{}' ';'
 
     game_exe_internal_path="${game_exe_path#"$tmp_wrapper_drive_c_path"}"
 
@@ -487,9 +533,7 @@ main () {
     plutil -replace "GameInstallerDir" -string "$(remove_prefix "$primary_install_disk_dir" "$tmp_wrapper_drive_c_path")" "$tmp_wrapper_setting_plist_path"
     plutil -replace "GameEngine" -string "$game_engine" "$tmp_wrapper_setting_plist_path"
     
-    if [ -n "$steam_id" ]; then
-        plutil -replace "SteamGameId" -string "$steam_id" "$tmp_wrapper_setting_plist_path"
-    fi
+    plutil -replace "SteamGameId" -string "$steam_id" "$tmp_wrapper_setting_plist_path"
 
     new_wrapper_bundle_id="$(plutil -extract "CFBundleIdentifier" raw "$tmp_wrapper_info_plist_path").$game_slug"
     new_wrapper_bundle_id_randomised="$new_wrapper_bundle_id.$((RANDOM % 100000))"
@@ -536,6 +580,7 @@ main () {
     if which -s codesign; then
         codesign --remove-signature "$tmp_wrapper_path"
         find "$tmp_wrapper_path/Contents/Frameworks" -type f -exec codesign -s - '{}' ';'
+        find "$tmp_wrapper_path" -name '.DS_Store' -exec rm '{}' ';'
         codesign -s - "$tmp_wrapper_path"
     fi
     
@@ -602,16 +647,18 @@ get_install_instructions () {
     install_instructions=$(
         get_game_info "$game_slug" "install_instructions" "$(get_game_info "unknown" "install_instructions")"
     )
-    echo "To successfully install the game you must follow these instructions once the installer has started:"
+    echo "When the game installer appears follow these instructions:"
     echo ""
     echo "$install_instructions"
+    echo ""
+    echo "- Untick the option to play the game after installation is complete."
     echo ""
     echo "If you get lost at any point simply cancel the install and the above instructions will be shown again."
 }
 
 get_failed_install_info () {
     game_slug=$1
-    echo "Error: installed game could not be found."
+    echo "Unfortunately something when wrong when trying to install the game. We're going to try again."
     get_game_info "$game_slug" "failed_install_info"
 }
 
@@ -636,7 +683,8 @@ install_winetrick () {
     local winetricks_path="$script_dir/../Resources/winetricks"
     
     echo "Installing winetrick $winetrick_name"
-    run_with_wine_env_vars "$tmp_wrapper_path" "$winetricks_path" --unattended "$winetrick_name"
+    run_with_wine_env_vars "$tmp_wrapper_path" "$winetricks_path" --unattended "$winetrick_name" || \
+        { exit_code=$?; echo "Winetrick $winetrick_name returned with non-zero exit code: $exit_code" >&2; exit $exit_code; }
 }
 
 setup_base_wrapper_app () {
@@ -652,14 +700,17 @@ setup_base_wrapper_app () {
     install_winetrick cnc_ddraw
     sed -I '' 's/maintas=false/maintas=true/g' "$tmp_wrapper_path/Contents/SharedSupport/prefix/drive_c/windows/syswow64/ddraw.ini"
 
-    install_winetrick sandbox
-    # sandbox only removes the main host system drive and symlinks to that drive that are added to drive_c
-    # so we remove all non c drive drives
+    # "sandbox" only removes the main host system drive mount and symlinks to that drive that are added to drive_c.
+    # We want to keep the main host system drive mount but remove all other mounts the possiblitiy of the game installer
+    # attempting to fetch game files from the host's CD drive which is unreliable as the CD could be ejected at any time.
+    # To do this we remove all mounts, add back the cd drive, and host main drive.
+    install_winetrick isolate_home
     rm "$tmp_wrapper_path/Contents/SharedSupport/prefix/dosdevices/"*
     ln -s "../drive_c" "$tmp_wrapper_path/Contents/SharedSupport/prefix/dosdevices/c:"
+    ln -s "/" "$tmp_wrapper_path/Contents/SharedSupport/prefix/dosdevices/z:"
     # Slightly ugly hack to stop wine from mounting in other host system drives by creating dummy files
     # for each drive letter
-    for letter in {d..z}; do
+    for letter in {d..y}; do
         touch "$tmp_wrapper_path/Contents/SharedSupport/prefix/dosdevices/$letter:"
     done
 }
@@ -742,6 +793,10 @@ detect_game_slug () {
         local game_exe_parent_filename
         game_exe_parent_filename="$(basename "$(dirname "$game_exe_path")")"
         fingerprint="$fingerprint $game_exe_parent_filename"
+
+    elif [ "$install_type" == "her-download" ]; then
+        local game_installer_path=$2
+        fingerprint="$(basename "$game_installer_path" | tr '_' ' ')"
     else
         echo "Error: unknown install type '$install_type'" >&2
         exit 1
@@ -933,6 +988,7 @@ get_game_slug_from_user() {
 }
 
 handle_int () {
+    print_spacer
     local return_value=$?
     echo Interupted. Cleaning up...
     cleanup
@@ -940,6 +996,7 @@ handle_int () {
 }
 
 handle_error () {
+    print_spacer
     local return_value=$1
     echo "DETAILS:SHOW" >&4
     echo "" >&4
@@ -951,10 +1008,19 @@ handle_error () {
 }
 
 handle_exit () {
+    print_spacer
     local return_value=$?
     echo Finished. Cleaning up...
     cleanup
     exit $return_value
+}
+
+print_spacer () {
+    echo ""
+    echo ""
+    echo "-------------------------------------------------"
+    echo ""
+    echo ""
 }
 
 trap 'handle_int' INT

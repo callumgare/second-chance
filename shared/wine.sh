@@ -16,7 +16,7 @@ trap 'stop_wine_server "$app_dir"' EXIT
 if [ "${1:-}" == "winetricks" ]; then
     shift
     winetricks_url="https://raw.githubusercontent.com/Kegworks-App/winetricks/kegworks/src/winetricks"
-    run_with_wine_env_vars "$app_dir" bash -c "curl -sS '$winetricks_url' | bash -s -- "\$@"" -- "$@"
+    run_with_wine_env_vars "$app_dir" bash -c "curl -fsS '$winetricks_url' | bash -s -- "\$@"" -- "$@"
 else
     run_with_wine "$app_dir" "$@"
 fi

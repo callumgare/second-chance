@@ -49,7 +49,7 @@ main() {
     
     # Mount application support dir into wine enviroment
     mount_dir_into_wine_env "$app_path" "$app_support_dir_path" "a"
-    game_save_path_in_wine="$winePrefix/drive_c/users/wine/Documents"
+    game_save_path_in_wine="$winePrefix/drive_c/users/$wine_user_name/Documents"
     rm -rf "$game_save_path_in_wine"
     ln -s "$app_support_dir_path" "$game_save_path_in_wine"
     
@@ -70,7 +70,7 @@ main() {
             --auto-detect
     
     elif [[ "$game_engine" == "wine" ]]; then
-        run_with_wine "$app_path" "$game_exe_path"
+        run_with_wine_start "$app_path" "$game_exe_path"
     
     elif [[ "$game_engine" == "wine-steam" ]]; then
         # Redirecting stdout and stderr to a subshell which we use to prefix the output with 
@@ -87,7 +87,7 @@ main() {
             while read -r line; do
                 if [[ "${line}" == *"Removing process "* ]] && [[ "${line}" == *" for gameID "* ]]; then
                     echo "*** shutting down steam"
-                    run_with_wine "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' '-shutdown'
+                    run_with_wine_start "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' '-shutdown'
                     break
                 fi
             done
@@ -106,8 +106,8 @@ main() {
         
         # May or may not launch steam depending on if game title includes DRM. If it starts steam the initial process will quit which will make the wine command end. We want to wait until all processes including the newly started steam process to end before we continue executing so we stop the wine server first so that it is implicitly started and will remain running until all wine processes have ended.
         stop_wine_server "$app_path"
-        run_with_wine "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' \
-            "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' \
+        run_with_wine_start "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' \
+            "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' '-cef-disable-d3d11' -cef-single-process -nocrashmonitor -cef-disable-breakpad +open \
             "steam://rungameid/$steam_game_id"
             
         # Remove stdout and stderr redirect
@@ -132,7 +132,7 @@ main() {
                     output_prefix="Quitting steam...$(printf ' %.0s' {1..300})"
                     exec > >(trap "" INT TERM; sed -u "s/^/$output_prefix technical info: /")
                     exec 2> >(trap "" INT TERM; sed -u "s/^/$output_prefix technical info: /" >&2)
-                    run_with_wine "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' '-shutdown'
+                    run_with_wine_start "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' '-shutdown'
                     break
                 fi
             done
@@ -142,7 +142,7 @@ main() {
             while read -r line; do
                 if [[ "${line}" == *"System startup time:"* ]]; then
                     echo "*** starting game"
-                    run_with_wine "$app_path" "$game_exe_path"
+                    run_with_wine_start "$app_path" "$game_exe_path"
                     break
                 fi
             done
@@ -163,7 +163,7 @@ main() {
         # but for some reason if we start steam with the "-silent" param then the game doesn't load properly.
         # So instead we just start steam by it self then monitor the logs to check when it's finished starting
         # then start the game directly.
-        run_with_wine "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' \
+        run_with_wine_start "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' \
             "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' '-silent'
             
         # Remove stdout and stderr redirect

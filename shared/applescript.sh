@@ -14,6 +14,8 @@ show_list_select() {
     local applescript_list
     applescript_list=$(printf ', "%s"' "$@")
     
+    echo "Showing list selection prompt: $prompt_message" 1>&2
+    
     print_open_dialog_message
     
     local result
@@ -35,6 +37,8 @@ show_button_select_dialog () {
     shift
     shift
     
+    echo "Showing button selection prompt: $prompt_message" 1>&2
+    
     print_open_dialog_message
     
     local applescript_buttons_list
@@ -48,9 +52,24 @@ show_folder_selection_dialog () {
     prompt_message=$(escape_applescript_string "$1")
     local additional_options="$2"
     
+    echo "Showing folder selection prompt: $prompt_message" 1>&2
+    
     print_open_dialog_message
     
     osascript -e "POSIX path of (choose folder with prompt \"$prompt_message\" $additional_options)"
+    bring_app_to_front
+}
+
+show_file_selection_dialog () {
+    local prompt_message
+    prompt_message=$(escape_applescript_string "$1")
+    local additional_options="$2"
+    
+    echo "Showing file selection prompt: $prompt_message" 1>&2
+    
+    print_open_dialog_message
+    
+    osascript -e "POSIX path of (choose file with prompt \"$prompt_message\" $additional_options)"
     bring_app_to_front
 }
 
@@ -64,6 +83,8 @@ show_text_selection_dialog () {
     shift
     shift
     
+    echo "Showing text selection prompt: $prompt_message" 1>&2
+    
     print_open_dialog_message
     
     local applescript_buttons_list
@@ -76,6 +97,8 @@ show_alert () {
     local prompt_title
     prompt_title=$(escape_applescript_string "$1")
     local additional_options="${2:-}"
+    
+    echo "Showing alert: $prompt_title" 1>&2
     
     print_open_dialog_message
     
@@ -107,5 +130,8 @@ print_open_dialog_message () {
 bring_app_to_front () {
     local app_path
     app_path=$(ps -o comm= -p "$(ps -o ppid= -p $$)" | sed -E 's/(.*\.app\/).*/\1/')
+    if [[ "$app_path" != *".app"* ]]; then
+        return
+    fi
     osascript -e "tell application \"$(escape_applescript_string "$app_path")\""$'\n''   activate'$'\n''end tell'
 }

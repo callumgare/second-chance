@@ -122,12 +122,13 @@ find_game_exe_after_install () {
 
 get_installer_args () {
     set -Eeuo pipefail
-    installer_dir=$1
-    install_count=$2
-    setup_iss_path=$3
+    local app_path="$1"
+    installer_path=$2
+    install_count=$3
+    setup_iss_path=$4
     
-    installer_path=$(get_installer_path "$game_slug" "$installer_dir")
-    windows_installer_path="$(to_windows_path "$installer_path")"
+    # windows_installer_path="$(to_windows_path "$app_path" "$installer_path")"
+    windows_installer_path="$installer_path"
     
     local installer_type
     installer_type=$(detect_installer_type "$installer_path")
@@ -148,19 +149,19 @@ get_installer_args () {
             if [ "$(get_game_info "$game_slug" "use_autoit_for_install")" == "true" ]; then
                 return_as_array "C:\\autoit\\AutoIt3.exe" "C:\\installshield-custom-dialog-automate.au3" "$windows_installer_path" "$(get_game_info "$game_slug" "game_title")"
             else
-                return_as_array start "/wait" "$windows_installer_path" "/s" "/sms" "/f1$(to_windows_path "$setup_iss_path")"
+                return_as_array start "/wait" "/unix" "$windows_installer_path" "/s" "/sms" "/f1$(to_windows_path "$setup_iss_path")"
             fi
         else
-            return_as_array start "/wait" "$windows_installer_path" "/r"
+            return_as_array start "/wait" "/unix" "$windows_installer_path" "/r"
         fi
     elif [[ "$installer_type" == "inno-setup" ]]; then
         if [ "$install_count" -eq 0 ]; then
-            return_as_array start "/wait" "$windows_installer_path" "/verysilent" "/norestart"
+            return_as_array start "/wait" "/unix" "$windows_installer_path" "/verysilent" "/norestart"
         else
-            return_as_array start "/wait" "$windows_installer_path"
+            return_as_array start "/wait" "/unix" "$windows_installer_path"
         fi
     else
-        return_as_array start "/wait" "$windows_installer_path"
+        return_as_array start "/wait" "/unix" "$windows_installer_path"
     fi
 }
 
@@ -321,6 +322,7 @@ attempt_to_restore_cached_wrapper () {
         return 0
     fi
     # Return a false value if cache usage was not requested or no cache was found
+    echo "No cached wrapper found for: $*"
     false
 }
 

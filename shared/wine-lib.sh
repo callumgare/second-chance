@@ -6,10 +6,19 @@ IFS=$'\n\t'
 
 wine_lib_script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
+wine_user_name="crossover"
+
 wineserver_was_manually_started=false
 
 # shellcheck source=./applescript.sh
 source "$wine_lib_script_dir/applescript.sh"
+
+run_with_wine_start() (
+    # Use "(" instead of "{" for function body to run in subshell
+    local app_path="$1"
+    shift
+    run_with_wine "$app_path" start /wait /unix "$@"
+)
 
 run_with_wine() (
     # Use "(" instead of "{" for function body to run in subshell
@@ -21,25 +30,17 @@ run_with_wine() (
     local wine_dir="$app_path/Contents/SharedSupport/wine"
     local wine_bin_dir="$wine_dir/bin"
     local wineserver_path="$wine_bin_dir/wineserver"
-    local wine64_path="$wine_bin_dir/wine64"
+    local wine_path="$wine_bin_dir/wine"
     
     # Kill any existing wineserver processes
     if [ "$wineserver_was_manually_started" != "true" ]; then
         prompt_for_wine_kill_if_running "$app_path"
     fi
     
-    # Set the working directory to the directory containing the exe
-    local exe_unix_path
-    exe_unix_path=$(run_with_wine_env_vars "$app_path" "$wine64_path" winepath --unix "$exe_path")
-    local exe_parent_dir
-    exe_parent_dir=$(dirname "$exe_unix_path")
-    echo "Working dir: $exe_parent_dir"
-    cd "$exe_parent_dir"
-    
     # Run the exe
     local exitCode=0
     set -o xtrace
-    run_with_wine_env_vars "$app_path" "$wine64_path" "$exe_path" "$@" || exitCode=$?
+    run_with_wine_env_vars "$app_path" "$wine_path" "$exe_path" "$@" || exitCode=$?
     set +o xtrace
     if [ $exitCode -ne 0 ]; then
         echo "Wine process returned with non-zero exit code: $exitCode" >&2
@@ -52,6 +53,7 @@ run_with_wine() (
     fi
 
     if [ $exitCode -ne 0 ]; then
+        echo "Wine process failed with exit code $exitCode" >&2
         exit $exitCode
     fi
 )
@@ -87,9 +89,11 @@ run_with_wine_env_vars() (
     env_vars=(
         WINEPREFIX="$wine_prefix_dir"
         # Used by winetricks
-        WINE="$wine_dir/bin/wine64"
-        # Use "wine" as the name for the home dir in the wine fs rather than the host user's actual username
-        USER="wine"
+        WINE="$wine_dir/bin/wine"
+        # The crossover version of wine that we're currently using hardcodes the username to "crossover" in the wine prefix
+        # # Use "WINEUSERNAME" as the name for the home dir in the wine fs rather than the host user's actual username
+        # WINEUSERNAME="wine"
+        USER="$wine_user_name"
         WINEDEBUG="-all"
         PATH="$wine_bin_dir:$PATH:/opt/local/bin:/opt/local/sbin"
         DYLD_FALLBACK_LIBRARY_PATH="$dyld_fallback_library_dir"\
@@ -113,21 +117,29 @@ run_with_wine_env_vars() (
 )
 
 to_windows_path() {
-    echo "C:\\$(sed -n -E 's/.*\/prefix\/drive_c\/(.*)/\1/p' <<<"$1" | tr '/' '\\')"
+    local app_path="$1"
+    shift
+    local exe_path="$1"
+    shift
+    
+    local wine_dir="$app_path/Contents/SharedSupport/wine"
+    local wine_bin_dir="$wine_dir/bin"
+    local wine_path="$wine_bin_dir/wine"
+    run_with_wine_env_vars "$app_path" "$wine_path" winepath --unix "$exe_path"
 }
 
 create_wine_prefix() {
     local app_path="$1"
     shift
     run_with_wine "$app_path" wineboot -u
-    # Wait for wineserver (which was started by wineboot) to exit to make sure registory is fully written
+    # Wait for wineserver (which was started by wineboot) to exit to make sure registry is fully written
     # https://github.com/The-Wineskin-Project/wineskin-source/blob/4689441c1f63facdd1513c14a32659c231cd9656/WineskinLauncher/Classes/Controller/WineskinLauncherAppDelegate.m#L1064
     wait_for_wine_to_exit "$app_path"
 }
 
 wait_for_wine_to_exit() {
     local app_path="$1"
-    run_with_wine_env_vars "$app_path" "$app_path/Contents/SharedSupport/wine/bin/wineserver" -w 
+    run_with_wine_env_vars "$app_path" "$app_path/Contents/SharedSupport/wine/bin/wineserver" -w || bash -c 'echo "Error waiting for wineserver to exit" >&2; 43'
 }
 
 start_wine_server() {
@@ -147,8 +159,9 @@ stop_wine_server() {
     local app_path="$1"
     local wineserver_path="$app_path/Contents/SharedSupport/wine/bin/wineserver"
     if wine_is_running "$app_path"; then
-        run_with_wine_env_vars "$app_path" "$wineserver_path" -kSIGINT
-        run_with_wine_env_vars "$app_path" "$wineserver_path" -w
+        echo "Wine server is running, stopping it now..."
+        run_with_wine_env_vars "$app_path" "$wineserver_path" -kSIGINT || true # This might fail if wine has since quit
+        run_with_wine_env_vars "$app_path" "$wineserver_path" -w || bash -c 'echo "Error stopping wineserver" >&2; exit 42'
     fi
     wineserver_was_manually_started=false
 }

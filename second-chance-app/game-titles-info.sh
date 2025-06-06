@@ -159,7 +159,7 @@ sea_of_darkness__internal_game_exe_path="/Program Files (x86)/Her Interactive/Se
 
 unknown__game_title="Other"
 unknown__install_instructions=$(cat <<EOF
-Accept all default options unless the installer tries to install DirectX. In which case select the option NOT to install DirectX. If asked if you want to play the game after installation, select "No".
+- Accept all default options unless the installer tries to install DirectX. In which case select the option NOT to install DirectX. If asked if you want to play the game after installation, select "No".
 EOF
 )
 }

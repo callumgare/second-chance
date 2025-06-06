@@ -53,7 +53,7 @@ download_file() {
         return 1
     fi
     
-    curl -L "$url" -o "$output_file_path.tmp"
+    curl -fL "$url" -o "$output_file_path.tmp"
     mv "$output_file_path.tmp" "$output_file_path"
 }
 
