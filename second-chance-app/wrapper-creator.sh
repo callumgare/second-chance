@@ -6,18 +6,17 @@ IFS=$'\n\t'
 
 script_dir=$(dirname "$(readlink -f "$0")")
 
-
 # shellcheck source=../shared/utils.sh
-source "$script_dir/utils.sh"
+source "$script_dir/shared/utils.sh"
 
 # shellcheck source=../shared/wine-lib.sh
-source "$script_dir/wine-lib.sh"
+source "$script_dir/shared/wine-lib.sh"
 
 # shellcheck source=./game-titles-info.sh
 source "$script_dir/game-titles-info.sh"
 
 # shellcheck source=../shared/applescript.sh
-source "$script_dir/applescript.sh"
+source "$script_dir/shared/applescript.sh"
 
 tmp_dir="${dev_tmp_dir:-"/tmp/nancy-drew-second-chance"}"
 
@@ -36,32 +35,37 @@ tmp_wrapper_disk_2_destination_path="$tmp_wrapper_installer_files_dir/disk-2"
 tmp_wrapper_disk_combined_destination_path="$tmp_wrapper_installer_files_dir/disk-combined"
 tmp_wrapper_setup_iss_path="$tmp_wrapper_installer_files_dir/setup.iss"
 
-
 tmp_wrapper_setting_plist_path="$tmp_wrapper_path/Contents/Resources/AppSettings.plist"
 tmp_wrapper_info_plist_path="$tmp_wrapper_path/Contents/Info.plist"
 
+
+# Variables that can be used for runtime automation
 install_action="${install_action:-}"
+primary_install_disk_dir="$tmp_wrapper_disk_1_destination_path"
 possible_disk_1_path="${disk_1_path:-}"
 possible_installer_path="${installer_path:-}"
 disk_2_path="${disk_2_path:-}"
-dev_installer_answer_files_dir="${dev_installer_answer_files_dir:-}"
-dev_lower_case_fingerprints_info_path="${dev_game_titles_info_path:-}"
 app_save_dir="${app_save_dir:-}"
 override_existing="${override_existing:-}"
 post_creation_action="${post_creation_action:-}"
-debug_mode="${debug_mode:-}"
-dev_use_wrapper_cache="${dev_use_wrapper_cache:-}"
-dev_unmount_source_disks="${dev_unmount_source_disks:-}"
 
-primary_install_disk_dir="$tmp_wrapper_disk_1_destination_path"
+# Variables intended to be used just in the dev process
+debug_mode="${debug_mode:-}"
+dev_unmount_source_disks="${dev_unmount_source_disks:-}"
+dev_installer_answer_files_dir="${dev_installer_answer_files_dir:-}"
+dev_lower_case_fingerprints_info_path="${dev_game_titles_info_path:-}"
+dev_project_root="${dev_project_root:-}"
+dev_include_steam_client_login_stage="${dev_include_steam_client_login_stage:-}"
 
 if [ "$debug_mode" == "true" ]; then
     set -x
 fi
 
 
-# shellcheck source=./support.sh
-source "$script_dir/support.sh"
+# shellcheck source=./lib/support.sh
+source "$script_dir/lib/support.sh"
+# shellcheck source=./lib/support.sh
+source "$script_dir/lib/wrapper-caching.sh"
 
 main () {
     set -Eeuo pipefail
@@ -78,7 +82,7 @@ main () {
     if [ -z "$install_action" ]; then
         install_action_button=$(
             show_button_select_dialog \
-                'Welcome Detective!'$'\n\n'$'Second Chance allows you to play the Nancy Drew games on a Mac. It can install the game from either the original game CDs, Steam, or a windows game installer purchased from Her Interactive website. Which would you like to use?sss' \
+                'Welcome Detective!'$'\n\n'$'Second Chance allows you to play the Nancy Drew games on a Mac. It can install the game from either the original game CDs, Steam, or a windows game installer purchased from Her Interactive website. Which would you like to use?' \
                 '' \
                 "Game Disk(s)" "Steam" "Her Download"
         )
@@ -110,8 +114,15 @@ main () {
                     possible_disk_1_path=$(
                         show_folder_selection_dialog \
                             "Please select the installer disk (disk 1 if there are multiple):" \
-                            'default location "/Volumes"'
+                            'default location "/Volumes"' \
+                            || echo ""
                     )
+                fi
+                # If the user clicked "Cancel" then show the main screen again
+                if [ -z "$possible_disk_1_path" ]; then
+                    install_action=""
+                    main
+                    return $?
                 fi
                 path_is_install_disk "$possible_disk_1_path"
                 if [ "$(path_is_install_disk "$possible_disk_1_path")" != "true" ]; then
@@ -142,7 +153,7 @@ main () {
             
             update_progress_indicator "Setting up wrapper"
             cached_wrapper_game_title=""
-            if ! attempt_to_restore_cached_wrapper "game-installer-copied" "base"; then
+            if ! attempt_to_restore_cached_wrapper "base"; then
                 ##########################################
                 # Create empty wrapper
                 ##########################################
@@ -151,7 +162,7 @@ main () {
             fi
             
             update_progress_indicator "Copying in game installer"
-            if ! is_wrapper_cache_in_use "game-installer-copied"; then
+            if ! attempt_to_restore_cached_wrapper "disk-game-installer-copied"; then
                 ##########################################
                 # Copy in disks
                 ##########################################
@@ -198,7 +209,7 @@ main () {
                     primary_install_disk_dir="$tmp_wrapper_disk_combined_destination_path"
                 fi
                 
-                save_cached_wrapper_if_requested "game-installer-copied" "cached_wrapper_game_title=\"$game_slug\""
+                save_cached_wrapper_if_requested "disk-game-installer-copied" "cached_wrapper_game_title=\"$game_slug\""
             else
                 if [ "$game_slug" != "$cached_wrapper_game_title" ]; then
                     show_alert \
@@ -227,8 +238,7 @@ main () {
             echo "Detected game engine: $game_engine"
             
             update_progress_indicator "Setting up wrapper"
-            cached_wrapper_game_title=""
-            if ! attempt_to_restore_cached_wrapper "game-installer-copied" "base"; then
+            if ! attempt_to_restore_cached_wrapper "base"; then
                 ##########################################
                 # Create empty wrapper
                 ##########################################
@@ -247,114 +257,125 @@ main () {
         
         update_progress_indicator "Preparing to run game installer"
         
-        if [ "$game_engine" == "scummvm" ]; then
-            install_scummvm
-        elif [ "$game_engine" == "wine" ]; then
-            if [ "$install_action" == "disk" ]; then
-                echo "Disk count: $disk_count"
-                # Set register disk dirs as CD drives
-                for ((i = 1; i <= disk_count; i++)); do
-                    echo "Setting up install disk-$i dir as CD drive"
-                    # shellcheck disable=SC2004 # Seems to be shellcheck misunderstanding the situation
-                    set -x
-                    letter=$(get_letter_from_number "$(($i + 3))") # Start at "d:"
-                    mount_dir_into_wine_env "$tmp_wrapper_path" "../drive_c/nancy-drew-installer/disk-$i" "$letter" "cdrom"
-                    set +x
-                done
-            fi
-        fi
-        
-        ##########################################
-        # Run game installer if running with wine
-        ##########################################
-        if [ "$install_action" == "disk" ]; then
-            possible_setup_iss_path="$script_dir/../Resources/installer-answer-files/$game_slug.iss"
-            if [ -e "$possible_setup_iss_path" ]; then
-                cp "$possible_setup_iss_path" "$tmp_wrapper_setup_iss_path"
-            fi
-            
-            if [ "$(get_game_info "$game_slug" "use_autoit_for_install")" == "true" ]; then
-                cp -ac "$script_dir/../Resources/autoit" \
-                    "$script_dir/../Resources/installshield-custom-dialog-automate.au3" \
-                    "$tmp_wrapper_drive_c_path"
-            fi
-        fi
-        
-        exe_paths_before_install="$(find "$tmp_wrapper_drive_c_path" -iname '*.exe')"
-        
-        local install_count=0
-        local internal_expected_game_exe_path
-        internal_expected_game_exe_path=$(get_game_info "$game_slug" "game_exe_path")
-        if [ -n "$internal_expected_game_exe_path" ]; then
-            game_exe_path="$tmp_wrapper_drive_c_path$internal_expected_game_exe_path"
-        fi
-        
-        # Repeatedly attempt to run installer until game exe is found
-        update_progress_indicator "Game installing"
-        while [ "$game_engine" == "wine" ] && ! [ -f "$game_exe_path" ]; do
-            if [ "$install_action" == "disk" ]; then
-                installer_path=$(get_installer_path "$game_slug" "$primary_install_disk_dir")
-            fi
-            
-            if [ "$(is_silent_install "$installer_path" "$install_count" "$tmp_wrapper_setup_iss_path")" == "false" ]; then
-                echo "Showing install info"
-                install_instructions=$(get_install_instructions "$game_slug")
-
-                if ! [ $install_count -eq 0 ]; then
-                    failed_install_info=$(get_failed_install_info "$game_slug")
-                    install_instructions="$failed_install_info"$'\n'""$'\n'"$install_instructions"
-                else
-                    install_instructions="The next step is to run the original game installer. $install_instructions"
+        if ! attempt_to_restore_cached_wrapper "$install_action-game-installed"; then
+            if [ "$game_engine" == "scummvm" ]; then
+                install_scummvm
+            elif [ "$game_engine" == "wine" ]; then
+                if [ "$install_action" == "disk" ]; then
+                    echo "Disk count: $disk_count"
+                    # Set register disk dirs as CD drives
+                    for ((i = 1; i <= disk_count; i++)); do
+                        echo "Setting up install disk-$i dir as CD drive"
+                        # shellcheck disable=SC2004 # Seems to be shellcheck misunderstanding the situation
+                        set -x
+                        letter=$(get_letter_from_number "$(($i + 3))") # Start at "d:"
+                        mount_dir_into_wine_env "$tmp_wrapper_path" "../drive_c/nancy-drew-installer/disk-$i" "$letter" "cdrom"
+                        set +x
+                    done
                 fi
-            
-                show_button_select_dialog \
-                    "$install_instructions" \
-                    'cancel button "Cancel"' \
-                    "Cancel" "I Understand"
             fi
             
-            
-            get_installer_args \
-                "$tmp_wrapper_path" \
-                "$installer_path" \
-                "$install_count" \
-                "$tmp_wrapper_setup_iss_path"
-            installer_args=( "${returned_array[@]}" )
-        
-            # Run the installer
-            run_with_wine "$tmp_wrapper_path" "${installer_args[@]}" || echo "Installer returned with non-zero exit code: $?" >&2
-            
-            
-            # Locate game exe after install
-            exe_paths_after_install="$(find "$tmp_wrapper_drive_c_path" -iname '*.exe')"
-            game_exe_path=$(
-                find_game_exe_after_install \
-                    "$exe_paths_before_install" \
-                    "$exe_paths_after_install" \
-                    "$game_exe_path" \
-                    "$tmp_wrapper_drive_c_path"
-            )
-            if [ -n "$game_exe_path" ]; then
-                save_game_info_if_dev_run \
-                    "$game_slug" \
-                    "internal_game_exe_path" \
-                    "${game_exe_path#"$tmp_wrapper_drive_c_path"}"
-                # Game exe found so end install loop
-                break
+            ##########################################
+            # Run game installer if running with wine
+            ##########################################
+            if [ "$install_action" == "disk" ]; then
+                possible_setup_iss_path="$script_dir/../Resources/installer-answer-files/$game_slug.iss"
+                if [ -e "$possible_setup_iss_path" ]; then
+                    cp "$possible_setup_iss_path" "$tmp_wrapper_setup_iss_path"
+                fi
+                
+                if [ "$(get_game_info "$game_slug" "use_autoit_for_install")" == "true" ]; then
+                    cp -ac "$script_dir/../Resources/autoit" \
+                        "$script_dir/../Resources/installshield-custom-dialog-automate.au3" \
+                        "$tmp_wrapper_drive_c_path"
+                fi
             fi
             
-            install_count=$((install_count + 1))
-        done
-        
-        # Delete autoit program to reduce app size
-        rm -rf "$tmp_wrapper_path/Contents/SharedSupport/prefix/drive_c/autoit"
-        
-        # Copy installer answer file out of wrapper for future use if requested
-        init_setup_iss_path="$tmp_wrapper_path/Contents/SharedSupport/prefix/drive_c/windows/setup.iss"
-        if [ -e "$init_setup_iss_path" ] && [ -n "$dev_installer_answer_files_dir" ]; then
-            local dev_installer_answer_file_path="$dev_installer_answer_files_dir/$game_slug.iss"
-            if ! [ -e "$dev_installer_answer_file_path" ]; then
-                cp "$init_setup_iss_path" "$dev_installer_answer_file_path"
+            exe_paths_before_install="$(find "$tmp_wrapper_drive_c_path" -iname '*.exe')"
+            
+            local install_count=0
+            local internal_expected_game_exe_path
+            internal_expected_game_exe_path=$(get_game_info "$game_slug" "game_exe_path")
+            if [ -n "$internal_expected_game_exe_path" ]; then
+                game_exe_path="$tmp_wrapper_drive_c_path$internal_expected_game_exe_path"
+            fi
+            
+            # Repeatedly attempt to run installer until game exe is found
+            update_progress_indicator "Game installing"
+            while [ "$game_engine" == "wine" ] && ! [ -f "$game_exe_path" ]; do
+                if [ "$install_action" == "disk" ]; then
+                    installer_path=$(get_installer_path "$game_slug" "$primary_install_disk_dir")
+                fi
+                
+                if [ "$(is_silent_install "$installer_path" "$install_count" "$tmp_wrapper_setup_iss_path")" == "false" ]; then
+                    echo "Showing install info"
+                    install_instructions=$(get_install_instructions "$game_slug")
+
+                    if ! [ $install_count -eq 0 ]; then
+                        failed_install_info=$(get_failed_install_info "$game_slug")
+                        install_instructions="$failed_install_info"$'\n'""$'\n'"$install_instructions"
+                    else
+                        install_instructions="The next step is to run the original game installer. $install_instructions"
+                    fi
+                
+                    show_button_select_dialog \
+                        "$install_instructions" \
+                        'cancel button "Cancel"' \
+                        "Cancel" "I Understand"
+                fi
+                
+                
+                get_installer_args \
+                    "$tmp_wrapper_path" \
+                    "$installer_path" \
+                    "$install_count" \
+                    "$tmp_wrapper_setup_iss_path"
+                installer_args=( "${returned_array[@]}" )
+            
+                # Run the installer
+                run_with_wine "$tmp_wrapper_path" "${installer_args[@]}" || echo "Installer returned with non-zero exit code: $?" >&2
+                
+                
+                # Locate game exe after install
+                exe_paths_after_install="$(find "$tmp_wrapper_drive_c_path" -iname '*.exe')"
+                game_exe_path=$(
+                    find_game_exe_after_install \
+                        "$exe_paths_before_install" \
+                        "$exe_paths_after_install" \
+                        "$game_exe_path" \
+                        "$tmp_wrapper_drive_c_path"
+                )
+                if [ -n "$game_exe_path" ]; then
+                    save_game_info_if_dev_run \
+                        "$game_slug" \
+                        "internal_game_exe_path" \
+                        "${game_exe_path#"$tmp_wrapper_drive_c_path"}"
+                    # Game exe found so end install loop
+                    break
+                fi
+                
+                install_count=$((install_count + 1))
+            done
+            
+            # Delete autoit program to reduce app size
+            rm -rf "$tmp_wrapper_path/Contents/SharedSupport/prefix/drive_c/autoit"
+            
+            # Copy installer answer file out of wrapper for future use if requested
+            init_setup_iss_path="$tmp_wrapper_path/Contents/SharedSupport/prefix/drive_c/windows/setup.iss"
+            if [ -e "$init_setup_iss_path" ] && [ -n "$dev_installer_answer_files_dir" ]; then
+                local dev_installer_answer_file_path="$dev_installer_answer_files_dir/$game_slug.iss"
+                if ! [ -e "$dev_installer_answer_file_path" ]; then
+                    cp "$init_setup_iss_path" "$dev_installer_answer_file_path"
+                fi
+            fi
+            
+            save_cached_wrapper_if_requested "$install_action-game-installed" "cached_wrapper_game_title=\"$game_slug\""
+        else
+            update_progress_indicator "" # Ensure update_progress_indicator is called the same number of times when using cached wrapper
+            if [ "$game_slug" != "$cached_wrapper_game_title" ]; then
+                show_alert \
+                    "The game title detected does not match the game title of the cached wrapper. Either use the installer for the same game as cached in the wrapper or delete the cache."
+                exit 1
             fi
         fi
         
@@ -366,12 +387,12 @@ main () {
         setup_progress_indicator 4
         update_progress_indicator "Setting up wrapper"
 
-        if ! attempt_to_restore_cached_wrapper "steam-game-installed" "steam-client-setup" "steam-client-installed" "base"; then
+        if ! attempt_to_restore_cached_wrapper "base"; then
             setup_base_wrapper_app
             save_cached_wrapper_if_requested "base"
         fi
         
-        if ! is_wrapper_cache_in_use "steam-game-installed" "steam-client-setup" "steam-client-installed"; then
+        if ! attempt_to_restore_cached_wrapper "steam-client-installed"; then
             stop_wine_server "$tmp_wrapper_path" # The winetricks steam script requires the wine server to not be running.
             install_winetrick steam
             save_cached_wrapper_if_requested "steam-client-installed"
@@ -386,8 +407,8 @@ main () {
         
         # This step is not normally used but to speed up the testing loop when developing the optional caching
         # of logging into the steam client so that wee don't have to do it every time we re-install a game from steam.
-        if is_wrapper_caching_requested "steam-client-setup"; then
-            if ! is_wrapper_cache_in_use "steam-game-installed" "steam-client-setup"; then
+        if [[ "$dev_include_steam_client_login_stage" == "true" ]]; then
+            if ! attempt_to_restore_cached_wrapper "steam-client-login"; then
                 # Steam in wine is currently a little broken and on the first run after installation the
                 # started process quits before steam is fully started. However a background process continues 
                 # and eventually steam does start. This makes it tricky for us to know when steam has 
@@ -398,22 +419,22 @@ main () {
                 stop_wine_server "$tmp_wrapper_path"
                 while ! [ -e "$tmp_wrapper_drive_c_path/Program Files (x86)/Steam/userdata" ]; do
                     show_alert \
-                        "[DEV STEP] Steam will now start (it may take a few minutes to open after updating). Please login then quit the Steam app." \
+                        "[DEV] Steam will now start. Login only then quit." \
                         'default button "I Understand" cancel button "Cancel"' \
                         "Cancel" "I Understand"
                     # https://web.archive.org/web/20240629222839/https://github.com/Gcenx/WineskinServer/wiki#steam
-                    run_with_wine_start "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" || echo "Installer returned with non-zero exit code: $?" >&2
+                    run_with_wine_start "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" "-nochatui" || echo "Installer returned with non-zero exit code: $?" >&2
                     date
                     echo "Steam has closed"
                 done;
                 echo "Finished logging into Steam"
                 start_wine_server "$tmp_wrapper_path"
                 
-                save_cached_wrapper_if_requested "steam-client-setup"
+                save_cached_wrapper_if_requested "steam-client-login"
             fi
         fi
 
-        if ! is_wrapper_cache_in_use "steam-game-installed"; then
+        if ! attempt_to_restore_cached_wrapper "steam-game-installed"; then
             show_button_select_dialog \
                 "Steam will now start (please be patient, it may take a few minutes to open after running an update). Please install your desired Nancy Drew title then fully quit Steam (without launching the game first)." \
                 'default button "I Understand" cancel button "Cancel"' \
@@ -429,11 +450,15 @@ main () {
             # command will only only finish when there are no more wine processes running rather than
             # just when the process we started ends.
             stop_wine_server "$tmp_wrapper_path"
+                
+                
+                echo "______--_________--_____-________"
+                sleep 99999999
 
             game_exe_path=""
             while [ -z "$game_exe_path" ]; do
                 # https://web.archive.org/web/20240629222839/https://github.com/Gcenx/WineskinServer/wiki#steam
-                run_with_wine_start "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" || echo "Installer returned with non-zero exit code: $?" >&2
+                run_with_wine_start "$tmp_wrapper_path" "C:\Program Files (x86)\Steam\Steam.exe" "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" "-nofriendsui" "-nochatui" || echo "Installer returned with non-zero exit code: $?" >&2
             
                 # Locate game exe after install
                 installed_steam_apps_path="$steam_common_apps_path"
@@ -484,14 +509,14 @@ main () {
         
         echo "Detected Steam ID: $steam_id"
 
-        has_steam_drm="$(get_game_info "$game_slug" "has_steam_drm")"
-        if [ "$has_steam_drm" == "yes-launch-when-steam-running" ]; then
+        steam_drm="$(get_game_info "$game_slug" "steam_drm")"
+        if [ "$steam_drm" == "yes-launch-when-steam-running" ]; then
             # If we're sure the game does have drm then we need to start steam to run the game which
             # we start in silent mode. If the game doesn't have drm but we were to try and run steam
             # in silent mode anyway the game won't start properly (not sure why, seems like a weird 
             # steam bug)
             game_engine="wine-steam-silent"
-        elif [ "$has_steam_drm" == "no" ]; then
+        elif [ "$steam_drm" == "no" ]; then
             # If we're sure the game doesn't have drm then we don't need bother start steam and can 
             # run directly (if it has drm running it directly will fail)
             game_engine="wine"
@@ -543,6 +568,14 @@ main () {
     # Sometimes we want to share resources between what are different game wrappers but which are for the same game title.
     # For example save files
     plutil -replace "CFBundleIdentifierForGameTitle" -string "$new_wrapper_bundle_id" "$tmp_wrapper_info_plist_path"
+    
+    # To help reduce the amount of rebuilding we need to do when developing we explicitly update first party scripts in the wrapper
+    if [ -n "$dev_project_root" ]; then
+        echo "[DEV] Updating first party scripts in wrapper"
+        # These should more or less match the files listed in the BundledFiles array of game-wrapper/GameWrapper.platypus
+        cp -ac "$dev_project_root/shared" "$tmp_wrapper_path/Contents/Resources/shared"
+        cp -ac "$dev_project_root/game-wrapper/entrypoint.sh" "$tmp_wrapper_path/Contents/Resources/script"
+    fi
         
     ##########################################
     # Get save location
@@ -683,6 +716,9 @@ install_winetrick () {
     local winetricks_path="$script_dir/../Resources/winetricks"
     
     echo "Installing winetrick $winetrick_name"
+    PATH="$script_dir/../Resources/bin:$PATH"
+    
+    echo "PATH: $PATH"
     run_with_wine_env_vars "$tmp_wrapper_path" "$winetricks_path" --unattended "$winetrick_name" || \
         { exit_code=$?; echo "Winetrick $winetrick_name returned with non-zero exit code: $exit_code" >&2; exit $exit_code; }
 }
@@ -716,8 +752,8 @@ setup_base_wrapper_app () {
 }
 
 install_scummvm () {
-    cp -r "$second_chance_app_support_script_dir/scummvm/Frameworks/"* "$tmp_wrapper_path/Contents/Frameworks"
-    cp -r "$second_chance_app_support_script_dir/scummvm/Resources/"* "$tmp_wrapper_path/Contents/Resources"
+    cp -r "$script_dir/scummvm/Frameworks/"* "$tmp_wrapper_path/Contents/Frameworks"
+    cp -r "$script_dir/scummvm/Resources/"* "$tmp_wrapper_path/Contents/Resources"
 }
 
 get_game_info () {
@@ -988,6 +1024,7 @@ get_game_slug_from_user() {
 }
 
 handle_int () {
+    update_progress_indicator "Quiting due to request"
     print_spacer
     local return_value=$?
     echo Interupted. Cleaning up...
@@ -996,18 +1033,21 @@ handle_int () {
 }
 
 handle_error () {
+    update_progress_indicator "Error"
     print_spacer
     local return_value=$1
     echo "DETAILS:SHOW" >&4
     echo "" >&4
     echo "An error occurred ($return_value). Cleaning up..." >&4
-    echo "Please report this error by posting in https://www.reddit.com/mod/SecondChanceHelpDesk/ (or create a GitHub issue if you have a GitHub account) and including a copy of the above log." >&4
+    echo "Please report this error by creating an issue in https://github.com/callumgare/second-chance and including a copy of the above log." >&4
     cleanup
     trap 'true' EXIT # Remove exit trap so that cleanup is not called again
+    echo "Please report this error by creating an issue in https://github.com/callumgare/second-chance and including a copy of the above log." >&4
     exit "$return_value"
 }
 
 handle_exit () {
+    update_progress_indicator "Exiting"
     print_spacer
     local return_value=$?
     echo Finished. Cleaning up...

@@ -15,16 +15,14 @@
 		<string>$project_root/game-wrapper/dist/nancy-drew-wrapper.zip</string>
 		<string>$project_root/second-chance-app/installer-answer-files</string>
 		<string>$project_root/second-chance-app/game-titles-info.sh</string>
-		<string>$project_root/second-chance-app/support.sh</string>
+		<string>$project_root/second-chance-app/lib</string>
 		<string>$project_root/second-chance-app/build/exiftool</string>
 		<string>$project_root/second-chance-app/build/winetricks</string>
 		<string>$project_root/second-chance-app/build/autoit</string>
 		<string>$project_root/second-chance-app/build/scummvm</string>
+		<string>$project_root/second-chance-app/build/cabextract/bin</string>
 		<string>$project_root/second-chance-app/installshield-custom-dialog-automate.au3</string>
-		<string>$project_root/shared/wine-lib.sh</string>
-		<string>$project_root/shared/wine.sh</string>
-		<string>$project_root/shared/applescript.sh</string>
-		<string>$project_root/shared/utils.sh</string>
+		<string>$project_root/shared</string>
 	</array>
 	<key>Creator</key>
 	<string>Platypus-5.4.1</string>

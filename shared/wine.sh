@@ -4,11 +4,11 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-script_dir=$(dirname "$(readlink -f "$0")")
+current_script_dir_shared_wine=$(dirname "$(readlink -f "$0")")
 
-source "$script_dir/wine-lib.sh"
+source "$current_script_dir_shared_wine/wine-lib.sh"
 
-app_dir="$script_dir/../.."
+app_dir="$current_script_dir_shared_wine/../.."
 
 start_wine_server "$app_dir"
 trap 'stop_wine_server "$app_dir"' EXIT

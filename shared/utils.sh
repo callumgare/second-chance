@@ -45,6 +45,7 @@ remove_prefix() {
 download_file() {
     local url="$1"
     local output_file_path="$2"
+    local header="${3:-}"
     if [ -f "$output_file_path" ]; then
         echo "File is already downloaded: $output_file_path"
         return
@@ -53,7 +54,12 @@ download_file() {
         return 1
     fi
     
-    curl -fL "$url" -o "$output_file_path.tmp"
+    set -x
+    if [ -n "$header" ]; then
+        curl -fL -H "$header" "$url" -o "$output_file_path.tmp"
+    else
+        curl -fL "$url" -o "$output_file_path.tmp"
+    fi
     mv "$output_file_path.tmp" "$output_file_path"
 }
 

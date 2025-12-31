@@ -4,20 +4,20 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-wine_lib_script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+current_script_dir_shared_wine_lib=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 wine_user_name="crossover"
 
 wineserver_was_manually_started=false
 
 # shellcheck source=./applescript.sh
-source "$wine_lib_script_dir/applescript.sh"
+source "$current_script_dir_shared_wine_lib/applescript.sh"
 
 run_with_wine_start() (
     # Use "(" instead of "{" for function body to run in subshell
     local app_path="$1"
     shift
-    run_with_wine "$app_path" start /wait /unix "$@"
+    run_with_wine "$app_path" start /wait /unix "$@" || { exit_code=$?; echo "Wine start failed with exit code $exit_code" >&2; return $exit_code; }
 )
 
 run_with_wine() (
@@ -34,6 +34,7 @@ run_with_wine() (
     
     # Kill any existing wineserver processes
     if [ "$wineserver_was_manually_started" != "true" ]; then
+        echo "Wine server was not started manually, checking if it is running and killing if so..." >&2
         prompt_for_wine_kill_if_running "$app_path"
     fi
     
@@ -48,13 +49,15 @@ run_with_wine() (
 
     # Wait for wineserver to exit if started automatically
     if [ "$wineserver_was_manually_started" != "true" ]; then
+        echo "Waiting for wineserver to exit..." >&2
         time run_with_wine_env_vars "$app_path" "$wineserver_path" --wait
         echo "Time taken waiting for wineserver to exit"
+        echo "Wine process failed with exit code $exitCode" >&2
     fi
 
     if [ $exitCode -ne 0 ]; then
         echo "Wine process failed with exit code $exitCode" >&2
-        exit $exitCode
+        return $exitCode
     fi
 )
 
@@ -113,7 +116,7 @@ run_with_wine_env_vars() (
         DOTNET_EnableWriteXorExecute=0
     )
     
-    exec env "${env_vars[@]}" "$@"
+    env "${env_vars[@]}" "$@"
 )
 
 to_windows_path() {

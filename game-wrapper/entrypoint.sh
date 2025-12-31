@@ -20,10 +20,10 @@ steam_game_id=$(plutil -extract "SteamGameId" raw "$setting_plist_path")
 bundle_id_for_game_title=$(plutil -extract "CFBundleIdentifierForGameTitle" raw "$info_plist_path")
 
 # shellcheck source=../shared/wine-lib.sh
-source "$script_dir/wine-lib.sh"
+source "$script_dir/shared/wine-lib.sh"
 
 # shellcheck source=../shared/applescript.sh
-source "$script_dir/applescript.sh"
+source "$script_dir/shared/applescript.sh"
 
 main() {    
     echo "Game engine: $game_engine"
@@ -39,7 +39,7 @@ main() {
         trap 'stop_wine_server "$app_path"' EXIT
         steam_messsage=""
         if [ "$game_engine" == "wine-steam" ] || [ "$game_engine" == "wine-steam-silent" ]; then
-            steam_messsage=$'\n'$'\n'"Also due to the way Steam works it may take up to a 1 minute to launch the game. Sorry for the wait :("
+            steam_messsage=$'\n'$'\n'"Also due to the way Steam works it may take a minute or more to launch the game. Sorry for the wait."
         fi
         show_alert \
             "Save regularly to avoid losing progress" \
@@ -83,9 +83,9 @@ main() {
         # If we start the game directly that will quit after starting a new process which loads
         # the game. When the game is quit steam remains running. To quit steam when the game is
         # quit we observe the steam logs for game stop events then manually quit steam.
-        tail -n 0 -f "$winePrefix/drive_c/Program Files (x86)/Steam/logs/streaming_log.txt" > >( 
+        tail -n 0 -f "$winePrefix/drive_c/Program Files (x86)/Steam/logs/console_log.txt" > >( 
             while read -r line; do
-                if [[ "${line}" == *"Removing process "* ]] && [[ "${line}" == *" for gameID "* ]]; then
+                if [[ "${line}" == *"Game process removed: AppID"* ]]; then
                     echo "*** shutting down steam"
                     run_with_wine_start "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' '-shutdown'
                     break
@@ -107,8 +107,7 @@ main() {
         # May or may not launch steam depending on if game title includes DRM. If it starts steam the initial process will quit which will make the wine command end. We want to wait until all processes including the newly started steam process to end before we continue executing so we stop the wine server first so that it is implicitly started and will remain running until all wine processes have ended.
         stop_wine_server "$app_path"
         run_with_wine_start "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' \
-            "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' '-cef-disable-d3d11' -cef-single-process -nocrashmonitor -cef-disable-breakpad +open \
-            "steam://rungameid/$steam_game_id"
+            "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' '-cef-disable-d3d11' "-nochatui" -cef-single-process -nocrashmonitor -cef-disable-breakpad -silent -applaunch "$steam_game_id"
             
         # Remove stdout and stderr redirect
         exec 1>&3 2>&4
@@ -124,9 +123,9 @@ main() {
         # If we start the game directly that will quit after starting a new process which loads
         # the game. When the game is quit steam remains running. To quit steam when the game is
         # quit we observe the steam logs for game stop events then manually quit steam.
-        tail -n 0 -f "$winePrefix/drive_c/Program Files (x86)/Steam/logs/streaming_log.txt" > >( 
+        tail -n 0 -f "$winePrefix/drive_c/Program Files (x86)/Steam/logs/console_log.txt" > >( 
             while read -r line; do
-                if [[ "${line}" == *"Removing process "* ]] && [[ "${line}" == *" for gameID "* ]]; then
+                if [[ "${line}" == *"Game process removed: AppID"* ]]; then
                     echo "*** shutting down steam"
                     exec 1>&3 2>&4
                     output_prefix="Quitting steam...$(printf ' %.0s' {1..300})"
@@ -164,7 +163,7 @@ main() {
         # So instead we just start steam by it self then monitor the logs to check when it's finished starting
         # then start the game directly.
         run_with_wine_start "$app_path" 'C:\Program Files (x86)\Steam\steam.exe' \
-            "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' '-silent'
+            "-cef-in-process-gpu" "-cef-disable-sandbox" "-cef-disable-gpu" '-nofriendsui' '-silent' "-nochatui"
             
         # Remove stdout and stderr redirect
         exec 1>&3 2>&4

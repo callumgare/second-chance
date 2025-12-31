@@ -4,53 +4,53 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-second_chance_app_support_script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
-second_chance_app_dir="$second_chance_app_support_script_dir/../.."
-
+##########################
+# Sourcing Requirements:
+#
+# The following variables must be at defined before sourcing this script:
 debug_mode="${debug_mode:-}"
-dev_use_wrapper_cache="${dev_use_wrapper_cache:-}"
 tmp_dir="${tmp_dir:-}"
 tmp_wrapper_path="${tmp_wrapper_path:-}"
+##########################
 
-if [ -z "$tmp_dir" ]; then
-    echo "Error: tmp_dir is not set" >&2
-    exit 1
+current_script_dir_lib_support=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+executing_in_app_bundle="$(ps -o comm= -p "$(ps -o ppid= -p $$)" | grep -q '.app' && echo "true" || echo "")"
+
+if [ "$executing_in_app_bundle" == "true" ]; then
+    # shellcheck source=../../shared/applescript.sh
+    source "$current_script_dir_lib_support/../shared/applescript.sh"
+    # shellcheck source=../../shared/utils.sh
+    source "$current_script_dir_lib_support/../shared/utils.sh"
+    # shellcheck source=../../shared/wine-lib.sh
+    source "$current_script_dir_lib_support/../shared/wine-lib.sh"
+else
+    # shellcheck source=../../shared/applescript.sh
+    source "$current_script_dir_lib_support/../../shared/applescript.sh"
+    # shellcheck source=../../shared/utils.sh
+    source "$current_script_dir_lib_support/../../shared/utils.sh"
+    # shellcheck source=../../shared/wine-lib.sh
+    source "$current_script_dir_lib_support/../../shared/wine-lib.sh"
 fi
-if [ -z "$tmp_wrapper_path" ]; then
-    echo "Error: tmp_wrapper_path is not set" >&2
-    exit 1
-fi
 
-cache_dir="$tmp_dir/wrapper-cache"
-
-# shellcheck source=../shared/applescript.sh
-source "$second_chance_app_support_script_dir/applescript.sh"
-# source "$second_chance_app_support_script_dir/../shared/applescript.sh"
-
-# shellcheck source=../shared/utils.sh
-source "$second_chance_app_support_script_dir/utils.sh"
-
-# shellcheck source=../shared/wine-lib.sh
-source "$second_chance_app_support_script_dir/wine-lib.sh"
 
 find_game_exe_after_install () {
     set -Eeuo pipefail
     local IFS=$'\n'
     # shellcheck disable=SC2206 # We want quotespliting in this case
-    local -a local_exe_paths_before_install=( $1 )
+    local -a exe_paths_before_install=( $1 )
     # shellcheck disable=SC2206
-    local -a local_exe_paths_after_install=( $2 )
+    local -a exe_paths_after_install=( $2 )
     local expected_game_exe_path=${3}
     local shared_root_path=${4}
     
     local -a new_exe_paths=()
-    [ "$debug_mode" == "true" ] && echo "Number of EXEs before install: ${#local_exe_paths_before_install[@]}" >&2
-    [ "$debug_mode" == "true" ] && echo "Number of EXEs after install: ${#local_exe_paths_after_install[@]}" >&2
+    [ "$debug_mode" == "true" ] && echo "Number of EXEs before install: ${#exe_paths_before_install[@]}" >&2
+    [ "$debug_mode" == "true" ] && echo "Number of EXEs after install: ${#exe_paths_after_install[@]}" >&2
     
     # Find all paths that only exist after installer has run and add to new_exe_paths
-    for exe_after_install_path in "${local_exe_paths_after_install[@]+"${local_exe_paths_after_install[@]}"}"; do
-        for exe_before_install_path in "${local_exe_paths_before_install[@]+"${local_exe_paths_before_install[@]}"}"; do
+    for exe_after_install_path in "${exe_paths_after_install[@]+"${exe_paths_after_install[@]}"}"; do
+        for exe_before_install_path in "${exe_paths_before_install[@]+"${exe_paths_before_install[@]}"}"; do
             if [ "$exe_after_install_path" == "$exe_before_install_path" ]; then
                 [ "$debug_mode" == "true" ] && echo "Exe existed before: $exe_after_install_path" >&2
                 continue 2
@@ -84,7 +84,7 @@ find_game_exe_after_install () {
                 return
             fi
         done
-        # If the fiename in the exe path matches the filename of the expected exe path then mark it as the
+        # If the filename in the exe path matches the filename of the expected exe path then mark it as the
         # default selection in the prompt we're about to show to the user
         for new_exe_path in "${new_exe_paths[@]}"; do
             if [[ "$(to_lowercase "$new_exe_path")" == *"$(to_lowercase "$expected_exe_filename")" ]]; then
@@ -102,7 +102,7 @@ find_game_exe_after_install () {
         local game_exe_path
         local -a new_relative_exe_paths=()
         for new_exe_path in "${new_exe_paths[@]}"; do
-            new_relative_exe_paths+=("$shared_root_path$new_exe_path")
+            new_relative_exe_paths+=("${new_exe_path#"${shared_root_path}"}")
         done
         game_exe_path="$shared_root_path$(
             show_list_select \
@@ -268,7 +268,7 @@ get_installer_path () {
 
 get_all_file_info () {
     [ "$debug_mode" == "true" ] && echo "Getting file info for: $1" >&2
-    "$second_chance_app_support_script_dir/exiftool/exiftool" "$1"
+    "$current_script_dir_lib_support/exiftool/exiftool" "$1"
 }
 
 get_file_info () {
@@ -307,63 +307,4 @@ update_progress_indicator () {
     # Prefix each line with progress step details
     exec > >(trap "" INT TERM; sed -u "s/^/$details        technical info: /")
     exec 2> >(trap "" INT TERM; sed -u "s/^/$details        technical info: /" >&2)
-}
-
-attempt_to_restore_cached_wrapper () {
-    local cache
-    cache=$(cached_wrapper_to_use "$@")
-    if [ -n "$cache" ]; then
-        echo "Restoring cache for: $cache"
-        delete_old_wrapper
-        cp -ac "$cache_dir/$cache/wrapper" "$tmp_wrapper_path"
-        # Restore any required enviromnent variables
-        # shellcheck disable=SC1090 # Env var file is dynmically generated
-        source "$cache_dir/$cache/env_vars"
-        return 0
-    fi
-    # Return a false value if cache usage was not requested or no cache was found
-    echo "No cached wrapper found for: $*"
-    false
-}
-
-cached_wrapper_to_use () {
-    for arg in "$@"; do
-        local cache_path="$cache_dir/$arg/wrapper"
-        if is_wrapper_caching_requested "$arg" && [ -e "$cache_path" ]; then
-            echo "$arg"
-            return
-        fi
-    done
-}
-
-is_wrapper_cache_in_use () {
-    [ -n "$(cached_wrapper_to_use "$@")" ]
-}
-
-is_wrapper_caching_requested () {
-    local cache_name=$1
-    echo "$dev_use_wrapper_cache" | grep -qE "(?:^|,) *$(escape_string_for_sed_regex "$cache_name") *(?:$|,)"
-}
-
-save_cached_wrapper_if_requested () {
-    local cache_name=$1
-    shift
-    local cache_path="$cache_dir/$cache_name"
-    if is_wrapper_caching_requested "$cache_name"; then
-        local wine_was_running
-        wine_was_running=$(wine_is_running "$tmp_wrapper_path" && echo "true" || echo "false")
-        if [ "$wine_was_running" == "true" ]; then
-            # We to stop the wine server to make sure all registry changes have been writen to disk
-            # before attempting to copy the wrapper
-            stop_wine_server "$tmp_wrapper_path"
-        fi
-        mkdir -p "$cache_path"
-        cp -ac "$tmp_wrapper_path" "$cache_path/wrapper.tmp" 
-        mv "$cache_path/wrapper.tmp" "$cache_path/wrapper"
-        # Cache any required environment variables
-        printf "%s\n" "$@" > "$cache_path/env_vars"
-        if [ "$wine_was_running" == "true" ]; then
-            start_wine_server "$tmp_wrapper_path"
-        fi
-    fi
 }

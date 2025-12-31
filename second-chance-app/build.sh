@@ -33,6 +33,7 @@ main() {
         "$generate_icons_path" "$second_chance_icon_source" "$second_chance_icon"
     fi
     
+    add_cabextract
     download_exiftool
     download_winetricks
     download_autoit
@@ -113,6 +114,30 @@ download_autoit() {
         unzip "$compressed_autoit_path" -d "$tmp_dir"
         mv "$dist_autoit_extracted_dir" "$autoit_dir"
     fi
+}
+
+get_public_github_token() {
+    GITHUB_TOKEN=$(curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository%3Ahomebrew/core/go%3Apull" | grep -o '"token":"[^"]*' | cut -d':' -f2 | tr -d '"')
+    if [ -z "$GITHUB_TOKEN" ]; then
+        echo "Error: Failed to fetch GitHub token." >&2
+        exit 1
+    fi
+    echo $GITHUB_TOKEN
+}
+
+add_cabextract() {
+    local cabextract_url="https://ghcr.io/v2/homebrew/core/cabextract/blobs/sha256:8101eb79dccd718a2568420757be4c4f191ee6e11a8c8107a000f1691b081456"
+    local cabextract_tar_path="$tmp_dir/cabextract.tar.gz"
+    local cabextract_dir="$tmp_dir/cabextract"
+    
+    GITHUB_TOKEN=$(get_public_github_token)
+
+    echo "Downloading cabextract"
+    download_file "$cabextract_url" "$cabextract_tar_path" "Authorization: Bearer $GITHUB_TOKEN"
+
+    echo "Extracting cabextract"
+    mkdir -p "$cabextract_dir"
+    tar -xf "$cabextract_tar_path" -C "$cabextract_dir" --strip-components=2 "cabextract/1.11/bin/cabextract"
 }
 
 download_scummvm() {
