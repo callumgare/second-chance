@@ -1,0 +1,106 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  unit-tests:
+    name: Swift Unit Tests
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+      
+      - name: Build and test
+        run: |
+          cd SecondChance
+          xcodebuild test \
+            -scheme SecondChance \
+            -destination 'platform=macOS' \
+            -resultBundlePath TestResults.xcresult \
+            | xcpretty --color --report html
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: SecondChance/TestResults.xcresult
+  
+  integration-tests:
+    name: Integration Tests
+    runs-on: macos-14
+    strategy:
+      matrix:
+        game: 
+          - secrets-can-kill-remastered
+          - scarlet-hand
+          - blue-moon
+          # Add more games as needed for smoke testing
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+      
+      - name: Install dependencies
+        run: |
+          brew install jq
+      
+      - name: Run integration test
+        run: |
+          ./test-all-games.sh --no-launch ${{ matrix.game }}
+        timeout-minutes: 20
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results-${{ matrix.game }}
+          path: test-output-*/
+      
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.game }}
+          path: test-output-*/report.html
+
+  # Optional: Full test suite (only on manual trigger or release)
+  full-integration:
+    name: Full Integration Test Suite
+    runs-on: macos-14
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+      
+      - name: Install dependencies
+        run: |
+          brew install jq
+      
+      - name: Run all integration tests
+        run: |
+          ./test-all-games.sh --no-launch
+        timeout-minutes: 180
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-integration-results
+          path: test-output-*/

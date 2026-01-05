@@ -49,12 +49,11 @@ generate_game_icons () {
 }
 
 add_wine_engine() {
-    local tmp_engine_path="$tmp_dir/wine-engine.tar.7z"
+    local tmp_engine_path="$tmp_dir/wine-engine.tar.xz"
     local tmp_extracted_engine_path="$tmp_dir/wine-engine"
     local tmp_wrapper_wine_dir="$tmp_wrapper_path/Contents/SharedSupport/wine"
     # The file extention is a 7zip file but it's actually a xz file
-    local wine_engine_url="https://github.com/Kegworks-App/Engines/releases/download/v1.0/WS12WineCX24.0.7.tar.7z"
-
+    local wine_engine_url="https://github.com/Kegworks-App/Engines/releases/download/v1.0/WS12WineCX24.0.7.tar.xz"
     echo "Downloading wine engine"
     download_file "$wine_engine_url" "$tmp_engine_path"
 
@@ -71,12 +70,12 @@ add_wine_engine() {
 }
 
 add_wine_libraries() {
-    local tmp_wineskin_wrapper_path="$tmp_dir/wineskin-wrapper.tar.7z"
+    local tmp_wineskin_wrapper_path="$tmp_dir/wineskin-wrapper.tar.xz"
     local tmp_extracted_wineskin_wrapper_path="$tmp_dir/wineskin"
     local tmp_wineskin_wrapper_framework_path="$tmp_extracted_wineskin_wrapper_path/Contents/Frameworks"
     local tmp_wrapper_wine_frameworks_dir="$tmp_wrapper_path/Contents/Frameworks"
     # The file extention is a 7zip file but it's actually a xz file
-    local wineskin_wrapper_url="https://github.com/Kegworks-App/Wrapper/releases/download/v1.0/Wineskin-3.1.7_2.tar.7z"
+    local wineskin_wrapper_url="https://github.com/Kegworks-App/Wrapper/releases/download/v1.0/Wineskin-3.1.7_2.tar.xz"
 
     echo "Downloading wineskin wrapper to get wine libraries from"
     download_file "$wineskin_wrapper_url" "$tmp_wineskin_wrapper_path"

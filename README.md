@@ -54,7 +54,36 @@ Or maybe "apps" plural is more applicable here since a new instance of the game 
 This provides a user interface for constructing a wrapped game. The user tells it where it can find an installer for a Nancy Drew game and it will create an empty wrapper app then run the game installer and install the game inside the wrapper.
 
 ## Testing
-If only 🥲
+
+Second Chance now has a comprehensive testing framework!
+
+### Quick Start
+```bash
+# Run fast unit tests (~5 seconds)
+./run-tests.sh unit
+
+# Test one specific game
+./run-tests.sh quick scarlet-hand
+
+# Test all games (takes 2-3 hours!)
+./run-tests.sh integration
+```
+
+### Test Structure
+
+**Swift Unit Tests** - Fast component testing
+- Game detection logic (35+ parameterized tests)
+- Installer type detection (MSI, InstallShield, Inno Setup)
+- ExiftoolService functionality
+- Uses modern Swift Testing framework with `@Test` macros
+
+**Integration Tests** - Full end-to-end testing
+- Builds app and tests complete installation flow
+- Tests all games in `installers/` directory
+- Captures logs, screenshots, and generates HTML reports
+- Timeout handling and error recovery
+
+See [SecondChanceTests/README.md](SecondChance/SecondChanceTests/README.md) for detailed documentation.
 
 ## Development
 Good luck (and also thank you very much for considering helping out).

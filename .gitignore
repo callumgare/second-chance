@@ -1,9 +1,15 @@
 .DS_Store
 
-/game-wrapper/dist
-/game-wrapper/build
-/second-chance-app/dist
-/second-chance-app/build
+/DerivedData
+/build
+
+/old-bash-version/game-wrapper/dist
+/old-bash-version/game-wrapper/build
+/old-bash-version/second-chance-app/dist
+/old-bash-version/second-chance-app/build
 /installers
 /built-apps
 /tmp
+
+/test-output
+/test-results
