@@ -1,9 +1,14 @@
 .DS_Store
+.local
 
-/game-wrapper/dist
-/game-wrapper/build
-/second-chance-app/dist
-/second-chance-app/build
+/DerivedData
+/build
+
 /installers
 /built-apps
-/tmp
+
+/test-output
+/test-results
+
+GameTester/GameTester
+*.build-cache
