@@ -19,8 +19,7 @@ or copies directly downloaded from the Her Interactive website.
 
 ## Using Second Chance
 
-You can download the [latest version of Second Chance
-here](https://github.com/callumgare/second-chance/releases/latest).
+To get started download **SecondChance.zip** [from the releases page](https://github.com/callumgare/second-chance/releases/latest).
 
 > [!IMPORTANT]
 > I'm too cheep to pay for an Apple developer membership ($99 USD a year). This means macOS will give some some scary
