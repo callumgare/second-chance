@@ -49,4 +49,4 @@ func detectFromMockDisk() async throws {
 
 ## Real Game Testing
 
-For integration tests with real games, the bash script `test-games.sh` uses actual installer files from the `installers/` directory.
+For integration tests with real games, run `./run-tests.sh integration` — it uses actual installer files from the `installers/` directory.

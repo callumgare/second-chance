@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "9A8B7C6D-5E4F-3A2B-1C0D-9E8F7A6B5C4D",
+      "name" : "Default",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:SecondChance.xcodeproj",
+        "identifier" : "E2A0E3C22F075266007E9F60",
+        "name" : "SecondChanceTests"
+      }
+    }
+  ],
+  "version" : 1
+}

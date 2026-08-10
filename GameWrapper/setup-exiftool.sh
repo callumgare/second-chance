@@ -14,7 +14,9 @@ echo "🔍 Setting up exiftool for SecondChance..."
 
 # Fetch latest version from GitHub
 echo "📡 Fetching latest exiftool version from GitHub..."
-EXIFTOOL_VERSION=$(curl -fsSL https://api.github.com/repos/exiftool/exiftool/tags | grep -m 1 '"name":' | sed -E 's/.*"name": ?"([^"]+)".*/\1/')
+# Fetch to a variable first to avoid curl getting SIGPIPE from grep -m 1 under set -o pipefail
+TAGS_JSON=$(curl -fsSL https://api.github.com/repos/exiftool/exiftool/tags)
+EXIFTOOL_VERSION=$(echo "$TAGS_JSON" | grep -m 1 '"name":' | sed -E 's/.*"name": ?"([^"]+)".*/\1/')
 
 if [ -z "$EXIFTOOL_VERSION" ]; then
     echo "❌ Failed to fetch latest version from GitHub, using fallback version 12.96"

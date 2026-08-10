@@ -23,6 +23,11 @@ struct SecondChanceApp: App {
     init() {
         let debugMode = CommandLine.arguments.contains("--debug")
 
+        // In non-interactive mode (subprocess install), suppress all windows and the Dock icon.
+        if ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" {
+            NSApp.setActivationPolicy(.prohibited)
+        }
+
         // Subscribe LogCorrelator to the bus so step-change headers are emitted.
         Task { await LogCorrelator.shared.subscribe(to: EventBus.app) }
 
@@ -30,7 +35,11 @@ struct SecondChanceApp: App {
         // This ensures print() calls and ContextualLogger output (which emits
         // via print()) are identical in both the console and the log window.
         // LogManager writes to the original console fd AND the log window.
-        LogManager.shared.startRedirectingOutput()
+        let logFilePath = ProcessInfo.processInfo.environment["SC_LOG_PATH"]
+        LogManager.shared.startRedirectingOutput(toFile: logFilePath)
+
+        // Start the automation bridge if SC_AUTOMATION_SOCKET is set.
+        Task { await AutomationBridge.shared.startIfConfigured() }
 
         // Show the floating log window only in debug mode.
         if debugMode {

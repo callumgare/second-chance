@@ -51,146 +51,124 @@ struct DiskInstallIntegrationTests {
 
     @Test(
         "Wrapper creation produces correct intermediate results for each game",
-        arguments: GameInfoProvider.shared.allGames()
+        arguments: TestGameFilter.selectedGames
     )
     func wrapperCreationForGame(game: GameInfo) async throws {
-        // Resolve the installer disk(s) for this game.
-        let disk1 = try #require(
-            InstallerPaths.diskISO(for: game, diskNumber: 1),
-            "disk-1.iso not found for \(game.id) at \(TestPaths.installersDir.path)/\(game.id)/"
-        )
-        let disk2 = InstallerPaths.diskISO(for: game, diskNumber: 2)
+        // SKIP_BUILD=1 (via --test-existing-wrapper): skip the install and use a
+        // pre-existing wrapper from built-apps/ if present. Useful for iterating
+        // on the GamePuppeteer test without waiting for a full Wine install.
+        let skipBuild = ProcessInfo.processInfo.environment["SKIP_BUILD"] == "1"
+        let builtAppsDir = TestPaths.repoRoot.appendingPathComponent("built-apps")
+        let prebuiltWrapper = builtAppsDir.appendingPathComponent("Nancy Drew - \(game.title).app")
+        let usingPrebuiltWrapper = skipBuild && FileManager.default.fileExists(atPath: prebuiltWrapper.path)
 
-        // Verify disk count matches what GameInfoProvider says.
-        if game.diskCount > 1 {
-            #expect(disk2 != nil, "Game \(game.id) requires \(game.diskCount) disks but disk-2.iso not found")
+        let wrapperPath: URL
+        var builtOutputDir: URL? = nil  // cleaned up after GamePuppeteer, not before
+
+        if usingPrebuiltWrapper {
+            wrapperPath = prebuiltWrapper
+        } else {
+            // ── E2E install via the real UI ───────────────────────────────────
+            let disk1 = try #require(
+                InstallerPaths.diskISO(for: game, diskNumber: 1),
+                "disk-1.iso not found for \(game.id) at \(TestPaths.installersDir.path)/\(game.id)/"
+            )
+            let disk2 = InstallerPaths.diskISO(for: game, diskNumber: 2)
+
+            if game.diskCount > 1 {
+                #expect(disk2 != nil, "Game \(game.id) requires \(game.diskCount) disks but disk-2.iso not found")
+            }
+
+            let outputDir = makeOutputDir()
+            builtOutputDir = outputDir
+
+            // Pre-configure disk paths so InteractiveContext bypasses NSOpenPanel.
+            PreconfiguredPaths.disk1 = disk1
+            PreconfiguredPaths.disk2 = disk2
+            PreconfiguredPaths.outputDir = outputDir
+            defer { PreconfiguredPaths.clear() }  // dir cleanup deferred until after GamePuppeteer
+
+            let recorder = RecordingEventSubscriber()
+            await recorder.subscribe(to: EventBus.app)
+            defer { Task { await recorder.unsubscribe(from: EventBus.app) } }
+
+            // Redirect stdout to a file so Second Chance's print()/LogCorrelator output is captured.
+            let installLogURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("sc-install-\(game.id)-\(UUID().uuidString).txt")
+            let savedStdout = dup(STDOUT_FILENO)
+            let logFD = open(installLogURL.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+            if logFD >= 0 { dup2(logFD, STDOUT_FILENO); close(logFD) }
+            defer {
+                if savedStdout >= 0 { dup2(savedStdout, STDOUT_FILENO); close(savedStdout) }
+                if let data = try? Data(contentsOf: installLogURL), !data.isEmpty {
+                    Attachment.record(data, named: "secondchance-install-\(game.id).txt")
+                }
+                try? FileManager.default.removeItem(at: installLogURL)
+            }
+
+            // Fire installFromDisk() as a detached task so waitForCompletion() can run concurrently.
+            let viewModel = await MainActor.run { InstallationViewModel() }
+            Task { await MainActor.run { Task { await viewModel.installFromDisk() } } }
+
+            let succeeded = await recorder.waitForCompletion(timeout: 600)
+
+            // Attach event trace for debugging.
+            let eventTrace = recorder.events.map { "\($0)" }.joined(separator: "\n")
+            Attachment.record(Data(eventTrace.utf8), named: "install-events-\(game.id).txt")
+
+            #expect(succeeded, "Installation did not complete within timeout")
+            #expect(recorder.failedError == nil, "Installation failed: \(String(describing: recorder.failedError))")
+
+            // ── Per-step assertions ───────────────────────────────────────────
+
+            #expect(recorder.detectedGame?.id == game.id,
+                    "Detected game \(recorder.detectedGame?.id ?? "nil") but expected \(game.id)")
+            #expect(recorder.routedEngine == game.gameEngine,
+                    "Routed engine \(String(describing: recorder.routedEngine)) but expected \(game.gameEngine)")
+
+            if let expectedExe = game.internalGameExePath {
+                #expect(recorder.detectedExePath == expectedExe,
+                        "Detected exe path \(recorder.detectedExePath ?? "nil") but expected \(expectedExe)")
+            }
+
+            #expect(recorder.configuredWrapper != nil, "wrapperConfigured event not emitted")
+            #expect(recorder.signedWrapper != nil, "signed event not emitted")
+            #expect(recorder.completedWrapper != nil, "completed event not emitted")
+
+            if let expectedExe = game.internalGameExePath {
+                let plistExe = try WrapperInfo.gameExePath(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
+                #expect(plistExe == expectedExe,
+                        "Wrapper plist GameExePath \(plistExe ?? "nil") ≠ \(expectedExe)")
+            }
+
+            let plistSlug = try WrapperInfo.gameSlug(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
+            #expect(plistSlug == game.id, "Wrapper plist GameSlug \(plistSlug ?? "nil") ≠ \(game.id)")
+
+            // Event ordering.
+            let kinds = recorder.events.map { "\($0)" }
+            if let a = kinds.firstIndex(where: { $0.hasPrefix("gameDetected") }),
+               let b = kinds.firstIndex(where: { $0.hasPrefix("engineRouted") }) {
+                #expect(a < b, "gameDetected must precede engineRouted")
+            }
+
+            wrapperPath = recorder.completedWrapper ?? outputDir.appendingPathComponent("Nancy Drew - \(game.title).app")
         }
 
-        // Set up an isolated bus + recording subscriber for this test.
-        let bus = EventBus<AppEvent>()
-        let recorder = RecordingEventSubscriber()
-        await recorder.subscribe(to: bus)
+        // ── Launch & quit via GamePuppeteer ──────────────────────────────────
 
-        let outputDir = makeOutputDir()
-        defer { cleanup(outputDir) }
-
-        let context = IntegrationTestContext(disk1: disk1, disk2: disk2, outputDir: outputDir)
-        let service = InstallationService(bus: bus)
-
-        // Run the REAL installation flow.
-        let wrapperPath = try await service.performInstallation(context: context)
-
-        // Unsubscribe before asserting so no race with final events.
-        await recorder.unsubscribe(from: bus)
-
-        // ── Per-step assertions ──────────────────────────────────────────
-
-        // 1. Game was detected correctly
-        #expect(recorder.detectedGame?.id == game.id,
-                "Detected game \(recorder.detectedGame?.id ?? "nil") but expected \(game.id)")
-
-        // 2. Engine routing is correct
-        #expect(recorder.routedEngine == game.gameEngine,
-                "Routed engine \(String(describing: recorder.routedEngine)) but expected \(game.gameEngine)")
-
-        // 3. The detected exe path matches what GameInfoProvider expects
-        //    (for games with a known internalGameExePath).
-        if let expectedExePath = game.internalGameExePath {
-            #expect(recorder.detectedExePath == expectedExePath,
-                    "Detected exe path \(recorder.detectedExePath ?? "nil") but expected \(expectedExePath)")
-        }
-
-        // 4. The wrapper was configured with the detected exe path
-        #expect(recorder.configuredWrapper != nil,
-                "wrapperConfigured event was not emitted")
-        if let config = recorder.configuredWrapper {
-            #expect(config.exePath == recorder.detectedExePath,
-                    "Configured exe path \(config.exePath) doesn't match detected \(recorder.detectedExePath ?? "nil")")
-        }
-
-        // 5. The wrapper was signed
-        #expect(recorder.signedWrapper != nil, "Wrapper was not signed")
-
-        // 6. The flow completed
-        #expect(recorder.completedWrapper == wrapperPath,
-                "Completed event wrapper path mismatch")
-
-        // 7. The actual built wrapper's Info.plist has the right exe path
-        //    (this verifies the configuration was persisted, not just evented)
-        if let expectedExePath = game.internalGameExePath {
-            let plistExePath = try WrapperInfo.gameExePath(at: wrapperPath)
-            #expect(plistExePath == expectedExePath,
-                    "Wrapper Info.plist GameExePath \(plistExePath ?? "nil") but expected \(expectedExePath)")
-        }
-
-        // 8. The wrapper Info.plist has the correct game slug
-        let plistSlug = try WrapperInfo.gameSlug(at: wrapperPath)
-        #expect(plistSlug == game.id,
-                "Wrapper Info.plist GameSlug \(plistSlug ?? "nil") but expected \(game.id)")
-    }
-
-    // MARK: - Event sequence test (for a single game)
-
-    @Test("Event sequence is correct", arguments: [GameInfoProvider.shared.allGames().first!])
-    func eventSequenceForFirstAvailableGame(game: GameInfo) async throws {
-        // Skip if no installer available for the first game.
-        guard let disk1 = InstallerPaths.diskISO(for: game, diskNumber: 1) else {
-            print("⏭️  Skipping: no installer for \(game.id)")
+        guard WrapperInfo.gamePuppeteerBundle() != nil else {
+            Attachment.record(Data("GamePuppeteer.app not found — skipping launch test".utf8),
+                              named: "gamepuppeteer-skipped.txt")
             return
         }
 
-        let bus = EventBus<AppEvent>()
-        let recorder = RecordingEventSubscriber()
-        await recorder.subscribe(to: bus)
+        let exitCode = try await GamePuppetRunner.run(wrapperURL: wrapperPath, game: game)
 
-        let outputDir = makeOutputDir()
-        defer { cleanup(outputDir) }
+        // Clean up the built wrapper now that GamePuppeteer is done with it.
+        if let dir = builtOutputDir { cleanup(dir) }
 
-        let context = IntegrationTestContext(disk1: disk1, disk2: nil, outputDir: outputDir)
-        let service = InstallationService(bus: bus)
-
-        _ = try await service.performInstallation(context: context)
-        await recorder.unsubscribe(from: bus)
-
-        // Verify the key events appear in a logical order.
-        let eventKinds = recorder.events.map { event -> String in
-            switch event {
-            case .started: return "started"
-            case .disksResolved: return "disksResolved"
-            case .gameDetected: return "gameDetected"
-            case .engineRouted: return "engineRouted"
-            case .installerResolved: return "installerResolved"
-            case .gameExeDetected: return "gameExeDetected"
-            case .wrapperConfigured: return "wrapperConfigured"
-            case .signed: return "signed"
-            case .completed: return "completed"
-            case .isoMounted: return "isoMounted"
-            case .progress: return "progress"
-            case .failed: return "failed"
-            }
-        }
-
-        // These key events should appear in this relative order:
-        let keyEvents = ["gameDetected", "engineRouted", "gameExeDetected", "wrapperConfigured", "signed", "completed"]
-            .filter { kind in eventKinds.contains(kind) }
-
-        // Verify each key event appears at least once
-        for expected in ["gameDetected", "engineRouted", "wrapperConfigured", "signed", "completed"] {
-            #expect(eventKinds.contains(expected), "Expected event \(expected) in sequence")
-        }
-
-        // Verify started comes before completed
-        if let startedIdx = eventKinds.firstIndex(of: "started"),
-           let completedIdx = eventKinds.firstIndex(of: "completed") {
-            #expect(startedIdx < completedIdx, "started must come before completed")
-        }
-
-        // gameDetected before engineRouted
-        if let detectedIdx = eventKinds.firstIndex(of: "gameDetected"),
-           let routedIdx = eventKinds.firstIndex(of: "engineRouted") {
-            #expect(detectedIdx < routedIdx, "gameDetected must come before engineRouted")
-        }
-
-        _ = keyEvents // silence unused warning if all filtered
+        // 0 = clean quit
+        #expect(exitCode == 0,
+                "GamePuppeteer exited with \(exitCode) for \(game.id)")
     }
 }

@@ -1,8 +1,8 @@
 //
 //  Configuration.swift
-//  GameTester
+//  GamePuppeteer
 //
-//  Configuration and plist reading utilities
+//  Configuration, plist reading, and result types for the game launch test tool.
 
 import Foundation
 
@@ -19,6 +19,21 @@ struct TestConfig {
     let logFilePath: String?
 }
 
+/// Typed result of running a puppet session.
+enum GamePuppetResult {
+    case passed
+    case forcedQuit
+    case failed(String)
+
+    var exitCode: Int32 {
+        switch self {
+        case .passed: return 0
+        case .forcedQuit: return 2
+        case .failed: return 1
+        }
+    }
+}
+
 // Template match cache for adaptive search across script executions
 struct TemplateMatchCache: Codable {
     let x: Int
@@ -26,20 +41,20 @@ struct TemplateMatchCache: Codable {
     let timestamp: TimeInterval
 }
 
-let cacheFilePath = "/tmp/game-tester-template-cache.json"
+let cacheFilePath = "/tmp/game-puppeteer-template-cache.json"
 
 // MARK: - Plist Reading
 
 func readPlist(appPath: String, key: String) -> String? {
     let appURL = URL(fileURLWithPath: appPath)
     let settingsPlistPath = appURL.appendingPathComponent("Contents/Resources/AppSettings.plist")
-    
+
     guard let data = try? Data(contentsOf: settingsPlistPath),
           let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
           let value = plist[key] as? String else {
         return nil
     }
-    
+
     return value
 }
 

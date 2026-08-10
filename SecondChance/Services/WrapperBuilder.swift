@@ -913,6 +913,7 @@ class WrapperBuilder {
         plist["CFBundleIdentifier"] = newBundleID
         plist["CFBundleName"] = "Nancy Drew - \(gameInfo.title)"
         plist["CFBundleDisplayName"] = "Nancy Drew - \(gameInfo.title)"
+        plist["GameExePath"] = gameExePath
         plist["Program Name and Path"] = gameExePath
         
         // Save updated plist
@@ -985,6 +986,7 @@ class WrapperBuilder {
         var settings: [String: Any] = [
             "GameExePath": gameExePath,
             "GameEngine": gameEngine,
+            "GameSlug": gameInfo.id,
             "GameInstallerDir": installerDir
         ]
         

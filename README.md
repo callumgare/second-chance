@@ -58,7 +58,19 @@ This provides a user interface for taking the game installer files and installin
 ```
 
 ## Development
+
 Good luck (and also thank you very much for considering helping out).
+
+### Prerequisites
+
+- **Xcode** (16 or later) — provides `xcodebuild`, Swift 5.0, and macOS SDK
+- **Homebrew** packages:
+  ```bash
+  brew install xcbeautify xctesthtmlreport
+  ```
+  `xcbeautify` pretty-prints build/test output; `xctest-html-report` generates HTML test reports.
+
+All other dependencies (Wine, ScummVM, winetricks, AutoIt, exiftool) are automatically downloaded and cached in `~/Library/Caches/SecondChance/` during the build process — you don't need to install them yourself.
 
 
 ## Built with

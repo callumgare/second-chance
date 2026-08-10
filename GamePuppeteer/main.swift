@@ -1,48 +1,41 @@
 #!/usr/bin/env swift
 
 import Foundation
-import AppKit
 import ApplicationServices
-
-// MARK: - Main
 
 func printUsage() {
     print("""
-    GameTester - Automated game testing tool
-    
+    GamePuppeteer - Automated game launch & quit test tool
+
     Usage:
-        GameTester <app-path> [options]
-    
+        GamePuppeteer <app-path> [options]
+
     Options:
         --timeout <seconds>    Maximum runtime (default: 60)
         --debug                Launch game in debug mode
-        --log <path>           Path to write game wrapper log output
+        --game-log-path <path>      Path to write game wrapper log output
+        --puppeteer-log-path <path> Path to write GamePuppeteer's own stdout/stderr
         --help                 Show this help
-    
-    Examples:
-        GameTester "/Applications/Nancy Drew.app"
-        GameTester "/path/to/Game.app" --timeout 90
-        GameTester "/path/to/Game.app" --debug
-        GameTester "/path/to/Game.app" --log "/tmp/wrapper.log"
+
+    Exit codes:
+        0   Game exited cleanly
+        2   Game required force-quit (acceptable — some Wine games need this)
+        1   Test failed (launch failure, OCR failure, etc.)
     """)
 }
 
-// Check for Accessibility permissions
 func checkAccessibilityPermissions() -> Bool {
     let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
     let trusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
-    
+
     if !trusted {
         print("⚠️  Warning: Accessibility permissions not granted")
         print("   Go to System Settings → Privacy & Security → Accessibility")
-        print("   and enable permissions for Terminal or your IDE")
-        print("")
     }
-    
+
     return trusted
 }
 
-// Parse arguments
 var appPath: String?
 var timeout: TimeInterval = 60
 var debugMode = false
@@ -51,7 +44,7 @@ var logFilePath: String?
 var i = 1
 while i < CommandLine.arguments.count {
     let arg = CommandLine.arguments[i]
-    
+
     switch arg {
     case "--help", "-h":
         printUsage()
@@ -63,17 +56,24 @@ while i < CommandLine.arguments.count {
         }
     case "--debug":
         debugMode = true
-    case "--log":
+    case "--game-log-path":
         i += 1
         if i < CommandLine.arguments.count {
             logFilePath = CommandLine.arguments[i]
+        }
+    case "--puppeteer-log-path":
+        i += 1
+        if i < CommandLine.arguments.count {
+            // Redirect stdout+stderr to a file so the test runner can attach them.
+            let fd = open(CommandLine.arguments[i], O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+            if fd >= 0 { dup2(fd, STDOUT_FILENO); dup2(fd, STDERR_FILENO); close(fd) }
         }
     default:
         if appPath == nil && !arg.hasPrefix("-") {
             appPath = arg
         }
     }
-    
+
     i += 1
 }
 
@@ -83,20 +83,15 @@ guard let path = appPath else {
     exit(1)
 }
 
-// Check accessibility permissions
 _ = checkAccessibilityPermissions()
 
-// Install signal handlers early (before launching game)
 print("  → Installing signal handlers...")
 signal(SIGINT, handleTermination)
 signal(SIGTERM, handleTermination)
 signal(SIGHUP, handleTermination)
 print("  → Signal handlers installed\n")
 
-// Read game engine from plist
 let gameEngine = readGameEngine(appPath: path) ?? "unknown"
-
-// Get game executable name from plist
 let gameExePath = readGameExePath(appPath: path) ?? "/Game.exe"
 let gameExeName = (gameExePath as NSString).lastPathComponent
 let winePrefix = getWinePrefix(appPath: path)
@@ -108,8 +103,13 @@ if gameEngine.lowercased().contains("wine") {
 }
 print("")
 
-// Run test
-let config = TestConfig(appPath: path, maxRuntime: timeout, gameEngine: gameEngine, debugMode: debugMode, logFilePath: logFilePath)
-let exitCode = runTest(config: config, gameExeName: gameExeName, winePrefix: winePrefix)
+let config = TestConfig(
+    appPath: path,
+    maxRuntime: timeout,
+    gameEngine: gameEngine,
+    debugMode: debugMode,
+    logFilePath: logFilePath
+)
 
-exit(exitCode)
+let session = GamePuppetSession(config: config, gameExeName: gameExeName, winePrefix: winePrefix)
+exit(session.run().exitCode)

@@ -85,4 +85,15 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             break
         }
     }
+
+    /// Block until a .completed or .failed event is received, or the timeout elapses.
+    func waitForCompletion(timeout: TimeInterval = 300) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let done = lock.withLock { completedWrapper != nil || failedError != nil }
+            if done { return lock.withLock { completedWrapper != nil } }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return false
+    }
 }

@@ -25,6 +25,13 @@
 			remoteGlobalIDString = E24D78DD2F063E1E00B38683;
 			remoteInfo = GameWrapper;
 		};
+		E2F9AA012F15E6B90040383D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E21733892F04AA580058E8E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AABB00030000000000000003;
+			remoteInfo = GamePuppeteer;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -56,15 +63,20 @@
 				GameMonitor.swift,
 				InfoWindow.swift,
 				main.swift,
-				Subcommands.swift,
 				Resources/Assets.xcassets,
 				Resources/GameWrapperIcon.icon,
+				Subcommands.swift,
 			);
 			target = E24D78DD2F063E1E00B38683 /* GameWrapper */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		AABB00010000000000000001 /* GamePuppeteer */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = GamePuppeteer;
+			sourceTree = "<group>";
+		};
 		E21733932F04AA580058E8E9 /* SecondChance */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			explicitFolders = (
@@ -94,6 +106,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		AABB00050000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E217338E2F04AA580058E8E9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -125,6 +144,7 @@
 				E2C65E102F15FA4700FAFF50 /* GameWrapper */,
 				E21733932F04AA580058E8E9 /* SecondChance */,
 				E2A0E3C42F075266007E9F60 /* SecondChanceTests */,
+				AABB00010000000000000001 /* GamePuppeteer */,
 				E21733922F04AA580058E8E9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -142,6 +162,26 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		AABB00030000000000000003 /* GamePuppeteer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "GamePuppeteer" */;
+			buildPhases = (
+				AABB00040000000000000004 /* Sources */,
+				AABB00050000000000000005 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AABB00010000000000000001 /* GamePuppeteer */,
+			);
+			name = GamePuppeteer;
+			packageProductDependencies = (
+			);
+			productName = GamePuppeteer;
+			productType = "com.apple.product-type.application";
+		};
 		E21733902F04AA580058E8E9 /* SecondChance */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E217339C2F04AA5A0058E8E9 /* Build configuration list for PBXNativeTarget "SecondChance" */;
@@ -206,6 +246,7 @@
 			);
 			dependencies = (
 				E2A0E3C82F075266007E9F60 /* PBXTargetDependency */,
+				E2F9AA022F15E6B90040383D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				E2A0E3C42F075266007E9F60 /* SecondChanceTests */,
@@ -224,9 +265,12 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2620;
+				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					AABB00030000000000000003 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					E21733902F04AA580058E8E9 = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -256,6 +300,7 @@
 				E21733902F04AA580058E8E9 /* SecondChance */,
 				E24D78DD2F063E1E00B38683 /* GameWrapper */,
 				E2A0E3C22F075266007E9F60 /* SecondChanceTests */,
+				AABB00030000000000000003 /* GamePuppeteer */,
 			);
 		};
 /* End PBXProject section */
@@ -390,6 +435,13 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AABB00040000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		E217338D2F04AA580058E8E9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -424,9 +476,58 @@
 			target = E24D78DD2F063E1E00B38683 /* GameWrapper */;
 			targetProxy = E2F499232F15E6B90040383D /* PBXContainerItemProxy */;
 		};
+		E2F9AA022F15E6B90040383D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AABB00030000000000000003 /* GamePuppeteer */;
+			targetProxy = E2F9AA012F15E6B90040383D /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		AABB00060000000000000006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.GamePuppeteer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AABB00070000000000000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.GamePuppeteer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 		E217339A2F04AA5A0058E8E9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -570,9 +671,9 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance;
-				PRODUCT_MODULE_NAME = SecondChance;				
+				PRODUCT_MODULE_NAME = SecondChance;
 				PRODUCT_NAME = "Second Chance";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -610,7 +711,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance;
 				PRODUCT_MODULE_NAME = SecondChance;
 				PRODUCT_NAME = "Second Chance";
@@ -758,6 +859,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "GamePuppeteer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AABB00060000000000000006 /* Debug */,
+				AABB00070000000000000007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		E217338C2F04AA580058E8E9 /* Build configuration list for PBXProject "SecondChance" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

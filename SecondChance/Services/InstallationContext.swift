@@ -144,6 +144,16 @@ class NonInteractiveContext: InstallationContext {
 
 // MARK: - Interactive Context
 
+/// In-process test seam: set disk paths before tapping the UI to bypass NSOpenPanel.
+/// Production code never touches this — it stays nil and the panels show normally.
+struct PreconfiguredPaths {
+    static var disk1: URL?
+    static var disk2: URL?
+    static var outputDir: URL?
+    static var isConfigured: Bool { disk1 != nil }
+    static func clear() { disk1 = nil; disk2 = nil; outputDir = nil }
+}
+
 /// Interactive context - prompts with GUI, outputs to both GUI and terminal
 class InteractiveContext: InstallationContext {
     private weak var viewModel: InstallationViewModel?
@@ -154,6 +164,7 @@ class InteractiveContext: InstallationContext {
     
     @MainActor
     func getDisk1Path() async throws -> URL {
+        if let path = PreconfiguredPaths.disk1 { return path }
         guard let url = await selectDiskOrISO(message: "Select the first game disk or ISO:") else {
             throw InstallationError.cancelled
         }
@@ -163,7 +174,7 @@ class InteractiveContext: InstallationContext {
     @MainActor
     func getDisk2Path(gameInfo: GameInfo) async throws -> URL? {
         guard gameInfo.diskCount > 1 else { return nil }
-        
+        if let path = PreconfiguredPaths.disk2 { return path }
         guard let url = await selectDiskOrISO(message: "Select the second game disk or ISO:") else {
             throw InstallationError.cancelled
         }
@@ -172,6 +183,7 @@ class InteractiveContext: InstallationContext {
     
     @MainActor
     func getOutputPath(gameName: String) async throws -> URL {
+        if let dir = PreconfiguredPaths.outputDir { return dir }
         let panel = NSOpenPanel()
         panel.message = "Choose where to save the Nancy Drew app:"
         panel.canChooseFiles = false
@@ -210,6 +222,8 @@ class InteractiveContext: InstallationContext {
     
     @MainActor
     func requestVolumeAccess(mountPoint: URL) async throws -> URL {
+        // Skip the grant-access panel when disk paths are pre-configured (test seam).
+        if PreconfiguredPaths.isConfigured { return mountPoint }
         let accessPanel = NSOpenPanel()
         accessPanel.message = "Please grant access to the mounted volume to continue"
         accessPanel.prompt = "Grant Access"

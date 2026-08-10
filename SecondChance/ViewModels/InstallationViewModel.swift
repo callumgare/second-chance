@@ -188,6 +188,7 @@ class InstallationViewModel: ObservableObject {
         case .completed:
             logger.log("NON-INTERACTIVE MODE: Exiting with success")
             fflush(stdout)
+            AutomationBridge.shared.stop()
             _exit(0)
         default:
             break
