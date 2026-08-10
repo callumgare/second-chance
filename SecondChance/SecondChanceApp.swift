@@ -61,7 +61,7 @@ struct SecondChanceApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(installationViewModel)
-                .frame(minWidth: 700, idealWidth: 700, minHeight: 550, idealHeight: 550)
+                .frame(minWidth: 700, idealWidth: 700, minHeight: 650, idealHeight: 650)
         }
         .windowResizability(.contentMinSize)
         .commands {

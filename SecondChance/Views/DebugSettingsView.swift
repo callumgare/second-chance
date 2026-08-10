@@ -34,6 +34,8 @@ struct DebugSettingsView: View {
                 Section {
                     Toggle("Skip Installer Execution", isOn: $settings.skipInstaller)
                         .help("When enabled, game files are copied but the installer is not run. Useful for testing wrapper setup without waiting for installation.")
+                    Toggle("Show Unsupported Install Options", isOn: $settings.showUnsupportedInstallOptions)
+                        .help("Show partially implemented install sources (Her Download, Steam) on the welcome screen.")
                 } header: {
                     Text("Installation")
                         .font(.headline)

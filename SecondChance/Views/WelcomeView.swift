@@ -8,6 +8,7 @@ import SwiftUI
 
 struct WelcomeView: View {
     @EnvironmentObject var viewModel: InstallationViewModel
+    @ObservedObject var debugSettings = DebugSettings.shared
     @State private var isHoveringDisk = false
     @State private var isHoveringHer = false
     @State private var isHoveringSteam = false
@@ -47,51 +48,48 @@ struct WelcomeView: View {
                 
                 HStack(spacing: 20) {
                     // Disk option
-                    InstallationOptionCard(
-                        icon: "opticaldiscdrive",
-                        title: "Game Disk(s)",
-                        description: "Install from original CDs",
-                        isHovering: isHoveringDisk
-                    )
-                    .onTapGesture {
-                        Task {
-                            await viewModel.installFromDisk()
-                        }
+                    Button {
+                        Task { await viewModel.installFromDisk() }
+                    } label: {
+                        InstallationOptionCard(
+                            icon: "opticaldiscdrive",
+                            title: "Game Disk(s)",
+                            description: "Install from original CDs",
+                            isHovering: isHoveringDisk
+                        )
                     }
-                    .onHover { hovering in
-                        isHoveringDisk = hovering
-                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("installSourceDisk")
+                    .onHover { hovering in isHoveringDisk = hovering }
                     
-                    // Her Download option
-                    InstallationOptionCard(
-                        icon: "arrow.down.circle",
-                        title: "Her Download",
-                        description: "Windows installer from Her Interactive",
-                        isHovering: isHoveringHer
-                    )
-                    .onTapGesture {
-                        Task {
-                            await viewModel.installFromHerDownload()
+                    if debugSettings.showUnsupportedInstallOptions {
+                        // Her Download option
+                        Button {
+                            Task { await viewModel.installFromHerDownload() }
+                        } label: {
+                            InstallationOptionCard(
+                                icon: "arrow.down.circle",
+                                title: "Her Download",
+                                description: "Windows installer from Her Interactive",
+                                isHovering: isHoveringHer
+                            )
                         }
-                    }
-                    .onHover { hovering in
-                        isHoveringHer = hovering
-                    }
-                    
-                    // Steam option
-                    InstallationOptionCard(
-                        icon: "cloud",
-                        title: "Steam",
-                        description: "Install from Steam library",
-                        isHovering: isHoveringSteam
-                    )
-                    .onTapGesture {
-                        Task {
-                            await viewModel.installFromSteam()
+                        .buttonStyle(.plain)
+                        .onHover { hovering in isHoveringHer = hovering }
+
+                        // Steam option
+                        Button {
+                            Task { await viewModel.installFromSteam() }
+                        } label: {
+                            InstallationOptionCard(
+                                icon: "cloud",
+                                title: "Steam",
+                                description: "Install from Steam library",
+                                isHovering: isHoveringSteam
+                            )
                         }
-                    }
-                    .onHover { hovering in
-                        isHoveringSteam = hovering
+                        .buttonStyle(.plain)
+                        .onHover { hovering in isHoveringSteam = hovering }
                     }
                 }
             }

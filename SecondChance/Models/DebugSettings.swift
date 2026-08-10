@@ -13,6 +13,7 @@ class DebugSettings: ObservableObject {
     
     @Published var skipInstaller: Bool
     @Published var debugMode: Bool
+    @Published var showUnsupportedInstallOptions: Bool = false
     
     private init() {
         // Check for command line flags
@@ -25,5 +26,6 @@ class DebugSettings: ObservableObject {
     func resetToDefaults() {
         skipInstaller = false
         debugMode = false
+        showUnsupportedInstallOptions = false
     }
 }
