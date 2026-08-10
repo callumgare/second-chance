@@ -49,6 +49,12 @@ point on you can just simply open the app it created in to be able to play the g
 
 Have fun!
 
+> [!NOTE]
+> Small advertisement: I'd love to get rid of the scary warnings messages when you first run the app. I want Second
+> Chance to be as easy to use as possible to make it accessible for even the least technically inclined. If you've found
+> Second Chance helpful and you'd like to help out with that too you can send me
+> [a small tip on ko-fi](https://ko-fi.com/callumgare) to allow me to buy an Apple Developer Membership. 
+
 ---
 
 ## Architecture / Code History
