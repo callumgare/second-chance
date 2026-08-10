@@ -27,7 +27,10 @@ To get started download **SecondChance.zip** [from the releases page](https://gi
 > can inspect the source code for the app in this repo).
 
 In the most recent versions of macOS you'll likely see a warning like this on first run. Select **Done**.
-![First warning screen](./docs/first-warning.png)
+
+<p align="center">
+<img alt="Screenshot of first warning" src="https://github.com/callumgare/second-chance/raw/refs/heads/main/docs/first-warning.png" style="width: 261px">
+</p>
 
 Now you need to open **Privacy & Security** in **System Settings**. If you scroll down to near the bottom you should
 see a section that says:
@@ -36,7 +39,10 @@ see a section that says:
 ![privacy settings](./docs/settings.png)
 
 Click **Open Anyway**. You'll probably then see a final warning that looks like this:
-![last warning](./docs/second-warning.png)
+
+<p align="center">
+<img alt="Screenshot of second warning" src="https://github.com/callumgare/second-chance/raw/refs/heads/main/docs/second-warning.png" style="width: 261px">
+</p>
 
 Click **Open Anyway** again to continue. macOS may then ask for your password to confirm.
 
