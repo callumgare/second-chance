@@ -17,6 +17,41 @@ the game as a new app. Currently it only works with the CD versions of the games
 or copies directly downloaded from the Her Interactive website.
 
 
+## Using Second Chance
+
+You can download the [latest version of Second Chance
+here](https://github.com/callumgare/second-chance/releases/latest).
+
+> [!IMPORTANT]
+> I'm too cheep to pay for an Apple developer membership ($99 USD a year). This means macOS will give some some scary
+> warnings when you try to open it for the first time. I pinky promise there's nothing sneaky happening (and if you're technical you
+> can inspect the source code for the app in this repo).
+
+In the most recent versions of macOS you'll likely see a warning like this on first run. Select **Done**.
+![First warning screen](./docs/first-warning.png)
+
+Now you need to open **Privacy & Security** in **System Settings**. If you scroll down to near the bottom you should
+see a section that says:
+> "Second Chance" was blocked to protect your Mac. [Open Anyway]
+
+![privacy settings](./docs/settings.png)
+
+Click **Open Anyway**. You'll probably then see a final warning that looks like this:
+![last warning](./docs/second-warning.png)
+
+Click **Open Anyway** again to continue. macOS may then ask for your password to confirm.
+
+Finally after all that you should see a screen like this:
+![main second chance screen](./docs/main-screen.png)
+
+Once you've loaded your CD copy of any of the classic games you can select "Game Disk(s)" and point to the CD. From
+there Second Chance will create a new app for that game. When done it'll ask you where you want to save it. From that
+point on you can just simply open the app it created in to be able to play the game.
+
+Have fun!
+
+---
+
 ## Architecture / Code History
 I have many fond memories of whiling away my childhood scoping out old mansions and questioning shady characters.
 So a couple of years back I decided to play though them again. However getting them to run on modern mac hardware ended
