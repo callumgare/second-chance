@@ -32,10 +32,7 @@ struct SecondChanceApp: App {
         Task { await AutomationBridge.shared.startIfConfigured() }
 
         if debugMode {
-            let pid = ProcessInfo.processInfo.processIdentifier
-            let startTime = Date()
             LogWindow.shared.showLogWindow(title: "SecondChance - Installation Log")
-            LogWindow.shared.startStreaming(pid: pid, since: startTime)
         }
 
         setupSignalHandlers()

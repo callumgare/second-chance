@@ -26,6 +26,9 @@ public class LogWindow: ObservableObject {
     /// Called for every line received from the log stream. Useful for testing.
     var onLine: ((String) -> Void)?
 
+    // Capture the moment the singleton is created so log history starts from app launch.
+    private let processStartTime = Date()
+
     init() {}
 
     // MARK: - Public API
@@ -36,6 +39,7 @@ public class LogWindow: ObservableObject {
             logWindow = LogWindowController(title: title)
         }
         logWindow?.show(relativeTo: referenceWindow)
+        startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: processStartTime)
         isVisible = true
     }
 
@@ -49,7 +53,6 @@ public class LogWindow: ObservableObject {
     /// buffered stream lines. Hash dedup handles the overlap at the junction.
     public func startStreaming(pid: Int32, since startTime: Date) {
         stopStreaming()
-        seenLineHashes.removeAll()
         streamLineBuffer.removeAll()
 
         startLogStream(pid: pid)
@@ -170,6 +173,7 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         LogWindow.shared.isVisible = false
+        LogWindow.shared.stopStreaming()
     }
 
     required init?(coder: NSCoder) {

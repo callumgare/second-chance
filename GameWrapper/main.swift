@@ -497,8 +497,7 @@ func main() {
     // Create log window if in debug mode
     if debugMode {
         LogWindow.shared.showLogWindow(title: "\(config.gameTitle) - Launch Log", relativeTo: nil)
-        LogWindow.shared.startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: Date())
-        
+
         // Process events to show window
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
     }
@@ -509,10 +508,7 @@ func main() {
     let infoWindow = InfoWindowController(gameTitle: config.gameTitle, appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled)
     globalInfoWindow = infoWindow
     
-    // Redirect stdout/stderr if not already done (for non-debug mode)
-    if !debugMode {
-        LogWindow.shared.startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: Date())
-    } else {
+    if debugMode {
         // If log window exists in debug mode, reposition it relative to info window
         if let logWindow = LogWindow.shared.window {
             // Reposition relative to info window

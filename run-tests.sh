@@ -168,6 +168,7 @@ run_tests() {
                 -only-testing:SecondChanceTests/LogCorrelatorTests
                 -only-testing:SecondChanceTests/GameDetectorTests
                 -only-testing:SecondChanceTests/GameInstallerTests
+                -only-testing:SecondChanceTests/ErrorViewTests
             )
             ;;
         integration)
@@ -190,7 +191,7 @@ run_tests() {
 
     set -o pipefail
     local exit_code=0
-    env NSUnbufferedIO=YES "${extra_env[@]}" xcodebuild test-without-building \
+    env NSUnbufferedIO=YES ${extra_env[@]+"${extra_env[@]}"} xcodebuild test-without-building \
         -scheme SecondChance \
         -destination "platform=macOS,arch=$ARCH" \
         -derivedDataPath "$DERIVED_DATA" \
