@@ -2,12 +2,18 @@
 # run-tests.sh - Second Chance test runner
 #
 # Usage:
-#   ./run-tests.sh [--no-rebuild] [command] [game-slug]
+#   ./run-tests.sh [--no-rebuild] [--raw-logs | --quiet] [command] [game-slug]
 #
 # Commands:
 #   (none)              Rebuild and run all tests
 #   unit | u            Run unit tests only
 #   integration | i     Run integration tests (all games, or one if slug given)
+#
+# Options:
+#   --raw-logs          Show raw xcodebuild output instead of xcbeautify
+#   --quiet             Suppress all build/test output
+#   --no-rebuild        Skip the build step (use existing build)
+#   --test-existing-wrapper  Skip install, launch prebuilt wrapper from built-apps/
 #
 # Examples:
 #   ./run-tests.sh                          Rebuild then run all tests
@@ -35,6 +41,8 @@ REBUILD=true
 COMMAND="all"
 GAME_SLUG=""
 SKIP_BUILD=false
+RAW_LOGS=false
+QUIET=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -44,6 +52,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --test-existing-wrapper)
             SKIP_BUILD=true
+            shift
+            ;;
+        --raw-logs)
+            RAW_LOGS=true
+            shift
+            ;;
+        --quiet|-q)
+            QUIET=true
             shift
             ;;
         unit|u)
@@ -71,6 +87,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$QUIET" == true && "$RAW_LOGS" == true ]]; then
+    echo -e "${RED}❌ --quiet and --raw-logs are mutually exclusive${NC}" >&2
+    exit 1
+fi
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 require_tool() {
@@ -85,6 +106,15 @@ require_tool xchtmlreport xctest-html-report
 
 # arch=arm64 pins to a single destination — without it xcodebuild matches both
 # arm64 and x86_64, launching two parallel test runners and doubling Wine installs.
+# Build the pipe suffix for xcodebuild output based on flags.
+if [[ "$QUIET" == true ]]; then
+    XCBEAUTIFY_OPTIONS="--quiet --disable-logging"
+elif [[ "$RAW_LOGS" == true ]]; then
+    XCBEAUTIFY_OPTIONS="--preserve-unbeautified"
+else
+    XCBEAUTIFY_OPTIONS=""
+fi
+
 ARCH="arm64"
 
 # Unique result bundle path for this run so parallel runs don't collide
@@ -111,7 +141,7 @@ build_for_testing() {
         -scheme SecondChance \
         -destination "platform=macOS,arch=$ARCH" \
         -derivedDataPath "$DERIVED_DATA" \
-        2>&1 | xcbeautify --preserve-unbeautified
+        2>&1 | xcbeautify $XCBEAUTIFY_OPTIONS
 }
 
 if [[ "$REBUILD" == true ]]; then
@@ -121,66 +151,56 @@ elif [[ ! -d "$DERIVED_DATA/Build/Products" ]]; then
     exit 1
 fi
 
-# ── Test runners ──────────────────────────────────────────────────────────────
+# ── Test runner ───────────────────────────────────────────────────────────────
 
-run_unit_tests() {
-    echo -e "${BLUE}🧪 Running unit tests...${NC}"
+run_tests() {
+    local test_type="$1"
+
+    local extra_args=()
+    local extra_env=()
+
+    case "$test_type" in
+        unit)
+            echo -e "${BLUE}🧪 Running unit tests...${NC}"
+            extra_args+=(
+                -only-testing:SecondChanceTests/EventBusTests
+                -only-testing:SecondChanceTests/ContextualLoggerTests
+                -only-testing:SecondChanceTests/LogCorrelatorTests
+                -only-testing:SecondChanceTests/GameDetectorTests
+                -only-testing:SecondChanceTests/GameInstallerTests
+            )
+            ;;
+        integration)
+            if [[ -n "$GAME_SLUG" ]]; then
+                echo -e "${BLUE}🎮 Running integration tests for: $GAME_SLUG${NC}"
+                extra_env+=(TEST_RUNNER_TEST_GAMES="$GAME_SLUG")
+            else
+                echo -e "${BLUE}🎮 Running integration tests for all games...${NC}"
+            fi
+            [[ "$SKIP_BUILD" == true ]] && extra_env+=(TEST_RUNNER_SKIP_BUILD=1)
+            extra_args+=(
+                -parallel-testing-worker-count 1
+                -only-testing:SecondChanceTests/DiskInstallIntegrationTests
+            )
+            ;;
+        all)
+            echo -e "${BLUE}🧪 Running all tests...${NC}"
+            ;;
+    esac
+
     set -o pipefail
     local exit_code=0
-    NSUnbufferedIO=YES xcodebuild test-without-building \
+    env NSUnbufferedIO=YES "${extra_env[@]}" xcodebuild test-without-building \
         -scheme SecondChance \
         -destination "platform=macOS,arch=$ARCH" \
         -derivedDataPath "$DERIVED_DATA" \
         -resultBundlePath "$RESULT_BUNDLE" \
-        -only-testing:SecondChanceTests/EventBusTests \
-        -only-testing:SecondChanceTests/ContextualLoggerTests \
-        -only-testing:SecondChanceTests/LogCorrelatorTests \
-        -only-testing:SecondChanceTests/GameDetectorTests \
-        -only-testing:SecondChanceTests/GameInstallerTests \
-        2>&1 | xcbeautify --preserve-unbeautified || exit_code=$?
-    open_html_report "$RESULT_BUNDLE"
-    return $exit_code
-}
-
-run_integration_tests() {
-    if [[ -n "$GAME_SLUG" ]]; then
-        echo -e "${BLUE}🎮 Running integration tests for: $GAME_SLUG${NC}"
-    else
-        echo -e "${BLUE}🎮 Running integration tests for all games...${NC}"
-    fi
-
-    local env_prefix=""
-    [[ -n "$GAME_SLUG" ]] && env_prefix="TEST_RUNNER_TEST_GAMES=$GAME_SLUG"
-    [[ "$SKIP_BUILD" == true ]] && env_prefix="$env_prefix TEST_RUNNER_SKIP_BUILD=1"
-
-    set -o pipefail
-    local exit_code=0
-    eval "NSUnbufferedIO=YES $env_prefix xcodebuild test-without-building \
-        -scheme SecondChance \
-        -destination 'platform=macOS,arch=$ARCH' \
-        -derivedDataPath \"$DERIVED_DATA\" \
-        -resultBundlePath \"$RESULT_BUNDLE\" \
-        -parallel-testing-worker-count 1 \
-        -only-testing:SecondChanceTests/DiskInstallIntegrationTests \
-        2>&1 | xcbeautify --preserve-unbeautified" || exit_code=$?
+        ${extra_args[@]+"${extra_args[@]}"} \
+        2>&1 | xcbeautify $XCBEAUTIFY_OPTIONS || exit_code=$?
     open_html_report "$RESULT_BUNDLE"
     return $exit_code
 }
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
-case "$COMMAND" in
-    unit)
-        run_unit_tests
-        ;;
-    integration)
-        run_integration_tests
-        ;;
-    all)
-        # Unit tests write to the same result bundle; integration appends a new run
-        run_unit_tests
-        echo ""
-        RESULT_BUNDLE="$REPORTS_DIR/${TIMESTAMP}-integration.xcresult"
-        run_integration_tests
-        ;;
-esac
+run_tests "$COMMAND"
