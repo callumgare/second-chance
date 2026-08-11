@@ -11,12 +11,6 @@ struct GamePuppetSession {
     let winePrefix: URL
     private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "GamePuppetSession")
 
-    // Path to the quit button image, relative to the executable.
-    private var quitButtonImagePath: String {
-        let scriptDir = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        return scriptDir.appendingPathComponent("assets/quit-button.png").path
-    }
-
     func run() -> GamePuppetResult {
         logger.notice("🎮 Starting puppet session")
         logger.notice("   App: \(config.appPath, privacy: .public)")
@@ -117,29 +111,11 @@ struct GamePuppetSession {
             guard let screenshotPath = ScreenshotOCR.captureScreen() else { continue }
 
             let searchStartTime = Date()
-            let dispatchGroup = DispatchGroup()
-            var foundTexts: [String: CGRect] = [:]
-            var quitButtonLocation: CGRect?
-
-            dispatchGroup.enter()
-            DispatchQueue.global(qos: .userInitiated).async {
-                foundTexts = ScreenshotOCR.findText(["Exit Game", "Quit", "interactive"], in: screenshotPath, app: app)
-                dispatchGroup.leave()
-            }
-
-            if FileManager.default.fileExists(atPath: quitButtonImagePath) {
-                dispatchGroup.enter()
-                DispatchQueue.global(qos: .userInitiated).async {
-                    quitButtonLocation = ScreenshotOCR.findImage(quitButtonImagePath, in: screenshotPath)
-                    dispatchGroup.leave()
-                }
-            }
-
-            dispatchGroup.wait()
+            let analysis = analyzeScreenshot(at: screenshotPath, app: app)
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)), privacy: .public)s")
             try? FileManager.default.removeItem(atPath: screenshotPath)
 
-            let exitLocation = foundTexts["Exit Game"] ?? foundTexts["Quit"] ?? quitButtonLocation
+            let exitLocation = analysis.quitButton
 
             if let exitLocation = exitLocation {
                 guard GameFocusDetector.isGameFocused(pid: pid, gameEngine: config.gameEngine) else {
@@ -180,7 +156,7 @@ struct GamePuppetSession {
                 }
             }
 
-            if let interactiveLocation = foundTexts["interactive"], !clickedInteractive {
+            if let interactiveLocation = analysis.interactiveLogo, !clickedInteractive {
                 logger.notice("  ✓ Found 'interactive' button, clicking to enable menu...")
                 Thread.sleep(forTimeInterval: 1)
                 InputControl.click(at: CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY))

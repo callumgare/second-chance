@@ -1618,3 +1618,70 @@ enum ScreenshotOCR {
         return [:]
     }
 }
+
+// MARK: - Screen Analysis
+
+/// Points of interest found in a game screenshot.
+struct ScreenAnalysisResult {
+    /// "Exit Game", "Quit" text, or quit button matched via template image
+    var quitButton: CGRect?
+    /// "interactive" text (Her Interactive logo) location
+    var interactiveLogo: CGRect?
+}
+
+/// Resolves the path to the quit-button template image from the app bundle.
+private func resolveQuitButtonImagePath() -> String {
+    if let bundled = Bundle.main.path(forResource: "quit-button", ofType: "png") {
+        return bundled
+    }
+    // Dev fallback: search upward from executable for the source tree
+    let scriptDir = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
+    var dir = scriptDir
+    for _ in 0..<10 {
+        dir = dir.deletingLastPathComponent()
+        let candidate = dir.appendingPathComponent("GamePuppeteer/assets/quit-button.png").path
+        if FileManager.default.fileExists(atPath: candidate) {
+            return candidate
+        }
+    }
+    fatalError("quit-button.png not found in bundle or source tree. Add it to the GamePuppeteer target's Copy Bundle Resources build phase.")
+}
+
+/// Analyzes a screenshot for quit-related UI elements.
+/// Can be used standalone against a saved screenshot for debugging.
+func analyzeScreenshot(at screenshotPath: String, app: NSRunningApplication? = nil) -> ScreenAnalysisResult {
+    let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "ScreenAnalysis")
+    let quitButtonImagePath = resolveQuitButtonImagePath()
+
+    let dispatchGroup = DispatchGroup()
+    var foundTexts: [String: CGRect] = [:]
+    var quitButtonLocation: CGRect?
+
+    dispatchGroup.enter()
+    DispatchQueue.global(qos: .userInitiated).async {
+        foundTexts = ScreenshotOCR.findText(["Exit Game", "Quit", "interactive"], in: screenshotPath, app: app)
+        dispatchGroup.leave()
+    }
+
+    dispatchGroup.enter()
+    DispatchQueue.global(qos: .userInitiated).async {
+        quitButtonLocation = ScreenshotOCR.findImage(quitButtonImagePath, in: screenshotPath)
+        dispatchGroup.leave()
+    }
+
+    dispatchGroup.wait()
+
+    let result = ScreenAnalysisResult(
+        quitButton: foundTexts["Exit Game"] ?? foundTexts["Quit"] ?? quitButtonLocation,
+        interactiveLogo: foundTexts["interactive"]
+    )
+
+    logger.notice("Screen analysis results:")
+    if let r = result.quitButton { logger.notice("  Quit button: \(Int(r.minX), privacy: .public),\(Int(r.minY), privacy: .public) \(Int(r.width), privacy: .public)x\(Int(r.height), privacy: .public)") }
+    if let r = result.interactiveLogo { logger.notice("  Interactive logo: \(Int(r.minX), privacy: .public),\(Int(r.minY), privacy: .public) \(Int(r.width), privacy: .public)x\(Int(r.height), privacy: .public)") }
+    if result.quitButton == nil && result.interactiveLogo == nil {
+        logger.notice("  (nothing found)")
+    }
+
+    return result
+}

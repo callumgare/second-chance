@@ -170,6 +170,7 @@
 			buildPhases = (
 				AABB00040000000000000004 /* Sources */,
 				AABB00050000000000000005 /* Frameworks */,
+				E21846A6302B452200E56C73 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -309,6 +310,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		E217338F2F04AA580058E8E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E21846A6302B452200E56C73 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (

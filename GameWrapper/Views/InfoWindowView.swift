@@ -130,6 +130,8 @@ struct InfoWindowView: View {
                 Button("I Understand") {
                     viewModel.confirm()
                 }
+                .accessibilityIdentifier("save-regularly-warning-confirm")
+                .keyboardShortcut(.defaultAction)
             }
         }
     }

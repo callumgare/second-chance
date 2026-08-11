@@ -15,21 +15,41 @@ private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", categor
 
 enum InfoWindowHandler {
     /// Recursively search for a button with a title containing any of the search terms
-    static func findButton(in element: AXUIElement, containing searchTerms: [String]) -> AXUIElement? {
+    static func findButton(in element: AXUIElement, containing searchTerms: [String], depth: Int = 0) -> AXUIElement? {
+        guard depth < 20 else { return nil }
         var roleRef: CFTypeRef?
         AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
         let role = roleRef as? String
         
+        // Collect all text attributes — SwiftUI buttons may expose their label via any of these
         var titleRef: CFTypeRef?
         AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &titleRef)
         let title = titleRef as? String ?? ""
         
-        // Check if this is a button with matching title
+        var descRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXDescriptionAttribute as CFString, &descRef)
+        let desc = descRef as? String ?? ""
+        
+        var valueRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef)
+        let value = valueRef as? String ?? ""
+
+        var identifierRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, "AXIdentifier" as CFString, &identifierRef)
+        let identifier = identifierRef as? String ?? ""
+        
+        // Check if this is a button with matching text in any attribute
         if role == kAXButtonRole as String {
-            for term in searchTerms {
-                if title.lowercased().contains(term.lowercased()) {
-                    logger.notice("  [DEBUG]     ✓ Found button: '\(title, privacy: .public)'")
-                    return element
+            let candidates = [title, desc, value, identifier].filter { !$0.isEmpty }
+            if candidates.isEmpty {
+                logger.notice("  [DEBUG]     Found button with no title/desc/value/identifier")
+            }
+            for text in candidates {
+                for term in searchTerms {
+                    if text.lowercased().contains(term.lowercased()) {
+                        logger.notice("  [DEBUG]     ✓ Found button: '\(text, privacy: .public)'")
+                        return element
+                    }
                 }
             }
         }
@@ -40,7 +60,7 @@ enum InfoWindowHandler {
         
         if childrenResult == .success, let children = childrenRef as? [AXUIElement] {
             for child in children {
-                if let button = findButton(in: child, containing: searchTerms) {
+                if let button = findButton(in: child, containing: searchTerms, depth: depth + 1) {
                     return button
                 }
             }
@@ -152,7 +172,7 @@ enum InfoWindowHandler {
                                 logger.notice("  [DEBUG]     ✓ Found Nancy Drew window via Accessibility API")
                                 
                                 // Find button with title containing "Understand" or "OK" or "Continue"
-                                if let button = findButton(in: window, containing: ["Understand", "OK", "Continue"]) {
+                                if let button = findButton(in: window, containing: ["save-regularly-warning-confirm", "Understand", "OK", "Continue"]) {
                                     var positionRef: CFTypeRef?
                                     AXUIElementCopyAttributeValue(button, kAXPositionAttribute as CFString, &positionRef)
                                     
@@ -174,7 +194,12 @@ enum InfoWindowHandler {
                                         return true
                                     }
                                 } else {
-                                    logger.notice("  ✗ Window does not have a button - continuing without clicking")
+                                    // Button not found via AX tree (SwiftUI hosted views may not expose buttons).
+                                    // Fall back to pressing Return key, which activates the default button.
+                                    logger.notice("  ✗ Button not found via AX - pressing Return key as fallback")
+                                    // InputControl.pressReturn()
+                                    Thread.sleep(forTimeInterval: 0.5)
+                                    logger.notice("✅ Info window dismissed via Return key")
                                     return true
                                 }
                             }

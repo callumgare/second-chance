@@ -69,6 +69,19 @@ enum InputControl {
         Thread.sleep(forTimeInterval: 0.1)
     }
     
+    /// Send Return key press
+    static func pressReturn() {
+        logger.notice("  → Pressing Return key...")
+        
+        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true)
+        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: false)
+        
+        keyDown?.post(tap: .cghidEventTap)
+        keyUp?.post(tap: .cghidEventTap)
+        
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    
     /// Click at screen coordinates
     static func click(at point: CGPoint) {
         logger.notice("  → Clicking at (\(Int(point.x), privacy: .public), \(Int(point.y), privacy: .public))...")
