@@ -3,61 +3,44 @@
 //  SecondChanceTests
 //
 //  Tests for ErrorView's "Show Logs" and "Save Logs" functionality.
-//  Triggers an installation error by pointing at an empty directory,
-//  then verifies the log window and log export behave correctly.
+//  Emits log entries via os.Logger with the secondchance subsystem, then
+//  verifies the log window and log export surface them correctly.
 
 import Testing
 import Foundation
 import os
 @testable import SecondChance
 
+private let testLogger = Logger(subsystem: "com.secondchance", category: "ErrorViewTests")
+
 @Suite("ErrorView log actions", .serialized)
 struct ErrorViewTests {
 
     // MARK: - Helpers
 
-    /// Drive an install with an empty temp dir so GameDetector fails → error state.
-    private func triggerInstallError() async throws -> InstallationViewModel {
-        let emptyDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sc-error-test-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: emptyDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: emptyDir) }
-
-        let outputDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sc-error-output-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: outputDir) }
-
-        PreconfiguredPaths.disk1 = emptyDir
-        PreconfiguredPaths.outputDir = outputDir
-        defer { PreconfiguredPaths.clear() }
-
-        let viewModel = await MainActor.run { InstallationViewModel() }
-
-        let recorder = RecordingEventSubscriber()
-        await recorder.subscribe(to: EventBus.app)
-        defer { Task { await recorder.unsubscribe(from: EventBus.app) } }
-
-        Task { await MainActor.run { Task { await viewModel.installFromDisk() } } }
-
-        // Wait for either a failure event or timeout
-        _ = await recorder.waitForCompletion(timeout: 30)
-
-        return viewModel
+    /// Emit a few log entries so LogWindow / LogExporter have something to find.
+    private func emitTestLogEntries() {
+        testLogger.notice("ErrorViewTests: simulated installation started")
+        testLogger.error("ErrorViewTests: simulated installation error occurred")
     }
 
     // MARK: - Show Logs
 
     @Test("Show Logs opens log window and it contains installation log entries")
     func showLogsOpensWindow() async throws {
-        // Collect from the shared instance — same object ErrorView's button uses.
         let collector = LineCollector()
-        LogWindow.shared.onLine = { line in Task { await collector.add(line) } }
-        defer { LogWindow.shared.onLine = nil; LogWindow.shared.stopStreaming() }
+        await MainActor.run {
+            LogWindow.shared.onLine = { line in Task { await collector.add(line) } }
+        }
+        defer {
+            Task { @MainActor in
+                LogWindow.shared.onLine = nil
+                LogWindow.shared.stopStreaming()
+            }
+        }
 
-        _ = try await triggerInstallError()
+        emitTestLogEntries()
 
-        // Simulate the "Show Logs" button: showLogWindow starts streaming from processStartTime.
         await MainActor.run {
             LogWindow.shared.showLogWindow(title: "Test - Installation Log")
         }
@@ -79,7 +62,7 @@ struct ErrorViewTests {
 
     @Test("Save Logs writes a non-empty file containing log entries")
     func saveLogsWritesFile() async throws {
-        _ = try await triggerInstallError()
+        emitTestLogEntries()
 
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("sc-test-export-\(UUID().uuidString).txt")

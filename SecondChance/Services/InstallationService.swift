@@ -121,10 +121,8 @@ class InstallationService {
         } catch {
             await bus.publishInstallation(.progress(.error(error.localizedDescription)))
 
-            // Publish a typed failure event if it's an InstallationError
-            if let installError = error as? InstallationError {
-                await bus.publishInstallation(.failed(installError))
-            }
+            let installError = (error as? InstallationError) ?? .internalError(error.localizedDescription)
+            await bus.publishInstallation(.failed(installError))
             
             await unmountAllISOs()
             

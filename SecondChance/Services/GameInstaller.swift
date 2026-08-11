@@ -879,6 +879,7 @@ enum InstallationError: LocalizedError, Equatable {
     case autoItScriptNotFound
     case missingRequiredParameter(String)
     case invalidPath(String)
+    case internalError(String)
     
     var errorDescription: String? {
         switch self {
@@ -902,6 +903,8 @@ enum InstallationError: LocalizedError, Equatable {
             return "Missing required parameter: \(param)"
         case .invalidPath(let message):
             return "Invalid path: \(message)"
+        case .internalError(let message):
+            return message
         }
     }
     
