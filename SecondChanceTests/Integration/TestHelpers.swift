@@ -203,6 +203,7 @@ enum WrapperBuilder {
 /// Invokes GamePuppeteer as a subprocess to launch a wrapper and verify the
 /// game quits cleanly. Returns the exit code from GamePuppeteer.
 enum GamePuppetRunner {
+    private static let screenRecordingRelaunchExitCode: Int32 = 5
 
     @discardableResult
     static func run(
@@ -213,22 +214,169 @@ enum GamePuppetRunner {
         guard let bundle = WrapperInfo.gamePuppeteerBundle() else {
             throw TestError.gamePuppeteerNotFound
         }
-        let launchTime = Date()
-        let (exitCode, pid) = try await Self.launchViaLaunchServices(
+        let slug = game.id
+
+        var firstAttempt = try await Self.launchAndCollect(
             appBundle: bundle,
+            wrapperURL: wrapperURL,
+            timeout: timeout,
+            gameSlug: slug,
+            attemptLabel: "initial"
+        )
+
+        if firstAttempt.exitCode == screenRecordingRelaunchExitCode {
+            Attachment.record(
+                Data("GamePuppeteer requested relaunch after manual Screen Recording confirmation.\n".utf8),
+                named: "gamepuppeteer-relaunch-\(slug).txt"
+            )
+
+            firstAttempt = try await Self.launchAndCollect(
+                appBundle: bundle,
+                wrapperURL: wrapperURL,
+                timeout: timeout,
+                gameSlug: slug,
+                attemptLabel: "relaunch"
+            )
+        }
+
+        return firstAttempt.exitCode
+    }
+
+    private static func launchAndCollect(
+        appBundle: URL,
+        wrapperURL: URL,
+        timeout: TimeInterval,
+        gameSlug: String,
+        attemptLabel: String
+    ) async throws -> (exitCode: Int32, pid: Int32) {
+        let launchTime = Date()
+        let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
+            appBundle: appBundle,
             arguments: [wrapperURL.path, "--timeout", String(Int(timeout))]
         )
+
+        var effectiveExitCode = observedExitCode
+
         let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
-        if !logData.isEmpty {
-            Attachment.record(logData, named: "gamepuppeteer-\(game.id).txt")
+        guard !logData.isEmpty else {
+            throw NSError(
+                domain: "GamePuppetRunner",
+                code: Int(effectiveExitCode),
+                userInfo: [
+                    NSLocalizedDescriptionKey: "GamePuppeteer produced no logs (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                ]
+            )
         }
-        return exitCode
+
+        Attachment.record(logData, named: "gamepuppeteer-\(attemptLabel)-\(gameSlug).txt")
+
+        if let logText = String(data: logData, encoding: .utf8) {
+            let requestedPermission = logText.contains("PERMISSION_GATE: permission_requested")
+            let allPermissionsGranted = logText.contains("PERMISSION_GATE: all_permissions_granted")
+            let runSucceeded = logText.contains("GAME_PUPPETEER: run_succeeded")
+
+            if logText.contains("Timed out waiting") {
+                throw NSError(
+                    domain: "GamePuppetRunner",
+                    code: Int(effectiveExitCode),
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "GamePuppeteer timed out waiting for permission grant (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                    ]
+                )
+            }
+
+            if requestedPermission && !allPermissionsGranted {
+                effectiveExitCode = screenRecordingRelaunchExitCode
+                Attachment.record(
+                    Data("Permission request detected without all-permissions-granted marker. Treating as relaunch-required.\n".utf8),
+                    named: "gamepuppeteer-exit-code-correction-\(attemptLabel)-\(gameSlug).txt"
+                )
+            } else if !runSucceeded {
+                throw NSError(
+                    domain: "GamePuppetRunner",
+                    code: Int(effectiveExitCode),
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "GamePuppeteer did not emit success marker (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                    ]
+                )
+            }
+        } else {
+            throw NSError(
+                domain: "GamePuppetRunner",
+                code: Int(effectiveExitCode),
+                userInfo: [
+                    NSLocalizedDescriptionKey: "GamePuppeteer logs were not UTF-8 decodable (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                ]
+            )
+        }
+
+        let exitCodeSummary = "GamePuppeteer exit code (\(attemptLabel)) for \(gameSlug): observed=\(observedExitCode), effective=\(effectiveExitCode)\n"
+        Attachment.record(
+            Data(exitCodeSummary.utf8),
+            named: "gamepuppeteer-exit-code-\(attemptLabel)-\(gameSlug).txt"
+        )
+
+        return (exitCode: effectiveExitCode, pid: pid)
+    }
+
+    private static func decodeExitCode(fromKqueueStatus status: Int32) -> Int32 {
+        // NOTE_EXIT status representation can vary; accept either direct exit code
+        // or waitpid-style encoded status.
+        if status >= 0 && status <= 255 {
+            return status
+        }
+
+        if (status & 0x7f) == 0 {
+            return (status >> 8) & 0xff
+        }
+
+        return 1
+    }
+
+    private static func waitForProcessExitCode(pid: Int32) -> Int32 {
+        let kqueueDescriptor = Darwin.kqueue()
+        guard kqueueDescriptor >= 0 else {
+            return 1
+        }
+        defer { Darwin.close(kqueueDescriptor) }
+
+        var exitEventRegistration = kevent()
+        exitEventRegistration.ident = UInt(pid)
+        exitEventRegistration.filter = Int16(EVFILT_PROC)
+        exitEventRegistration.flags = UInt16(EV_ADD) | UInt16(EV_ONESHOT)
+        exitEventRegistration.fflags = UInt32(NOTE_EXIT)
+
+        let registerResult = withUnsafePointer(to: exitEventRegistration) {
+            keventCall(kqueueDescriptor, $0, 1, nil, 0, nil)
+        }
+        // Registration-only kevent calls (no eventlist) return 0 on success.
+        guard registerResult >= 0 else {
+            return 1
+        }
+
+        var exitEvent = kevent()
+        while true {
+            let waitResult = withUnsafeMutablePointer(to: &exitEvent) {
+                keventCall(kqueueDescriptor, nil, 0, $0, 1, nil)
+            }
+
+            if waitResult == 1 {
+                return decodeExitCode(fromKqueueStatus: Int32(exitEvent.data))
+            }
+
+            if waitResult == -1 && Darwin.errno == EINTR {
+                continue
+            }
+
+            return 1
+        }
     }
 
     /// Launch GamePuppeteer through LaunchServices so TCC attributes Accessibility
     /// and Screen Recording prompts to GamePuppeteer (its own bundle ID), not to
     /// the Second Chance test host.
     private static func launchViaLaunchServices(appBundle: URL, arguments: [String]) async throws -> (exitCode: Int32, pid: Int32) {
+        let launchRequestTime = Date()
         let config = NSWorkspace.OpenConfiguration()
         config.arguments = arguments
         config.activates = false
@@ -242,28 +390,65 @@ enum GamePuppetRunner {
             }
         }
 
-        let pid = app.processIdentifier
+        let pid = try await resolveValidProcessIdentifier(
+            for: app,
+            appBundle: appBundle,
+            launchRequestTime: launchRequestTime
+        )
 
         // waitpid only works on child processes; NSWorkspace parents to launchd so we
         // use kqueue NOTE_EXIT instead, which works on any process we can observe.
         let exitCode = await Task.detached(priority: .userInitiated) {
-            let kq = Darwin.kqueue()
-            defer { Darwin.close(kq) }
-            var ke = kevent()
-            ke.ident = UInt(pid)
-            ke.filter = Int16(EVFILT_PROC)
-            ke.flags = UInt16(EV_ADD) | UInt16(EV_ONESHOT)
-            ke.fflags = UInt32(NOTE_EXIT)
-            // withUnsafePointer gives an explicit UnsafePointer<kevent>, disambiguating
-            // the kevent() call from the kevent struct's memberwise init.
-            withUnsafePointer(to: ke) { _ = keventCall(kq, $0, 1, nil, 0, nil) }
-            var result = kevent()
-            withUnsafeMutablePointer(to: &result) { _ = keventCall(kq, nil, 0, $0, 1, nil) }
-            // NOTE_EXIT stores the exit status in data (same format as waitpid's status argument).
-            let s = Int32(result.data)
-            return (s & 0x7f) == 0 ? ((s >> 8) & 0xff) : 1
+            waitForProcessExitCode(pid: pid)
         }.value
         return (exitCode: exitCode, pid: pid)
+    }
+
+    private static func resolveValidProcessIdentifier(
+        for launchedApp: NSRunningApplication,
+        appBundle: URL,
+        launchRequestTime: Date
+    ) async throws -> Int32 {
+        if launchedApp.processIdentifier > 0 {
+            return launchedApp.processIdentifier
+        }
+
+        guard let bundleIdentifier = Bundle(url: appBundle)?.bundleIdentifier else {
+            throw NSError(
+                domain: NSCocoaErrorDomain,
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "GamePuppeteer bundle identifier is missing"]
+            )
+        }
+
+        let deadline = Date().addingTimeInterval(5)
+        let launchDateThreshold = launchRequestTime.addingTimeInterval(-1)
+
+        while Date() < deadline {
+            let runningCandidates = NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleIdentifier)
+                .filter { $0.processIdentifier > 0 && !$0.isTerminated }
+                .sorted {
+                    ($0.launchDate ?? .distantPast) > ($1.launchDate ?? .distantPast)
+                }
+
+            if let matchedCandidate = runningCandidates.first(where: {
+                guard let launchDate = $0.launchDate else { return true }
+                return launchDate >= launchDateThreshold
+            }) ?? runningCandidates.first {
+                return matchedCandidate.processIdentifier
+            }
+
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        throw NSError(
+            domain: NSCocoaErrorDomain,
+            code: 0,
+            userInfo: [
+                NSLocalizedDescriptionKey: "GamePuppeteer launched with invalid PID: \(launchedApp.processIdentifier)"
+            ]
+        )
     }
 }
 

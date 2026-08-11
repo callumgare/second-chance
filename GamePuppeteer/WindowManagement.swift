@@ -192,8 +192,8 @@ enum InfoWindowHandler {
                         logger.fault("   Error: API Disabled (accessibility not enabled)")
                         logger.notice("   Troubleshooting:")
                         logger.notice("   1. Open System Settings → Privacy & Security → Accessibility")
-                        logger.notice("   2. Ensure Terminal (or your IDE) has Accessibility permissions")
-                        logger.notice("   3. Try restarting the application after granting permissions")
+                        logger.notice("   2. Ensure GamePuppeteer has Accessibility permission")
+                        logger.notice("   3. Try relaunching GamePuppeteer after granting permission")
                     case .cannotComplete:
                         logger.fault("   Error: Cannot Complete (window not ready after \(maxRetries, privacy: .public) retries)")
                     case .success:
@@ -356,49 +356,6 @@ struct ProcessInfo {
 }
 
 enum WindowDetector {
-    /// Check if we have Screen Recording permission (needed to read window titles)
-    static func checkScreenRecordingPermission() -> Bool {
-        let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
-        
-        // Check if we can read window titles - if all are unnamed/empty, we likely don't have permission
-        var namedWindowCount = 0
-        var totalWindowCount = 0
-        
-        for window in windowList {
-            let windowName = window[kCGWindowName as String] as? String ?? ""
-            let ownerName = window[kCGWindowOwnerName as String] as? String ?? ""
-            
-            // Only count windows with reasonable owners (not system windows)
-            if !ownerName.isEmpty && ownerName != "Window Server" && ownerName != "Dock" {
-                totalWindowCount += 1
-                if !windowName.isEmpty {
-                    namedWindowCount += 1
-                }
-            }
-        }
-        
-        // If we found windows but none have names, we likely don't have permission
-        let hasPermission = totalWindowCount == 0 || namedWindowCount > 0
-        
-        if !hasPermission {
-            logger.error("⚠️  Screen Recording permission required")
-            logger.error("GameTester cannot read window titles. This is required to detect and interact with game windows.")
-            logger.notice("Opening System Settings to grant permission...")
-            
-            // Open System Settings to the Screen Recording permission pane
-            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
-            NSWorkspace.shared.open(url)
-            
-            logger.notice("Please:")
-            logger.notice("  1. Find and enable Terminal (or your IDE) in the list")
-            logger.notice("  2. Click the lock icon and authenticate if needed")
-            logger.notice("  3. Restart Terminal/IDE (required for permission to take effect)")
-            logger.notice("After granting permission and restarting, please run this test again.")
-        }
-        
-        return hasPermission
-    }
-    
     /// Get all processes for a specific game engine
     static func getAllProcesses(for gameEngine: String) -> [ProcessInfo] {
         let task = Process()

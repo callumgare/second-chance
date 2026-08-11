@@ -1,7 +1,6 @@
 #!/usr/bin/env swift
 
 import Foundation
-import ApplicationServices
 import os
 
 private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "main")
@@ -22,19 +21,10 @@ func printUsage() {
         0   Game exited cleanly
         2   Game required force-quit (acceptable — some Wine games need this)
         1   Test failed (launch failure, OCR failure, etc.)
+        3   Accessibility permission not granted
+        4   Screen Recording permission not granted
+        5   Screen Recording was manually confirmed; relaunch required
     """)
-}
-
-func checkAccessibilityPermissions() -> Bool {
-    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-    let trusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
-
-    if !trusted {
-        logger.error("⚠️  Warning: Accessibility permissions not granted")
-        logger.error("   Go to System Settings → Privacy & Security → Accessibility")
-    }
-
-    return trusted
 }
 
 var appPath: String?
@@ -71,7 +61,22 @@ guard let path = appPath else {
     exit(1)
 }
 
-_ = checkAccessibilityPermissions()
+if !StartupPermissions.ensureAccessibilityPermission() {
+    exit(GamePuppetExitCode.permissionDeniedAccessibility.rawValue)
+}
+
+switch StartupPermissions.ensureScreenRecordingPermission() {
+case .granted:
+    break
+case .denied:
+    exit(GamePuppetExitCode.permissionDeniedScreenRecording.rawValue)
+case .relaunchRequired:
+    exit(GamePuppetExitCode.permissionRelaunchRequiredScreenRecording.rawValue)
+}
+
+logger.notice("PERMISSION_GATE: all_permissions_granted")
+
+StartupPermissions.warmupPrivilegedAPIs()
 
 logger.notice("  → Installing signal handlers...")
 signal(SIGINT, handleTermination)
@@ -98,4 +103,8 @@ let config = TestConfig(
 )
 
 let session = GamePuppetSession(config: config, gameExeName: gameExeName, winePrefix: winePrefix)
-exit(session.run().exitCode)
+let result = session.run()
+if result.exitCode == GamePuppetExitCode.passed.rawValue {
+    logger.notice("GAME_PUPPETEER: run_succeeded")
+}
+exit(result.exitCode)

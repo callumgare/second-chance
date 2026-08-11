@@ -24,10 +24,6 @@ struct GamePuppetSession {
         logger.notice("   Executable: \(gameExeName, privacy: .public)")
         logger.notice("   Max runtime: \(Int(config.maxRuntime), privacy: .public)s")
 
-        guard WindowDetector.checkScreenRecordingPermission() else {
-            return .failed("Screen Recording permission not granted")
-        }
-
         var arguments: [String] = []
         if config.debugMode { arguments.append("--debug") }
 

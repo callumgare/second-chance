@@ -18,6 +18,15 @@ struct TestConfig {
     let debugMode: Bool
 }
 
+enum GamePuppetExitCode: Int32 {
+    case passed = 0
+    case failed = 1
+    case forcedQuit = 2
+    case permissionDeniedAccessibility = 3
+    case permissionDeniedScreenRecording = 4
+    case permissionRelaunchRequiredScreenRecording = 5
+}
+
 /// Typed result of running a puppet session.
 enum GamePuppetResult {
     case passed
@@ -26,9 +35,9 @@ enum GamePuppetResult {
 
     var exitCode: Int32 {
         switch self {
-        case .passed: return 0
-        case .forcedQuit: return 2
-        case .failed: return 1
+        case .passed: return GamePuppetExitCode.passed.rawValue
+        case .forcedQuit: return GamePuppetExitCode.forcedQuit.rawValue
+        case .failed: return GamePuppetExitCode.failed.rawValue
         }
     }
 }
