@@ -36,6 +36,10 @@ fi
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help)
+            sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
         --built-app-path)
             BUILT_APP_PATH="$2"
             shift 2

@@ -24,7 +24,7 @@ class InfoWindowViewModel: ObservableObject {
     let gameSlug: String
     var onConfirm: (() -> Void)?
 
-    private var gameHasLoaded = false
+    private(set) var gameHasLoaded = false
     private var slowLoadingTimer: Timer?
     private var suspectedHangTimer: Timer?
 

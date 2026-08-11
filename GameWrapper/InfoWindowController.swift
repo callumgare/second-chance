@@ -21,6 +21,11 @@ class InfoWindowController: NSWindowController {
         return false
     }
 
+    /// Whether the game has successfully loaded (info window was dismissed).
+    var hasGameLoaded: Bool {
+        viewModel.gameHasLoaded
+    }
+
     init(gameTitle: String, appSupportPath: URL, gameSlug: String = "nancy-drew", saveWarningEnabled: Bool = true, customMessage: String? = nil) {
         self.appSupportPath = appSupportPath
 

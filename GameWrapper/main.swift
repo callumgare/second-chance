@@ -261,6 +261,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let config: GameConfig
     let gameLauncher: GameLauncher?
     var isCleaningUp = false
+    /// Set when the game crashes during loading, so quitting propagates the game's exit code.
+    var gameExitCode: Int32 = 0
     
     init(config: GameConfig, gameLauncher: GameLauncher?) {
         self.config = config
@@ -294,6 +296,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 logger.notice("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
                 logger.notice("[Cleanup] All cleanup complete, terminating application")
+                if self.gameExitCode != 0 {
+                    exit(self.gameExitCode)
+                }
                 NSApp.reply(toApplicationShouldTerminate: true)
                 logger.notice("[Cleanup/AppDelegate] NSApp.reply(toApplicationShouldTerminate: true) called")
             }
@@ -614,8 +619,11 @@ func main() {
         DispatchQueue.global(qos: .userInitiated).async {
             let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
 
-            if exitCode != 0 {
+            // Only treat non-zero exit as an error if the game never loaded.
+            // Wine games often exit with non-zero codes during normal quit.
+            if exitCode != 0 && !infoWindow.hasGameLoaded {
                 logger.error("Game exited with non-zero status: \(exitCode, privacy: .public)")
+                appDelegate.gameExitCode = exitCode
                 infoWindow.showError(exitCode: exitCode)
                 return
             }
