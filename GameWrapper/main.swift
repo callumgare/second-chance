@@ -486,7 +486,7 @@ func main() {
         debugMenu.addItem(openShellItem)
         
         // Keep the handler alive
-        objc_setAssociatedObject(NSApp, "debugMenuHandler", menuHandler, .OBJC_ASSOCIATION_RETAIN)
+        objc_setAssociatedObject(NSApp!, "debugMenuHandler", menuHandler, .OBJC_ASSOCIATION_RETAIN)
     }
     
     NSApp.mainMenu = mainMenu
@@ -610,103 +610,53 @@ func main() {
     }
     
     // Launch based on engine type
+    func launchGameAsync() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
+
+            if exitCode != 0 {
+                logger.error("Game exited with non-zero status: \(exitCode, privacy: .public)")
+                infoWindow.showError(exitCode: exitCode)
+                return
+            }
+
+            if !debugMode {
+                logger.notice("[App Lifecycle] Game ended, exiting cleanly...")
+                exit(0)
+            } else {
+                logger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
+            }
+        }
+    }
+
     switch config.gameEngine {
     case "wine":
-        // Check if we need to wait for warning confirmation
-        let shouldShowWarning = !(infoWindow.warningStackView?.isHidden ?? true)
-        
-        if shouldShowWarning {
-            // Set up callback to launch game when warning is confirmed
+        if infoWindow.isShowingWarning {
             logger.notice("Waiting for user to confirm save warning before launching game...")
             infoWindow.onWarningConfirmed = {
                 logger.notice("Warning confirmed, launching game...")
-                DispatchQueue.global(qos: .userInitiated).async {
-                    do {
-                        _ = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
-                        
-                        // Game has ended, exit cleanly unless in debug mode
-                        if !debugMode {
-                            logger.notice("[App Lifecycle] Game ended, exiting cleanly...")
-                            exit(0)
-                        } else {
-                            logger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
-                        }
-                    } catch {
-                        logger.fault("ERROR: Game launch failed: \(error, privacy: .public)")
-                        logger.fault("Error details: \(error.localizedDescription, privacy: .public)")
-                        DispatchQueue.main.async {
-                            showAlert(message: "Game Launch Failed", informativeText: "An error occurred while launching the game: \(error.localizedDescription)")
-                            NSApp.terminate(nil)
-                        }
-                    }
-                }
+                launchGameAsync()
             }
         } else {
-            // No warning to show, launch game immediately
             logger.notice("No warning to show, launching game immediately...")
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    _ = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
-                    
-                    // Game has ended, exit cleanly unless in debug mode
-                    if !debugMode {
-                        logger.notice("[App Lifecycle] Game ended, exiting cleanly...")
-                        exit(0)
-                    } else {
-                        logger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
-                    }
-                } catch {
-                    logger.fault("ERROR: Game launch failed: \(error, privacy: .public)")
-                    logger.fault("Error details: \(error.localizedDescription, privacy: .public)")
-                    DispatchQueue.main.async {
-                        showAlert(message: "Game Launch Failed", informativeText: "An error occurred while launching the game: \(error.localizedDescription)")
-                        NSApp.terminate(nil)
-                    }
-                }
-            }
+            launchGameAsync()
         }
-        
-        // Start the main event loop
-        NSApp.run()
-        return
-        
+
     case "wine-steam", "wine-steam-silent":
         logger.fault("ERROR: Steam engine not yet implemented in Swift runtime")
         logger.fault("Please use the bash runtime for Steam games")
         exit(1)
-        
+
     case "scummvm":
-        // Launch ScummVM asynchronously
         logger.notice("Launching ScummVM game...")
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                _ = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
-                
-                // Game has ended, exit cleanly unless in debug mode
-                if !debugMode {
-                    logger.notice("[App Lifecycle] Game ended, exiting cleanly...")
-                    exit(0)
-                } else {
-                    logger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
-                }
-            } catch {
-                logger.fault("ERROR: Game launch failed: \(error, privacy: .public)")
-                logger.fault("Error details: \(error.localizedDescription, privacy: .public)")
-                DispatchQueue.main.async {
-                    showAlert(message: "Game Launch Failed", informativeText: "An error occurred while launching the game: \(error.localizedDescription)")
-                    NSApp.terminate(nil)
-                }
-            }
-        }
-        
-        // Start the main event loop
-        NSApp.run()
-        return
-        
+        launchGameAsync()
+
     default:
         logger.fault("ERROR: Unknown game engine: \(config.gameEngine, privacy: .public)")
         exit(1)
     }
+
+    NSApp.run()
 }
 
 // Run the main function

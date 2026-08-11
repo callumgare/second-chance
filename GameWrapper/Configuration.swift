@@ -19,6 +19,7 @@ struct GameConfig {
     let gameEngine: String
     let steamGameId: String?
     let gameTitle: String
+    let gameSlug: String
     let bundleId: String
     let appSupportPath: URL
 }
@@ -196,6 +197,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     }
     
     let steamGameId = readPlist(at: settingsPlistPath, key: "SteamGameId")
+    let gameSlug = readPlist(at: settingsPlistPath, key: "GameSlug") ?? "unknown"
     
     let winePrefix = customWinePrefix ?? appPath.appendingPathComponent("Contents/SharedSupport/prefix")
     
@@ -213,6 +215,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         gameEngine: gameEngine,
         steamGameId: steamGameId,
         gameTitle: gameTitle,
+        gameSlug: gameSlug,
         bundleId: bundleId,
         appSupportPath: appSupportPath
     )

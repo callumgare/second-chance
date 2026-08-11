@@ -26,9 +26,6 @@ public class LogWindow: ObservableObject {
     /// Called for every line received from the log stream. Useful for testing.
     var onLine: ((String) -> Void)?
 
-    // Capture the moment the singleton is created so log history starts from app launch.
-    private let processStartTime = Date()
-
     init() {}
 
     // MARK: - Public API
@@ -39,7 +36,8 @@ public class LogWindow: ObservableObject {
             logWindow = LogWindowController(title: title)
         }
         logWindow?.show(relativeTo: referenceWindow)
-        startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: processStartTime)
+        let since = Self.processStartDate()
+        startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: since)
         isVisible = true
     }
 
@@ -145,6 +143,19 @@ public class LogWindow: ObservableObject {
     }
 
     public var window: NSWindow? { logWindow?.window }
+
+    /// The date this process was created, queried via sysctl.
+    private static func processStartDate() -> Date {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        var mib = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.size
+        guard sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0) == 0 else {
+            return Date()
+        }
+        let tv = info.kp_proc.p_starttime
+        return Date(timeIntervalSince1970: Double(tv.tv_sec) + Double(tv.tv_usec) / 1_000_000)
+    }
 }
 
 // MARK: - Log Window Controller

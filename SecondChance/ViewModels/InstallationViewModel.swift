@@ -183,16 +183,7 @@ class InstallationViewModel: ObservableObject {
     /// Handle state changes in non-interactive mode - exit when complete
     private func handleStateChange(_ state: InstallationState) {
         guard nonInteractiveMode else { return }
-
-        switch state {
-        case .completed:
-            logger.notice("NON-INTERACTIVE MODE: Exiting with success")
-            fflush(stdout)
-            AutomationBridge.shared.stop()
-            _exit(0)
-        default:
-            break
-        }
+        // Exit is handled after performInstallation completes (including game launch)
     }
     
     /// Automatically run installation in non-interactive mode
@@ -209,6 +200,10 @@ class InstallationViewModel: ObservableObject {
                 await MainActor.run {
                     currentState = .completed
                 }
+                logger.notice("NON-INTERACTIVE MODE: Exiting with success")
+                fflush(stdout)
+                AutomationBridge.shared.stop()
+                _exit(0)
                 
             case "her-download":
                 logger.fault("NON-INTERACTIVE MODE: Her Interactive download installation not yet implemented")

@@ -41,14 +41,15 @@ public enum LogExporter {
     }
 
     /// Present an NSSavePanel and return the chosen URL, or nil if cancelled. Must be called on the main thread.
-    public static func selectSaveURL() -> URL? {
+    public static func selectSaveURL(fileNamePrefix: String = "second-chance") -> URL? {
         let panel = NSSavePanel()
         panel.title = "Save Logs"
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate, .withTime, .withTimeZone]
         let timestamp = formatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
-        panel.nameFieldStringValue = "second-chance-logs-\(timestamp).txt"
+        panel.nameFieldStringValue = "\(fileNamePrefix)-logs-\(timestamp).txt"
         panel.allowedContentTypes = [.text]
 
         guard panel.runModal() == .OK else { return nil }

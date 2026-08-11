@@ -58,14 +58,16 @@
 		E2C65E122F15FA4700FAFF50 /* Exceptions for "GameWrapper" folder in "GameWrapper" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				AlertHelper.swift,
 				Configuration.swift,
 				GameLauncher.swift,
 				GameMonitor.swift,
-				InfoWindow.swift,
+				InfoWindowController.swift,
 				main.swift,
 				Resources/Assets.xcassets,
 				Resources/GameWrapperIcon.icon,
 				Subcommands.swift,
+				Views/InfoWindowView.swift,
 			);
 			target = E24D78DD2F063E1E00B38683 /* GameWrapper */;
 		};

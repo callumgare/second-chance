@@ -171,9 +171,6 @@ struct StageIndicator: View {
 struct ErrorView: View {
     let message: String
     @EnvironmentObject var viewModel: InstallationViewModel
-    @ObservedObject var logWindow = LogWindow.shared
-    @State private var isSavingLogs = false
-    @State private var showSaveFailedAlert = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -194,44 +191,9 @@ struct ErrorView: View {
 
             Spacer().frame(height: 12)
 
-            HStack(spacing: 15) {
-                Button {
-                    logWindow.showLogWindow(title: "SecondChance - Installation Log")
-                } label: {
-                    Label("Show Logs", systemImage: "doc.text")
-                }
-                .disabled(logWindow.isVisible)
+            LogActionButtons(logWindowTitle: "SecondChance - Installation Log")
 
-                Button {
-                    isSavingLogs = true
-                    Task { await saveLogs() }
-                } label: {
-                    if isSavingLogs {
-                        Label("Saving…", systemImage: "hourglass")
-                    } else {
-                        Label("Save Logs", systemImage: "square.and.arrow.down")
-                    }
-                }
-                .disabled(isSavingLogs)
-            }
-
-            VStack(spacing: 8) {
-                Text("Believe this is a bug in Second Chance?")
-                    .font(.callout)
-                    .fontWeight(.medium)
-                Link(
-                    "Open an issue on GitHub →",
-                    destination: URL(string: "https://github.com/callumgare/second-chance/issues/new")!
-                )
-                .font(.callout)
-                Text("Attach the saved log file to help diagnose the problem.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding()
-            .frame(maxWidth: 420)
-            .background(Color.orange.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            BugReportCallout()
 
             Spacer().frame(height: 8)
 
@@ -242,21 +204,6 @@ struct ErrorView: View {
         }
         .contentShape(Rectangle())
         .allowsHitTesting(true)
-        .alert("Save Failed", isPresented: $showSaveFailedAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The log file could not be saved. Please try again.")
-        }
-    }
-
-    private func saveLogs() async {
-        guard let url = LogExporter.selectSaveURL() else {
-            isSavingLogs = false
-            return
-        }
-        let succeeded = await LogExporter.export(to: url)
-        isSavingLogs = false
-        if !succeeded { showSaveFailedAlert = true }
     }
 }
 

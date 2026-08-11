@@ -26,7 +26,10 @@ struct SecondChanceApp: App {
         let debugMode = CommandLine.arguments.contains("--debug")
 
         if ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" {
-            NSApp.setActivationPolicy(.prohibited)
+            // NSApp may not exist yet during init; defer to first run loop cycle
+            DispatchQueue.main.async {
+                NSApp?.setActivationPolicy(.prohibited)
+            }
         }
 
         Task { await AutomationBridge.shared.startIfConfigured() }
