@@ -9,7 +9,7 @@ on:
 jobs:
   unit-tests:
     name: Swift Unit Tests
-    runs-on: macos-14
+    runs-on: macos-15
     
     steps:
       - name: Checkout code
@@ -20,18 +20,21 @@ jobs:
         with:
           xcode-version: '16'
       
+      - name: Install xcbeautify
+        run: brew install xcbeautify
+
       - name: Build and test
         run: |
-          cd SecondChance
+          set -o pipefail
           xcodebuild test \
             -scheme SecondChance \
             -destination 'platform=macOS' \
             -resultBundlePath TestResults.xcresult \
-            | xcpretty --color --report html
+            2>&1 | xcbeautify
       
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: SecondChance/TestResults.xcresult
+          path: TestResults.xcresult
