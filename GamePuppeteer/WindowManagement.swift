@@ -7,6 +7,9 @@
 import Foundation
 import AppKit
 import CoreGraphics
+import os
+
+private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "WindowManagement")
 
 // MARK: - Info Window Handler
 
@@ -25,7 +28,7 @@ enum InfoWindowHandler {
         if role == kAXButtonRole as String {
             for term in searchTerms {
                 if title.lowercased().contains(term.lowercased()) {
-                    print("  [DEBUG]     ✓ Found button: '\(title)'")
+                    logger.notice("  [DEBUG]     ✓ Found button: '\(title, privacy: .public)'")
                     return element
                 }
             }
@@ -48,7 +51,7 @@ enum InfoWindowHandler {
     
     /// Find and dismiss the wrapper's info window with save warning
     static func dismissInfoWindow(wrapperPid: Int32, config: TestConfig) -> Bool {
-        print("🔍 Looking for wrapper info window from PID \(wrapperPid)...")
+        logger.notice("🔍 Looking for wrapper info window from PID \(wrapperPid, privacy: .public)...")
         
         let startTime = Date()
         
@@ -57,7 +60,7 @@ enum InfoWindowHandler {
             let options: CGWindowListOption = [.optionOnScreenOnly]
             let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
             
-            print("  [DEBUG] Checking \(windowList.count) windows for info window...")
+            logger.notice("  [DEBUG] Checking \(windowList.count, privacy: .public) windows for info window...")
             
             // Find Nancy Drew info window
             for window in windowList {
@@ -70,27 +73,27 @@ enum InfoWindowHandler {
                 
                 // Show all windows with reasonable size
                 if width > 50 && height > 50 {
-                    print("  [DEBUG]   Window: '\(windowName)' Owner: '\(ownerName)' PID: \(windowPID ?? -1) Size: \(Int(width))x\(Int(height))")
+                    logger.notice("  [DEBUG]   Window: '\(windowName, privacy: .public)' Owner: '\(ownerName, privacy: .public)' PID: \(windowPID ?? -1, privacy: .public) Size: \(Int(width), privacy: .public)x\(Int(height), privacy: .public)")
                 }
                 
                 // Check if window is owned by the wrapper app
                 guard windowPID == wrapperPid else {
                     if width > 50 && height > 50 {
-                        print("  [DEBUG]     ✗ PID \(windowPID ?? -1) doesn't match wrapper PID \(wrapperPid)")
+                        logger.notice("  [DEBUG]     ✗ PID \(windowPID ?? -1, privacy: .public) doesn't match wrapper PID \(wrapperPid, privacy: .public)")
                     }
                     continue
                 }
                 
-                print("  [DEBUG]     ✓ PID matches wrapper")
+                logger.notice("  [DEBUG]     ✓ PID matches wrapper")
                 
                 guard windowName == "Nancy Drew" else {
                     if width > 50 && height > 50 {
-                        print("  [DEBUG]     ✗ Window name is '\(windowName)', not 'Nancy Drew'")
+                        logger.notice("  [DEBUG]     ✗ Window name is '\(windowName, privacy: .public)', not 'Nancy Drew'")
                     }
                     continue
                 }
                 
-                print("  [DEBUG]     ✓ Window name matches 'Nancy Drew'")
+                logger.notice("  [DEBUG]     ✓ Window name matches 'Nancy Drew'")
                 
                 let rect = CGRect(
                     x: bounds["X"] ?? 0,
@@ -102,11 +105,11 @@ enum InfoWindowHandler {
                 // Info window is typically around 450x200-300
                 let widthMatch = rect.width > 400 && rect.width < 500
                 let heightMatch = rect.height > 50 && rect.height < 400
-                print("  [DEBUG]     Width check: \(Int(rect.width)) (need 400-500): \(widthMatch ? "✓" : "✗")")
-                print("  [DEBUG]     Height check: \(Int(rect.height)) (need 50-400): \(heightMatch ? "✓" : "✗")")
+                logger.notice("  [DEBUG]     Width check: \(Int(rect.width), privacy: .public) (need 400-500): \(widthMatch ? "✓" : "✗", privacy: .public)")
+                logger.notice("  [DEBUG]     Height check: \(Int(rect.height), privacy: .public) (need 50-400): \(heightMatch ? "✓" : "✗", privacy: .public)")
                 
                 if widthMatch && heightMatch {
-                    print("  → Found info window: \(Int(rect.width))x\(Int(rect.height))")
+                    logger.notice("  → Found info window: \(Int(rect.width), privacy: .public)x\(Int(rect.height), privacy: .public)")
                     
                     // Wait a moment for window to be fully initialized
                     Thread.sleep(forTimeInterval: 0.5)
@@ -127,7 +130,7 @@ enum InfoWindowHandler {
                         } else if windowsResult == .cannotComplete {
                             retryCount += 1
                             if retryCount < maxRetries {
-                                print("  → Window not accessible yet, retrying (\(retryCount)/\(maxRetries))...")
+                                logger.notice("  → Window not accessible yet, retrying (\(retryCount, privacy: .public)/\(maxRetries, privacy: .public))...")
                                 Thread.sleep(forTimeInterval: 0.5)
                             }
                         } else {
@@ -137,16 +140,16 @@ enum InfoWindowHandler {
                     }
                     
                     if windowsResult == .success, let windows = windowsRef as? [AXUIElement] {
-                        print("  [DEBUG] Found \(windows.count) accessible windows")
+                        logger.notice("  [DEBUG] Found \(windows.count, privacy: .public) accessible windows")
                         
                         for (index, window) in windows.enumerated() {
                             var titleRef: CFTypeRef?
                             AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleRef)
                             let title = titleRef as? String ?? "(no title)"
-                            print("  [DEBUG]   Accessible window [\(index)]: '\(title)'")
+                            logger.notice("  [DEBUG]   Accessible window [\(index, privacy: .public)]: '\(title, privacy: .public)'")
                             
                             if title.contains("Nancy Drew") {
-                                print("  [DEBUG]     ✓ Found Nancy Drew window via Accessibility API")
+                                logger.notice("  [DEBUG]     ✓ Found Nancy Drew window via Accessibility API")
                                 
                                 // Find button with title containing "Understand" or "OK" or "Continue"
                                 if let button = findButton(in: window, containing: ["Understand", "OK", "Continue"]) {
@@ -163,15 +166,15 @@ enum InfoWindowHandler {
                                         AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
                                         
                                         let clickPoint = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
-                                        print("  ✓ Window has button - clicking at (\(Int(clickPoint.x)), \(Int(clickPoint.y)))")
+                                        logger.notice("  ✓ Window has button - clicking at (\(Int(clickPoint.x), privacy: .public), \(Int(clickPoint.y), privacy: .public))")
                                         InputControl.click(at: clickPoint)
                                         Thread.sleep(forTimeInterval: 0.5)
                                         
-                                        print("✅ Info window dismissed")
+                                        logger.notice("✅ Info window dismissed")
                                         return true
                                     }
                                 } else {
-                                    print("  ✗ Window does not have a button - continuing without clicking")
+                                    logger.notice("  ✗ Window does not have a button - continuing without clicking")
                                     return true
                                 }
                             }
@@ -179,51 +182,50 @@ enum InfoWindowHandler {
                     }
                     
                     // Could not access window via Accessibility API - decode and report error
-                    print("❌ Could not access info window via Accessibility API")
-                    print("   Found window: \(Int(rect.width))x\(Int(rect.height)) at PID \(wrapperPid)")
-                    print("   AXError code: \(windowsResult.rawValue)")
+                    logger.fault("❌ Could not access info window via Accessibility API")
+                    logger.fault("   Found window: \(Int(rect.width), privacy: .public)x\(Int(rect.height), privacy: .public) at PID \(wrapperPid, privacy: .public)")
+                    logger.fault("   AXError code: \(windowsResult.rawValue, privacy: .public)")
                     
                     // Decode the error and show troubleshooting if needed
                     switch windowsResult {
                     case .apiDisabled:
-                        print("   Error: API Disabled (accessibility not enabled)")
-                        print("")
-                        print("   Troubleshooting:")
-                        print("   1. Open System Settings → Privacy & Security → Accessibility")
-                        print("   2. Ensure Terminal (or your IDE) has Accessibility permissions")
-                        print("   3. Try restarting the application after granting permissions")
+                        logger.fault("   Error: API Disabled (accessibility not enabled)")
+                        logger.notice("   Troubleshooting:")
+                        logger.notice("   1. Open System Settings → Privacy & Security → Accessibility")
+                        logger.notice("   2. Ensure Terminal (or your IDE) has Accessibility permissions")
+                        logger.notice("   3. Try restarting the application after granting permissions")
                     case .cannotComplete:
-                        print("   Error: Cannot Complete (window not ready after \(maxRetries) retries)")
+                        logger.fault("   Error: Cannot Complete (window not ready after \(maxRetries, privacy: .public) retries)")
                     case .success:
-                        print("   Error: Success (but windows array was invalid)")
+                        logger.fault("   Error: Success (but windows array was invalid)")
                     case .failure:
-                        print("   Error: Failure")
+                        logger.fault("   Error: Failure")
                     case .illegalArgument:
-                        print("   Error: Illegal Argument")
+                        logger.fault("   Error: Illegal Argument")
                     case .invalidUIElement:
-                        print("   Error: Invalid UI Element")
+                        logger.fault("   Error: Invalid UI Element")
                     case .invalidUIElementObserver:
-                        print("   Error: Invalid UI Element Observer")
+                        logger.fault("   Error: Invalid UI Element Observer")
                     case .attributeUnsupported:
-                        print("   Error: Attribute Unsupported")
+                        logger.fault("   Error: Attribute Unsupported")
                     case .actionUnsupported:
-                        print("   Error: Action Unsupported")
+                        logger.fault("   Error: Action Unsupported")
                     case .notificationUnsupported:
-                        print("   Error: Notification Unsupported")
+                        logger.fault("   Error: Notification Unsupported")
                     case .notImplemented:
-                        print("   Error: Not Implemented")
+                        logger.fault("   Error: Not Implemented")
                     case .notificationAlreadyRegistered:
-                        print("   Error: Notification Already Registered")
+                        logger.fault("   Error: Notification Already Registered")
                     case .notificationNotRegistered:
-                        print("   Error: Notification Not Registered")
+                        logger.fault("   Error: Notification Not Registered")
                     case .noValue:
-                        print("   Error: No Value")
+                        logger.fault("   Error: No Value")
                     case .parameterizedAttributeUnsupported:
-                        print("   Error: Parameterized Attribute Unsupported")
+                        logger.fault("   Error: Parameterized Attribute Unsupported")
                     case .notEnoughPrecision:
-                        print("   Error: Not Enough Precision")
+                        logger.fault("   Error: Not Enough Precision")
                     @unknown default:
-                        print("   Error: Unknown error")
+                        logger.fault("   Error: Unknown error")
                     }
                     return false
                 }
@@ -232,7 +234,7 @@ enum InfoWindowHandler {
             Thread.sleep(forTimeInterval: 0.3)
         }
         
-        print("  → Info window not found (may have been auto-dismissed)")
+        logger.notice("  → Info window not found (may have been auto-dismissed)")
         return false
     }
 }
@@ -288,7 +290,7 @@ enum GameFocusDetector {
     
     /// Wait for game to become focused, trying to activate it
     static func waitForGameToBecomeFocused(pid: Int32, gameEngine: String, timeout: TimeInterval = 10.0) -> Bool {
-        print("\n[Step 3] Waiting for game to become active...")
+        logger.notice("\n[Step 3] Waiting for game to become active...")
         let startTime = Date()
         var lastPrintTime = Date()
         
@@ -310,29 +312,29 @@ enum GameFocusDetector {
                     // Wait a bit longer to ensure window is fully rendered and stable
                     Thread.sleep(forTimeInterval: 10.0)
                     let elapsed = Date().timeIntervalSince(startTime)
-                    print("✅ Game is active after \(String(format: "%.1f", elapsed))s")
+                    logger.notice("✅ Game is active after \(String(format: "%.1f", elapsed), privacy: .public)s")
                     
                     return true
                 } else {
                     // Print status every 2 seconds
                     if Date().timeIntervalSince(lastPrintTime) >= 2.0 {
                         let elapsed = Date().timeIntervalSince(startTime)
-                        print("   [\(String(format: "%.1f", elapsed))s] Game app not active yet, retrying...")
+                        logger.notice("   [\(String(format: "%.1f", elapsed), privacy: .public)s] Game app not active yet, retrying...")
                         
                         // Also show what is currently frontmost
                         let frontmostApp = NSWorkspace.shared.frontmostApplication
                         let frontmostName = frontmostApp?.localizedName ?? frontmostApp?.bundleIdentifier ?? "unknown"
                         let frontmostPid = frontmostApp?.processIdentifier ?? -1
-                        print("   Current frontmost: \(frontmostName) (PID: \(frontmostPid)), Looking for PID: \(pid)")
+                        logger.notice("   Current frontmost: \(frontmostName, privacy: .public) (PID: \(frontmostPid, privacy: .public)), Looking for PID: \(pid, privacy: .public)")
                         lastPrintTime = Date()
                     }
                 }
             } else {
                 let elapsed = Int(Date().timeIntervalSince(startTime))
-                print("   [\(elapsed)s] Game app not found in running applications...")
+                logger.notice("   [\(elapsed, privacy: .public)s] Game app not found in running applications...")
                 
                 if elapsed >= Int(timeout) {
-                    print("❌ Timeout: Could not find game in running applications")
+                    logger.fault("❌ Timeout: Could not find game in running applications")
                     return false
                 }
             }
@@ -341,7 +343,7 @@ enum GameFocusDetector {
             Thread.sleep(forTimeInterval: 0.3)
         }
         
-        print("❌ Timeout: Game did not become active within \(Int(timeout))s")
+        logger.fault("❌ Timeout: Game did not become active within \(Int(timeout), privacy: .public)s")
         return false
     }
 }
@@ -379,25 +381,19 @@ enum WindowDetector {
         let hasPermission = totalWindowCount == 0 || namedWindowCount > 0
         
         if !hasPermission {
-            print("")
-            print("⚠️  Screen Recording permission required")
-            print("")
-            print("GameTester cannot read window titles. This is required to detect and interact with game windows.")
-            print("")
-            print("Opening System Settings to grant permission...")
-            print("")
+            logger.error("⚠️  Screen Recording permission required")
+            logger.error("GameTester cannot read window titles. This is required to detect and interact with game windows.")
+            logger.notice("Opening System Settings to grant permission...")
             
             // Open System Settings to the Screen Recording permission pane
             let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
             NSWorkspace.shared.open(url)
             
-            print("Please:")
-            print("  1. Find and enable Terminal (or your IDE) in the list")
-            print("  2. Click the lock icon and authenticate if needed")
-            print("  3. Restart Terminal/IDE (required for permission to take effect)")
-            print("")
-            print("After granting permission and restarting, please run this test again.")
-            print("")
+            logger.notice("Please:")
+            logger.notice("  1. Find and enable Terminal (or your IDE) in the list")
+            logger.notice("  2. Click the lock icon and authenticate if needed")
+            logger.notice("  3. Restart Terminal/IDE (required for permission to take effect)")
+            logger.notice("After granting permission and restarting, please run this test again.")
         }
         
         return hasPermission
@@ -449,7 +445,7 @@ enum WindowDetector {
                 }
             }
         } catch {
-            print("  ⚠️  Error checking processes: \(error)")
+            logger.error("  ⚠️  Error checking processes: \(error, privacy: .public)")
         }
         
         return processes
@@ -457,30 +453,29 @@ enum WindowDetector {
     /// Wait for window with app name to appear (handles Wine and ScummVM)
     /// Returns the game process PID if found, nil otherwise
     static func waitForWindow(appName: String, wrapperPid: Int32, gameEngine: String, gameExeName: String, prefixPath: URL, timeout: TimeInterval) -> Int32? {
-        print("⏳ Waiting for game window to appear (timeout: \(Int(timeout))s)...)")
-        print("   Engine: \(gameEngine)")
+        logger.notice("⏳ Waiting for game window to appear (timeout: \(Int(timeout), privacy: .public)s)...")
+        logger.notice("   Engine: \(gameEngine, privacy: .public)")
         
         // Determine what process to look for based on engine
         let processToFind: String
         if gameEngine.lowercased().contains("wine") {
             processToFind = gameExeName  // Wine: look for game executable (e.g., Game.exe)
-            print("   Looking for Wine process: \(processToFind)")
-            print("   Wine prefix: \(prefixPath.path)")
+            logger.notice("   Looking for Wine process: \(processToFind, privacy: .public)")
+            logger.notice("   Wine prefix: \(prefixPath.path, privacy: .public)")
         } else if gameEngine.lowercased().contains("scummvm") {
             processToFind = "scummvm"  // ScummVM: look for scummvm process
-            print("   Looking for ScummVM process: \(processToFind)")
+            logger.notice("   Looking for ScummVM process: \(processToFind, privacy: .public)")
         } else {
             processToFind = gameExeName  // Default: look for game executable
-            print("   Looking for process: \(processToFind)")
+            logger.notice("   Looking for process: \(processToFind, privacy: .public)")
         }
-        print("")
         
         let startTime = Date()
         var lastPrintTime = Date()
         var gamePid: Int32?
         
         // Step 1: Wait for game executable/engine process to appear
-        print("[Step 1] Monitoring for \(processToFind) process...")
+        logger.notice("[Step 1] Monitoring for \(processToFind, privacy: .public) process...")
         let processTimeout: TimeInterval = timeout * 0.7  // Use 70% of timeout for process detection
         
         while Date().timeIntervalSince(startTime) < processTimeout {
@@ -489,14 +484,14 @@ enum WindowDetector {
             // Print debug info every 5 seconds
             if Date().timeIntervalSince(lastPrintTime) >= 5 {
                 let elapsed = Int(Date().timeIntervalSince(startTime))
-                print("   [\(elapsed)s] Checking for \(processToFind) process...")
-                print("   Found \(processes.count) total processes")
+                logger.notice("   [\(elapsed, privacy: .public)s] Checking for \(processToFind, privacy: .public) process...")
+                logger.notice("   Found \(processes.count, privacy: .public) total processes")
                 lastPrintTime = Date()
             }
             
             // Look for the specific process
             if let gameProcess = processes.first(where: { $0.name.lowercased() == processToFind.lowercased() }) {
-                print("✅ \(processToFind) process detected (PID: \(gameProcess.pid))")
+                logger.notice("✅ \(processToFind, privacy: .public) process detected (PID: \(gameProcess.pid, privacy: .public))")
                 gamePid = gameProcess.pid
                 break
             }
@@ -505,12 +500,12 @@ enum WindowDetector {
         }
         
         guard let pid = gamePid else {
-            print("❌ Timeout: \(processToFind) process not detected")
+            logger.fault("❌ Timeout: \(processToFind, privacy: .public) process not detected")
             return nil
         }
         
         // Step 2: Wait for window owned by game process
-        print("\n[Step 2] Monitoring for windows from \(processToFind) (PID: \(pid))...")
+        logger.notice("\n[Step 2] Monitoring for windows from \(processToFind, privacy: .public) (PID: \(pid, privacy: .public))...")
         let windowStartTime = Date()
         let windowTimeout: TimeInterval = 30.0
         
@@ -529,15 +524,15 @@ enum WindowDetector {
             if !gameWindows.isEmpty {
                 
                 let totalElapsed = Date().timeIntervalSince(startTime)
-                print("✅ Game window detected after \(String(format: "%.1f", totalElapsed))s")
-                print("   Found \(gameWindows.count) window(s) from \(processToFind)")
+                logger.notice("✅ Game window detected after \(String(format: "%.1f", totalElapsed), privacy: .public)s")
+                logger.notice("   Found \(gameWindows.count, privacy: .public) window(s) from \(processToFind, privacy: .public)")
                 
                 for (index, window) in gameWindows.enumerated() {
                     let windowName = window[kCGWindowName as String] as? String ?? "(unnamed)"
                     let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
                     let width = Int(bounds["Width"] ?? 0)
                     let height = Int(bounds["Height"] ?? 0)
-                    print("   [\(index + 1)] \(windowName) - \(width)x\(height)")
+                    logger.notice("   [\(index + 1, privacy: .public)] \(windowName, privacy: .public) - \(width, privacy: .public)x\(height, privacy: .public)")
                 }
                 
                 // Wait for window to be focused
@@ -564,9 +559,9 @@ enum WindowDetector {
                     windowScreenshotTask.arguments = ["-x", "-l\(windowNumber)", windowScreenshotPath]
                     try? windowScreenshotTask.run()
                     windowScreenshotTask.waitUntilExit()
-                    print("📸 Window screenshot: \(windowScreenshotPath)")
+                    logger.notice("📸 Window screenshot: \(windowScreenshotPath, privacy: .public)")
                 } else {
-                    print("⚠️  Could not get window ID for screenshot")
+                    logger.error("⚠️  Could not get window ID for screenshot")
                 }
                 
                 // Then, take a screenshot of the whole screen
@@ -576,20 +571,20 @@ enum WindowDetector {
                 fullScreenshotTask.arguments = ["-x", fullScreenshotPath]
                 try? fullScreenshotTask.run()
                 fullScreenshotTask.waitUntilExit()
-                print("📸 Full screen screenshot: \(fullScreenshotPath)")
+                logger.notice("📸 Full screen screenshot: \(fullScreenshotPath, privacy: .public)")
                 
                 return pid
             }
             
             if elapsed % 5 == 0 {
-                print("   [\(elapsed)s] No windows yet, still waiting...")
+                logger.notice("   [\(elapsed, privacy: .public)s] No windows yet, still waiting...")
             }
             
             Thread.sleep(forTimeInterval: 0.2)
         }
         
-        print("❌ Timeout: \(processToFind) process found but no windows appeared")
-        print("   Final window list:")
+        logger.fault("❌ Timeout: \(processToFind, privacy: .public) process found but no windows appeared")
+        logger.fault("   Final window list:")
         printAllWindows()
         return nil
     }
@@ -599,7 +594,7 @@ enum WindowDetector {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
         
-        print("📋 Current windows on screen:")
+        logger.notice("📋 Current windows on screen:")
         for (index, window) in windowList.enumerated() {
             let ownerName = window[kCGWindowOwnerName as String] as? String ?? "(no owner)"
             let windowTitle = window[kCGWindowName as String] as? String ?? "(no title)"
@@ -609,10 +604,9 @@ enum WindowDetector {
             
             // Only show windows with reasonable size (filter out tiny helper windows)
             if width > 50 && height > 50 {
-                print("   [\(index)] Owner: '\(ownerName)' | Title: '\(windowTitle)' | Size: \(width)x\(height)")
+                logger.notice("   [\(index, privacy: .public)] Owner: '\(ownerName, privacy: .public)' | Title: '\(windowTitle, privacy: .public)' | Size: \(width, privacy: .public)x\(height, privacy: .public)")
             }
         }
-        print("")
     }
     
     /// Find window for game (handles native apps, Wine, and ScummVM)

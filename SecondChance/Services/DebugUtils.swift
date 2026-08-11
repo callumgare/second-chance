@@ -5,13 +5,16 @@
 //  Debugging and diagnostic utilities
 
 import Foundation
+import os
 
 class DebugUtils {
+    
+    private static let logger = Logger(subsystem: "com.secondchance", category: "DebugUtils")
     
     /// Trace and log a path from a root directory, showing what exists and what doesn't
     /// Useful for debugging when expected directories are not found
     static func tracePath(from rootPath: URL, to targetPath: URL, fileManager: FileManager = .default) {
-        print("   Tracing path from \(rootPath.lastPathComponent) to target: \(targetPath.path)")
+        logger.notice("   Tracing path from \(rootPath.lastPathComponent, privacy: .public) to target: \(targetPath.path, privacy: .public)")
         
         // Get relative path components
         let rootComponents = rootPath.pathComponents
@@ -44,13 +47,13 @@ class DebugUtils {
         let indent = "     "
         
         // Show root directory
-        print("   \(String(repeating: indent, count: depth))📁 \(rootPath.lastPathComponent)")
+        logger.notice("   \(String(repeating: indent, count: depth), privacy: .public)📁 \(rootPath.lastPathComponent, privacy: .public)")
         if let contents = try? fileManager.contentsOfDirectory(atPath: currentPath.path) {
             for item in contents.sorted() {
                 let itemPath = currentPath.appendingPathComponent(item)
                 var isDir: ObjCBool = false
                 fileManager.fileExists(atPath: itemPath.path, isDirectory: &isDir)
-                print("   \(String(repeating: indent, count: depth + 1))\(isDir.boolValue ? "📁" : "📄") \(item)")
+                logger.notice("   \(String(repeating: indent, count: depth + 1), privacy: .public)\(isDir.boolValue ? "📁" : "📄", privacy: .public) \(item, privacy: .public)")
             }
         }
         
@@ -59,39 +62,39 @@ class DebugUtils {
             depth = index + 1
             let nextPath = currentPath.appendingPathComponent(segment)
             
-            print("   \(String(repeating: indent, count: depth))Looking for: 📁 \(segment)")
+            logger.notice("   \(String(repeating: indent, count: depth), privacy: .public)Looking for: 📁 \(segment, privacy: .public)")
             
             if fileManager.fileExists(atPath: nextPath.path) {
                 var isDir: ObjCBool = false
                 fileManager.fileExists(atPath: nextPath.path, isDirectory: &isDir)
                 
                 if isDir.boolValue {
-                    print("   \(String(repeating: indent, count: depth))✅ Found directory")
+                    logger.notice("   \(String(repeating: indent, count: depth), privacy: .public)✅ Found directory")
                     
                     // Show contents of this directory
                     if let contents = try? fileManager.contentsOfDirectory(atPath: nextPath.path) {
-                        print("   \(String(repeating: indent, count: depth))Contents:")
+                        logger.notice("   \(String(repeating: indent, count: depth), privacy: .public)Contents:")
                         for item in contents.sorted() {
                             let itemPath = nextPath.appendingPathComponent(item)
                             var isSubDir: ObjCBool = false
                             fileManager.fileExists(atPath: itemPath.path, isDirectory: &isSubDir)
-                            print("   \(String(repeating: indent, count: depth + 1))\(isSubDir.boolValue ? "📁" : "📄") \(item)")
+                            logger.notice("   \(String(repeating: indent, count: depth + 1), privacy: .public)\(isSubDir.boolValue ? "📁" : "📄", privacy: .public) \(item, privacy: .public)")
                         }
                     }
                     currentPath = nextPath
                 } else {
-                    print("   \(String(repeating: indent, count: depth))❌ Found but is a file, not a directory")
+                    logger.fault("   \(String(repeating: indent, count: depth), privacy: .public)❌ Found but is a file, not a directory")
                     break
                 }
             } else {
-                print("   \(String(repeating: indent, count: depth))❌ Not found")
-                print("   \(String(repeating: indent, count: depth))Parent directory contents:")
+                logger.fault("   \(String(repeating: indent, count: depth), privacy: .public)❌ Not found")
+                logger.notice("   \(String(repeating: indent, count: depth), privacy: .public)Parent directory contents:")
                 if let contents = try? fileManager.contentsOfDirectory(atPath: currentPath.path) {
                     for item in contents.sorted() {
                         let itemPath = currentPath.appendingPathComponent(item)
                         var isDir: ObjCBool = false
                         fileManager.fileExists(atPath: itemPath.path, isDirectory: &isDir)
-                        print("   \(String(repeating: indent, count: depth + 1))\(isDir.boolValue ? "📁" : "📄") \(item)")
+                        logger.notice("   \(String(repeating: indent, count: depth + 1), privacy: .public)\(isDir.boolValue ? "📁" : "📄", privacy: .public) \(item, privacy: .public)")
                     }
                 }
                 break

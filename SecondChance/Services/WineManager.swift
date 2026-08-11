@@ -5,6 +5,7 @@
 //  Manages Wine environment and execution
 
 import Foundation
+import os
 import AppKit
 
 // Note: WineEnvironment is defined in this same module
@@ -15,6 +16,7 @@ class WineManager {
     
     private let fileManager = FileManager.default
     private let prefixCacheDir: URL
+    private let logger = Logger(subsystem: "com.secondchance", category: "WineManager")
     
     private init() {
         // Set up prefix cache directory in user's Caches (persists between runs)
@@ -70,7 +72,7 @@ class WineManager {
         let cachedPrefixDir = prefixCacheDir.appendingPathComponent(buildId)
         let cachedPrefix = cachedPrefixDir.appendingPathComponent("prefix")
         
-        print("Caching Wine prefix for build: \(buildId)...")
+        logger.notice("Caching Wine prefix for build: \(buildId, privacy: .public)...")
         
         // Remove old cache for this build if it exists
         try? fileManager.removeItem(at: cachedPrefixDir)
@@ -81,16 +83,16 @@ class WineManager {
         // Copy prefix to cache
         try fileManager.copyItem(at: sourcePath, to: cachedPrefix)
         
-        print("✓ Cached Wine prefix for build: \(buildId)")
+        logger.notice("✓ Cached Wine prefix for build: \(buildId, privacy: .public)")
     }
     
     /// Clear all cached Wine prefixes
     func clearCache() throws {
         if fileManager.fileExists(atPath: prefixCacheDir.path) {
             try fileManager.removeItem(at: prefixCacheDir)
-            print("✓ Cleared Wine prefix cache")
+            logger.notice("✓ Cleared Wine prefix cache")
         } else {
-            print("✓ Wine prefix cache is already empty")
+            logger.notice("✓ Wine prefix cache is already empty")
         }
     }
     
@@ -100,7 +102,8 @@ class WineManager {
         
         // Check if we have a cached prefix
         if let cachedPrefix = getCachedPrefix() {
-            print("✓ Using cached Wine prefix (build: \(getBuildIdentifier()))")
+            let buildId = getBuildIdentifier()
+            logger.notice("✓ Using cached Wine prefix (build: \(buildId, privacy: .public))")
             
             // Copy cached prefix to wrapper
             try? fileManager.removeItem(at: prefixPath)
@@ -129,7 +132,7 @@ class WineManager {
                 if let contents = try? String(contentsOf: ddrawIniPath, encoding: .utf8) {
                     let updated = contents.replacingOccurrences(of: "maintas=false", with: "maintas=true")
                     try? updated.write(to: ddrawIniPath, atomically: true, encoding: .utf8)
-                    print("✓ Configured cnc-ddraw to maintain aspect ratio")
+                    logger.notice("✓ Configured cnc-ddraw to maintain aspect ratio")
                 }
             }
         
@@ -204,7 +207,7 @@ class WineManager {
         
         // Set drive type in Wine registry if specified
         if !driveType.isEmpty {
-            print("Setting drive \(driveLetter): type to \(driveType) in Wine registry")
+            logger.notice("Setting drive \(driveLetter, privacy: .public): type to \(driveType, privacy: .public) in Wine registry")
             try await runWine(
                 at: wrapperPath,
                 executable: "wine",
@@ -268,7 +271,7 @@ class WineManager {
             try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments)
             return 0
         } catch let WineError.executionFailed(exitCode) {
-            print("⚠️  Warning: \(exePath) exited with non-zero code: \(exitCode)")
+            logger.error("⚠️  Warning: \(exePath, privacy: .public) exited with non-zero code: \(exitCode, privacy: .public)")
             return exitCode
         }
     }
@@ -287,7 +290,7 @@ class WineManager {
             try await runWine(at: wrapperPath, executable: executable, arguments: arguments)
             return 0
         } catch let WineError.executionFailed(exitCode) {
-            print("⚠️  Warning: \(executable) exited with non-zero code: \(exitCode)")
+            logger.error("⚠️  Warning: \(executable, privacy: .public) exited with non-zero code: \(exitCode, privacy: .public)")
             return exitCode
         }
     }
@@ -310,7 +313,7 @@ class WineManager {
         try process.run()
         process.waitUntilExit()
         
-        print("Wine server started in persistent mode")
+        logger.notice("Wine server started in persistent mode")
     }
     
     /// Install a winetrick
@@ -344,11 +347,11 @@ class WineManager {
                 let errorHandle = errorPipe.fileHandleForReading
                 
                 if let output = String(data: outputHandle.readDataToEndOfFile(), encoding: .utf8), !output.isEmpty {
-                    print("Winetricks output: \(output)")
+                    self.logger.notice("Winetricks output: \(output, privacy: .public)")
                 }
                 
                 if let error = String(data: errorHandle.readDataToEndOfFile(), encoding: .utf8), !error.isEmpty {
-                    print("Winetricks error: \(error)")
+                    self.logger.notice("Winetricks error: \(error, privacy: .public)")
                 }
                 
                 if process.terminationStatus != 0 {
@@ -356,10 +359,10 @@ class WineManager {
                     return
                 }
                 
-                print("✓ Successfully installed \(name)")
+                self.logger.notice("✓ Successfully installed \(name, privacy: .public)")
                 continuation.resume()
             } catch {
-                print("Failed to install winetrick \(name): \(error)")
+                self.logger.notice("Failed to install winetrick \(name, privacy: .public): \(error, privacy: .public)")
                 continuation.resume(throwing: error)
             }
             }

@@ -2,9 +2,12 @@
 
 import Foundation
 import ApplicationServices
+import os
+
+private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "main")
 
 func printUsage() {
-    print("""
+    logger.notice("""
     GamePuppeteer - Automated game launch & quit test tool
 
     Usage:
@@ -13,8 +16,6 @@ func printUsage() {
     Options:
         --timeout <seconds>    Maximum runtime (default: 60)
         --debug                Launch game in debug mode
-        --game-log-path <path>      Path to write game wrapper log output
-        --puppeteer-log-path <path> Path to write GamePuppeteer's own stdout/stderr
         --help                 Show this help
 
     Exit codes:
@@ -29,8 +30,8 @@ func checkAccessibilityPermissions() -> Bool {
     let trusted = AXIsProcessTrustedWithOptions(options as CFDictionary)
 
     if !trusted {
-        print("⚠️  Warning: Accessibility permissions not granted")
-        print("   Go to System Settings → Privacy & Security → Accessibility")
+        logger.error("⚠️  Warning: Accessibility permissions not granted")
+        logger.error("   Go to System Settings → Privacy & Security → Accessibility")
     }
 
     return trusted
@@ -39,7 +40,6 @@ func checkAccessibilityPermissions() -> Bool {
 var appPath: String?
 var timeout: TimeInterval = 60
 var debugMode = false
-var logFilePath: String?
 
 var i = 1
 while i < CommandLine.arguments.count {
@@ -56,18 +56,6 @@ while i < CommandLine.arguments.count {
         }
     case "--debug":
         debugMode = true
-    case "--game-log-path":
-        i += 1
-        if i < CommandLine.arguments.count {
-            logFilePath = CommandLine.arguments[i]
-        }
-    case "--puppeteer-log-path":
-        i += 1
-        if i < CommandLine.arguments.count {
-            // Redirect stdout+stderr to a file so the test runner can attach them.
-            let fd = open(CommandLine.arguments[i], O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-            if fd >= 0 { dup2(fd, STDOUT_FILENO); dup2(fd, STDERR_FILENO); close(fd) }
-        }
     default:
         if appPath == nil && !arg.hasPrefix("-") {
             appPath = arg
@@ -78,37 +66,35 @@ while i < CommandLine.arguments.count {
 }
 
 guard let path = appPath else {
-    print("Error: No app path provided\n")
+    logger.fault("Error: No app path provided")
     printUsage()
     exit(1)
 }
 
 _ = checkAccessibilityPermissions()
 
-print("  → Installing signal handlers...")
+logger.notice("  → Installing signal handlers...")
 signal(SIGINT, handleTermination)
 signal(SIGTERM, handleTermination)
 signal(SIGHUP, handleTermination)
-print("  → Signal handlers installed\n")
+logger.notice("  → Signal handlers installed")
 
 let gameEngine = readGameEngine(appPath: path) ?? "unknown"
 let gameExePath = readGameExePath(appPath: path) ?? "/Game.exe"
 let gameExeName = (gameExePath as NSString).lastPathComponent
 let winePrefix = getWinePrefix(appPath: path)
 
-print("ℹ️  Game engine: \(gameEngine)")
-print("ℹ️  Game executable: \(gameExeName)")
+logger.notice("ℹ️  Game engine: \(gameEngine, privacy: .public)")
+logger.notice("ℹ️  Game executable: \(gameExeName, privacy: .public)")
 if gameEngine.lowercased().contains("wine") {
-    print("ℹ️  Wine prefix: \(winePrefix.path)")
+    logger.notice("ℹ️  Wine prefix: \(winePrefix.path, privacy: .public)")
 }
-print("")
 
 let config = TestConfig(
     appPath: path,
     maxRuntime: timeout,
     gameEngine: gameEngine,
-    debugMode: debugMode,
-    logFilePath: logFilePath
+    debugMode: debugMode
 )
 
 let session = GamePuppetSession(config: config, gameExeName: gameExeName, winePrefix: winePrefix)

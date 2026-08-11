@@ -7,7 +7,7 @@
 //  records the structured values that tests assert on.
 //
 //  This is the test-side counterpart to the event publishing added in Phase 2.
-//  Instead of scraping stdout text (which loses structure), tests assert on
+//  Instead of scraping log text, tests assert on
 //  the typed events — guaranteed ordered, exact, and lossless.
 
 import Foundation

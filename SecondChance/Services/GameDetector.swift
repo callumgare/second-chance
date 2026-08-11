@@ -5,6 +5,7 @@
 //  Detects which Nancy Drew game is being installed from various sources
 
 import Foundation
+import os
 import UniformTypeIdentifiers
 
 /// Detects Nancy Drew games from various installation sources
@@ -12,15 +13,15 @@ class GameDetector {
     static let shared = GameDetector()
 
     private let exiftool = ExiftoolService.shared
-    private let logger = ContextualLogger(source: "GameDetector")
+    private let logger = Logger(subsystem: "com.secondchance", category: "GameDetector")
     
     private init() {}
     
     /// Detect game from disk path
     func detectGame(fromDisk diskPath: URL) async throws -> String {
         // Note: Progress should already be reported by caller before this method
-        let stepLogger = logger.step(.detectingGame(substep: nil))
-        stepLogger.log("Analyzing: \(diskPath.lastPathComponent)")
+        let stepLogger = logger
+        stepLogger.notice("Analyzing: \(diskPath.lastPathComponent, privacy: .public)")
 
         var fingerprint = ""
 
@@ -30,18 +31,18 @@ class GameDetector {
             options: [.skipsHiddenFiles]
         )
 
-        stepLogger.log("Found \(contents.count) items in disk")
+        stepLogger.notice("Found \(contents.count, privacy: .public) items in disk")
         
         if let setupExe = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.exe" }) {
             if let productName = try? getFileInfo(setupExe, property: "Product Name") {
-                stepLogger.log("Product Name: \(productName)")
+                stepLogger.notice("Product Name: \(productName, privacy: .public)")
                 fingerprint += " \(productName)"
             }
         }
         
         if let msiFile = contents.first(where: { $0.pathExtension.lowercased() == "msi" }) {
             if let subject = try? getFileInfo(msiFile, property: "Subject") {
-                stepLogger.log("MSI Subject: \(subject)")
+                stepLogger.notice("MSI Subject: \(subject, privacy: .public)")
                 fingerprint += " \(subject)"
             }
         }
@@ -49,11 +50,11 @@ class GameDetector {
         if let setupIni = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.ini" }) {
             if let iniContent = try? String(contentsOf: setupIni, encoding: .utf8) {
                 if let appName = getPropertyFromIni(iniContent, property: "AppName") {
-                    stepLogger.log("AppName: \(appName)")
+                    stepLogger.notice("AppName: \(appName, privacy: .public)")
                     fingerprint += " \(appName)"
                 }
                 if let product = getPropertyFromIni(iniContent, property: "Product") {
-                    stepLogger.log("Product: \(product)")
+                    stepLogger.notice("Product: \(product, privacy: .public)")
                     fingerprint += " \(product)"
                 }
             }
@@ -62,7 +63,7 @@ class GameDetector {
         if let autorunInf = contents.first(where: { $0.lastPathComponent.lowercased() == "autorun.inf" }) {
             if let autorunContent = try? String(contentsOf: autorunInf, encoding: .utf8) {
                 if let label = getAutorunLabel(autorunContent) {
-                    stepLogger.log("Autorun label: \(label)")
+                    stepLogger.notice("Autorun label: \(label, privacy: .public)")
                     fingerprint += " \(label)"
                 }
             }
@@ -70,13 +71,13 @@ class GameDetector {
         
         fingerprint += " \(diskPath.lastPathComponent)"
 
-        stepLogger.log("Fingerprint: '\(fingerprint)'")
+        stepLogger.notice("Fingerprint: '\(fingerprint, privacy: .public)'")
         let result = getGameSlugFromFingerprint(fingerprint)
 
         if result == "unknown" {
-            stepLogger.log("Detection failed for '\(diskPath.lastPathComponent)' fingerprint='\(fingerprint)'", level: .error)
+            stepLogger.fault("Detection failed for '\(diskPath.lastPathComponent, privacy: .public)' fingerprint='\(fingerprint, privacy: .public)'")
         } else {
-            stepLogger.log("Detected: \(result)")
+            stepLogger.notice("Detected: \(result, privacy: .public)")
         }
         
         return result
@@ -84,23 +85,23 @@ class GameDetector {
     
     /// Detect game from Her Interactive installer
     func detectGame(fromInstaller installerPath: URL) async throws -> String {
-        print("🔍 GameDetector: Starting detection from installer: \(installerPath.lastPathComponent)")
+        logger.notice("🔍 GameDetector: Starting detection from installer: \(installerPath.lastPathComponent, privacy: .public)")
         
         // Use filename as fingerprint, replacing underscores with spaces
         let filename = installerPath.deletingPathExtension().lastPathComponent
         let fingerprint = filename.replacingOccurrences(of: "_", with: " ")
         
-        print("🔍 GameDetector: Installer fingerprint: '\(fingerprint)'")
+        logger.notice("🔍 GameDetector: Installer fingerprint: '\(fingerprint, privacy: .public)'")
         let result = getGameSlugFromFingerprint(fingerprint)
         
         if result == "unknown" {
-            print("❌ GameDetector: DETECTION FAILED")
-            print("   Installer path: \(installerPath.path)")
-            print("   Filename: \(installerPath.lastPathComponent)")
-            print("   Fingerprint: \(fingerprint)")
-            print("   No matching patterns found")
+            logger.fault("❌ GameDetector: DETECTION FAILED")
+            logger.fault("   Installer path: \(installerPath.path, privacy: .public)")
+            logger.fault("   Filename: \(installerPath.lastPathComponent, privacy: .public)")
+            logger.fault("   Fingerprint: \(fingerprint, privacy: .public)")
+            logger.fault("   No matching patterns found")
         } else {
-            print("✅ GameDetector: Detected game from installer: \(result)")
+            logger.notice("✅ GameDetector: Detected game from installer: \(result, privacy: .public)")
         }
         
         return result
@@ -108,23 +109,23 @@ class GameDetector {
     
     /// Detect game from Steam installation
     func detectGame(fromSteamExe exePath: URL) async throws -> String {
-        print("🔍 GameDetector: Starting detection from Steam exe: \(exePath.path)")
+        logger.notice("🔍 GameDetector: Starting detection from Steam exe: \(exePath.path, privacy: .public)")
         
         // Use parent directory name as fingerprint
         let parentDir = exePath.deletingLastPathComponent().lastPathComponent
         let fingerprint = " \(parentDir) "
         
-        print("🔍 GameDetector: Steam fingerprint: '\(fingerprint)'")
+        logger.notice("🔍 GameDetector: Steam fingerprint: '\(fingerprint, privacy: .public)'")
         let result = getGameSlugFromFingerprint(fingerprint)
         
         if result == "unknown" {
-            print("❌ GameDetector: DETECTION FAILED")
-            print("   Steam exe path: \(exePath.path)")
-            print("   Parent directory: \(parentDir)")
-            print("   Fingerprint: \(fingerprint)")
-            print("   No matching patterns found")
+            logger.fault("❌ GameDetector: DETECTION FAILED")
+            logger.fault("   Steam exe path: \(exePath.path, privacy: .public)")
+            logger.fault("   Parent directory: \(parentDir, privacy: .public)")
+            logger.fault("   Fingerprint: \(fingerprint, privacy: .public)")
+            logger.fault("   No matching patterns found")
         } else {
-            print("✅ GameDetector: Detected game from Steam: \(result)")
+            logger.notice("✅ GameDetector: Detected game from Steam: \(result, privacy: .public)")
         }
         
         return result

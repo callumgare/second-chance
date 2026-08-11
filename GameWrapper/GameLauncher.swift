@@ -6,6 +6,7 @@
 
 import Foundation
 import AppKit
+import os
 
 // MARK: - Directory Mounting
 
@@ -111,6 +112,7 @@ class GameLauncher {
     private var currentProcess: Process?
     private var cleanupCompleted = false
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
+    private let logger = Logger(subsystem: "com.secondchance.gamewrapper", category: "GameLauncher")
     
     init(config: GameConfig, gameMonitor: GameMonitor) {
         self.config = config
@@ -122,76 +124,73 @@ class GameLauncher {
     /// Cleanup game and Wine processes when quitting
     /// Returns true if async cleanup is needed (caller should wait), false if cleanup is immediate
     func performCleanup(completion: @escaping () -> Void) {
-        print("[Cleanup/performCleanup] ENTERED performCleanup method")
+        logger.notice("[Cleanup/performCleanup] ENTERED performCleanup method")
         
         // Ensure cleanup only happens once
         cleanupQueue.sync {
-            print("[Cleanup/performCleanup] Inside cleanupQueue.sync block")
+            logger.notice("[Cleanup/performCleanup] Inside cleanupQueue.sync block")
             if cleanupCompleted {
-                print("[Cleanup/performCleanup] Cleanup already completed, calling completion handler immediately")
+                logger.notice("[Cleanup/performCleanup] Cleanup already completed, calling completion handler immediately")
                 completion()
                 return
             }
-            print("[Cleanup/performCleanup] Setting cleanupCompleted = true")
+            logger.notice("[Cleanup/performCleanup] Setting cleanupCompleted = true")
             cleanupCompleted = true
         }
-        print("[Cleanup/performCleanup] After cleanupQueue.sync block")
+        logger.notice("[Cleanup/performCleanup] After cleanupQueue.sync block")
         
-        print("[Cleanup] Starting cleanup process...")
+        logger.notice("[Cleanup] Starting cleanup process...")
         
         // Terminate the game process if it's still running
         if let process = currentProcess, process.isRunning {
-            print("[Cleanup] Terminating game process (PID \(process.processIdentifier))...")
+            logger.notice("[Cleanup] Terminating game process (PID \(process.processIdentifier, privacy: .public))...")
             process.terminate()
         }
         
         // For Wine games, we need to ensure wineserver is stopped
         if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") {
-            print("[Cleanup/performCleanup] Dispatching Wine server cleanup to background queue...")
+            logger.notice("[Cleanup/performCleanup] Dispatching Wine server cleanup to background queue...")
             DispatchQueue.global(qos: .utility).async { [weak self] in
-                print("[Cleanup/performCleanup] Inside Wine cleanup async block")
+                self?.logger.notice("[Cleanup/performCleanup] Inside Wine cleanup async block")
                 guard let self = self else {
-                    print("[Cleanup/performCleanup] self is nil, calling completion handler")
+                    self?.logger.notice("[Cleanup/performCleanup] self is nil, calling completion handler")
                     completion()
                     return
                 }
                 
-                print("[Cleanup/performCleanup] Calling WineUtilities.waitTillWineserverStopped...")
+                self.logger.notice("[Cleanup/performCleanup] Calling WineUtilities.waitTillWineserverStopped...")
                 WineUtilities.waitTillWineserverStopped(at: self.config.appPath, customPrefixDir: self.config.winePrefix)
-                print("[Cleanup/performCleanup] WineUtilities.waitTillWineserverStopped returned")
-                print("[Cleanup/performCleanup] About to call completion handler")
+                self.logger.notice("[Cleanup/performCleanup] WineUtilities.waitTillWineserverStopped returned")
+                self.logger.notice("[Cleanup/performCleanup] About to call completion handler")
                 completion()
-                print("[Cleanup/performCleanup] Completion handler called")
+                logger.notice("[Cleanup/performCleanup] Completion handler called")
             }
-            print("[Cleanup/performCleanup] Wine cleanup dispatched, exiting performCleanup method")
+            logger.notice("[Cleanup/performCleanup] Wine cleanup dispatched, exiting performCleanup method")
         } else {
             // Non-Wine games, cleanup is immediate
-            print("[Cleanup/performCleanup] Non-Wine game, cleanup is immediate")
-            print("[Cleanup/performCleanup] About to call completion handler")
+            logger.notice("[Cleanup/performCleanup] Non-Wine game, cleanup is immediate")
+            logger.notice("[Cleanup/performCleanup] About to call completion handler")
             completion()
-            print("[Cleanup/performCleanup] Completion handler called, exiting performCleanup method")
+            logger.notice("[Cleanup/performCleanup] Completion handler called, exiting performCleanup method")
         }
     }
     
     // MARK: - Common Cleanup
     
     private func handleGameTermination(exitCode: Int32, infoWindow: InfoWindowController?) {
-        print("\n[Process Monitor] ⚠️ Game process termination detected!")
-        print("[Process Monitor] Exit code: \(exitCode)")
+        logger.error("[Process Monitor] ⚠️ Game process termination detected!")
+        logger.notice("[Process Monitor] Exit code: \(exitCode, privacy: .public)")
         
         // Print warning if game didn't exit cleanly
         if exitCode != 0 {
-            print("⚠️ WARNING: Game did not exit cleanly! Exit code: \(exitCode)")
-            print("This may indicate a crash or error during shutdown.")
+            logger.error("⚠️ WARNING: Game did not exit cleanly! Exit code: \(exitCode, privacy: .public)")
+            logger.error("This may indicate a crash or error during shutdown.")
         }
-        
-        // Flush to ensure output is written immediately
-        fflush(stdout)
         
         // Close info window if it's still open
         infoWindow?.close()
         
-        print("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
+        logger.notice("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
     }
     
     // MARK: - Game Launching
@@ -208,12 +207,12 @@ class GameLauncher {
         case "scummvm":
             launchResult = launchScummVMProcess()
         default:
-            print("ERROR: Unknown game engine: \(config.gameEngine)")
+            logger.fault("ERROR: Unknown game engine: \(self.config.gameEngine, privacy: .public)")
             return -1
         }
         
         guard launchResult.gamePid > 0 else {
-            print("ERROR: Failed to launch game")
+            logger.fault("ERROR: Failed to launch game")
             return -1
         }
         
@@ -221,17 +220,17 @@ class GameLauncher {
         
         // Wait for game to start
         if let gameExeName = launchResult.gameExeName {
-            print("\n[Game Launch] Waiting for game executable to start...")
+            logger.notice("[Game Launch] Waiting for game executable to start...")
             if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid) {
-                print("[Game Launch] Game executable detected with PID \(detectedPid)")
+                logger.notice("[Game Launch] Game executable detected with PID \(detectedPid, privacy: .public)")
                 
                 // Activate game window (Wine games only)
                 if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") {
-                    print("\n[Game Launch] Activating game window...")
+                    logger.notice("[Game Launch] Activating game window...")
                     gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow)
                 }
             } else {
-                print("[Game Launch] Failed to detect game executable, but will continue monitoring process")
+                logger.notice("[Game Launch] Failed to detect game executable, but will continue monitoring process")
             }
         } else {
             // ScummVM - starts immediately
@@ -243,7 +242,7 @@ class GameLauncher {
 
         // Wait for ScummVM to fully initialize
         if config.gameEngine == "scummvm" {
-            print("[Game Launch] Waiting 2 seconds for ScummVM to initialize...")
+            logger.notice("[Game Launch] Waiting 2 seconds for ScummVM to initialize...")
             Thread.sleep(forTimeInterval: 2.0)
         }
         
@@ -252,7 +251,7 @@ class GameLauncher {
         
         
         // Wait for game to stop
-        print("\n[Game Launch] Waiting for game to stop...")
+        logger.notice("[Game Launch] Waiting for game to stop...")
         gameMonitor.waitForGameToStop(gamePid: gamePid, process: launchResult.process)
         
         // Get exit code from GameMonitor which captured it safely
@@ -270,9 +269,9 @@ class GameLauncher {
         // Get game launch info
         let launchInfo = getGameLaunchInfo(config)
         
-        print("Launching game: \(launchInfo.executable) with arguments: \(launchInfo.arguments.joined(separator: " "))")
+        logger.notice("Launching game: \(launchInfo.executable, privacy: .public) with arguments: \(launchInfo.arguments.joined(separator: " "), privacy: .public)")
         if let gameExeName = launchInfo.gameExeName {
-            print("Game executable name: \(gameExeName)")
+            logger.notice("Game executable name: \(gameExeName, privacy: .public)")
         }
         
         let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
@@ -281,20 +280,19 @@ class GameLauncher {
         let wineEnvVars = wine.wineSpecificEnvironmentVariables()
         
         // Print export commands for manual use
-        print("\nWine-specific environment variables (for manual debugging):")
-        print("# These are the custom env vars needed for Wine to work properly")
+        logger.notice("Wine-specific environment variables (for manual debugging):")
+        logger.notice("# These are the custom env vars needed for Wine to work properly")
         for (key, value) in wineEnvVars.sorted(by: { $0.key < $1.key }) {
             let escapedValue = value.replacingOccurrences(of: "\"", with: "\\\"")
-            print("export \(key)=\"\(escapedValue)\"")
+            logger.notice("export \(key, privacy: .public)=\"\(escapedValue, privacy: .public)\"")
         }
-        print("")
         
         // Print full command with proper quoting
         let fullCommand = launchInfo.formatLaunchCommand()
-        print("Full command: \(fullCommand)")
+        logger.notice("Full command: \(fullCommand, privacy: .public)")
         
         // Launch the game
-        print("\n[Wine] Launching game process...")
+        logger.notice("[Wine] Launching game process...")
         
         // Capture Wine's stdout/stderr and log them
         let outputPipe = Pipe()
@@ -305,7 +303,7 @@ class GameLauncher {
             // For Wine, we need to pass the game exe path, not the wine binary
             // The working directory change and wine binary call are handled by runWindowsExecutableWithStart
             guard let gameExeUnixPath = launchInfo.gameExePath else {
-                print("ERROR: gameExePath is nil for Wine game")
+                logger.fault("ERROR: gameExePath is nil for Wine game")
                 return (nil, -1, nil)
             }
             
@@ -316,7 +314,7 @@ class GameLauncher {
                 errorPipe: errorPipe
             )
         } catch {
-            print("ERROR: Failed to launch game: \(error)")
+            logger.fault("ERROR: Failed to launch game: \(error, privacy: .public)")
             return (nil, -1, nil)
         }
         
@@ -329,7 +327,7 @@ class GameLauncher {
                 if let output = String(data: data, encoding: .utf8) {
                     let lines = output.split(separator: "\n")
                     for line in lines {
-                        print("Wine: \(line)")
+                        Logger(subsystem: "com.secondchance.gamewrapper", category: "GameLauncher").notice("Wine: \(line, privacy: .public)")
                     }
                 }
             }
@@ -342,13 +340,13 @@ class GameLauncher {
                 if let output = String(data: data, encoding: .utf8) {
                     let lines = output.split(separator: "\n")
                     for line in lines {
-                        print("Wine stderr: \(line)")
+                        Logger(subsystem: "com.secondchance.gamewrapper", category: "GameLauncher").notice("Wine stderr: \(line, privacy: .public)")
                     }
                 }
             }
         }
         
-        print("[Wine] Game process started with PID \(process.processIdentifier)")
+        logger.notice("[Wine] Game process started with PID \(process.processIdentifier, privacy: .public)")
         
         // Store the process reference
         self.currentProcess = process
@@ -362,15 +360,15 @@ class GameLauncher {
         // Get game launch info
         let launchInfo = getGameLaunchInfo(config)
         
-        print("ScummVM binary: \(launchInfo.executable)")
-        print("Launching ScummVM with arguments:")
+        logger.notice("ScummVM binary: \(launchInfo.executable, privacy: .public)")
+        logger.notice("Launching ScummVM with arguments:")
         for arg in launchInfo.arguments {
-            print("  \(arg)")
+            logger.notice("  \(arg, privacy: .public)")
         }
         
         // Print full command with proper quoting
         let fullCommand = launchInfo.formatLaunchCommand()
-        print("Full command: \(fullCommand)")
+        logger.notice("Full command: \(fullCommand, privacy: .public)")
         
         // Execute ScummVM
         let task = Process()
@@ -383,14 +381,14 @@ class GameLauncher {
         
         do {
             try task.run()
-            print("[ScummVM] Game process started with PID \(task.processIdentifier)")
+            logger.notice("[ScummVM] Game process started with PID \(task.processIdentifier, privacy: .public)")
             
             // Store the process reference
             self.currentProcess = task
             
             return (task, task.processIdentifier, nil)  // No gameExeName for ScummVM
         } catch {
-            print("ERROR: Failed to launch ScummVM: \(error.localizedDescription)")
+            logger.fault("ERROR: Failed to launch ScummVM: \(error.localizedDescription, privacy: .public)")
             return (nil, -1, nil)
         }
     }

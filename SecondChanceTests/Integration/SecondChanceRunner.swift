@@ -9,7 +9,7 @@
 //  Usage:
 //    let runner = try await SecondChanceRunner.launch(disk1: ..., outputDir: ...)
 //    let (exitCode, events) = try await runner.waitForCompletion(timeout: 600)
-//    if let logData = runner.logData { Attachment.record(logData, named: "...") }
+//    Attachment.record(runner.fetchLogData(), named: "...")
 
 import Foundation
 import Darwin
@@ -30,8 +30,10 @@ final class SecondChanceRunner: @unchecked Sendable {
         return (exitCode, await events)
     }
 
-    /// Raw log output written by Second Chance (from SC_LOG_PATH). Non-nil after exit.
-    var logData: Data? { try? Data(contentsOf: URL(fileURLWithPath: logPath)) }
+    /// Log output from os.Logger's unified logging store (queried after exit).
+    func fetchLogData() -> Data {
+        SystemLogReader.fetch(pid: process.processIdentifier, since: startTime)
+    }
 
     // MARK: - Launch
 
@@ -44,8 +46,6 @@ final class SecondChanceRunner: @unchecked Sendable {
     ) async throws -> SecondChanceRunner {
         let socketPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("sc-automation-\(UUID().uuidString).sock").path
-        let logPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sc-log-\(UUID().uuidString).txt").path
 
         let appExecutable = TestPaths.repoRoot
             .appendingPathComponent("DerivedData/Build/Products/Debug/Second Chance.app/Contents/MacOS/Second Chance")
@@ -62,7 +62,6 @@ final class SecondChanceRunner: @unchecked Sendable {
         env["OUTPUT_PATH"]           = outputDir.path
         env["STRICT_INSTALL"]        = strictInstall ? "true" : "false"
         env["SC_AUTOMATION_SOCKET"]  = socketPath
-        env["SC_LOG_PATH"]           = logPath
         if let disk2 { env["DISK_2_PATH"] = disk2.path }
 
         let process = Process()
@@ -71,23 +70,24 @@ final class SecondChanceRunner: @unchecked Sendable {
 
         // Launch the process — the socket is created in the app's init() shortly after.
         try process.run()
+        let startTime = Date()
 
         // Poll until the socket file appears (created by the bridge on app start).
         let client = try await connectWithRetry(socketPath: socketPath, timeout: 15)
 
-        return SecondChanceRunner(process: process, client: client, logPath: logPath, socketPath: socketPath)
+        return SecondChanceRunner(process: process, client: client, startTime: startTime, socketPath: socketPath)
     }
 
     // MARK: - Private
 
     private let process: Process
-    private let logPath: String
+    private let startTime: Date
     private let socketPath: String
 
-    private init(process: Process, client: AutomationClient, logPath: String, socketPath: String) {
+    private init(process: Process, client: AutomationClient, startTime: Date, socketPath: String) {
         self.process = process
         self.client = client
-        self.logPath = logPath
+        self.startTime = startTime
         self.socketPath = socketPath
     }
 

@@ -9,6 +9,7 @@ import SwiftUI
 import Combine
 import AppKit
 import UniformTypeIdentifiers
+import os
 
 /// Main ViewModel for coordinating the installation process
 @MainActor
@@ -16,8 +17,7 @@ class InstallationViewModel: ObservableObject {
     @Published var currentState: InstallationState = .idle
     @Published var selectedInstallationType: InstallationType?
     @Published var detectedGame: GameInfo?
-    @Published var showingError = false
-    @Published var errorMessage = ""
+
     @Published var progress: Double = 0.0
 
     private let installationService = InstallationService()
@@ -25,7 +25,7 @@ class InstallationViewModel: ObservableObject {
     private let cacheManager = CacheManager.shared
     private var stateObserver: AnyCancellable?
     private var busSubscriptionToken: EventBus<AppEvent>.Token?
-    private let logger = ContextualLogger(source: "InstallationViewModel")
+    private let logger = Logger(subsystem: "com.secondchance", category: "InstallationViewModel")
 
     // Elapsed-time tracking — mirrors the original AsyncProgressReporter timer behaviour.
     // The UI only shows substep and elapsed time after 5 s so fast sub-steps don't flash.
@@ -90,11 +90,11 @@ class InstallationViewModel: ObservableObject {
     init() {
         // Clear Wine cache if requested
         if clearWineCache {
-            logger.log("Clearing Wine prefix cache...")
+            logger.notice("Clearing Wine prefix cache...")
             do {
                 try WineManager.shared.clearCache()
             } catch {
-                logger.log("Failed to clear Wine prefix cache: \(error.localizedDescription)", level: .error)
+                logger.fault("Failed to clear Wine prefix cache: \(error.localizedDescription, privacy: .public)")
                 exit(1)
             }
         }
@@ -114,34 +114,34 @@ class InstallationViewModel: ObservableObject {
         // Auto-start if in non-interactive mode
         if nonInteractiveMode {
             guard let source = installationSource else {
-                logger.log("NON-INTERACTIVE MODE: INSTALLATION_SOURCE environment variable is required (disk, her-download, steam)", level: .error)
+                logger.fault("NON-INTERACTIVE MODE: INSTALLATION_SOURCE environment variable is required (disk, her-download, steam)")
                 exit(1)
             }
 
             guard source == "disk" || source == "her-download" || source == "steam" else {
-                logger.log("NON-INTERACTIVE MODE: Invalid INSTALLATION_SOURCE '\(source)' (disk, her-download, steam)", level: .error)
+                logger.fault("NON-INTERACTIVE MODE: Invalid INSTALLATION_SOURCE '\(source, privacy: .public)' (disk, her-download, steam)")
                 exit(1)
             }
 
-            logger.log("NON-INTERACTIVE MODE: Auto-starting installation — source: \(source)")
+            logger.notice("NON-INTERACTIVE MODE: Auto-starting installation — source: \(source, privacy: .public)")
 
             // Validate required parameters for each source type
             if source == "disk" {
                 guard let disk1 = disk1Path else {
-                    logger.log("NON-INTERACTIVE MODE: DISK_1_PATH environment variable is required for disk installation", level: .error)
+                    logger.fault("NON-INTERACTIVE MODE: DISK_1_PATH environment variable is required for disk installation")
                     exit(1)
                 }
-                logger.log("Disk 1: \(disk1)")
+                logger.notice("Disk 1: \(disk1, privacy: .public)")
                 if let disk2 = disk2Path {
-                    logger.log("Disk 2: \(disk2)")
+                    logger.notice("Disk 2: \(disk2, privacy: .public)")
                 }
             }
 
             guard let output = outputPath else {
-                logger.log("NON-INTERACTIVE MODE: OUTPUT_PATH environment variable is required (directory where .app will be saved)", level: .error)
+                logger.fault("NON-INTERACTIVE MODE: OUTPUT_PATH environment variable is required (directory where .app will be saved)")
                 exit(1)
             }
-            logger.log("Output: \(output)")
+            logger.notice("Output: \(output, privacy: .public)")
             
             // Observe state changes to auto-exit when done
             stateObserver = $currentState.sink { [weak self] state in
@@ -186,7 +186,7 @@ class InstallationViewModel: ObservableObject {
 
         switch state {
         case .completed:
-            logger.log("NON-INTERACTIVE MODE: Exiting with success")
+            logger.notice("NON-INTERACTIVE MODE: Exiting with success")
             fflush(stdout)
             AutomationBridge.shared.stop()
             _exit(0)
@@ -211,29 +211,28 @@ class InstallationViewModel: ObservableObject {
                 }
                 
             case "her-download":
-                logger.log("NON-INTERACTIVE MODE: Her Interactive download installation not yet implemented", level: .error)
+                logger.fault("NON-INTERACTIVE MODE: Her Interactive download installation not yet implemented")
                 throw NSError(domain: "Installation", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Her Interactive download not yet implemented in non-interactive mode"
                 ])
 
             case "steam":
-                logger.log("NON-INTERACTIVE MODE: Steam installation not yet implemented", level: .error)
+                logger.fault("NON-INTERACTIVE MODE: Steam installation not yet implemented")
                 throw NSError(domain: "Installation", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Steam installation not yet implemented in non-interactive mode"
                 ])
 
             default:
-                logger.log("NON-INTERACTIVE MODE: Unknown installation source '\(source)'", level: .error)
+                logger.fault("NON-INTERACTIVE MODE: Unknown installation source '\(source, privacy: .public)'")
                 throw NSError(domain: "Installation", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Unknown installation source"
                 ])
             }
         } catch {
             await MainActor.run {
-                errorMessage = error.localizedDescription
                 currentState = .error(error.localizedDescription)
             }
-            logger.log("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription)", level: .error)
+            logger.fault("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription, privacy: .public)")
             fflush(stdout)
             fflush(stderr)
             _exit(1)
@@ -253,6 +252,8 @@ class InstallationViewModel: ObservableObject {
         } ?? true
 
         guard isNewStep else { return }
+
+        logger.notice("\n━━━ \(state.displayText, privacy: .public) ━━━")
 
         stepStartTime = Date()
         shouldShowElapsed = false
@@ -382,10 +383,7 @@ class InstallationViewModel: ObservableObject {
     /// Start installation from Steam
     func installFromSteam() async {
         do {
-            currentState = .installingGame(substep: nil)
-            errorMessage = "Steam installation is not fully implemented yet. This feature is coming soon!"
-            showingError = true
-            currentState = .idle
+            currentState = .error("Steam installation is not fully implemented yet. This feature is coming soon!")
         } catch {
             handleError(error)
         }
@@ -395,8 +393,6 @@ class InstallationViewModel: ObservableObject {
     
     /// Handle errors
     private func handleError(_ error: Error) {
-        errorMessage = error.localizedDescription
-        showingError = true
         currentState = .error(error.localizedDescription)
     }
     

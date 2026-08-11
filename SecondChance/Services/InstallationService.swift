@@ -5,6 +5,7 @@
 //  Service for managing game installation without UI concerns
 
 import Foundation
+import os
 import AppKit
 
 /// Thread-safe tracker for mounted ISOs
@@ -30,7 +31,7 @@ class InstallationService {
     private let gameInstaller: GameInstaller
     private let mountedISOTracker = MountedISOTracker()
     let bus: EventBus<AppEvent>
-    private let logger = ContextualLogger(source: "InstallationService")
+    private let logger = Logger(subsystem: "com.secondchance", category: "InstallationService")
 
     init(bus: EventBus<AppEvent> = .app) {
         self.bus = bus
@@ -51,7 +52,7 @@ class InstallationService {
 
             // Get input paths
             let disk1 = try await context.getDisk1Path()
-            logger.log("Disk 1: \(disk1.path)")
+            logger.notice("Disk 1: \(disk1.path, privacy: .public)")
 
             // Mount disk 1 if ISO
             let disk1Mounted: URL
@@ -72,7 +73,7 @@ class InstallationService {
             var disk2Mounted: URL?
             if gameInfo.diskCount > 1 {
                 if let disk2 = try await context.getDisk2Path(gameInfo: gameInfo) {
-                    logger.log("Disk 2: \(disk2.path)")
+                    logger.notice("Disk 2: \(disk2.path, privacy: .public)")
                     if disk2.pathExtension.lowercased() == "iso" {
                         disk2Mounted = try await mountISO(at: disk2, context: context)
                         await bus.publishInstallation(.isoMounted(disk2Mounted!))
@@ -147,7 +148,7 @@ class InstallationService {
         disk2: URL?,
         onDetectedGame: @escaping (GameInfo) -> Void
     ) async throws -> URL {
-        logger.log("WARNING: Using deprecated installFromDisk method", level: .warning)
+        logger.error("WARNING: Using deprecated installFromDisk method")
         let tempContext = NonInteractiveContext(
             environment: [
                 "DISK_1_PATH": disk1.path,
@@ -198,7 +199,7 @@ class InstallationService {
     ) async throws -> URL {
         let finalPath = outputPath.appendingPathComponent("Nancy Drew - \(gameName).app")
         
-        logger.log("Saving wrapper: \(finalPath.path)")
+        logger.notice("Saving wrapper: \(finalPath.path, privacy: .public)")
         
         // Remove existing if present
         if FileManager.default.fileExists(atPath: finalPath.path) {
@@ -211,14 +212,15 @@ class InstallationService {
         // Unregister from cleanup tracking since it's no longer temporary
         GameInstaller.shared.unregisterTemporaryWrapper(wrapperPath)
         
-        logger.log("Wrapper saved: \(finalPath.path)")
+        logger.notice("Wrapper saved: \(finalPath.path, privacy: .public)")
         
         return finalPath
     }
     
     /// Launch the game app
     func launchGame(at appPath: URL, with arguments: [String]) async throws {
-        logger.log("Launching: \(appPath.path)" + (arguments.isEmpty ? "" : " \(arguments.joined(separator: " "))"))
+        let launchDesc = appPath.path + (arguments.isEmpty ? "" : " \(arguments.joined(separator: " "))")
+        logger.notice("Launching: \(launchDesc, privacy: .public)")
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -235,7 +237,7 @@ class InstallationService {
         process.waitUntilExit()
         
         if process.terminationStatus == 0 {
-            logger.log("Game launched successfully")
+            logger.notice("Game launched successfully")
         } else {
             throw NSError(domain: "GameLaunch", code: Int(process.terminationStatus), userInfo: [
                 NSLocalizedDescriptionKey: "Failed to launch game: open command exited with status \(process.terminationStatus)"
@@ -248,7 +250,7 @@ class InstallationService {
         let mountedISOs = await mountedISOTracker.getAll()
         guard !mountedISOs.isEmpty else { return }
         
-        logger.log("Unmounting \(mountedISOs.count) ISO(s)...")
+        logger.notice("Unmounting \(mountedISOs.count, privacy: .public) ISO(s)...")
 
         for mountPoint in mountedISOs {
             let process = Process()
@@ -259,12 +261,12 @@ class InstallationService {
                 try process.run()
                 process.waitUntilExit()
                 if process.terminationStatus == 0 {
-                    logger.log("Unmounted: \(mountPoint.path)")
+                    logger.notice("Unmounted: \(mountPoint.path, privacy: .public)")
                 } else {
-                    logger.log("Failed to unmount \(mountPoint.path) (exit code: \(process.terminationStatus))", level: .warning)
+                    logger.error("Failed to unmount \(mountPoint.path, privacy: .public) (exit code: \(process.terminationStatus, privacy: .public))")
                 }
             } catch {
-                logger.log("Error unmounting \(mountPoint.path): \(error)", level: .warning)
+                logger.error("Error unmounting \(mountPoint.path, privacy: .public): \(error, privacy: .public)")
             }
         }
         
@@ -278,11 +280,11 @@ class InstallationService {
     private func mountISO(at isoPath: URL, context: InstallationContext) async throws -> URL {
         // Check if this ISO is already mounted
         if let existingMount = try? await checkIfISOAlreadyMounted(isoPath) {
-            logger.log("ISO already mounted: \(existingMount.path)")
+            logger.notice("ISO already mounted: \(existingMount.path, privacy: .public)")
             return existingMount
         }
 
-        logger.log("Mounting ISO: \(isoPath.lastPathComponent)")
+        logger.notice("Mounting ISO: \(isoPath.lastPathComponent, privacy: .public)")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         process.arguments = ["attach", "-nobrowse", "-readonly", isoPath.path]
@@ -322,7 +324,7 @@ class InstallationService {
                 
                 // Track that we mounted this
                 await mountedISOTracker.insert(mountURL)
-                logger.log("Mounted: \(mountURL.path)")
+                logger.notice("Mounted: \(mountURL.path, privacy: .public)")
                 return mountURL
             }
         }
@@ -349,7 +351,7 @@ class InstallationService {
         // Print any errors to console
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         if let errorOutput = String(data: errorData, encoding: .utf8), !errorOutput.isEmpty {
-            print("   hdiutil info error: \(errorOutput)")
+            logger.fault("   hdiutil info error: \(errorOutput, privacy: .public)")
         }
         
         let plistData = outputPipe.fileHandleForReading.readDataToEndOfFile()
@@ -357,7 +359,7 @@ class InstallationService {
         // Parse the plist
         guard let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any],
               let images = plist["images"] as? [[String: Any]] else {
-            print("   ℹ️ No mounted disk images found")
+            logger.notice("   ℹ️ No mounted disk images found")
             return nil
         }
         
@@ -367,13 +369,13 @@ class InstallationService {
         let canonicalISOPath: String
         if let resolved = try? fileManager.destinationOfSymbolicLink(atPath: isoPath.path) {
             canonicalISOPath = (resolved as NSString).resolvingSymlinksInPath
-            print("   ℹ️ Resolved symlink: \(isoPath.path) -> \(canonicalISOPath)")
+            logger.notice("   ℹ️ Resolved symlink: \(isoPath.path, privacy: .public) -> \(canonicalISOPath, privacy: .public)")
         } else {
             canonicalISOPath = (isoPath.path as NSString).resolvingSymlinksInPath
         }
         
-        print("   ℹ️ Looking for mounted ISO: \(canonicalISOPath)")
-        print("   ℹ️ Found \(images.count) mounted disk image(s)")
+        logger.notice("   ℹ️ Looking for mounted ISO: \(canonicalISOPath, privacy: .public)")
+        logger.notice("   ℹ️ Found \(images.count, privacy: .public) mounted disk image(s)")
         
         // Find our ISO in the list of mounted images
         for image in images {
@@ -383,14 +385,14 @@ class InstallationService {
             
             let canonicalImagePath = (imagePath as NSString).resolvingSymlinksInPath
             
-            print("   ℹ️ Checking mounted image: \(canonicalImagePath)")
+            logger.notice("   ℹ️ Checking mounted image: \(canonicalImagePath, privacy: .public)")
             
             if canonicalImagePath == canonicalISOPath {
-                print("   ✓ Found matching mounted ISO")
+                logger.notice("   ✓ Found matching mounted ISO")
                 
                 // Found our ISO, now get the mount points
                 guard let systemEntities = image["system-entities"] as? [[String: Any]] else {
-                    print("   ⚠️ No system entities found for mounted ISO")
+                    logger.error("   ⚠️ No system entities found for mounted ISO")
                     continue
                 }
                 
@@ -400,17 +402,17 @@ class InstallationService {
                         // Verify that the mount point actually exists as a directory
                         var isDirectory: ObjCBool = false
                         if fileManager.fileExists(atPath: mountPoint, isDirectory: &isDirectory), isDirectory.boolValue {
-                            print("   ✓ Mount point verified: \(mountPoint)")
+                            logger.notice("   ✓ Mount point verified: \(mountPoint, privacy: .public)")
                             return URL(fileURLWithPath: mountPoint)
                         } else {
-                            print("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint)")
+                            logger.error("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint, privacy: .public)")
                         }
                     }
                 }
             }
         }
         
-        print("   ℹ️ ISO not found in mounted images")
+        logger.notice("   ℹ️ ISO not found in mounted images")
         return nil
     }
 }

@@ -7,6 +7,9 @@
 import Foundation
 import AppKit
 import CoreGraphics
+import os
+
+private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "InputAutomation")
 
 // MARK: - Mouse & Keyboard Control
 
@@ -55,7 +58,7 @@ enum InputControl {
     
     /// Send ESC key press
     static func pressEscape() {
-        print("  → Pressing ESC key...")
+        logger.notice("  → Pressing ESC key...")
         
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: true)
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false)
@@ -68,7 +71,7 @@ enum InputControl {
     
     /// Click at screen coordinates
     static func click(at point: CGPoint) {
-        print("  → Clicking at (\(Int(point.x)), \(Int(point.y)))...")
+        logger.notice("  → Clicking at (\(Int(point.x), privacy: .public), \(Int(point.y), privacy: .public))...")
         
         // Get current mouse position
         let currentEvent = CGEvent(source: nil)
@@ -116,7 +119,7 @@ enum InputControl {
     
     /// Send Cmd+Q to quit
     static func sendQuitCommand() {
-        print("  → Sending Cmd+Q...")
+        logger.notice("  → Sending Cmd+Q...")
         
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x0C, keyDown: true) // Q key
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x0C, keyDown: false)

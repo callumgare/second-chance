@@ -3,6 +3,9 @@ import AppKit
 import CoreGraphics
 import Vision
 import Accelerate
+import os
+
+private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "ComputerVision")
 
 // Get environment variable for extra debugging
 private let findImageExtraDebugging = Foundation.ProcessInfo.processInfo.environment["FIND_IMAGE_EXTRA_DEBUGGING"] == "true"
@@ -47,7 +50,7 @@ enum ScreenshotOCR {
                 return screenshotPath
             }
         } catch {
-            print("⚠️  Failed to capture screenshot: \(error)")
+            logger.error("⚠️  Failed to capture screenshot: \(error, privacy: .public)")
         }
         
         return nil
@@ -68,8 +71,8 @@ enum ScreenshotOCR {
         searchStartX: Int,
         searchStartY: Int
     ) {
-        print("  🔍 DEBUG: Testing match at specific position...")
-        print("     Position: (\(debugX), \(debugY))")
+        logger.notice("  🔍 DEBUG: Testing match at specific position...")
+        logger.notice("     Position: (\(debugX, privacy: .public), \(debugY, privacy: .public))")
         
         // Use the same scaling logic as the main search algorithm
         let targetHeight = CGFloat(screenshotCG.height) * baseHeightRatio
@@ -78,8 +81,8 @@ enum ScreenshotOCR {
         let debugWidth = Int(targetWidth)
         let debugHeight = Int(targetHeight)
         
-        print("     Template original size: \(templateCG.width)x\(templateCG.height)")
-        print("     Scaled template size: \(debugWidth)x\(debugHeight) (scale factor: \(String(format: "%.4f", templateScaleFactor)))")
+        logger.notice("     Template original size: \(templateCG.width, privacy: .public)x\(templateCG.height, privacy: .public)")
+        logger.notice("     Scaled template size: \(debugWidth, privacy: .public)x\(debugHeight, privacy: .public) (scale factor: \(String(format: "%.4f", templateScaleFactor), privacy: .public))")
         
         // Scale the template using algorithm's scaling
         guard let debugScaledTemplate = scaleImage(templateCG, to: CGSize(width: debugWidth, height: debugHeight)) else {
@@ -93,7 +96,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: colorTemplatePath))
-            print("     💾 Saved color template (before conversion): \(colorTemplatePath)")
+            logger.notice("     💾 Saved color template (before conversion): \(colorTemplatePath, privacy: .public)")
         }
         
         guard let debugTemplateGray = convertToGrayscale(cgImage: debugScaledTemplate) else {
@@ -115,7 +118,7 @@ enum ScreenshotOCR {
             sampleStep: 1
         )
         
-        print("     Correlation: \(String(format: "%.4f", debugCorrelation))")
+        logger.notice("     Correlation: \(String(format: "%.4f", debugCorrelation), privacy: .public)")
         
         // Save grayscale template for inspection
         let grayTemplateImage = NSImage(size: NSSize(width: debugWidth, height: debugHeight))
@@ -134,15 +137,15 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: grayTemplatePath))
-            print("     💾 Saved grayscale template: \(grayTemplatePath)")
+            logger.notice("     💾 Saved grayscale template: \(grayTemplatePath, privacy: .public)")
         }
         
         // Save grayscale screenshot region for comparison
-        print("     DEBUG grayRegionImage extraction:")
-        print("       screenshotData dimensions: \(screenshotWidth)x\(screenshotHeight)")
-        print("       debugX=\(debugX), debugY=\(debugY)")
-        print("       debugWidth=\(debugWidth), debugHeight=\(debugHeight)")
-        print("       Extracting region: (\(debugX),\(debugY)) to (\(debugX+debugWidth),\(debugY+debugHeight))")
+        logger.notice("     DEBUG grayRegionImage extraction:")
+        logger.notice("       screenshotData dimensions: \(screenshotWidth, privacy: .public)x\(screenshotHeight, privacy: .public)")
+        logger.notice("       debugX=\(debugX, privacy: .public), debugY=\(debugY, privacy: .public)")
+        logger.notice("       debugWidth=\(debugWidth, privacy: .public), debugHeight=\(debugHeight, privacy: .public)")
+        logger.notice("       Extracting region: (\(debugX, privacy: .public),\(debugY, privacy: .public)) to (\(debugX+debugWidth, privacy: .public),\(debugY+debugHeight, privacy: .public))")
         
         let grayRegionImage = NSImage(size: NSSize(width: debugWidth, height: debugHeight))
         grayRegionImage.lockFocus()
@@ -162,7 +165,7 @@ enum ScreenshotOCR {
                 }
             }
             if pixelsOutOfBounds > 0 {
-                print("       ⚠️  \(pixelsOutOfBounds) pixels out of bounds!")
+                logger.error("       ⚠️  \(pixelsOutOfBounds, privacy: .public) pixels out of bounds!")
             }
             if let provider = CGDataProvider(data: Data(regionData) as CFData),
                let grayImage = CGImage(width: debugWidth, height: debugHeight, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: debugWidth, space: colorSpace, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) {
@@ -176,7 +179,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: grayRegionPath))
-            print("     💾 Saved grayscale screenshot region: \(grayRegionPath)")
+            logger.notice("     💾 Saved grayscale screenshot region: \(grayRegionPath, privacy: .public)")
         }
         
         // Save grayscale screenshot of entire search region with box around sampled area
@@ -209,7 +212,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: grayFullRegionPath))
-            print("     💾 Saved grayscale full search region: \(grayFullRegionPath)")
+            logger.notice("     💾 Saved grayscale full search region: \(grayFullRegionPath, privacy: .public)")
         }
         
         // Create detailed debug visualization
@@ -351,7 +354,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: heatmapPath))
-            print("    💾 Saved heatmap: \(heatmapPath)")
+            logger.notice("    💾 Saved heatmap: \(heatmapPath, privacy: .public)")
         }
     }
     
@@ -380,24 +383,24 @@ enum ScreenshotOCR {
         let fullDebugX = debugX + searchStartX
         let fullDebugY = debugY + searchStartY
         
-        print("     Screenshot dimensions: \(imageWidth)x\(imageHeight)")
-        print("     Test position (cropped region): (\(debugX), \(debugY))")
-        print("     Test position (full screenshot): (\(fullDebugX), \(fullDebugY))")
+        logger.notice("     Screenshot dimensions: \(imageWidth, privacy: .public)x\(imageHeight, privacy: .public)")
+        logger.notice("     Test position (cropped region): (\(debugX, privacy: .public), \(debugY, privacy: .public))")
+        logger.notice("     Test position (full screenshot): (\(fullDebugX, privacy: .public), \(fullDebugY, privacy: .public))")
         
         // Check if coordinates are within bounds of full screenshot
         let inBounds = fullDebugX >= 0 && fullDebugY >= 0 &&
                       fullDebugX + debugWidth <= imageWidth &&
                       fullDebugY + debugHeight <= imageHeight
-        print("     Position in bounds: \(inBounds)")
+        logger.notice("     Position in bounds: \(inBounds, privacy: .public)")
         
         if !inBounds {
-            if fullDebugX < 0 { print("       ⚠️  X coordinate (\(fullDebugX)) is negative") }
-            if fullDebugY < 0 { print("       ⚠️  Y coordinate (\(fullDebugY)) is negative") }
+            if fullDebugX < 0 { logger.error("       ⚠️  X coordinate (\(fullDebugX, privacy: .public)) is negative") }
+            if fullDebugY < 0 { logger.error("       ⚠️  Y coordinate (\(fullDebugY, privacy: .public)) is negative") }
             if fullDebugX + debugWidth > imageWidth {
-                print("       ⚠️  Right edge (\(fullDebugX + debugWidth)) exceeds image width (\(imageWidth))")
+                logger.error("       ⚠️  Right edge (\(fullDebugX + debugWidth, privacy: .public)) exceeds image width (\(imageWidth, privacy: .public))")
             }
             if fullDebugY + debugHeight > imageHeight {
-                print("       ⚠️  Bottom edge (\(fullDebugY + debugHeight)) exceeds image height (\(imageHeight))")
+                logger.error("       ⚠️  Bottom edge (\(fullDebugY + debugHeight, privacy: .public)) exceeds image height (\(imageHeight, privacy: .public))")
             }
         }
         
@@ -413,7 +416,7 @@ enum ScreenshotOCR {
             height: CGFloat(debugHeight)
         )
         
-        print("     Overlay rect (bottom-left origin): x=\(testRect.origin.x), y=\(testRect.origin.y), w=\(testRect.width), h=\(testRect.height)")
+        logger.notice("     Overlay rect (bottom-left origin): x=\(testRect.origin.x, privacy: .public), y=\(testRect.origin.y, privacy: .public), w=\(testRect.width, privacy: .public), h=\(testRect.height, privacy: .public)")
         
         // Overlay template with transparency
         if let templateImage = NSImage(contentsOfFile: templatePath) {
@@ -449,7 +452,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: debugPath))
-            print("     💾 Saved debug visualization: \(debugPath)")
+            logger.notice("     💾 Saved debug visualization: \(debugPath, privacy: .public)")
         }
     }
     
@@ -505,7 +508,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: debugPath))
-            print("  💾 Saved search region: \(debugPath)")
+            logger.notice("  💾 Saved search region: \(debugPath, privacy: .public)")
         }
     }
     
@@ -570,7 +573,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: debugPath))
-            print("  💾 Saved all matches visualization: \(debugPath)")
+            logger.notice("  💾 Saved all matches visualization: \(debugPath, privacy: .public)")
         }
     }
     
@@ -624,7 +627,7 @@ enum ScreenshotOCR {
            let bitmap = NSBitmapImageRep(data: tiffData),
            let pngData = bitmap.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: debugPath))
-            print("  💾 Saved final match: \(debugPath)")
+            logger.notice("  💾 Saved final match: \(debugPath, privacy: .public)")
         }
     }
     
@@ -645,7 +648,7 @@ enum ScreenshotOCR {
             space: colorSpace,
             bitmapInfo: bitmapInfo
         ) else {
-            print("    ⚠️  Failed to create CGContext for scaling")
+            logger.error("    ⚠️  Failed to create CGContext for scaling")
             return nil
         }
         
@@ -659,16 +662,16 @@ enum ScreenshotOCR {
     static func findImage(_ templatePath: String, in screenshotPath: String, minConfidence: Float = 0.5) -> CGRect? {
         let startTime = Date()
         var stepStartTime = Date()
-        print("\n⏱️  Starting template matching...")
+        logger.notice("\n⏱️  Starting template matching...")
         
         guard let screenshot = NSImage(contentsOfFile: screenshotPath),
               let screenshotCG = screenshot.cgImage(forProposedRect: nil, context: nil, hints: nil),
               let template = NSImage(contentsOfFile: templatePath),
               let templateCG = template.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            print("⚠️  Failed to load images for template matching")
+            logger.error("⚠️  Failed to load images for template matching")
             return nil
         }
-        print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Loaded images")
+        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Loaded images")
         stepStartTime = Date()
         
         // Use only base scale of 6.62% of screenshot height for careful search
@@ -689,12 +692,12 @@ enum ScreenshotOCR {
         }
         
         if scaledTemplates.isEmpty {
-            print("⚠️  Failed to create any scaled templates")
+            logger.error("⚠️  Failed to create any scaled templates")
             return nil
         }
         
-        print("  → Prepared \(scaledTemplates.count) template scales (\(scaleVariations.map { Int($0 * 100) }.map { "\($0)%" }.joined(separator: ", ")))")
-        print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Scaled templates")
+        logger.notice("  → Prepared \(scaledTemplates.count, privacy: .public) template scales (\(scaleVariations.map { Int($0 * 100) }.map { "\($0)%" }.joined(separator: ", "), privacy: .public))")
+        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Scaled templates")
         stepStartTime = Date()
         
         if findImageExtraDebugging {
@@ -705,10 +708,10 @@ enum ScreenshotOCR {
                    let bitmap = NSBitmapImageRep(data: tiffData),
                    let pngData = bitmap.representation(using: .png, properties: [:]) {
                     try? pngData.write(to: URL(fileURLWithPath: templateDebugPath))
-                    print("  💾 Saved template: \(templateDebugPath)")
+                    logger.notice("  💾 Saved template: \(templateDebugPath, privacy: .public)")
                 }
             }
-            print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Saved debug template")
+            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Saved debug template")
             stepStartTime = Date()
         }
         
@@ -721,22 +724,22 @@ enum ScreenshotOCR {
         let searchWidth = fullWidth - searchStartX
         let searchHeight = fullHeight - searchStartY
         
-        print("  → Full screenshot: \(fullWidth)x\(fullHeight)")
-        print("  → Search region: x[\(searchStartX)-\(fullWidth)], y[\(searchStartY)-\(fullHeight)] (\(searchWidth)x\(searchHeight))")
+        logger.notice("  → Full screenshot: \(fullWidth, privacy: .public)x\(fullHeight, privacy: .public)")
+        logger.notice("  → Search region: x[\(searchStartX, privacy: .public)-\(fullWidth, privacy: .public)], y[\(searchStartY, privacy: .public)-\(fullHeight, privacy: .public)] (\(searchWidth, privacy: .public)x\(searchHeight, privacy: .public))")
         
         // Crop screenshot to search region only (huge performance win!)
         let searchRect = CGRect(x: searchStartX, y: searchStartY, width: searchWidth, height: searchHeight)
         guard let croppedScreenshot = screenshotCG.cropping(to: searchRect) else {
-            print("⚠️  Failed to crop screenshot to search region")
+            logger.error("⚠️  Failed to crop screenshot to search region")
             return nil
         }
         
         // Convert ONLY the cropped region to grayscale (18x faster!)
         guard let screenshotGray = convertToGrayscale(cgImage: croppedScreenshot) else {
-            print("⚠️  Failed to convert screenshot to grayscale")
+            logger.error("⚠️  Failed to convert screenshot to grayscale")
             return nil
         }
-        print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Converted search region to grayscale")
+        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Converted search region to grayscale")
         stepStartTime = Date()
         
         // Use cached template or create new one
@@ -756,14 +759,14 @@ enum ScreenshotOCR {
             
             // Convert and downscale new template
             guard let newTemplateGray = convertToGrayscale(cgImage: templateCG) else {
-                print("⚠️  Failed to convert template to grayscale")
+                logger.error("⚠️  Failed to convert template to grayscale")
                 free(screenshotGray.data)
                 return nil
             }
             
             let scale = 2
             guard let newTemplateSmall = downscaleBuffer(newTemplateGray, scale: scale) else {
-                print("⚠️  Failed to downscale template")
+                logger.error("⚠️  Failed to downscale template")
                 free(screenshotGray.data)
                 free(newTemplateGray.data)
                 return nil
@@ -785,7 +788,7 @@ enum ScreenshotOCR {
         let cropSearchEndX = screenshotWidth
         let cropSearchEndY = screenshotHeight
         
-        print("  → Searching entire cropped region: \(screenshotWidth)x\(screenshotHeight)")
+        logger.notice("  → Searching entire cropped region: \(screenshotWidth, privacy: .public)x\(screenshotHeight, privacy: .public)")
         
         // Save debug screenshot showing search region (use full screenshot for visualization)
         if findImageExtraDebugging {
@@ -796,7 +799,7 @@ enum ScreenshotOCR {
                 searchEndX: fullWidth,
                 searchEndY: fullHeight
             )
-            print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Saved search region debug")
+            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Saved search region debug")
             stepStartTime = Date()
         }
         
@@ -825,7 +828,7 @@ enum ScreenshotOCR {
                 searchStartY: searchStartY
             )
             
-            print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Debug position test")
+            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Debug position test")
             stepStartTime = Date()
         }
         
@@ -836,24 +839,24 @@ enum ScreenshotOCR {
         // Try each scale variation
         for (scaleIndex, scaleInfo) in scaledTemplates.enumerated() {
             let scalePercent = Int(scaleInfo.scale * 100)
-            print("  → [Scale \(scaleIndex + 1)/\(scaledTemplates.count)] Searching at \(scalePercent)% (\(scaleInfo.width)x\(scaleInfo.height))...")
+            logger.notice("  → [Scale \(scaleIndex + 1, privacy: .public)/\(scaledTemplates.count, privacy: .public)] Searching at \(scalePercent, privacy: .public)% (\(scaleInfo.width, privacy: .public)x\(scaleInfo.height, privacy: .public))...")
             
             let templateWidth = scaleInfo.width
             let templateHeight = scaleInfo.height
             
             // Skip if template is larger than search area
             guard templateWidth < (cropSearchEndX - cropSearchStartX) && templateHeight < (cropSearchEndY - cropSearchStartY) else {
-                print("    → Template too large for search area, skipping")
+                logger.notice("    → Template too large for search area, skipping")
                 continue
             }
             
             // Convert template to grayscale
             guard let templateGray = convertToGrayscale(cgImage: scaleInfo.cgImage) else {
-                print("    → Failed to convert template to grayscale, skipping")
+                logger.notice("    → Failed to convert template to grayscale, skipping")
                 continue
             }
             let templateData = templateGray.data.assumingMemoryBound(to: UInt8.self)
-            print("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Template grayscale conversion")
+            logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Template grayscale conversion")
             stepStartTime = Date()
             
             // STAGE 1: Coarse search with optimized stride for speed
@@ -863,7 +866,7 @@ enum ScreenshotOCR {
             let coarseStride = max(1, Int(10.0 * scaleFactor))  // Scale stride
             let coarseSampleStep = max(1, Int(3.0 * scaleFactor))  // Scale sample step
             
-            print("    → Resolution-scaled search: stride=\(coarseStride), sampleStep=\(coarseSampleStep) (width=\(fullWidth), scale=\(String(format: "%.2f", scaleFactor)))")
+            logger.notice("    → Resolution-scaled search: stride=\(coarseStride, privacy: .public), sampleStep=\(coarseSampleStep, privacy: .public) (width=\(fullWidth, privacy: .public), scale=\(String(format: "%.2f", scaleFactor), privacy: .public))")
             
             var coarseMatches: [(x: Int, y: Int, correlation: Float)] = []
             
@@ -887,7 +890,7 @@ enum ScreenshotOCR {
                 }
             }
             
-            print("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Coarse search completed")
+            logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Coarse search completed")
             stepStartTime = Date()
             
             // Create heatmap visualization for this scale
@@ -907,17 +910,17 @@ enum ScreenshotOCR {
                     searchEndY: cropSearchEndY,
                     coarseStride: coarseStride
                 )
-                print("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Heatmap generation")
+                logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Heatmap generation")
                 stepStartTime = Date()
             }
             
             if coarseMatches.isEmpty {
-                print("    → No promising matches found")
+                logger.notice("    → No promising matches found")
                 free(templateGray.data)
                 continue
             }
             
-            print("    → Found \(coarseMatches.count) coarse candidates")
+            logger.notice("    → Found \(coarseMatches.count, privacy: .public) coarse candidates")
             
             // Save debug info for this scale
             allScaleMatches.append((scaleIndex: scaleIndex, scale: scaleInfo.scale, matches: coarseMatches))
@@ -930,7 +933,7 @@ enum ScreenshotOCR {
             let fineStride = max(1, Int(2.0 * scaleFactor))  // Scale fine stride
             let fineSampleStep = max(1, Int(2.0 * scaleFactor))  // Scale fine sample step
             
-            print("    → Fine search: stride=\(fineStride), sampleStep=\(fineSampleStep), radius=\(fineSearchRadius)")
+            logger.notice("    → Fine search: stride=\(fineStride, privacy: .public), sampleStep=\(fineSampleStep, privacy: .public), radius=\(fineSearchRadius, privacy: .public)")
             
             for candidate in topCandidates {
                 let fineStartX = max(cropSearchStartX, candidate.x - fineSearchRadius)
@@ -964,7 +967,7 @@ enum ScreenshotOCR {
                 }
             }
             
-            print("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Fine search completed")
+            logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Fine search completed")
             stepStartTime = Date()
             
             // Only free template if it's not the best one
@@ -982,26 +985,26 @@ enum ScreenshotOCR {
                 allScaleMatches: allScaleMatches,
                 scaledTemplates: scaledTemplates
             )
-            print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] All-matches debug")
+            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] All-matches debug")
             stepStartTime = Date()
         }
         
         // Check if we found a match
         guard let bestMatch = globalBestMatch else {
-            print("  ✗ No matches found across any scale")
+            logger.notice("  ✗ No matches found across any scale")
             if findImageExtraDebugging {
-                print("  💾 Check debug images:")
-                print("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-search-region.png"))")
-                print("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-all-matches.png"))")
+                logger.notice("  💾 Check debug images:")
+                logger.notice("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-search-region.png"), privacy: .public)")
+                logger.notice("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-all-matches.png"), privacy: .public)")
             }
             return nil
         }
         
-        print("  ℹ️  Best match: scale=\(Int(scaledTemplates[bestMatch.scaleIndex].scale * 100))% at (\(bestMatch.x), \(bestMatch.y)) confidence=\(String(format: "%.2f", bestMatch.correlation))")
+        logger.notice("  ℹ️  Best match: scale=\(Int(scaledTemplates[bestMatch.scaleIndex].scale * 100), privacy: .public)% at (\(bestMatch.x, privacy: .public), \(bestMatch.y, privacy: .public)) confidence=\(String(format: "%.2f", bestMatch.correlation), privacy: .public)")
         
         // Reuse the saved best-matching template (already converted to grayscale)
         guard let templateGray = bestTemplateGray else {
-            print("  ✗ No template data saved for refinement")
+            logger.notice("  ✗ No template data saved for refinement")
             free(screenshotGray.data)
             return nil
         }
@@ -1047,7 +1050,7 @@ enum ScreenshotOCR {
             }
         }
         
-        print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Refinement completed")
+        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Refinement completed")
         stepStartTime = Date()
         
         // Free buffers
@@ -1057,12 +1060,12 @@ enum ScreenshotOCR {
         // Check if best match meets minimum confidence threshold
         let lowerThreshold = minConfidence * 0.9  // Slightly lower threshold (10% tolerance)
         guard refinedMatch.correlation >= lowerThreshold else {
-            print("  ✗ Template not found (best: \(String(format: "%.2f", refinedMatch.correlation)), threshold: \(String(format: "%.2f", lowerThreshold)))")
+            logger.notice("  ✗ Template not found (best: \(String(format: "%.2f", refinedMatch.correlation), privacy: .public), threshold: \(String(format: "%.2f", lowerThreshold), privacy: .public))")
             return nil
         }
         
         let scalePercent = Int(scaledTemplates[bestMatch.scaleIndex].scale * 100)
-        print("  ✓ Found template at (\(refinedMatch.x), \(refinedMatch.y)) scale=\(scalePercent)% confidence=\(String(format: "%.2f", refinedMatch.correlation))")
+        logger.notice("  ✓ Found template at (\(refinedMatch.x, privacy: .public), \(refinedMatch.y, privacy: .public)) scale=\(scalePercent, privacy: .public)% confidence=\(String(format: "%.2f", refinedMatch.correlation), privacy: .public)")
         
         // Save debug screenshot showing final match (convert coordinates back to full image)
         if findImageExtraDebugging {
@@ -1074,11 +1077,11 @@ enum ScreenshotOCR {
                 templateHeight: templateHeight,
                 correlation: refinedMatch.correlation
             )
-            print("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Final match debug")
+            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)), privacy: .public)s] Final match debug")
         }
         
         let totalTime = Date().timeIntervalSince(startTime)
-        print("⏱️  TOTAL: [\(String(format: "%.3f", totalTime))s]")
+        logger.notice("⏱️  TOTAL: [\(String(format: "%.3f", totalTime), privacy: .public)s]")
         
         // Convert coordinates back to full screenshot space
         return CGRect(
@@ -1149,16 +1152,16 @@ enum ScreenshotOCR {
         let bytesPerPixel = cgImage.bitsPerPixel / 8
         let bytesPerRow = cgImage.bytesPerRow
         
-        print("        DEBUG convertToGrayscale: \(width)x\(height), bitsPerPixel=\(cgImage.bitsPerPixel), bytesPerPixel=\(bytesPerPixel)")
+        logger.notice("        DEBUG convertToGrayscale: \(width, privacy: .public)x\(height, privacy: .public), bitsPerPixel=\(cgImage.bitsPerPixel, privacy: .public), bytesPerPixel=\(bytesPerPixel, privacy: .public)")
         
         if bytesPerPixel == 1 {
             // Already grayscale - just copy
-            print("        DEBUG: Image already grayscale, copying directly")
+            logger.notice("        DEBUG: Image already grayscale, copying directly")
             memcpy(grayData, pixels, width * height)
         } else {
             // Red emphasis: pure red appears bright, other colors darker
             // Formula: gray = R - max(G, B), clamped to 0-255
-            print("        DEBUG: Applying red-emphasis conversion")
+            logger.notice("        DEBUG: Applying red-emphasis conversion")
             
             // Optimized loop: process pixels more efficiently
             var dstIndex = 0
@@ -1241,7 +1244,7 @@ enum ScreenshotOCR {
     static func findText(_ searchTexts: [String], in imagePath: String, app: NSRunningApplication? = nil) -> [String: CGRect] {
         guard let image = NSImage(contentsOfFile: imagePath),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            print("⚠️  Failed to load image for OCR")
+            logger.error("⚠️  Failed to load image for OCR")
             return [:]
         }
         
@@ -1264,18 +1267,18 @@ enum ScreenshotOCR {
                 let isFocused = frontmostApp?.processIdentifier == app.processIdentifier
                 
                 if isFocused {
-                    print("  → Detected text on screen:")
+                    logger.notice("  → Detected text on screen:")
                     for (index, observation) in observations.enumerated() {
                         guard let candidate = observation.topCandidates(1).first else { continue }
-                        print("     [\(index)] '\(candidate.string)' (confidence: \(String(format: "%.2f", candidate.confidence)))")
+                        logger.notice("     [\(index, privacy: .public)] '\(candidate.string, privacy: .public)' (confidence: \(String(format: "%.2f", candidate.confidence), privacy: .public))")
                     }
                 }
             } else {
                 // If no app provided, always print (backward compatibility)
-                print("  → Detected text on screen:")
+                logger.notice("  → Detected text on screen:")
                 for (index, observation) in observations.enumerated() {
                     guard let candidate = observation.topCandidates(1).first else { continue }
-                    print("     [\(index)] '\(candidate.string)' (confidence: \(String(format: "%.2f", candidate.confidence)))")
+                    logger.notice("     [\(index, privacy: .public)] '\(candidate.string, privacy: .public)' (confidence: \(String(format: "%.2f", candidate.confidence), privacy: .public))")
                 }
             }
             
@@ -1306,7 +1309,7 @@ enum ScreenshotOCR {
                             height: boundingBox.height * imageSize.height
                         )
                         
-                        print("  ✓ Found '\(searchText)' - matched text: '\(candidate.string)' at (\(Int(clickRect.midX)), \(Int(clickRect.midY)))")
+                        logger.notice("  ✓ Found '\(searchText, privacy: .public)' - matched text: '\(candidate.string, privacy: .public)' at (\(Int(clickRect.midX), privacy: .public), \(Int(clickRect.midY), privacy: .public))")
                         
                         // Draw a box around the found text and save annotated screenshot
                         saveAnnotatedScreenshot(image: image, rect: annotationRect, originalPath: imagePath, label: searchText)
@@ -1319,7 +1322,7 @@ enum ScreenshotOCR {
             
             return foundTexts
         } catch {
-            print("⚠️  OCR failed: \(error)")
+            logger.error("⚠️  OCR failed: \(error, privacy: .public)")
         }
         
         return [:]
@@ -1420,8 +1423,8 @@ enum ScreenshotOCR {
            let bitmapImage = NSBitmapImageRep(data: tiffData),
            let pngData = bitmapImage.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: debugPath))
-            print("  📸 Saved no-match debug image with template overlay:")
-            print("     \(debugPath)")
+            logger.notice("  📸 Saved no-match debug image with template overlay:")
+            logger.notice("     \(debugPath, privacy: .public)")
         }
     }
     
@@ -1483,7 +1486,7 @@ enum ScreenshotOCR {
            let bitmapImage = NSBitmapImageRep(data: tiffData),
            let pngData = bitmapImage.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: annotatedPath))
-            print("  📸 Saved annotated screenshot with \(rects.count) matches: \(annotatedPath)")
+            logger.notice("  📸 Saved annotated screenshot with \(rects.count, privacy: .public) matches: \(annotatedPath, privacy: .public)")
         }
     }
     
@@ -1530,13 +1533,13 @@ enum ScreenshotOCR {
            let bitmapImage = NSBitmapImageRep(data: tiffData),
            let pngData = bitmapImage.representation(using: .png, properties: [:]) {
             try? pngData.write(to: URL(fileURLWithPath: annotatedPath))
-            print("  📸 Saved annotated screenshot: \(annotatedPath)")
+            logger.notice("  📸 Saved annotated screenshot: \(annotatedPath, privacy: .public)")
         }
     }
     
     /// Search for a single text in a screenshot (single attempt)
     static func searchForText(_ searchText: String) -> CGPoint? {
-        print("🔍 Searching for '\(searchText)'...")
+        logger.notice("🔍 Searching for '\(searchText, privacy: .public)'...")
         
         guard let screenshotPath = captureScreen() else {
             return nil
@@ -1557,10 +1560,10 @@ enum ScreenshotOCR {
     /// Search for multiple texts in a screenshot (single attempt)
     static func searchForText(_ searchTexts: [String]) -> [String: CGPoint] {
         if searchTexts.count == 1 {
-            print("🔍 Searching for '\(searchTexts[0])'...")
+            logger.notice("🔍 Searching for '\(searchTexts[0], privacy: .public)'...")
         } else {
             let textList = searchTexts.map { "'\($0)'" }.joined(separator: ", ")
-            print("🔍 Searching for multiple texts: \(textList)")
+            logger.notice("🔍 Searching for multiple texts: \(textList, privacy: .public)")
         }
         
         guard let screenshotPath = captureScreen() else {
@@ -1575,7 +1578,7 @@ enum ScreenshotOCR {
         }
         
         // Save screenshot for inspection
-        print("  📸 Screenshot saved: \(screenshotPath)")
+        logger.notice("  📸 Screenshot saved: \(screenshotPath, privacy: .public)")
         
         return foundTexts
     }
@@ -1590,14 +1593,14 @@ enum ScreenshotOCR {
     /// Search for multiple texts in screenshots periodically
     static func searchForTextPeriodically(_ searchTexts: [String], interval: TimeInterval, maxAttempts: Int) -> [String: CGPoint] {
         if searchTexts.count == 1 {
-            print("🔍 Searching for '\(searchTexts[0])' in screenshots...")
+            logger.notice("🔍 Searching for '\(searchTexts[0], privacy: .public)' in screenshots...")
         } else {
             let textList = searchTexts.map { "'\($0)'" }.joined(separator: ", ")
-            print("🔍 Searching for multiple texts in screenshots: \(textList)")
+            logger.notice("🔍 Searching for multiple texts in screenshots: \(textList, privacy: .public)")
         }
         
         for attempt in 1...maxAttempts {
-            print("  → Attempt \(attempt)/\(maxAttempts)")
+            logger.notice("  → Attempt \(attempt, privacy: .public)/\(maxAttempts, privacy: .public)")
             
             let foundTexts = searchForText(searchTexts)
             
@@ -1611,7 +1614,7 @@ enum ScreenshotOCR {
             }
         }
         
-        print("  ✗ None of the texts found after \(maxAttempts) attempts")
+        logger.notice("  ✗ None of the texts found after \(maxAttempts, privacy: .public) attempts")
         return [:]
     }
 }

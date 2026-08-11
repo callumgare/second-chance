@@ -6,6 +6,9 @@
 
 import Foundation
 import AppKit
+import os
+
+private let logger = Logger(subsystem: "com.secondchance.gamewrapper", category: "main")
 
 // MARK: - Debug Settings
 
@@ -59,13 +62,13 @@ func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldC
 }
 
 func launchWineShell(_ config: GameConfig) {
-    print("Opening Wine shell...")
+    logger.notice("Opening Wine shell...")
     
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
     let wineEnvVars = wine.wineSpecificEnvironmentVariables()
     
-    print("Wine prefix: \(config.winePrefix)")
-    print("Wine environment variables: \(wineEnvVars)")
+    logger.notice("Wine prefix: \(config.winePrefix, privacy: .public)")
+    logger.notice("Wine environment variables: \(wineEnvVars, privacy: .public)")
     
     let wineBinPath = config.appPath.path + "/Contents/SharedSupport/wine/bin"
     
@@ -136,14 +139,14 @@ func launchWineShell(_ config: GameConfig) {
         process.arguments = [tempCommand.path]
         try process.run()
         
-        print("Debug shell opened in Terminal")
+        logger.notice("Debug shell opened in Terminal")
     } catch {
-        print("Error creating shell command file: \(error)")
+        logger.error("Error creating shell command file: \(error, privacy: .public)")
     }
 }
 
 func launchScummvmShell(_ config: GameConfig) {
-    print("Opening ScummVM shell...")
+    logger.notice("Opening ScummVM shell...")
     
     // Get the game launch info
     let launchInfo = getGameLaunchInfo(config)
@@ -201,9 +204,9 @@ func launchScummvmShell(_ config: GameConfig) {
         process.arguments = [tempCommand.path]
         try process.run()
         
-        print("Debug shell opened in Terminal")
+        logger.notice("Debug shell opened in Terminal")
     } catch {
-        print("Error creating shell command file: \(error)")
+        logger.error("Error creating shell command file: \(error, privacy: .public)")
     }
 }
 
@@ -215,25 +218,25 @@ func launchShell(_ config: GameConfig) {
     case "wine", "wine-steam", "wine-steam-silent":
         launchWineShell(config)
     default:
-        print("Warning: Unknown game engine \(config.gameEngine), attempting Wine shell")
+        logger.error("Warning: Unknown game engine \(config.gameEngine, privacy: .public), attempting Wine shell")
         launchWineShell(config)
     }
 }
 
 func launchWineControlPanel(_ config: GameConfig) {
-    print("Launching Wine control panel...")
+    logger.notice("Launching Wine control panel...")
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
     wine.runExecutable("wine", arguments: ["control"])
 }
 
 func launchWineConfig(_ config: GameConfig) {
-    print("Launching Wine config...")
+    logger.notice("Launching Wine config...")
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
     wine.runExecutable("winecfg")
 }
 
 func showWinePrefixInFinder(_ config: GameConfig) {
-    print("Opening Wine prefix in Finder: \(config.winePrefix.path)")
+    logger.notice("Opening Wine prefix in Finder: \(config.winePrefix.path, privacy: .public)")
     NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: config.winePrefix.path)
 }
 
@@ -266,48 +269,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        print("[Cleanup/AppDelegate] applicationShouldTerminate called")
-        fflush(stdout)
+        logger.notice("[Cleanup/AppDelegate] applicationShouldTerminate called")
         
         // Prevent multiple cleanup attempts
         guard !isCleaningUp else {
-            print("[Cleanup/AppDelegate] Already cleaning up, returning .terminateNow")
-            fflush(stdout)
+            logger.notice("[Cleanup/AppDelegate] Already cleaning up, returning .terminateNow")
             return .terminateNow
         }
         
-        print("[Cleanup/AppDelegate] Setting isCleaningUp = true")
-        fflush(stdout)
+        logger.notice("[Cleanup/AppDelegate] Setting isCleaningUp = true")
         isCleaningUp = true
         
         guard let gameLauncher = gameLauncher else {
-            print("[Cleanup/AppDelegate] No gameLauncher, returning .terminateNow")
-            fflush(stdout)
+            logger.notice("[Cleanup/AppDelegate] No gameLauncher, returning .terminateNow")
             return .terminateNow
         }
         
-        print("\n[Cleanup/AppDelegate] Application terminating, performing cleanup...")
-        fflush(stdout)
+        logger.notice("[Cleanup/AppDelegate] Application terminating, performing cleanup...")
         
         // Perform cleanup and wait for completion
-        print("[Cleanup/AppDelegate] About to call gameLauncher.performCleanup...")
-        fflush(stdout)
+        logger.notice("[Cleanup/AppDelegate] About to call gameLauncher.performCleanup...")
         gameLauncher.performCleanup {
-            print("[Cleanup/AppDelegate] Inside performCleanup completion handler")
-            fflush(stdout)
+            logger.notice("[Cleanup/AppDelegate] Inside performCleanup completion handler")
             DispatchQueue.main.async {
-                print("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
-                fflush(stdout)
-                print("[Cleanup] All cleanup complete, terminating application")
-                fflush(stdout)
+                logger.notice("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
+                logger.notice("[Cleanup] All cleanup complete, terminating application")
                 NSApp.reply(toApplicationShouldTerminate: true)
-                print("[Cleanup/AppDelegate] NSApp.reply(toApplicationShouldTerminate: true) called")
-                fflush(stdout)
+                logger.notice("[Cleanup/AppDelegate] NSApp.reply(toApplicationShouldTerminate: true) called")
             }
         }
         
-        print("[Cleanup/AppDelegate] Returning .terminateLater")
-        fflush(stdout)
+        logger.notice("[Cleanup/AppDelegate] Returning .terminateLater")
         // Return later - we'll call reply when cleanup is done
         return .terminateLater
     }
@@ -355,17 +347,17 @@ func main() {
         exit(1)
     }
     
-    print("Game wrapper starting...")
-    print("App path: \(config.appPath.path)")
-    print("Game engine: \(config.gameEngine)")
-    print("Game exe: \(config.gameExePath)")
-    print("Wine prefix: \(config.winePrefix.path)")
-    print("App support: \(config.appSupportPath.path)")
+    logger.notice("Game wrapper starting...")
+    logger.notice("App path: \(config.appPath.path, privacy: .public)")
+    logger.notice("Game engine: \(config.gameEngine, privacy: .public)")
+    logger.notice("Game exe: \(config.gameExePath, privacy: .public)")
+    logger.notice("Wine prefix: \(config.winePrefix.path, privacy: .public)")
+    logger.notice("App support: \(config.appSupportPath.path, privacy: .public)")
     
     // Check if wineserver is already running for this prefix
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
     if wine.isWineserverRunning() {
-        print("WARNING ⚠️: Detected running wineserver process for this prefix")
+        logger.error("WARNING ⚠️: Detected running wineserver process for this prefix")
         
         // Initialize NSApplication if not already done
         _ = NSApplication.shared
@@ -385,19 +377,19 @@ func main() {
         
         switch response {
         case .alertFirstButtonReturn:  // Quit Wine Server
-            print("User chose to quit Wine server")
+            logger.notice("User chose to quit Wine server")
             let exitStatus = wine.stopWineserver()
             if exitStatus == 0 {
-                print("✓ Wine server terminated successfully")
+                logger.notice("✓ Wine server terminated successfully")
                 // Wait a moment for cleanup
                 Thread.sleep(forTimeInterval: 0.5)
             } else {
-                print("⚠️  Wine server termination returned exit code: \(exitStatus)")
+                logger.error("⚠️  Wine server termination returned exit code: \(exitStatus, privacy: .public)")
             }
         case .alertSecondButtonReturn:  // Continue Anyway
-            print("User chose to continue with Wine server running")
+            logger.notice("User chose to continue with Wine server running")
         default:  // Cancel Launch
-            print("Launch cancelled by user")
+            logger.notice("Launch cancelled by user")
             exit(0)
         }
     }
@@ -409,7 +401,7 @@ func main() {
     for arg in CommandLine.arguments {
         if arg == "--debug" {
             debugMode = true
-            print("--debug flag detected - debug mode enabled")
+            logger.notice("--debug flag detected - debug mode enabled")
         } else if arg == "--debug-options" {
             shouldShowDebugSettings = true
         }
@@ -418,20 +410,20 @@ func main() {
     // Show debug settings if requested
     if shouldShowDebugSettings {
         if debugMode {
-            print("--debug and --debug-options flags detected - showing debug settings with debug mode pre-enabled")
+            logger.notice("--debug and --debug-options flags detected - showing debug settings with debug mode pre-enabled")
         } else {
-            print("--debug-options flag detected - showing debug settings")
+            logger.notice("--debug-options flag detected - showing debug settings")
         }
         let (shouldContinue, debugModeFromDialog) = showDebugSettings(config, initialDebugMode: debugMode)
         debugMode = debugModeFromDialog
         if !shouldContinue {
-            print("Launch cancelled from debug settings")
+            logger.notice("Launch cancelled from debug settings")
             exit(0)
         }
     }
     
     if debugMode {
-        print("Debug mode enabled - log window will be shown")
+        logger.notice("Debug mode enabled - log window will be shown")
     }
     
     // Create game monitor
@@ -504,8 +496,8 @@ func main() {
     
     // Create log window if in debug mode
     if debugMode {
-        LogManager.shared.showLogWindow(title: "\(config.gameTitle) - Launch Log", relativeTo: nil)
-        LogManager.shared.startRedirectingOutput()
+        LogWindow.shared.showLogWindow(title: "\(config.gameTitle) - Launch Log", relativeTo: nil)
+        LogWindow.shared.startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: Date())
         
         // Process events to show window
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
@@ -519,10 +511,10 @@ func main() {
     
     // Redirect stdout/stderr if not already done (for non-debug mode)
     if !debugMode {
-        LogManager.shared.startRedirectingOutput()
+        LogWindow.shared.startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: Date())
     } else {
         // If log window exists in debug mode, reposition it relative to info window
-        if let logWindow = LogManager.shared.window {
+        if let logWindow = LogWindow.shared.window {
             // Reposition relative to info window
             let referenceFrame = infoWindow.window!.frame
             let newOrigin = NSPoint(
@@ -538,14 +530,14 @@ func main() {
     // Process events to show window
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.2))
     
-    print("Starting game...")
+    logger.notice("Starting game...")
     
     // Setup Wine environment (only for Wine games)
     if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-steam") {
         do {
             try mountDirectoryIntoWine(config, hostPath: config.appSupportPath, driveLetter: "a")
         } catch {
-            print("ERROR: Failed to mount directory into Wine: \(error)")
+            logger.fault("ERROR: Failed to mount directory into Wine: \(error, privacy: .public)")
             showAlert(message: "Configuration Error", informativeText: "Failed to mount directory into Wine: \(error.localizedDescription)")
             exit(1)
         }
@@ -556,17 +548,17 @@ func main() {
             var targetPath: URL? = documentsPath
             
             // Check if documentsPath exists (including broken symlinks)
-            print("Checking if Documents directory exists at: \(documentsPath.path)")
+            logger.notice("Checking if Documents directory exists at: \(documentsPath.path, privacy: .public)")
             
             // Check for symlink existence (works even if target doesn't exist)
             let attributes = try? FileManager.default.attributesOfItem(atPath: documentsPath.path)
-            print("Attributes: \(String(describing: attributes))")
+            logger.notice("Attributes: \(String(describing: attributes), privacy: .public)")
             let itemExists = attributes != nil
             
             if itemExists {
-                print("Documents directory exists at: \(documentsPath.path)")
+                logger.notice("Documents directory exists at: \(documentsPath.path, privacy: .public)")
             } else {
-                print("Documents directory does not exist at: \(documentsPath.path)")
+                logger.notice("Documents directory does not exist at: \(documentsPath.path, privacy: .public)")
             }
             
             if itemExists {
@@ -575,13 +567,13 @@ func main() {
                     try FileManager.default.removeItem(at: documentsPath)
                 } catch {
                     // Check if it's a permission error
-                    print("ERROR: \(error)")
-                    print("Unable to remove Documents so treating as as a symlink...")
+                    logger.fault("ERROR: \(error, privacy: .public)")
+                    logger.notice("Unable to remove Documents so treating as as a symlink...")
                     
                     // Check if it's a symlink and get where it points
                     do {
                         let destination = try FileManager.default.destinationOfSymbolicLink(atPath: documentsPath.path)
-                        print("Documents is a symlink pointing to: \(destination)")
+                        logger.notice("Documents is a symlink pointing to: \(destination, privacy: .public)")
                         
                         // Convert destination to absolute URL
                         if destination.hasPrefix("/") {
@@ -593,13 +585,13 @@ func main() {
                         
                         // If targetPath exists, set it to nil
                         if let resolvedPath = targetPath, FileManager.default.fileExists(atPath: resolvedPath.path) {
-                            print("Target path already exists, skipping")
+                            logger.notice("Target path already exists, skipping")
                             targetPath = nil
                         } else if let resolvedPath = targetPath {
-                            print("Will create new symlink at: \(resolvedPath.path)")
+                            logger.notice("Will create new symlink at: \(resolvedPath.path, privacy: .public)")
                         }
                     } catch {
-                        print("ERROR: Could not read symlink destination: \(error)")
+                        logger.fault("ERROR: Could not read symlink destination: \(error, privacy: .public)")
                         throw error
                     }
                 }
@@ -609,7 +601,7 @@ func main() {
                 try FileManager.default.createSymbolicLink(at: targetPath, withDestinationURL: config.appSupportPath)
             }
         } catch {
-            print("ERROR: Failed to create symbolic link for Documents directory: \(error)")
+            logger.fault("ERROR: Failed to create symbolic link for Documents directory: \(error, privacy: .public)")
             showAlert(message: "Configuration Error", informativeText: "Failed to create symbolic link for save directory: \(error.localizedDescription)")
             exit(1)
         }
@@ -629,23 +621,23 @@ func main() {
         
         if shouldShowWarning {
             // Set up callback to launch game when warning is confirmed
-            print("Waiting for user to confirm save warning before launching game...")
+            logger.notice("Waiting for user to confirm save warning before launching game...")
             infoWindow.onWarningConfirmed = {
-                print("Warning confirmed, launching game...")
+                logger.notice("Warning confirmed, launching game...")
                 DispatchQueue.global(qos: .userInitiated).async {
                     do {
                         _ = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
                         
                         // Game has ended, exit cleanly unless in debug mode
                         if !debugMode {
-                            print("\n[App Lifecycle] Game ended, exiting cleanly...")
+                            logger.notice("[App Lifecycle] Game ended, exiting cleanly...")
                             exit(0)
                         } else {
-                            print("\n[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
+                            logger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
                         }
                     } catch {
-                        print("ERROR: Game launch failed: \(error)")
-                        print("Error details: \(error.localizedDescription)")
+                        logger.fault("ERROR: Game launch failed: \(error, privacy: .public)")
+                        logger.fault("Error details: \(error.localizedDescription, privacy: .public)")
                         DispatchQueue.main.async {
                             showAlert(message: "Game Launch Failed", informativeText: "An error occurred while launching the game: \(error.localizedDescription)")
                             NSApp.terminate(nil)
@@ -655,21 +647,21 @@ func main() {
             }
         } else {
             // No warning to show, launch game immediately
-            print("No warning to show, launching game immediately...")
+            logger.notice("No warning to show, launching game immediately...")
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     _ = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
                     
                     // Game has ended, exit cleanly unless in debug mode
                     if !debugMode {
-                        print("\n[App Lifecycle] Game ended, exiting cleanly...")
+                        logger.notice("[App Lifecycle] Game ended, exiting cleanly...")
                         exit(0)
                     } else {
-                        print("\n[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
+                        logger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
                     }
                 } catch {
-                    print("ERROR: Game launch failed: \(error)")
-                    print("Error details: \(error.localizedDescription)")
+                    logger.fault("ERROR: Game launch failed: \(error, privacy: .public)")
+                    logger.fault("Error details: \(error.localizedDescription, privacy: .public)")
                     DispatchQueue.main.async {
                         showAlert(message: "Game Launch Failed", informativeText: "An error occurred while launching the game: \(error.localizedDescription)")
                         NSApp.terminate(nil)
@@ -683,27 +675,27 @@ func main() {
         return
         
     case "wine-steam", "wine-steam-silent":
-        print("ERROR: Steam engine not yet implemented in Swift runtime")
-        print("Please use the bash runtime for Steam games")
+        logger.fault("ERROR: Steam engine not yet implemented in Swift runtime")
+        logger.fault("Please use the bash runtime for Steam games")
         exit(1)
         
     case "scummvm":
         // Launch ScummVM asynchronously
-        print("Launching ScummVM game...")
+        logger.notice("Launching ScummVM game...")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 _ = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
                 
                 // Game has ended, exit cleanly unless in debug mode
                 if !debugMode {
-                    print("\n[App Lifecycle] Game ended, exiting cleanly...")
+                    logger.notice("[App Lifecycle] Game ended, exiting cleanly...")
                     exit(0)
                 } else {
-                    print("\n[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
+                    logger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")
                 }
             } catch {
-                print("ERROR: Game launch failed: \(error)")
-                print("Error details: \(error.localizedDescription)")
+                logger.fault("ERROR: Game launch failed: \(error, privacy: .public)")
+                logger.fault("Error details: \(error.localizedDescription, privacy: .public)")
                 DispatchQueue.main.async {
                     showAlert(message: "Game Launch Failed", informativeText: "An error occurred while launching the game: \(error.localizedDescription)")
                     NSApp.terminate(nil)
@@ -716,7 +708,7 @@ func main() {
         return
         
     default:
-        print("ERROR: Unknown game engine: \(config.gameEngine)")
+        logger.fault("ERROR: Unknown game engine: \(config.gameEngine, privacy: .public)")
         exit(1)
     }
 }

@@ -5,6 +5,9 @@
 //  Configuration management for Nancy Drew game wrappers
 
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.secondchance.gamewrapper", category: "Configuration")
 
 // MARK: - Game Configuration
 
@@ -67,7 +70,7 @@ func getWinePrefix(appPath: URL, bundleId: String) -> URL {
     }
     
     // Prefix is read-only, set up cached copy
-    print("[Wine] Prefix is read-only, copying to cache directory...")
+    logger.notice("[Wine] Prefix is read-only, copying to cache directory...")
     
     let cacheDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
     var cachedPrefixPath = cacheDir
@@ -76,12 +79,12 @@ func getWinePrefix(appPath: URL, bundleId: String) -> URL {
     
     // Try to remove existing cache if present
     if fileManager.fileExists(atPath: cachedPrefixPath.path) {
-        print("[Wine] Removing existing cached prefix...")
+        logger.notice("[Wine] Removing existing cached prefix...")
         do {
             try fileManager.removeItem(at: cachedPrefixPath)
         } catch {
             // If removal fails (e.g., permissions issues), use a new path with timestamp
-            print("[Wine] Could not remove existing cache, using timestamped path instead")
+            logger.notice("[Wine] Could not remove existing cache, using timestamped path instead")
             let timestamp = Int(Date().timeIntervalSince1970)
             cachedPrefixPath = cacheDir
                 .appendingPathComponent(bundleId)
@@ -113,7 +116,7 @@ func getWinePrefix(appPath: URL, bundleId: String) -> URL {
             cpProcess.waitUntilExit()
         }
         
-        print("[Wine] Copied prefix contents to cache (excluding drive_c)")
+        logger.notice("[Wine] Copied prefix contents to cache (excluding drive_c)")
         
         // Recreate drive_c structure with selective copying/symlinking
         let originalDriveCPath = originalPrefixPath.appendingPathComponent("drive_c")
@@ -158,13 +161,13 @@ func getWinePrefix(appPath: URL, bundleId: String) -> URL {
         
         try recreateDriveCStructure(sourceDir: originalDriveCPath, destDir: cachedDriveCPath)
         
-        print("[Wine] Recreated drive_c structure with selective copying/symlinking")
+        logger.notice("[Wine] Recreated drive_c structure with selective copying/symlinking")
         
         return cachedPrefixPath
         
     } catch {
-        print("⛔️ [Wine] Error setting up cached prefix: \(error)")
-        print("[Wine] Falling back to original prefix")
+        logger.fault("⛔️ [Wine] Error setting up cached prefix: \(error, privacy: .public)")
+        logger.notice("[Wine] Falling back to original prefix")
         return originalPrefixPath
     }
 }
@@ -172,7 +175,7 @@ func getWinePrefix(appPath: URL, bundleId: String) -> URL {
 func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     // Get app path
     guard let executablePath = ProcessInfo.processInfo.arguments.first else {
-        print("ERROR: Could not determine executable path")
+        logger.fault("ERROR: Could not determine executable path")
         return nil
     }
     
@@ -188,7 +191,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
           let gameEngine = readPlist(at: settingsPlistPath, key: "GameEngine"),
           let gameTitle = readPlist(at: infoPlistPath, key: "CFBundleName"),
           let bundleId = readPlist(at: infoPlistPath, key: "CFBundleIdentifier") else {
-        print("ERROR: Could not read required configuration from plists")
+        logger.fault("ERROR: Could not read required configuration from plists")
         return nil
     }
     

@@ -5,6 +5,7 @@
 //  Orchestrates the complete game installation process
 
 import Foundation
+import os
 import AppKit
 
 /// Installer types for different game installers
@@ -25,7 +26,7 @@ class GameInstaller {
     private let gameDetector = GameDetector.shared
     private let gameInfoProvider = GameInfoProvider.shared
     private let exiftool = ExiftoolService.shared
-    private let logger = ContextualLogger(source: "GameInstaller")
+    private let logger = Logger(subsystem: "com.secondchance", category: "GameInstaller")
     let bus: EventBus<AppEvent>
 
     // Track temporary wrappers for cleanup
@@ -44,16 +45,16 @@ class GameInstaller {
         disk2Path: URL?
     ) async throws -> URL {
         // Detect game
-        logger.step(.detectingGame(substep: nil)).log("Analyzing disk: \(disk1Path.lastPathComponent)")
+        logger.notice("Analyzing disk: \(disk1Path.lastPathComponent, privacy: .public)")
         let gameSlug = try await gameDetector.detectGame(fromDisk: disk1Path)
         let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
-        logger.log("Detected game: \(gameInfo.title)")
+        logger.notice("Detected game: \(gameInfo.title, privacy: .public)")
         await bus.publishInstallation(.gameDetected(gameInfo))
 
         // Create wrapper (WrapperBuilder will report progress for setup)
         let wrapperPath = createTemporaryWrapperPath()
         registerTemporaryWrapper(wrapperPath)
-        logger.log("Temporary wrapper: \(wrapperPath.path)")
+        logger.notice("Temporary wrapper: \(wrapperPath.path, privacy: .public)")
         
         do {
             try await wrapperBuilder.createBaseWrapper(at: wrapperPath)
@@ -126,12 +127,12 @@ class GameInstaller {
         Task { await self.bus.publishInstallation(.progress(.detectingGame(substep: nil))) }
         let gameSlug = try await gameDetector.detectGame(fromInstaller: installerPath)
         let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
-        logger.log("Detected game: \(gameInfo.title)")
+        logger.notice("Detected game: \(gameInfo.title, privacy: .public)")
         
         // Create wrapper (WrapperBuilder will report progress for setup)
         let wrapperPath = createTemporaryWrapperPath()
         registerTemporaryWrapper(wrapperPath)
-        logger.log("Temporary wrapper: \(wrapperPath.path)")
+        logger.notice("Temporary wrapper: \(wrapperPath.path, privacy: .public)")
 
         do {
             try await wrapperBuilder.createBaseWrapper(at: wrapperPath)
@@ -167,7 +168,7 @@ class GameInstaller {
     func installFromSteam() async throws -> URL {
         let wrapperPath = createTemporaryWrapperPath()
         registerTemporaryWrapper(wrapperPath)
-        logger.log("Temporary wrapper: \(wrapperPath.path)")
+        logger.notice("Temporary wrapper: \(wrapperPath.path, privacy: .public)")
         try await wrapperBuilder.createBaseWrapper(at: wrapperPath)
         Task { await self.bus.publishInstallation(.progress(.installingGame(substep: nil))) }
         try await wrapperBuilder.installSteamClient(in: wrapperPath)
@@ -204,13 +205,13 @@ class GameInstaller {
             
             let installerDir: URL
             if fileManager.fileExists(atPath: combinedDir.path) {
-                logger.log("Using combined disk directory for installer search")
+                logger.notice("Using combined disk directory for installer search")
                 installerDir = combinedDir
             } else if fileManager.fileExists(atPath: disk1Dir.path) {
-                logger.log("Using disk-1 directory for installer search")
+                logger.notice("Using disk-1 directory for installer search")
                 installerDir = disk1Dir
             } else {
-                logger.log("Could not find disk directory — expected at \(disk1Dir.path) or \(combinedDir.path)", level: .error)
+                logger.fault("Could not find disk directory — expected at \(disk1Dir.path, privacy: .public) or \(combinedDir.path, privacy: .public)")
                 throw InstallationError.diskNotFound
             }
             
@@ -224,7 +225,7 @@ class GameInstaller {
         let skipInstaller = DebugSettings.shared.skipInstaller
         
         if skipInstaller {
-            logger.log("DEBUG: Skip installer enabled — using installer path as game exe: \(installerExe)")
+            logger.notice("DEBUG: Skip installer enabled — using installer path as game exe: \(installerExe, privacy: .public)")
             
             // Show what command would have been run using the same code path
             let installerType = detectInstallerType(installerExe)
@@ -235,9 +236,9 @@ class GameInstaller {
                 wrapperPath: wrapperPath,
                 attemptNumber: 0
             )
-            logger.log("DEBUG: Would have run: \(command.commandDescription)")
+            logger.notice("DEBUG: Would have run: \(command.commandDescription, privacy: .public)")
             if let underlyingCommand = command.underlyingCommandDescription {
-                logger.log("DEBUG:    Automating: \(underlyingCommand)")
+                logger.notice("DEBUG:    Automating: \(underlyingCommand, privacy: .public)")
             }
             
             // Use the installer executable path as the game executable
@@ -272,7 +273,7 @@ class GameInstaller {
         var gameExe: URL?
         
         while gameExe == nil && installAttempt < maxAttempts {
-            print("🔄 Installation attempt \(installAttempt + 1) of \(maxAttempts)")
+            logger.notice("🔄 Installation attempt \(installAttempt + 1, privacy: .public) of \(maxAttempts, privacy: .public)")
             do {
                 // Run installer
                 try await runInstaller(
@@ -296,12 +297,12 @@ class GameInstaller {
                 } catch {
                     // Game executable not found
                     if installAttempt == 0 && !strictInstall {
-                        logger.log("Game exe not found after silent install — retrying with interactive mode...", level: .warning)
+                        logger.error("Game exe not found after silent install — retrying with interactive mode...")
                         installAttempt += 1
                     } else {
                         // Strict mode or second attempt failed, throw the error
                         if strictInstall {
-                            print("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
+                            logger.fault("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
                         }
                         throw error
                     }
@@ -310,14 +311,14 @@ class GameInstaller {
                 installAttempt += 1
                 if installAttempt >= maxAttempts {
                     if strictInstall {
-                        print("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
+                        logger.fault("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
                     } else {
-                        print("❌ Installation failed after \(installAttempt) attempts")
+                        logger.fault("❌ Installation failed after \(installAttempt, privacy: .public) attempts")
                     }
                     throw error
                 }
                 
-                logger.log("Silent install failed: \(error) — retrying with interactive mode...", level: .warning)
+                logger.error("Silent install failed: \(error, privacy: .public) — retrying with interactive mode...")
             }
         }
         
@@ -368,13 +369,13 @@ class GameInstaller {
         
         let gameDir: URL
         if fileManager.fileExists(atPath: combinedDir.path) {
-            print("✅ Using combined disk directory for ScummVM game")
+            logger.notice("✅ Using combined disk directory for ScummVM game")
             gameDir = combinedDir
         } else if fileManager.fileExists(atPath: disk1Dir.path) {
-            print("✅ Using disk-1 directory for ScummVM game")
+            logger.notice("✅ Using disk-1 directory for ScummVM game")
             gameDir = disk1Dir
         } else {
-            logger.log("Could not find disk directory for ScummVM game — expected at \(disk1Dir.path) or \(combinedDir.path)", level: .error)
+            logger.fault("Could not find disk directory for ScummVM game — expected at \(disk1Dir.path, privacy: .public) or \(combinedDir.path, privacy: .public)")
             throw InstallationError.diskNotFound
         }
         
@@ -407,7 +408,7 @@ class GameInstaller {
         
         // Copy AutoIt directory
         try fileManager.copyItem(at: autoitSourceDir, to: autoitDestDir)
-        print("✅ Copied AutoIt to drive_c")
+        logger.notice("✅ Copied AutoIt to drive_c")
         
         // Copy automation script from bundle
         if let scriptPath = Bundle.main.path(forResource: "installshield-custom-dialog-automate", ofType: "au3") {
@@ -419,7 +420,7 @@ class GameInstaller {
             }
             
             try fileManager.copyItem(atPath: scriptPath, toPath: scriptDestPath.path)
-            print("✅ Copied AutoIt script to drive_c")
+            logger.notice("✅ Copied AutoIt script to drive_c")
         } else {
             throw InstallationError.autoItScriptNotFound
         }
@@ -434,13 +435,13 @@ class GameInstaller {
         // Remove AutoIt directory
         if fileManager.fileExists(atPath: autoitDir.path) {
             try? fileManager.removeItem(at: autoitDir)
-            print("🧹 Cleaned up AutoIt directory")
+            logger.notice("🧹 Cleaned up AutoIt directory")
         }
         
         // Remove script
         if fileManager.fileExists(atPath: scriptPath.path) {
             try? fileManager.removeItem(at: scriptPath)
-            print("🧹 Cleaned up AutoIt script")
+            logger.notice("🧹 Cleaned up AutoIt script")
         }
     }
     
@@ -521,7 +522,8 @@ class GameInstaller {
         attemptNumber: Int
     ) async throws {
         let installerType = detectInstallerType(installerPath)
-        logger.step(.installingGame(substep: nil)).log("Installer type: \(installerType)")
+        let installerTypeDesc = String(describing: installerType)
+        logger.notice("Installer type: \(installerTypeDesc, privacy: .public)")
         await bus.publishInstallation(.installerResolved(exePath: installerPath, type: installerType))
 
         // Check if we need to use AutoIt for this installer
@@ -531,9 +533,10 @@ class GameInstaller {
                        attemptNumber == 0 && 
                        fileManager.fileExists(atPath: setupIssPath.path) &&
                        gameInfo.doesNotExitInNonInteractiveMode
-        print("Attempt number: \(attemptNumber)")
-        print("Setup.iss path: \(setupIssPath.path), exists: \(fileManager.fileExists(atPath: setupIssPath.path))")
-        print("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
+        logger.notice("Attempt number: \(attemptNumber, privacy: .public)")
+        let setupIssExists = fileManager.fileExists(atPath: setupIssPath.path)
+        logger.notice("Setup.iss path: \(setupIssPath.path, privacy: .public), exists: \(setupIssExists, privacy: .public)")
+        logger.notice("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode, privacy: .public)")
         
         // Build and print the command that will be executed
         let command = buildInstallerCommand(
@@ -543,9 +546,9 @@ class GameInstaller {
             wrapperPath: wrapperPath,
             attemptNumber: attemptNumber
         )
-        logger.log("Running: \(command.commandDescription)")
+        logger.notice("Running: \(command.commandDescription, privacy: .public)")
         if let underlyingCommand = command.underlyingCommandDescription {
-            logger.log("   Automating: \(underlyingCommand)")
+            logger.notice("   Automating: \(underlyingCommand, privacy: .public)")
         }
         
         // Setup AutoIt if needed
@@ -581,7 +584,7 @@ class GameInstaller {
         // Cleanup AutoIt if it was used (skip in debug mode to allow manual re-runs)
         if command.underlyingCommandDescription != nil {
             if DebugSettings.shared.debugMode {
-                logger.log("DEBUG: Keeping AutoIt files for manual re-run")
+                logger.notice("DEBUG: Keeping AutoIt files for manual re-run")
             } else {
                 cleanupAutoItAfterInstall(in: wrapperPath)
             }
@@ -600,7 +603,7 @@ class GameInstaller {
         // Try to extract metadata using exiftool to detect InstallShield/Inno Setup
         do {
             let metadata = try exiftool.getFileProperties(installerPath, properties: ["ProductName", "Comments"])
-            print("🔍 Installer metadata: \(metadata)")
+            logger.notice("🔍 Installer metadata: \(metadata, privacy: .public)")
             let combined = (metadata["ProductName"] ?? "") + " " + (metadata["Comments"] ?? "")
             let lowercased = combined.lowercased()
             
@@ -610,7 +613,7 @@ class GameInstaller {
                 return .innoSetup
             }
         } catch {
-            print("⚠️ Failed to detect installer type via exiftool: \(error)")
+            logger.error("⚠️ Failed to detect installer type via exiftool: \(error, privacy: .public)")
         }
         
         return .unknown
@@ -677,7 +680,7 @@ class GameInstaller {
             options: []
         )
         
-        print("Searching for installer executable in: \(directory.path)")
+        logger.notice("Searching for installer executable in: \(directory.path, privacy: .public)")
         
         // First look for .msi files
         for file in contents {
@@ -709,11 +712,11 @@ class GameInstaller {
             return exe.path
         }
         
-        print("ERROR: No installer executable found!")
-        print("Expected to find .msi, setup.exe, install.exe, or any .exe file")
-        print("Found \(contents.count) files/folders:")
+        logger.fault("ERROR: No installer executable found!")
+        logger.notice("Expected to find .msi, setup.exe, install.exe, or any .exe file")
+        logger.notice("Found \(contents.count, privacy: .public) files/folders:")
         for file in contents {
-            print("  - \(file.lastPathComponent)")
+            logger.notice("  - \(file.lastPathComponent, privacy: .public)")
         }
         throw InstallationError.installerNotFound
     }
@@ -746,64 +749,64 @@ class GameInstaller {
         expectedPath: String?,
         driveCPath: URL
     ) throws -> URL {
-        print("=== Searching for game executable ===")
+        logger.notice("=== Searching for game executable ===")
         
         // Find new executables
         let newExes = after.subtracting(before)
-        print("Number of executables before installation: \(before.count)")
-        print("Number of executables after installation: \(after.count)")
-        print("Number of new executables found: \(newExes.count)")
+        logger.notice("Number of executables before installation: \(before.count, privacy: .public)")
+        logger.notice("Number of executables after installation: \(after.count, privacy: .public)")
+        logger.notice("Number of new executables found: \(newExes.count, privacy: .public)")
         
         if newExes.isEmpty {
-            print("WARNING: No new executables were created during installation")
-            print("First few existing executables:")
+            logger.error("WARNING: No new executables were created during installation")
+            logger.notice("First few existing executables:")
             for (index, exe) in after.prefix(5).enumerated() {
-                print("  \(index + 1). \(exe)")
+                logger.notice("  \(index + 1, privacy: .public). \(exe, privacy: .public)")
             }
         } else {
-            print("New executables found:")
+            logger.notice("New executables found:")
             for (index, exe) in newExes.enumerated() {
-                print("  \(index + 1). \(exe)")
+                logger.notice("  \(index + 1, privacy: .public). \(exe, privacy: .public)")
             }
         }
         
         // Check if expected path exists
         if let expectedPath = expectedPath {
             let fullPath = driveCPath.appendingPathComponent(expectedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
-            print("Looking for expected game executable at: \(fullPath.path)")
+            logger.notice("Looking for expected game executable at: \(fullPath.path, privacy: .public)")
             if fileManager.fileExists(atPath: fullPath.path) {
-                print("✓ Found game executable at expected path")
+                logger.notice("✓ Found game executable at expected path")
                 return fullPath
             } else {
-                print("✗ Expected game executable not found at: \(fullPath.path)")
+                logger.notice("✗ Expected game executable not found at: \(fullPath.path, privacy: .public)")
             }
         } else {
-            print("No expected game executable path provided in game info")
+            logger.notice("No expected game executable path provided in game info")
         }
         
         // Look for game.exe or similar
-        print("Searching for 'game.exe' in new executables...")
+        logger.notice("Searching for 'game.exe' in new executables...")
         for exePath in newExes {
             let url = URL(fileURLWithPath: exePath)
             let name = url.lastPathComponent.lowercased()
             if name == "game.exe" {
-                print("✓ Found game.exe at: \(exePath)")
+                logger.notice("✓ Found game.exe at: \(exePath, privacy: .public)")
                 return url
             }
         }
-        print("✗ No 'game.exe' found in new executables")
+        logger.notice("✗ No 'game.exe' found in new executables")
         
         // Return first new executable
         if let first = newExes.first {
-            print("Using first new executable as fallback: \(first)")
+            logger.notice("Using first new executable as fallback: \(first, privacy: .public)")
             return URL(fileURLWithPath: first)
         }
         
-        print("ERROR: Could not determine game executable")
-        print("Search criteria:")
-        print("  - Expected path: \(expectedPath ?? "none")")
-        print("  - drive_c path: \(driveCPath.path)")
-        print("  - New executables: \(newExes.count)")
+        logger.fault("ERROR: Could not determine game executable")
+        logger.notice("Search criteria:")
+        logger.notice("  - Expected path: \(expectedPath ?? "none", privacy: .public)")
+        logger.notice("  - drive_c path: \(driveCPath.path, privacy: .public)")
+        logger.notice("  - New executables: \(newExes.count, privacy: .public)")
         
         throw InstallationError.gameExecutableNotFound
     }
@@ -840,24 +843,24 @@ class GameInstaller {
         
         // Skip deletion in debug mode
         if DebugSettings.shared.debugMode {
-            print("🐛 DEBUG: Keeping \(wrappers.count) temporary wrapper(s) for inspection:")
+            logger.notice("🐛 DEBUG: Keeping \(wrappers.count, privacy: .public) temporary wrapper(s) for inspection:")
             for wrapper in wrappers {
                 if fileManager.fileExists(atPath: wrapper.path) {
-                    print("   \(wrapper.path)")
+                    logger.notice("   \(wrapper.path, privacy: .public)")
                 }
             }
             return
         }
         
-        print("🧹 Cleaning up \(wrappers.count) temporary wrapper(s)...")
+        logger.notice("🧹 Cleaning up \(wrappers.count, privacy: .public) temporary wrapper(s)...")
         for wrapper in wrappers {
             do {
                 if fileManager.fileExists(atPath: wrapper.path) {
-                    print("   Removing: \(wrapper.path)")
+                    logger.notice("   Removing: \(wrapper.path, privacy: .public)")
                     try fileManager.removeItem(at: wrapper)
                 }
             } catch {
-                print("   ⚠️ Failed to remove \(wrapper.lastPathComponent): \(error.localizedDescription)")
+                logger.error("   ⚠️ Failed to remove \(wrapper.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
     }

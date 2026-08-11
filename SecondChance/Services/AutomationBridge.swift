@@ -133,8 +133,6 @@ final class AutomationBridge: @unchecked Sendable {
         switch event {
         case .installation(let e): return serializeInstallation(e)
         case .lifecycle(let e):    return serializeLifecycle(e)
-        case .log(let level, let msg):
-            return ["kind": "event", "type": "log", "level": "\(level)", "message": msg]
         }
     }
 

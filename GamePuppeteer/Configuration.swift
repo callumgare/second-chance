@@ -16,7 +16,6 @@ struct TestConfig {
     let maxRuntime: TimeInterval
     let gameEngine: String
     let debugMode: Bool
-    let logFilePath: String?
 }
 
 /// Typed result of running a puppet session.

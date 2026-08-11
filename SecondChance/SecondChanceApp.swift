@@ -1,15 +1,15 @@
 //
 //  SecondChanceApp.swift
 //  SecondChance
-//
-//  Created for bringing Nancy Drew games to modern macOS
 
 import SwiftUI
+import os
 
-// Application delegate to handle termination events (Cmd+Q)
+private let logger = Logger(subsystem: "com.secondchance", category: "App")
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        print("\n🛑 Application terminating, cleaning up...")
+        logger.notice("🛑 Application terminating, cleaning up...")
         GameInstaller.shared.cleanupTemporaryWrappers()
         return .terminateNow
     }
@@ -19,53 +19,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct SecondChanceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var installationViewModel = InstallationViewModel()
-    
+
+    private let appStartTime = Date()
+
     init() {
         let debugMode = CommandLine.arguments.contains("--debug")
 
-        // In non-interactive mode (subprocess install), suppress all windows and the Dock icon.
         if ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" {
             NSApp.setActivationPolicy(.prohibited)
         }
 
-        // Subscribe LogCorrelator to the bus so step-change headers are emitted.
-        Task { await LogCorrelator.shared.subscribe(to: EventBus.app) }
-
-        // Always redirect stdout through LogManager's pipe tee.
-        // This ensures print() calls and ContextualLogger output (which emits
-        // via print()) are identical in both the console and the log window.
-        // LogManager writes to the original console fd AND the log window.
-        let logFilePath = ProcessInfo.processInfo.environment["SC_LOG_PATH"]
-        LogManager.shared.startRedirectingOutput(toFile: logFilePath)
-
-        // Start the automation bridge if SC_AUTOMATION_SOCKET is set.
         Task { await AutomationBridge.shared.startIfConfigured() }
 
-        // Show the floating log window only in debug mode.
         if debugMode {
-            LogManager.shared.showLogWindow(title: "SecondChance - Installation Log")
+            let pid = ProcessInfo.processInfo.processIdentifier
+            let startTime = Date()
+            LogWindow.shared.showLogWindow(title: "SecondChance - Installation Log")
+            LogWindow.shared.startStreaming(pid: pid, since: startTime)
         }
 
-        // Set up signal handlers for cleanup on exit
         setupSignalHandlers()
     }
-    
-    /// Set up signal handlers to clean up temporary wrappers on exit
+
     private func setupSignalHandlers() {
-        // Handle SIGINT (Ctrl+C) and SIGTERM
         signal(SIGINT) { _ in
-            print("\n🛑 Received interrupt signal, cleaning up...")
+            logger.fault("🛑 Received interrupt signal, cleaning up...")
             GameInstaller.shared.cleanupTemporaryWrappers()
-            exit(130)  // Standard exit code for SIGINT
+            exit(130)
         }
-        
         signal(SIGTERM) { _ in
-            print("\n🛑 Received termination signal, cleaning up...")
+            logger.fault("🛑 Received termination signal, cleaning up...")
             GameInstaller.shared.cleanupTemporaryWrappers()
-            exit(143)  // Standard exit code for SIGTERM
+            exit(143)
         }
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()

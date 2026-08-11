@@ -6,6 +6,9 @@
 
 import Foundation
 import AppKit
+import os
+
+private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "ProcessManagement")
 
 // MARK: - Signal Handling
 
@@ -58,14 +61,14 @@ enum SignalHandler {
         globalWrapperPid = app.processIdentifier
         globalGamePid = gamePid ?? 0
         
-        print("  → Setting up signal handlers (wrapper PID: \(globalWrapperPid), game PID: \(globalGamePid))...")
+        logger.notice("  → Setting up signal handlers (wrapper PID: \(globalWrapperPid, privacy: .public), game PID: \(globalGamePid, privacy: .public))...")
         
         // Use the top-level function directly
         signal(SIGINT, handleTermination)
         signal(SIGTERM, handleTermination)
         signal(SIGHUP, handleTermination)
         
-        print("  → Signal handlers registered")
+        logger.notice("  → Signal handlers registered")
     }
 }
 
@@ -74,9 +77,9 @@ enum SignalHandler {
 enum ProcessManager {
     /// Launch application with optional arguments and return NSRunningApplication
     static func launch(appPath: String, arguments: [String] = []) -> NSRunningApplication? {
-        print("🚀 Launching game...")
+        logger.notice("🚀 Launching game...")
         if !arguments.isEmpty {
-            print("   Arguments: \(arguments.joined(separator: " "))")
+            logger.notice("   Arguments: \(arguments.joined(separator: " "), privacy: .public)")
         }
         
         let url = URL(fileURLWithPath: appPath)
@@ -89,7 +92,7 @@ enum ProcessManager {
         
         NSWorkspace.shared.openApplication(at: url, configuration: configuration) { runningApp, error in
             if let error = error {
-                print("❌ Failed to launch: \(error.localizedDescription)")
+                logger.fault("❌ Failed to launch: \(error.localizedDescription, privacy: .public)")
             }
             app = runningApp
             semaphore.signal()
@@ -109,9 +112,9 @@ enum ProcessManager {
         wrapperRunning = (wrapperKillResult == 0)
         if wrapperKillResult != 0 {
             let err = errno
-            print("   [DEBUG] Wrapper PID \(app.processIdentifier): kill(pid, 0)=\(wrapperKillResult), errno=\(err), wrapperRunning=\(wrapperRunning)")
+            logger.notice("   [DEBUG] Wrapper PID \(app.processIdentifier, privacy: .public): kill(pid, 0)=\(wrapperKillResult, privacy: .public), errno=\(err, privacy: .public), wrapperRunning=\(wrapperRunning, privacy: .public)")
         } else {
-            print("   [DEBUG] Wrapper PID \(app.processIdentifier): kill(pid, 0)=\(wrapperKillResult), wrapperRunning=\(wrapperRunning)")
+            logger.notice("   [DEBUG] Wrapper PID \(app.processIdentifier, privacy: .public): kill(pid, 0)=\(wrapperKillResult, privacy: .public), wrapperRunning=\(wrapperRunning, privacy: .public)")
         }
         
         // Check game process using kill(pid, 0)
@@ -120,21 +123,21 @@ enum ProcessManager {
             gameRunning = (killResult == 0)
             if killResult != 0 {
                 let err = errno
-                print("   [DEBUG] Game PID \(pid): kill(pid, 0)=\(killResult), errno=\(err), gameRunning=\(gameRunning)")
+                logger.notice("   [DEBUG] Game PID \(pid, privacy: .public): kill(pid, 0)=\(killResult, privacy: .public), errno=\(err, privacy: .public), gameRunning=\(gameRunning, privacy: .public)")
             } else {
-                print("   [DEBUG] Game PID \(pid): kill(pid, 0)=\(killResult), gameRunning=\(gameRunning)")
+                logger.notice("   [DEBUG] Game PID \(pid, privacy: .public): kill(pid, 0)=\(killResult, privacy: .public), gameRunning=\(gameRunning, privacy: .public)")
             }
         }
         
         let finalResult = wrapperRunning || gameRunning
-        print("   [DEBUG] Final isRunning result: \(finalResult) (wrapper=\(wrapperRunning), game=\(gameRunning))")
+        logger.notice("   [DEBUG] Final isRunning result: \(finalResult, privacy: .public) (wrapper=\(wrapperRunning, privacy: .public), game=\(gameRunning, privacy: .public))")
         
         return finalResult
     }
     
     /// Force terminate app and game engine child processes
     static func forceQuit(_ app: NSRunningApplication, gameEngine: String = "") {
-        print("⚠️  Force quitting game...")
+        logger.error("⚠️  Force quitting game...")
         
         // Terminate main app
         app.forceTerminate()
@@ -162,15 +165,15 @@ enum ProcessManager {
         
         // Print initial info about what we're waiting for
         if let gamePid = gamePid {
-            print("   Waiting for game process (PID: \(gamePid)) and wrapper (PID: \(app.processIdentifier)) to exit...")
+            logger.notice("   Waiting for game process (PID: \(gamePid, privacy: .public)) and wrapper (PID: \(app.processIdentifier, privacy: .public)) to exit...")
         } else {
-            print("   Waiting for wrapper process (PID: \(app.processIdentifier)) to exit...")
+            logger.notice("   Waiting for wrapper process (PID: \(app.processIdentifier, privacy: .public)) to exit...")
         }
         
         while Date().timeIntervalSince(startTime) < timeout {
             if !isRunning(app, gamePid: gamePid) {
                 let elapsed = Date().timeIntervalSince(startTime)
-                print("   ✓ Process exited after \(String(format: "%.1f", elapsed))s")
+                logger.notice("   ✓ Process exited after \(String(format: "%.1f", elapsed), privacy: .public)s")
                 return true
             }
             
@@ -191,14 +194,14 @@ enum ProcessManager {
                 }
                 
                 let statusString = statusParts.joined(separator: ", ")
-                print("   [\(String(format: "%.1f", elapsed))s] Still running: \(statusString)")
+                logger.notice("   [\(String(format: "%.1f", elapsed), privacy: .public)s] Still running: \(statusString, privacy: .public)")
                 lastPrintTime = Date()
             }
             
             Thread.sleep(forTimeInterval: 0.5)
         }
         
-        print("   ✗ Timeout after \(Int(timeout))s waiting for process to exit")
+        logger.notice("   ✗ Timeout after \(Int(timeout), privacy: .public)s waiting for process to exit")
         return false
     }
 }

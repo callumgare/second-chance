@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import CoreGraphics
+import os
 
 /// Orchestrates a single game launch-and-quit session. Encapsulates the
 /// logic previously in GameTester's free functions into a testable struct.
@@ -8,6 +9,7 @@ struct GamePuppetSession {
     let config: TestConfig
     let gameExeName: String
     let winePrefix: URL
+    private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "GamePuppetSession")
 
     // Path to the quit button image, relative to the executable.
     private var quitButtonImagePath: String {
@@ -16,12 +18,11 @@ struct GamePuppetSession {
     }
 
     func run() -> GamePuppetResult {
-        print("🎮 Starting puppet session")
-        print("   App: \(config.appPath)")
-        print("   Engine: \(config.gameEngine)")
-        print("   Executable: \(gameExeName)")
-        print("   Max runtime: \(Int(config.maxRuntime))s")
-        print("")
+        logger.notice("🎮 Starting puppet session")
+        logger.notice("   App: \(config.appPath, privacy: .public)")
+        logger.notice("   Engine: \(config.gameEngine, privacy: .public)")
+        logger.notice("   Executable: \(gameExeName, privacy: .public)")
+        logger.notice("   Max runtime: \(Int(config.maxRuntime), privacy: .public)s")
 
         guard WindowDetector.checkScreenRecordingPermission() else {
             return .failed("Screen Recording permission not granted")
@@ -29,26 +30,21 @@ struct GamePuppetSession {
 
         var arguments: [String] = []
         if config.debugMode { arguments.append("--debug") }
-        if let logPath = config.logFilePath {
-            arguments.append("--game-log-path")
-            arguments.append(logPath)
-        }
 
         guard let app = ProcessManager.launch(appPath: config.appPath, arguments: arguments) else {
             return .failed("Failed to launch game")
         }
 
         let appName = app.localizedName ?? "GameWrapper"
-        print("ℹ️  Game process: \(appName) (PID: \(app.processIdentifier))")
+        logger.notice("ℹ️  Game process: \(appName, privacy: .public) (PID: \(app.processIdentifier, privacy: .public))")
 
         if config.gameEngine.lowercased().contains("wine") {
-            print("\n⚠️  Wine game detected - checking for info window...")
+            logger.error("⚠️  Wine game detected - checking for info window...")
             Thread.sleep(forTimeInterval: 1)
             guard InfoWindowHandler.dismissInfoWindow(wrapperPid: Int32(app.processIdentifier), config: config) else {
                 ProcessManager.forceQuit(app, gameEngine: config.gameEngine)
                 return .failed("Failed to dismiss info window")
             }
-            print("")
         }
 
         guard let gamePid = WindowDetector.waitForWindow(
@@ -63,7 +59,7 @@ struct GamePuppetSession {
             return .failed("Game window did not appear within \(Int(config.windowDetectTimeout))s")
         }
 
-        print("ℹ️  Game process PID: \(gamePid)")
+        logger.notice("ℹ️  Game process PID: \(gamePid, privacy: .public)")
         SignalHandler.setup(app: app, gamePid: gamePid)
 
         let ocrSuccess = attemptQuit(appName: appName, app: app, gamePid: gamePid)
@@ -72,16 +68,16 @@ struct GamePuppetSession {
             return .failed("OCR could not find Exit button")
         }
 
-        print("⏳ Waiting for game to exit...")
+        logger.notice("⏳ Waiting for game to exit...")
         if ProcessManager.waitForTermination(app, gamePid: gamePid, timeout: config.quitTimeout) {
-            print("✅ Game exited cleanly")
+            logger.notice("✅ Game exited cleanly")
             return .passed
         } else {
-            print("⚠️  Game did not exit cleanly, force quitting...")
+            logger.error("⚠️  Game did not exit cleanly, force quitting...")
             ProcessManager.forceQuit(app, gameEngine: config.gameEngine)
             Thread.sleep(forTimeInterval: 2)
             if app.isTerminated {
-                print("✅ Game force-quit successful")
+                logger.notice("✅ Game force-quit successful")
                 return .forcedQuit
             } else {
                 return .failed("Failed to quit game even after force-quit")
@@ -92,7 +88,7 @@ struct GamePuppetSession {
     // MARK: - Private
 
     private func attemptQuit(appName: String, app: NSRunningApplication, gamePid: Int32?) -> Bool {
-        print("🎮 Attempting to quit game...")
+        logger.notice("🎮 Attempting to quit game...")
 
         var clickedInteractive = false
         var clickedExitButton = false
@@ -107,7 +103,7 @@ struct GamePuppetSession {
             if attempt == 1 { NSSound.beep() }
 
             guard let pid = gamePid else {
-                print("⚠️  No game PID available, cannot check focus")
+                logger.error("⚠️  No game PID available, cannot check focus")
                 break
             }
 
@@ -120,7 +116,7 @@ struct GamePuppetSession {
                 }
             }
 
-            print("\n\u{001B}[1m  → Attempt \(attempt)\u{001B}[0m (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s)")
+            logger.notice("  → Attempt \(attempt, privacy: .public) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)), privacy: .public)s)")
 
             guard let screenshotPath = ScreenshotOCR.captureScreen() else { continue }
 
@@ -144,7 +140,7 @@ struct GamePuppetSession {
             }
 
             dispatchGroup.wait()
-            print("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
+            logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)), privacy: .public)s")
             try? FileManager.default.removeItem(atPath: screenshotPath)
 
             let exitLocation = foundTexts["Exit Game"] ?? foundTexts["Quit"] ?? quitButtonLocation
@@ -157,11 +153,11 @@ struct GamePuppetSession {
                 }
 
                 if !clickedExitButton {
-                    print("  ✓ Found 'Exit Game' button, clicking...")
+                    logger.notice("  ✓ Found 'Exit Game' button, clicking...")
                     clickedExitButton = true
                     if attempt == 1 { NSSound.beep() }
                 } else {
-                    print("  ✓ Clicking 'Exit Game' button again...")
+                    logger.notice("  ✓ Clicking 'Exit Game' button again...")
                 }
 
                 let backingScaleFactor = NSScreen.main?.backingScaleFactor ?? 1.0
@@ -183,13 +179,13 @@ struct GamePuppetSession {
                 CGWarpMouseCursorPosition(cornerPoint)
 
                 if !ProcessManager.isRunning(app, gamePid: gamePid) {
-                    print("✅ Game exited successfully")
+                    logger.notice("✅ Game exited successfully")
                     return true
                 }
             }
 
             if let interactiveLocation = foundTexts["interactive"], !clickedInteractive {
-                print("  ✓ Found 'interactive' button, clicking to enable menu...")
+                logger.notice("  ✓ Found 'interactive' button, clicking to enable menu...")
                 Thread.sleep(forTimeInterval: 1)
                 InputControl.click(at: CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY))
                 clickedInteractive = true

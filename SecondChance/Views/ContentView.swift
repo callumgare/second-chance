@@ -32,12 +32,10 @@ struct ContentView: View {
             }
             .padding()
         }
-        .alert("Error", isPresented: $viewModel.showingError) {
-            Button("OK") {
-                viewModel.reset()
+        .onChange(of: viewModel.currentState) { _, newState in
+            if case .error = newState {
+                NSApplication.shared.activate(ignoringOtherApps: true)
             }
-        } message: {
-            Text(viewModel.errorMessage)
         }
     }
 }

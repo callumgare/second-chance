@@ -6,10 +6,8 @@
 //  serialized by the actor's mailbox. Designed as the single delivery mechanism
 //  for structured (typed) events across the app.
 //
-//  Note: this is deliberately NOT used for log text. Text logging is handled
-//  by ContextualLogger (which carries its own step/source context) and
-//  LogManager (which handles subprocess stdout/stderr byte streams). The bus
-//  carries typed events that tests and UI can assert on.
+//  Note: this is deliberately NOT used for log text. Text logging goes directly
+//  to os.Logger. The bus carries typed events that tests and UI can assert on.
 
 import Foundation
 

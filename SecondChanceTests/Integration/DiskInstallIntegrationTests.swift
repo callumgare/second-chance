@@ -92,18 +92,16 @@ struct DiskInstallIntegrationTests {
             await recorder.subscribe(to: EventBus.app)
             defer { Task { await recorder.unsubscribe(from: EventBus.app) } }
 
-            // Redirect stdout to a file so Second Chance's print()/LogCorrelator output is captured.
-            let installLogURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("sc-install-\(game.id)-\(UUID().uuidString).txt")
-            let savedStdout = dup(STDOUT_FILENO)
-            let logFD = open(installLogURL.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-            if logFD >= 0 { dup2(logFD, STDOUT_FILENO); close(logFD) }
+            // Capture PID + start time to collect os.Logger output after the install.
+            let logPid = ProcessInfo.processInfo.processIdentifier
+            let logStart = Date()
             defer {
-                if savedStdout >= 0 { dup2(savedStdout, STDOUT_FILENO); close(savedStdout) }
-                if let data = try? Data(contentsOf: installLogURL), !data.isEmpty {
-                    Attachment.record(data, named: "secondchance-install-\(game.id).txt")
+                // Wait for os.Logger to flush entries to the persistent store before querying.
+                Thread.sleep(forTimeInterval: 2.0)
+                let logData = SystemLogReader.fetch(pid: logPid, since: logStart)
+                if !logData.isEmpty {
+                    Attachment.record(logData, named: "secondchance-install-\(game.id).txt")
                 }
-                try? FileManager.default.removeItem(at: installLogURL)
             }
 
             // Fire installFromDisk() as a detached task so waitForCompletion() can run concurrently.
@@ -117,7 +115,7 @@ struct DiskInstallIntegrationTests {
             Attachment.record(Data(eventTrace.utf8), named: "install-events-\(game.id).txt")
 
             #expect(succeeded, "Installation did not complete within timeout")
-            #expect(recorder.failedError == nil, "Installation failed: \(String(describing: recorder.failedError))")
+            try #require(recorder.failedError == nil, "Installation failed: \(String(describing: recorder.failedError))")
 
             // ── Per-step assertions ───────────────────────────────────────────
 

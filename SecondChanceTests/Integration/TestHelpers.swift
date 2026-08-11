@@ -23,6 +23,40 @@ private func keventCall(
     _ timeout: UnsafePointer<timespec>?
 ) -> Int32
 
+/// Reads log entries from Apple's unified logging system via `log show`.
+enum SystemLogReader {
+
+    /// Fetch all log lines for `pid` since `start` (padded back 5 s to avoid clipping).
+    static func fetch(pid: Int32, since start: Date) -> Data {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let paddedStart = start.addingTimeInterval(-5)
+        let startStr = formatter.string(from: paddedStart)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+        process.arguments = [
+            "show",
+            "--start", startStr,
+            "--predicate", "processIdentifier == \(pid) AND subsystem BEGINSWITH 'com.secondchance'",
+            "--style", "syslog",
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return pipe.fileHandleForReading.readDataToEndOfFile()
+        } catch {
+            return Data()
+        }
+    }
+}
+
 /// Enumerate the repo root regardless of test working directory.
 enum TestPaths {
     /// The repository root directory (parent of `SecondChanceTests/`).
@@ -179,23 +213,22 @@ enum GamePuppetRunner {
         guard let bundle = WrapperInfo.gamePuppeteerBundle() else {
             throw TestError.gamePuppeteerNotFound
         }
-        let logURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("sc-puppeteer-\(game.id)-\(UUID().uuidString).txt")
-        let exitCode = try await Self.launchViaLaunchServices(
+        let launchTime = Date()
+        let (exitCode, pid) = try await Self.launchViaLaunchServices(
             appBundle: bundle,
-            arguments: [wrapperURL.path, "--timeout", String(Int(timeout)), "--puppeteer-log-path", logURL.path]
+            arguments: [wrapperURL.path, "--timeout", String(Int(timeout))]
         )
-        if let data = try? Data(contentsOf: logURL), !data.isEmpty {
-            Attachment.record(data, named: "gamepuppeteer-\(game.id).txt")
+        let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
+        if !logData.isEmpty {
+            Attachment.record(logData, named: "gamepuppeteer-\(game.id).txt")
         }
-        try? FileManager.default.removeItem(at: logURL)
         return exitCode
     }
 
     /// Launch GamePuppeteer through LaunchServices so TCC attributes Accessibility
     /// and Screen Recording prompts to GamePuppeteer (its own bundle ID), not to
     /// the Second Chance test host.
-    private static func launchViaLaunchServices(appBundle: URL, arguments: [String]) async throws -> Int32 {
+    private static func launchViaLaunchServices(appBundle: URL, arguments: [String]) async throws -> (exitCode: Int32, pid: Int32) {
         let config = NSWorkspace.OpenConfiguration()
         config.arguments = arguments
         config.activates = false
@@ -213,7 +246,7 @@ enum GamePuppetRunner {
 
         // waitpid only works on child processes; NSWorkspace parents to launchd so we
         // use kqueue NOTE_EXIT instead, which works on any process we can observe.
-        return await Task.detached(priority: .userInitiated) {
+        let exitCode = await Task.detached(priority: .userInitiated) {
             let kq = Darwin.kqueue()
             defer { Darwin.close(kq) }
             var ke = kevent()
@@ -230,6 +263,7 @@ enum GamePuppetRunner {
             let s = Int32(result.data)
             return (s & 0x7f) == 0 ? ((s >> 8) & 0xff) : 1
         }.value
+        return (exitCode: exitCode, pid: pid)
     }
 }
 

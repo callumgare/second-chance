@@ -5,6 +5,7 @@
 //  Builds Wine wrapper apps for Nancy Drew games
 
 import Foundation
+import os
 import AppKit
 
 /// Builds complete Wine wrapper applications for Nancy Drew games
@@ -14,6 +15,7 @@ class WrapperBuilder {
     private let fileManager = FileManager.default
     private let wineManager = WineManager.shared
     private let cacheManager = CacheManager.shared
+    private let logger = Logger(subsystem: "com.secondchance", category: "WrapperBuilder")
     
     private init() {}
     
@@ -54,7 +56,7 @@ class WrapperBuilder {
             return
         }
         
-        print("Creating unified wrapper with both Wine and ScummVM support...")
+        logger.notice("Creating unified wrapper with both Wine and ScummVM support...")
         Task { await EventBus.app.publishInstallation(.progress(.settingUpWrapper(substep: nil))) }
         
         // Find the pre-built unified template
@@ -68,38 +70,38 @@ class WrapperBuilder {
             try copyItemDerefencingSymlinks(at: templatePath, to: path)
         } catch {
             if let wrapperError = error as? WrapperError, let output = wrapperError.copyOutput {
-                print("Copy output: \(output)")
+                logger.notice("Copy output: \(output, privacy: .public)")
             }
-            print("❌ Failed to copy GameWrapper template: \(error.localizedDescription)")
+            logger.fault("❌ Failed to copy GameWrapper template: \(error.localizedDescription, privacy: .public)")
             if let wrapperError = error as? WrapperError, let command = wrapperError.copyCommand {
-                print("   Command: \(command)")
+                logger.notice("   Command: \(command, privacy: .public)")
             }
-            print("📋 Template copy details:")
-            print("   Source: \(templatePath.path)")
-            print("   Dest:   \(path.path)")
+            logger.notice("📋 Template copy details:")
+            logger.notice("   Source: \(templatePath.path, privacy: .public)")
+            logger.notice("   Dest:   \(path.path, privacy: .public)")
             
             // Check the Frameworks in the template
             let templateFrameworks = templatePath.appendingPathComponent("Contents/Frameworks")
             if let contents = try? fileManager.contentsOfDirectory(atPath: templateFrameworks.path) {
-                print("   Template Frameworks contains \(contents.count) items")
+                logger.notice("   Template Frameworks contains \(contents.count, privacy: .public) items")
                 let p11Files = contents.filter { $0.contains("p11") }
                 if !p11Files.isEmpty {
-                    print("   p11-related files in template: \(p11Files.joined(separator: ", "))")
+                    logger.notice("   p11-related files in template: \(p11Files.joined(separator: ", "), privacy: .public)")
                     for p11File in p11Files {
                         let filePath = templateFrameworks.appendingPathComponent(p11File)
                         if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path) {
                             let isSymlink = attrs[.type] as? FileAttributeType == .typeSymbolicLink
-                            print("     - \(p11File): \(isSymlink ? "symlink" : "regular file")")
+                            logger.notice("     - \(p11File, privacy: .public): \(isSymlink ? "symlink" : "regular file", privacy: .public)")
                             if isSymlink, let target = try? fileManager.destinationOfSymbolicLink(atPath: filePath.path) {
-                                print("       → \(target)")
+                                logger.notice("       → \(target, privacy: .public)")
                                 // Check if target exists
                                 let targetPath = templateFrameworks.appendingPathComponent(target)
                                 let targetExists = fileManager.fileExists(atPath: targetPath.path)
-                                print("       Target exists: \(targetExists)")
+                                logger.notice("       Target exists: \(targetExists, privacy: .public)")
                                 if targetExists, let targetAttrs = try? fileManager.attributesOfItem(atPath: targetPath.path) {
                                     let targetIsSymlink = targetAttrs[.type] as? FileAttributeType == .typeSymbolicLink
                                     if targetIsSymlink, let nextTarget = try? fileManager.destinationOfSymbolicLink(atPath: targetPath.path) {
-                                        print("       Target is also symlink → \(nextTarget)")
+                                        logger.notice("       Target is also symlink → \(nextTarget, privacy: .public)")
                                     }
                                 }
                             }
@@ -108,11 +110,11 @@ class WrapperBuilder {
                 }
             }
             
-            print("   Full error: \(error)")
+            logger.notice("   Full error: \(error, privacy: .public)")
             if let nsError = error as NSError? {
-                print("   Domain: \(nsError.domain)")
-                print("   Code: \(nsError.code)")
-                print("   UserInfo: \(nsError.userInfo)")
+                logger.notice("   Domain: \(nsError.domain, privacy: .public)")
+                logger.notice("   Code: \(nsError.code, privacy: .public)")
+                logger.notice("   UserInfo: \(nsError.userInfo, privacy: .public)")
             }
             throw error
         }
@@ -126,7 +128,7 @@ class WrapperBuilder {
     
     /// Remove unused game engine from wrapper after game is determined
     func cleanupUnusedEngine(at wrapperPath: URL, gameEngine: GameInfo.GameEngine) throws {
-        print("Cleaning up unused game engine from wrapper...")
+        logger.notice("Cleaning up unused game engine from wrapper...")
         
         let resourcesPath = wrapperPath.appendingPathComponent("Contents/Resources")
         
@@ -135,10 +137,10 @@ class WrapperBuilder {
             // Using Wine, remove ScummVM files listed in scummvm-files
             let scummvmFilesPath = resourcesPath.appendingPathComponent("scummvm-files")
             if fileManager.fileExists(atPath: scummvmFilesPath.path) {
-                print("Reading ScummVM files list...")
+                logger.notice("Reading ScummVM files list...")
                 if let content = try? String(contentsOf: scummvmFilesPath, encoding: .utf8) {
                     let lines = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                    print("Found \(lines.count) ScummVM files/directories to remove")
+                    logger.notice("Found \(lines.count, privacy: .public) ScummVM files/directories to remove")
                     
                     for relativePath in lines {
                         let pathToRemove = wrapperPath.appendingPathComponent(relativePath)
@@ -148,17 +150,17 @@ class WrapperBuilder {
                     }
                 }
             } else {
-                print("Warning: scummvm-files list not found at \(scummvmFilesPath.path)")
+                logger.error("Warning: scummvm-files list not found at \(scummvmFilesPath.path, privacy: .public)")
             }
             
         case .scummvm:
             // Using ScummVM, remove Wine files listed in wine-files
             let wineFilesPath = resourcesPath.appendingPathComponent("wine-files")
             if fileManager.fileExists(atPath: wineFilesPath.path) {
-                print("Reading Wine files list...")
+                logger.notice("Reading Wine files list...")
                 if let content = try? String(contentsOf: wineFilesPath, encoding: .utf8) {
                     let lines = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                    print("Found \(lines.count) Wine files/directories to remove")
+                    logger.notice("Found \(lines.count, privacy: .public) Wine files/directories to remove")
                     
                     for relativePath in lines {
                         let pathToRemove = wrapperPath.appendingPathComponent(relativePath)
@@ -168,11 +170,11 @@ class WrapperBuilder {
                     }
                 }
             } else {
-                print("Warning: wine-files list not found at \(wineFilesPath.path)")
+                logger.error("Warning: wine-files list not found at \(wineFilesPath.path, privacy: .public)")
             }
         }
         
-        print("Cleanup complete")
+        logger.notice("Cleanup complete")
     }
     
     /// Setup Wine framework in wrapper
@@ -183,11 +185,11 @@ class WrapperBuilder {
         // Check if already set up
         if fileManager.fileExists(atPath: wineDestPath.appendingPathComponent("bin/wine").path) &&
            fileManager.fileExists(atPath: frameworksDestPath.path) {
-            print("Wine framework already exists")
+            logger.notice("Wine framework already exists")
             return
         }
         
-        print("Setting up Wine framework...")
+        logger.notice("Setting up Wine framework...")
         
         // Try to find local cached files first (only accessible if app has permission to the source directory)
         let localWineEnginePath = URL(fileURLWithPath: "/Users/callumgare/repos/second-chance/game-wrapper/build/wine-engine")
@@ -200,21 +202,21 @@ class WrapperBuilder {
                                    fileManager.isReadableFile(atPath: localWineskinPath.path)
         
         if canAccessLocalFiles {
-            print("Using local Wine files from game-wrapper/build/")
+            logger.notice("Using local Wine files from game-wrapper/build/")
             
             // Ensure destination directories exist
             try fileManager.createDirectory(at: wineDestPath.deletingLastPathComponent(), 
                                            withIntermediateDirectories: true)
             
             // Copy Wine engine
-            print("Copying wine-engine from \(localWineEnginePath.path)")
-            print("            to \(wineDestPath.path)")
+            logger.notice("Copying wine-engine from \(localWineEnginePath.path, privacy: .public)")
+            logger.notice("            to \(wineDestPath.path, privacy: .public)")
             
             do {
                 try fileManager.copyItem(at: localWineEnginePath, to: wineDestPath)
                 
                 // Restore executable permissions on wine binaries
-                print("Setting executable permissions on wine binaries...")
+                logger.notice("Setting executable permissions on wine binaries...")
                 let binPath = wineDestPath.appendingPathComponent("bin")
                 let binContents = try fileManager.contentsOfDirectory(at: binPath, includingPropertiesForKeys: nil)
                 for binaryURL in binContents {
@@ -226,7 +228,7 @@ class WrapperBuilder {
                 }
                 
                 // Fix rpaths in Wine binaries to point to Frameworks directory
-                print("Fixing rpaths in wine binaries...")
+                logger.notice("Fixing rpaths in wine binaries...")
                 try fixWineRpaths(wineDestPath: wineDestPath, frameworksPath: frameworksDestPath)
                 
                 // Verify the copy succeeded
@@ -234,32 +236,32 @@ class WrapperBuilder {
                 if fileManager.fileExists(atPath: wineBinaryPath.path) {
                     let attrs = try fileManager.attributesOfItem(atPath: wineBinaryPath.path)
                     let perms = attrs[.posixPermissions] as? NSNumber
-                    print("Wine binary verified at: \(wineBinaryPath.path)")
-                    print("Wine binary permissions: \(String(format: "%o", perms?.uint16Value ?? 0))")
+                    logger.notice("Wine binary verified at: \(wineBinaryPath.path, privacy: .public)")
+                    logger.notice("Wine binary permissions: \(String(format: "%o", perms?.uint16Value ?? 0), privacy: .public)")
                     
                     // Note: isExecutableFile may return false in sandbox even with correct permissions
                     // This is a sandbox API limitation, not an actual permission issue
                     if fileManager.isExecutableFile(atPath: wineBinaryPath.path) {
-                        print("Wine binary is executable (according to FileManager)")
+                        logger.notice("Wine binary is executable (according to FileManager)")
                     } else {
-                        print("Note: FileManager.isExecutableFile returns false, but this is expected in sandbox")
-                        print("The binary has correct permissions (755) and should work when executed")
+                        logger.notice("Note: FileManager.isExecutableFile returns false, but this is expected in sandbox")
+                        logger.notice("The binary has correct permissions (755) and should work when executed")
                     }
                 } else {
-                    print("ERROR: Wine binary not found after copy at: \(wineBinaryPath.path)")
+                    logger.fault("ERROR: Wine binary not found after copy at: \(wineBinaryPath.path, privacy: .public)")
                     throw WrapperError.wineNotFound
                 }
             } catch {
-                print("Failed to copy wine-engine: \(error.localizedDescription)")
-                print("Note: The app may not have permission to read from the source directory.")
-                print("Consider downloading instead or granting permission.")
+                logger.notice("Failed to copy wine-engine: \(error.localizedDescription, privacy: .public)")
+                logger.notice("Note: The app may not have permission to read from the source directory.")
+                logger.notice("Consider downloading instead or granting permission.")
                 throw error
             }
             
             // Copy Frameworks from Wineskin
             let wineskinFrameworksPath = localWineskinPath.appendingPathComponent("Contents/Frameworks")
-            print("Copying frameworks from \(wineskinFrameworksPath.path)")
-            print("               to \(frameworksDestPath.path)")
+            logger.notice("Copying frameworks from \(wineskinFrameworksPath.path, privacy: .public)")
+            logger.notice("               to \(frameworksDestPath.path, privacy: .public)")
             
             do {
                 // Remove existing Frameworks directory if it exists
@@ -268,60 +270,60 @@ class WrapperBuilder {
                 }
                 try fileManager.copyItem(at: wineskinFrameworksPath, to: frameworksDestPath)
             } catch {
-                print("❌ Failed to copy frameworks: \(error.localizedDescription)")
-                print("📋 Framework copy details:")
-                print("   Source: \(wineskinFrameworksPath.path)")
-                print("   Dest:   \(frameworksDestPath.path)")
-                print("   Source exists: \(fileManager.fileExists(atPath: wineskinFrameworksPath.path))")
-                print("   Source is readable: \(fileManager.isReadableFile(atPath: wineskinFrameworksPath.path))")
+                logger.fault("❌ Failed to copy frameworks: \(error.localizedDescription, privacy: .public)")
+                logger.notice("📋 Framework copy details:")
+                logger.notice("   Source: \(wineskinFrameworksPath.path, privacy: .public)")
+                logger.notice("   Dest:   \(frameworksDestPath.path, privacy: .public)")
+                logger.notice("   Source exists: \(FileManager.default.fileExists(atPath: wineskinFrameworksPath.path), privacy: .public)")
+                logger.notice("   Source is readable: \(FileManager.default.isReadableFile(atPath: wineskinFrameworksPath.path), privacy: .public)")
                 
                 // List some files in source to verify structure
-                if let contents = try? fileManager.contentsOfDirectory(atPath: wineskinFrameworksPath.path) {
-                    print("   Source contains \(contents.count) items")
+                if let contents = try? FileManager.default.contentsOfDirectory(atPath: wineskinFrameworksPath.path) {
+                    logger.notice("   Source contains \(contents.count, privacy: .public) items")
                     let p11Files = contents.filter { $0.contains("p11") }
                     if !p11Files.isEmpty {
-                        print("   p11-related files: \(p11Files.joined(separator: ", "))")
+                        logger.notice("   p11-related files: \(p11Files.joined(separator: ", "), privacy: .public)")
                         // Check symlink details for p11 files
                         for p11File in p11Files {
                             let filePath = wineskinFrameworksPath.appendingPathComponent(p11File)
                             if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path) {
                                 let isSymlink = attrs[.type] as? FileAttributeType == .typeSymbolicLink
-                                print("     - \(p11File): \(isSymlink ? "symlink" : "regular file")")
+                                logger.notice("     - \(p11File, privacy: .public): \(isSymlink ? "symlink" : "regular file", privacy: .public)")
                                 if isSymlink, let target = try? fileManager.destinationOfSymbolicLink(atPath: filePath.path) {
-                                    print("       → \(target)")
+                                    logger.notice("       → \(target, privacy: .public)")
                                 }
                             }
                         }
                     }
                 }
                 
-                print("   Full error: \(error)")
+                logger.notice("   Full error: \(error, privacy: .public)")
                 if let nsError = error as NSError? {
-                    print("   Domain: \(nsError.domain)")
-                    print("   Code: \(nsError.code)")
-                    print("   UserInfo: \(nsError.userInfo)")
+                    logger.notice("   Domain: \(nsError.domain, privacy: .public)")
+                    logger.notice("   Code: \(nsError.code, privacy: .public)")
+                    logger.notice("   UserInfo: \(nsError.userInfo, privacy: .public)")
                 }
                 throw error
             }
             
-            print("Wine framework installed successfully from local cache")
+            logger.notice("Wine framework installed successfully from local cache")
             return
         }
         
-        print("Local Wine files not accessible or not found")
+        logger.notice("Local Wine files not accessible or not found")
         
         // If local files don't exist, try downloading
-        print("Local Wine files not found, attempting to download...")
+        logger.notice("Local Wine files not found, attempting to download...")
         
         // Download Wine engine
         let wineEngineURL = URL(string: "https://github.com/Kegworks-App/Engines/releases/download/v1.0/WS12WineCX24.0.7.tar.xz")!
         let wineEngineCache = try await downloadAndCacheFile(url: wineEngineURL, name: "wine-engine.tar.xz")
         
-        print("Wine engine downloaded/cached at: \(wineEngineCache.path)")
+        logger.notice("Wine engine downloaded/cached at: \(wineEngineCache.path, privacy: .public)")
         
         // Extract Wine engine
         let wineEngineExtracted = wineEngineCache.deletingLastPathComponent().appendingPathComponent("wine-engine")
-        print("Will extract to: \(wineEngineExtracted.path)")
+        logger.notice("Will extract to: \(wineEngineExtracted.path, privacy: .public)")
         
         // Check if extraction exists AND is valid (has wine binary)
         let extractedWineBinary = wineEngineExtracted.appendingPathComponent("bin/wine")
@@ -329,26 +331,26 @@ class WrapperBuilder {
         
         if needsExtraction {
             if fileManager.fileExists(atPath: wineEngineExtracted.path) {
-                print("Extracted directory exists but is invalid, removing and re-extracting...")
+                logger.notice("Extracted directory exists but is invalid, removing and re-extracting...")
                 try fileManager.removeItem(at: wineEngineExtracted)
             } else {
-                print("Extracted directory doesn't exist, extracting now...")
+                logger.notice("Extracted directory doesn't exist, extracting now...")
             }
             try await extractTarArchive(from: wineEngineCache, to: wineEngineExtracted)
-            print("Extraction complete")
+            logger.notice("Extraction complete")
         } else {
-            print("Using previously extracted wine-engine")
+            logger.notice("Using previously extracted wine-engine")
         }
         
         // Verify extracted wine exists
         guard fileManager.fileExists(atPath: extractedWineBinary.path) else {
-            print("ERROR: Extracted wine binary not found at: \(extractedWineBinary.path)")
+            logger.fault("ERROR: Extracted wine binary not found at: \(extractedWineBinary.path, privacy: .public)")
             throw WrapperError.wineNotFound
         }
-        print("Verified extracted wine binary at: \(extractedWineBinary.path)")
+        logger.notice("Verified extracted wine binary at: \(extractedWineBinary.path, privacy: .public)")
         
         // Copy Wine to wrapper
-        print("Copying extracted wine to wrapper at: \(wineDestPath.path)")
+        logger.notice("Copying extracted wine to wrapper at: \(wineDestPath.path, privacy: .public)")
         
         // Ensure parent directory exists
         try fileManager.createDirectory(at: wineDestPath.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -358,11 +360,11 @@ class WrapperBuilder {
         // Verify Wine binary exists in wrapper
         let wrapperWineBinary = wineDestPath.appendingPathComponent("bin/wine")
         guard fileManager.fileExists(atPath: wrapperWineBinary.path) else {
-            print("ERROR: Wine binary not found in wrapper at: \(wrapperWineBinary.path)")
+            logger.fault("ERROR: Wine binary not found in wrapper at: \(wrapperWineBinary.path, privacy: .public)")
             throw WrapperError.wineNotFound
         }
         
-        print("Wine engine installed successfully")
+        logger.notice("Wine engine installed successfully")
         
         // Download Wineskin wrapper for frameworks
         let wineskinURL = URL(string: "https://github.com/Kegworks-App/Wrapper/releases/download/v1.0/Wineskin-3.1.7_2.tar.xz")!
@@ -379,51 +381,51 @@ class WrapperBuilder {
         
         // Remove existing Frameworks directory if it exists
         if fileManager.fileExists(atPath: frameworksDestPath.path) {
-            print("Removing existing Frameworks directory...")
+            logger.notice("Removing existing Frameworks directory...")
             try fileManager.removeItem(at: frameworksDestPath)
         }
         
-        print("Copying Frameworks from Wineskin...")
+        logger.notice("Copying Frameworks from Wineskin...")
         do {
             try fileManager.copyItem(at: wineskinFrameworksPath, to: frameworksDestPath)
         } catch {
-            print("❌ Failed to copy frameworks: \(error.localizedDescription)")
-            print("📋 Framework copy details:")
-            print("   Source: \(wineskinFrameworksPath.path)")
-            print("   Dest:   \(frameworksDestPath.path)")
-            print("   Source exists: \(fileManager.fileExists(atPath: wineskinFrameworksPath.path))")
-            print("   Source is readable: \(fileManager.isReadableFile(atPath: wineskinFrameworksPath.path))")
+            logger.fault("❌ Failed to copy frameworks: \(error.localizedDescription, privacy: .public)")
+            logger.notice("📋 Framework copy details:")
+            logger.notice("   Source: \(wineskinFrameworksPath.path, privacy: .public)")
+            logger.notice("   Dest:   \(frameworksDestPath.path, privacy: .public)")
+            logger.notice("   Source exists: \(FileManager.default.fileExists(atPath: wineskinFrameworksPath.path), privacy: .public)")
+            logger.notice("   Source is readable: \(FileManager.default.isReadableFile(atPath: wineskinFrameworksPath.path), privacy: .public)")
             
             // List some files in source to verify structure
-            if let contents = try? fileManager.contentsOfDirectory(atPath: wineskinFrameworksPath.path) {
-                print("   Source contains \(contents.count) items")
+            if let contents = try? FileManager.default.contentsOfDirectory(atPath: wineskinFrameworksPath.path) {
+                logger.notice("   Source contains \(contents.count, privacy: .public) items")
                 let p11Files = contents.filter { $0.contains("p11") }
                 if !p11Files.isEmpty {
-                    print("   p11-related files: \(p11Files.joined(separator: ", "))")
+                    logger.notice("   p11-related files: \(p11Files.joined(separator: ", "), privacy: .public)")
                     // Check symlink details for p11 files
                     for p11File in p11Files {
                         let filePath = wineskinFrameworksPath.appendingPathComponent(p11File)
                         if let attrs = try? fileManager.attributesOfItem(atPath: filePath.path) {
                             let isSymlink = attrs[.type] as? FileAttributeType == .typeSymbolicLink
-                            print("     - \(p11File): \(isSymlink ? "symlink" : "regular file")")
+                            logger.notice("     - \(p11File, privacy: .public): \(isSymlink ? "symlink" : "regular file", privacy: .public)")
                             if isSymlink, let target = try? fileManager.destinationOfSymbolicLink(atPath: filePath.path) {
-                                print("       → \(target)")
+                                logger.notice("       → \(target, privacy: .public)")
                             }
                         }
                     }
                 }
             }
             
-            print("   Full error: \(error)")
+            logger.notice("   Full error: \(error, privacy: .public)")
             if let nsError = error as NSError? {
-                print("   Domain: \(nsError.domain)")
-                print("   Code: \(nsError.code)")
-                print("   UserInfo: \(nsError.userInfo)")
+                logger.notice("   Domain: \(nsError.domain, privacy: .public)")
+                logger.notice("   Code: \(nsError.code, privacy: .public)")
+                logger.notice("   UserInfo: \(nsError.userInfo, privacy: .public)")
             }
             throw error
         }
         
-        print("Wineskin frameworks installed successfully")
+        logger.notice("Wineskin frameworks installed successfully")
     }
     
     /// Fix rpaths in Wine binaries to point to the Frameworks directory
@@ -437,11 +439,11 @@ class WrapperBuilder {
         // Relative path: ../../../Frameworks
         let rpathToFrameworks = "@executable_path/../../../Frameworks"
         
-        print("Fixing rpaths in Wine binaries to: \(rpathToFrameworks)")
+        logger.notice("Fixing rpaths in Wine binaries to: \(rpathToFrameworks, privacy: .public)")
         
         // Get all binaries in bin directory
         guard let binContents = try? fileManager.contentsOfDirectory(at: binPath, includingPropertiesForKeys: nil) else {
-            print("Warning: Could not read wine bin directory")
+            logger.error("Warning: Could not read wine bin directory")
             return
         }
         
@@ -481,17 +483,17 @@ class WrapperBuilder {
                         // Already has this rpath, that's ok
                         fixedCount += 1
                     } else {
-                        print("Warning: Failed to fix rpath for \(binaryURL.lastPathComponent): \(errorStr)")
+                        logger.error("Warning: Failed to fix rpath for \(binaryURL.lastPathComponent, privacy: .public): \(errorStr, privacy: .public)")
                         failedCount += 1
                     }
                 }
             } catch {
-                print("Warning: Could not run install_name_tool on \(binaryURL.lastPathComponent): \(error)")
+                logger.error("Warning: Could not run install_name_tool on \(binaryURL.lastPathComponent, privacy: .public): \(error, privacy: .public)")
                 failedCount += 1
             }
         }
         
-        print("Fixed rpaths in \(fixedCount) Wine binaries (\(failedCount) failed)")
+        logger.notice("Fixed rpaths in \(fixedCount, privacy: .public) Wine binaries (\(failedCount, privacy: .public) failed)")
     }
     
     /// Create the main launcher executable
@@ -505,7 +507,7 @@ class WrapperBuilder {
         
         // If we have the Swift runtime source, compile it
         if fileManager.fileExists(atPath: runtimeSourcePath.path) {
-            print("Compiling Swift runtime...")
+            logger.notice("Compiling Swift runtime...")
             Task { await EventBus.app.publishInstallation(.progress(.configuringWrapper(substep: "Compiling Swift runtime"))) }
             
             let process = Process()
@@ -533,14 +535,14 @@ class WrapperBuilder {
             if process.terminationStatus != 0 {
                 let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                 let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-                print("❌ Swift compilation failed: \(errorMessage)")
+                logger.fault("❌ Swift compilation failed: \(errorMessage, privacy: .public)")
                 throw WrapperError.swiftCompilationFailed(errorMessage)
             } else {
-                print("✅ Created Swift launcher executable: GameWrapper")
+                logger.notice("✅ Created Swift launcher executable: GameWrapper")
                 
                 // Code sign the launcher executable
                 // Ad-hoc signing is sufficient for local development
-                print("Signing launcher executable...")
+                logger.notice("Signing launcher executable...")
                 Task { await EventBus.app.publishInstallation(.progress(.configuringWrapper(substep: "Signing launcher executable"))) }
                 let codesignPath = "/usr/bin/codesign"
                 let signProcess = Process()
@@ -560,19 +562,19 @@ class WrapperBuilder {
                 signProcess.waitUntilExit()
                 
                 if signProcess.terminationStatus == 0 {
-                    print("✅ Signed launcher executable")
+                    logger.notice("✅ Signed launcher executable")
                 } else {
                     let errorData = signErrorPipe.fileHandleForReading.readDataToEndOfFile()
                     let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
                     let command = "\(codesignPath) \(signProcess.arguments?.joined(separator: " ") ?? "")"
-                    print("⚠️ Warning: Failed to sign launcher: \(errorMessage)")
-                    print("   Command: \(command)")
-                    print("The wrapper may not run on some systems")
+                    logger.error("⚠️ Warning: Failed to sign launcher: \(errorMessage, privacy: .public)")
+                    logger.notice("   Command: \(command, privacy: .public)")
+                    logger.notice("The wrapper may not run on some systems")
                     // Don't throw an error - continue anyway
                 }
             }
         } else {
-            print("❌ Swift runtime source not found at \(runtimeSourcePath.path)")
+            logger.fault("❌ Swift runtime source not found at \(runtimeSourcePath.path, privacy: .public)")
             throw WrapperError.swiftRuntimeNotFound
         }
     }
@@ -601,7 +603,7 @@ class WrapperBuilder {
             ofItemAtPath: launcherPath.path
         )
         
-        print("Created bash launcher executable: GameWrapper")
+        logger.notice("Created bash launcher executable: GameWrapper")
     }
     
     /// Download and cache a file using URLSession with progress reporting
@@ -613,11 +615,11 @@ class WrapperBuilder {
         
         // Return cached file if it exists
         if fileManager.fileExists(atPath: cachePath.path) {
-            print("Using cached file: \(name)")
+            logger.notice("Using cached file: \(name, privacy: .public)")
             return cachePath
         }
         
-        print("Downloading \(name) from \(url.absoluteString)...")
+        logger.notice("Downloading \(name, privacy: .public) from \(url.absoluteString, privacy: .public)...")
         
         // Create a URLSession with a delegate to track progress
         let delegate = DownloadDelegate(fileName: name)
@@ -632,7 +634,7 @@ class WrapperBuilder {
         
         try fileManager.moveItem(at: downloadedFileURL, to: cachePath)
         
-        print("Downloaded \(name) successfully")
+        logger.notice("Downloaded \(name, privacy: .public) successfully")
         return cachePath
     }
     
@@ -640,6 +642,7 @@ class WrapperBuilder {
     private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         let fileName: String
         var lastPrintedProgress: Int = -1
+        private let logger = Logger(subsystem: "com.secondchance", category: "WrapperBuilder.DownloadDelegate")
         
         init(fileName: String) {
             self.fileName = fileName
@@ -655,7 +658,8 @@ class WrapperBuilder {
                 lastPrintedProgress = progress
                 let mbWritten = Double(totalBytesWritten) / 1_048_576.0
                 let mbTotal = Double(totalBytesExpectedToWrite) / 1_048_576.0
-                print(String(format: "Downloading %@: %.1f / %.1f MB (%d%%)", fileName, mbWritten, mbTotal, progress))
+                let downloadDesc = String(format: "Downloading %@: %.1f / %.1f MB (%d%%)", self.fileName, mbWritten, mbTotal, progress)
+                logger.notice("\(downloadDesc, privacy: .public)")
             }
         }
         
@@ -688,31 +692,22 @@ class WrapperBuilder {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
         
-        // Print dots periodically to show progress
-        let progressTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
-            print(".", terminator: "")
-            fflush(stdout)
-        }
-        
         try process.run()
         process.waitUntilExit()
-        
-        progressTimer.invalidate()
-        print("") // New line after dots
         
         guard process.terminationStatus == 0 else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            print("Extraction error: \(errorMessage)")
+            logger.notice("Extraction error: \(errorMessage, privacy: .public)")
             throw WrapperError.extractionFailed(errorMessage)
         }
         
-        print("Extraction completed, moving to final location...")
+        logger.notice("Extraction completed, moving to final location...")
         
         // Move to final destination
         try fileManager.moveItem(at: tempDestination, to: destination)
         
-        print("Extracted to \(destination.path)")
+        logger.notice("Extracted to \(destination.path, privacy: .public)")
     }
     
     // MARK: - Game Installation
@@ -791,12 +786,12 @@ class WrapperBuilder {
             let setupIssDestPath = installerPath.appendingPathComponent("setup.iss")
             do {
                 try fileManager.copyItem(atPath: issPath, toPath: setupIssDestPath.path)
-                print("✅ Copied setup.iss for \(gameSlug)")
+                logger.notice("✅ Copied setup.iss for \(gameSlug, privacy: .public)")
             } catch {
-                print("⚠️ Failed to copy setup.iss: \(error)")
+                logger.error("⚠️ Failed to copy setup.iss: \(error, privacy: .public)")
             }
         } else {
-            print("ℹ️ No setup.iss file found for \(gameSlug)")
+            logger.notice("ℹ️ No setup.iss file found for \(gameSlug, privacy: .public)")
         }
         
         // Mount the disk directories as CD-ROM drives
@@ -814,7 +809,7 @@ class WrapperBuilder {
         
         // Find all disk-* directories and sort them
         guard let contents = try? fileManager.contentsOfDirectory(at: installerPath, includingPropertiesForKeys: [.isDirectoryKey]) else {
-            print("No installer directory found, skipping disk mounting")
+            logger.notice("No installer directory found, skipping disk mounting")
             return
         }
         
@@ -833,17 +828,17 @@ class WrapperBuilder {
         diskDirs.sort { $0.number < $1.number }
         
         if diskDirs.isEmpty {
-            print("No disk directories found to mount")
+            logger.notice("No disk directories found to mount")
             return
         }
         
-        print("Found \(diskDirs.count) disk director\(diskDirs.count == 1 ? "y" : "ies") to mount as CD-ROM drives")
+        logger.notice("Found \(diskDirs.count, privacy: .public) disk director\(diskDirs.count == 1 ? "y" : "ies", privacy: .public) to mount as CD-ROM drives")
         
         // Mount each disk starting at drive letter "d:" (4th letter, index 3)
         for (index, disk) in diskDirs.enumerated() {
             let letterIndex = index + 3 // Start at "d:" which is the 4th letter (index 3)
             guard letterIndex < 26 else {
-                print("Warning: Too many disks to mount (maximum 23)")
+                logger.error("Warning: Too many disks to mount (maximum 23)")
                 break
             }
             
@@ -852,7 +847,7 @@ class WrapperBuilder {
             // Use relative path from prefix directory
             let relativePath = "../drive_c/nancy-drew-installer/disk-\(disk.number)"
             
-            print("Mounting disk-\(disk.number) as \(letter): (cdrom)")
+            logger.notice("Mounting disk-\(disk.number, privacy: .public) as \(letter, privacy: .public): (cdrom)")
             try await wineManager.mountDirectory(
                 relativePath,
                 asDrive: letter,
@@ -999,7 +994,7 @@ class WrapperBuilder {
         let data = try PropertyListSerialization.data(fromPropertyList: settings, format: .xml, options: 0)
         try data.write(to: appSettingsPath)
         
-        print("Created AppSettings.plist with engine: \(gameEngine)")
+        logger.notice("Created AppSettings.plist with engine: \(gameEngine, privacy: .public)")
     }
     
     /// Configure game INI files
@@ -1013,12 +1008,12 @@ class WrapperBuilder {
         let gameExeURL = driveCPath.appendingPathComponent(cleanGameExePath)
         let gameDir = gameExeURL.deletingLastPathComponent()
         
-        print("Configuring game INI files in: \(gameDir.path)")
+        logger.notice("Configuring game INI files in: \(gameDir.path, privacy: .public)")
         
         // Check if directory exists
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: gameDir.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            print("⚠️ Warning: Game directory not found at: \(gameDir.path)")
+            logger.error("⚠️ Warning: Game directory not found at: \(gameDir.path, privacy: .public)")
             
             // Trace the path from C drive to help debug
             DebugUtils.tracePath(from: driveCPath, to: gameDir, fileManager: fileManager)
@@ -1033,28 +1028,28 @@ class WrapperBuilder {
         )
         
         guard let contents = contents else {
-            print("⚠️ Warning: Failed to read game directory at: \(gameDir.path)")
+            logger.error("⚠️ Warning: Failed to read game directory at: \(gameDir.path, privacy: .public)")
             return
         }
         
         let iniFiles = contents.filter({ $0.pathExtension.lowercased() == "ini" })
         
         if iniFiles.isEmpty {
-            print("⚠️ No INI files found in game directory")
-            print("   Files found in directory:")
+            logger.error("⚠️ No INI files found in game directory")
+            logger.notice("   Files found in directory:")
             for file in contents {
-                print("     - \(file.lastPathComponent)")
+                logger.notice("     - \(file.lastPathComponent, privacy: .public)")
             }
             return
         }
         
-        print("Found \(iniFiles.count) INI file\(iniFiles.count == 1 ? "" : "s") to configure")
+        logger.notice("Found \(iniFiles.count, privacy: .public) INI file\(iniFiles.count == 1 ? "" : "s", privacy: .public) to configure")
         
         for iniFile in iniFiles {
-            print("  Processing: \(iniFile.lastPathComponent)")
+            logger.notice("  Processing: \(iniFile.lastPathComponent, privacy: .public)")
             
             guard let originalContent = try? String(contentsOf: iniFile, encoding: .utf8) else {
-                print("    ⚠️ Failed to read file")
+                logger.error("    ⚠️ Failed to read file")
                 continue
             }
             
@@ -1065,12 +1060,12 @@ class WrapperBuilder {
             let windowModeChanged = content.contains("WindowMode=0")
             if windowModeChanged {
                 content = content.replacingOccurrences(of: "WindowMode=0", with: "WindowMode=2")
-                print("    ✅ Set WindowMode to 2 (LCD mode)")
+                logger.notice("    ✅ Set WindowMode to 2 (LCD mode)")
                 modified = true
             } else if content.contains("WindowMode=2") {
-                print("    ℹ️ WindowMode already set to 2")
+                logger.notice("    ℹ️ WindowMode already set to 2")
             } else {
-                print("    ℹ️ No WindowMode setting found")
+                logger.notice("    ℹ️ No WindowMode setting found")
             }
             
             // Set save path to Documents
@@ -1084,24 +1079,24 @@ class WrapperBuilder {
                     range: NSRange(content.startIndex..., in: content),
                     withTemplate: savePath
                 )
-                print("    ✅ Updated LoadSavePath")
-                print("       Old: \(oldValue)")
-                print("       New: \(savePath)")
+                logger.notice("    ✅ Updated LoadSavePath")
+                logger.notice("       Old: \(oldValue, privacy: .public)")
+                logger.notice("       New: \(savePath, privacy: .public)")
                 modified = true
             } else {
-                print("    ℹ️ No LoadSavePath setting found")
+                logger.notice("    ℹ️ No LoadSavePath setting found")
             }
             
             // Write back if modified
             if modified {
                 do {
                     try content.write(to: iniFile, atomically: true, encoding: .utf8)
-                    print("    ✅ Saved changes to \(iniFile.lastPathComponent)")
+                    logger.notice("    ✅ Saved changes to \(iniFile.lastPathComponent, privacy: .public)")
                 } catch {
-                    print("    ⚠️ Failed to save changes: \(error)")
+                    logger.error("    ⚠️ Failed to save changes: \(error, privacy: .public)")
                 }
             } else {
-                print("    ℹ️ No changes needed")
+                logger.notice("    ℹ️ No changes needed")
             }
         }
     }
@@ -1109,7 +1104,7 @@ class WrapperBuilder {
     /// Remove extended attributes, resource forks, and Finder info from a directory
     /// This prevents codesign errors like "resource fork, Finder information, or similar detritus not allowed"
     private func removeExtendedAttributes(from path: URL) throws {
-        print("Removing extended attributes from \(path.lastPathComponent)...")
+        logger.notice("Removing extended attributes from \(path.lastPathComponent, privacy: .public)...")
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
@@ -1125,14 +1120,14 @@ class WrapperBuilder {
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            print("⚠️ Failed to remove extended attributes: \(errorMessage)")
+            logger.error("⚠️ Failed to remove extended attributes: \(errorMessage, privacy: .public)")
             // Don't throw - this is not critical, codesign will just fail later with a better message
         }
     }
     
     /// Sign the wrapper app
     func signWrapper(at path: URL) throws {
-        print("Signing wrapper...")
+        logger.notice("Signing wrapper...")
         
         let codesignPath = "/usr/bin/codesign"
         let process = Process()
@@ -1152,13 +1147,13 @@ class WrapperBuilder {
         process.waitUntilExit()
         
         if process.terminationStatus == 0 {
-            print("✅ Wrapper signed successfully")
+            logger.notice("✅ Wrapper signed successfully")
         } else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             let command = "\(codesignPath) \(process.arguments?.joined(separator: " ") ?? "")"
-            print("⚠️ Code signing failed: \(errorMessage)")
-            print("   Command: \(command)")
+            logger.error("⚠️ Code signing failed: \(errorMessage, privacy: .public)")
+            logger.notice("   Command: \(command, privacy: .public)")
             throw WrapperError.signingFailed(errorMessage)
         }
     }

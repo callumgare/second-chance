@@ -21,11 +21,6 @@ enum AppEvent {
     /// App lifecycle events. See `LifecycleEvent`.
     case lifecycle(LifecycleEvent)
 
-    /// A narrow escape hatch for genuinely unstructured output that still wants
-    /// to ride the bus. Prefer a typed case in the relevant sub-enum. Do not use
-    /// this as a dumping ground — if a value matters, give it its own case.
-    case log(LogLevel, String)
-
     // Future subsystems (stubs — populate when built):
     // case library(LibraryEvent)
     // case settings(SettingsEvent)
@@ -62,14 +57,6 @@ enum InstallationEvent {
 enum LifecycleEvent {
     case launched
     case terminating
-}
-
-// MARK: - Log level
-
-enum LogLevel {
-    case info
-    case warning
-    case error
 }
 
 // MARK: - Shared bus + installation convenience

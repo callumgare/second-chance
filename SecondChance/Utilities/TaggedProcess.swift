@@ -3,25 +3,23 @@
 //  SecondChance
 //
 //  A thin wrapper around Foundation's `Process` that captures stdout and stderr
-//  from a subprocess and forwards each line to a `ContextualLogger`. This
-//  ensures subprocess output (Wine, AutoIt, exiftool, ScummVM, etc.) is tagged
-//  with the caller's step and source context at spawn time — the one moment
-//  when the context is unambiguously known.
+//  from a subprocess and forwards each line to an os.Logger.
 //
 //  Usage:
-//    let process = TaggedProcess(logger: logger.withSource("wine"))
+//    let process = TaggedProcess(logger: Logger(subsystem: "com.secondchance", category: "wine"))
 //    process.executableURL = wineURL
 //    process.arguments = [...]
 //    try process.run()
 //    process.waitUntilExit()
 
 import Foundation
+import os
 
 final class TaggedProcess: @unchecked Sendable {
 
     // Delegate to a real Process for all configuration
     let process = Process()
-    private let logger: ContextualLogger
+    private let logger: Logger
 
     // Expose the most-used Process properties directly
     var executableURL: URL? {
@@ -44,7 +42,7 @@ final class TaggedProcess: @unchecked Sendable {
     var terminationReason: Process.TerminationReason { process.terminationReason }
     var isRunning: Bool { process.isRunning }
 
-    init(logger: ContextualLogger) {
+    init(logger: Logger) {
         self.logger = logger
     }
 
@@ -60,8 +58,8 @@ final class TaggedProcess: @unchecked Sendable {
         process.standardOutput = stdoutPipe
         process.standardError  = stderrPipe
 
-        setupLineReader(pipe: stdoutPipe, level: .info)
-        setupLineReader(pipe: stderrPipe, level: .warning)
+        setupLineReader(pipe: stdoutPipe, isStderr: false)
+        setupLineReader(pipe: stderrPipe, isStderr: true)
 
         try process.run()
     }
@@ -80,19 +78,21 @@ final class TaggedProcess: @unchecked Sendable {
 
     // MARK: - Line reading
 
-    private func setupLineReader(pipe: Pipe, level: LogLevel) {
+    private func setupLineReader(pipe: Pipe, isStderr: Bool) {
         let capturedLogger = logger
         let fh = pipe.fileHandleForReading
-
-        // Buffer for partial lines
         var buffer = Data()
 
         fh.readabilityHandler = { handle in
             let data = handle.availableData
             guard !data.isEmpty else {
-                // EOF — flush any remaining buffer
                 if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8) {
-                    capturedLogger.log(line.trimmingCharacters(in: .newlines), level: level)
+                    let trimmed = line.trimmingCharacters(in: .newlines)
+                    if isStderr {
+                        capturedLogger.error("\(trimmed, privacy: .public)")
+                    } else {
+                        capturedLogger.notice("\(trimmed, privacy: .public)")
+                    }
                     buffer.removeAll()
                 }
                 handle.readabilityHandler = nil
@@ -101,27 +101,21 @@ final class TaggedProcess: @unchecked Sendable {
 
             buffer.append(data)
 
-            // Split on newlines, forwarding complete lines
             while let range = buffer.range(of: Data("\n".utf8)) {
                 let lineData = buffer.subdata(in: buffer.startIndex..<range.lowerBound)
                 buffer.removeSubrange(buffer.startIndex...range.upperBound.advanced(by: -1))
                 if let line = String(data: lineData, encoding: .utf8) {
                     let trimmed = line.trimmingCharacters(in: .controlCharacters)
                     if !trimmed.isEmpty {
-                        capturedLogger.log(trimmed, level: level)
+                        if isStderr {
+                            capturedLogger.error("\(trimmed, privacy: .public)")
+                        } else {
+                            capturedLogger.notice("\(trimmed, privacy: .public)")
+                        }
                     }
                 }
             }
         }
         fh.waitForDataInBackgroundAndNotify()
-    }
-}
-
-// MARK: - ContextualLogger source convenience
-
-extension ContextualLogger {
-    /// Return a child logger with `source` set, for passing to `TaggedProcess`.
-    func withSource(_ source: String) -> ContextualLogger {
-        self.source(source)
     }
 }
