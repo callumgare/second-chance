@@ -8,9 +8,12 @@
 
 import Foundation
 import AppKit
+import Combine
 
-public class LogWindow {
+public class LogWindow: ObservableObject {
     public static let shared = LogWindow()
+
+    @Published public var isVisible = false
 
     private var logWindow: LogWindowController?
     private var streamProcess: Process?
@@ -33,6 +36,12 @@ public class LogWindow {
             logWindow = LogWindowController(title: title)
         }
         logWindow?.show(relativeTo: referenceWindow)
+        isVisible = true
+    }
+
+    public func hideLogWindow() {
+        logWindow?.close()
+        isVisible = false
     }
 
     /// Fetch history via `log show` then hand off to `log stream` for real-time delivery.
@@ -137,7 +146,7 @@ public class LogWindow {
 
 // MARK: - Log Window Controller
 
-private class LogWindowController: NSWindowController {
+private class LogWindowController: NSWindowController, NSWindowDelegate {
     private var logTextView: NSTextView!
     private var logScrollView: NSScrollView!
 
@@ -155,7 +164,12 @@ private class LogWindowController: NSWindowController {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
         super.init(window: window)
+        window.delegate = self
         setupUI()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        LogWindow.shared.isVisible = false
     }
 
     required init?(coder: NSCoder) {

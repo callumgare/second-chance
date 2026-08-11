@@ -8,6 +8,7 @@ import SwiftUI
 
 struct DebugSettingsView: View {
     @ObservedObject var settings = DebugSettings.shared
+    @ObservedObject var logWindow = LogWindow.shared
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
@@ -42,6 +43,23 @@ struct DebugSettingsView: View {
                 }
                 
                 Section {
+                    Toggle("Show Log Window", isOn: Binding(
+                        get: { logWindow.isVisible },
+                        set: { show in
+                            if show {
+                                logWindow.showLogWindow(title: "SecondChance - Installation Log")
+                            } else {
+                                logWindow.hideLogWindow()
+                            }
+                        }
+                    ))
+                    .help("Show or hide the floating log window.")
+                } header: {
+                    Text("Debugging")
+                        .font(.headline)
+                }
+                
+                Section {
                     HStack {
                         Spacer()
                         Button("Reset to Defaults") {
@@ -55,7 +73,7 @@ struct DebugSettingsView: View {
             
             Spacer()
         }
-        .frame(width: 500, height: 300)
+        .frame(width: 500, height: 380)
     }
 }
 
