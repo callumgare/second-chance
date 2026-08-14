@@ -1,4 +1,5 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 # build.sh - Build the SecondChance app
 #
 # Usage:
@@ -7,7 +8,10 @@
 #   ./build.sh --raw-logs   # Raw xcodebuild output (no xcbeautify)
 #
 
-set -e
+# Enable strict mode
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/
+set -euo pipefail
+IFS=$'\n\t'
 
 # Colors for output
 RED='\033[0;31m'

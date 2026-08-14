@@ -17,7 +17,6 @@ func printUsage() {
     Options:
         --timeout <seconds>    Maximum runtime (default: 60)
         --debug                Launch game in debug mode
-        --verbose, -v          Stream logs to the console
         --analyze <path>       Analyze a screenshot for quit buttons (no game launch)
         --help                 Show this help
 
@@ -34,7 +33,6 @@ func printUsage() {
 var appPath: String?
 var timeout: TimeInterval = 60
 var debugMode = false
-var verbose = false
 var analyzePath: String?
 
 var i = 1
@@ -52,8 +50,6 @@ while i < CommandLine.arguments.count {
         }
     case "--debug":
         debugMode = true
-    case "--verbose", "-v":
-        verbose = true
     case "--analyze":
         i += 1
         if i < CommandLine.arguments.count {
@@ -106,9 +102,9 @@ case .relaunchRequired:
 
 logger.notice("PERMISSION_GATE: all_permissions_granted")
 
-// Stream os.Logger output to stderr so logs are visible in the terminal
+// Stream os.Logger output to stderr when launched from a terminal
 var logStreamProcess: Process?
-if verbose {
+if isatty(STDERR_FILENO) != 0 {
     let pid = getpid()
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: "/usr/bin/log")

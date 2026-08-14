@@ -138,7 +138,7 @@ build_app_if_needed() {
         BUILD_LOG="$SCRIPT_DIR/DerivedData/build-log-$(date +%Y%m%d-%H%M%S).txt"
         mkdir -p "$(dirname "$BUILD_LOG")"
         
-        if ! "$BUILD_SCRIPT" > "$BUILD_LOG" 2>&1; then
+        if ! "$BUILD_SCRIPT" > "$BUILD_LOG" 2>"$BUILD_LOG"; then
             echo -e "${RED}❌ Build failed! Check log: $BUILD_LOG${NC}"
             exit 1
         fi

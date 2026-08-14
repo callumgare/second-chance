@@ -98,7 +98,7 @@ func launchWineShell(_ config: GameConfig) {
     script += "echo '  wine --version'\n"
     script += "echo '  wineserver -k                                    (kill all Wine processes)'\n"
     script += "echo '  \"$(which wineserver)\" -f -p                      (start the wineserver - for some reason this fails unless path is absolute)'\n"
-    script += "echo '  winecfg                                          (Wine configuration)'\n"
+    script += "echo '  wine winecfg                                          (Wine configuration)'\n"
     script += "echo '  wine \"C:\\windows\\syswow64\\cnc-ddraw config.exe\"  (cnc-ddraw configuration)'\n"            
     script += "echo ''\n"
     
@@ -352,6 +352,20 @@ func main() {
         exit(1)
     }
     
+    // Stream os.Logger output to stderr when launched from a terminal
+    var logStreamProcess: Process?
+    if isatty(STDERR_FILENO) != 0 {
+        let pid = getpid()
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+        proc.arguments = ["stream", "--process", "\(pid)", "--style", "compact",
+                          "--predicate", "subsystem == \"com.secondchance.gamewrapper\""]
+        proc.standardOutput = FileHandle.standardError
+        try? proc.run()
+        logStreamProcess = proc
+        Thread.sleep(forTimeInterval: 0.3)
+    }
+
     logger.notice("Game wrapper starting...")
     logger.notice("App path: \(config.appPath.path, privacy: .public)")
     logger.notice("Game engine: \(config.gameEngine, privacy: .public)")
