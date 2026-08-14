@@ -77,6 +77,35 @@ echo "📋 Installing winetricks..."
 ditto --rsrc "$WINETRICKS_FILE" "${TEMP_DIR}/Resources/winetricks"
 chmod +x "${TEMP_DIR}/Resources/winetricks"
     
+# Build the native fullscreen helper and hook it into Wine's Mac driver.
+#
+# The helper has to run inside the Wine process that owns the game window, since
+# macOS only lets a process fullscreen its own NSWindow without the Accessibility
+# permission. DYLD_INSERT_LIBRARIES does not work here -- wine-preloader reaches
+# its entry point before dyld runs initializers -- so instead the driver gets a
+# weak dependency on the dylib. See NativeFullscreen/native_fullscreen.m.
+echo "🖥️  Building native fullscreen helper..."
+NATIVE_FS_DIR="${SCRIPT_DIR}/NativeFullscreen"
+clang -dynamiclib \
+    -o "${TEMP_DIR}/Frameworks/native_fullscreen.dylib" \
+    "${NATIVE_FS_DIR}/native_fullscreen.m" \
+    -framework Cocoa \
+    -arch arm64 -arch x86_64 \
+    -mmacosx-version-min=11.0 \
+    -fobjc-arc -O2 -Wall
+
+# Sign explicitly rather than leaving it to the generic signing loop below. ld
+# only auto-signs the arm64 slice ("linker-signed"), and a bare `codesign -dvv`
+# reports on the native slice alone -- so the loop sees "already signed", skips
+# the file, and Xcode's bundle signing then fails on the unsigned x86_64 slice.
+# --force signs every slice.
+codesign --force --sign - "${TEMP_DIR}/Frameworks/native_fullscreen.dylib"
+echo "✓ Built and signed native_fullscreen.dylib"
+
+echo "🔧 Patching winemac.so to load the native fullscreen helper..."
+"${NATIVE_FS_DIR}/patch-winemac.swift" \
+    "${TEMP_DIR}/SharedSupport/wine/lib/wine/x86_64-unix/winemac.so"
+
 # Fix rpaths
 echo "🔧 Fixing rpaths..."
 for binary in "${TEMP_DIR}/SharedSupport/wine/bin"/*; do

@@ -130,9 +130,10 @@ class WineManager {
         let ddrawIniPath = prefixPath.appendingPathComponent("drive_c/windows/syswow64/ddraw.ini")
             if fileManager.fileExists(atPath: ddrawIniPath.path) {
                 if let contents = try? String(contentsOf: ddrawIniPath, encoding: .utf8) {
-                    let updated = contents.replacingOccurrences(of: "maintas=false", with: "maintas=true")
+                    var updated = contents.replacingOccurrences(of: "maintas=false", with: "maintas=true")
+                    updated = updated.replacingOccurrences(of: "windowed=false", with: "windowed=true")
                     try? updated.write(to: ddrawIniPath, atomically: true, encoding: .utf8)
-                    logger.notice("✓ Configured cnc-ddraw to maintain aspect ratio")
+                    logger.notice("✓ Configured cnc-ddraw to maintain aspect ratio and run in windowed mode")
                 }
             }
         

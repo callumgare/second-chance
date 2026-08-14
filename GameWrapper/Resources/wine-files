@@ -4649,6 +4649,7 @@ Frameworks/libgmpxx.4.dylib
 Frameworks/libMacportsLegacySystem.B.dylib
 Frameworks/libp11-kit.0.dylib
 Frameworks/libxml2.2.dylib
+Frameworks/native_fullscreen.dylib
 Frameworks/libffi.8.dylib
 Frameworks/SikarugirSdk.framework/Versions/A/_CodeSignature/CodeResources
 Frameworks/SikarugirSdk.framework/Versions/A/Resources/Info.plist

@@ -238,7 +238,15 @@ public struct WineEnvironment {
         let process = Process()
         process.executableURL = wineExecutable
         process.arguments = args
-        process.environment = environmentVariables()
+
+        // Ask the native-fullscreen dylib bundled into Wine's Mac driver to put
+        // this game's window into a real macOS fullscreen Space. Every Mac-driver
+        // process loads that dylib, so it needs to be told which one is the game;
+        // Wine names each child's loader copy after the .exe it runs.
+        // See GameWrapper/NativeFullscreen/native_fullscreen.m.
+        var env = environmentVariables()
+        env["NATIVE_MACOS_FULLSCREEN_EXE"] = exeFileName
+        process.environment = env
         process.currentDirectoryURL = URL(fileURLWithPath: exeDir)
         
         if let outputPipe = outputPipe {
