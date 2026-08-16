@@ -6,6 +6,16 @@
 
 import Foundation
 
+/// Fields extracted from a line of an exported log file. File-scope (like
+/// `Entry`) to avoid nested type inference issues under
+/// SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor.
+nonisolated struct LogLineFields: Equatable, Sendable {
+    let time: String
+    let level: String
+    let category: String
+    let message: String
+}
+
 /// Log formatting styles.
 nonisolated struct LogFormatter {
     
@@ -36,8 +46,66 @@ nonisolated struct LogFormatter {
         }
         return line
     }
-    
+
+    /// Parse one line of an exported log file — either the full format
+    /// (from `full`: exports, disk mirror) or the compact format (from
+    /// `compact`: stderr mirror). Full-format ISO timestamps are converted
+    /// to local time-of-day (`HH:mm:ss.SSS`) so imported rows render the
+    /// same Time column as live rows.
+    ///
+    /// Returns nil when the line carries no time/level/category prefix —
+    /// e.g. a continuation of a multi-line message — or when the level token
+    /// isn't a known swift-log level (guards against false positives on
+    /// arbitrary text).
+    nonisolated static func parse(line: String) -> LogLineFields? {
+        if let match = try? fullLineRegex.firstMatch(in: line) {
+            return makeFields(
+                time: String(match.output.1),
+                rawLevel: String(match.output.2),
+                // The full format carries the complete subsystem label;
+                // rows show only the trailing category component.
+                category: extractCategory(from: String(match.output.3)),
+                message: String(match.output.4)
+            )
+        }
+        if let match = try? compactLineRegex.firstMatch(in: line) {
+            return makeFields(
+                time: String(match.output.1),
+                rawLevel: String(match.output.2),
+                category: String(match.output.3),
+                message: String(match.output.4)
+            )
+        }
+        return nil
+    }
+
     // MARK: - Private
+
+    /// Assemble parsed fields, rejecting unknown levels and converting
+    /// ISO timestamps to local time-of-day.
+    nonisolated private static func makeFields(time rawTime: String, rawLevel: String, category: String, message: String) -> LogLineFields? {
+        let normalized = rawLevel.lowercased()
+        guard knownLevels.contains(normalized) else { return nil }
+        let time = localTime(fromISO: rawTime) ?? rawTime
+        return LogLineFields(time: time, level: formatLevel(normalized), category: category, message: message)
+    }
+
+    /// `2026-02-16T00:00:00.000Z` → `10:00:00.000` (local time-of-day).
+    nonisolated private static func localTime(fromISO iso: String) -> String? {
+        guard let date = fullFormatter.date(from: iso) else { return nil }
+        return timeFormatter.string(from: date)
+    }
+
+    nonisolated private static let knownLevels: Set<String> = [
+        "trace", "debug", "info", "notice", "warning", "error", "critical",
+    ]
+
+    /// `<ISO8601>  <level>  <full label>  <message>` — labels carry no spaces,
+    /// and fields are separated by runs of 2+ spaces.
+    nonisolated private static let fullLineRegex = /^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/
+
+    /// `HH:mm:ss.SSS  <level>  <category>  <message>`.
+    nonisolated private static let compactLineRegex = /^(\d{2}:\d{2}:\d{2}\.\d{3})\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/
     
     /// Time formatter for compact display (HH:mm:ss.SSS).
     nonisolated private static let timeFormatter: DateFormatter = {
@@ -57,6 +125,8 @@ nonisolated struct LogFormatter {
         return formatter
     }()
     
+    // MARK: - Category
+
     /// Extract the category (last component) from a label like "au.gare.callum.second-chance.SecondChance.GameDetector".
     nonisolated static func extractCategory(from label: String) -> String {
         if let lastDot = label.lastIndex(of: ".") {

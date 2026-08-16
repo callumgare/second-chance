@@ -69,6 +69,34 @@ public class LogWindow: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.refollowTail() }
             .store(in: &cancellables)
+
+        // Import must stop live delivery synchronously, before the file's
+        // rows replace the display — otherwise a flush racing the import
+        // would interleave store lines into the file view.
+        display.onImportWillBegin = { [weak self] in
+            self?.cancelLogStoreSubscription()
+        }
+        // Live/file transitions: file mode cancels the LogStore subscription
+        // (nothing live is shown); returning to live replays the snapshot —
+        // which includes everything emitted while the file was open — and
+        // resumes streaming.
+        display.$source
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] source in self?.sourceDidChange(source) }
+            .store(in: &cancellables)
+    }
+
+    private func sourceDidChange(_ source: LogSource) {
+        switch source {
+        case .importedFile:
+            cancelLogStoreSubscription()
+            logWindow?.scrollToTop()
+        case .live:
+            guard isVisible else { return }
+            subscribeToLogStore()
+            refollowTail()
+        }
     }
 
     /// Give SwiftUI a beat to lay out the rebuilt table, then apply the usual
@@ -87,7 +115,11 @@ public class LogWindow: ObservableObject {
             logWindow = LogWindowController(title: title, owner: self)
         }
         logWindow?.show(relativeTo: referenceWindow)
-        subscribeToLogStore()
+        // An imported file stays on display across close/reopen; the live
+        // subscription is (re)made only in live mode.
+        if case .live = display.source {
+            subscribeToLogStore()
+        }
         isVisible = true
     }
 
@@ -301,6 +333,21 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
             guard self.isPinnedToBottom else { return }
             let clipView = scrollView.contentView
             clipView.scroll(to: NSPoint(x: 0, y: max(0, documentView.bounds.maxY - clipView.bounds.height)))
+            scrollView.reflectScrolledClipView(clipView)
+        }
+    }
+
+    /// Jump to the top after an imported file replaces the rows (files are
+    /// naturally read from the start, not the tail).
+    func scrollToTop() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  let contentView = self.window?.contentView,
+                  let scrollView = Self.firstScrollView(in: contentView) else { return }
+
+            self.observeBounds(of: scrollView)
+            let clipView = scrollView.contentView
+            clipView.scroll(to: .zero)
             scrollView.reflectScrolledClipView(clipView)
         }
     }

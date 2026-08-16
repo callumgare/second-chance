@@ -4,15 +4,29 @@
 //
 //  SwiftUI rendering for the floating log window: a Console-style table with
 //  Time/Level/Category/Message columns, level-tinted rows, and an options bar
-//  above the column headers (level filter, compact two-column mode, line
-//  counts). The display state lives in `LogDisplayModel`, owned by
-//  `LogWindow` — the hosted view observes the model directly so nothing in
-//  the SwiftUI subtree needs a reference back to the window controller.
+//  above the column headers (level filter, compact two-column mode, export /
+//  import, line counts). While an imported log file is shown, a banner under
+//  the options bar names the file and offers a Close button that returns to
+//  the live in-memory logs. The display state lives in `LogDisplayModel`,
+//  owned by `LogWindow` — the hosted view observes the model directly so
+//  nothing in the SwiftUI subtree needs a reference back to the window
+//  controller.
 //
 
 import SwiftUI
 import AppKit
 import Combine
+import UniformTypeIdentifiers
+
+// MARK: - Source
+
+/// What the log window is currently showing.
+enum LogSource: Equatable {
+    /// The in-memory LogStore of the current process (live streaming).
+    case live
+    /// A previously exported log file opened via Import.
+    case importedFile(URL)
+}
 
 // MARK: - Display Model
 
@@ -31,6 +45,90 @@ final class LogDisplayModel: ObservableObject {
     @Published var levelFilter: LogLevelFilter = .all
     /// When set, only the Level and Message columns are shown.
     @Published var compactMode = false
+    /// What the window displays: live store streaming or an imported file.
+    /// Transitions are coordinated by `LogWindow` (subscription cancel /
+    /// replay) — via `onImportWillBegin` and its `$source` observation.
+    @Published var source: LogSource = .live
+
+    // Import/export toolbar state.
+    @Published var isExporting = false
+    @Published var showExportFailedAlert = false
+    @Published var showImportFailedAlert = false
+
+    /// Called (on the main actor) just before an imported file's rows replace
+    /// the display, so `LogWindow` can synchronously stop live delivery — a
+    /// racing flush would otherwise interleave store lines into the file
+    /// view. Set by `LogWindow`.
+    var onImportWillBegin: (() -> Void)?
+
+    /// Compact-format rendering of everything currently displayed. Used to
+    /// export an imported file's view (live view exports the full store via
+    /// `LogExporter` instead).
+    var displayedExportText: String {
+        guard !rows.isEmpty else { return "" }
+        return rows.map(\.compactLine).joined(separator: "\n") + "\n"
+    }
+
+    /// Export what the window is showing: the full in-memory history when
+    /// live, or the displayed rows when an imported file is open.
+    func exportLogs() {
+        switch source {
+        case .live:
+            guard let url = LogExporter.selectSaveURL() else { return }
+            isExporting = true
+            Task {
+                let ok = await LogExporter.export(to: url)
+                isExporting = false
+                if !ok { showExportFailedAlert = true }
+            }
+        case .importedFile(let sourceURL):
+            let prefix = sourceURL.deletingPathExtension().lastPathComponent
+            guard let url = LogExporter.selectSaveURL(fileNamePrefix: prefix.isEmpty ? "second-chance" : prefix) else { return }
+            do {
+                try displayedExportText.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                showExportFailedAlert = true
+            }
+        }
+    }
+
+    /// Present an open panel and, on selection, show that file's logs.
+    func importLogs() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Log File"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.text]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importLogFile(at: url)
+    }
+
+    /// Replace the display with a log file's contents. Live streaming pauses
+    /// (no in-memory logs are shown); setting `source = .live` again resumes
+    /// it with a full snapshot replay — nothing emitted meanwhile is lost.
+    @discardableResult
+    func importLogFile(at url: URL) -> Bool {
+        let text: String
+        do {
+            text = try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            showImportFailedAlert = true
+            return false
+        }
+
+        let parsed = LogRow.parse(fileContents: text)
+        guard !parsed.isEmpty else {
+            showImportFailedAlert = true
+            return false
+        }
+
+        onImportWillBegin?()
+        rows = parsed
+        hiddenLineCount = 0
+        source = .importedFile(url)
+        return true
+    }
 }
 
 // MARK: - Row Model
@@ -58,6 +156,54 @@ nonisolated struct LogRow: Identifiable, Hashable, Sendable {
     /// Single-line rendering (time, level, category, message) used by
     /// Copy Row and test assertions.
     var compactLine: String { "\(time)  \(level)  \(category)  \(message)" }
+
+    init(id: UInt64, time: String, level: String, category: String, message: String) {
+        self.id = id
+        self.time = time
+        self.level = level
+        self.category = category
+        self.message = message
+    }
+
+    /// Parse a log file's contents into rows. Lines carrying the
+    /// time/level/category prefix (either export format) start rows; any
+    /// other line is a continuation of the previous parsed row's multi-line
+    /// message. Leading unparsable text becomes fallback rows (one per
+    /// line) so arbitrary text files still render.
+    nonisolated static func parse(fileContents text: String) -> [LogRow] {
+        var lines = text.components(separatedBy: "\n")
+        // A file-final newline is an artifact, not a blank continuation line.
+        if lines.last == "" { lines.removeLast() }
+
+        var rows: [LogRow] = []
+        var lastRowWasParsed = false
+        for line in lines {
+            if let fields = LogFormatter.parse(line: line) {
+                rows.append(LogRow(
+                    id: UInt64(rows.count + 1),
+                    time: fields.time,
+                    level: fields.level,
+                    category: fields.category,
+                    message: fields.message
+                ))
+                lastRowWasParsed = true
+            } else if let last = rows.last, lastRowWasParsed {
+                // Continuation of a multi-line message (exported messages
+                // span lines after their prefixed first line).
+                rows[rows.count - 1] = LogRow(
+                    id: last.id,
+                    time: last.time,
+                    level: last.level,
+                    category: last.category,
+                    message: last.message + "\n" + line
+                )
+            } else if !line.isEmpty {
+                rows.append(LogRow(id: UInt64(rows.count + 1), time: "", level: "notice", category: "", message: line))
+                lastRowWasParsed = false
+            }
+        }
+        return rows
+    }
 }
 
 // MARK: - Level Filter
@@ -151,7 +297,23 @@ struct LogWindowView: View {
                 totalCount: model.rows.count
             )
             Divider()
+            if case .importedFile(let url) = model.source {
+                ImportedFileBar(url: url) {
+                    model.source = .live
+                }
+                Divider()
+            }
             logTable
+        }
+        .alert("Export Failed", isPresented: $model.showExportFailedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The log file could not be saved. Please try again.")
+        }
+        .alert("Import Failed", isPresented: $model.showImportFailedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The file could not be read as a text log file.")
         }
     }
 
@@ -263,8 +425,42 @@ struct LogWindowView: View {
 
 // MARK: - Options Bar
 
+/// The banner shown below the options bar while an imported log file is
+/// displayed: names the file and offers Close, which returns the window to
+/// the in-memory logs of the current process.
+private struct ImportedFileBar: View {
+    let url: URL
+    let onClose: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text")
+                .foregroundStyle(.secondary)
+
+            Text("Showing logs from **\(url.lastPathComponent)** — live logs from this process are paused")
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(url.path)
+
+            Spacer(minLength: 8)
+
+            Button {
+                onClose()
+            } label: {
+                Label("Close", systemImage: "xmark.circle")
+            }
+            .controlSize(.small)
+            .help("Stop showing the imported file and resume the in-memory logs of the current process.")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.yellow.opacity(0.13))
+    }
+}
+
 /// The small options bar above the log lines and column headers: level
-/// filter, compact mode toggle, and line counts.
+/// filter, compact mode toggle, export/import, and line counts.
 private struct LogFilterBar: View {
     @ObservedObject var model: LogDisplayModel
     let shownCount: Int
@@ -287,6 +483,29 @@ private struct LogFilterBar: View {
                 .help("Show only the Level and Message columns.")
 
             Spacer(minLength: 8)
+
+            Button {
+                model.exportLogs()
+            } label: {
+                if model.isExporting {
+                    Label("Exporting…", systemImage: "hourglass")
+                } else {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+            }
+            .controlSize(.small)
+            .disabled(model.isExporting)
+            .help(model.source == .live
+                  ? "Save the full in-memory log history to a file."
+                  : "Save the displayed file's logs to a new file.")
+
+            Button {
+                model.importLogs()
+            } label: {
+                Label("Import", systemImage: "square.and.arrow.down.on.square")
+            }
+            .controlSize(.small)
+            .help("Open a previously saved log file and show it here instead of the live logs.")
 
             if model.levelFilter != .all {
                 Text("\(shownCount) of \(totalCount) lines")
