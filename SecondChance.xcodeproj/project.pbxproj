@@ -204,6 +204,7 @@
 				E2127F502F063FF300E02402 /* Embeded Wrapper Template App */,
 				E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */,
 				E25DDA6952206C43D18B125E /* Download And Copy AutoIt Files */,
+				E280B72C30319B6700501790 /* Download And Copy Game Patches */,
 			);
 			buildRules = (
 			);
@@ -395,6 +396,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/GameWrapper/setup-autoit.sh\"\n";
+		};
+		E280B72C30319B6700501790 /* Download And Copy Game Patches */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${SRCROOT}/GameWrapper/setup-game-patches.sh",
+			);
+			name = "Download And Copy Game Patches";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/game-patches",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/GameWrapper/setup-game-patches.sh\"\n";
 		};
 		E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */ = {
 			isa = PBXShellScriptBuildPhase;

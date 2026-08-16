@@ -344,8 +344,22 @@ class GameInstaller {
             // Fallback to base directory
             installerDir = "/nancy-drew-installer"
         }
-        
+
         await bus.publishInstallation(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
+
+        // Apply any available game patches
+        do {
+            try await applyGamePatches(
+                wrapperPath: wrapperPath,
+                gameInfo: gameInfo,
+                gameExePath: "/" + relativePath
+            )
+        } catch InstallationError.userCancelled {
+            throw InstallationError.userCancelled
+        } catch {
+            logger.error("⚠️  Failed to apply patches: \(error)")
+        }
+
         return ("/" + relativePath, installerDir)
     }
 
@@ -385,6 +399,117 @@ class GameInstaller {
         let relativeInstallerDir = gameDir.path(relativeTo: driveCPath)
         await bus.publishInstallation(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
         return ("/" + relativePath, "/" + relativeInstallerDir)
+    }
+    
+    /// Apply game patches if available
+    private func applyGamePatches(
+        wrapperPath: URL,
+        gameInfo: GameInfo,
+        gameExePath: String
+    ) async throws {
+        let gameSlug = gameInfo.id
+        guard let patchesCacheDir = Bundle.main.url(forResource: gameSlug, withExtension: nil, subdirectory: "game-patches") else {
+            logger.notice("ℹ️  No patches found for game '\(gameSlug)'")
+            return
+        }
+        
+        // Get list of patch files
+        let patchFiles = try fileManager.contentsOfDirectory(at: patchesCacheDir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "zip" }
+        
+        guard !patchFiles.isEmpty else {
+            logger.notice("ℹ️  No zip patch files found for game '\(gameSlug)'")
+            return
+        }
+        
+        logger.notice("🔧 Applying patches for game '\(gameSlug)'...")
+        
+        // Get the game installation directory
+        let driveCPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let gameExeFullPath = driveCPath.appendingPathComponent(String(gameExePath.dropFirst()))
+        let gameInstallDir = gameExeFullPath.deletingLastPathComponent()
+        
+        // Process each patch file
+        for patchFile in patchFiles {
+            logger.notice("📦 Processing patch: \(patchFile.lastPathComponent)")
+            
+            // Unzip the patch to a temporary directory
+            let tempDir = FileManager.default.temporaryDirectory
+                .appendingPathComponent("patch-\(UUID().uuidString)")
+            try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            
+            defer {
+                try? fileManager.removeItem(at: tempDir)
+            }
+            
+            // Use unzip command to extract the patch
+            let unzipProcess = Process()
+            unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+            unzipProcess.arguments = ["-q", patchFile.path, "-d", tempDir.path]
+            
+            try unzipProcess.run()
+            unzipProcess.waitUntilExit()
+            
+            guard unzipProcess.terminationStatus == 0 else {
+                logger.error("❌ Failed to unzip patch: \(patchFile.lastPathComponent)")
+                continue
+            }
+            
+            // Look for patch exe files in the unzipped content
+            let unzippedFiles = try fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
+                .filter { $0.pathExtension == "exe" }
+            
+            guard !unzippedFiles.isEmpty else {
+                logger.notice("⚠️  No exe files found in patch: \(patchFile.lastPathComponent)")
+                continue
+            }
+            
+            // Copy unzipped files to game installation directory
+            for unzippedFile in unzippedFiles {
+                let destPath = gameInstallDir.appendingPathComponent(unzippedFile.lastPathComponent)
+                try fileManager.copyItem(at: unzippedFile, to: destPath)
+                logger.notice("✓ Copied \(unzippedFile.lastPathComponent) to game directory")
+            }
+        }
+        
+        // Run patch exes found in game directory
+        let patchExes = try fileManager.contentsOfDirectory(at: gameInstallDir, includingPropertiesForKeys: nil)
+            .filter { $0.lastPathComponent.contains("patch") && $0.pathExtension == "exe" }
+        
+        for patchExe in patchExes {
+            let winePath = String(patchExe.path.dropFirst(driveCPath.path.count))
+            logger.notice("🚀 Running patch: \(patchExe.lastPathComponent)")
+            
+            do {
+                _ = try await wineManager.runWindowsExecutable(
+                    at: wrapperPath,
+                    exePath: winePath,
+                    arguments: []
+                )
+                logger.notice("✅ Patch completed: \(patchExe.lastPathComponent)")
+            } catch {
+                logger.error("❌ Patch failed: \(patchExe.lastPathComponent): \(error)")
+                let continueInstall = await confirmPatchFailure(patchName: patchExe.lastPathComponent, error: error)
+                if continueInstall {
+                    logger.notice("⚠️  Continuing installation without patch: \(patchExe.lastPathComponent)")
+                } else {
+                    throw InstallationError.userCancelled
+                }
+            }
+        }
+        
+        logger.notice("✅ All patches applied successfully")
+    }
+    
+    @MainActor
+    private func confirmPatchFailure(patchName: String, error: Error) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Game patch failed"
+        alert.informativeText = "The patch \"\(patchName)\" failed to apply:\n\n\(error.localizedDescription)\n\nDo you want to continue installing without the patch?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Continue Without Patch")
+        alert.addButton(withTitle: "Cancel Installation")
+        return alert.runModal() == .alertFirstButtonReturn
     }
     
     /// Run the installer with appropriate arguments based on installer type
@@ -453,6 +578,38 @@ class GameInstaller {
         let commandDescription: String
         let underlyingCommandDescription: String?
     }
+
+    /// Host and Windows paths for an MSI log file.
+    private struct MsiLogDestination {
+        let hostPath: URL
+        let windowsPath: String
+    }
+
+    /// Build a unique MSI log file path in the Wine prefix temp directory.
+    private func prepareMsiLogDestination(in wrapperPath: URL) throws -> MsiLogDestination {
+        let driveCPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let windowsTempDir = driveCPath.appendingPathComponent("windows/temp")
+        try fileManager.createDirectory(at: windowsTempDir, withIntermediateDirectories: true)
+
+        let fileName = "nancy-drew-install-\(UUID().uuidString).log"
+        let hostPath = windowsTempDir.appendingPathComponent(fileName)
+        fileManager.createFile(atPath: hostPath.path, contents: nil)
+
+        return MsiLogDestination(
+            hostPath: hostPath,
+            windowsPath: "C:\\\\windows\\\\temp\\\\\(fileName)"
+        )
+    }
+
+    /// Stream an MSI log file line-by-line to a dedicated logger.
+    private func startMsiLogStreaming(at logPath: URL) throws -> TaggedProcess {
+        let msiLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstaller.msi-log")
+        let process = TaggedProcess(logger: msiLogger)
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tail")
+        process.arguments = ["-n", "+1", "-F", logPath.path]
+        try process.run()
+        return process
+    }
     
     /// Build the installer command that should be executed
     private func buildInstallerCommand(
@@ -460,7 +617,8 @@ class GameInstaller {
         installerType: InstallerType,
         gameInfo: GameInfo,
         wrapperPath: URL,
-        attemptNumber: Int
+        attemptNumber: Int,
+        msiLogPath: String? = nil
     ) -> InstallerCommand {
         // Get installer arguments
         let args = getInstallerArguments(
@@ -468,7 +626,8 @@ class GameInstaller {
             installerType: installerType,
             gameInfo: gameInfo,
             wrapperPath: wrapperPath,
-            attemptNumber: attemptNumber
+            attemptNumber: attemptNumber,
+            msiLogPath: msiLogPath
         )
         
         // Check if we need to use AutoIt for this installer
@@ -537,6 +696,13 @@ class GameInstaller {
         let setupIssExists = fileManager.fileExists(atPath: setupIssPath.path)
         logger.notice("Setup.iss path: \(setupIssPath.path), exists: \(setupIssExists)")
         logger.notice("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
+
+        let msiLogDestination = installerType == .msi
+            ? try prepareMsiLogDestination(in: wrapperPath)
+            : nil
+        if let msiLogDestination {
+            logger.notice("MSI install log file: \(msiLogDestination.hostPath.path)")
+        }
         
         // Build and print the command that will be executed
         let command = buildInstallerCommand(
@@ -544,11 +710,27 @@ class GameInstaller {
             installerType: installerType,
             gameInfo: gameInfo,
             wrapperPath: wrapperPath,
-            attemptNumber: attemptNumber
+            attemptNumber: attemptNumber,
+            msiLogPath: msiLogDestination?.windowsPath
         )
         logger.notice("Running: \(command.commandDescription)")
         if let underlyingCommand = command.underlyingCommandDescription {
             logger.notice("   Automating: \(underlyingCommand)")
+        }
+
+        // Stream MSI log lines independently from Wine stdout/stderr.
+        var msiLogStreamer: TaggedProcess?
+        if let msiLogDestination {
+            msiLogStreamer = try startMsiLogStreaming(at: msiLogDestination.hostPath)
+        }
+        defer {
+            if let msiLogStreamer {
+                msiLogStreamer.terminate()
+                msiLogStreamer.waitUntilExit()
+            }
+            if let msiLogDestination, !DebugSettings.shared.debugMode {
+                try? fileManager.removeItem(at: msiLogDestination.hostPath)
+            }
         }
         
         // Setup AutoIt if needed
@@ -625,16 +807,18 @@ class GameInstaller {
         installerType: InstallerType,
         gameInfo: GameInfo,
         wrapperPath: URL,
-        attemptNumber: Int
+        attemptNumber: Int,
+        msiLogPath: String? = nil
     ) -> [String] {
         switch installerType {
         case .msi:
+            let logPath = msiLogPath ?? "nancy-drew-install-log.txt"
             if attemptNumber == 0 {
                 // Silent install with logging
-                return ["/qn", "/l*", "nancy-drew-install-log.txt", "/i", installerPath]
+                return ["/qn", "/l*", logPath, "/i", installerPath]
             } else {
-                // Interactive install
-                return ["/i", installerPath]
+                // Interactive install (still collect installer logs)
+                return ["/l*", logPath, "/i", installerPath]
             }
             
         case .installShield:

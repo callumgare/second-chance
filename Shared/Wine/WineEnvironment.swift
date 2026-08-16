@@ -182,6 +182,11 @@ public struct WineEnvironment {
         // Execute via shell
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", shellScript]
+
+        let envPrefix = env.sorted(by: { $0.key < $1.key })
+            .map { k, v in "\(k)=\(v.contains(" ") ? "\"\(v)\"" : v)" }
+            .joined(separator: " ")
+        wineLogger.notice("Exact command: \(envPrefix) \"\(winePath.path)\" \(arguments.map { "\"\($0)\"" }.joined(separator: " "))")
         
         do {
             try process.run()
