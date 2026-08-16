@@ -1,6 +1,9 @@
 .DS_Store
 .local
 
+*.profraw
+*.xcuserstate
+
 /DerivedData
 /build
 
