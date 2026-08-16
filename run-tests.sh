@@ -169,6 +169,7 @@ run_tests() {
                 -only-testing:SecondChanceTests/GameDetectorTests
                 -only-testing:SecondChanceTests/GameInstallerTests
                 -only-testing:SecondChanceTests/ErrorViewTests
+                -only-testing:SecondChanceTests/InstallationCancellationTests
             )
             ;;
         integration)

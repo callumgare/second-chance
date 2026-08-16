@@ -158,16 +158,23 @@ class InstallationViewModel: ObservableObject {
     // MARK: - Non-Interactive Mode
 
     /// Handle bus events — drives @Published properties from typed events.
-    private func handleBusEvent(_ event: AppEvent) async {
+    /// Internal (not private) so unit tests can drive it directly without
+    /// racing the async subscription set up in `init`.
+    func handleBusEvent(_ event: AppEvent) async {
         switch event {
         case .installation(let installEvent):
             switch installEvent {
             case .progress(let state):
+                // Error presentation is owned by the `.failed` event, which
+                // carries the typed error. A `.progress(.error)` only has the
+                // localized string, so handling it here would flash the error
+                // screen before `.failed` routes an early cancel back to idle.
+                if case .error = state { return }
                 applyProgress(state)
             case .gameDetected(let info):
                 detectedGame = info
             case .failed(let error):
-                handleError(error)
+                handleInstallFailure(error)
                 stopStepTimer()
             case .completed:
                 currentState = .completed
@@ -309,14 +316,9 @@ class InstallationViewModel: ObservableObject {
             _ = try await installationService.performInstallation(context: context)
             currentState = .completed
         } catch {
-            handleError(error)
-            // Check if it's a cancellation error
-            if let installError = error as? InstallationError, installError == InstallationError.cancelled {
-                // User cancelled - just reset
-                currentState = .idle
-            } else {
-                handleError(error)
-            }
+            // The bus has already routed this failure (see handleBusEvent);
+            // this mirrors the same rule at the throw site.
+            handleInstallFailure(error)
         }
     }
     
@@ -390,6 +392,18 @@ class InstallationViewModel: ObservableObject {
     /// Handle errors
     private func handleError(_ error: Error) {
         currentState = .error(error.localizedDescription)
+    }
+
+    /// Route installation failures. Cancelling the initial disk-selection
+    /// dialog means the user never really started — quietly return to the
+    /// welcome screen. Cancelling any later prompt (disk 2, save location)
+    /// abandons work already done, so it shows the error screen.
+    private func handleInstallFailure(_ error: Error) {
+        if let installError = error as? InstallationError, installError == InstallationError.userCancelledBeforeStart {
+            currentState = .idle
+        } else {
+            handleError(error)
+        }
     }
     
     /// Reset to initial state

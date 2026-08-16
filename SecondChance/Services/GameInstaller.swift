@@ -874,6 +874,7 @@ enum InstallationError: LocalizedError, Equatable {
     case installerNotFound
     case gameExecutableNotFound
     case userCancelled
+    case userCancelledBeforeStart
     case diskNotFound
     case autoItNotAvailable
     case autoItScriptNotFound
@@ -893,6 +894,8 @@ enum InstallationError: LocalizedError, Equatable {
             return "Could not find game executable after installation"
         case .userCancelled:
             return "Installation cancelled by user"
+        case .userCancelledBeforeStart:
+            return "Installation cancelled before it started"
         case .diskNotFound:
             return "Could not find disk-1 or disk-combined directory"
         case .autoItNotAvailable:
@@ -907,6 +910,4 @@ enum InstallationError: LocalizedError, Equatable {
             return message
         }
     }
-    
-    static let cancelled = InstallationError.userCancelled
 }

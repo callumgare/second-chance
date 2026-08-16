@@ -166,7 +166,9 @@ class InteractiveContext: InstallationContext {
     func getDisk1Path() async throws -> URL {
         if let path = PreconfiguredPaths.disk1 { return path }
         guard let url = await selectDiskOrISO(message: "Select the first game disk or ISO:") else {
-            throw InstallationError.cancelled
+            // Cancelling the very first dialog means the user never started —
+            // distinct from cancelling a later prompt mid-install.
+            throw InstallationError.userCancelledBeforeStart
         }
         return url
     }
@@ -176,7 +178,7 @@ class InteractiveContext: InstallationContext {
         guard gameInfo.diskCount > 1 else { return nil }
         if let path = PreconfiguredPaths.disk2 { return path }
         guard let url = await selectDiskOrISO(message: "Select the second game disk or ISO:") else {
-            throw InstallationError.cancelled
+            throw InstallationError.userCancelled
         }
         return url
     }
@@ -199,7 +201,7 @@ class InteractiveContext: InstallationContext {
         }
         
         guard response == .OK, let url = panel.url else {
-            throw InstallationError.cancelled
+            throw InstallationError.userCancelled
         }
         return url
     }
