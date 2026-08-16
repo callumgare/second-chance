@@ -14,6 +14,13 @@ class DebugSettings: ObservableObject {
     @Published var skipInstaller: Bool
     @Published var debugMode: Bool
     @Published var showUnsupportedInstallOptions: Bool = false
+    /// Mirror every log entry to a file in Downloads (opt-in). Backfills the
+    /// whole current ring when enabled, then appends live.
+    @Published var mirrorLogsToDisk: Bool = false {
+        didSet {
+            LogStore.shared.setDiskMirror(enabled: mirrorLogsToDisk)
+        }
+    }
     
     private init() {
         // Check for command line flags
@@ -27,5 +34,6 @@ class DebugSettings: ObservableObject {
         skipInstaller = false
         debugMode = false
         showUnsupportedInstallOptions = false
+        mirrorLogsToDisk = false
     }
 }

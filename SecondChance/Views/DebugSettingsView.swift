@@ -54,6 +54,8 @@ struct DebugSettingsView: View {
                         }
                     ))
                     .help("Show or hide the floating log window.")
+                    Toggle("Mirror Logs to Disk", isOn: $settings.mirrorLogsToDisk)
+                        .help("Write every log entry to a file in Downloads (backfills the current log history, then appends live). The in-memory log used for Save Logs keeps only the last 50,000 entries; the mirror keeps everything.")
                 } header: {
                     Text("Debugging")
                         .font(.headline)
@@ -73,7 +75,7 @@ struct DebugSettingsView: View {
             
             Spacer()
         }
-        .frame(width: 500, height: 380)
+        .frame(width: 500, height: 420)
     }
 }
 

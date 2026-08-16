@@ -7,9 +7,9 @@
 import Foundation
 import AppKit
 import CoreGraphics
-import os
+import Logging
 
-private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "WindowManagement")
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.WindowManagement")
 
 // MARK: - Info Window Handler
 
@@ -47,7 +47,7 @@ enum InfoWindowHandler {
             for text in candidates {
                 for term in searchTerms {
                     if text.lowercased().contains(term.lowercased()) {
-                        logger.notice("  [DEBUG]     ✓ Found button: '\(text, privacy: .public)'")
+                        logger.notice("  [DEBUG]     ✓ Found button: '\(text)'")
                         return element
                     }
                 }
@@ -71,7 +71,7 @@ enum InfoWindowHandler {
     
     /// Find and dismiss the wrapper's info window with save warning
     static func dismissInfoWindow(wrapperPid: Int32, config: TestConfig) -> Bool {
-        logger.notice("🔍 Looking for wrapper info window from PID \(wrapperPid, privacy: .public)...")
+        logger.notice("🔍 Looking for wrapper info window from PID \(wrapperPid)...")
         
         let startTime = Date()
         
@@ -80,7 +80,7 @@ enum InfoWindowHandler {
             let options: CGWindowListOption = [.optionOnScreenOnly]
             let windowList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
             
-            logger.notice("  [DEBUG] Checking \(windowList.count, privacy: .public) windows for info window...")
+            logger.notice("  [DEBUG] Checking \(windowList.count) windows for info window...")
             
             // Find Nancy Drew info window
             for window in windowList {
@@ -93,13 +93,13 @@ enum InfoWindowHandler {
                 
                 // Show all windows with reasonable size
                 if width > 50 && height > 50 {
-                    logger.notice("  [DEBUG]   Window: '\(windowName, privacy: .public)' Owner: '\(ownerName, privacy: .public)' PID: \(windowPID ?? -1, privacy: .public) Size: \(Int(width), privacy: .public)x\(Int(height), privacy: .public)")
+                    logger.notice("  [DEBUG]   Window: '\(windowName)' Owner: '\(ownerName)' PID: \(windowPID ?? -1) Size: \(Int(width))x\(Int(height))")
                 }
                 
                 // Check if window is owned by the wrapper app
                 guard windowPID == wrapperPid else {
                     if width > 50 && height > 50 {
-                        logger.notice("  [DEBUG]     ✗ PID \(windowPID ?? -1, privacy: .public) doesn't match wrapper PID \(wrapperPid, privacy: .public)")
+                        logger.notice("  [DEBUG]     ✗ PID \(windowPID ?? -1) doesn't match wrapper PID \(wrapperPid)")
                     }
                     continue
                 }
@@ -108,7 +108,7 @@ enum InfoWindowHandler {
                 
                 guard windowName == "Nancy Drew" else {
                     if width > 50 && height > 50 {
-                        logger.notice("  [DEBUG]     ✗ Window name is '\(windowName, privacy: .public)', not 'Nancy Drew'")
+                        logger.notice("  [DEBUG]     ✗ Window name is '\(windowName)', not 'Nancy Drew'")
                     }
                     continue
                 }
@@ -125,11 +125,11 @@ enum InfoWindowHandler {
                 // Info window is typically around 450x200-300
                 let widthMatch = rect.width > 400 && rect.width < 500
                 let heightMatch = rect.height > 50 && rect.height < 400
-                logger.notice("  [DEBUG]     Width check: \(Int(rect.width), privacy: .public) (need 400-500): \(widthMatch ? "✓" : "✗", privacy: .public)")
-                logger.notice("  [DEBUG]     Height check: \(Int(rect.height), privacy: .public) (need 50-400): \(heightMatch ? "✓" : "✗", privacy: .public)")
+                logger.notice("  [DEBUG]     Width check: \(Int(rect.width)) (need 400-500): \(widthMatch ? "✓" : "✗")")
+                logger.notice("  [DEBUG]     Height check: \(Int(rect.height)) (need 50-400): \(heightMatch ? "✓" : "✗")")
                 
                 if widthMatch && heightMatch {
-                    logger.notice("  → Found info window: \(Int(rect.width), privacy: .public)x\(Int(rect.height), privacy: .public)")
+                    logger.notice("  → Found info window: \(Int(rect.width))x\(Int(rect.height))")
                     
                     // Wait a moment for window to be fully initialized
                     Thread.sleep(forTimeInterval: 0.5)
@@ -150,7 +150,7 @@ enum InfoWindowHandler {
                         } else if windowsResult == .cannotComplete {
                             retryCount += 1
                             if retryCount < maxRetries {
-                                logger.notice("  → Window not accessible yet, retrying (\(retryCount, privacy: .public)/\(maxRetries, privacy: .public))...")
+                                logger.notice("  → Window not accessible yet, retrying (\(retryCount)/\(maxRetries))...")
                                 Thread.sleep(forTimeInterval: 0.5)
                             }
                         } else {
@@ -160,13 +160,13 @@ enum InfoWindowHandler {
                     }
                     
                     if windowsResult == .success, let windows = windowsRef as? [AXUIElement] {
-                        logger.notice("  [DEBUG] Found \(windows.count, privacy: .public) accessible windows")
+                        logger.notice("  [DEBUG] Found \(windows.count) accessible windows")
                         
                         for (index, window) in windows.enumerated() {
                             var titleRef: CFTypeRef?
                             AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleRef)
                             let title = titleRef as? String ?? "(no title)"
-                            logger.notice("  [DEBUG]   Accessible window [\(index, privacy: .public)]: '\(title, privacy: .public)'")
+                            logger.notice("  [DEBUG]   Accessible window [\(index)]: '\(title)'")
                             
                             if title.contains("Nancy Drew") {
                                 logger.notice("  [DEBUG]     ✓ Found Nancy Drew window via Accessibility API")
@@ -186,7 +186,7 @@ enum InfoWindowHandler {
                                         AXValueGetValue(sizeValue as! AXValue, .cgSize, &size)
                                         
                                         let clickPoint = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
-                                        logger.notice("  ✓ Window has button - clicking at (\(Int(clickPoint.x), privacy: .public), \(Int(clickPoint.y), privacy: .public))")
+                                        logger.notice("  ✓ Window has button - clicking at (\(Int(clickPoint.x)), \(Int(clickPoint.y)))")
                                         InputControl.click(at: clickPoint)
                                         Thread.sleep(forTimeInterval: 0.5)
                                         
@@ -207,50 +207,50 @@ enum InfoWindowHandler {
                     }
                     
                     // Could not access window via Accessibility API - decode and report error
-                    logger.fault("❌ Could not access info window via Accessibility API")
-                    logger.fault("   Found window: \(Int(rect.width), privacy: .public)x\(Int(rect.height), privacy: .public) at PID \(wrapperPid, privacy: .public)")
-                    logger.fault("   AXError code: \(windowsResult.rawValue, privacy: .public)")
+                    logger.critical("❌ Could not access info window via Accessibility API")
+                    logger.critical("   Found window: \(Int(rect.width))x\(Int(rect.height)) at PID \(wrapperPid)")
+                    logger.critical("   AXError code: \(windowsResult.rawValue)")
                     
                     // Decode the error and show troubleshooting if needed
                     switch windowsResult {
                     case .apiDisabled:
-                        logger.fault("   Error: API Disabled (accessibility not enabled)")
+                        logger.critical("   Error: API Disabled (accessibility not enabled)")
                         logger.notice("   Troubleshooting:")
                         logger.notice("   1. Open System Settings → Privacy & Security → Accessibility")
                         logger.notice("   2. Ensure GamePuppeteer has Accessibility permission")
                         logger.notice("   3. Try relaunching GamePuppeteer after granting permission")
                     case .cannotComplete:
-                        logger.fault("   Error: Cannot Complete (window not ready after \(maxRetries, privacy: .public) retries)")
+                        logger.critical("   Error: Cannot Complete (window not ready after \(maxRetries) retries)")
                     case .success:
-                        logger.fault("   Error: Success (but windows array was invalid)")
+                        logger.critical("   Error: Success (but windows array was invalid)")
                     case .failure:
-                        logger.fault("   Error: Failure")
+                        logger.critical("   Error: Failure")
                     case .illegalArgument:
-                        logger.fault("   Error: Illegal Argument")
+                        logger.critical("   Error: Illegal Argument")
                     case .invalidUIElement:
-                        logger.fault("   Error: Invalid UI Element")
+                        logger.critical("   Error: Invalid UI Element")
                     case .invalidUIElementObserver:
-                        logger.fault("   Error: Invalid UI Element Observer")
+                        logger.critical("   Error: Invalid UI Element Observer")
                     case .attributeUnsupported:
-                        logger.fault("   Error: Attribute Unsupported")
+                        logger.critical("   Error: Attribute Unsupported")
                     case .actionUnsupported:
-                        logger.fault("   Error: Action Unsupported")
+                        logger.critical("   Error: Action Unsupported")
                     case .notificationUnsupported:
-                        logger.fault("   Error: Notification Unsupported")
+                        logger.critical("   Error: Notification Unsupported")
                     case .notImplemented:
-                        logger.fault("   Error: Not Implemented")
+                        logger.critical("   Error: Not Implemented")
                     case .notificationAlreadyRegistered:
-                        logger.fault("   Error: Notification Already Registered")
+                        logger.critical("   Error: Notification Already Registered")
                     case .notificationNotRegistered:
-                        logger.fault("   Error: Notification Not Registered")
+                        logger.critical("   Error: Notification Not Registered")
                     case .noValue:
-                        logger.fault("   Error: No Value")
+                        logger.critical("   Error: No Value")
                     case .parameterizedAttributeUnsupported:
-                        logger.fault("   Error: Parameterized Attribute Unsupported")
+                        logger.critical("   Error: Parameterized Attribute Unsupported")
                     case .notEnoughPrecision:
-                        logger.fault("   Error: Not Enough Precision")
+                        logger.critical("   Error: Not Enough Precision")
                     @unknown default:
-                        logger.fault("   Error: Unknown error")
+                        logger.critical("   Error: Unknown error")
                     }
                     return false
                 }
@@ -337,29 +337,29 @@ enum GameFocusDetector {
                     // Wait a bit longer to ensure window is fully rendered and stable
                     Thread.sleep(forTimeInterval: 10.0)
                     let elapsed = Date().timeIntervalSince(startTime)
-                    logger.notice("✅ Game is active after \(String(format: "%.1f", elapsed), privacy: .public)s")
+                    logger.notice("✅ Game is active after \(String(format: "%.1f", elapsed))s")
                     
                     return true
                 } else {
                     // Print status every 2 seconds
                     if Date().timeIntervalSince(lastPrintTime) >= 2.0 {
                         let elapsed = Date().timeIntervalSince(startTime)
-                        logger.notice("   [\(String(format: "%.1f", elapsed), privacy: .public)s] Game app not active yet, retrying...")
+                        logger.notice("   [\(String(format: "%.1f", elapsed))s] Game app not active yet, retrying...")
                         
                         // Also show what is currently frontmost
                         let frontmostApp = NSWorkspace.shared.frontmostApplication
                         let frontmostName = frontmostApp?.localizedName ?? frontmostApp?.bundleIdentifier ?? "unknown"
                         let frontmostPid = frontmostApp?.processIdentifier ?? -1
-                        logger.notice("   Current frontmost: \(frontmostName, privacy: .public) (PID: \(frontmostPid, privacy: .public)), Looking for PID: \(pid, privacy: .public)")
+                        logger.notice("   Current frontmost: \(frontmostName) (PID: \(frontmostPid)), Looking for PID: \(pid)")
                         lastPrintTime = Date()
                     }
                 }
             } else {
                 let elapsed = Int(Date().timeIntervalSince(startTime))
-                logger.notice("   [\(elapsed, privacy: .public)s] Game app not found in running applications...")
+                logger.notice("   [\(elapsed)s] Game app not found in running applications...")
                 
                 if elapsed >= Int(timeout) {
-                    logger.fault("❌ Timeout: Could not find game in running applications")
+                    logger.critical("❌ Timeout: Could not find game in running applications")
                     return false
                 }
             }
@@ -368,21 +368,23 @@ enum GameFocusDetector {
             Thread.sleep(forTimeInterval: 0.3)
         }
         
-        logger.fault("❌ Timeout: Game did not become active within \(Int(timeout), privacy: .public)s")
+        logger.critical("❌ Timeout: Game did not become active within \(Int(timeout))s")
         return false
     }
 }
 
 // MARK: - Window Detection
 
-struct ProcessInfo {
+/// Named GameProcessInfo to avoid shadowing Foundation.ProcessInfo — this
+/// target also compiles Shared/ sources that use the Foundation type.
+struct GameProcessInfo {
     let pid: Int32
     let name: String
 }
 
 enum WindowDetector {
     /// Get all processes for a specific game engine
-    static func getAllProcesses(for gameEngine: String) -> [ProcessInfo] {
+    static func getAllProcesses(for gameEngine: String) -> [GameProcessInfo] {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/ps")
         task.arguments = ["-A", "-o", "pid,comm"]
@@ -391,7 +393,7 @@ enum WindowDetector {
         task.standardOutput = pipe
         task.standardError = Pipe()
         
-        var processes: [ProcessInfo] = []
+        var processes: [GameProcessInfo] = []
         
         do {
             try task.run()
@@ -422,12 +424,12 @@ enum WindowDetector {
                     }
                     
                     if shouldInclude {
-                        processes.append(ProcessInfo(pid: pid, name: basename))
+                        processes.append(GameProcessInfo(pid: pid, name: basename))
                     }
                 }
             }
         } catch {
-            logger.error("  ⚠️  Error checking processes: \(error, privacy: .public)")
+            logger.error("  ⚠️  Error checking processes: \(error)")
         }
         
         return processes
@@ -435,21 +437,21 @@ enum WindowDetector {
     /// Wait for window with app name to appear (handles Wine and ScummVM)
     /// Returns the game process PID if found, nil otherwise
     static func waitForWindow(appName: String, wrapperPid: Int32, gameEngine: String, gameExeName: String, prefixPath: URL, timeout: TimeInterval) -> Int32? {
-        logger.notice("⏳ Waiting for game window to appear (timeout: \(Int(timeout), privacy: .public)s)...")
-        logger.notice("   Engine: \(gameEngine, privacy: .public)")
+        logger.notice("⏳ Waiting for game window to appear (timeout: \(Int(timeout))s)...")
+        logger.notice("   Engine: \(gameEngine)")
         
         // Determine what process to look for based on engine
         let processToFind: String
         if gameEngine.lowercased().contains("wine") {
             processToFind = gameExeName  // Wine: look for game executable (e.g., Game.exe)
-            logger.notice("   Looking for Wine process: \(processToFind, privacy: .public)")
-            logger.notice("   Wine prefix: \(prefixPath.path, privacy: .public)")
+            logger.notice("   Looking for Wine process: \(processToFind)")
+            logger.notice("   Wine prefix: \(prefixPath.path)")
         } else if gameEngine.lowercased().contains("scummvm") {
             processToFind = "scummvm"  // ScummVM: look for scummvm process
-            logger.notice("   Looking for ScummVM process: \(processToFind, privacy: .public)")
+            logger.notice("   Looking for ScummVM process: \(processToFind)")
         } else {
             processToFind = gameExeName  // Default: look for game executable
-            logger.notice("   Looking for process: \(processToFind, privacy: .public)")
+            logger.notice("   Looking for process: \(processToFind)")
         }
         
         let startTime = Date()
@@ -457,7 +459,7 @@ enum WindowDetector {
         var gamePid: Int32?
         
         // Step 1: Wait for game executable/engine process to appear
-        logger.notice("[Step 1] Monitoring for \(processToFind, privacy: .public) process...")
+        logger.notice("[Step 1] Monitoring for \(processToFind) process...")
         let processTimeout: TimeInterval = timeout * 0.7  // Use 70% of timeout for process detection
         
         while Date().timeIntervalSince(startTime) < processTimeout {
@@ -466,14 +468,14 @@ enum WindowDetector {
             // Print debug info every 5 seconds
             if Date().timeIntervalSince(lastPrintTime) >= 5 {
                 let elapsed = Int(Date().timeIntervalSince(startTime))
-                logger.notice("   [\(elapsed, privacy: .public)s] Checking for \(processToFind, privacy: .public) process...")
-                logger.notice("   Found \(processes.count, privacy: .public) total processes")
+                logger.notice("   [\(elapsed)s] Checking for \(processToFind) process...")
+                logger.notice("   Found \(processes.count) total processes")
                 lastPrintTime = Date()
             }
             
             // Look for the specific process
             if let gameProcess = processes.first(where: { $0.name.lowercased() == processToFind.lowercased() }) {
-                logger.notice("✅ \(processToFind, privacy: .public) process detected (PID: \(gameProcess.pid, privacy: .public))")
+                logger.notice("✅ \(processToFind) process detected (PID: \(gameProcess.pid))")
                 gamePid = gameProcess.pid
                 break
             }
@@ -482,12 +484,12 @@ enum WindowDetector {
         }
         
         guard let pid = gamePid else {
-            logger.fault("❌ Timeout: \(processToFind, privacy: .public) process not detected")
+            logger.critical("❌ Timeout: \(processToFind) process not detected")
             return nil
         }
         
         // Step 2: Wait for window owned by game process
-        logger.notice("\n[Step 2] Monitoring for windows from \(processToFind, privacy: .public) (PID: \(pid, privacy: .public))...")
+        logger.notice("\n[Step 2] Monitoring for windows from \(processToFind) (PID: \(pid))...")
         let windowStartTime = Date()
         let windowTimeout: TimeInterval = 30.0
         
@@ -506,15 +508,15 @@ enum WindowDetector {
             if !gameWindows.isEmpty {
                 
                 let totalElapsed = Date().timeIntervalSince(startTime)
-                logger.notice("✅ Game window detected after \(String(format: "%.1f", totalElapsed), privacy: .public)s")
-                logger.notice("   Found \(gameWindows.count, privacy: .public) window(s) from \(processToFind, privacy: .public)")
+                logger.notice("✅ Game window detected after \(String(format: "%.1f", totalElapsed))s")
+                logger.notice("   Found \(gameWindows.count) window(s) from \(processToFind)")
                 
                 for (index, window) in gameWindows.enumerated() {
                     let windowName = window[kCGWindowName as String] as? String ?? "(unnamed)"
                     let bounds = window[kCGWindowBounds as String] as? [String: CGFloat] ?? [:]
                     let width = Int(bounds["Width"] ?? 0)
                     let height = Int(bounds["Height"] ?? 0)
-                    logger.notice("   [\(index + 1, privacy: .public)] \(windowName, privacy: .public) - \(width, privacy: .public)x\(height, privacy: .public)")
+                    logger.notice("   [\(index + 1)] \(windowName) - \(width)x\(height)")
                 }
                 
                 // Wait for window to be focused
@@ -541,7 +543,7 @@ enum WindowDetector {
                     windowScreenshotTask.arguments = ["-x", "-l\(windowNumber)", windowScreenshotPath]
                     try? windowScreenshotTask.run()
                     windowScreenshotTask.waitUntilExit()
-                    logger.notice("📸 Window screenshot: \(windowScreenshotPath, privacy: .public)")
+                    logger.notice("📸 Window screenshot: \(windowScreenshotPath)")
                 } else {
                     logger.error("⚠️  Could not get window ID for screenshot")
                 }
@@ -553,20 +555,20 @@ enum WindowDetector {
                 fullScreenshotTask.arguments = ["-x", fullScreenshotPath]
                 try? fullScreenshotTask.run()
                 fullScreenshotTask.waitUntilExit()
-                logger.notice("📸 Full screen screenshot: \(fullScreenshotPath, privacy: .public)")
+                logger.notice("📸 Full screen screenshot: \(fullScreenshotPath)")
                 
                 return pid
             }
             
             if elapsed % 5 == 0 {
-                logger.notice("   [\(elapsed, privacy: .public)s] No windows yet, still waiting...")
+                logger.notice("   [\(elapsed)s] No windows yet, still waiting...")
             }
             
             Thread.sleep(forTimeInterval: 0.2)
         }
         
-        logger.fault("❌ Timeout: \(processToFind, privacy: .public) process found but no windows appeared")
-        logger.fault("   Final window list:")
+        logger.critical("❌ Timeout: \(processToFind) process found but no windows appeared")
+        logger.critical("   Final window list:")
         printAllWindows()
         return nil
     }
@@ -586,7 +588,7 @@ enum WindowDetector {
             
             // Only show windows with reasonable size (filter out tiny helper windows)
             if width > 50 && height > 50 {
-                logger.notice("   [\(index, privacy: .public)] Owner: '\(ownerName, privacy: .public)' | Title: '\(windowTitle, privacy: .public)' | Size: \(width, privacy: .public)x\(height, privacy: .public)")
+                logger.notice("   [\(index)] Owner: '\(ownerName)' | Title: '\(windowTitle)' | Size: \(width)x\(height)")
             }
         }
     }

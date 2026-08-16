@@ -138,10 +138,7 @@ build_app_if_needed() {
         BUILD_LOG="$SCRIPT_DIR/DerivedData/build-log-$(date +%Y%m%d-%H%M%S).txt"
         mkdir -p "$(dirname "$BUILD_LOG")"
         
-        if ! "$BUILD_SCRIPT" > "$BUILD_LOG" 2>"$BUILD_LOG"; then
-            echo -e "${RED}❌ Build failed! Check log: $BUILD_LOG${NC}"
-            exit 1
-        fi
+        "$BUILD_SCRIPT"
     fi
 }
 
@@ -151,11 +148,13 @@ launch_game_if_requested() {
     
     if [[ "$LAUNCH_GAME_FLAG" == true ]]; then
         echo -e "${BLUE}🎮 Launching game: $(basename "$game_app_path" .app)${NC}"
+        # Exec the binary directly so the game's stdio (and thus the
+        # GameWrapper's stderr log stream) reaches this terminal.
         if [[ ${#APP_ARGS[@]} -gt 0 ]]; then
             echo -e "${BLUE}   Arguments: ${APP_ARGS[*]}${NC}"
-            open "$game_app_path" --args "${APP_ARGS[@]}"
+            "$game_app_path/Contents/MacOS/GameWrapper" "${APP_ARGS[@]}"
         else
-            open "$game_app_path"
+            "$game_app_path/Contents/MacOS/GameWrapper"
         fi
     fi
 }
@@ -230,16 +229,12 @@ fi
 # Build if needed
 build_app_if_needed "$FORCE_REBUILD_APP"
 
-# Run the app
+# Run the app — binary directly, not `open`, so stdio stays attached to
+# this terminal and the app's stderr log stream works from the first line.
 echo -e "${BLUE}🚀 Running Second Chance...${NC}"
 if [[ " ${DEBUG_FLAGS[*]} " == *" --debug "* ]]; then
     echo -e "${BLUE}   Debug mode enabled${NC}"
 fi
-open "$APP_PATH" --args "${DEBUG_FLAGS[@]}"
-
-# Wait for the app to quit
-while pgrep -f "Second Chance.app/Contents/MacOS/Second Chance" > /dev/null 2>&1; do
-    sleep 1
-done
+"$APP_PATH/Contents/MacOS/Second Chance" "${DEBUG_FLAGS[@]}"
 
 echo -e "${GREEN}✅ Second Chance quit${NC}"

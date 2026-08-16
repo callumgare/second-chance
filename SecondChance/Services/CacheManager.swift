@@ -5,14 +5,14 @@
 //  Manages caching and restoration of wrapper states for debugging
 
 import Foundation
-import os
+import Logging
 
 /// Manages the caching system for wrapper creation stages
 class CacheManager {
     static let shared = CacheManager()
     
     private let fileManager = FileManager.default
-    private let logger = Logger(subsystem: "com.secondchance", category: "CacheManager")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.CacheManager")
     private var cacheDirectory: URL
     
     private init() {
@@ -70,7 +70,7 @@ class CacheManager {
         let data = try encoder.encode(metadata)
         try data.write(to: metadataPath)
         
-        logger.notice("✓ Cached wrapper at stage: \(stage.displayName, privacy: .public)")
+        logger.notice("✓ Cached wrapper at stage: \(stage.displayName)")
     }
     
     /// Attempt to restore a wrapper from cache at a specific stage
@@ -101,7 +101,7 @@ class CacheManager {
         // Copy cached wrapper to destination
         try fileManager.copyItem(at: cachedWrapperPath, to: destinationPath)
         
-        logger.notice("✓ Restored wrapper from cache: \(stage.displayName, privacy: .public)")
+        logger.notice("✓ Restored wrapper from cache: \(stage.displayName)")
         return metadata
     }
     
@@ -116,7 +116,7 @@ class CacheManager {
     func clearCache(for stage: CacheStage) throws {
         let stageDir = cacheDirectory.appendingPathComponent(stage.rawValue)
         try fileManager.removeItem(at: stageDir)
-        logger.notice("✓ Cleared cache for: \(stage.displayName, privacy: .public)")
+        logger.notice("✓ Cleared cache for: \(stage.displayName)")
     }
     
     /// List all available cached stages

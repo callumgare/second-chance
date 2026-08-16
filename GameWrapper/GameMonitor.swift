@@ -6,7 +6,7 @@
 
 import Foundation
 import AppKit
-import os
+import Logging
 
 // MARK: - Wine Process Info
 
@@ -38,7 +38,7 @@ class GameMonitor {
     private let debugMode: Bool
     private let exitCodeLock = NSLock()
     private var _exitCode: Int32? = nil
-    private let logger = Logger(subsystem: "com.secondchance.gamewrapper", category: "GameMonitor")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GameWrapper.GameMonitor")
     
     var exitCode: Int32? {
         exitCodeLock.withLock { _exitCode }
@@ -64,7 +64,7 @@ class GameMonitor {
         case "scummvm":
             return waitForScummVMGameToStart(gamePid: gamePid)
         default:
-            logger.error("[Game Monitor] Unknown game engine: \(self.gameEngine, privacy: .public)")
+            logger.error("[Game Monitor] Unknown game engine: \(self.gameEngine)")
             return nil
         }
     }
@@ -84,7 +84,7 @@ class GameMonitor {
         case "scummvm":
             waitForScummVMGameToStop(gamePid: gamePid, process: process)
         default:
-            logger.error("[Game Monitor] Unknown game engine: \(self.gameEngine, privacy: .public)")
+            logger.error("[Game Monitor] Unknown game engine: \(self.gameEngine)")
             isMonitoring = false
         }
     }
@@ -133,10 +133,10 @@ class GameMonitor {
                 }
                 
                 let pids = processes.map { $0.pid }.sorted().joined(separator: ", ")
-                logger.notice("[Wine Processes] Found \(processes.count, privacy: .public) wine-related processes: \(pids, privacy: .public)")
+                logger.notice("[Wine Processes] Found \(processes.count) wine-related processes: \(pids)")
             }
         } catch {
-            logger.error("[Wine Processes] Error checking processes: \(error, privacy: .public)")
+            logger.error("[Wine Processes] Error checking processes: \(error)")
         }
         
         return processes
@@ -144,8 +144,8 @@ class GameMonitor {
     
     /// Wait for Wine game executable to start
     private func waitForWineGameToStart(gameExeName: String, timeout: TimeInterval = 120) -> Int32? {
-        logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName, privacy: .public)")
-        logger.notice("[Game Monitor] Wine prefix: \(self.config.winePrefix.path, privacy: .public)")
+        logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName)")
+        logger.notice("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
         
         let startTime = Date()
         var gamePid: Int32? = nil
@@ -156,11 +156,11 @@ class GameMonitor {
             for process in processes {
                 if process.basename.lowercased() == gameExeName.lowercased() {
                     logger.notice("[Game Monitor] ✅ Game executable started!")
-                    logger.notice("[Game Monitor]   - Process: \(process.basename, privacy: .public)")
-                    logger.notice("[Game Monitor]   - PID: \(process.pid, privacy: .public)")
-                    logger.notice("[Game Monitor]   - Parent PID: \(process.ppid, privacy: .public)")
-                    logger.notice("[Game Monitor]   - Full path: \(process.command, privacy: .public)")
-                    logger.notice("[Game Monitor]   - Time to start: \(String(format: "%.1f", Date().timeIntervalSince(startTime)), privacy: .public)s")
+                    logger.notice("[Game Monitor]   - Process: \(process.basename)")
+                    logger.notice("[Game Monitor]   - PID: \(process.pid)")
+                    logger.notice("[Game Monitor]   - Parent PID: \(process.ppid)")
+                    logger.notice("[Game Monitor]   - Full path: \(process.command)")
+                    logger.notice("[Game Monitor]   - Time to start: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s")
                     
                     if let pid = Int32(process.pid) {
                         gamePid = pid
@@ -171,7 +171,7 @@ class GameMonitor {
                     logger.notice("[Game Monitor] All Wine processes in this session:")
                     for proc in processes.sorted(by: { $0.basename < $1.basename }) {
                         let marker = proc.basename.lowercased() == gameExeName.lowercased() ? " 🎮" : ""
-                        logger.notice("[Game Monitor]   - \(proc.basename, privacy: .public) (PID \(proc.pid, privacy: .public))\(marker, privacy: .public)")
+                        logger.notice("[Game Monitor]   - \(proc.basename) (PID \(proc.pid))\(marker)")
                     }
                     
                     break
@@ -184,7 +184,7 @@ class GameMonitor {
         }
         
         if gamePid == nil {
-            logger.error("[Game Monitor] ⚠️ Game executable not detected within \(Int(timeout), privacy: .public)s timeout")
+            logger.error("[Game Monitor] ⚠️ Game executable not detected within \(Int(timeout))s timeout")
         }
         
         return gamePid
@@ -192,7 +192,7 @@ class GameMonitor {
     
     /// Wait for ScummVM game to start (ScummVM starts immediately)
     private func waitForScummVMGameToStart(gamePid: Int32) -> Int32? {
-        logger.notice("[Game Monitor] ScummVM game started with PID \(gamePid, privacy: .public)")
+        logger.notice("[Game Monitor] ScummVM game started with PID \(gamePid)")
         self.delegate?.gameMonitorDidDetectGameStart(pid: gamePid)
         return gamePid
     }
@@ -218,10 +218,10 @@ class GameMonitor {
             if !gameWindows.isEmpty {
                 windowDetected = true
                 let windowWaitTime = Date().timeIntervalSince(windowStartTime)
-                logger.notice("[Game Monitor] ✅ Window detected after \(String(format: "%.1f", windowWaitTime), privacy: .public)s")
+                logger.notice("[Game Monitor] ✅ Window detected after \(String(format: "%.1f", windowWaitTime))s")
                 
                 // Print window details
-                logger.notice("[Game Monitor] Game process windows (\(gameWindows.count, privacy: .public)):")
+                logger.notice("[Game Monitor] Game process windows (\(gameWindows.count)):")
                 for (index, window) in gameWindows.enumerated() {
                     let windowName = window[kCGWindowName as String] as? String ?? "(unnamed)"
                     let windowNumber = window[kCGWindowNumber as String] as? Int32 ?? 0
@@ -230,16 +230,16 @@ class GameMonitor {
                     let width = bounds["Width"] ?? 0
                     let height = bounds["Height"] ?? 0
                     
-                    logger.notice("[Game Monitor]   [\(index + 1, privacy: .public)] \"\(windowName, privacy: .public)\"")
-                    logger.notice("[Game Monitor]       Window ID: \(windowNumber, privacy: .public)")
-                    logger.notice("[Game Monitor]       Size: \(Int(width), privacy: .public) x \(Int(height), privacy: .public)")
-                    logger.notice("[Game Monitor]       Layer: \(windowLayer, privacy: .public)")
+                    logger.notice("[Game Monitor]   [\(index + 1)] \"\(windowName)\"")
+                    logger.notice("[Game Monitor]       Window ID: \(windowNumber)")
+                    logger.notice("[Game Monitor]       Size: \(Int(width)) x \(Int(height))")
+                    logger.notice("[Game Monitor]       Layer: \(windowLayer)")
                 }
                 
                 // Notify info window if it exists
                 if let infoWindow = infoWindow {
                     DispatchQueue.main.async {
-                        Logger(subsystem: "com.secondchance.gamewrapper", category: "GameMonitor").notice("[Game Monitor] Notifying info window that game has loaded...")
+                        Logger(label: "au.gare.callum.second-chance.GameWrapper.GameMonitor").notice("[Game Monitor] Notifying info window that game has loaded...")
                         infoWindow.notifyGameLoaded()
                     }
                 }
@@ -264,7 +264,7 @@ class GameMonitor {
         }
         
         if !windowDetected {
-            logger.error("[Game Monitor] ⚠️ No windows detected after \(Int(windowTimeout), privacy: .public)s timeout")
+            logger.error("[Game Monitor] ⚠️ No windows detected after \(Int(windowTimeout))s timeout")
             // Notify info window even if no windows detected (treat as loaded)
             DispatchQueue.main.async {
                 infoWindow?.notifyGameLoaded()
@@ -281,7 +281,7 @@ class GameMonitor {
         }
         
         DispatchQueue.main.async {
-            Logger(subsystem: "com.secondchance.gamewrapper", category: "GameMonitor").notice("[Game Monitor] Hiding wrapper app from dock...")
+            Logger(label: "au.gare.callum.second-chance.GameWrapper.GameMonitor").notice("[Game Monitor] Hiding wrapper app from dock...")
             NSApp.setActivationPolicy(.accessory)
         }
     }
@@ -290,7 +290,7 @@ class GameMonitor {
     
     /// Wait for Wine game to stop
     private func waitForWineGameToStop(winePid: Int32) {
-        logger.notice("[Process Monitor] Waiting for Wine game to stop (PID \(winePid, privacy: .public))")
+        logger.notice("[Process Monitor] Waiting for Wine game to stop (PID \(winePid))")
         
         var lastProcessList: Set<String> = []
         
@@ -312,7 +312,7 @@ class GameMonitor {
                 checkProcess.waitUntilExit()
                 
                 if checkProcess.terminationStatus != 0 {
-                    logger.notice("[Process Monitor] Wine process \(winePid, privacy: .public) has terminated")
+                    logger.notice("[Process Monitor] Wine process \(winePid) has terminated")
                     // Store exit code - Wine exit codes are typically 0 or non-zero from wineserver
                     self.setExitCode(Int32(checkProcess.terminationStatus))
                     self.isMonitoring = false
@@ -320,9 +320,9 @@ class GameMonitor {
                     break
                 }
                 
-                logger.notice("[Process Monitor] Wine process \(winePid, privacy: .public) is still running")
+                logger.notice("[Process Monitor] Wine process \(winePid) is still running")
             } catch {
-                logger.error("[Process Monitor] Error checking wine process: \(error, privacy: .public)")
+                logger.error("[Process Monitor] Error checking wine process: \(error)")
                 self.setExitCode(-1)
                 self.isMonitoring = false
                 self.delegate?.gameMonitorGameDidTerminate(exitCode: -1)
@@ -342,18 +342,18 @@ class GameMonitor {
     
     /// Wait for ScummVM game to stop
     private func waitForScummVMGameToStop(gamePid: Int32, process: Process?) {
-        logger.notice("[Process Monitor] Waiting for ScummVM game to stop (PID \(gamePid, privacy: .public))")
+        logger.notice("[Process Monitor] Waiting for ScummVM game to stop (PID \(gamePid))")
         
         // If we have the process object, use it directly for better reliability
         if let process = process {
             if process.isRunning {
                 process.waitUntilExit()
             }
-            logger.notice("[Process Monitor] ScummVM process \(gamePid, privacy: .public) has terminated")
+            logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
             // Capture exit code while we safely have access to the process object
             let exitCode = process.terminationStatus
             self.setExitCode(exitCode)
-            logger.notice("[Process Monitor] ScummVM exit code: \(exitCode, privacy: .public)")
+            logger.notice("[Process Monitor] ScummVM exit code: \(exitCode)")
         } else {
             // Fallback: poll using ps if we don't have the process object
             while true {
@@ -368,14 +368,14 @@ class GameMonitor {
                     checkProcess.waitUntilExit()
                     
                     if checkProcess.terminationStatus != 0 {
-                        logger.notice("[Process Monitor] ScummVM process \(gamePid, privacy: .public) has terminated")
+                        logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
                         self.setExitCode(0)  // Process is gone, assume success
                         break
                     }
                     
-                    logger.notice("[Process Monitor] ScummVM process \(gamePid, privacy: .public) is still running")
+                    logger.notice("[Process Monitor] ScummVM process \(gamePid) is still running")
                 } catch {
-                    logger.error("[Process Monitor] Error checking ScummVM process: \(error, privacy: .public)")
+                    logger.error("[Process Monitor] Error checking ScummVM process: \(error)")
                     self.setExitCode(-1)
                     break
                 }
@@ -409,10 +409,10 @@ class GameMonitor {
             logger.notice("[Process Monitor] ps command started, reading output...")
             
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            logger.notice("[Process Monitor] Read \(data.count, privacy: .public) bytes from ps output")
+            logger.notice("[Process Monitor] Read \(data.count) bytes from ps output")
             
             psProcess.waitUntilExit()
-            logger.notice("[Process Monitor] ps command completed with status: \(psProcess.terminationStatus, privacy: .public)")
+            logger.notice("[Process Monitor] ps command completed with status: \(psProcess.terminationStatus)")
             
             if let output = String(data: data, encoding: .utf8) {
                 logger.notice("[Process Monitor] Successfully decoded output, parsing lines...")
@@ -433,7 +433,7 @@ class GameMonitor {
                 }
             }
         } catch {
-            logger.error("[Process Monitor] Error checking processes: \(error, privacy: .public)")
+            logger.error("[Process Monitor] Error checking processes: \(error)")
         }
         
         return wineProcesses
@@ -537,12 +537,12 @@ class GameMonitor {
         
         // Only print if the process list has changed
         if currentProcessList != lastProcessList {
-            logger.notice("[Process Monitor] Wine processes (\(wineProcesses.count, privacy: .public) total):")
+            logger.notice("[Process Monitor] Wine processes (\(wineProcesses.count) total):")
             for line in processLines {
-                logger.notice("\(line, privacy: .public)")
+                logger.notice("\(line)")
             }
         } else {
-            logger.notice("[Process Monitor] Process list unchanged (\(wineProcesses.count, privacy: .public) processes)")
+            logger.notice("[Process Monitor] Process list unchanged (\(wineProcesses.count) processes)")
         }
         
         return currentProcessList

@@ -4,10 +4,10 @@
 
 import Testing
 import Foundation
-import os
+import Logging
 @testable import SecondChance
 
-@Suite("LogWindow streaming")
+@Suite("LogWindow streaming", .serialized)
 struct LogWindowTests {
 
     actor LineCollector {
@@ -16,30 +16,106 @@ struct LogWindowTests {
         func contains(text: String) -> Bool { lines.contains { $0.contains(text) } }
     }
 
-    @Test("Log stream delivers entries to onLine callback")
-    func streamingDeliversEntries() async throws {
+    @Test("Log window delivers entries to onLine callback")
+    func windowDeliversEntries() async throws {
         let marker = "LogWindowTest-\(UUID().uuidString)"
         let window = LogWindow()
         let collector = LineCollector()
 
-        window.onLine = { line in Task { await collector.add(line) } }
+        await MainActor.run {
+            window.onLine = { line in Task { await collector.add(line) } }
+        }
 
-        window.startStreaming(pid: ProcessInfo.processInfo.processIdentifier, since: Date())
+        // Emit through the host app's bootstrapped logging system, then show
+        // the window: the LogStore snapshot carries the marker as history.
+        Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(marker)")
 
-        // Give log stream time to connect before emitting
-        try await Task.sleep(for: .seconds(1))
+        await MainActor.run {
+            window.showLogWindow(title: "Test - Log Window")
+        }
 
-        Logger(subsystem: "com.secondchance", category: "test").notice("\(marker, privacy: .public)")
+        // The snapshot is delivered synchronously on show; allow a brief hop
+        // for the collector tasks, then assert.
+        try await Task.sleep(for: .milliseconds(200))
 
-        // Poll up to 5 s for the marker to appear
-        let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline {
-            if await collector.contains(text: marker) { break }
-            try await Task.sleep(for: .milliseconds(250))
+        await MainActor.run {
+            window.hideLogWindow()
         }
 
         let found = await collector.contains(text: marker)
         let count = await collector.lines.count
-        #expect(found, "log stream did not deliver marker within 5 s — \(count) lines received")
+        #expect(found, "log window did not deliver marker — \(count) lines received")
+    }
+
+    @Test("Live entries stream to an open window")
+    func liveEntriesStream() async throws {
+        let marker = "LogWindowLiveTest-\(UUID().uuidString)"
+        let window = LogWindow()
+        let collector = LineCollector()
+
+        await MainActor.run {
+            window.onLine = { line in Task { await collector.add(line) } }
+            window.showLogWindow(title: "Test - Live Streaming")
+        }
+
+        // Emitted after subscribing — must arrive via the live batch path.
+        Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(marker)")
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if await collector.contains(text: marker) { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+
+        await MainActor.run {
+            window.hideLogWindow()
+        }
+
+        let found = await collector.contains(text: marker)
+        #expect(found, "live entry did not reach the open window within 2 s")
+    }
+
+    @Test("Reopening the window does not duplicate history")
+    func reopenDoesNotDuplicateHistory() async throws {
+        let marker = "LogWindowReopenTest-\(UUID().uuidString)"
+        // Emit before opening so the marker is part of the history snapshot.
+        Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(marker)")
+
+        let window = LogWindow()
+
+        func occurrences(of marker: String) -> Int {
+            window.displayedTextForTesting.components(separatedBy: marker).count - 1
+        }
+
+        await MainActor.run {
+            window.showLogWindow(title: "Test - Reopen")
+        }
+        // Allow the coalesced flush (100 ms deadline) to render the snapshot.
+        try await Task.sleep(for: .milliseconds(400))
+        let firstOpenCount = await MainActor.run { occurrences(of: marker) }
+        #expect(firstOpenCount == 1, "marker appeared \(firstOpenCount)× on first open — expected exactly 1")
+
+        // Close and reopen: the controller (and its text storage) persists,
+        // and the snapshot replays. The display must start fresh, not append.
+        await MainActor.run {
+            window.hideLogWindow()
+            window.showLogWindow(title: "Test - Reopen")
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        let secondOpenCount = await MainActor.run { occurrences(of: marker) }
+        #expect(secondOpenCount == 1, "marker appeared \(secondOpenCount)× after reopen — history duplicated")
+
+        // And once more for good measure (the bug compounded per open).
+        await MainActor.run {
+            window.hideLogWindow()
+            window.showLogWindow(title: "Test - Reopen")
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        let thirdOpenCount = await MainActor.run { occurrences(of: marker) }
+        #expect(thirdOpenCount == 1, "marker appeared \(thirdOpenCount)× after second reopen — history duplicated")
+
+        await MainActor.run {
+            window.hideLogWindow()
+        }
     }
 }

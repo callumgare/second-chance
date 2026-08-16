@@ -6,6 +6,9 @@
 //  without requiring SecondChance-specific dependencies
 
 import Foundation
+import Logging
+
+private nonisolated let wineUtilitiesLogger = Logger(label: "au.gare.callum.second-chance.Shared.WineUtilities")
 
 /// Utility functions for Wine operations that don't require progress reporting
 class WineUtilities {
@@ -16,7 +19,7 @@ class WineUtilities {
         let wine = WineEnvironment(appPath: wrapperPath, customPrefixDir: customPrefixDir)
         
         // Try graceful shutdown with -w (wait for processes to exit)
-        print("[Wine Cleanup] Running wineserver -w (waiting for processes to exit cleanly)...")
+        wineUtilitiesLogger.notice("[Wine Cleanup] Running wineserver -w (waiting for processes to exit cleanly)...")
         let waitProcess = Process()
         waitProcess.executableURL = URL(fileURLWithPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
         waitProcess.arguments = ["-w"]
@@ -34,11 +37,11 @@ class WineUtilities {
             }
             
             if waitProcess.isRunning {
-                print("[Wine Cleanup] Graceful shutdown timed out after 5 seconds")
+                wineUtilitiesLogger.error("[Wine Cleanup] Graceful shutdown timed out after 5 seconds")
                 waitProcess.terminate()
                 
                 // Force termination with -k (SIGTERM) - don't wait for it
-                print("[Wine Cleanup] Running wineserver -k (sending SIGTERM)...")
+                wineUtilitiesLogger.notice("[Wine Cleanup] Running wineserver -k (sending SIGTERM)...")
                 let killProcess = Process()
                 killProcess.executableURL = URL(fileURLWithPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
                 killProcess.arguments = ["-k"]
@@ -49,7 +52,7 @@ class WineUtilities {
                 Thread.sleep(forTimeInterval: 5.0)
                 
                 // Force kill with -k9 (SIGKILL) regardless of whether -k finished
-                print("[Wine Cleanup] Running wineserver -k9 (sending SIGKILL)...")
+                wineUtilitiesLogger.notice("[Wine Cleanup] Running wineserver -k9 (sending SIGKILL)...")
                 let killForceProcess = Process()
                 killForceProcess.executableURL = URL(fileURLWithPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
                 killForceProcess.arguments = ["-k9"]
@@ -57,10 +60,10 @@ class WineUtilities {
                 try killForceProcess.run()
                 killForceProcess.waitUntilExit()
             } else {
-                print("[Wine Cleanup] Processes exited cleanly")
+                wineUtilitiesLogger.notice("[Wine Cleanup] Processes exited cleanly")
             }
         } catch {
-            print("[Wine Cleanup] Error during wineserver cleanup: \(error)")
+            wineUtilitiesLogger.error("[Wine Cleanup] Error during wineserver cleanup: \(error)")
         }
     }
 }

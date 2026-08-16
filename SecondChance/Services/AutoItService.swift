@@ -5,7 +5,7 @@
 //  Provides centralized access to bundled AutoIt for automating installer dialogs
 
 import Foundation
-import os
+import Logging
 
 /// Service for running AutoIt scripts to automate installation dialogs
 class AutoItService {
@@ -14,22 +14,22 @@ class AutoItService {
     let autoitPath: String
     let autoitDir: URL
     private let fileManager = FileManager.default
-    private let logger = Logger(subsystem: "com.secondchance", category: "AutoItService")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.AutoItService")
     
     private init() {
         // Get path to AutoIt bundled in app
         let bundleResourcePath = Bundle.main.resourceURL?.appendingPathComponent("autoit")
-        logger.notice("🔍 Looking for bundled AutoIt at: \(bundleResourcePath?.path ?? "nil", privacy: .public)")
+        logger.notice("🔍 Looking for bundled AutoIt at: \(bundleResourcePath?.path ?? "nil")")
         
         if let bundlePath = bundleResourcePath, fileManager.fileExists(atPath: bundlePath.path) {
             autoitDir = bundlePath
             // AutoIt3.exe is the main executable
             autoitPath = bundlePath.appendingPathComponent("AutoIt3.exe").path
-            logger.notice("✅ Found bundled AutoIt at: \(bundlePath.path, privacy: .public)")
+            logger.notice("✅ Found bundled AutoIt at: \(bundlePath.path)")
         } else {
-            logger.fault("❌ ERROR: Bundled AutoIt not found!")
-            logger.notice("   Bundle.main.resourceURL: \(Bundle.main.resourceURL?.path ?? "nil", privacy: .public)")
-            logger.notice("   Expected at: \(bundleResourcePath?.path ?? "nil", privacy: .public)")
+            logger.critical("❌ ERROR: Bundled AutoIt not found!")
+            logger.notice("   Bundle.main.resourceURL: \(Bundle.main.resourceURL?.path ?? "nil")")
+            logger.notice("   Expected at: \(bundleResourcePath?.path ?? "nil")")
             // Use a non-existent path that will fail explicitly
             autoitPath = "/AUTOIT_NOT_BUNDLED"
             autoitDir = URL(fileURLWithPath: "/AUTOIT_NOT_BUNDLED")

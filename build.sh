@@ -58,7 +58,7 @@ else
     XCBEAUTIFY_OPTIONS=""
 fi
 
-NSUnbufferedIO=YES xcodebuild -project "$SCRIPT_DIR/SecondChance.xcodeproj" \
+NSUnbufferedIO=YES arch -x86_64 xcodebuild -project "$SCRIPT_DIR/SecondChance.xcodeproj" \
     -scheme SecondChance \
     -configuration Debug \
     -derivedDataPath "$DERIVED_DATA_PATH" \

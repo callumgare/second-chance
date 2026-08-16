@@ -5,7 +5,7 @@
 //  Manages Wine environment and execution
 
 import Foundation
-import os
+import Logging
 import AppKit
 
 // Note: WineEnvironment is defined in this same module
@@ -16,7 +16,7 @@ class WineManager {
     
     private let fileManager = FileManager.default
     private let prefixCacheDir: URL
-    private let logger = Logger(subsystem: "com.secondchance", category: "WineManager")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineManager")
     
     private init() {
         // Set up prefix cache directory in user's Caches (persists between runs)
@@ -72,7 +72,7 @@ class WineManager {
         let cachedPrefixDir = prefixCacheDir.appendingPathComponent(buildId)
         let cachedPrefix = cachedPrefixDir.appendingPathComponent("prefix")
         
-        logger.notice("Caching Wine prefix for build: \(buildId, privacy: .public)...")
+        logger.notice("Caching Wine prefix for build: \(buildId)...")
         
         // Remove old cache for this build if it exists
         try? fileManager.removeItem(at: cachedPrefixDir)
@@ -83,7 +83,7 @@ class WineManager {
         // Copy prefix to cache
         try fileManager.copyItem(at: sourcePath, to: cachedPrefix)
         
-        logger.notice("✓ Cached Wine prefix for build: \(buildId, privacy: .public)")
+        logger.notice("✓ Cached Wine prefix for build: \(buildId)")
     }
     
     /// Clear all cached Wine prefixes
@@ -103,7 +103,7 @@ class WineManager {
         // Check if we have a cached prefix
         if let cachedPrefix = getCachedPrefix() {
             let buildId = getBuildIdentifier()
-            logger.notice("✓ Using cached Wine prefix (build: \(buildId, privacy: .public))")
+            logger.notice("✓ Using cached Wine prefix (build: \(buildId))")
             
             // Copy cached prefix to wrapper
             try? fileManager.removeItem(at: prefixPath)
@@ -208,7 +208,7 @@ class WineManager {
         
         // Set drive type in Wine registry if specified
         if !driveType.isEmpty {
-            logger.notice("Setting drive \(driveLetter, privacy: .public): type to \(driveType, privacy: .public) in Wine registry")
+            logger.notice("Setting drive \(driveLetter): type to \(driveType) in Wine registry")
             try await runWine(
                 at: wrapperPath,
                 executable: "wine",
@@ -272,7 +272,7 @@ class WineManager {
             try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments)
             return 0
         } catch let WineError.executionFailed(exitCode) {
-            logger.error("⚠️  Warning: \(exePath, privacy: .public) exited with non-zero code: \(exitCode, privacy: .public)")
+            logger.error("⚠️  Warning: \(exePath) exited with non-zero code: \(exitCode)")
             return exitCode
         }
     }
@@ -291,7 +291,7 @@ class WineManager {
             try await runWine(at: wrapperPath, executable: executable, arguments: arguments)
             return 0
         } catch let WineError.executionFailed(exitCode) {
-            logger.error("⚠️  Warning: \(executable, privacy: .public) exited with non-zero code: \(exitCode, privacy: .public)")
+            logger.error("⚠️  Warning: \(executable) exited with non-zero code: \(exitCode)")
             return exitCode
         }
     }
@@ -329,43 +329,28 @@ class WineManager {
         // Run in detached task to avoid blocking
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             Task.detached {
-                let process = Process()
+                // Streams line-by-line through the logger — live progress during
+                // a slow operation, no single multi-MB entry at the end.
+                let process = TaggedProcess(logger: self.logger)
                 process.executableURL = URL(fileURLWithPath: "/bin/bash")
-            process.arguments = [winetricksPath, "--unattended", name]
-            process.environment = wine.environmentVariables()
-            
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
-            
-            do {
-                try process.run()
-                process.waitUntilExit()
+                process.arguments = [winetricksPath, "--unattended", name]
+                process.environment = wine.environmentVariables()
                 
-                // Log output
-                let outputHandle = outputPipe.fileHandleForReading
-                let errorHandle = errorPipe.fileHandleForReading
-                
-                if let output = String(data: outputHandle.readDataToEndOfFile(), encoding: .utf8), !output.isEmpty {
-                    self.logger.notice("Winetricks output: \(output, privacy: .public)")
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    
+                    if process.terminationStatus != 0 {
+                        continuation.resume(throwing: WineError.executionFailed(exitCode: process.terminationStatus))
+                        return
+                    }
+                    
+                    self.logger.notice("✓ Successfully installed \(name)")
+                    continuation.resume()
+                } catch {
+                    self.logger.notice("Failed to install winetrick \(name): \(error)")
+                    continuation.resume(throwing: error)
                 }
-                
-                if let error = String(data: errorHandle.readDataToEndOfFile(), encoding: .utf8), !error.isEmpty {
-                    self.logger.notice("Winetricks error: \(error, privacy: .public)")
-                }
-                
-                if process.terminationStatus != 0 {
-                    continuation.resume(throwing: WineError.executionFailed(exitCode: process.terminationStatus))
-                    return
-                }
-                
-                self.logger.notice("✓ Successfully installed \(name, privacy: .public)")
-                continuation.resume()
-            } catch {
-                self.logger.notice("Failed to install winetrick \(name, privacy: .public): \(error, privacy: .public)")
-                continuation.resume(throwing: error)
-            }
             }
         }
     }

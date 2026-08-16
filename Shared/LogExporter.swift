@@ -2,7 +2,9 @@
 //  LogExporter.swift
 //  Shared
 //
-//  Exports unified log entries for the current process to a file via `log show`.
+//  Exports the in-memory LogStore ring to a file. Complete and lossless
+//  where `log show` was not (the unified log drops .debug, keeps .info only
+//  in a memory ring, and evicts under store pressure).
 
 import Foundation
 import AppKit
@@ -10,34 +12,39 @@ import UniformTypeIdentifiers
 
 public enum LogExporter {
 
-    /// Export the current process's Second Chance log entries to a file. Runs on a background thread.
+    /// Export the current LogStore ring to a file.
+    ///
+    /// Formatting up to 50k entries must not run on the main actor
+    /// (SE-0461: a plain nonisolated async inherits the caller's executor,
+    /// and LogActionButtons awaits this from a MainActor Task), hence the
+    /// explicit detached task.
     public static func export(to url: URL) async -> Bool {
-        let pid = ProcessInfo.processInfo.processIdentifier
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-                process.arguments = [
-                    "show",
-                    "--predicate", "processIdentifier == \(pid) AND subsystem BEGINSWITH 'com.secondchance'",
-                    "--style", "syslog",
-                ]
+        await Task.detached(priority: .userInitiated) {
+            let (entries, dropped) = LogStore.shared.snapshot()
 
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = Pipe()
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                    try data.write(to: url)
-                    continuation.resume(returning: true)
-                } catch {
-                    continuation.resume(returning: false)
-                }
+            var sections: [String] = []
+            if dropped > 0 {
+                sections.append("[\(dropped) earlier entries were evicted from the \(50_000)-entry in-memory ring — enable the disk mirror for full-session capture]")
             }
-        }
+            sections.append(contentsOf: entries.map { LogFormatter.full(entry: $0) })
+
+            let text = sections.joined(separator: "\n") + "\n"
+            do {
+                try text.data(using: .utf8)?.write(to: url, options: .atomic)
+                return true
+            } catch {
+                return false
+            }
+        }.value
+    }
+
+    /// Default file name for log exports and the disk mirror, e.g.
+    /// `second-chance-logs-2026-08-14-21-30-00.txt`.
+    public static func defaultFileName(prefix: String = "second-chance") -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate, .withTime, .withTimeZone]
+        let timestamp = formatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        return "\(prefix)-logs-\(timestamp).txt"
     }
 
     /// Present an NSSavePanel and return the chosen URL, or nil if cancelled. Must be called on the main thread.
@@ -46,14 +53,10 @@ public enum LogExporter {
         panel.title = "Save Logs"
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate, .withTime, .withTimeZone]
-        let timestamp = formatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")
-        panel.nameFieldStringValue = "\(fileNamePrefix)-logs-\(timestamp).txt"
+        panel.nameFieldStringValue = defaultFileName(prefix: fileNamePrefix)
         panel.allowedContentTypes = [.text]
 
         guard panel.runModal() == .OK else { return nil }
         return panel.url
     }
-
 }

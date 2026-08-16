@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 import CoreGraphics
-import os
+import Logging
 
 /// Orchestrates a single game launch-and-quit session. Encapsulates the
 /// logic previously in GameTester's free functions into a testable struct.
@@ -9,14 +9,14 @@ struct GamePuppetSession {
     let config: TestConfig
     let gameExeName: String
     let winePrefix: URL
-    private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "GamePuppetSession")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.GamePuppetSession")
 
     func run() -> GamePuppetResult {
         logger.notice("🎮 Starting puppet session")
-        logger.notice("   App: \(config.appPath, privacy: .public)")
-        logger.notice("   Engine: \(config.gameEngine, privacy: .public)")
-        logger.notice("   Executable: \(gameExeName, privacy: .public)")
-        logger.notice("   Max runtime: \(Int(config.maxRuntime), privacy: .public)s")
+        logger.notice("   App: \(config.appPath)")
+        logger.notice("   Engine: \(config.gameEngine)")
+        logger.notice("   Executable: \(gameExeName)")
+        logger.notice("   Max runtime: \(Int(config.maxRuntime))s")
 
         var arguments: [String] = []
         if config.debugMode { arguments.append("--debug") }
@@ -26,7 +26,7 @@ struct GamePuppetSession {
         }
 
         let appName = app.localizedName ?? "GameWrapper"
-        logger.notice("ℹ️  Game process: \(appName, privacy: .public) (PID: \(app.processIdentifier, privacy: .public))")
+        logger.notice("ℹ️  Game process: \(appName) (PID: \(app.processIdentifier))")
 
         if config.gameEngine.lowercased().contains("wine") {
             logger.error("⚠️  Wine game detected - checking for info window...")
@@ -49,7 +49,7 @@ struct GamePuppetSession {
             return .failed("Game window did not appear within \(Int(config.windowDetectTimeout))s")
         }
 
-        logger.notice("ℹ️  Game process PID: \(gamePid, privacy: .public)")
+        logger.notice("ℹ️  Game process PID: \(gamePid)")
         SignalHandler.setup(app: app, gamePid: gamePid)
 
         let ocrSuccess = attemptQuit(appName: appName, app: app, gamePid: gamePid)
@@ -106,13 +106,13 @@ struct GamePuppetSession {
                 }
             }
 
-            logger.notice("  → Attempt \(attempt, privacy: .public) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)), privacy: .public)s)")
+            logger.notice("  → Attempt \(attempt) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s)")
 
             guard let screenshotPath = ScreenshotOCR.captureScreen() else { continue }
 
             let searchStartTime = Date()
             let analysis = analyzeScreenshot(at: screenshotPath, app: app)
-            logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)), privacy: .public)s")
+            logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
             try? FileManager.default.removeItem(atPath: screenshotPath)
 
             let exitLocation = analysis.quitButton

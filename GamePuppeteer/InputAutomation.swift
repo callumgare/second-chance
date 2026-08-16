@@ -7,9 +7,9 @@
 import Foundation
 import AppKit
 import CoreGraphics
-import os
+import Logging
 
-private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "InputAutomation")
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.InputAutomation")
 
 // MARK: - Mouse & Keyboard Control
 
@@ -84,7 +84,7 @@ enum InputControl {
     
     /// Click at screen coordinates
     static func click(at point: CGPoint) {
-        logger.notice("  → Clicking at (\(Int(point.x), privacy: .public), \(Int(point.y), privacy: .public))...")
+        logger.notice("  → Clicking at (\(Int(point.x)), \(Int(point.y)))...")
         
         // Get current mouse position
         let currentEvent = CGEvent(source: nil)

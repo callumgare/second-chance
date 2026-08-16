@@ -39,7 +39,7 @@ enum SystemLogReader {
         process.arguments = [
             "show",
             "--start", startStr,
-            "--predicate", "processIdentifier == \(pid) AND subsystem BEGINSWITH 'com.secondchance'",
+            "--predicate", "processIdentifier == \(pid) AND subsystem BEGINSWITH 'au.gare.callum.second-chance'",
             "--style", "syslog",
         ]
 

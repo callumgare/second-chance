@@ -5,7 +5,7 @@
 //  Provides centralized access to bundled exiftool for extracting file metadata
 
 import Foundation
-import os
+import Logging
 
 /// Service for extracting metadata from files using exiftool
 class ExiftoolService {
@@ -13,20 +13,20 @@ class ExiftoolService {
     
     let exiftoolPath: String
     private let fileManager = FileManager.default
-    private let logger = Logger(subsystem: "com.secondchance", category: "ExiftoolService")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.ExiftoolService")
     
     private init() {
         // Get path to exiftool bundled in app
         let bundleResourcePath = Bundle.main.resourceURL?.appendingPathComponent("exiftool/exiftool")
-        logger.notice("🔍 Looking for bundled exiftool at: \(bundleResourcePath?.path ?? "nil", privacy: .public)")
+        logger.notice("🔍 Looking for bundled exiftool at: \(bundleResourcePath?.path ?? "nil")")
         
         if let bundlePath = bundleResourcePath?.path, fileManager.fileExists(atPath: bundlePath) {
             exiftoolPath = bundlePath
-            logger.notice("✅ Found bundled exiftool at: \(bundlePath, privacy: .public)")
+            logger.notice("✅ Found bundled exiftool at: \(bundlePath)")
         } else {
-            logger.fault("❌ ERROR: Bundled exiftool not found!")
-            logger.notice("   Bundle.main.resourceURL: \(Bundle.main.resourceURL?.path ?? "nil", privacy: .public)")
-            logger.notice("   Expected at: \(bundleResourcePath?.path ?? "nil", privacy: .public)")
+            logger.critical("❌ ERROR: Bundled exiftool not found!")
+            logger.notice("   Bundle.main.resourceURL: \(Bundle.main.resourceURL?.path ?? "nil")")
+            logger.notice("   Expected at: \(bundleResourcePath?.path ?? "nil")")
             // Use a non-existent path that will fail explicitly
             exiftoolPath = "/EXIFTOOL_NOT_BUNDLED"
         }
@@ -78,7 +78,7 @@ class ExiftoolService {
         process.arguments = args
         
         let cmd = formatShellCommand(executable: exiftoolPath, arguments: args)
-        logger.notice("Running exiftool command: \(cmd, privacy: .public)")
+        logger.notice("Running exiftool command: \(cmd)")
         
         let pipe = Pipe()
         process.standardOutput = pipe

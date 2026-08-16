@@ -3,20 +3,20 @@
 //  SecondChance
 
 import SwiftUI
-import os
+import Logging
 
-private let logger = Logger(subsystem: "com.secondchance", category: "App")
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.App")
 
-// Global reference to keep the log stream child process alive for the app's lifetime.
-// Can't be stored on the App struct (SwiftUI may discard it) or AppDelegate
-// (not yet available during App.init()).
-private var logStreamProcess: Process?
+// Keeps the DispatchSourceSignal handlers alive for the app's lifetime.
+// (SwiftUI may discard the App struct after building the view hierarchy.)
+private var signalSources: [DispatchSourceSignal] = []
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         logger.notice("🛑 Application terminating, cleaning up...")
         GameInstaller.shared.cleanupTemporaryWrappers()
-        logStreamProcess?.terminate()
+        // Drain anything still pending so the disk mirror / stderr don't lose the last lines.
+        LogStore.shared.flush()
         return .terminateNow
     }
 }
@@ -29,22 +29,14 @@ struct SecondChanceApp: App {
     private let appStartTime = Date()
 
     init() {
-        let debugMode = CommandLine.arguments.contains("--debug")
+        // Bootstrap logging before anything else can construct a Logger —
+        // a Logger built before this is permanently bound to swift-log's
+        // default StreamLogHandler and never reaches LogStore or the window.
+        // (Stored-property initialisers that run before init()'s body — e.g.
+        // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
+        AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
 
-        // Stream os.Logger output to stderr when launched from a terminal.
-        // Stored in a global so it survives for the app's lifetime (SwiftUI
-        // may discard the App struct after building the view hierarchy).
-        if isatty(STDERR_FILENO) != 0 {
-            let pid = getpid()
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-            proc.arguments = ["stream", "--process", "\(pid)", "--style", "compact",
-                              "--predicate", "subsystem == \"com.secondchance\""]
-            proc.standardOutput = FileHandle.standardError
-            try? proc.run()
-            logStreamProcess = proc
-            Thread.sleep(forTimeInterval: 0.3)
-        }
+        let debugMode = CommandLine.arguments.contains("--debug")
 
         if ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" {
             // NSApp may not exist yet during init; defer to first run loop cycle
@@ -63,16 +55,31 @@ struct SecondChanceApp: App {
     }
 
     private func setupSignalHandlers() {
-        signal(SIGINT) { _ in
-            logger.fault("🛑 Received interrupt signal, cleaning up...")
+        // DispatchSourceSignal delivers on the main queue where normal logging
+        // is safe. A raw signal() handler must not touch LogStore — the mutex
+        // is not async-signal-safe and would deadlock if the signal lands on a
+        // thread already holding the store's lock.
+        let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        sigintSource.setEventHandler {
+            logger.critical("🛑 Received interrupt signal, cleaning up...")
             GameInstaller.shared.cleanupTemporaryWrappers()
+            LogStore.shared.flush()
             exit(130)
         }
-        signal(SIGTERM) { _ in
-            logger.fault("🛑 Received termination signal, cleaning up...")
+        sigintSource.resume()
+        signal(SIGINT, SIG_IGN)
+        signalSources.append(sigintSource)
+
+        let sigtermSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        sigtermSource.setEventHandler {
+            logger.critical("🛑 Received termination signal, cleaning up...")
             GameInstaller.shared.cleanupTemporaryWrappers()
+            LogStore.shared.flush()
             exit(143)
         }
+        sigtermSource.resume()
+        signal(SIGTERM, SIG_IGN)
+        signalSources.append(sigtermSource)
     }
 
     var body: some Scene {

@@ -5,7 +5,7 @@
 //  Service for managing game installation without UI concerns
 
 import Foundation
-import os
+import Logging
 import AppKit
 
 /// Thread-safe tracker for mounted ISOs
@@ -31,7 +31,7 @@ class InstallationService {
     private let gameInstaller: GameInstaller
     private let mountedISOTracker = MountedISOTracker()
     let bus: EventBus<AppEvent>
-    private let logger = Logger(subsystem: "com.secondchance", category: "InstallationService")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.InstallationService")
 
     init(bus: EventBus<AppEvent> = .app) {
         self.bus = bus
@@ -52,7 +52,7 @@ class InstallationService {
 
             // Get input paths
             let disk1 = try await context.getDisk1Path()
-            logger.notice("Disk 1: \(disk1.path, privacy: .public)")
+            logger.notice("Disk 1: \(disk1.path)")
 
             // Mount disk 1 if ISO
             let disk1Mounted: URL
@@ -73,7 +73,7 @@ class InstallationService {
             var disk2Mounted: URL?
             if gameInfo.diskCount > 1 {
                 if let disk2 = try await context.getDisk2Path(gameInfo: gameInfo) {
-                    logger.notice("Disk 2: \(disk2.path, privacy: .public)")
+                    logger.notice("Disk 2: \(disk2.path)")
                     if disk2.pathExtension.lowercased() == "iso" {
                         disk2Mounted = try await mountISO(at: disk2, context: context)
                         await bus.publishInstallation(.isoMounted(disk2Mounted!))
@@ -197,7 +197,7 @@ class InstallationService {
     ) async throws -> URL {
         let finalPath = outputPath.appendingPathComponent("Nancy Drew - \(gameName).app")
         
-        logger.notice("Saving wrapper: \(finalPath.path, privacy: .public)")
+        logger.notice("Saving wrapper: \(finalPath.path)")
         
         // Remove existing if present
         if FileManager.default.fileExists(atPath: finalPath.path) {
@@ -210,7 +210,7 @@ class InstallationService {
         // Unregister from cleanup tracking since it's no longer temporary
         GameInstaller.shared.unregisterTemporaryWrapper(wrapperPath)
         
-        logger.notice("Wrapper saved: \(finalPath.path, privacy: .public)")
+        logger.notice("Wrapper saved: \(finalPath.path)")
         
         return finalPath
     }
@@ -218,7 +218,7 @@ class InstallationService {
     /// Launch the game app
     func launchGame(at appPath: URL, with arguments: [String]) async throws {
         let launchDesc = appPath.path + (arguments.isEmpty ? "" : " \(arguments.joined(separator: " "))")
-        logger.notice("Launching: \(launchDesc, privacy: .public)")
+        logger.notice("Launching: \(launchDesc)")
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -248,7 +248,7 @@ class InstallationService {
         let mountedISOs = await mountedISOTracker.getAll()
         guard !mountedISOs.isEmpty else { return }
         
-        logger.notice("Unmounting \(mountedISOs.count, privacy: .public) ISO(s)...")
+        logger.notice("Unmounting \(mountedISOs.count) ISO(s)...")
 
         for mountPoint in mountedISOs {
             let process = Process()
@@ -259,12 +259,12 @@ class InstallationService {
                 try process.run()
                 process.waitUntilExit()
                 if process.terminationStatus == 0 {
-                    logger.notice("Unmounted: \(mountPoint.path, privacy: .public)")
+                    logger.notice("Unmounted: \(mountPoint.path)")
                 } else {
-                    logger.error("Failed to unmount \(mountPoint.path, privacy: .public) (exit code: \(process.terminationStatus, privacy: .public))")
+                    logger.error("Failed to unmount \(mountPoint.path) (exit code: \(process.terminationStatus))")
                 }
             } catch {
-                logger.error("Error unmounting \(mountPoint.path, privacy: .public): \(error, privacy: .public)")
+                logger.error("Error unmounting \(mountPoint.path): \(error)")
             }
         }
         
@@ -278,11 +278,11 @@ class InstallationService {
     private func mountISO(at isoPath: URL, context: InstallationContext) async throws -> URL {
         // Check if this ISO is already mounted
         if let existingMount = try? await checkIfISOAlreadyMounted(isoPath) {
-            logger.notice("ISO already mounted: \(existingMount.path, privacy: .public)")
+            logger.notice("ISO already mounted: \(existingMount.path)")
             return existingMount
         }
 
-        logger.notice("Mounting ISO: \(isoPath.lastPathComponent, privacy: .public)")
+        logger.notice("Mounting ISO: \(isoPath.lastPathComponent)")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         process.arguments = ["attach", "-nobrowse", "-readonly", isoPath.path]
@@ -322,7 +322,7 @@ class InstallationService {
                 
                 // Track that we mounted this
                 await mountedISOTracker.insert(mountURL)
-                logger.notice("Mounted: \(mountURL.path, privacy: .public)")
+                logger.notice("Mounted: \(mountURL.path)")
                 return mountURL
             }
         }
@@ -349,7 +349,7 @@ class InstallationService {
         // Print any errors to console
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         if let errorOutput = String(data: errorData, encoding: .utf8), !errorOutput.isEmpty {
-            logger.fault("   hdiutil info error: \(errorOutput, privacy: .public)")
+            logger.critical("   hdiutil info error: \(errorOutput)")
         }
         
         let plistData = outputPipe.fileHandleForReading.readDataToEndOfFile()
@@ -367,13 +367,13 @@ class InstallationService {
         let canonicalISOPath: String
         if let resolved = try? fileManager.destinationOfSymbolicLink(atPath: isoPath.path) {
             canonicalISOPath = (resolved as NSString).resolvingSymlinksInPath
-            logger.notice("   ℹ️ Resolved symlink: \(isoPath.path, privacy: .public) -> \(canonicalISOPath, privacy: .public)")
+            logger.notice("   ℹ️ Resolved symlink: \(isoPath.path) -> \(canonicalISOPath)")
         } else {
             canonicalISOPath = (isoPath.path as NSString).resolvingSymlinksInPath
         }
         
-        logger.notice("   ℹ️ Looking for mounted ISO: \(canonicalISOPath, privacy: .public)")
-        logger.notice("   ℹ️ Found \(images.count, privacy: .public) mounted disk image(s)")
+        logger.notice("   ℹ️ Looking for mounted ISO: \(canonicalISOPath)")
+        logger.notice("   ℹ️ Found \(images.count) mounted disk image(s)")
         
         // Find our ISO in the list of mounted images
         for image in images {
@@ -383,7 +383,7 @@ class InstallationService {
             
             let canonicalImagePath = (imagePath as NSString).resolvingSymlinksInPath
             
-            logger.notice("   ℹ️ Checking mounted image: \(canonicalImagePath, privacy: .public)")
+            logger.notice("   ℹ️ Checking mounted image: \(canonicalImagePath)")
             
             if canonicalImagePath == canonicalISOPath {
                 logger.notice("   ✓ Found matching mounted ISO")
@@ -400,10 +400,10 @@ class InstallationService {
                         // Verify that the mount point actually exists as a directory
                         var isDirectory: ObjCBool = false
                         if fileManager.fileExists(atPath: mountPoint, isDirectory: &isDirectory), isDirectory.boolValue {
-                            logger.notice("   ✓ Mount point verified: \(mountPoint, privacy: .public)")
+                            logger.notice("   ✓ Mount point verified: \(mountPoint)")
                             return URL(fileURLWithPath: mountPoint)
                         } else {
-                            logger.error("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint, privacy: .public)")
+                            logger.error("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint)")
                         }
                     }
                 }

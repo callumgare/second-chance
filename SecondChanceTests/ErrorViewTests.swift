@@ -3,15 +3,15 @@
 //  SecondChanceTests
 //
 //  Tests for ErrorView's "Show Logs" and "Save Logs" functionality.
-//  Emits log entries via os.Logger with the secondchance subsystem, then
-//  verifies the log window and log export surface them correctly.
+//  Emits log entries through the host app's bootstrapped logging system and
+//  verifies the log window and log export surface them synchronously.
 
 import Testing
 import Foundation
-import os
+import Logging
 @testable import SecondChance
 
-private let testLogger = Logger(subsystem: "com.secondchance", category: "ErrorViewTests")
+private let testLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.ErrorViewTests")
 
 @Suite("ErrorView log actions", .serialized)
 struct ErrorViewTests {
@@ -29,30 +29,21 @@ struct ErrorViewTests {
     @Test("Show Logs opens log window and it contains installation log entries")
     func showLogsOpensWindow() async throws {
         let collector = LineCollector()
-        await MainActor.run {
-            LogWindow.shared.onLine = { line in Task { await collector.add(line) } }
-        }
-        defer {
-            Task { @MainActor in
-                LogWindow.shared.onLine = nil
-                LogWindow.shared.stopStreaming()
-            }
-        }
-
         emitTestLogEntries()
 
         await MainActor.run {
+            LogWindow.shared.onLine = { line in Task { await collector.add(line) } }
             LogWindow.shared.showLogWindow(title: "Test - Installation Log")
         }
 
-        // Poll up to 10 s for lines to arrive.
-        let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline {
-            if await collector.lines.count > 0 { break }
-            try await Task.sleep(for: .milliseconds(250))
-        }
+        // The snapshot is delivered synchronously on show; allow a brief hop
+        // for the collector tasks.
+        try await Task.sleep(for: .milliseconds(200))
 
-        await MainActor.run { LogWindow.shared.hideLogWindow() }
+        await MainActor.run {
+            LogWindow.shared.onLine = nil
+            LogWindow.shared.hideLogWindow()
+        }
 
         let count = await collector.lines.count
         #expect(count > 0, "Log window received no lines after install error")
@@ -68,9 +59,6 @@ struct ErrorViewTests {
             .appendingPathComponent("sc-test-export-\(UUID().uuidString).txt")
         defer { try? FileManager.default.removeItem(at: outputURL) }
 
-        // Wait briefly for os.Logger entries to flush to the store
-        try await Task.sleep(for: .seconds(2))
-
         let succeeded = await LogExporter.export(to: outputURL)
         #expect(succeeded, "LogExporter.export returned false")
 
@@ -78,13 +66,16 @@ struct ErrorViewTests {
         #expect(!data.isEmpty, "Exported log file is empty")
 
         let text = String(data: data, encoding: .utf8) ?? ""
-        #expect(text.contains("secondchance"), "Exported log does not mention secondchance subsystem")
+        #expect(text.contains("au.gare.callum.second-chance"), "Exported log does not mention the app subsystem")
+        #expect(text.contains("ErrorViewTests: simulated installation error occurred"),
+                "Exported log does not contain the emitted test entry")
     }
 }
 
 // MARK: - Helpers shared with LogWindowTests
 
-private actor LineCollector {
+actor LineCollector {
     private(set) var lines: [String] = []
     func add(_ line: String) { lines.append(line) }
+    func contains(text: String) -> Bool { lines.contains { $0.contains(text) } }
 }

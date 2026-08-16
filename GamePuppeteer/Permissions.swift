@@ -8,9 +8,9 @@ import Foundation
 import AppKit
 import ApplicationServices
 import CoreGraphics
-import os
+import Logging
 
-private let permissionLogger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "Permissions")
+private nonisolated let permissionLogger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.Permissions")
 
 enum PermissionWaitOutcome {
     case granted
@@ -162,18 +162,18 @@ enum StartupPermissions {
 
         while Date() < deadline {
             if waitingWindow.didRequestManualConfirmation {
-                permissionLogger.notice("User manually confirmed \(permissionName, privacy: .public) permission update")
+                permissionLogger.notice("User manually confirmed \(permissionName) permission update")
                 return .manualConfirmationRequested
             }
 
             if checkPermission() {
-                permissionLogger.notice("\(permissionName, privacy: .public) permission granted")
+                permissionLogger.notice("\(permissionName) permission granted")
                 return .granted
             }
             waitingWindow.pumpUIEvents(until: Date().addingTimeInterval(permissionPollInterval))
         }
 
-        permissionLogger.error("Timed out waiting \(String(format: "%.0f", timeout), privacy: .public)s for \(permissionName, privacy: .public) permission")
+        permissionLogger.error("Timed out waiting \(String(format: "%.0f", timeout))s for \(permissionName) permission")
         return .timedOut
     }
 

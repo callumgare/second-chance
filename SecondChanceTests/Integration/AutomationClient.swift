@@ -5,9 +5,9 @@
 //  Client-side counterpart to AutomationBridge. Connects to the Unix socket,
 //  reads NDJSON lines, and makes them available as a typed collection.
 //
-//  Typical usage (via SecondChanceRunner):
-//    let runner = try await SecondChanceRunner.launch(...)
-//    let (exitCode, events) = try await runner.waitForCompletion(timeout: 600)
+//  Typical usage:
+//    let client = try AutomationClient(socketPath: ...)
+//    let events = try await client.collectAll()
 //    let detected = events.first(ofType: "installation.gameDetected")
 //    #expect(detected?.string(for: "gameId") == game.id)
 
@@ -68,8 +68,8 @@ extension Array where Element == AutomationMessage {
 // MARK: - AutomationClient
 
 /// Connects to the Second Chance automation socket and buffers all incoming events.
-/// Returned by `SecondChanceRunner.launch`. Call `collectAll()` to block until EOF
-/// (i.e. until the server process exits and closes the socket).
+/// Call `collectAll()` to block until EOF (i.e. until the server process exits
+/// and closes the socket).
 final class AutomationClient: @unchecked Sendable {
     private let fileHandle: FileHandle
 

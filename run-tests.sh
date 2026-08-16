@@ -164,8 +164,8 @@ run_tests() {
             echo -e "${BLUE}🧪 Running unit tests...${NC}"
             extra_args+=(
                 -only-testing:SecondChanceTests/EventBusTests
-                -only-testing:SecondChanceTests/ContextualLoggerTests
-                -only-testing:SecondChanceTests/LogCorrelatorTests
+                -only-testing:SecondChanceTests/LogStoreTests
+                -only-testing:SecondChanceTests/LogWindowTests
                 -only-testing:SecondChanceTests/GameDetectorTests
                 -only-testing:SecondChanceTests/GameInstallerTests
                 -only-testing:SecondChanceTests/ErrorViewTests

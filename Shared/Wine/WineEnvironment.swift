@@ -5,6 +5,12 @@
 //  Used by both SecondChance app and GameWrapper runtime
 
 import Foundation
+import Logging
+
+/// Fixed label: `Shared/` compiles into three targets with three different
+/// subsystems, so this file cannot pick one — a stable `.Shared` leaf still
+/// matches `BEGINSWITH 'au.gare.callum.second-chance'`.
+private nonisolated let wineLogger = Logger(label: "au.gare.callum.second-chance.Shared.WineEnvironment")
 
 /// Wine configuration and execution utilities
 public struct WineEnvironment {
@@ -97,7 +103,7 @@ public struct WineEnvironment {
             process.waitUntilExit()
             return process.terminationStatus
         } catch {
-            print("ERROR: Failed to run \(executable): \(error)")
+            wineLogger.error("ERROR: Failed to run \(executable): \(error)")
             return -1
         }
     }
@@ -136,25 +142,25 @@ public struct WineEnvironment {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
         
-        print("Attempting to execute: \(winePath.path)")
-        print("With arguments: \(arguments.joined(separator: " "))")
-        print("Checking if file exists: \(FileManager.default.fileExists(atPath: winePath.path))")
-        print("Checking if file is readable: \(FileManager.default.isReadableFile(atPath: winePath.path))")
+        wineLogger.notice("Attempting to execute: \(winePath.path)")
+        wineLogger.notice("With arguments: \(arguments.joined(separator: " "))")
+        wineLogger.notice("Checking if file exists: \(FileManager.default.fileExists(atPath: winePath.path))")
+        wineLogger.notice("Checking if file is readable: \(FileManager.default.isReadableFile(atPath: winePath.path))")
         
         // Check attributes
         if let attrs = try? FileManager.default.attributesOfItem(atPath: winePath.path) {
             let perms = attrs[.posixPermissions] as? NSNumber
-            print("File permissions: \(String(format: "%o", perms?.uint16Value ?? 0))")
+            wineLogger.notice("File permissions: \(String(format: "%o", perms?.uint16Value ?? 0))")
             let fileType = attrs[.type] as? FileAttributeType
-            print("File type: \(fileType?.rawValue ?? "unknown")")
+            wineLogger.notice("File type: \(fileType?.rawValue ?? "unknown")")
         }
         
         // Try to read the file to see if we have access
         if let fileHandle = try? FileHandle(forReadingFrom: winePath) {
-            print("Successfully opened file handle")
+            wineLogger.notice("Successfully opened file handle")
             try? fileHandle.close()
         } else {
-            print("WARNING: Could not open file handle")
+            wineLogger.error("WARNING: Could not open file handle")
         }
         
         // Wine is x86_64, so we need to use arch -x86_64 on Apple Silicon
@@ -180,8 +186,8 @@ public struct WineEnvironment {
         do {
             try process.run()
         } catch {
-            print("ERROR: Failed to execute wine: \(error.localizedDescription)")
-            print("Error details: \(error)")
+            wineLogger.error("ERROR: Failed to execute wine: \(error.localizedDescription)")
+            wineLogger.error("Error details: \(error)")
             throw error
         }
         
@@ -198,11 +204,11 @@ public struct WineEnvironment {
         let errorHandle = errorPipe.fileHandleForReading
         
         if let output = String(data: outputHandle.readDataToEndOfFile(), encoding: .utf8), !output.isEmpty {
-            print("Wine output: \(output)")
+            wineLogger.notice("Wine output: \(output)")
         }
         
         if let error = String(data: errorHandle.readDataToEndOfFile(), encoding: .utf8), !error.isEmpty {
-            print("Wine error: \(error)")
+            wineLogger.error("Wine error: \(error)")
         }
         
         if process.terminationStatus != 0 {
@@ -275,7 +281,7 @@ public struct WineEnvironment {
             // wineserver -k0 returns 0 if server is running for this prefix
             return process.terminationStatus == 0
         } catch {
-            print("Error checking for wineserver: \(error)")
+            wineLogger.error("Error checking for wineserver: \(error)")
             return false
         }
     }
@@ -295,7 +301,7 @@ public struct WineEnvironment {
             process.waitUntilExit()
             return process.terminationStatus
         } catch {
-            print("Error stopping wineserver: \(error)")
+            wineLogger.error("Error stopping wineserver: \(error)")
             return -1
         }
     }

@@ -131,11 +131,13 @@ echo -e "${GREEN}✅ Wrapper updated successfully!${NC}"
 # Launch game if requested
 if [[ "$LAUNCH_GAME_FLAG" == true ]]; then
     echo -e "${BLUE}🎮 Launching game: $(basename "$BUILT_APP_PATH" .app)${NC}"
+    # Exec the binary directly so the game's stdio (and thus the
+    # GameWrapper's stderr log stream) reaches this terminal.
     if [[ ${#APP_ARGS[@]} -gt 0 ]]; then
         echo -e "${BLUE}   Arguments: ${APP_ARGS[*]}${NC}"
-        open "$BUILT_APP_PATH" --args "${APP_ARGS[@]}"
+        "$BUILT_APP_PATH/Contents/MacOS/GameWrapper" "${APP_ARGS[@]}"
     else
-        open "$BUILT_APP_PATH"
+        "$BUILT_APP_PATH/Contents/MacOS/GameWrapper"
     fi
 else
     echo -e "${BLUE}You can now run: open '$BUILT_APP_PATH'${NC}"

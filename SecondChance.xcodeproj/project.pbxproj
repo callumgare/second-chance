@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		E2127F512F06402B00E02402 /* GameWrapper.app in Embeded Wrapper Template App */ = {isa = PBXBuildFile; fileRef = E24D78DE2F063E1E00B38683 /* GameWrapper.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E2B000002F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
+		E2B000022F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
+		E2B000042F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,6 +67,7 @@
 				GameMonitor.swift,
 				InfoWindowController.swift,
 				main.swift,
+				MainLogger.swift,
 				Resources/Assets.xcassets,
 				Resources/GameWrapperIcon.icon,
 				Subcommands.swift,
@@ -112,6 +116,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2B000042F01000000000001 /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +124,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2B000002F01000000000001 /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,6 +139,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E2B000022F01000000000001 /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,9 +185,11 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AABB00010000000000000001 /* GamePuppeteer */,
+				E2FC5BF22F160FB100AC5301 /* Shared */,
 			);
 			name = GamePuppeteer;
 			packageProductDependencies = (
+				E2B000012F01000000000001 /* Logging */,
 			);
 			productName = GamePuppeteer;
 			productType = "com.apple.product-type.application";
@@ -207,6 +216,7 @@
 			);
 			name = SecondChance;
 			packageProductDependencies = (
+				E2B000012F01000000000001 /* Logging */,
 			);
 			productName = SecondChance;
 			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
@@ -232,6 +242,7 @@
 			);
 			name = GameWrapper;
 			packageProductDependencies = (
+				E2B000012F01000000000001 /* Logging */,
 			);
 			productName = GameWrapperWine;
 			productReference = E24D78DE2F063E1E00B38683 /* GameWrapper.app */;
@@ -295,6 +306,9 @@
 			);
 			mainGroup = E21733882F04AA580058E8E9;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
 			projectDirPath = "";
@@ -542,6 +556,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -594,7 +609,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
+				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -605,6 +620,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -653,6 +669,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				VALID_ARCHS = "$(ARCHS_STANDARD)";
 			};
 			name = Release;
 		};
@@ -915,6 +932,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.15.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E2B000012F01000000000001 /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E21733892F04AA580058E8E9 /* Project object */;
 }

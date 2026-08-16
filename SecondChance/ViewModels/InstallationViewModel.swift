@@ -9,7 +9,7 @@ import SwiftUI
 import Combine
 import AppKit
 import UniformTypeIdentifiers
-import os
+import Logging
 
 /// Main ViewModel for coordinating the installation process
 @MainActor
@@ -25,7 +25,7 @@ class InstallationViewModel: ObservableObject {
     private let cacheManager = CacheManager.shared
     private var stateObserver: AnyCancellable?
     private var busSubscriptionToken: EventBus<AppEvent>.Token?
-    private let logger = Logger(subsystem: "com.secondchance", category: "InstallationViewModel")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.InstallationViewModel")
 
     // Elapsed-time tracking — mirrors the original AsyncProgressReporter timer behaviour.
     // The UI only shows substep and elapsed time after 5 s so fast sub-steps don't flash.
@@ -94,7 +94,7 @@ class InstallationViewModel: ObservableObject {
             do {
                 try WineManager.shared.clearCache()
             } catch {
-                logger.fault("Failed to clear Wine prefix cache: \(error.localizedDescription, privacy: .public)")
+                logger.critical("Failed to clear Wine prefix cache: \(error.localizedDescription)")
                 exit(1)
             }
         }
@@ -114,34 +114,34 @@ class InstallationViewModel: ObservableObject {
         // Auto-start if in non-interactive mode
         if nonInteractiveMode {
             guard let source = installationSource else {
-                logger.fault("NON-INTERACTIVE MODE: INSTALLATION_SOURCE environment variable is required (disk, her-download, steam)")
+                logger.critical("NON-INTERACTIVE MODE: INSTALLATION_SOURCE environment variable is required (disk, her-download, steam)")
                 exit(1)
             }
 
             guard source == "disk" || source == "her-download" || source == "steam" else {
-                logger.fault("NON-INTERACTIVE MODE: Invalid INSTALLATION_SOURCE '\(source, privacy: .public)' (disk, her-download, steam)")
+                logger.critical("NON-INTERACTIVE MODE: Invalid INSTALLATION_SOURCE '\(source)' (disk, her-download, steam)")
                 exit(1)
             }
 
-            logger.notice("NON-INTERACTIVE MODE: Auto-starting installation — source: \(source, privacy: .public)")
+            logger.notice("NON-INTERACTIVE MODE: Auto-starting installation — source: \(source)")
 
             // Validate required parameters for each source type
             if source == "disk" {
                 guard let disk1 = disk1Path else {
-                    logger.fault("NON-INTERACTIVE MODE: DISK_1_PATH environment variable is required for disk installation")
+                    logger.critical("NON-INTERACTIVE MODE: DISK_1_PATH environment variable is required for disk installation")
                     exit(1)
                 }
-                logger.notice("Disk 1: \(disk1, privacy: .public)")
+                logger.notice("Disk 1: \(disk1)")
                 if let disk2 = disk2Path {
-                    logger.notice("Disk 2: \(disk2, privacy: .public)")
+                    logger.notice("Disk 2: \(disk2)")
                 }
             }
 
             guard let output = outputPath else {
-                logger.fault("NON-INTERACTIVE MODE: OUTPUT_PATH environment variable is required (directory where .app will be saved)")
+                logger.critical("NON-INTERACTIVE MODE: OUTPUT_PATH environment variable is required (directory where .app will be saved)")
                 exit(1)
             }
-            logger.notice("Output: \(output, privacy: .public)")
+            logger.notice("Output: \(output)")
             
             // Observe state changes to auto-exit when done
             stateObserver = $currentState.sink { [weak self] state in
@@ -206,19 +206,19 @@ class InstallationViewModel: ObservableObject {
                 _exit(0)
                 
             case "her-download":
-                logger.fault("NON-INTERACTIVE MODE: Her Interactive download installation not yet implemented")
+                logger.critical("NON-INTERACTIVE MODE: Her Interactive download installation not yet implemented")
                 throw NSError(domain: "Installation", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Her Interactive download not yet implemented in non-interactive mode"
                 ])
 
             case "steam":
-                logger.fault("NON-INTERACTIVE MODE: Steam installation not yet implemented")
+                logger.critical("NON-INTERACTIVE MODE: Steam installation not yet implemented")
                 throw NSError(domain: "Installation", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Steam installation not yet implemented in non-interactive mode"
                 ])
 
             default:
-                logger.fault("NON-INTERACTIVE MODE: Unknown installation source '\(source, privacy: .public)'")
+                logger.critical("NON-INTERACTIVE MODE: Unknown installation source '\(source)'")
                 throw NSError(domain: "Installation", code: 1, userInfo: [
                     NSLocalizedDescriptionKey: "Unknown installation source"
                 ])
@@ -227,7 +227,7 @@ class InstallationViewModel: ObservableObject {
             await MainActor.run {
                 currentState = .error(error.localizedDescription)
             }
-            logger.fault("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription, privacy: .public)")
+            logger.critical("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription)")
             fflush(stdout)
             fflush(stderr)
             _exit(1)
@@ -248,7 +248,7 @@ class InstallationViewModel: ObservableObject {
 
         guard isNewStep else { return }
 
-        logger.notice("\n━━━ \(state.displayText, privacy: .public) ━━━")
+        logger.notice("\n━━━ \(state.displayText) ━━━")
 
         stepStartTime = Date()
         shouldShowElapsed = false
@@ -309,6 +309,7 @@ class InstallationViewModel: ObservableObject {
             _ = try await installationService.performInstallation(context: context)
             currentState = .completed
         } catch {
+            handleError(error)
             // Check if it's a cancellation error
             if let installError = error as? InstallationError, installError == InstallationError.cancelled {
                 // User cancelled - just reset

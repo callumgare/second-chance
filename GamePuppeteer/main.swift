@@ -2,9 +2,14 @@
 
 import Foundation
 import CoreGraphics
-import os
+import Logging
 
-private let logger = Logger(subsystem: "com.secondchance.gamepuppeteer", category: "main")
+// Bootstrap logging before anything else can construct a Logger — top-level
+// code in main.swift runs in source order, and the logger below (like any
+// earlier Logger construction) must resolve its handler after this call.
+AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.GamePuppeteer")
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.main")
 
 func printUsage() {
     logger.notice("""
@@ -82,7 +87,7 @@ if let screenshotPath = analyzePath {
 }
 
 guard let path = appPath else {
-    logger.fault("Error: No app path provided")
+    logger.critical("Error: No app path provided")
     printUsage()
     exit(1)
 }
@@ -102,21 +107,6 @@ case .relaunchRequired:
 
 logger.notice("PERMISSION_GATE: all_permissions_granted")
 
-// Stream os.Logger output to stderr when launched from a terminal
-var logStreamProcess: Process?
-if isatty(STDERR_FILENO) != 0 {
-    let pid = getpid()
-    let proc = Process()
-    proc.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-    proc.arguments = ["stream", "--process", "\(pid)", "--style", "compact",
-                      "--predicate", "subsystem == \"com.secondchance.gamepuppeteer\""]
-    proc.standardOutput = FileHandle.standardError
-    try? proc.run()
-    logStreamProcess = proc
-    // Give log stream a moment to attach
-    Thread.sleep(forTimeInterval: 0.3)
-}
-
 StartupPermissions.warmupPrivilegedAPIs()
 
 logger.notice("  → Installing signal handlers...")
@@ -130,10 +120,10 @@ let gameExePath = readGameExePath(appPath: path) ?? "/Game.exe"
 let gameExeName = (gameExePath as NSString).lastPathComponent
 let winePrefix = getWinePrefix(appPath: path)
 
-logger.notice("ℹ️  Game engine: \(gameEngine, privacy: .public)")
-logger.notice("ℹ️  Game executable: \(gameExeName, privacy: .public)")
+logger.notice("ℹ️  Game engine: \(gameEngine)")
+logger.notice("ℹ️  Game executable: \(gameExeName)")
 if gameEngine.lowercased().contains("wine") {
-    logger.notice("ℹ️  Wine prefix: \(winePrefix.path, privacy: .public)")
+    logger.notice("ℹ️  Wine prefix: \(winePrefix.path)")
 }
 
 let config = TestConfig(
@@ -148,5 +138,5 @@ let result = session.run()
 if result.exitCode == GamePuppetExitCode.passed.rawValue {
     logger.notice("GAME_PUPPETEER: run_succeeded")
 }
-logStreamProcess?.terminate()
+LogStore.shared.flush()
 exit(result.exitCode)
