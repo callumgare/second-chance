@@ -13,10 +13,12 @@ nonisolated struct LogFormatter {
     /// Format: `HH:mm:ss.SSS  notice  GameDetector  <message>`
     /// Short category because messages carry their own structure.
     nonisolated static func compact(entry: Entry) -> String {
-        let time = timeFormatter.string(from: entry.timestamp)
-        // Extract just the category (last component) from the label
-        let category = extractCategory(from: entry.label)
-        return "\(time)  \(formatLevel(entry.level))  \(category)  \(entry.message)"
+        return "\(time(entry: entry))  \(formatLevel(entry.level))  \(extractCategory(from: entry.label))  \(entry.message)"
+    }
+
+    /// Time component of the compact format (`HH:mm:ss.SSS`).
+    nonisolated static func time(entry: Entry) -> String {
+        timeFormatter.string(from: entry.timestamp)
     }
     
     /// Full format for export and disk mirror.
@@ -56,7 +58,7 @@ nonisolated struct LogFormatter {
     }()
     
     /// Extract the category (last component) from a label like "au.gare.callum.second-chance.SecondChance.GameDetector".
-    nonisolated private static func extractCategory(from label: String) -> String {
+    nonisolated static func extractCategory(from label: String) -> String {
         if let lastDot = label.lastIndex(of: ".") {
             return String(label[label.index(after: lastDot)...])
         }
@@ -64,7 +66,7 @@ nonisolated struct LogFormatter {
     }
     
     /// Format level with consistent width.
-    nonisolated private static func formatLevel(_ level: String) -> String {
+    nonisolated static func formatLevel(_ level: String) -> String {
         // swift-log level names are lowercase, but we may get mixed case
         let normalized = level.lowercased()
         switch normalized {

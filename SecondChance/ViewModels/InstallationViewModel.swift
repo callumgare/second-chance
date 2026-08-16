@@ -255,7 +255,7 @@ class InstallationViewModel: ObservableObject {
 
         guard isNewStep else { return }
 
-        logger.notice("\n━━━ \(state.displayText) ━━━")
+        logger.notice("━━━ \(state.displayText) ━━━")
 
         stepStartTime = Date()
         shouldShowElapsed = false

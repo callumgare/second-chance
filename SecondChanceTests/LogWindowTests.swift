@@ -118,4 +118,54 @@ struct LogWindowTests {
             window.hideLogWindow()
         }
     }
+
+    // MARK: - Row model
+
+    @Test("LogRow carries structured fields and appends the error in-band")
+    func logRowFormatting() {
+        let entry = Entry(
+            seq: 42,
+            timestamp: Date(timeIntervalSince1970: 1_771_200_000),
+            level: "warning",
+            label: "au.gare.callum.second-chance.SecondChance.GameDetector",
+            message: "disk not found",
+            error: "I/O"
+        )
+        let row = LogRow(entry: entry)
+        #expect(row.id == 42)
+        #expect(row.time == LogFormatter.time(entry: entry))
+        #expect(row.level == "warning")
+        #expect(row.category == "GameDetector")
+        #expect(row.message == "disk not found — Error: I/O")
+        #expect(row.compactLine.hasPrefix("\(row.time)  warning  GameDetector  disk not found"))
+
+        let clean = LogRow(entry: Entry(
+            seq: 43,
+            timestamp: Date(timeIntervalSince1970: 1_771_200_000),
+            level: "trace",
+            label: "Bare",
+            message: "msg",
+            error: nil
+        ))
+        #expect(clean.message == "msg", "no error suffix without an error")
+        #expect(clean.level == "debug", "trace coalesces to debug")
+        #expect(clean.category == "Bare", "labels without a dot pass through unchanged")
+    }
+
+    // MARK: - Level filter
+
+    @Test("Level filter thresholds")
+    func levelFilterThresholds() {
+        #expect(LogLevelFilter.all.includes(level: "trace"))
+        #expect(LogLevelFilter.all.includes(level: "critical"))
+
+        #expect(!LogLevelFilter.warnings.includes(level: "notice"))
+        #expect(LogLevelFilter.warnings.includes(level: "warning"))
+        #expect(LogLevelFilter.warnings.includes(level: "error"))
+        #expect(LogLevelFilter.warnings.includes(level: "critical"))
+
+        #expect(!LogLevelFilter.errors.includes(level: "warning"))
+        #expect(LogLevelFilter.errors.includes(level: "error"))
+        #expect(LogLevelFilter.errors.includes(level: "critical"))
+    }
 }
