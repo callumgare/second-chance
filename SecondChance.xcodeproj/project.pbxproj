@@ -425,12 +425,14 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/GameWrapper/setup-wine.sh",
+				"$(SRCROOT)/GameWrapper/NativeFullscreen/native_fullscreen.m",
+				"$(SRCROOT)/GameWrapper/NativeFullscreen/patch-winemac.swift",
 			);
 			name = "Download And Copy Wine Files";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/wine-bundle-temp",
+				"$(DERIVED_FILE_DIR)/wine-setup-last-run",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -445,12 +447,13 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/GameWrapper/setup-scummvm.sh",
+				"$(SRCROOT)/GameWrapper/scummvm.ini",
 			);
 			name = "Download And Copy ScummVM Files";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/scummvm-bundle-temp",
+				"$(DERIVED_FILE_DIR)/scummvm-setup-last-run",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

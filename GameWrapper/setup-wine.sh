@@ -160,3 +160,7 @@ rm -rf "${TEMP_DIR}"
 
 echo "✅ Wine, frameworks, and winetricks embedded in ${PRODUCT_NAME}.app"
 echo "✅ Output files list created at ${OUTPUT_LIST}"
+
+# Stamp named to match the input declared on the "Check for collisions" phase, so
+# collision checking re-runs whenever Wine bundling re-runs.
+touch "${DERIVED_FILE_DIR}/wine-setup-last-run"

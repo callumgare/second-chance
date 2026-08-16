@@ -93,3 +93,7 @@ rm -rf "${TEMP_DIR}"
 
 echo "✅ ScummVM embedded successfully in ${PRODUCT_NAME}.app"
 echo "✅ Output files list created at ${OUTPUT_LIST}"
+
+# Stamp named to match the input declared on the "Check for collisions" phase, so
+# collision checking re-runs whenever ScummVM bundling re-runs.
+touch "${DERIVED_FILE_DIR}/scummvm-setup-last-run"
