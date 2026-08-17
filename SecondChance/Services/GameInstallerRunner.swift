@@ -11,7 +11,6 @@
 
 import Foundation
 import Logging
-import AppKit
 
 /// Runs the game's own installer (setup.exe / .msi) inside the Wine prefix
 /// and finds what it installed.
@@ -21,6 +20,15 @@ import AppKit
 /// execution to WineManager.
 class GameInstallerRunner {
     static let shared = GameInstallerRunner()
+
+    /// Ask the user whether to continue after a patch failed.
+    ///
+    /// Confirmation is injected via `patchFailureConfirmation` (default:
+    /// continue without prompting). The GUI supplies an NSAlert-based
+    /// handler through `WrappBuildInput.confirmPatchFailure`; headless runs
+    /// default to continuing (a modal alert under a `.prohibited` activation
+    /// policy is invisible and would hang the build forever).
+    var patchFailureConfirmation: (@MainActor (String, Error) async -> Bool)?
 
     private let fileManager = FileManager.default
     private let wineManager = WineManager.shared
@@ -335,25 +343,17 @@ class GameInstallerRunner {
         logger.notice("✅ All patches applied successfully")
     }
 
-    /// Ask the user whether to continue after a patch failed.
-    ///
-    /// In non-interactive (headless) mode the app runs with a prohibited
-    /// activation policy, so a modal alert would be invisible and unfocusable —
-    /// and would hang the build forever. Default to continuing without the patch.
+    /// Route a patch-failure confirmation through the injected handler when
+    /// present, otherwise continue without prompting (headless default —
+    /// a modal alert under a `.prohibited` activation policy would be
+    /// invisible and hang the build forever).
     @MainActor
-    private func confirmPatchFailure(patchName: String, error: Error) -> Bool {
-        if ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" {
-            logger.notice("NON-INTERACTIVE: patch '\(patchName)' failed — continuing without it")
-            return true
+    private func confirmPatchFailure(patchName: String, error: Error) async -> Bool {
+        if let confirmation = patchFailureConfirmation {
+            return await confirmation(patchName, error)
         }
-
-        let alert = NSAlert()
-        alert.messageText = "Game patch failed"
-        alert.informativeText = "The patch \"\(patchName)\" failed to apply:\n\n\(error.localizedDescription)\n\nDo you want to continue installing without the patch?"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Continue Without Patch")
-        alert.addButton(withTitle: "Cancel Installation")
-        return alert.runModal() == .alertFirstButtonReturn
+        logger.notice("No patch-failure handler installed — continuing without patch '\(patchName)'")
+        return true
     }
 
     // MARK: - AutoIt Automation

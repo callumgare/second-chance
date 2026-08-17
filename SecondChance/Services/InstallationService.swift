@@ -27,21 +27,27 @@ class InstallationService {
     /// Complete installation coordinator with guaranteed cleanup
     /// This is the unified entry point used by both interactive and non-interactive modes
     func performInstallation(
-        context: InstallationContext
+        input: WrappBuildInput
     ) async throws -> URL {
         // Top-level error handling with guaranteed cleanup
         do {
+            // Route patch-failure confirmation through the input (GUI alert
+            // vs headless default-continue).
+            gameInstaller.patchFailureConfirmation = { [weak input] patchName, error in
+                await input?.confirmPatchFailure(patchName: patchName, error: error) ?? true
+            }
+
             // Signal start
             await bus.publishInstallation(.started(source: .disk))
 
             // Get input paths
-            let disk1 = try await context.getDisk1Path()
+            let disk1 = try await input.getDisk1Path()
             logger.notice("Disk 1: \(disk1.path)")
 
             // Mount disk 1 if ISO
             let disk1Mounted: URL
             if disk1.pathExtension.lowercased() == "iso" {
-                disk1Mounted = try await mountISO(at: disk1, context: context)
+                disk1Mounted = try await mountISO(at: disk1, input: input)
                 await bus.publishInstallation(.isoMounted(disk1Mounted))
             } else {
                 disk1Mounted = disk1
@@ -51,15 +57,15 @@ class InstallationService {
             await bus.publishInstallation(.progress(.detectingGame(substep: nil)))
             let gameSlug = try await GameDetector.shared.detectGame(fromDisk: disk1Mounted)
             let gameInfo = GameInfoProvider.shared.gameInfo(for: gameSlug)
-            await context.onGameDetected(gameInfo)
+            await input.onGameDetected(gameInfo)
             
             // Get disk 2 if needed
             var disk2Mounted: URL?
             if gameInfo.diskCount > 1 {
-                if let disk2 = try await context.getDisk2Path(gameInfo: gameInfo) {
+                if let disk2 = try await input.getDisk2Path(gameInfo: gameInfo) {
                     logger.notice("Disk 2: \(disk2.path)")
                     if disk2.pathExtension.lowercased() == "iso" {
-                        disk2Mounted = try await mountISO(at: disk2, context: context)
+                        disk2Mounted = try await mountISO(at: disk2, input: input)
                         await bus.publishInstallation(.isoMounted(disk2Mounted!))
                     } else {
                         disk2Mounted = disk2
@@ -81,7 +87,7 @@ class InstallationService {
             await bus.publishInstallation(.signed(wrapperPath: wrapperPath))
             
             // Save wrapper
-            let outputDir = try await context.getOutputPath(gameName: gameInfo.title)
+            let outputDir = try await input.getOutputPath(gameName: gameInfo.title)
             let finalPath = try await saveWrapper(
                 from: wrapperPath,
                 to: outputDir,
@@ -91,11 +97,11 @@ class InstallationService {
             // Unmount ISOs now that installation is complete
             await isoMounter.unmountAll()
             
-            await context.onInstallationComplete(finalPath)
+            await input.onWrappBuildComplete(finalPath)
             await bus.publishInstallation(.completed(wrapperPath: finalPath))
 
             // Launch if requested
-            let (shouldLaunch, args) = await context.shouldLaunchGame()
+            let (shouldLaunch, args) = await input.shouldLaunchGame()
             if shouldLaunch {
                 try await launchGame(at: finalPath, with: args)
             }
@@ -114,63 +120,6 @@ class InstallationService {
             
             throw error
         }
-    }
-    
-    // MARK: - Legacy Non-Interactive Installation (Deprecated - use performInstallation instead)
-    
-    /// Install game from disk sources in non-interactive mode (DEPRECATED - use performInstallation)
-    /// - Parameters:
-    ///   - disk1: URL to first disk (directory or ISO)
-    ///   - disk2: Optional URL to second disk
-    ///   - onDetectedGame: Callback when game is detected
-    /// - Returns: URL of the created wrapper
-    @available(*, deprecated, message: "Use performInstallation with NonInteractiveContext instead")
-    func installFromDisk(
-        disk1: URL,
-        disk2: URL?,
-        onDetectedGame: @escaping (GameInfo) -> Void
-    ) async throws -> URL {
-        logger.error("WARNING: Using deprecated installFromDisk method")
-        let tempContext = NonInteractiveContext(
-            environment: [
-                "DISK_1_PATH": disk1.path,
-                "DISK_2_PATH": disk2?.path ?? "",
-                "OUTPUT_PATH": FileManager.default.temporaryDirectory.path
-            ],
-            viewModel: nil
-        )
-
-        var disk1Path: URL = disk1
-        var disk2Path: URL? = nil
-
-        if disk1.pathExtension.lowercased() == "iso" {
-            disk1Path = try await mountISO(at: disk1, context: tempContext)
-        }
-
-        await bus.publishInstallation(.progress(.detectingGame(substep: nil)))
-
-        if let gameSlug = try? await GameDetector.shared.detectGame(fromDisk: disk1Path) {
-            let gameInfo = GameInfoProvider.shared.gameInfo(for: gameSlug)
-            onDetectedGame(gameInfo)
-            if gameInfo.diskCount > 1 && disk2 == nil {
-                throw NSError(domain: "Installation", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Game requires 2 disks but DISK_2_PATH was not provided"
-                ])
-            }
-        }
-
-        if let disk2 = disk2 {
-            if disk2.pathExtension.lowercased() == "iso" {
-                disk2Path = try await mountISO(at: disk2, context: tempContext)
-            } else {
-                disk2Path = disk2
-            }
-        }
-
-        return try await gameInstaller.installFromDisk(
-            disk1Path: disk1Path,
-            disk2Path: disk2Path
-        )
     }
     
     /// Save wrapper to specified location
@@ -234,10 +183,10 @@ class InstallationService {
     
     // MARK: - ISO Management
     
-    /// Mount an ISO file with context-aware sandbox handling (delegates to ISOMounter)
-    private func mountISO(at isoPath: URL, context: InstallationContext) async throws -> URL {
+    /// Mount an ISO file with input-aware sandbox handling (delegates to ISOMounter)
+    private func mountISO(at isoPath: URL, input: WrappBuildInput) async throws -> URL {
         try await isoMounter.mount(isoPath) { mountPoint in
-            try await context.requestVolumeAccess(mountPoint: mountPoint)
+            try await input.requestVolumeAccess(mountPoint: mountPoint)
         }
     }
     

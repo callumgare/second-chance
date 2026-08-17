@@ -82,7 +82,7 @@ struct DiskInstallIntegrationTests {
             let outputDir = makeOutputDir()
             builtOutputDir = outputDir
 
-            // Pre-configure disk paths so InteractiveContext bypasses NSOpenPanel.
+            // Pre-configure disk paths so WrappBuildInput bypasses NSOpenPanel.
             PreconfiguredPaths.disk1 = disk1
             PreconfiguredPaths.disk2 = disk2
             PreconfiguredPaths.outputDir = outputDir

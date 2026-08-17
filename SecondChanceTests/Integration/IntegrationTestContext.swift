@@ -2,15 +2,19 @@
 //  IntegrationTestContext.swift
 //  SecondChanceTests
 //
-//  An InstallationContext for integration tests. Provides disk paths and output
-//  dir directly (no env vars, no NSOpenPanel) and never calls exit().
+//  A headless WrappBuildInput for integration tests. Provides disk paths and
+//  output dir directly (no env vars, no NSOpenPanel) and never calls exit().
 
 import Foundation
 @testable import SecondChance
 
-/// An `InstallationContext` for integration tests. Injects fixed disk paths and
-/// output directory, never prompts the user, and never calls `exit()`.
-final class IntegrationTestContext: InstallationContext, @unchecked Sendable {
+/// A headless `WrappBuildInput` for integration tests. Injects fixed disk
+/// paths and output directory via env-style overrides, never prompts the
+/// user, and never calls `exit()`.
+///
+/// Works by supplying an in-memory "environment" to `WrappBuildInput` — every
+/// lookup hits the env-var branch and no panel can ever appear.
+final class IntegrationTestContext: WrappBuildInput, @unchecked Sendable {
     let disk1: URL
     let disk2: URL?
     let outputDir: URL
@@ -23,40 +27,29 @@ final class IntegrationTestContext: InstallationContext, @unchecked Sendable {
         self.disk1 = disk1
         self.disk2 = disk2
         self.outputDir = outputDir
+
+        var env: [String: String] = [
+            "DISK_1_PATH": disk1.path,
+            "OUTPUT_PATH": outputDir.path,
+        ]
+        if let disk2 {
+            env["DISK_2_PATH"] = disk2.path
+        }
+
+        super.init(environment: env, viewModel: nil)
     }
 
-    // MARK: - InstallationContext
+    // MARK: - Callback overrides
 
-    func getDisk1Path() async throws -> URL {
-        return disk1
-    }
-
-    func getDisk2Path(gameInfo: GameInfo) async throws -> URL? {
-        // Return the injected disk2 if provided, regardless of diskCount.
-        // Tests set this up correctly based on the game's diskCount.
-        return disk2
-    }
-
-    func getOutputPath(gameName: String) async throws -> URL {
-        // Create the output directory if it doesn't exist.
-        try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        return outputDir
-    }
-
-    func onGameDetected(_ gameInfo: GameInfo) async {
+    override func onGameDetected(_ gameInfo: GameInfo) async {
         onGameDetectedCallback?(gameInfo)
     }
 
-    func onInstallationComplete(_ wrapperPath: URL) async {
+    override func onWrappBuildComplete(_ wrapperPath: URL) async {
         onInstallationCompleteCallback?(wrapperPath)
     }
 
-    func shouldLaunchGame() async -> (Bool, [String]) {
+    override func shouldLaunchGame() async -> (Bool, [String]) {
         return (launchAfterInstall, [])
-    }
-
-    func requestVolumeAccess(mountPoint: URL) async throws -> URL {
-        // Tests don't need volume access prompts.
-        return mountPoint
     }
 }

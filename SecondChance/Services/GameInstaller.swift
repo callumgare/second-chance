@@ -23,6 +23,14 @@ class GameInstaller {
     /// installer-execution machinery lives here.
     private let installerRunner: GameInstallerRunner
 
+    /// Patch-failure confirmation. Routed through to the runner so the GUI
+    /// can present an alert (via `WrappBuildInput.confirmPatchFailure`) while
+    /// headless runs default to continuing.
+    var patchFailureConfirmation: (@MainActor (String, Error) async -> Bool)? {
+        get { installerRunner.patchFailureConfirmation }
+        set { installerRunner.patchFailureConfirmation = newValue }
+    }
+
     // Track temporary wrappers for cleanup
     private var temporaryWrappers: Set<URL> = []
     private let wrappersLock = NSLock()

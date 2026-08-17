@@ -7,8 +7,6 @@
 import Foundation
 import SwiftUI
 import Combine
-import AppKit
-import UniformTypeIdentifiers
 import Logging
 
 /// Main ViewModel for coordinating the installation process
@@ -195,15 +193,12 @@ class InstallationViewModel: ObservableObject {
     
     /// Automatically run installation in non-interactive mode
     private func autoNonInteractiveInstall(source: String) async {
-        let context = NonInteractiveContext(
-            environment: ProcessInfo.processInfo.environment,
-            viewModel: self
-        )
+        let input = WrappBuildInput(viewModel: self)
         
         do {
             switch source {
             case "disk":
-                _ = try await installationService.performInstallation(context: context)
+                _ = try await installationService.performInstallation(input: input)
                 await MainActor.run {
                     currentState = .completed
                 }
@@ -310,10 +305,10 @@ class InstallationViewModel: ObservableObject {
     
     /// Start installation from disk (interactive mode)
     func installFromDisk() async {
-        let context = InteractiveContext(viewModel: self)
+        let input = WrappBuildInput(viewModel: self)
         
         do {
-            _ = try await installationService.performInstallation(context: context)
+            _ = try await installationService.performInstallation(input: input)
             currentState = .completed
         } catch {
             // The bus has already routed this failure (see handleBusEvent);
@@ -324,26 +319,14 @@ class InstallationViewModel: ObservableObject {
     
     /// Start installation from Her Interactive download
     func installFromHerDownload() async {
-        // TODO: Implement using new unified flow with HerDownloadContext
-        // For now, keep old implementation
+        // TODO: Implement using the unified flow (see docs/installation-flow.md §5)
+        // For now, keep the legacy direct-to-installer path, but source all
+        // user I/O through WrappBuildInput like the unified flow does.
+        let input = WrappBuildInput(viewModel: self)
+
         do {
-            // Select installer file
-            let panel = NSOpenPanel()
-            panel.message = "Select the Windows game installer:"
-            panel.canChooseFiles = true
-            panel.canChooseDirectories = false
-            panel.allowedContentTypes = [UTType(filenameExtension: "exe")].compactMap { $0 }
-            
-            let response: NSApplication.ModalResponse
-            if let keyWindow = NSApp.keyWindow {
-                response = await panel.beginSheetModal(for: keyWindow)
-            } else {
-                response = panel.runModal()
-            }
-            
-            guard response == .OK, let installerURL = panel.url else {
-                return
-            }
+            // Select installer file (env HER_INSTALLER_PATH or NSOpenPanel)
+            let installerURL = try await input.getHerInstallerPath()
             
             let installer = gameInstaller
 
@@ -357,10 +340,9 @@ class InstallationViewModel: ObservableObject {
                 detectedGame = GameInfoProvider.shared.gameInfo(for: gameSlug)
             }
             
-            // Save wrapper using interactive context
-            let context = InteractiveContext(viewModel: self)
+            // Save wrapper using unified input
             let gameName = detectedGame?.title ?? "Unknown Game"
-            let outputDir = try await context.getOutputPath(gameName: gameName)
+            let outputDir = try await input.getOutputPath(gameName: gameName)
             
             currentState = .savingApp(substep: nil)
             let finalPath = try await installationService.saveWrapper(
@@ -369,7 +351,7 @@ class InstallationViewModel: ObservableObject {
                 gameName: gameName
             )
             
-            await context.onInstallationComplete(finalPath)
+            await input.onWrappBuildComplete(finalPath)
             
             currentState = .completed
             

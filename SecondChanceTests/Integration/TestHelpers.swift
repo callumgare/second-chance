@@ -196,7 +196,7 @@ enum WrapperBuilder {
 
         let context = IntegrationTestContext(disk1: disk1, disk2: disk2, outputDir: outputDir)
         let service = InstallationService()
-        return try await service.performInstallation(context: context)
+        return try await service.performInstallation(input: context)
     }
 }
 
