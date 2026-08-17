@@ -19,7 +19,7 @@ struct GameInstallerTests {
     // Test installer type detection
     @Test("MSI installer arguments - silent install")
     func msiArgumentsSilent() {
-        let installer = GameInstaller.shared
+        let installer = GameInstallerRunner.shared
         let args = installer.getInstallerArguments(
             installerPath: testInstallerPath,
             installerType: .msi,
@@ -35,7 +35,7 @@ struct GameInstallerTests {
     
     @Test("MSI installer arguments - interactive install")
     func msiArgumentsInteractive() {
-        let installer = GameInstaller.shared
+        let installer = GameInstallerRunner.shared
         let args = installer.getInstallerArguments(
             installerPath: testInstallerPath,
             installerType: .msi,
@@ -50,7 +50,7 @@ struct GameInstallerTests {
     
     @Test("InstallShield installer arguments - interactive install")
     func installShieldArgumentsInteractive() {
-        let installer = GameInstaller.shared
+        let installer = GameInstallerRunner.shared
         let args = installer.getInstallerArguments(
             installerPath: testInstallerPath,
             installerType: .installShield,
@@ -65,7 +65,7 @@ struct GameInstallerTests {
     
     @Test("Inno Setup installer arguments - silent install")
     func innoSetupArgumentsSilent() {
-        let installer = GameInstaller.shared
+        let installer = GameInstallerRunner.shared
         let args = installer.getInstallerArguments(
             installerPath: testInstallerPath,
             installerType: .innoSetup,
@@ -80,7 +80,7 @@ struct GameInstallerTests {
     
     @Test("Inno Setup installer arguments - interactive install")
     func innoSetupArgumentsInteractive() {
-        let installer = GameInstaller.shared
+        let installer = GameInstallerRunner.shared
         let args = installer.getInstallerArguments(
             installerPath: testInstallerPath,
             installerType: .innoSetup,
@@ -94,7 +94,7 @@ struct GameInstallerTests {
     
     @Test("Unknown installer type")
     func unknownInstallerType() {
-        let installer = GameInstaller.shared
+        let installer = GameInstallerRunner.shared
         let args = installer.getInstallerArguments(
             installerPath: testInstallerPath,
             installerType: .unknown,
@@ -163,7 +163,7 @@ struct InstallerIntegrationTests {
             return
         }
         
-        let installer = GameInstaller.shared
+        let installer = GameInstallerRunner.shared
         let installerType = installer.detectInstallerType(mockInstallerPath.path)
         
         // The type will depend on what mock installer we create

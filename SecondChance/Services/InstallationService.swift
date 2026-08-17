@@ -8,34 +8,18 @@ import Foundation
 import Logging
 import AppKit
 
-/// Thread-safe tracker for mounted ISOs
-actor MountedISOTracker {
-    private var mountedISOs: Set<URL> = []
-    
-    func insert(_ url: URL) {
-        mountedISOs.insert(url)
-    }
-    
-    func getAll() -> Set<URL> {
-        return mountedISOs
-    }
-    
-    func removeAll() {
-        mountedISOs.removeAll()
-    }
-}
-
 /// Service for handling game installation logic without UI dependencies
 /// Not tied to any actor, can be called from any context
 class InstallationService {
     private let gameInstaller: GameInstaller
-    private let mountedISOTracker = MountedISOTracker()
+    let isoMounter: ISOMounter
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.InstallationService")
 
     init(bus: EventBus<AppEvent> = .app) {
         self.bus = bus
         self.gameInstaller = GameInstaller(bus: bus)
+        self.isoMounter = ISOMounter()
     }
     
     // MARK: - Unified Installation Flow
@@ -105,7 +89,7 @@ class InstallationService {
             )
             
             // Unmount ISOs now that installation is complete
-            await unmountAllISOs()
+            await isoMounter.unmountAll()
             
             await context.onInstallationComplete(finalPath)
             await bus.publishInstallation(.completed(wrapperPath: finalPath))
@@ -124,7 +108,7 @@ class InstallationService {
             let installError = (error as? InstallationError) ?? .internalError(error.localizedDescription)
             await bus.publishInstallation(.failed(installError))
             
-            await unmountAllISOs()
+            await isoMounter.unmountAll()
             
             gameInstaller.cleanupTemporaryWrappers()
             
@@ -243,174 +227,18 @@ class InstallationService {
         }
     }
     
-    /// Unmount all ISOs that were mounted by this service
+    /// Unmount all ISOs that were mounted by this service (delegates to ISOMounter)
     func unmountAllISOs() async {
-        let mountedISOs = await mountedISOTracker.getAll()
-        guard !mountedISOs.isEmpty else { return }
-        
-        logger.notice("Unmounting \(mountedISOs.count) ISO(s)...")
-
-        for mountPoint in mountedISOs {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-            process.arguments = ["detach", mountPoint.path, "-quiet"]
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-                if process.terminationStatus == 0 {
-                    logger.notice("Unmounted: \(mountPoint.path)")
-                } else {
-                    logger.error("Failed to unmount \(mountPoint.path) (exit code: \(process.terminationStatus))")
-                }
-            } catch {
-                logger.error("Error unmounting \(mountPoint.path): \(error)")
-            }
-        }
-        
-        await mountedISOTracker.removeAll()
+        await isoMounter.unmountAll()
     }
     
     // MARK: - ISO Management
     
-    /// Mount an ISO file with context-aware sandbox handling
-    /// Checks if already mounted, otherwise mounts to /Volumes
+    /// Mount an ISO file with context-aware sandbox handling (delegates to ISOMounter)
     private func mountISO(at isoPath: URL, context: InstallationContext) async throws -> URL {
-        // Check if this ISO is already mounted
-        if let existingMount = try? await checkIfISOAlreadyMounted(isoPath) {
-            logger.notice("ISO already mounted: \(existingMount.path)")
-            return existingMount
+        try await isoMounter.mount(isoPath) { mountPoint in
+            try await context.requestVolumeAccess(mountPoint: mountPoint)
         }
-
-        logger.notice("Mounting ISO: \(isoPath.lastPathComponent)")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        process.arguments = ["attach", "-nobrowse", "-readonly", isoPath.path]
-        
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        
-        try process.run()
-        process.waitUntilExit()
-        
-        guard process.terminationStatus == 0 else {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorOutput = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw NSError(domain: "ISOMount", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to mount ISO: \(errorOutput)"
-            ])
-        }
-        
-        // Parse hdiutil output to get mount point
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else {
-            throw NSError(domain: "ISOMount", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to read mount output"
-            ])
-        }
-        
-        // Find the mount point in the output (last column, usually /Volumes/...)
-        let lines = output.components(separatedBy: "\n")
-        for line in lines {
-            let parts = line.components(separatedBy: "\t").map { $0.trimmingCharacters(in: .whitespaces) }
-            if let mountPoint = parts.last, mountPoint.hasPrefix("/") {
-                var mountURL = URL(fileURLWithPath: mountPoint)
-                
-                // For sandboxed apps, may need user to grant access
-                mountURL = try await context.requestVolumeAccess(mountPoint: mountURL)
-                
-                // Track that we mounted this
-                await mountedISOTracker.insert(mountURL)
-                logger.notice("Mounted: \(mountURL.path)")
-                return mountURL
-            }
-        }
-        
-        throw NSError(domain: "ISOMount", code: 3, userInfo: [
-            NSLocalizedDescriptionKey: "Failed to find mount point in hdiutil output"
-        ])
     }
     
-    /// Check if an ISO is already mounted and return its mount point
-    private func checkIfISOAlreadyMounted(_ isoPath: URL) async throws -> URL? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        process.arguments = ["info", "-plist"]
-        
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-        
-        try process.run()
-        process.waitUntilExit()
-        
-        // Print any errors to console
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        if let errorOutput = String(data: errorData, encoding: .utf8), !errorOutput.isEmpty {
-            logger.critical("   hdiutil info error: \(errorOutput)")
-        }
-        
-        let plistData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        
-        // Parse the plist
-        guard let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any],
-              let images = plist["images"] as? [[String: Any]] else {
-            logger.notice("   ℹ️ No mounted disk images found")
-            return nil
-        }
-        
-        let fileManager = FileManager.default
-        
-        // Resolve the canonical path of our ISO (in case it's a symlink)
-        let canonicalISOPath: String
-        if let resolved = try? fileManager.destinationOfSymbolicLink(atPath: isoPath.path) {
-            canonicalISOPath = (resolved as NSString).resolvingSymlinksInPath
-            logger.notice("   ℹ️ Resolved symlink: \(isoPath.path) -> \(canonicalISOPath)")
-        } else {
-            canonicalISOPath = (isoPath.path as NSString).resolvingSymlinksInPath
-        }
-        
-        logger.notice("   ℹ️ Looking for mounted ISO: \(canonicalISOPath)")
-        logger.notice("   ℹ️ Found \(images.count) mounted disk image(s)")
-        
-        // Find our ISO in the list of mounted images
-        for image in images {
-            guard let imagePath = image["image-path"] as? String else {
-                continue
-            }
-            
-            let canonicalImagePath = (imagePath as NSString).resolvingSymlinksInPath
-            
-            logger.notice("   ℹ️ Checking mounted image: \(canonicalImagePath)")
-            
-            if canonicalImagePath == canonicalISOPath {
-                logger.notice("   ✓ Found matching mounted ISO")
-                
-                // Found our ISO, now get the mount points
-                guard let systemEntities = image["system-entities"] as? [[String: Any]] else {
-                    logger.error("   ⚠️ No system entities found for mounted ISO")
-                    continue
-                }
-                
-                for entity in systemEntities {
-                    if let mountPoint = entity["mount-point"] as? String,
-                       !mountPoint.isEmpty {
-                        // Verify that the mount point actually exists as a directory
-                        var isDirectory: ObjCBool = false
-                        if fileManager.fileExists(atPath: mountPoint, isDirectory: &isDirectory), isDirectory.boolValue {
-                            logger.notice("   ✓ Mount point verified: \(mountPoint)")
-                            return URL(fileURLWithPath: mountPoint)
-                        } else {
-                            logger.error("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint)")
-                        }
-                    }
-                }
-            }
-        }
-        
-        logger.notice("   ℹ️ ISO not found in mounted images")
-        return nil
-    }
 }
