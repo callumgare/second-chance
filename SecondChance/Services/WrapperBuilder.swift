@@ -13,11 +13,20 @@ class WrapperBuilder {
     static let shared = WrapperBuilder()
     
     private let fileManager = FileManager.default
-    private let wineManager = WineManager.shared
-    private let cacheManager = CacheManager.shared
+    private let wineManager: WineManager
+    private let cacheManager: CacheManager
+    let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrapperBuilder")
     
-    private init() {}
+    init(
+        wineManager: WineManager = .shared,
+        cacheManager: CacheManager = .shared,
+        bus: EventBus<AppEvent> = .app
+    ) {
+        self.wineManager = wineManager
+        self.cacheManager = cacheManager
+        self.bus = bus
+    }
     
     // MARK: - Helper Methods
     
@@ -57,7 +66,7 @@ class WrapperBuilder {
         }
         
         logger.notice("Creating unified wrapper with both Wine and ScummVM support...")
-        Task { await EventBus.app.publishInstallation(.progress(.settingUpWrapper(substep: nil))) }
+        await bus.publishInstallation(.progress(.settingUpWrapper(substep: nil)))
         
         // Find the pre-built unified template
         guard let templatePath = Bundle.main.url(forResource: "GameWrapper", withExtension: "app") else {
@@ -508,7 +517,9 @@ class WrapperBuilder {
         // If we have the Swift runtime source, compile it
         if fileManager.fileExists(atPath: runtimeSourcePath.path) {
             logger.notice("Compiling Swift runtime...")
-            Task { await EventBus.app.publishInstallation(.progress(.configuringWrapper(substep: "Compiling Swift runtime"))) }
+            // Sync function — detached publish keeps ordering best-effort while
+            // still targeting the injected (testable) bus.
+            Task { await bus.publishInstallation(.progress(.configuringWrapper(substep: "Compiling Swift runtime"))) }
             
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/swiftc")
@@ -543,7 +554,7 @@ class WrapperBuilder {
                 // Code sign the launcher executable
                 // Ad-hoc signing is sufficient for local development
                 logger.notice("Signing launcher executable...")
-                Task { await EventBus.app.publishInstallation(.progress(.configuringWrapper(substep: "Signing launcher executable"))) }
+                Task { await bus.publishInstallation(.progress(.configuringWrapper(substep: "Signing launcher executable"))) }
                 let codesignPath = "/usr/bin/codesign"
                 let signProcess = Process()
                 signProcess.executableURL = URL(fileURLWithPath: codesignPath)
@@ -728,7 +739,7 @@ class WrapperBuilder {
             }
         }
         
-        Task { await EventBus.app.publishInstallation(.progress(.copyingInstaller(substep: nil))) }
+        await bus.publishInstallation(.progress(.copyingInstaller(substep: nil)))
         
         let driveCPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
         let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
@@ -864,7 +875,7 @@ class WrapperBuilder {
             return
         }
         
-        Task { await EventBus.app.publishInstallation(.progress(.installingGame(substep: "Installing Steam client"))) }
+        await bus.publishInstallation(.progress(.installingGame(substep: "Installing Steam client")))
         
         // Stop wine server first
         let wine = WineEnvironment(appPath: wrapperPath)
@@ -885,7 +896,7 @@ class WrapperBuilder {
         installerDir: String,
         steamID: String? = nil
     ) throws {
-        Task { await EventBus.app.publishInstallation(.progress(.configuringWrapper(substep: "Updating configuration files"))) }
+        Task { await bus.publishInstallation(.progress(.configuringWrapper(substep: "Updating configuration files"))) }
         
         let infoPlistPath = wrapperPath.appendingPathComponent("Contents/Info.plist")
         

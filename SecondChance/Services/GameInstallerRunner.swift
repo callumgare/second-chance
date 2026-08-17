@@ -31,12 +31,18 @@ class GameInstallerRunner {
     var patchFailureConfirmation: (@MainActor (String, Error) async -> Bool)?
 
     private let fileManager = FileManager.default
-    private let wineManager = WineManager.shared
-    private let exiftool = ExiftoolService.shared
+    private let wineManager: WineManager
+    private let exiftool: ExiftoolService
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner")
     let bus: EventBus<AppEvent>
 
-    init(bus: EventBus<AppEvent> = .app) {
+    init(
+        wineManager: WineManager = .shared,
+        exiftool: ExiftoolService = .shared,
+        bus: EventBus<AppEvent> = .app
+    ) {
+        self.wineManager = wineManager
+        self.exiftool = exiftool
         self.bus = bus
     }
 

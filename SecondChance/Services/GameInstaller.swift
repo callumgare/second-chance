@@ -13,9 +13,9 @@ class GameInstaller {
     static let shared = GameInstaller()
 
     private let fileManager = FileManager.default
-    private let wrapperBuilder = WrapperBuilder.shared
-    private let gameDetector = GameDetector.shared
-    private let gameInfoProvider = GameInfoProvider.shared
+    private let wrapperBuilder: WrapperBuilder
+    private let gameDetector: GameDetector
+    private let gameInfoProvider: GameInfoProvider
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstaller")
     let bus: EventBus<AppEvent>
 
@@ -35,9 +35,18 @@ class GameInstaller {
     private var temporaryWrappers: Set<URL> = []
     private let wrappersLock = NSLock()
 
-    init(bus: EventBus<AppEvent> = .app) {
+    init(
+        wrapperBuilder: WrapperBuilder = .shared,
+        gameDetector: GameDetector = .shared,
+        gameInfoProvider: GameInfoProvider = .shared,
+        installerRunner: GameInstallerRunner? = nil,
+        bus: EventBus<AppEvent> = .app
+    ) {
         self.bus = bus
-        self.installerRunner = GameInstallerRunner(bus: bus)
+        self.wrapperBuilder = wrapperBuilder
+        self.gameDetector = gameDetector
+        self.gameInfoProvider = gameInfoProvider
+        self.installerRunner = installerRunner ?? GameInstallerRunner(bus: bus)
     }
     
     // MARK: - Main Installation Flow

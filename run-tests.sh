@@ -115,7 +115,12 @@ else
     XCBEAUTIFY_OPTIONS=""
 fi
 
-ARCH="arm64"
+# Pin to the architecture this script is running under (Rosetta reports x86_64)
+# instead of hardcoding arm64: GameWrapper is x86_64-only (Wine) and links
+# swift-log via Shared/Logging/, so a native arm64 run produces an arm64-only
+# Logging.o that GameWrapper cannot link. Run under Rosetta for integration
+# tests: `arch -x86_64 ./run-tests.sh ...`
+ARCH="$(uname -m)"
 
 # Unique result bundle path for this run so parallel runs don't collide
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"

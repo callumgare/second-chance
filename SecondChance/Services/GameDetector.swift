@@ -12,10 +12,12 @@ import UniformTypeIdentifiers
 class GameDetector {
     static let shared = GameDetector()
 
-    private let exiftool = ExiftoolService.shared
+    private let exiftool: ExiftoolService
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameDetector")
     
-    private init() {}
+    init(exiftool: ExiftoolService = .shared) {
+        self.exiftool = exiftool
+    }
     
     /// Detect game from disk path
     func detectGame(fromDisk diskPath: URL) async throws -> String {

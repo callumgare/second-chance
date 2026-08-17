@@ -12,14 +12,27 @@ import AppKit
 /// Not tied to any actor, can be called from any context
 class InstallationService {
     private let gameInstaller: GameInstaller
+    private let gameDetector: GameDetector
+    private let gameInfoProvider: GameInfoProvider
+    private let wrapperBuilder: WrapperBuilder
     let isoMounter: ISOMounter
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.InstallationService")
 
-    init(bus: EventBus<AppEvent> = .app) {
+    init(
+        gameInstaller: GameInstaller? = nil,
+        gameDetector: GameDetector = .shared,
+        gameInfoProvider: GameInfoProvider = .shared,
+        wrapperBuilder: WrapperBuilder = .shared,
+        isoMounter: ISOMounter = ISOMounter(),
+        bus: EventBus<AppEvent> = .app
+    ) {
         self.bus = bus
-        self.gameInstaller = GameInstaller(bus: bus)
-        self.isoMounter = ISOMounter()
+        self.gameInstaller = gameInstaller ?? GameInstaller(bus: bus)
+        self.gameDetector = gameDetector
+        self.gameInfoProvider = gameInfoProvider
+        self.wrapperBuilder = wrapperBuilder
+        self.isoMounter = isoMounter
     }
     
     // MARK: - Unified Installation Flow
@@ -55,8 +68,8 @@ class InstallationService {
             
             // Detect game
             await bus.publishInstallation(.progress(.detectingGame(substep: nil)))
-            let gameSlug = try await GameDetector.shared.detectGame(fromDisk: disk1Mounted)
-            let gameInfo = GameInfoProvider.shared.gameInfo(for: gameSlug)
+            let gameSlug = try await gameDetector.detectGame(fromDisk: disk1Mounted)
+            let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
             await input.onGameDetected(gameInfo)
             
             // Get disk 2 if needed
@@ -83,7 +96,7 @@ class InstallationService {
             )
             
             // Sign wrapper before moving (so failures trigger cleanup)
-            try WrapperBuilder.shared.signWrapper(at: wrapperPath)
+            try wrapperBuilder.signWrapper(at: wrapperPath)
             await bus.publishInstallation(.signed(wrapperPath: wrapperPath))
             
             // Save wrapper
@@ -141,7 +154,7 @@ class InstallationService {
         try FileManager.default.moveItem(at: wrapperPath, to: finalPath)
         
         // Unregister from cleanup tracking since it's no longer temporary
-        GameInstaller.shared.unregisterTemporaryWrapper(wrapperPath)
+        gameInstaller.unregisterTemporaryWrapper(wrapperPath)
         
         logger.notice("Wrapper saved: \(finalPath.path)")
         
