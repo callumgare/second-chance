@@ -21,7 +21,6 @@ class InstallationViewModel: ObservableObject {
     private let installationService = InstallationService()
     private let gameInstaller = GameInstaller.shared
     private let cacheManager = CacheManager.shared
-    private var stateObserver: AnyCancellable?
     private var busSubscriptionToken: EventBus<AppEvent>.Token?
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.InstallationViewModel")
 
@@ -36,124 +35,22 @@ class InstallationViewModel: ObservableObject {
     var enableCaching = false
     var stagesToRestore: Set<CacheStage> = []
     
-    // Non-interactive mode settings (for command-line usage)
-    var nonInteractiveMode: Bool {
-        ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true"
-    }
-    var installationSource: String? {
-        ProcessInfo.processInfo.environment["INSTALLATION_SOURCE"]
-    }
-    var disk1Path: String? {
-        ProcessInfo.processInfo.environment["DISK_1_PATH"]
-    }
-    var disk2Path: String? {
-        ProcessInfo.processInfo.environment["DISK_2_PATH"]
-    }
-    var outputPath: String? {
-        ProcessInfo.processInfo.environment["OUTPUT_PATH"]
-    }
-    var launchGame: Bool {
-        ProcessInfo.processInfo.environment["LAUNCH_GAME"] == "true"
-    }
-    var launchGameArgs: [String] {
-        if let args = ProcessInfo.processInfo.environment["LAUNCH_GAME_ARGS"] {
-            // Split by spaces, respecting quoted strings
-            var result: [String] = []
-            var current = ""
-            var inQuotes = false
-            
-            for char in args {
-                if char == "\"" {
-                    inQuotes = !inQuotes
-                } else if char == " " && !inQuotes {
-                    if !current.isEmpty {
-                        result.append(current)
-                        current = ""
-                    }
-                } else {
-                    current.append(char)
-                }
-            }
-            if !current.isEmpty {
-                result.append(current)
-            }
-            return result
-        }
-        return []
-    }
-    var clearWineCache: Bool {
-        CommandLine.arguments.contains("--clear-wine-cache")
-    }
-    
     init() {
-        // Clear Wine cache if requested
-        if clearWineCache {
-            logger.notice("Clearing Wine prefix cache...")
-            do {
-                try WineManager.shared.clearCache()
-            } catch {
-                logger.critical("Failed to clear Wine prefix cache: \(error.localizedDescription)")
-                exit(1)
-            }
-        }
-        
         // Configure cache manager based on settings
         cacheManager.cachingEnabled = enableCaching
         cacheManager.stagesToRestore = stagesToRestore
 
         // Subscribe to the app-wide bus so installation events drive our @Published properties.
+        // (Headless runs are driven by CLIBuilder, which was extracted from here.)
         Task { @MainActor in
             let token = await EventBus.app.subscribe { [weak self] event in
                 await self?.handleBusEvent(event)
             }
             self.busSubscriptionToken = token
         }
-
-        // Auto-start if in non-interactive mode
-        if nonInteractiveMode {
-            guard let source = installationSource else {
-                logger.critical("NON-INTERACTIVE MODE: INSTALLATION_SOURCE environment variable is required (disk, her-download, steam)")
-                exit(1)
-            }
-
-            guard source == "disk" || source == "her-download" || source == "steam" else {
-                logger.critical("NON-INTERACTIVE MODE: Invalid INSTALLATION_SOURCE '\(source)' (disk, her-download, steam)")
-                exit(1)
-            }
-
-            logger.notice("NON-INTERACTIVE MODE: Auto-starting installation — source: \(source)")
-
-            // Validate required parameters for each source type
-            if source == "disk" {
-                guard let disk1 = disk1Path else {
-                    logger.critical("NON-INTERACTIVE MODE: DISK_1_PATH environment variable is required for disk installation")
-                    exit(1)
-                }
-                logger.notice("Disk 1: \(disk1)")
-                if let disk2 = disk2Path {
-                    logger.notice("Disk 2: \(disk2)")
-                }
-            }
-
-            guard let output = outputPath else {
-                logger.critical("NON-INTERACTIVE MODE: OUTPUT_PATH environment variable is required (directory where .app will be saved)")
-                exit(1)
-            }
-            logger.notice("Output: \(output)")
-            
-            // Observe state changes to auto-exit when done
-            stateObserver = $currentState.sink { [weak self] state in
-                self?.handleStateChange(state)
-            }
-            
-            // Run installation in detached task so it doesn't block app termination
-            Task.detached { [weak self] in
-                await self?.autoNonInteractiveInstall(source: source)
-            }
-        }
     }
-    
-    // MARK: - Non-Interactive Mode
+
+    // MARK: - Bus Event Handling
 
     /// Handle bus events — drives @Published properties from typed events.
     /// Internal (not private) so unit tests can drive it directly without
@@ -185,57 +82,6 @@ class InstallationViewModel: ObservableObject {
         }
     }
 
-    /// Handle state changes in non-interactive mode - exit when complete
-    private func handleStateChange(_ state: InstallationState) {
-        guard nonInteractiveMode else { return }
-        // Exit is handled after performInstallation completes (including game launch)
-    }
-    
-    /// Automatically run installation in non-interactive mode
-    private func autoNonInteractiveInstall(source: String) async {
-        let input = WrappBuildInput(viewModel: self)
-        
-        do {
-            switch source {
-            case "disk":
-                _ = try await installationService.performInstallation(input: input)
-                await MainActor.run {
-                    currentState = .completed
-                }
-                logger.notice("NON-INTERACTIVE MODE: Exiting with success")
-                fflush(stdout)
-                AutomationBridge.shared.stop()
-                _exit(0)
-                
-            case "her-download":
-                logger.critical("NON-INTERACTIVE MODE: Her Interactive download installation not yet implemented")
-                throw NSError(domain: "Installation", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Her Interactive download not yet implemented in non-interactive mode"
-                ])
-
-            case "steam":
-                logger.critical("NON-INTERACTIVE MODE: Steam installation not yet implemented")
-                throw NSError(domain: "Installation", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Steam installation not yet implemented in non-interactive mode"
-                ])
-
-            default:
-                logger.critical("NON-INTERACTIVE MODE: Unknown installation source '\(source)'")
-                throw NSError(domain: "Installation", code: 1, userInfo: [
-                    NSLocalizedDescriptionKey: "Unknown installation source"
-                ])
-            }
-        } catch {
-            await MainActor.run {
-                currentState = .error(error.localizedDescription)
-            }
-            logger.critical("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription)")
-            fflush(stdout)
-            fflush(stderr)
-            _exit(1)
-        }
-    }
-    
     // MARK: - Elapsed-time tracking
 
     /// Apply a progress state with the elapsed-time delay logic from the

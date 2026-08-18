@@ -36,13 +36,30 @@ struct SecondChanceApp: App {
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
 
+        // Clear the Wine prefix cache before anything else touches it. Works in
+        // both GUI and headless launches (run.sh --clear-wine-cache).
+        if CommandLine.arguments.contains("--clear-wine-cache") {
+            logger.notice("Clearing Wine prefix cache...")
+            do {
+                try WineManager.shared.clearCache()
+            } catch {
+                logger.critical("Failed to clear Wine prefix cache: \(error.localizedDescription)")
+                LogStore.shared.flush()
+                exit(1)
+            }
+        }
+
         let debugMode = CommandLine.arguments.contains("--debug")
 
-        if ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" {
+        if CLIBuilder.isEnabled {
             // NSApp may not exist yet during init; defer to first run loop cycle
             DispatchQueue.main.async {
                 NSApp?.setActivationPolicy(.prohibited)
             }
+            // Validate synchronously so misconfigured runs fail before the UI
+            // starts, then run the build detached so it can drive termination.
+            let source = CLIBuilder.validatedSource()
+            Task { await CLIBuilder.run(source: source) }
         }
 
         Task { await AutomationBridge.shared.startIfConfigured() }
