@@ -18,8 +18,9 @@ class InstallationViewModel: ObservableObject {
 
     @Published var progress: Double = 0.0
 
-    private let installationService = InstallationService()
-    private let gameInstaller = GameInstaller.shared
+    private let diskBuilder = DiskWrappBuilder()
+    private let herDownloadBuilder = HerDownloadWrappBuilder()
+    private let steamBuilder = SteamWrappBuilder()
     private let cacheManager = CacheManager.shared
     private var busSubscriptionToken: EventBus<AppEvent>.Token?
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.InstallationViewModel")
@@ -151,67 +152,29 @@ class InstallationViewModel: ObservableObject {
     
     /// Start installation from disk (interactive mode)
     func installFromDisk() async {
-        let input = WrappBuildInput(viewModel: self)
-        
-        do {
-            _ = try await installationService.performInstallation(input: input)
-            currentState = .completed
-        } catch {
-            // The bus has already routed this failure (see handleBusEvent);
-            // this mirrors the same rule at the throw site.
-            handleInstallFailure(error)
-        }
+        await runBuild(diskBuilder)
     }
     
     /// Start installation from Her Interactive download
     func installFromHerDownload() async {
-        // TODO: Implement using the unified flow (see docs/installation-flow.md §5)
-        // For now, keep the legacy direct-to-installer path, but source all
-        // user I/O through WrappBuildInput like the unified flow does.
-        let input = WrappBuildInput(viewModel: self)
-
-        do {
-            // Select installer file (env HER_INSTALLER_PATH or NSOpenPanel)
-            let installerURL = try await input.getHerInstallerPath()
-            
-            let installer = gameInstaller
-
-            // Run installation in background task to avoid blocking UI
-            let wrapperPath = try await Task.detached {
-                try await installer.installFromHerDownload(installerPath: installerURL)
-            }.value
-            
-            // Detect game info
-            if let gameSlug = try? await GameDetector.shared.detectGame(fromInstaller: installerURL) {
-                detectedGame = GameInfoProvider.shared.gameInfo(for: gameSlug)
-            }
-            
-            // Save wrapper using unified input
-            let gameName = detectedGame?.title ?? "Unknown Game"
-            let outputDir = try await input.getOutputPath(gameName: gameName)
-            
-            currentState = .savingApp(substep: nil)
-            let finalPath = try await installationService.saveWrapper(
-                from: wrapperPath,
-                to: outputDir,
-                gameName: gameName
-            )
-            
-            await input.onWrappBuildComplete(finalPath)
-            
-            currentState = .completed
-            
-        } catch {
-            handleError(error)
-        }
+        await runBuild(herDownloadBuilder)
     }
     
     /// Start installation from Steam
     func installFromSteam() async {
+        await runBuild(steamBuilder)
+    }
+    
+    /// Drive any builder: build → completed, or route the failure. The bus
+    /// already routed `.failed` to `handleBusEvent`; the local catch mirrors
+    /// the same early-cancel rule for throws that bypassed it.
+    private func runBuild(_ builder: WrappBuildStrategy) async {
+        let input = WrappBuildInput(viewModel: self)
         do {
-            currentState = .error("Steam installation is not fully implemented yet. This feature is coming soon!")
+            _ = try await builder.build(input: input)
+            currentState = .completed
         } catch {
-            handleError(error)
+            handleInstallFailure(error)
         }
     }
     

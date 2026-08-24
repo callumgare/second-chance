@@ -14,7 +14,7 @@ private var signalSources: [DispatchSourceSignal] = []
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         logger.notice("🛑 Application terminating, cleaning up...")
-        GameInstaller.shared.cleanupTemporaryWrappers()
+        WrappBuildHelper.shared.cleanupTemporaryWrapps()
         // Drain anything still pending so the disk mirror / stderr don't lose the last lines.
         LogStore.shared.flush()
         return .terminateNow
@@ -79,7 +79,7 @@ struct SecondChanceApp: App {
         let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         sigintSource.setEventHandler {
             logger.critical("🛑 Received interrupt signal, cleaning up...")
-            GameInstaller.shared.cleanupTemporaryWrappers()
+            WrappBuildHelper.shared.cleanupTemporaryWrapps()
             LogStore.shared.flush()
             exit(130)
         }
@@ -90,7 +90,7 @@ struct SecondChanceApp: App {
         let sigtermSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
         sigtermSource.setEventHandler {
             logger.critical("🛑 Received termination signal, cleaning up...")
-            GameInstaller.shared.cleanupTemporaryWrappers()
+            WrappBuildHelper.shared.cleanupTemporaryWrapps()
             LogStore.shared.flush()
             exit(143)
         }

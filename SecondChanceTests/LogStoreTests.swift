@@ -153,14 +153,14 @@ struct LogStoreTests {
             seq: 1,
             timestamp: Date(timeIntervalSince1970: 1_771_200_000),
             level: "error",
-            label: "au.gare.callum.second-chance.SecondChance.GameInstaller",
+            label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner",
             message: "install failed",
             error: "disk full"
         )
         let text = LogFormatter.full(entry: entry)
         #expect(!text.contains("\n"), "single-line message should render as a single line")
         #expect(text.hasPrefix("2026-02-16T00:00:00.000Z"), "expected ISO8601 timestamp prefix, got: \(text)")
-        #expect(text.contains("  error  au.gare.callum.second-chance.SecondChance.GameInstaller  install failed"),
+        #expect(text.contains("  error  au.gare.callum.second-chance.SecondChance.GameInstallerRunner  install failed"),
                 "expected `ts  level  label  message` layout, got: \(text)")
         #expect(text.hasSuffix(" — Error: disk full"), "expected error appended in-band, got: \(text)")
         // The level is rendered verbatim in full format (no compact-style coalescing).

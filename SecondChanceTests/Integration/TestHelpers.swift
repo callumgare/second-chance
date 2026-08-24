@@ -172,7 +172,7 @@ enum WrapperInfo {
 
 /// Builds a game wrapper for use in integration tests. Returns the `.app` URL.
 /// The wrapper is placed in a temp directory; the caller is responsible for cleanup.
-enum WrapperBuilder {
+enum WrapperBuildTestHelper {
     /// Build a wrapper for the given game by running the real install flow.
     /// - Parameters:
     ///   - game: The game to install.
@@ -195,8 +195,8 @@ enum WrapperBuilder {
         }
 
         let context = IntegrationTestContext(disk1: disk1, disk2: disk2, outputDir: outputDir)
-        let service = InstallationService()
-        return try await service.performInstallation(input: context)
+        let builder = DiskWrappBuilder()
+        return try await builder.build(input: context)
     }
 }
 

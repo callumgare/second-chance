@@ -74,26 +74,23 @@ enum CLIBuilder {
     /// Run the build for a validated source, then terminate the process.
     /// Never returns.
     static func run(source: String) async -> Never {
-        let installationService = InstallationService()
+        let builder: WrappBuildStrategy
+        switch source {
+        case "disk":
+            builder = DiskWrappBuilder()
+        case "her-download":
+            builder = HerDownloadWrappBuilder()
+        case "steam":
+            builder = SteamWrappBuilder()
+        default:
+            logger.critical("NON-INTERACTIVE MODE: Unknown installation source '\(source)'")
+            exitWithFailure(InstallationError.internalError("Unknown installation source '\(source)'"))
+        }
+
         let input = WrappBuildInput(viewModel: nil)
 
         do {
-            switch source {
-            case "disk":
-                _ = try await installationService.performInstallation(input: input)
-
-            case "her-download":
-                logger.critical("NON-INTERACTIVE MODE: Her Interactive download installation not yet implemented")
-                throw InstallationError.internalError("Her Interactive download not yet implemented in non-interactive mode")
-
-            case "steam":
-                logger.critical("NON-INTERACTIVE MODE: Steam installation not yet implemented")
-                throw InstallationError.internalError("Steam installation not yet implemented in non-interactive mode")
-
-            default:
-                logger.critical("NON-INTERACTIVE MODE: Unknown installation source '\(source)'")
-                throw InstallationError.internalError("Unknown installation source '\(source)'")
-            }
+            _ = try await builder.build(input: input)
 
             logger.notice("NON-INTERACTIVE MODE: Exiting with success")
             fflush(stdout)
@@ -101,12 +98,17 @@ enum CLIBuilder {
             LogStore.shared.flush()
             _exit(0)
         } catch {
-            logger.critical("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription)")
-            fflush(stdout)
-            fflush(stderr)
-            LogStore.shared.flush()
-            _exit(1)
+            exitWithFailure(error)
         }
+    }
+
+    /// Log, flush, and terminate with a failure exit code. Never returns.
+    private static func exitWithFailure(_ error: Error) -> Never {
+        logger.critical("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription)")
+        fflush(stdout)
+        fflush(stderr)
+        LogStore.shared.flush()
+        _exit(1)
     }
 
     /// Log a validation failure and terminate with a non-zero exit.
