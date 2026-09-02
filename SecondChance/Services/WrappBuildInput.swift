@@ -17,17 +17,6 @@ import Foundation
 import AppKit
 import UniformTypeIdentifiers
 
-/// In-process test seam: set disk paths before tapping the UI to bypass
-/// NSOpenPanel. Production code never touches this — it stays nil and the
-/// panels show normally.
-struct PreconfiguredPaths {
-    static var disk1: URL?
-    static var disk2: URL?
-    static var outputDir: URL?
-    static var isConfigured: Bool { disk1 != nil }
-    static func clear() { disk1 = nil; disk2 = nil; outputDir = nil }
-}
-
 /// Unified I/O for a wrapp build.
 ///
 /// One implementation serves both GUI and headless runs, using env-var-first
@@ -67,7 +56,6 @@ class WrappBuildInput {
         if let url = try diskPathFromEnv("DISK_1_PATH", label: "Disk 1") {
             return url
         }
-        if let path = PreconfiguredPaths.disk1 { return path }
         guard let url = await selectDiskOrISO(message: "Select the first game disk or ISO:") else {
             // Cancelling the very first dialog means the user never started —
             // distinct from cancelling a later prompt mid-install.
@@ -83,7 +71,6 @@ class WrappBuildInput {
         if let url = try diskPathFromEnv("DISK_2_PATH", label: "Disk 2") {
             return url
         }
-        if let path = PreconfiguredPaths.disk2 { return path }
         guard let url = await selectDiskOrISO(message: "Select the second game disk or ISO:") else {
             throw WrappBuildError.userCancelled
         }
@@ -121,7 +108,7 @@ class WrappBuildInput {
     @MainActor
     func requestVolumeAccess(mountPoint: URL) async throws -> URL {
         // Headless/env-supplied runs can't prompt — pass the mount point through.
-        if anyDiskPathFromEnv || PreconfiguredPaths.isConfigured { return mountPoint }
+        if anyDiskPathFromEnv { return mountPoint }
 
         let accessPanel = NSOpenPanel()
         accessPanel.message = "Please grant access to the mounted volume to continue"
@@ -157,8 +144,6 @@ class WrappBuildInput {
             try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
             return url
         }
-
-        if let dir = PreconfiguredPaths.outputDir { return dir }
 
         let panel = NSOpenPanel()
         panel.message = "Choose where to save the Nancy Drew app:"

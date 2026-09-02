@@ -82,12 +82,6 @@ struct DiskInstallIntegrationTests {
             let outputDir = makeOutputDir()
             builtOutputDir = outputDir
 
-            // Pre-configure disk paths so WrappBuildInput bypasses NSOpenPanel.
-            PreconfiguredPaths.disk1 = disk1
-            PreconfiguredPaths.disk2 = disk2
-            PreconfiguredPaths.outputDir = outputDir
-            defer { PreconfiguredPaths.clear() }  // dir cleanup deferred until after GamePuppeteer
-
             let recorder = RecordingEventSubscriber()
             await recorder.subscribe(to: EventBus.app)
             defer { Task { await recorder.unsubscribe(from: EventBus.app) } }
@@ -104,8 +98,20 @@ struct DiskInstallIntegrationTests {
                 }
             }
 
-            // Fire buildFromDisk() as a detached task so waitForCompletion() can run concurrently.
-            let viewModel = await MainActor.run { WrappBuildViewModel() }
+            // Drive the real entry point, with a fixed-path input injected so
+            // WrappBuildInput takes its env-var branch and no panel appears.
+            // Fire buildFromDisk() as a detached task so waitForCompletion()
+            // can run concurrently.
+            let viewModel = await MainActor.run {
+                WrappBuildViewModel(makeInput: {
+                    WrappBuildInput(
+                        disk1: disk1,
+                        disk2: disk2,
+                        outputDir: outputDir,
+                        viewModel: $0
+                    )
+                })
+            }
             Task { await MainActor.run { Task { await viewModel.buildFromDisk() } } }
 
             let succeeded = await recorder.waitForCompletion(timeout: 600)

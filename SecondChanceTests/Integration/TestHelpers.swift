@@ -170,36 +170,6 @@ enum WrappInfo {
     }
 }
 
-/// Builds a game wrapp for use in integration tests. Returns the `.app` URL.
-/// The wrapp is placed in a temp directory; the caller is responsible for cleanup.
-enum WrappBuildTestHelper {
-    /// Build a wrapp for the given game by running the real install flow.
-    /// - Parameters:
-    ///   - game: The game to install.
-    ///   - keepWrapp: If `true`, persist the wrapp to `built-apps/` instead
-    ///     of a temp directory (mirrors `--use-existing` in `test-games.sh`).
-    /// - Returns: The built wrapp `.app` URL.
-    static func build(for game: GameInfo, keepWrapp: Bool = false) async throws -> URL {
-        let disk1 = try InstallerPaths.diskISO(for: game, diskNumber: 1)
-            ?? { throw TestError.installerNotFound(game.id) }()
-        let disk2 = InstallerPaths.diskISO(for: game, diskNumber: 2)
-
-        let outputDir: URL
-        if keepWrapp {
-            outputDir = TestPaths.repoRoot.appendingPathComponent("built-apps")
-            try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        } else {
-            outputDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("sc-integration-\(UUID().uuidString)")
-            try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        }
-
-        let input = IntegrationTestInput(disk1: disk1, disk2: disk2, outputDir: outputDir)
-        let builder = DiskWrappBuilder()
-        return try await builder.build(input: input)
-    }
-}
-
 /// Invokes GamePuppeteer as a subprocess to launch a wrapp and verify the
 /// game quits cleanly. Returns the exit code from GamePuppeteer.
 enum GamePuppetRunner {
@@ -453,15 +423,12 @@ enum GamePuppetRunner {
 }
 
 enum TestError: Error, LocalizedError {
-    case installerNotFound(String)
     case gamePuppeteerNotFound
 
     var errorDescription: String? {
         switch self {
-        case .installerNotFound(let slug):
-            return "No installer ISO found for game '\(slug)' in installers/"
         case .gamePuppeteerNotFound:
-            return "GamePuppeteer binary not found — build the GamePuppeteer target first"
+            return "GamePuppeteer.app not found in DerivedData — it builds as a SecondChanceTests dependency, so this means the build did not complete"
         }
     }
 }

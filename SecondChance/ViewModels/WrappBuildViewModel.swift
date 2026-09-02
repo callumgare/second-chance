@@ -9,6 +9,13 @@ import SwiftUI
 import Combine
 import Logging
 
+/// Builds the I/O for one wrapp build.
+///
+/// Production passes the standard env-var-first `WrappBuildInput`. Integration
+/// tests substitute one carrying fixed paths, which is what lets a test drive
+/// the real `buildFrom*` entry points without any global state.
+typealias WrappBuildInputFactory = (WrappBuildViewModel) -> WrappBuildInput
+
 /// Main ViewModel for coordinating the wrapp build process
 @MainActor
 class WrappBuildViewModel: ObservableObject {
@@ -23,6 +30,7 @@ class WrappBuildViewModel: ObservableObject {
     private let steamBuilder = SteamWrappBuilder()
     private let cacheManager = CacheManager.shared
     private var busSubscriptionToken: EventBus<AppEvent>.Token?
+    private let makeInput: WrappBuildInputFactory
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildViewModel")
 
     // Elapsed-time tracking — mirrors the original AsyncProgressReporter timer behaviour.
@@ -36,7 +44,9 @@ class WrappBuildViewModel: ObservableObject {
     var enableCaching = false
     var stagesToRestore: Set<CacheStage> = []
     
-    init() {
+    init(makeInput: @escaping WrappBuildInputFactory = { WrappBuildInput(viewModel: $0) }) {
+        self.makeInput = makeInput
+
         // Configure cache manager based on settings
         cacheManager.cachingEnabled = enableCaching
         cacheManager.stagesToRestore = stagesToRestore
@@ -169,7 +179,7 @@ class WrappBuildViewModel: ObservableObject {
     /// already routed `.failed` to `handleBusEvent`; the local catch mirrors
     /// the same early-cancel rule for throws that bypassed it.
     private func runBuild(_ builder: WrappBuildStrategy) async {
-        let input = WrappBuildInput(viewModel: self)
+        let input = makeInput(self)
         do {
             _ = try await builder.build(input: input)
             currentState = .completed

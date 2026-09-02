@@ -24,7 +24,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct SecondChanceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var installationViewModel = WrappBuildViewModel()
+    @StateObject private var wrappBuildViewModel = WrappBuildViewModel()
 
     private let appStartTime = Date()
 
@@ -102,7 +102,7 @@ struct SecondChanceApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(installationViewModel)
+                .environmentObject(wrappBuildViewModel)
                 .frame(minWidth: 700, idealWidth: 700, minHeight: 650, idealHeight: 650)
         }
         .windowResizability(.contentMinSize)
