@@ -4,7 +4,7 @@
 //
 //  Helpers for the per-game integration tests. Resolves installer ISO paths,
 //  detects whether installers are present (for test disabling), and reads
-//  wrapper Info.plist values for post-install assertions.
+//  wrapp Info.plist values for post-install assertions.
 
 import Foundation
 import Darwin
@@ -159,8 +159,8 @@ enum TestGameFilter {
     }()
 }
 
-/// Reads values from a built wrapper's `Info.plist` for post-install assertions.
-enum WrapperInfo {
+/// Reads values from a built wrapp's `Info.plist` for post-install assertions.
+enum WrappInfo {
 
     /// Locate the built GamePuppeteer.app bundle. Returns `nil` if not found.
     static func gamePuppeteerBundle() -> URL? {
@@ -170,22 +170,22 @@ enum WrapperInfo {
     }
 }
 
-/// Builds a game wrapper for use in integration tests. Returns the `.app` URL.
-/// The wrapper is placed in a temp directory; the caller is responsible for cleanup.
-enum WrapperBuildTestHelper {
-    /// Build a wrapper for the given game by running the real install flow.
+/// Builds a game wrapp for use in integration tests. Returns the `.app` URL.
+/// The wrapp is placed in a temp directory; the caller is responsible for cleanup.
+enum WrappBuildTestHelper {
+    /// Build a wrapp for the given game by running the real install flow.
     /// - Parameters:
     ///   - game: The game to install.
-    ///   - keepWrapper: If `true`, persist the wrapper to `built-apps/` instead
+    ///   - keepWrapp: If `true`, persist the wrapp to `built-apps/` instead
     ///     of a temp directory (mirrors `--use-existing` in `test-games.sh`).
-    /// - Returns: The built wrapper `.app` URL.
-    static func build(for game: GameInfo, keepWrapper: Bool = false) async throws -> URL {
+    /// - Returns: The built wrapp `.app` URL.
+    static func build(for game: GameInfo, keepWrapp: Bool = false) async throws -> URL {
         let disk1 = try InstallerPaths.diskISO(for: game, diskNumber: 1)
             ?? { throw TestError.installerNotFound(game.id) }()
         let disk2 = InstallerPaths.diskISO(for: game, diskNumber: 2)
 
         let outputDir: URL
-        if keepWrapper {
+        if keepWrapp {
             outputDir = TestPaths.repoRoot.appendingPathComponent("built-apps")
             try? FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
         } else {
@@ -200,25 +200,25 @@ enum WrapperBuildTestHelper {
     }
 }
 
-/// Invokes GamePuppeteer as a subprocess to launch a wrapper and verify the
+/// Invokes GamePuppeteer as a subprocess to launch a wrapp and verify the
 /// game quits cleanly. Returns the exit code from GamePuppeteer.
 enum GamePuppetRunner {
     private static let screenRecordingRelaunchExitCode: Int32 = 5
 
     @discardableResult
     static func run(
-        wrapperURL: URL,
+        wrappURL: URL,
         game: GameInfo,
         timeout: TimeInterval = 90
     ) async throws -> Int32 {
-        guard let bundle = WrapperInfo.gamePuppeteerBundle() else {
+        guard let bundle = WrappInfo.gamePuppeteerBundle() else {
             throw TestError.gamePuppeteerNotFound
         }
         let slug = game.id
 
         var firstAttempt = try await Self.launchAndCollect(
             appBundle: bundle,
-            wrapperURL: wrapperURL,
+            wrappURL: wrappURL,
             timeout: timeout,
             gameSlug: slug,
             attemptLabel: "initial"
@@ -232,7 +232,7 @@ enum GamePuppetRunner {
 
             firstAttempt = try await Self.launchAndCollect(
                 appBundle: bundle,
-                wrapperURL: wrapperURL,
+                wrappURL: wrappURL,
                 timeout: timeout,
                 gameSlug: slug,
                 attemptLabel: "relaunch"
@@ -244,7 +244,7 @@ enum GamePuppetRunner {
 
     private static func launchAndCollect(
         appBundle: URL,
-        wrapperURL: URL,
+        wrappURL: URL,
         timeout: TimeInterval,
         gameSlug: String,
         attemptLabel: String
@@ -252,7 +252,7 @@ enum GamePuppetRunner {
         let launchTime = Date()
         let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
             appBundle: appBundle,
-            arguments: [wrapperURL.path, "--timeout", String(Int(timeout))]
+            arguments: [wrappURL.path, "--timeout", String(Int(timeout))]
         )
 
         var effectiveExitCode = observedExitCode
@@ -466,36 +466,36 @@ enum TestError: Error, LocalizedError {
     }
 }
 
-// MARK: - Backward-compat: WrapperInfo read methods moved here
+// MARK: - Backward-compat: WrappInfo read methods moved here
 
-extension WrapperInfo {
-    /// Read the raw Info.plist dictionary from a wrapper `.app`.
-    static func readPlist(at wrapperPath: URL) throws -> [String: Any] {
-        let plistPath = wrapperPath.appendingPathComponent("Contents/Info.plist")
+extension WrappInfo {
+    /// Read the raw Info.plist dictionary from a wrapp `.app`.
+    static func readPlist(at wrappPath: URL) throws -> [String: Any] {
+        let plistPath = wrappPath.appendingPathComponent("Contents/Info.plist")
         guard FileManager.default.fileExists(atPath: plistPath.path) else {
-            throw NSError(domain: "WrapperInfo", code: 1, userInfo: [
+            throw NSError(domain: "WrappInfo", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Info.plist not found at \(plistPath.path)"
             ])
         }
         let data = try Data(contentsOf: plistPath)
         guard let plist = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
-            throw NSError(domain: "WrapperInfo", code: 2, userInfo: [
+            throw NSError(domain: "WrappInfo", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "Info.plist is not a valid dictionary"
             ])
         }
         return plist
     }
 
-    /// The `GameExePath` value from the wrapper's Info.plist (the exe path the
-    /// wrapper was configured to launch).
-    static func gameExePath(at wrapperPath: URL) throws -> String? {
-        let plist = try readPlist(at: wrapperPath)
+    /// The `GameExePath` value from the wrapp's Info.plist (the exe path the
+    /// wrapp was configured to launch).
+    static func gameExePath(at wrappPath: URL) throws -> String? {
+        let plist = try readPlist(at: wrappPath)
         return plist["GameExePath"] as? String
     }
 
-    /// The `GameSlug` value from the wrapper's AppSettings.plist.
-    static func gameSlug(at wrapperPath: URL) throws -> String? {
-        let settingsPath = wrapperPath.appendingPathComponent("Contents/Resources/AppSettings.plist")
+    /// The `GameSlug` value from the wrapp's AppSettings.plist.
+    static func gameSlug(at wrappPath: URL) throws -> String? {
+        let settingsPath = wrappPath.appendingPathComponent("Contents/Resources/AppSettings.plist")
         guard FileManager.default.fileExists(atPath: settingsPath.path),
               let data = try? Data(contentsOf: settingsPath),
               let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {

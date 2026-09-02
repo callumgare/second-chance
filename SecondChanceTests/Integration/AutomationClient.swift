@@ -8,7 +8,7 @@
 //  Typical usage:
 //    let client = try AutomationClient(socketPath: ...)
 //    let events = try await client.collectAll()
-//    let detected = events.first(ofType: "installation.gameDetected")
+//    let detected = events.first(ofType: "wrappBuild.gameDetected")
 //    #expect(detected?.string(for: "gameId") == game.id)
 
 import Foundation
@@ -23,7 +23,7 @@ import Testing
 struct AutomationMessage: Sendable {
     /// Protocol-level discriminator. Currently always "event".
     let kind: String
-    /// Dotted-path type, e.g. "installation.gameDetected", "lifecycle.terminating".
+    /// Dotted-path type, e.g. "wrappBuild.gameDetected", "lifecycle.terminating".
     let type: String
     let timestamp: Date
     /// All payload fields (everything except kind, type, t).

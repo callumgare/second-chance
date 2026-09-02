@@ -15,8 +15,8 @@ import Foundation
 
 /// Top-level event type for the entire Second Chance app.
 enum AppEvent {
-    /// Installation subsystem events. See `InstallationEvent`.
-    case installation(InstallationEvent)
+    /// Wrapp-build subsystem events. See `WrappBuildEvent`.
+    case wrappBuild(WrappBuildEvent)
 
     /// App lifecycle events. See `LifecycleEvent`.
     case lifecycle(LifecycleEvent)
@@ -26,20 +26,20 @@ enum AppEvent {
     // case settings(SettingsEvent)
 }
 
-// MARK: - Installation events
+// MARK: - Wrapp build events
 
-/// Events emitted during game wrapper creation / installation. These are the
-/// authoritative record of what the install flow did — tests assert on them and
-/// the UI reflects them. They are emitted at decision points where the value is
-/// already computed; emitting is strictly additive to the existing flow.
-enum InstallationEvent {
+/// Events emitted while a wrapp is being built. These are the authoritative
+/// record of what the build flow did — tests assert on them and the UI reflects
+/// them. They are emitted at decision points where the value is already
+/// computed; emitting is strictly additive to the existing flow.
+enum WrappBuildEvent {
     // Lifecycle
-    case started(source: InstallationType)
-    case completed(wrapperPath: URL)
-    case failed(InstallationError)
+    case started(source: WrappSource)
+    case completed(wrappPath: URL)
+    case failed(WrappBuildError)
 
-    // Step progress — carries the existing `InstallationState` enum used by the UI.
-    case progress(InstallationState)
+    // Step progress — carries the existing `WrappBuildState` enum used by the UI.
+    case progress(WrappBuildState)
 
     // Intermediate results — the things tests assert on and the UI/logs can show.
     case disksResolved(disk1: URL, disk2: URL?)
@@ -48,8 +48,8 @@ enum InstallationEvent {
     case engineRouted(engine: GameInfo.GameEngine, gameInfo: GameInfo)
     case installerResolved(exePath: String, type: InstallerType)
     case gameExeDetected(path: String, gameInfo: GameInfo)
-    case wrapperConfigured(exePath: String, installerDir: String, gameInfo: GameInfo)
-    case signed(wrapperPath: URL)
+    case wrappConfigured(exePath: String, installerDir: String, gameInfo: GameInfo)
+    case signed(wrappPath: URL)
 }
 
 // MARK: - Lifecycle events
@@ -59,7 +59,7 @@ enum LifecycleEvent {
     case terminating
 }
 
-// MARK: - Shared bus + installation convenience
+// MARK: - Shared bus + wrapp-build convenience
 
 extension EventBus where Event == AppEvent {
     /// The app-wide shared bus. Subscribe for UI updates, log rendering, and
@@ -67,10 +67,10 @@ extension EventBus where Event == AppEvent {
     /// tests.
     static let app = EventBus<AppEvent>()
 
-    /// Publish an installation-scoped event without the `.installation(...)`
+    /// Publish a wrapp-build-scoped event without the `.wrappBuild(...)`
     /// wrapper at every call site.
-    func publishInstallation(_ event: InstallationEvent) async {
-        await publish(.installation(event))
+    func publishWrappBuild(_ event: WrappBuildEvent) async {
+        await publish(.wrappBuild(event))
     }
 
     /// Publish a lifecycle event.

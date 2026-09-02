@@ -1,21 +1,21 @@
 //
-//  InstallationState.swift
+//  WrappBuildState.swift
 //  SecondChance
 //
-//  Represents the current state of a game installation
+//  Represents the current state of a wrapp build
 
 import Foundation
 
-/// Represents the current state of a game installation process
-enum InstallationState: Equatable {
+/// Represents the current state of a wrapp build
+enum WrappBuildState: Equatable {
     case idle
-    case selectingInstallationType
+    case selectingWrappSource
     case selectingSource
     case detectingGame(substep: String? = nil, elapsedSeconds: Int? = nil)
-    case settingUpWrapper(substep: String? = nil, elapsedSeconds: Int? = nil)
+    case settingUpWrapp(substep: String? = nil, elapsedSeconds: Int? = nil)
     case copyingInstaller(substep: String? = nil, elapsedSeconds: Int? = nil)
     case installingGame(substep: String? = nil, elapsedSeconds: Int? = nil)
-    case configuringWrapper(substep: String? = nil, elapsedSeconds: Int? = nil)
+    case configuringWrapp(substep: String? = nil, elapsedSeconds: Int? = nil)
     case savingApp(substep: String? = nil, elapsedSeconds: Int? = nil)
     case completed
     case error(String)
@@ -24,19 +24,19 @@ enum InstallationState: Equatable {
         switch self {
         case .idle:
             return "Ready"
-        case .selectingInstallationType:
+        case .selectingWrappSource:
             return "Select Installation Type"
         case .selectingSource:
             return "Select Source"
         case .detectingGame:
             return "Detecting game title"
-        case .settingUpWrapper:
+        case .settingUpWrapp:
             return "Setting up wrapper"
         case .copyingInstaller:
             return "Copying game installer"
         case .installingGame:
             return "Game installing"
-        case .configuringWrapper:
+        case .configuringWrapp:
             return "Configuring wrapper"
         case .savingApp:
             return "Saving new app"
@@ -50,10 +50,10 @@ enum InstallationState: Equatable {
     var substep: String? {
         switch self {
         case .detectingGame(let substep, _),
-             .settingUpWrapper(let substep, _),
+             .settingUpWrapp(let substep, _),
              .copyingInstaller(let substep, _),
              .installingGame(let substep, _),
-             .configuringWrapper(let substep, _),
+             .configuringWrapp(let substep, _),
              .savingApp(let substep, _):
             return substep
         default:
@@ -64,10 +64,10 @@ enum InstallationState: Equatable {
     var elapsedSeconds: Int? {
         switch self {
         case .detectingGame(_, let elapsed),
-             .settingUpWrapper(_, let elapsed),
+             .settingUpWrapp(_, let elapsed),
              .copyingInstaller(_, let elapsed),
              .installingGame(_, let elapsed),
-             .configuringWrapper(_, let elapsed),
+             .configuringWrapp(_, let elapsed),
              .savingApp(_, let elapsed):
             return elapsed
         default:
@@ -96,17 +96,17 @@ enum InstallationState: Equatable {
     
     var progress: Double? {
         switch self {
-        case .idle, .selectingInstallationType, .selectingSource:
+        case .idle, .selectingWrappSource, .selectingSource:
             return nil
         case .detectingGame:
             return 0.1
-        case .settingUpWrapper:
+        case .settingUpWrapp:
             return 0.2
         case .copyingInstaller:
             return 0.3
         case .installingGame:
             return 0.5
-        case .configuringWrapper:
+        case .configuringWrapp:
             return 0.8
         case .savingApp:
             return 0.9

@@ -6,7 +6,7 @@
 //  runs the requested build, and terminates the process with the right
 //  exit code.
 //
-//  Extracted from InstallationViewModel so the ViewModel is pure UI state
+//  Extracted from WrappBuildViewModel so the ViewModel is pure UI state
 //  and safe to instantiate in tests regardless of environment variables.
 //  The exit sequencing is deliberate and must be preserved:
 //
@@ -84,7 +84,7 @@ enum CLIBuilder {
             builder = SteamWrappBuilder()
         default:
             logger.critical("NON-INTERACTIVE MODE: Unknown installation source '\(source)'")
-            exitWithFailure(InstallationError.internalError("Unknown installation source '\(source)'"))
+            exitWithFailure(WrappBuildError.internalError("Unknown installation source '\(source)'"))
         }
 
         let input = WrappBuildInput(viewModel: nil)

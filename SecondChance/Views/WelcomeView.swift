@@ -7,7 +7,7 @@
 import SwiftUI
 
 struct WelcomeView: View {
-    @EnvironmentObject var viewModel: InstallationViewModel
+    @EnvironmentObject var viewModel: WrappBuildViewModel
     @ObservedObject var debugSettings = DebugSettings.shared
     @State private var isHoveringDisk = false
     @State private var isHoveringHer = false
@@ -49,9 +49,9 @@ struct WelcomeView: View {
                 HStack(spacing: 20) {
                     // Disk option
                     Button {
-                        Task { await viewModel.installFromDisk() }
+                        Task { await viewModel.buildFromDisk() }
                     } label: {
-                        InstallationOptionCard(
+                        WrappSourceOptionCard(
                             icon: "opticaldiscdrive",
                             title: "Game Disk(s)",
                             description: "Install from original CDs",
@@ -65,9 +65,9 @@ struct WelcomeView: View {
                     if debugSettings.showUnsupportedInstallOptions {
                         // Her Download option
                         Button {
-                            Task { await viewModel.installFromHerDownload() }
+                            Task { await viewModel.buildFromHerDownload() }
                         } label: {
-                            InstallationOptionCard(
+                            WrappSourceOptionCard(
                                 icon: "arrow.down.circle",
                                 title: "Her Download",
                                 description: "Windows installer from Her Interactive",
@@ -79,9 +79,9 @@ struct WelcomeView: View {
 
                         // Steam option
                         Button {
-                            Task { await viewModel.installFromSteam() }
+                            Task { await viewModel.buildFromSteam() }
                         } label: {
-                            InstallationOptionCard(
+                            WrappSourceOptionCard(
                                 icon: "cloud",
                                 title: "Steam",
                                 description: "Install from Steam library",
@@ -127,7 +127,7 @@ struct WelcomeView: View {
     }
 }
 
-struct InstallationOptionCard: View {
+struct WrappSourceOptionCard: View {
     let icon: String
     let title: String
     let description: String
@@ -166,6 +166,6 @@ struct InstallationOptionCard: View {
 
 #Preview {
     WelcomeView()
-        .environmentObject(InstallationViewModel())
+        .environmentObject(WrappBuildViewModel())
         .frame(width: 700, height: 500)
 }

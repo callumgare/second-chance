@@ -7,7 +7,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @EnvironmentObject var viewModel: InstallationViewModel
+    @EnvironmentObject var viewModel: WrappBuildViewModel
     
     var body: some View {
         ZStack {
@@ -22,12 +22,12 @@ struct ContentView: View {
             // Content
             Group {
                 switch viewModel.currentState {
-                case .idle, .selectingInstallationType:
+                case .idle, .selectingWrappSource:
                     WelcomeView()
                 case .error(let message):
                     ErrorView(message: message)
                 default:
-                    InstallationProgressView()
+                    WrappBuildProgressView()
                 }
             }
             .padding()
@@ -42,5 +42,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(InstallationViewModel())
+        .environmentObject(WrappBuildViewModel())
 }

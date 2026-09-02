@@ -1,13 +1,13 @@
 //
-//  InstallationType.swift
+//  WrappSource.swift
 //  SecondChance
 //
-//  Defines the different types of game installations supported
+//  The installation sources a wrapp can be built from
 
 import Foundation
 
-/// The type of installation source for a Nancy Drew game
-enum InstallationType: String, CaseIterable, Identifiable, Codable {
+/// The source a Nancy Drew game wrapp is built from
+enum WrappSource: String, CaseIterable, Identifiable, Codable {
     case disk = "disk"
     case herDownload = "her-download"
     case steam = "steam"

@@ -47,11 +47,11 @@ struct PreconfiguredPaths {
 /// path handles both.
 class WrappBuildInput {
     private let environment: [String: String]
-    private weak var viewModel: InstallationViewModel?
+    private weak var viewModel: WrappBuildViewModel?
 
     init(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        viewModel: InstallationViewModel?
+        viewModel: WrappBuildViewModel?
     ) {
         self.environment = environment
         self.viewModel = viewModel
@@ -70,7 +70,7 @@ class WrappBuildInput {
         guard let url = await selectDiskOrISO(message: "Select the first game disk or ISO:") else {
             // Cancelling the very first dialog means the user never started —
             // distinct from cancelling a later prompt mid-install.
-            throw InstallationError.userCancelledBeforeStart
+            throw WrappBuildError.userCancelledBeforeStart
         }
         return url
     }
@@ -84,7 +84,7 @@ class WrappBuildInput {
         }
         if let path = PreconfiguredPaths.disk2 { return path }
         guard let url = await selectDiskOrISO(message: "Select the second game disk or ISO:") else {
-            throw InstallationError.userCancelled
+            throw WrappBuildError.userCancelled
         }
         return url
     }
@@ -98,7 +98,7 @@ class WrappBuildInput {
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
                   !isDirectory.boolValue,
                   url.pathExtension.lowercased() == "exe" else {
-                throw InstallationError.invalidPath("Her installer path must be an existing .exe file: \(path)")
+                throw WrappBuildError.invalidPath("Her installer path must be an existing .exe file: \(path)")
             }
             return url
         }
@@ -110,7 +110,7 @@ class WrappBuildInput {
         panel.allowedContentTypes = [UTType(filenameExtension: "exe")].compactMap { $0 }
 
         guard let url = await runOpenPanel(panel) else {
-            throw InstallationError.userCancelled
+            throw WrappBuildError.userCancelled
         }
         return url
     }
@@ -167,7 +167,7 @@ class WrappBuildInput {
         panel.directoryURL = URL(fileURLWithPath: "/Applications")
 
         guard let url = await runOpenPanel(panel) else {
-            throw InstallationError.userCancelled
+            throw WrappBuildError.userCancelled
         }
         return url
     }
@@ -221,10 +221,10 @@ class WrappBuildInput {
 
     /// The build finished (GUI reveals in Finder; headless does nothing).
     @MainActor
-    func onWrappBuildComplete(_ wrapperPath: URL) async {
+    func onWrappBuildComplete(_ wrappPath: URL) async {
         guard !isHeadlessRun else { return }
         // Show in Finder
-        NSWorkspace.shared.selectFile(wrapperPath.path, inFileViewerRootedAtPath: "")
+        NSWorkspace.shared.selectFile(wrappPath.path, inFileViewerRootedAtPath: "")
     }
 
     // MARK: - Env Helpers
@@ -248,11 +248,11 @@ class WrappBuildInput {
 
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-            throw InstallationError.invalidPath("\(label) path does not exist: \(path)")
+            throw WrappBuildError.invalidPath("\(label) path does not exist: \(path)")
         }
 
         guard isDirectory.boolValue || url.pathExtension.lowercased() == "iso" else {
-            throw InstallationError.invalidPath("\(label) path must be a directory or ISO file")
+            throw WrappBuildError.invalidPath("\(label) path must be a directory or ISO file")
         }
 
         return url

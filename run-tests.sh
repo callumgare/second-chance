@@ -13,7 +13,7 @@
 #   --raw-logs          Show raw xcodebuild output instead of xcbeautify
 #   --quiet             Suppress all build/test output
 #   --no-rebuild        Skip the build step (use existing build)
-#   --test-existing-wrapper  Skip install, launch prebuilt wrapper from built-apps/
+#   --test-existing-wrapp  Skip install, launch prebuilt wrapp from built-apps/
 #
 # Examples:
 #   ./run-tests.sh                          Rebuild then run all tests
@@ -21,7 +21,7 @@
 #   ./run-tests.sh integration              Rebuild then run all integration tests
 #   ./run-tests.sh integration haunted-carousel   One game
 #   ./run-tests.sh i haunted-carousel       Same, short form
-#   ./run-tests.sh --test-existing-wrapper integration haunted-carousel
+#   ./run-tests.sh --test-existing-wrapp integration haunted-carousel
 #                              Skip the install and launch a prebuilt wrapper from built-apps/
 
 set -euo pipefail
@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
             REBUILD=false
             shift
             ;;
-        --test-existing-wrapper)
+        --test-existing-wrapp)
             SKIP_BUILD=true
             shift
             ;;
@@ -174,7 +174,7 @@ run_tests() {
                 -only-testing:SecondChanceTests/GameDetectorTests
                 -only-testing:SecondChanceTests/GameInstallerTests
                 -only-testing:SecondChanceTests/ErrorViewTests
-                -only-testing:SecondChanceTests/InstallationCancellationTests
+                -only-testing:SecondChanceTests/WrappBuildCancellationTests
             )
             ;;
         integration)

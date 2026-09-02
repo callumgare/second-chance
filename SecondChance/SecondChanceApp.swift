@@ -24,7 +24,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct SecondChanceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var installationViewModel = InstallationViewModel()
+    @StateObject private var installationViewModel = WrappBuildViewModel()
 
     private let appStartTime = Date()
 

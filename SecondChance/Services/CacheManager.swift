@@ -2,12 +2,12 @@
 //  CacheManager.swift
 //  SecondChance
 //
-//  Manages caching and restoration of wrapper states for debugging
+//  Manages caching and restoration of wrapp states for debugging
 
 import Foundation
 import Logging
 
-/// Manages the caching system for wrapper creation stages
+/// Manages the caching system for wrapp creation stages
 class CacheManager {
     static let shared = CacheManager()
     
@@ -21,7 +21,7 @@ class CacheManager {
         
         // Use the Caches directory for persistent caching between runs, namespaced by version
         let cachesDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        cacheDirectory = cachesDir.appendingPathComponent("SecondChance/wrapper-cache/v\(version)")
+        cacheDirectory = cachesDir.appendingPathComponent("SecondChance/wrapp-cache/v\(version)")
         
         // Create cache directory if needed
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
@@ -35,12 +35,12 @@ class CacheManager {
     
     // MARK: - Caching Operations
     
-    /// Save a wrapper state at a specific stage
+    /// Save a wrapp state at a specific stage
     func saveCache(
-        wrapperPath: URL,
+        wrappPath: URL,
         stage: CacheStage,
         gameSlug: String? = nil,
-        installationType: InstallationType? = nil,
+        wrappSource: WrappSource? = nil,
         gameExePath: String? = nil
     ) throws {
         guard cachingEnabled else { return }
@@ -53,15 +53,15 @@ class CacheManager {
         // Create stage directory
         try fileManager.createDirectory(at: stageDir, withIntermediateDirectories: true)
         
-        // Copy wrapper
-        let cachedWrapperPath = stageDir.appendingPathComponent("wrapper.app")
-        try fileManager.copyItem(at: wrapperPath, to: cachedWrapperPath)
+        // Copy wrapp
+        let cachedWrappPath = stageDir.appendingPathComponent("wrapp.app")
+        try fileManager.copyItem(at: wrappPath, to: cachedWrappPath)
         
         // Save metadata
         let metadata = CacheMetadata(
             stage: stage,
             gameSlug: gameSlug,
-            installationType: installationType,
+            wrappSource: wrappSource,
             gameExePath: gameExePath
         )
         let metadataPath = stageDir.appendingPathComponent("metadata.json")
@@ -70,21 +70,21 @@ class CacheManager {
         let data = try encoder.encode(metadata)
         try data.write(to: metadataPath)
         
-        logger.notice("✓ Cached wrapper at stage: \(stage.displayName)")
+        logger.notice("✓ Cached wrapp at stage: \(stage.displayName)")
     }
     
-    /// Attempt to restore a wrapper from cache at a specific stage
+    /// Attempt to restore a wrapp from cache at a specific stage
     func restoreCache(stage: CacheStage, to destinationPath: URL) throws -> CacheMetadata? {
         guard cachingEnabled, stagesToRestore.contains(stage) else {
             return nil
         }
         
         let stageDir = cacheDirectory.appendingPathComponent(stage.rawValue)
-        let cachedWrapperPath = stageDir.appendingPathComponent("wrapper.app")
+        let cachedWrappPath = stageDir.appendingPathComponent("wrapp.app")
         let metadataPath = stageDir.appendingPathComponent("metadata.json")
         
         // Check if cache exists
-        guard fileManager.fileExists(atPath: cachedWrapperPath.path),
+        guard fileManager.fileExists(atPath: cachedWrappPath.path),
               fileManager.fileExists(atPath: metadataPath.path) else {
             return nil
         }
@@ -98,14 +98,14 @@ class CacheManager {
         // Remove destination if it exists
         try? fileManager.removeItem(at: destinationPath)
         
-        // Copy cached wrapper to destination
-        try fileManager.copyItem(at: cachedWrapperPath, to: destinationPath)
+        // Copy cached wrapp to destination
+        try fileManager.copyItem(at: cachedWrappPath, to: destinationPath)
         
-        logger.notice("✓ Restored wrapper from cache: \(stage.displayName)")
+        logger.notice("✓ Restored wrapp from cache: \(stage.displayName)")
         return metadata
     }
     
-    /// Clear all cached wrappers
+    /// Clear all cached wrapps
     func clearAllCaches() throws {
         try fileManager.removeItem(at: cacheDirectory)
         try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)

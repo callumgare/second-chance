@@ -38,49 +38,49 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     }
 
     func build(input: WrappBuildInput) async throws -> URL {
-        await bus.publishInstallation(.started(source: .herDownload))
+        await bus.publishWrappBuild(.started(source: .herDownload))
 
         // ── Resolve installer ──────────────────────────────────────────
         let installerPath = try await input.getHerInstallerPath()
 
         // ── Detect ONCE ────────────────────────────────────────────────
-        await bus.publishInstallation(.progress(.detectingGame(substep: nil)))
+        await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
         let gameSlug = try await gameDetector.detectGame(fromInstaller: installerPath)
         let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
         logger.notice("Detected game: \(gameInfo.title)")
-        await bus.publishInstallation(.gameDetected(gameInfo))
+        await bus.publishWrappBuild(.gameDetected(gameInfo))
         await input.onGameDetected(gameInfo)
 
         // ── Build ──────────────────────────────────────────────────────
-        let wrapperPath = helper.createTemporaryWrappPath()
-        logger.notice("Temporary wrapper: \(wrapperPath.path)")
+        let wrappPath = helper.createTemporaryWrappPath()
+        logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
-            try await helper.createBaseWrapp(at: wrapperPath)
+            try await helper.createBaseWrapp(at: wrappPath)
 
-            await bus.publishInstallation(.progress(.installingGame(substep: nil)))
+            await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
             let (gameExePath, installerDir) = try await installerRunner.installGameWithWine(
-                wrapperPath: wrapperPath,
+                wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 installerPath: installerPath
             )
 
-            try helper.cleanupUnusedEngine(at: wrapperPath, gameEngine: gameInfo.gameEngine)
+            try helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
 
             try helper.configureWrapp(
-                at: wrapperPath,
+                at: wrappPath,
                 gameInfo: gameInfo,
                 gameExePath: gameExePath,
                 installerDir: installerDir
             )
-            await bus.publishInstallation(.wrapperConfigured(
+            await bus.publishWrappBuild(.wrappConfigured(
                 exePath: gameExePath,
                 installerDir: installerDir,
                 gameInfo: gameInfo
             ))
 
-            let finalPath = try await helper.finalize(wrapp: wrapperPath, gameInfo: gameInfo, input: input)
-            helper.unregisterTemporaryWrapp(wrapperPath)
+            let finalPath = try await helper.finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
+            helper.unregisterTemporaryWrapp(wrappPath)
 
             let (shouldLaunch, args) = await input.shouldLaunchGame()
             if shouldLaunch {
@@ -89,10 +89,10 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
             return finalPath
         } catch {
-            helper.removeTempWrapp(wrapperPath)
+            helper.removeTempWrapp(wrappPath)
 
-            let installError = (error as? InstallationError) ?? .internalError(error.localizedDescription)
-            await bus.publishInstallation(.failed(installError))
+            let installError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            await bus.publishWrappBuild(.failed(installError))
             throw error
         }
     }

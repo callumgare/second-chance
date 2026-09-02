@@ -6,7 +6,7 @@
 //  CDs, folders, or ISO images). Owns the disk flow end-to-end.
 //
 //  Merged from InstallationService.performInstallation (disk-specific parts)
-//  + GameInstaller.installFromDisk. GameInfo is detected ONCE here and
+//  + GameInstaller.buildFromDisk. GameInfo is detected ONCE here and
 //  threaded through — the previous flow detected the game twice.
 //
 //  Resource ownership (per the design rules): this builder mounts ISOs and
@@ -51,7 +51,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     // MARK: - Build Flow
 
     func build(input: WrappBuildInput) async throws -> URL {
-        await bus.publishInstallation(.started(source: .disk))
+        await bus.publishWrappBuild(.started(source: .disk))
 
         // ── Resolve disks ──────────────────────────────────────────────
         let disk1 = try await input.getDisk1Path()
@@ -59,16 +59,16 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         let disk1Mounted = try await mountIfISO(disk1, input: input)
         if let mounted = disk1Mounted {
-            await bus.publishInstallation(.isoMounted(mounted))
+            await bus.publishWrappBuild(.isoMounted(mounted))
         }
         let disk1Root = disk1Mounted ?? disk1
 
         // ── Detect the game ONCE; GameInfo threads through from here ──
-        await bus.publishInstallation(.progress(.detectingGame(substep: nil)))
+        await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
         let gameSlug = try await gameDetector.detectGame(fromDisk: disk1Root)
         let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
         logger.notice("Detected game: \(gameInfo.title)")
-        await bus.publishInstallation(.gameDetected(gameInfo))
+        await bus.publishWrappBuild(.gameDetected(gameInfo))
         await input.onGameDetected(gameInfo)
 
         // ── Disk 2 (multi-disk games) ─────────────────────────────────
@@ -77,7 +77,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             if let disk2 = try await input.getDisk2Path(gameInfo: gameInfo) {
                 logger.notice("Disk 2: \(disk2.path)")
                 if let mounted = try await mountIfISO(disk2, input: input) {
-                    await bus.publishInstallation(.isoMounted(mounted))
+                    await bus.publishWrappBuild(.isoMounted(mounted))
                     disk2Root = mounted
                 } else {
                     disk2Root = disk2
@@ -85,59 +85,59 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             }
         }
 
-        await bus.publishInstallation(.disksResolved(disk1: disk1Root, disk2: disk2Root))
+        await bus.publishWrappBuild(.disksResolved(disk1: disk1Root, disk2: disk2Root))
 
         // ── Build ──────────────────────────────────────────────────────
         // The builder owns the temp wrapp lifecycle: removed on both the
         // success path (after the move in finalize) and on error.
-        let wrapperPath = helper.createTemporaryWrappPath()
-        logger.notice("Temporary wrapper: \(wrapperPath.path)")
+        let wrappPath = helper.createTemporaryWrappPath()
+        logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
-            try await helper.createBaseWrapp(at: wrapperPath)
+            try await helper.createBaseWrapp(at: wrappPath)
 
             // Disk-specific layout + CD-ROM mounting stays in the builder —
             // no other source uses it.
             try await copyGameDisks(
                 disk1: disk1Root,
                 disk2: disk2Root,
-                to: wrapperPath,
+                to: wrappPath,
                 gameSlug: gameSlug
             )
 
             // Install the game via the engine it actually uses.
-            await bus.publishInstallation(.progress(.installingGame(substep: nil)))
+            await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
             let (gameExePath, installerDir): (String, String)
             switch gameInfo.gameEngine {
             case .wine:
-                await bus.publishInstallation(.engineRouted(engine: .wine, gameInfo: gameInfo))
+                await bus.publishWrappBuild(.engineRouted(engine: .wine, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithWine(
-                    wrapperPath: wrapperPath,
+                    wrappPath: wrappPath,
                     gameInfo: gameInfo
                 )
             case .scummvm:
-                await bus.publishInstallation(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
+                await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithScummVM(
-                    wrapperPath: wrapperPath,
+                    wrappPath: wrappPath,
                     gameInfo: gameInfo
                 )
             default:
-                throw InstallationError.unsupportedEngine
+                throw WrappBuildError.unsupportedEngine
             }
 
             // Clean up unused engine unless we skipped the installer — wine
             // might be needed to run the installer later.
             if !DebugSettings.shared.skipInstaller {
-                try helper.cleanupUnusedEngine(at: wrapperPath, gameEngine: gameInfo.gameEngine)
+                try helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
             }
 
             try helper.configureWrapp(
-                at: wrapperPath,
+                at: wrappPath,
                 gameInfo: gameInfo,
                 gameExePath: gameExePath,
                 installerDir: installerDir
             )
-            await bus.publishInstallation(.wrapperConfigured(
+            await bus.publishWrappBuild(.wrappConfigured(
                 exePath: gameExePath,
                 installerDir: installerDir,
                 gameInfo: gameInfo
@@ -145,8 +145,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
             // ── Shared tail: sign → save → notify. The move in here makes ──
             // the temp wrapp non-temporary, so unregister on success.
-            let finalPath = try await helper.finalize(wrapp: wrapperPath, gameInfo: gameInfo, input: input)
-            helper.unregisterTemporaryWrapp(wrapperPath)
+            let finalPath = try await helper.finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
+            helper.unregisterTemporaryWrapp(wrappPath)
 
             // Builder-owned resources: unmount now the build is complete.
             await isoMounter.unmountAll()
@@ -160,11 +160,11 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             return finalPath
         } catch {
             // Tear down builder-owned resources before rethrowing.
-            helper.removeTempWrapp(wrapperPath)
+            helper.removeTempWrapp(wrappPath)
             await isoMounter.unmountAll()
 
-            let installError = (error as? InstallationError) ?? .internalError(error.localizedDescription)
-            await bus.publishInstallation(.failed(installError))
+            let installError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            await bus.publishWrappBuild(.failed(installError))
             throw error
         }
     }
@@ -192,21 +192,21 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     private func copyGameDisks(
         disk1: URL,
         disk2: URL?,
-        to wrapperPath: URL,
+        to wrappPath: URL,
         gameSlug: String
     ) async throws {
         // Check cache first
-        if let metadata = try cacheManager.restoreCache(stage: .diskGameInstallerCopied, to: wrapperPath) {
+        if let metadata = try cacheManager.restoreCache(stage: .diskGameInstallerCopied, to: wrappPath) {
             if metadata.gameSlug == gameSlug {
                 return
             } else {
-                throw WrapperError.cachedGameMismatch
+                throw WrappError.cachedGameMismatch
             }
         }
 
-        await bus.publishInstallation(.progress(.copyingInstaller(substep: nil)))
+        await bus.publishWrappBuild(.progress(.copyingInstaller(substep: nil)))
 
-        let driveCPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
         let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
 
         try fileManager.createDirectory(at: installerPath, withIntermediateDirectories: true)
@@ -272,15 +272,15 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         // Mount the disk directories as CD-ROM drives
         // (Don't report progress again - would cause duplicate print)
-        try await mountGameDisksIntoWine(wrapperPath: wrapperPath)
+        try await mountGameDisksIntoWine(wrappPath: wrappPath)
 
         // Save to cache
-        try cacheManager.saveCache(wrapperPath: wrapperPath, stage: .diskGameInstallerCopied, gameSlug: gameSlug)
+        try cacheManager.saveCache(wrappPath: wrappPath, stage: .diskGameInstallerCopied, gameSlug: gameSlug)
     }
 
     /// Mount game disk directories as CD-ROM drives
-    private func mountGameDisksIntoWine(wrapperPath: URL) async throws {
-        let driveCPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+    private func mountGameDisksIntoWine(wrappPath: URL) async throws {
+        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
         let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
 
         // Find all disk-* directories and sort them
@@ -328,7 +328,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 relativePath,
                 asDrive: letter,
                 type: "cdrom",
-                in: wrapperPath
+                in: wrappPath
             )
         }
     }

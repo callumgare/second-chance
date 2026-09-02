@@ -2,11 +2,11 @@
 //  CacheStage.swift
 //  SecondChance
 //
-//  Defines the different stages of wrapper creation that can be cached
+//  Defines the different stages of wrapp creation that can be cached
 
 import Foundation
 
-/// Represents a stage in the wrapper creation process that can be cached for debugging
+/// Represents a stage in the wrapp creation process that can be cached for debugging
 enum CacheStage: String, Codable, CaseIterable {
     case base
     case diskGameInstallerCopied = "disk-game-installer-copied"
@@ -53,23 +53,23 @@ enum CacheStage: String, Codable, CaseIterable {
     }
 }
 
-/// Metadata stored with a cached wrapper
+/// Metadata stored with a cached wrapp
 struct CacheMetadata: Codable {
     let stage: CacheStage
     let gameSlug: String?
-    let installationType: InstallationType?
+    let wrappSource: WrappSource?
     let timestamp: Date
     let gameExePath: String?
     
     init(
         stage: CacheStage,
         gameSlug: String? = nil,
-        installationType: InstallationType? = nil,
+        wrappSource: WrappSource? = nil,
         gameExePath: String? = nil
     ) {
         self.stage = stage
         self.gameSlug = gameSlug
-        self.installationType = installationType
+        self.wrappSource = wrappSource
         self.timestamp = Date()
         self.gameExePath = gameExePath
     }

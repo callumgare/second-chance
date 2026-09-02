@@ -3,7 +3,7 @@
 //  SecondChanceTests
 //
 //  Per-game integration tests for the disk install flow. These exercise the
-//  REAL wrapper creation process (real Wine/ScummVM install, real file
+//  REAL wrapp creation process (real Wine/ScummVM install, real file
 //  detection) for each of the 33 Nancy Drew games, and assert the intermediate
 //  results via the event bus.
 //
@@ -19,7 +19,7 @@
 //    - The detected game slug matches the expected game
 //    - The engine routing (wine vs scummvm) is correct
 //    - The detected game exe path matches internalGameExePath from GameInfoProvider
-//    - The wrapper's Info.plist contains the correct exe path after configuration
+//    - The wrapp's Info.plist contains the correct exe path after configuration
 //    - The full event sequence is emitted in the expected order
 
 import Testing
@@ -50,23 +50,23 @@ struct DiskInstallIntegrationTests {
     // MARK: - Per-game parameterized test
 
     @Test(
-        "Wrapper creation produces correct intermediate results for each game",
+        "Wrapp creation produces correct intermediate results for each game",
         arguments: TestGameFilter.selectedGames
     )
-    func wrapperCreationForGame(game: GameInfo) async throws {
-        // SKIP_BUILD=1 (via --test-existing-wrapper): skip the install and use a
-        // pre-existing wrapper from built-apps/ if present. Useful for iterating
+    func wrappCreationForGame(game: GameInfo) async throws {
+        // SKIP_BUILD=1 (via --test-existing-wrapp): skip the install and use a
+        // pre-existing wrapp from built-apps/ if present. Useful for iterating
         // on the GamePuppeteer test without waiting for a full Wine install.
         let skipBuild = ProcessInfo.processInfo.environment["SKIP_BUILD"] == "1"
         let builtAppsDir = TestPaths.repoRoot.appendingPathComponent("built-apps")
-        let prebuiltWrapper = builtAppsDir.appendingPathComponent("Nancy Drew - \(game.title).app")
-        let usingPrebuiltWrapper = skipBuild && FileManager.default.fileExists(atPath: prebuiltWrapper.path)
+        let prebuiltWrapp = builtAppsDir.appendingPathComponent("Nancy Drew - \(game.title).app")
+        let usingPrebuiltWrapp = skipBuild && FileManager.default.fileExists(atPath: prebuiltWrapp.path)
 
-        let wrapperPath: URL
+        let wrappPath: URL
         var builtOutputDir: URL? = nil  // cleaned up after GamePuppeteer, not before
 
-        if usingPrebuiltWrapper {
-            wrapperPath = prebuiltWrapper
+        if usingPrebuiltWrapp {
+            wrappPath = prebuiltWrapp
         } else {
             // ── E2E install via the real UI ───────────────────────────────────
             let disk1 = try #require(
@@ -104,9 +104,9 @@ struct DiskInstallIntegrationTests {
                 }
             }
 
-            // Fire installFromDisk() as a detached task so waitForCompletion() can run concurrently.
-            let viewModel = await MainActor.run { InstallationViewModel() }
-            Task { await MainActor.run { Task { await viewModel.installFromDisk() } } }
+            // Fire buildFromDisk() as a detached task so waitForCompletion() can run concurrently.
+            let viewModel = await MainActor.run { WrappBuildViewModel() }
+            Task { await MainActor.run { Task { await viewModel.buildFromDisk() } } }
 
             let succeeded = await recorder.waitForCompletion(timeout: 600)
 
@@ -129,18 +129,18 @@ struct DiskInstallIntegrationTests {
                         "Detected exe path \(recorder.detectedExePath ?? "nil") but expected \(expectedExe)")
             }
 
-            #expect(recorder.configuredWrapper != nil, "wrapperConfigured event not emitted")
-            #expect(recorder.signedWrapper != nil, "signed event not emitted")
-            #expect(recorder.completedWrapper != nil, "completed event not emitted")
+            #expect(recorder.configuredWrapp != nil, "wrappConfigured event not emitted")
+            #expect(recorder.signedWrapp != nil, "signed event not emitted")
+            #expect(recorder.completedWrapp != nil, "completed event not emitted")
 
             if let expectedExe = game.internalGameExePath {
-                let plistExe = try WrapperInfo.gameExePath(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
+                let plistExe = try WrappInfo.gameExePath(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
                 #expect(plistExe == expectedExe,
-                        "Wrapper plist GameExePath \(plistExe ?? "nil") ≠ \(expectedExe)")
+                        "Wrapp plist GameExePath \(plistExe ?? "nil") ≠ \(expectedExe)")
             }
 
-            let plistSlug = try WrapperInfo.gameSlug(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
-            #expect(plistSlug == game.id, "Wrapper plist GameSlug \(plistSlug ?? "nil") ≠ \(game.id)")
+            let plistSlug = try WrappInfo.gameSlug(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
+            #expect(plistSlug == game.id, "Wrapp plist GameSlug \(plistSlug ?? "nil") ≠ \(game.id)")
 
             // Event ordering.
             let kinds = recorder.events.map { "\($0)" }
@@ -149,20 +149,20 @@ struct DiskInstallIntegrationTests {
                 #expect(a < b, "gameDetected must precede engineRouted")
             }
 
-            wrapperPath = recorder.completedWrapper ?? outputDir.appendingPathComponent("Nancy Drew - \(game.title).app")
+            wrappPath = recorder.completedWrapp ?? outputDir.appendingPathComponent("Nancy Drew - \(game.title).app")
         }
 
         // ── Launch & quit via GamePuppeteer ──────────────────────────────────
 
-        guard WrapperInfo.gamePuppeteerBundle() != nil else {
+        guard WrappInfo.gamePuppeteerBundle() != nil else {
             Attachment.record(Data("GamePuppeteer.app not found — skipping launch test".utf8),
                               named: "gamepuppeteer-skipped.txt")
             return
         }
 
-        let exitCode = try await GamePuppetRunner.run(wrapperURL: wrapperPath, game: game)
+        let exitCode = try await GamePuppetRunner.run(wrappURL: wrappPath, game: game)
 
-        // Clean up the built wrapper now that GamePuppeteer is done with it.
+        // Clean up the built wrapp now that GamePuppeteer is done with it.
         if let dir = builtOutputDir { cleanup(dir) }
 
         // 0 = clean quit

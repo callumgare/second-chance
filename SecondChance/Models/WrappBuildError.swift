@@ -1,5 +1,5 @@
 //
-//  InstallationError.swift
+//  WrappBuildError.swift
 //  SecondChance
 //
 //  Errors thrown while building a wrapp. Relocated from GameInstaller.swift
@@ -8,7 +8,7 @@
 
 import Foundation
 
-enum InstallationError: LocalizedError, Equatable {
+enum WrappBuildError: LocalizedError, Equatable {
     case unsupportedEngine
     case steamNotFullyImplemented
     case installerNotFound
@@ -51,5 +51,5 @@ enum InstallationError: LocalizedError, Equatable {
         }
     }
 
-    static let cancelled = InstallationError.userCancelled
+    static let cancelled = WrappBuildError.userCancelled
 }

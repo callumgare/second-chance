@@ -97,15 +97,15 @@ class WineManager {
     }
     
     /// Create a new Wine prefix at the specified path
-    func createWinePrefix(at wrapperPath: URL) async throws {
-        let prefixPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix")
+    func createWinePrefix(at wrappPath: URL) async throws {
+        let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
         
         // Check if we have a cached prefix
         if let cachedPrefix = getCachedPrefix() {
             let buildId = getBuildIdentifier()
             logger.notice("✓ Using cached Wine prefix (build: \(buildId))")
             
-            // Copy cached prefix to wrapper
+            // Copy cached prefix to wrapp
             try? fileManager.removeItem(at: prefixPath)
             try fileManager.copyItem(at: cachedPrefix, to: prefixPath)
             
@@ -114,17 +114,17 @@ class WineManager {
         
         // Run wineboot to initialize (wineboot is a Windows program, so run it through wine)
         try await runWine(
-            at: wrapperPath,
+            at: wrappPath,
             executable: "wine",
             arguments: ["wineboot", "-u"]
         )
             
         // Wait for wineserver to finish
-        try await waitForWineToExit(at: wrapperPath)
+        try await waitForWineToExit(at: wrappPath)
         
         // Install cnc-ddraw for better DirectDraw compatibility
-        Task { await EventBus.app.publishInstallation(.progress(.settingUpWrapper(substep: "Installing cnc-ddraw"))) }
-        try await installWinetrick("cnc_ddraw", at: wrapperPath)
+        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Installing cnc-ddraw"))) }
+        try await installWinetrick("cnc_ddraw", at: wrappPath)
         
         // Configure cnc-ddraw to maintain aspect ratio
         let ddrawIniPath = prefixPath.appendingPathComponent("drive_c/windows/syswow64/ddraw.ini")
@@ -138,8 +138,8 @@ class WineManager {
             }
         
         // Install isolate_home to remove unnecessary mounts
-        Task { await EventBus.app.publishInstallation(.progress(.settingUpWrapper(substep: "Configuring drive mounts"))) }
-        try await installWinetrick("isolate_home", at: wrapperPath)
+        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Configuring drive mounts"))) }
+        try await installWinetrick("isolate_home", at: wrappPath)
         
         // Remove all drive mounts and recreate only the ones we need
         let dosdevicesPath = prefixPath.appendingPathComponent("dosdevices")
@@ -179,7 +179,7 @@ class WineManager {
             
         // Ensure Wine server is fully shut down before caching
         // This ensures all registry changes and file writes are flushed to disk
-        try await waitForWineToExit(at: wrapperPath)
+        try await waitForWineToExit(at: wrappPath)
         
         // Cache the prefix for future use
         try cachePrefix(from: prefixPath)
@@ -189,9 +189,9 @@ class WineManager {
         _ sourcePath: String,
         asDrive driveLetter: String,
         type driveType: String = "hd",
-        in wrapperPath: URL
+        in wrappPath: URL
     ) async throws {
-        let prefixPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix")
+        let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
         let dosdevicesPath = prefixPath.appendingPathComponent("dosdevices")
         
         // Create symlink for drive
@@ -210,7 +210,7 @@ class WineManager {
         if !driveType.isEmpty {
             logger.notice("Setting drive \(driveLetter): type to \(driveType) in Wine registry")
             try await runWine(
-                at: wrapperPath,
+                at: wrappPath,
                 executable: "wine",
                 arguments: [
                     "reg", "add",
@@ -228,11 +228,11 @@ class WineManager {
     
     /// Run a program with Wine
     func runWine(
-        at wrapperPath: URL,
+        at wrappPath: URL,
         executable: String,
         arguments: [String] = []
     ) async throws {
-        let wine = WineEnvironment(appPath: wrapperPath)
+        let wine = WineEnvironment(appPath: wrappPath)
         try await wine.runWine(executable: executable, arguments: arguments)
     }
     
@@ -244,13 +244,13 @@ class WineManager {
     /// exit as an error should inspect the returned code.
     @discardableResult
     func runWindowsExecutable(
-        at wrapperPath: URL,
+        at wrappPath: URL,
         exePath: String,
         arguments: [String] = []
     ) async throws -> Int32 {
         let args = [exePath] + arguments
         return try await runWineReturningExitCode(
-            at: wrapperPath,
+            at: wrappPath,
             executable: "wine",
             arguments: args
         )
@@ -263,11 +263,11 @@ class WineManager {
     /// `runWindowsExecutable` for details.
     @discardableResult
     func runWindowsExecutableWithStart(
-        at wrapperPath: URL,
+        at wrappPath: URL,
         exePath: String,
         arguments: [String] = []
     ) async throws -> Int32 {
-        let wine = WineEnvironment(appPath: wrapperPath)
+        let wine = WineEnvironment(appPath: wrappPath)
         do {
             try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments)
             return 0
@@ -283,12 +283,12 @@ class WineManager {
     /// only genuine launch failures throw. Shared helper for
     /// `runWindowsExecutable` and friends.
     private func runWineReturningExitCode(
-        at wrapperPath: URL,
+        at wrappPath: URL,
         executable: String,
         arguments: [String] = []
     ) async throws -> Int32 {
         do {
-            try await runWine(at: wrapperPath, executable: executable, arguments: arguments)
+            try await runWine(at: wrappPath, executable: executable, arguments: arguments)
             return 0
         } catch let WineError.executionFailed(exitCode) {
             logger.error("⚠️  Warning: \(executable) exited with non-zero code: \(exitCode)")
@@ -297,13 +297,13 @@ class WineManager {
     }
     
     /// Wait for Wine server to exit
-    func waitForWineToExit(at wrapperPath: URL) async throws {
-        try await runWine(at: wrapperPath, executable: "wineserver", arguments: ["-w"])
+    func waitForWineToExit(at wrappPath: URL) async throws {
+        try await runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"])
     }
     
     /// Start Wine server manually (prevents automatic shutdown)
-    func startWineServer(at wrapperPath: URL) throws {
-        let wine = WineEnvironment(appPath: wrapperPath)
+    func startWineServer(at wrappPath: URL) throws {
+        let wine = WineEnvironment(appPath: wrappPath)
         let wineserverPath = wine.wineBinDir.appendingPathComponent("wineserver")
         
         let process = Process()
@@ -318,13 +318,13 @@ class WineManager {
     }
     
     /// Install a winetrick
-    func installWinetrick(_ name: String, at wrapperPath: URL) async throws {
+    func installWinetrick(_ name: String, at wrappPath: URL) async throws {
         // Check if winetricks is bundled
         guard let winetricksPath = Bundle.main.path(forResource: "winetricks", ofType: nil) else {
             throw WineError.winetricksNotFound
         }
         
-        let wine = WineEnvironment(appPath: wrapperPath)
+        let wine = WineEnvironment(appPath: wrappPath)
         
         // Run in detached task to avoid blocking
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in

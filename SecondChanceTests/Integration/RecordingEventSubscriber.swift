@@ -13,11 +13,11 @@
 import Foundation
 @testable import SecondChance
 
-/// Records `InstallationEvent`s published to a bus. Thread-safe via a lock;
-/// tests read the recorded values after `performInstallation` completes.
+/// Records `WrappBuildEvent`s published to a bus. Thread-safe via a lock;
+/// tests read the recorded values after the build completes.
 final class RecordingEventSubscriber: @unchecked Sendable {
     // Raw event log (for sequence assertions)
-    private(set) var events: [InstallationEvent] = []
+    private(set) var events: [WrappBuildEvent] = []
     private let lock = NSLock()
 
     // Derived convenience values (the things tests most commonly assert on)
@@ -25,13 +25,13 @@ final class RecordingEventSubscriber: @unchecked Sendable {
     private(set) var detectedExePath: String?
     private(set) var routedEngine: GameInfo.GameEngine?
     private(set) var resolvedInstaller: (exePath: String, type: InstallerType)?
-    private(set) var configuredWrapper: (exePath: String, installerDir: String)?
+    private(set) var configuredWrapp: (exePath: String, installerDir: String)?
     private(set) var mountedISOs: [URL] = []
     private(set) var disksResolved: (disk1: URL, disk2: URL?)?
-    private(set) var signedWrapper: URL?
-    private(set) var completedWrapper: URL?
-    private(set) var failedError: InstallationError?
-    private(set) var progressStates: [InstallationState] = []
+    private(set) var signedWrapp: URL?
+    private(set) var completedWrapp: URL?
+    private(set) var failedError: WrappBuildError?
+    private(set) var progressStates: [WrappBuildState] = []
 
     private var subscriptionToken: EventBus<AppEvent>.Token?
 
@@ -54,7 +54,7 @@ final class RecordingEventSubscriber: @unchecked Sendable {
     // MARK: - Internal handling
 
     private func handle(_ appEvent: AppEvent) async {
-        guard case .installation(let event) = appEvent else { return }
+        guard case .wrappBuild(let event) = appEvent else { return }
         lock.lock()
         defer { lock.unlock() }
         events.append(event)
@@ -73,12 +73,12 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             resolvedInstaller = (exePath, type)
         case .gameExeDetected(let path, _):
             detectedExePath = path
-        case .wrapperConfigured(let exePath, let installerDir, _):
-            configuredWrapper = (exePath, installerDir)
+        case .wrappConfigured(let exePath, let installerDir, _):
+            configuredWrapp = (exePath, installerDir)
         case .signed(let url):
-            signedWrapper = url
+            signedWrapp = url
         case .completed(let url):
-            completedWrapper = url
+            completedWrapp = url
         case .failed(let error):
             failedError = error
         case .started:
@@ -90,8 +90,8 @@ final class RecordingEventSubscriber: @unchecked Sendable {
     func waitForCompletion(timeout: TimeInterval = 300) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            let done = lock.withLock { completedWrapper != nil || failedError != nil }
-            if done { return lock.withLock { completedWrapper != nil } }
+            let done = lock.withLock { completedWrapp != nil || failedError != nil }
+            if done { return lock.withLock { completedWrapp != nil } }
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
         return false

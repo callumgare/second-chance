@@ -105,19 +105,19 @@ struct EventBusTests {
 
     // MARK: - AppEvent convenience
 
-    @Test("publishInstallation wraps in .installation case")
-    func publishInstallationWraps() async {
+    @Test("publishWrappBuild wraps in .installation case")
+    func publishWrappBuildWraps() async {
         let bus = EventBus<AppEvent>()
         let collector = EventCollector<AppEvent>()
         _ = await bus.subscribe { await collector.append($0) }
 
         let gameInfo = GameInfo(id: "test", title: "Test Game")
-        await bus.publishInstallation(.gameDetected(gameInfo))
+        await bus.publishWrappBuild(.gameDetected(gameInfo))
 
         let events = await collector.events
         #expect(events.count == 1)
-        guard case .installation(.gameDetected(let info)) = events.first else {
-            Issue.record("Expected .installation(.gameDetected) event")
+        guard case .wrappBuild(.gameDetected(let info)) = events.first else {
+            Issue.record("Expected .wrappBuild(.gameDetected) event")
             return
         }
         #expect(info.id == "test")
@@ -131,7 +131,7 @@ struct EventBusTests {
         let token = await EventBus.app.subscribe { await collector.append($0) }
 
         let isolated = EventBus<AppEvent>()
-        await isolated.publishInstallation(.completed(wrapperPath: URL(fileURLWithPath: "/tmp")))
+        await isolated.publishWrappBuild(.completed(wrappPath: URL(fileURLWithPath: "/tmp")))
 
         let events = await collector.events
         #expect(events.isEmpty, "Isolated bus events must not leak to the shared app bus")

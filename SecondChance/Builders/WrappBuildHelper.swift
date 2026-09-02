@@ -65,7 +65,7 @@ class WrappBuildHelper {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             let command = formatShellCommand(executable: executable, arguments: arguments)
-            throw WrapperError.copyFailed(message: "cp command failed", command: command, output: errorMessage)
+            throw WrappError.copyFailed(message: "cp command failed", command: command, output: errorMessage)
         }
     }
 
@@ -76,23 +76,23 @@ class WrappBuildHelper {
             return
         }
 
-        logger.notice("Creating unified wrapper with both Wine and ScummVM support...")
-        await bus.publishInstallation(.progress(.settingUpWrapper(substep: nil)))
+        logger.notice("Creating unified wrapp with both Wine and ScummVM support...")
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: nil)))
 
         // Find the pre-built unified template
         guard let templatePath = Bundle.main.url(forResource: "GameWrapper", withExtension: "app") else {
-            throw WrapperError.templateNotFound("GameWrapper.app not found in Second Chance.app bundle")
+            throw WrappError.templateNotFound("GameWrapper.app not found in Second Chance.app bundle")
         }
 
         // Copy the entire template (includes both Wine and ScummVM)
         do {
             try copyItemDerefencingSymlinks(at: templatePath, to: path)
         } catch {
-            if let wrapperError = error as? WrapperError, let output = wrapperError.copyOutput {
+            if let wrappError = error as? WrappError, let output = wrappError.copyOutput {
                 logger.notice("Copy output: \(output)")
             }
             logger.critical("❌ Failed to copy GameWrapper template: \(error.localizedDescription)")
-            if let wrapperError = error as? WrapperError, let command = wrapperError.copyCommand {
+            if let wrappError = error as? WrappError, let command = wrappError.copyCommand {
                 logger.notice("   Command: \(command)")
             }
             throw error
@@ -102,14 +102,14 @@ class WrappBuildHelper {
         try await wineManager.createWinePrefix(at: path)
 
         // Save to cache
-        try cacheManager.saveCache(wrapperPath: path, stage: .base)
+        try cacheManager.saveCache(wrappPath: path, stage: .base)
     }
 
     /// Remove the engine this game doesn't use from the wrapp.
-    func cleanupUnusedEngine(at wrapperPath: URL, gameEngine: GameInfo.GameEngine) throws {
-        logger.notice("Cleaning up unused game engine from wrapper...")
+    func cleanupUnusedEngine(at wrappPath: URL, gameEngine: GameInfo.GameEngine) throws {
+        logger.notice("Cleaning up unused game engine from wrapp...")
 
-        let resourcesPath = wrapperPath.appendingPathComponent("Contents/Resources")
+        let resourcesPath = wrappPath.appendingPathComponent("Contents/Resources")
 
         switch gameEngine {
         case .wine, .wineSteam, .wineSteamSilent:
@@ -122,7 +122,7 @@ class WrappBuildHelper {
                     logger.notice("Found \(lines.count) ScummVM files/directories to remove")
 
                     for relativePath in lines {
-                        let pathToRemove = wrapperPath.appendingPathComponent(relativePath)
+                        let pathToRemove = wrappPath.appendingPathComponent(relativePath)
                         if fileManager.fileExists(atPath: pathToRemove.path) {
                             try fileManager.removeItem(at: pathToRemove)
                         }
@@ -142,7 +142,7 @@ class WrappBuildHelper {
                     logger.notice("Found \(lines.count) Wine files/directories to remove")
 
                     for relativePath in lines {
-                        let pathToRemove = wrapperPath.appendingPathComponent(relativePath)
+                        let pathToRemove = wrappPath.appendingPathComponent(relativePath)
                         if fileManager.fileExists(atPath: pathToRemove.path) {
                             try fileManager.removeItem(at: pathToRemove)
                         }
@@ -161,29 +161,29 @@ class WrappBuildHelper {
     /// Configure the wrapp for its game: rewrite Info.plist, write
     /// AppSettings.plist, remap the Documents symlink, patch game INIs.
     func configureWrapp(
-        at wrapperPath: URL,
+        at wrappPath: URL,
         gameInfo: GameInfo,
         gameExePath: String,
         installerDir: String,
         steamID: String? = nil
     ) throws {
-        Task { await bus.publishInstallation(.progress(.configuringWrapper(substep: "Updating configuration files"))) }
+        Task { await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Updating configuration files"))) }
 
-        let infoPlistPath = wrapperPath.appendingPathComponent("Contents/Info.plist")
+        let infoPlistPath = wrappPath.appendingPathComponent("Contents/Info.plist")
 
         // Update Info.plist
         guard let plistData = try? Data(contentsOf: infoPlistPath),
               var plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any] else {
-            throw WrapperError.invalidInfoPlist
+            throw WrappError.invalidInfoPlist
         }
 
         // Update bundle identifier by replacing GameWrapper with game ID
         guard let currentBundleID = plist["CFBundleIdentifier"] as? String else {
-            throw WrapperError.invalidInfoPlist
+            throw WrappError.invalidInfoPlist
         }
 
         guard currentBundleID.contains("GameWrapper") else {
-            throw WrapperError.invalidInfoPlist
+            throw WrappError.invalidInfoPlist
         }
 
         let newBundleID = currentBundleID.replacingOccurrences(of: "GameWrapper", with: "nancy-drew." + gameInfo.id)
@@ -199,7 +199,7 @@ class WrappBuildHelper {
 
         // Create AppSettings.plist for runtime script
         try createAppSettingsPlist(
-            at: wrapperPath,
+            at: wrappPath,
             gameInfo: gameInfo,
             gameExePath: gameExePath,
             installerDir: installerDir,
@@ -208,8 +208,8 @@ class WrappBuildHelper {
 
         // Remap documents folder to point to a namespaced dir in the user's Application Support
         // dir on the host computer. This documents symlink will likely be replaced with a more direct link when running
-        // the game wrapper but we set this one up in case it's run on a read-only system.
-        let prefixPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix")
+        // the game wrapp but we set this one up in case it's run on a read-only system.
+        let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
         let driveCPath = prefixPath.appendingPathComponent("drive_c")
         let documentsPath = driveCPath.appendingPathComponent("/users/\(WineEnvironment.wineUsername)/Documents")
 
@@ -227,18 +227,18 @@ class WrappBuildHelper {
         )
 
         // Configure game INI files for LCD mode and save path
-        try configureGameINI(at: wrapperPath, gameExePath: gameExePath)
+        try configureGameINI(at: wrappPath, gameExePath: gameExePath)
     }
 
     /// Create AppSettings.plist for the runtime script to read
     private func createAppSettingsPlist(
-        at wrapperPath: URL,
+        at wrappPath: URL,
         gameInfo: GameInfo,
         gameExePath: String,
         installerDir: String,
         steamID: String?
     ) throws {
-        let resourcesPath = wrapperPath.appendingPathComponent("Contents/Resources")
+        let resourcesPath = wrappPath.appendingPathComponent("Contents/Resources")
         let appSettingsPath = resourcesPath.appendingPathComponent("AppSettings.plist")
 
         // Ensure Resources directory exists
@@ -280,9 +280,9 @@ class WrappBuildHelper {
     }
 
     /// Configure game INI files
-    private func configureGameINI(at wrapperPath: URL, gameExePath: String) throws {
-        // Build the full path to the game directory within the wrapper
-        let driveCPath = wrapperPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+    private func configureGameINI(at wrappPath: URL, gameExePath: String) throws {
+        // Build the full path to the game directory within the wrapp
+        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
 
         // gameExePath is a Windows path like "/Program Files (x86)/Nancy Drew/Game/game.exe"
         // Remove leading slash and append to drive_c
@@ -383,23 +383,23 @@ class WrappBuildHelper {
     // MARK: - Steam Client
 
     /// Install the Steam client in the wrapp (used by SteamWrappBuilder).
-    func installSteamClient(in wrapperPath: URL) async throws {
+    func installSteamClient(in wrappPath: URL) async throws {
         // Check cache first
-        if let _ = try cacheManager.restoreCache(stage: .steamClientInstalled, to: wrapperPath) {
+        if let _ = try cacheManager.restoreCache(stage: .steamClientInstalled, to: wrappPath) {
             return
         }
 
-        await bus.publishInstallation(.progress(.installingGame(substep: "Installing Steam client")))
+        await bus.publishWrappBuild(.progress(.installingGame(substep: "Installing Steam client")))
 
         // Stop wine server first
-        let wine = WineEnvironment(appPath: wrapperPath)
+        let wine = WineEnvironment(appPath: wrappPath)
         _ = wine.stopWineserver()
 
         // Install Steam via winetricks
-        try await wineManager.installWinetrick("steam", at: wrapperPath)
+        try await wineManager.installWinetrick("steam", at: wrappPath)
 
         // Save to cache
-        try cacheManager.saveCache(wrapperPath: wrapperPath, stage: .steamClientInstalled)
+        try cacheManager.saveCache(wrappPath: wrappPath, stage: .steamClientInstalled)
     }
 
     // MARK: - Finalization (absorbed from InstallationService)
@@ -411,31 +411,31 @@ class WrappBuildHelper {
     /// The caller (builder) still owns unmounting ISOs it mounted — that is
     /// source-specific, not part of the shared tail.
     func finalize(
-        wrapp wrapperPath: URL,
+        wrapp wrappPath: URL,
         gameInfo: GameInfo,
         input: WrappBuildInput
     ) async throws -> URL {
         // Sign before moving so failures trigger the builder's cleanup
-        try signWrapp(at: wrapperPath)
-        await bus.publishInstallation(.signed(wrapperPath: wrapperPath))
+        try signWrapp(at: wrappPath)
+        await bus.publishWrappBuild(.signed(wrappPath: wrappPath))
 
-        await bus.publishInstallation(.progress(.savingApp(substep: nil)))
+        await bus.publishWrappBuild(.progress(.savingApp(substep: nil)))
         let outputDir = try await input.getOutputPath(gameName: gameInfo.title)
         let finalPath = try await saveWrapp(
-            from: wrapperPath,
+            from: wrappPath,
             to: outputDir,
             gameName: gameInfo.title
         )
 
         await input.onWrappBuildComplete(finalPath)
-        await bus.publishInstallation(.completed(wrapperPath: finalPath))
+        await bus.publishWrappBuild(.completed(wrappPath: finalPath))
 
         return finalPath
     }
 
     /// Sign the wrapp app (ad-hoc codesign).
     func signWrapp(at path: URL) throws {
-        logger.notice("Signing wrapper...")
+        logger.notice("Signing wrapp...")
 
         let codesignPath = "/usr/bin/codesign"
         let process = Process()
@@ -455,37 +455,37 @@ class WrappBuildHelper {
         process.waitUntilExit()
 
         if process.terminationStatus == 0 {
-            logger.notice("✅ Wrapper signed successfully")
+            logger.notice("✅ Wrapp signed successfully")
         } else {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             let command = "\(codesignPath) \(process.arguments?.joined(separator: " ") ?? "")"
             logger.error("⚠️ Code signing failed: \(errorMessage)")
             logger.notice("   Command: \(command)")
-            throw WrapperError.signingFailed(errorMessage)
+            throw WrappError.signingFailed(errorMessage)
         }
     }
 
     /// Move the finished wrapp to its output location and unregister it from
     /// cleanup tracking (it's no longer temporary).
     func saveWrapp(
-        from wrapperPath: URL,
+        from wrappPath: URL,
         to outputPath: URL,
         gameName: String
     ) async throws -> URL {
         let finalPath = outputPath.appendingPathComponent("Nancy Drew - \(gameName).app")
 
-        logger.notice("Saving wrapper: \(finalPath.path)")
+        logger.notice("Saving wrapp: \(finalPath.path)")
 
         // Remove existing if present
         if FileManager.default.fileExists(atPath: finalPath.path) {
             try FileManager.default.removeItem(at: finalPath)
         }
 
-        // Move wrapper
-        try FileManager.default.moveItem(at: wrapperPath, to: finalPath)
+        // Move wrapp
+        try FileManager.default.moveItem(at: wrappPath, to: finalPath)
 
-        logger.notice("Wrapper saved: \(finalPath.path)")
+        logger.notice("Wrapp saved: \(finalPath.path)")
 
         return finalPath
     }
@@ -498,8 +498,8 @@ class WrappBuildHelper {
     /// Create a fresh temporary wrapp path and register it for cleanup.
     func createTemporaryWrappPath() -> URL {
         let tempDir = fileManager.temporaryDirectory
-        let wrapperName = "NancyDrew-\(UUID().uuidString).app"
-        let path = tempDir.appendingPathComponent(wrapperName)
+        let wrappName = "NancyDrew-\(UUID().uuidString).app"
+        let path = tempDir.appendingPathComponent(wrappName)
         registerTemporaryWrapp(path)
         return path
     }
@@ -543,32 +543,32 @@ class WrappBuildHelper {
     /// Clean up all tracked temporary wrapps (app termination / crash paths).
     func cleanupTemporaryWrapps() {
         wrappsLock.lock()
-        let wrappers = Array(temporaryWrapps)
+        let wrapps = Array(temporaryWrapps)
         temporaryWrapps.removeAll()
         wrappsLock.unlock()
 
-        guard !wrappers.isEmpty else { return }
+        guard !wrapps.isEmpty else { return }
 
         // Skip deletion in debug mode
         if DebugSettings.shared.debugMode {
-            logger.notice("🐛 DEBUG: Keeping \(wrappers.count) temporary wrapper(s) for inspection:")
-            for wrapper in wrappers {
-                if fileManager.fileExists(atPath: wrapper.path) {
-                    logger.notice("   \(wrapper.path)")
+            logger.notice("🐛 DEBUG: Keeping \(wrapps.count) temporary wrapp(s) for inspection:")
+            for wrapp in wrapps {
+                if fileManager.fileExists(atPath: wrapp.path) {
+                    logger.notice("   \(wrapp.path)")
                 }
             }
             return
         }
 
-        logger.notice("🧹 Cleaning up \(wrappers.count) temporary wrapper(s)...")
-        for wrapper in wrappers {
+        logger.notice("🧹 Cleaning up \(wrapps.count) temporary wrapp(s)...")
+        for wrapp in wrapps {
             do {
-                if fileManager.fileExists(atPath: wrapper.path) {
-                    logger.notice("   Removing: \(wrapper.path)")
-                    try fileManager.removeItem(at: wrapper)
+                if fileManager.fileExists(atPath: wrapp.path) {
+                    logger.notice("   Removing: \(wrapp.path)")
+                    try fileManager.removeItem(at: wrapp)
                 }
             } catch {
-                logger.error("   ⚠️ Failed to remove \(wrapper.lastPathComponent): \(error.localizedDescription)")
+                logger.error("   ⚠️ Failed to remove \(wrapp.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }
@@ -606,7 +606,7 @@ class WrappBuildHelper {
 
 // MARK: - Errors
 
-enum WrapperError: LocalizedError {
+enum WrappError: LocalizedError {
     case cachedGameMismatch
     case invalidInfoPlist
     case wineNotFound
@@ -617,11 +617,11 @@ enum WrapperError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cachedGameMismatch:
-            return "Cached wrapper belongs to a different game"
+            return "Cached wrapp belongs to a different game"
         case .invalidInfoPlist:
-            return "Wrapper Info.plist is missing required keys or has an unexpected bundle identifier"
+            return "Wrapp Info.plist is missing required keys or has an unexpected bundle identifier"
         case .wineNotFound:
-            return "Wine binary not found in wrapper"
+            return "Wine binary not found in wrapp"
         case .templateNotFound(let message):
             return message
         case .copyFailed(let message, _, _):

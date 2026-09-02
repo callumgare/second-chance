@@ -1,19 +1,19 @@
 //
-//  InstallationViewModel.swift
+//  WrappBuildViewModel.swift
 //  SecondChance
 //
-//  ViewModel for managing the installation process
+//  ViewModel for managing the wrapp build process
 
 import Foundation
 import SwiftUI
 import Combine
 import Logging
 
-/// Main ViewModel for coordinating the installation process
+/// Main ViewModel for coordinating the wrapp build process
 @MainActor
-class InstallationViewModel: ObservableObject {
-    @Published var currentState: InstallationState = .idle
-    @Published var selectedInstallationType: InstallationType?
+class WrappBuildViewModel: ObservableObject {
+    @Published var currentState: WrappBuildState = .idle
+    @Published var selectedWrappSource: WrappSource?
     @Published var detectedGame: GameInfo?
 
     @Published var progress: Double = 0.0
@@ -23,12 +23,12 @@ class InstallationViewModel: ObservableObject {
     private let steamBuilder = SteamWrappBuilder()
     private let cacheManager = CacheManager.shared
     private var busSubscriptionToken: EventBus<AppEvent>.Token?
-    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.InstallationViewModel")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildViewModel")
 
     // Elapsed-time tracking — mirrors the original AsyncProgressReporter timer behaviour.
     // The UI only shows substep and elapsed time after 5 s so fast sub-steps don't flash.
     private var stepStartTime: Date?
-    private var lastProgressState: InstallationState?
+    private var lastProgressState: WrappBuildState?
     private var stepTimer: Timer?
     private var shouldShowElapsed = false
     
@@ -41,7 +41,7 @@ class InstallationViewModel: ObservableObject {
         cacheManager.cachingEnabled = enableCaching
         cacheManager.stagesToRestore = stagesToRestore
 
-        // Subscribe to the app-wide bus so installation events drive our @Published properties.
+        // Subscribe to the app-wide bus so wrapp-build events drive our @Published properties.
         // (Headless runs are driven by CLIBuilder, which was extracted from here.)
         Task { @MainActor in
             let token = await EventBus.app.subscribe { [weak self] event in
@@ -58,8 +58,8 @@ class InstallationViewModel: ObservableObject {
     /// racing the async subscription set up in `init`.
     func handleBusEvent(_ event: AppEvent) async {
         switch event {
-        case .installation(let installEvent):
-            switch installEvent {
+        case .wrappBuild(let buildEvent):
+            switch buildEvent {
             case .progress(let state):
                 // Error presentation is owned by the `.failed` event, which
                 // carries the typed error. A `.progress(.error)` only has the
@@ -70,7 +70,7 @@ class InstallationViewModel: ObservableObject {
             case .gameDetected(let info):
                 detectedGame = info
             case .failed(let error):
-                handleInstallFailure(error)
+                handleBuildFailure(error)
                 stopStepTimer()
             case .completed:
                 currentState = .completed
@@ -88,7 +88,7 @@ class InstallationViewModel: ObservableObject {
     /// Apply a progress state with the elapsed-time delay logic from the
     /// original AsyncProgressReporter: the UI sees no substep or elapsed time
     /// for the first 5 s; after that a repeating timer drives the counter.
-    private func applyProgress(_ state: InstallationState) {
+    private func applyProgress(_ state: WrappBuildState) {
         if case .error = currentState { return }
 
         let isNewStep = lastProgressState.map {
@@ -136,32 +136,32 @@ class InstallationViewModel: ObservableObject {
         }
     }
 
-    private func withElapsedSeconds(_ state: InstallationState, elapsed: Int?) -> InstallationState {
+    private func withElapsedSeconds(_ state: WrappBuildState, elapsed: Int?) -> WrappBuildState {
         switch state {
         case .detectingGame(let s, _):    return .detectingGame(substep: s, elapsedSeconds: elapsed)
-        case .settingUpWrapper(let s, _): return .settingUpWrapper(substep: s, elapsedSeconds: elapsed)
+        case .settingUpWrapp(let s, _): return .settingUpWrapp(substep: s, elapsedSeconds: elapsed)
         case .copyingInstaller(let s, _): return .copyingInstaller(substep: s, elapsedSeconds: elapsed)
         case .installingGame(let s, _):   return .installingGame(substep: s, elapsedSeconds: elapsed)
-        case .configuringWrapper(let s, _): return .configuringWrapper(substep: s, elapsedSeconds: elapsed)
+        case .configuringWrapp(let s, _): return .configuringWrapp(substep: s, elapsedSeconds: elapsed)
         case .savingApp(let s, _):        return .savingApp(substep: s, elapsedSeconds: elapsed)
         default: return state
         }
     }
 
-    // MARK: - Installation Flow
+    // MARK: - Build Flow
     
-    /// Start installation from disk (interactive mode)
-    func installFromDisk() async {
+    /// Start a build from disk (interactive mode)
+    func buildFromDisk() async {
         await runBuild(diskBuilder)
     }
     
-    /// Start installation from Her Interactive download
-    func installFromHerDownload() async {
+    /// Start a build from a Her Interactive download
+    func buildFromHerDownload() async {
         await runBuild(herDownloadBuilder)
     }
     
-    /// Start installation from Steam
-    func installFromSteam() async {
+    /// Start a build from Steam
+    func buildFromSteam() async {
         await runBuild(steamBuilder)
     }
     
@@ -174,7 +174,7 @@ class InstallationViewModel: ObservableObject {
             _ = try await builder.build(input: input)
             currentState = .completed
         } catch {
-            handleInstallFailure(error)
+            handleBuildFailure(error)
         }
     }
     
@@ -185,12 +185,12 @@ class InstallationViewModel: ObservableObject {
         currentState = .error(error.localizedDescription)
     }
 
-    /// Route installation failures. Cancelling the initial disk-selection
+    /// Route build failures. Cancelling the initial disk-selection
     /// dialog means the user never really started — quietly return to the
     /// welcome screen. Cancelling any later prompt (disk 2, save location)
     /// abandons work already done, so it shows the error screen.
-    private func handleInstallFailure(_ error: Error) {
-        if let installError = error as? InstallationError, installError == InstallationError.userCancelledBeforeStart {
+    private func handleBuildFailure(_ error: Error) {
+        if let installError = error as? WrappBuildError, installError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
         } else {
             handleError(error)
@@ -200,7 +200,7 @@ class InstallationViewModel: ObservableObject {
     /// Reset to initial state
     func reset() {
         currentState = .idle
-        selectedInstallationType = nil
+        selectedWrappSource = nil
         detectedGame = nil
         progress = 0.0
     }

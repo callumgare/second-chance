@@ -8,7 +8,7 @@
 //  Each message is a JSON object on a single line (NDJSON / JSON Lines).
 //  All messages share three reserved keys:
 //    "kind"  — protocol-level discriminator: "event" | (future: "command" | "response")
-//    "type"  — dotted-path identifier, e.g. "installation.gameDetected"
+//    "type"  — dotted-path identifier, e.g. "wrappBuild.gameDetected"
 //    "t"     — ISO-8601 UTC timestamp
 //  All other keys carry the payload for that specific message type.
 //
@@ -131,44 +131,44 @@ final class AutomationBridge: @unchecked Sendable {
 
     private func serialize(_ event: AppEvent) -> [String: Any]? {
         switch event {
-        case .installation(let e): return serializeInstallation(e)
+        case .wrappBuild(let e): return serializeWrappBuild(e)
         case .lifecycle(let e):    return serializeLifecycle(e)
         }
     }
 
-    private func serializeInstallation(_ event: InstallationEvent) -> [String: Any]? {
+    private func serializeWrappBuild(_ event: WrappBuildEvent) -> [String: Any]? {
         var d: [String: Any] = ["kind": "event"]
         switch event {
         case .started(let source):
-            d["type"] = "installation.started"; d["source"] = source.rawValue
+            d["type"] = "wrappBuild.started"; d["source"] = source.rawValue
         case .isoMounted(let url):
-            d["type"] = "installation.isoMounted"; d["mountPath"] = url.path
+            d["type"] = "wrappBuild.isoMounted"; d["mountPath"] = url.path
         case .disksResolved(let disk1, let disk2):
-            d["type"] = "installation.disksResolved"; d["disk1Path"] = disk1.path
+            d["type"] = "wrappBuild.disksResolved"; d["disk1Path"] = disk1.path
             if let disk2 { d["disk2Path"] = disk2.path }
         case .gameDetected(let info):
-            d["type"] = "installation.gameDetected"
+            d["type"] = "wrappBuild.gameDetected"
             d["gameId"] = info.id; d["gameTitle"] = info.title; d["engine"] = info.gameEngine.rawValue
         case .engineRouted(let engine, let info):
-            d["type"] = "installation.engineRouted"
+            d["type"] = "wrappBuild.engineRouted"
             d["engine"] = engine.rawValue; d["gameId"] = info.id
         case .installerResolved(let exePath, let type):
-            d["type"] = "installation.installerResolved"
+            d["type"] = "wrappBuild.installerResolved"
             d["exePath"] = exePath; d["installerType"] = "\(type)"
         case .gameExeDetected(let path, let info):
-            d["type"] = "installation.gameExeDetected"
+            d["type"] = "wrappBuild.gameExeDetected"
             d["exePath"] = path; d["gameId"] = info.id
-        case .wrapperConfigured(let exePath, let installerDir, let info):
-            d["type"] = "installation.wrapperConfigured"
+        case .wrappConfigured(let exePath, let installerDir, let info):
+            d["type"] = "wrappBuild.wrappConfigured"
             d["exePath"] = exePath; d["installerDir"] = installerDir; d["gameId"] = info.id
         case .signed(let url):
-            d["type"] = "installation.signed"; d["wrapperPath"] = url.path
+            d["type"] = "wrappBuild.signed"; d["wrappPath"] = url.path
         case .completed(let url):
-            d["type"] = "installation.completed"; d["wrapperPath"] = url.path
+            d["type"] = "wrappBuild.completed"; d["wrappPath"] = url.path
         case .failed(let error):
-            d["type"] = "installation.failed"; d["error"] = error.localizedDescription
+            d["type"] = "wrappBuild.failed"; d["error"] = error.localizedDescription
         case .progress(let state):
-            d["type"] = "installation.progress"; d["state"] = "\(state)"
+            d["type"] = "wrappBuild.progress"; d["state"] = "\(state)"
             if let sub = state.substep { d["substep"] = sub }
         }
         return d

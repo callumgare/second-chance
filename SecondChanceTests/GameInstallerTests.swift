@@ -14,7 +14,7 @@ struct GameInstallerTests {
     )
     
     let testInstallerPath = "/path/to/installer.exe"
-    let testWrapperPath = URL(fileURLWithPath: "/tmp/test-wrapper.app")
+    let testWrappPath = URL(fileURLWithPath: "/tmp/test-wrapp.app")
     
     // Test installer type detection
     @Test("MSI installer arguments - silent install")
@@ -24,7 +24,7 @@ struct GameInstallerTests {
             installerPath: testInstallerPath,
             installerType: .msi,
             gameInfo: testGameInfo,
-            wrapperPath: testWrapperPath,
+            wrappPath: testWrappPath,
             attemptNumber: 0
         )
         
@@ -40,7 +40,7 @@ struct GameInstallerTests {
             installerPath: testInstallerPath,
             installerType: .msi,
             gameInfo: testGameInfo,
-            wrapperPath: testWrapperPath,
+            wrappPath: testWrappPath,
             attemptNumber: 1
         )
         
@@ -55,7 +55,7 @@ struct GameInstallerTests {
             installerPath: testInstallerPath,
             installerType: .installShield,
             gameInfo: testGameInfo,
-            wrapperPath: testWrapperPath,
+            wrappPath: testWrappPath,
             attemptNumber: 1
         )
         
@@ -70,7 +70,7 @@ struct GameInstallerTests {
             installerPath: testInstallerPath,
             installerType: .innoSetup,
             gameInfo: testGameInfo,
-            wrapperPath: testWrapperPath,
+            wrappPath: testWrappPath,
             attemptNumber: 0
         )
         
@@ -85,7 +85,7 @@ struct GameInstallerTests {
             installerPath: testInstallerPath,
             installerType: .innoSetup,
             gameInfo: testGameInfo,
-            wrapperPath: testWrapperPath,
+            wrappPath: testWrappPath,
             attemptNumber: 1
         )
         
@@ -99,7 +99,7 @@ struct GameInstallerTests {
             installerPath: testInstallerPath,
             installerType: .unknown,
             gameInfo: testGameInfo,
-            wrapperPath: testWrapperPath,
+            wrappPath: testWrappPath,
             attemptNumber: 0
         )
         

@@ -30,17 +30,17 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     }
 
     func build(input: WrappBuildInput) async throws -> URL {
-        await bus.publishInstallation(.started(source: .steam))
+        await bus.publishWrappBuild(.started(source: .steam))
 
         // TODO: Install the Steam client into a fresh wrapp, let the user
         // install the game via Steam's UI, then locate + configure it.
-        // (The old GameInstaller.installFromSteam stub created a base
-        // wrapper and installed the Steam client before throwing; that
+        // (The old GameInstaller.buildFromSteam stub created a base
+        // wrapp and installed the Steam client before throwing; that
         // half-path is not worth carrying — it just leaked a temp wrapp.)
         logger.notice("Steam source not yet implemented")
 
-        let installError = InstallationError.steamNotFullyImplemented
-        await bus.publishInstallation(.failed(installError))
+        let installError = WrappBuildError.steamNotFullyImplemented
+        await bus.publishWrappBuild(.failed(installError))
         throw installError
     }
 }

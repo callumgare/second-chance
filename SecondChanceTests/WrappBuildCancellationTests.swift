@@ -1,5 +1,5 @@
 //
-//  InstallationCancellationTests.swift
+//  WrappBuildCancellationTests.swift
 //  SecondChanceTests
 //
 //  Cancelling the initial disk-selection dialog is not an error from the
@@ -13,23 +13,23 @@ import Combine
 @testable import SecondChance
 
 @MainActor
-@Suite("Installation cancellation routing")
-struct InstallationCancellationTests {
+@Suite("Wrapp build cancellation routing")
+struct WrappBuildCancellationTests {
 
     @Test("Cancelling the initial disk dialog returns to the welcome screen")
     func initialDialogCancelResetsToIdle() async {
-        let viewModel = InstallationViewModel()
+        let viewModel = WrappBuildViewModel()
 
-        await viewModel.handleBusEvent(.installation(.failed(.userCancelledBeforeStart)))
+        await viewModel.handleBusEvent(.wrappBuild(.failed(.userCancelledBeforeStart)))
 
         #expect(viewModel.currentState == .idle)
     }
 
     @Test("Cancelling a later dialog (disk 2, save location) shows the error screen")
     func laterDialogCancelShowsError() async {
-        let viewModel = InstallationViewModel()
+        let viewModel = WrappBuildViewModel()
 
-        await viewModel.handleBusEvent(.installation(.failed(.userCancelled)))
+        await viewModel.handleBusEvent(.wrappBuild(.failed(.userCancelled)))
 
         guard case .error(let message) = viewModel.currentState else {
             Issue.record("Expected error state after late cancellation, got \(viewModel.currentState)")
@@ -40,9 +40,9 @@ struct InstallationCancellationTests {
 
     @Test("Other failures still show the error screen")
     func internalFailureShowsError() async {
-        let viewModel = InstallationViewModel()
+        let viewModel = WrappBuildViewModel()
 
-        await viewModel.handleBusEvent(.installation(.failed(.internalError("boom"))))
+        await viewModel.handleBusEvent(.wrappBuild(.failed(.internalError("boom"))))
 
         guard case .error(let message) = viewModel.currentState else {
             Issue.record("Expected error state after failure, got \(viewModel.currentState)")
@@ -53,22 +53,22 @@ struct InstallationCancellationTests {
 
     @Test("The initial-dialog cancel is a distinct error from later cancels")
     func earlyCancelIsDistinctCase() {
-        #expect(InstallationError.userCancelledBeforeStart != InstallationError.userCancelled)
+        #expect(WrappBuildError.userCancelledBeforeStart != WrappBuildError.userCancelled)
     }
 
     @Test("No error-screen flash between the error-progress event and the failure event")
     func earlyCancelDoesNotFlashErrorScreen() async {
-        let viewModel = InstallationViewModel()
+        let viewModel = WrappBuildViewModel()
 
         // Observe every state SwiftUI would render.
-        var observed: [InstallationState] = []
+        var observed: [WrappBuildState] = []
         var cancellables = Set<AnyCancellable>()
         viewModel.$currentState.sink { observed.append($0) }.store(in: &cancellables)
 
-        // Mirror the exact event order performInstallation's catch publishes on
+        // Mirror the exact event order the builder's catch publishes on
         // cancellation: an error progress state followed by the typed failure.
-        await viewModel.handleBusEvent(.installation(.progress(.error("Installation cancelled before it started"))))
-        await viewModel.handleBusEvent(.installation(.failed(.userCancelledBeforeStart)))
+        await viewModel.handleBusEvent(.wrappBuild(.progress(.error("Installation cancelled before it started"))))
+        await viewModel.handleBusEvent(.wrappBuild(.failed(.userCancelledBeforeStart)))
 
         #expect(observed.allSatisfy { state in
             if case .error = state { return false }

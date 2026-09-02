@@ -15,8 +15,8 @@ class WineUtilities {
     
     /// Wait for Wine server to stop with escalating force
     /// This is a standalone utility that can be used by GameWrapper without needing WineManager
-    static func waitTillWineserverStopped(at wrapperPath: URL, customPrefixDir: URL? = nil) {
-        let wine = WineEnvironment(appPath: wrapperPath, customPrefixDir: customPrefixDir)
+    static func waitTillWineserverStopped(at wrappPath: URL, customPrefixDir: URL? = nil) {
+        let wine = WineEnvironment(appPath: wrappPath, customPrefixDir: customPrefixDir)
         
         // Try graceful shutdown with -w (wait for processes to exit)
         wineUtilitiesLogger.notice("[Wine Cleanup] Running wineserver -w (waiting for processes to exit cleanly)...")

@@ -21,7 +21,7 @@ final class IntegrationTestContext: WrappBuildInput, @unchecked Sendable {
 
     var launchAfterInstall: Bool = false
     var onGameDetectedCallback: ((GameInfo) -> Void)?
-    var onInstallationCompleteCallback: ((URL) -> Void)?
+    var onWrappBuildCompleteCallback: ((URL) -> Void)?
 
     init(disk1: URL, disk2: URL?, outputDir: URL) {
         self.disk1 = disk1
@@ -45,8 +45,8 @@ final class IntegrationTestContext: WrappBuildInput, @unchecked Sendable {
         onGameDetectedCallback?(gameInfo)
     }
 
-    override func onWrappBuildComplete(_ wrapperPath: URL) async {
-        onInstallationCompleteCallback?(wrapperPath)
+    override func onWrappBuildComplete(_ wrappPath: URL) async {
+        onWrappBuildCompleteCallback?(wrappPath)
     }
 
     override func shouldLaunchGame() async -> (Bool, [String]) {

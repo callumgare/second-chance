@@ -1,13 +1,13 @@
 //
-//  InstallationProgressView.swift
+//  WrappBuildProgressView.swift
 //  SecondChance
 //
-//  Shows installation progress
+//  Shows wrapp build progress
 
 import SwiftUI
 
-struct InstallationProgressView: View {
-    @EnvironmentObject var viewModel: InstallationViewModel
+struct WrappBuildProgressView: View {
+    @EnvironmentObject var viewModel: WrappBuildViewModel
     
     var body: some View {
         VStack(spacing: 30) {
@@ -70,8 +70,8 @@ struct InstallationProgressView: View {
                 }
             }
             
-            // Installation stages
-            InstallationStagesView(currentState: viewModel.currentState)
+            // Build stages
+            WrappBuildStagesView(currentState: viewModel.currentState)
                 .padding(.top, 20)
             
             Spacer()
@@ -92,15 +92,15 @@ struct InstallationProgressView: View {
     }
 }
 
-struct InstallationStagesView: View {
-    let currentState: InstallationState
+struct WrappBuildStagesView: View {
+    let currentState: WrappBuildState
     
-    private let stages: [(state: InstallationState, label: String)] = [
+    private let stages: [(state: WrappBuildState, label: String)] = [
         (.detectingGame(substep: nil), "Detecting Game"),
-        (.settingUpWrapper(substep: nil), "Setting Up Wrapper"),
+        (.settingUpWrapp(substep: nil), "Setting Up Wrapper"),
         (.copyingInstaller(substep: nil), "Copying Installer"),
         (.installingGame(substep: nil), "Installing Game"),
-        (.configuringWrapper(substep: nil), "Configuring"),
+        (.configuringWrapp(substep: nil), "Configuring"),
         (.savingApp(substep: nil), "Saving App"),
         (.completed, "Complete")
     ]
@@ -128,7 +128,7 @@ struct InstallationStagesView: View {
         }
     }
     
-    private func isStageCompleted(_ stage: InstallationState) -> Bool {
+    private func isStageCompleted(_ stage: WrappBuildState) -> Bool {
         guard let currentProgress = currentState.progress,
               let stageProgress = stage.progress else {
             return false
@@ -136,13 +136,13 @@ struct InstallationStagesView: View {
         return currentProgress >= stageProgress
     }
     
-    private func isCurrentStage(_ stage: InstallationState) -> Bool {
+    private func isCurrentStage(_ stage: WrappBuildState) -> Bool {
         switch (currentState, stage) {
         case (.detectingGame, .detectingGame),
-             (.settingUpWrapper, .settingUpWrapper),
+             (.settingUpWrapp, .settingUpWrapp),
              (.copyingInstaller, .copyingInstaller),
              (.installingGame, .installingGame),
-             (.configuringWrapper, .configuringWrapper),
+             (.configuringWrapp, .configuringWrapp),
              (.savingApp, .savingApp),
              (.completed, .completed):
             return true
@@ -170,7 +170,7 @@ struct StageIndicator: View {
 
 struct ErrorView: View {
     let message: String
-    @EnvironmentObject var viewModel: InstallationViewModel
+    @EnvironmentObject var viewModel: WrappBuildViewModel
 
     var body: some View {
         VStack(spacing: 20) {
@@ -208,9 +208,9 @@ struct ErrorView: View {
 }
 
 #Preview("Progress") {
-    InstallationProgressView()
+    WrappBuildProgressView()
         .environmentObject({
-            let vm = InstallationViewModel()
+            let vm = WrappBuildViewModel()
             vm.currentState = .installingGame(substep: nil)
             vm.progress = 0.5
             vm.detectedGame = GameInfo(id: "blackmoor-manor", title: "Curse of Blackmoor Manor")
@@ -221,6 +221,6 @@ struct ErrorView: View {
 
 #Preview("Error") {
     ErrorView(message: "Could not find the game installer executable")
-        .environmentObject(InstallationViewModel())
+        .environmentObject(WrappBuildViewModel())
         .frame(width: 700, height: 500)
 }
