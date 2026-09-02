@@ -21,11 +21,25 @@ jobs:
         run: brew install xcbeautify
 
       - name: Build and test
+        env:
+          # Lets WrappTemplate/setup-exiftool.sh authenticate its
+          # api.github.com request: 60 requests/hour unauthenticated (shared
+          # across all runners on this IP) versus 1000/hour for the repo.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -o pipefail
+          # ONLY_ACTIVE_ARCH=NO is required, not an optimisation. The runner is
+          # arm64 and the WrappTemplate target is ARCHS = x86_64 (Wine is
+          # 32-bit). With only the active arch built, SPM emits swift-log for
+          # arm64 alone and WrappTemplate then fails with
+          #   "unable to resolve module dependency: 'Logging'"
+          # because only Logging.swiftmodule/arm64-apple-macos.swiftmodule
+          # exists. Building all archs gives Logging an x86_64 slice too, and
+          # the tests still run natively (no Rosetta needed).
           xcodebuild test \
             -scheme SecondChance \
             -destination 'platform=macOS' \
+            ONLY_ACTIVE_ARCH=NO \
             -resultBundlePath TestResults.xcresult
       
       - name: Upload test results
