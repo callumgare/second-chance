@@ -1,5 +1,5 @@
 //
-//  IntegrationTestContext.swift
+//  IntegrationTestInput.swift
 //  SecondChanceTests
 //
 //  A headless WrappBuildInput for integration tests. Provides disk paths and
@@ -14,12 +14,12 @@ import Foundation
 ///
 /// Works by supplying an in-memory "environment" to `WrappBuildInput` — every
 /// lookup hits the env-var branch and no panel can ever appear.
-final class IntegrationTestContext: WrappBuildInput, @unchecked Sendable {
+final class IntegrationTestInput: WrappBuildInput, @unchecked Sendable {
     let disk1: URL
     let disk2: URL?
     let outputDir: URL
 
-    var launchAfterInstall: Bool = false
+    var launchGameAfterBuild: Bool = false
     var onGameDetectedCallback: ((GameInfo) -> Void)?
     var onWrappBuildCompleteCallback: ((URL) -> Void)?
 
@@ -50,6 +50,6 @@ final class IntegrationTestContext: WrappBuildInput, @unchecked Sendable {
     }
 
     override func shouldLaunchGame() async -> (Bool, [String]) {
-        return (launchAfterInstall, [])
+        return (launchGameAfterBuild, [])
     }
 }

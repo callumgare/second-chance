@@ -4,7 +4,7 @@
 //
 //  The kind of Windows installer a game ships with. Determines the silent /
 //  interactive arguments and whether AutoIt automation applies.
-//  Moved out of GameInstaller so event types (AppEvent) can reference it
+//  Lives in Models/ so event types (AppEvent) can reference it
 //  without depending on a service class.
 //
 

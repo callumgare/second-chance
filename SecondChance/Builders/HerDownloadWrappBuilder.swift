@@ -7,8 +7,8 @@
 //
 //  Same shape as DiskWrappBuilder minus the disk-specific layout: resolve
 //  installer → detect ONCE → base wrapp → run installer → configure →
-//  finalize. Going through the shared helpers means it now signs and
-//  publishes events like the disk flow (the legacy path skipped signing).
+//  finalize, through the same shared helpers as the disk flow, so it signs
+//  and publishes the same events.
 //
 
 import Foundation

@@ -30,8 +30,9 @@ struct PreconfiguredPaths {
 
 /// Unified I/O for a wrapp build.
 ///
-/// Replaces `InstallationContext` + `InteractiveContext` + `NonInteractiveContext`
-/// with a single implementation using env-var-first resolution:
+/// One implementation serves both GUI and headless runs, using env-var-first
+/// resolution — an env var, when set, replaces the panel that would other-
+/// wise prompt:
 ///
 /// | Method                        | Env var override                        | Fallback (no env var)          |
 /// |-------------------------------|-----------------------------------------|--------------------------------|

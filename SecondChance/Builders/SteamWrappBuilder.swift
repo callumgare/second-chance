@@ -14,8 +14,9 @@
 import Foundation
 import Logging
 
-/// Builds a wrapp from a Steam installation. Stub — see the design notes in
-/// docs/installation-flow.md §5.
+/// Builds a wrapp from a Steam installation. Not implemented: `build` throws
+/// `WrappBuildError.steamNotFullyImplemented` before creating anything, so a
+/// failed Steam attempt leaves no temp wrapp behind.
 final class SteamWrappBuilder: WrappBuildStrategy {
     private let helper: WrappBuildHelper
     let bus: EventBus<AppEvent>
@@ -34,9 +35,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
         // TODO: Install the Steam client into a fresh wrapp, let the user
         // install the game via Steam's UI, then locate + configure it.
-        // (The old GameInstaller.buildFromSteam stub created a base
-        // wrapp and installed the Steam client before throwing; that
-        // half-path is not worth carrying — it just leaked a temp wrapp.)
+        // Throw before creating anything until that whole flow exists: a
+        // partial implementation that builds a wrapp and installs the Steam
+        // client, then gives up, just leaks the temp wrapp.
         logger.notice("Steam source not yet implemented")
 
         let installError = WrappBuildError.steamNotFullyImplemented

@@ -6,9 +6,9 @@
 //  process. The per-source *WrappBuilder orchestrators call these; this
 //  helper never calls a builder.
 //
-//  Merged from WrapperBuilder (bundle construction) + the InstallationService
-//  tail (sign/save/launch). Disk-specific work (copying disk layouts, CD-ROM
-//  mounting) lives in DiskWrappBuilder instead — it isn't shared.
+//  Covers bundle construction and the sign/save/launch tail. Disk-specific
+//  work (copying disk layouts, CD-ROM mounting) lives in DiskWrappBuilder
+//  instead — it isn't shared.
 //
 //  Lifecycle rule: this helper provides cleanup *primitives* (e.g.
 //  removeTempWrapp) for resources that outlive a single call — the builder
@@ -402,7 +402,7 @@ class WrappBuildHelper {
         try cacheManager.saveCache(wrappPath: wrappPath, stage: .steamClientInstalled)
     }
 
-    // MARK: - Finalization (absorbed from InstallationService)
+    // MARK: - Finalization
 
     /// Sequence the tail of every build: sign → resolve output → save →
     /// notify completion. Publishes `.signed` and `.completed`; emits

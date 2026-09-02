@@ -5,9 +5,8 @@
 //  The per-source orchestrator for building a wrapp from game disks (real
 //  CDs, folders, or ISO images). Owns the disk flow end-to-end.
 //
-//  Merged from InstallationService.performInstallation (disk-specific parts)
-//  + GameInstaller.buildFromDisk. GameInfo is detected ONCE here and
-//  threaded through — the previous flow detected the game twice.
+//  GameInfo is detected ONCE here and threaded through the rest of the
+//  flow — nothing downstream re-runs detection.
 //
 //  Resource ownership (per the design rules): this builder mounts ISOs and
 //  creates the temp wrapp, so it tears both down on the success AND error

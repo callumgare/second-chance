@@ -6,8 +6,10 @@
 //  runs the requested build, and terminates the process with the right
 //  exit code.
 //
-//  Extracted from WrappBuildViewModel so the ViewModel is pure UI state
-//  and safe to instantiate in tests regardless of environment variables.
+//  Kept out of WrappBuildViewModel so the ViewModel stays pure UI state and
+//  is safe to instantiate in tests regardless of environment variables — no
+//  code path in the ViewModel terminates the process.
+//
 //  The exit sequencing is deliberate and must be preserved:
 //
 //  - validation failure → log, flush stdout/stderr, flush LogStore, exit(1)

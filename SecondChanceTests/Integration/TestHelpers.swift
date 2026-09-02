@@ -194,9 +194,9 @@ enum WrappBuildTestHelper {
             try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
         }
 
-        let context = IntegrationTestContext(disk1: disk1, disk2: disk2, outputDir: outputDir)
+        let input = IntegrationTestInput(disk1: disk1, disk2: disk2, outputDir: outputDir)
         let builder = DiskWrappBuilder()
-        return try await builder.build(input: context)
+        return try await builder.build(input: input)
     }
 }
 
@@ -466,7 +466,7 @@ enum TestError: Error, LocalizedError {
     }
 }
 
-// MARK: - Backward-compat: WrappInfo read methods moved here
+// MARK: - WrappInfo plist readers
 
 extension WrappInfo {
     /// Read the raw Info.plist dictionary from a wrapp `.app`.

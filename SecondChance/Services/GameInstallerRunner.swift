@@ -6,7 +6,6 @@
 //  game executable. Owns the installer-execution machinery: command
 //  building, AutoIt automation, MSI log streaming, the silent→interactive
 //  retry loop, before/after exe diffing, and post-install game patches.
-//  Extracted from GameInstaller.
 //
 
 import Foundation

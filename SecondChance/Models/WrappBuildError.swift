@@ -2,8 +2,7 @@
 //  WrappBuildError.swift
 //  SecondChance
 //
-//  Errors thrown while building a wrapp. Relocated from GameInstaller.swift
-//  when the per-source builders replaced it.
+//  Errors thrown while building a wrapp.
 //
 
 import Foundation

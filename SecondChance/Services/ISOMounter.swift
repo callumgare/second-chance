@@ -3,7 +3,7 @@
 //  SecondChance
 //
 //  Mounts and unmounts ISO disk images, tracking what it mounted so it can
-//  clean up later. Extracted from InstallationService.
+//  clean up later.
 //
 
 import Foundation

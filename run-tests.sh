@@ -175,6 +175,7 @@ run_tests() {
                 -only-testing:SecondChanceTests/GameInstallerTests
                 -only-testing:SecondChanceTests/ErrorViewTests
                 -only-testing:SecondChanceTests/WrappBuildCancellationTests
+                -only-testing:SecondChanceTests/DocsTableTests
             )
             ;;
         integration)
