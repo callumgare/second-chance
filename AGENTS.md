@@ -46,11 +46,16 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
+| [docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md](docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md) | You want to know why the wrapp build is split into per-source builders over a shared helper, and what the `InstallationService` / `GameInstaller` / `WrapperBuilder` arrangement it replaced got wrong |
 
 Adding a doc means adding its row here, and this table is the only place the
 list lives. A test asserts the two match, so a doc without a row fails rather
-than going unnoticed.
+than going unnoticed. The check is recursive, and a row naming a directory
+covers every doc beneath it — with one exception: each historical plan gets its
+own row as well, so a frozen plan stays findable from this table rather than
+only by browsing the directory.
 
 ## Keeping the docs current
 
@@ -65,6 +70,10 @@ Documentation is part of a change, not a follow-up to it.
 - `AGENTS.md` itself changes when a repo-wide convention or invariant does: a
   new lint rule, a new mocking boundary, a new directory with rules of its own.
 - When finished implementing them plans should be added to `docs/historical-plans/`
+- The filename for historical plans leads with the date of implementation, in
+  the form `YYYY-MM-DD-`, so the directory sorts chronologically —
+  `2026-09-03-wrapp-build-architecture-refactor.md`. `DocsTableTests`
+  enforces this, including that the date is a real one.
 - Frozen plans under `docs/historical-plans/` are exempt from all of the above.
   They are not updated as the code moves on. If one has to be edited because it
   is actively misleading someone, mark the edit inline as post-implementation,
@@ -104,6 +113,9 @@ Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)      CLIBuilder (headless
 ```
 
 Progress and results flow the other way, as typed events on `EventBus.app`.
+
+[docs/wrapp-build.md](docs/wrapp-build.md) walks the whole flow
+step by step, including the resource-ownership rules and both injection seams.
 
 ### Key abstractions
 
