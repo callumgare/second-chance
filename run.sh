@@ -7,7 +7,7 @@
 #   ./run.sh --clear-wine-cache     # Clear cached Wine prefix
 #   ./run.sh --game <slug>          # Build game wrapper (don't launch)
 #   ./run.sh --game <slug> --rebuild-game  # Force rebuild game wrapper
-#   ./run.sh --game <slug> --update-game   # Update GameWrapper in existing game
+#   ./run.sh --game <slug> --update-game   # Update WrappTemplate in existing game
 #   ./run.sh --game <slug> --launch-game  # Build and launch game
 #   ./run.sh --game <slug> --launch-game="arg1 arg2"  # Launch with arguments
 #   ./run.sh --game seven-ships --launch-game=--wine-shell  # Launch wine shell in game
@@ -149,12 +149,12 @@ launch_game_if_requested() {
     if [[ "$LAUNCH_GAME_FLAG" == true ]]; then
         echo -e "${BLUE}🎮 Launching game: $(basename "$game_app_path" .app)${NC}"
         # Exec the binary directly so the game's stdio (and thus the
-        # GameWrapper's stderr log stream) reaches this terminal.
+        # WrappTemplate's stderr log stream) reaches this terminal.
         if [[ ${#APP_ARGS[@]} -gt 0 ]]; then
             echo -e "${BLUE}   Arguments: ${APP_ARGS[*]}${NC}"
-            "$game_app_path/Contents/MacOS/GameWrapper" "${APP_ARGS[@]}"
+            "$game_app_path/Contents/MacOS/WrappTemplate" "${APP_ARGS[@]}"
         else
-            "$game_app_path/Contents/MacOS/GameWrapper"
+            "$game_app_path/Contents/MacOS/WrappTemplate"
         fi
     fi
 }

@@ -320,7 +320,7 @@ enum GameFocusDetector {
         var lastPrintTime = Date()
         
         while Date().timeIntervalSince(startTime) < timeout {
-            // Find the game process using NSRunningApplication (like GameWrapper does)
+            // Find the game process using NSRunningApplication (like WrappTemplate does)
             let gameApp = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid })
             
             if let gameApp = gameApp {
@@ -607,12 +607,12 @@ enum WindowDetector {
             guard let ownerName = window[kCGWindowOwnerName as String] as? String else { return false }
             let windowTitle = window[kCGWindowName as String] as? String ?? ""
             
-            // Check if owned by our app or GameWrapper
+            // Check if owned by our app or WrappTemplate
             // Match "Nancy Drew.*<game title>" pattern (handles - vs : and truncation)
             if ownerName.contains("Nancy Drew") && ownerName.contains(gameTitle.prefix(20)) {
                 return true
             }
-            if ownerName.contains("GameWrapper") {
+            if ownerName.contains("WrappTemplate") {
                 return true
             }
             

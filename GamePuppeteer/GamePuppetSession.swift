@@ -25,7 +25,7 @@ struct GamePuppetSession {
             return .failed("Failed to launch game")
         }
 
-        let appName = app.localizedName ?? "GameWrapper"
+        let appName = app.localizedName ?? "WrappTemplate"
         logger.notice("ℹ️  Game process: \(appName) (PID: \(app.processIdentifier))")
 
         if config.gameEngine.lowercased().contains("wine") {

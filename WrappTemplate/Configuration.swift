@@ -1,13 +1,13 @@
 //
 //  Configuration.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  Configuration management for Nancy Drew game wrappers
 
 import Foundation
 import Logging
 
-private nonisolated let configLogger = Logger(label: "au.gare.callum.second-chance.GameWrapper.Configuration")
+private nonisolated let configLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Configuration")
 
 // MARK: - Game Configuration
 

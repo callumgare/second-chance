@@ -80,8 +80,8 @@ class WrappBuildHelper {
         await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: nil)))
 
         // Find the pre-built unified template
-        guard let templatePath = Bundle.main.url(forResource: "GameWrapper", withExtension: "app") else {
-            throw WrappError.templateNotFound("GameWrapper.app not found in Second Chance.app bundle")
+        guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
+            throw WrappError.templateNotFound("WrappTemplate.app not found in Second Chance.app bundle")
         }
 
         // Copy the entire template (includes both Wine and ScummVM)
@@ -91,7 +91,7 @@ class WrappBuildHelper {
             if let wrappError = error as? WrappError, let output = wrappError.copyOutput {
                 logger.notice("Copy output: \(output)")
             }
-            logger.critical("❌ Failed to copy GameWrapper template: \(error.localizedDescription)")
+            logger.critical("❌ Failed to copy wrapp template: \(error.localizedDescription)")
             if let wrappError = error as? WrappError, let command = wrappError.copyCommand {
                 logger.notice("   Command: \(command)")
             }
@@ -177,16 +177,16 @@ class WrappBuildHelper {
             throw WrappError.invalidInfoPlist
         }
 
-        // Update bundle identifier by replacing GameWrapper with game ID
+        // Update bundle identifier by replacing WrappTemplate with game ID
         guard let currentBundleID = plist["CFBundleIdentifier"] as? String else {
             throw WrappError.invalidInfoPlist
         }
 
-        guard currentBundleID.contains("GameWrapper") else {
+        guard currentBundleID.contains("WrappTemplate") else {
             throw WrappError.invalidInfoPlist
         }
 
-        let newBundleID = currentBundleID.replacingOccurrences(of: "GameWrapper", with: "nancy-drew." + gameInfo.id)
+        let newBundleID = currentBundleID.replacingOccurrences(of: "WrappTemplate", with: "nancy-drew." + gameInfo.id)
         plist["CFBundleIdentifier"] = newBundleID
         plist["CFBundleName"] = "Nancy Drew - \(gameInfo.title)"
         plist["CFBundleDisplayName"] = "Nancy Drew - \(gameInfo.title)"

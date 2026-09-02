@@ -1,9 +1,9 @@
 //
 //  Subcommands.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  Parsing helpers for CLI subcommands invoked via direct binary invocation
-//  (e.g. `/path/Game.app/Contents/MacOS/GameWrapper wine --version`).
+//  (e.g. `/path/Game.app/Contents/MacOS/WrappTemplate wine --version`).
 //
 //  These helpers are pure (no I/O, no side effects) so they can be exercised
 //  directly by unit tests if added to the test target.
@@ -17,9 +17,9 @@ import Foundation
 /// When the wrapper binary is invoked directly from a terminal, it can act as a
 /// thin pass-through to the bundled Wine binary for this game's prefix:
 ///
-///     /path/Game.app/Contents/MacOS/GameWrapper wine --version
-///     /path/Game.app/Contents/MacOS/GameWrapper wine '\start' explorer.exe
-///     /path/Game.app/Contents/MacOS/GameWrapper wine C:\windows\regedit.exe
+///     /path/Game.app/Contents/MacOS/WrappTemplate wine --version
+///     /path/Game.app/Contents/MacOS/WrappTemplate wine '\start' explorer.exe
+///     /path/Game.app/Contents/MacOS/WrappTemplate wine C:\windows\regedit.exe
 ///
 /// This helper drops `argv[0]` and, if the first remaining token is `"wine"`,
 /// returns all subsequent tokens to forward to the Wine binary verbatim.

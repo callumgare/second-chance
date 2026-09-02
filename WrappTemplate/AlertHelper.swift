@@ -1,6 +1,6 @@
 //
 //  AlertHelper.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  Standalone alert display utility.
 

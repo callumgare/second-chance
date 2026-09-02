@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		E2127F512F06402B00E02402 /* GameWrapper.app in Embeded Wrapper Template App */ = {isa = PBXBuildFile; fileRef = E24D78DE2F063E1E00B38683 /* GameWrapper.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E2127F512F06402B00E02402 /* WrappTemplate.app in Embeded Wrapper Template App */ = {isa = PBXBuildFile; fileRef = E24D78DE2F063E1E00B38683 /* WrappTemplate.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E2B000002F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
 		E2B000022F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
 		E2B000042F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
@@ -26,7 +26,7 @@
 			containerPortal = E21733892F04AA580058E8E9 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = E24D78DD2F063E1E00B38683;
-			remoteInfo = GameWrapper;
+			remoteInfo = WrappTemplate;
 		};
 		E2F9AA012F15E6B90040383D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -44,7 +44,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 7;
 			files = (
-				E2127F512F06402B00E02402 /* GameWrapper.app in Embeded Wrapper Template App */,
+				E2127F512F06402B00E02402 /* WrappTemplate.app in Embeded Wrapper Template App */,
 			);
 			name = "Embeded Wrapper Template App";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -53,12 +53,12 @@
 
 /* Begin PBXFileReference section */
 		E21733912F04AA580058E8E9 /* Second Chance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Second Chance.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E24D78DE2F063E1E00B38683 /* GameWrapper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GameWrapper.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E24D78DE2F063E1E00B38683 /* WrappTemplate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WrappTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2A0E3C32F075266007E9F60 /* SecondChanceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SecondChanceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		E2C65E122F15FA4700FAFF50 /* Exceptions for "GameWrapper" folder in "GameWrapper" target */ = {
+		E2C65E122F15FA4700FAFF50 /* Exceptions for "WrappTemplate" folder in "WrappTemplate" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AlertHelper.swift,
@@ -69,11 +69,11 @@
 				main.swift,
 				MainLogger.swift,
 				Resources/Assets.xcassets,
-				Resources/GameWrapperIcon.icon,
+				Resources/WrappTemplateIcon.icon,
 				Subcommands.swift,
 				Views/InfoWindowView.swift,
 			);
-			target = E24D78DD2F063E1E00B38683 /* GameWrapper */;
+			target = E24D78DD2F063E1E00B38683 /* WrappTemplate */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -96,12 +96,12 @@
 			path = SecondChanceTests;
 			sourceTree = "<group>";
 		};
-		E2C65E102F15FA4700FAFF50 /* GameWrapper */ = {
+		E2C65E102F15FA4700FAFF50 /* WrappTemplate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				E2C65E122F15FA4700FAFF50 /* Exceptions for "GameWrapper" folder in "GameWrapper" target */,
+				E2C65E122F15FA4700FAFF50 /* Exceptions for "WrappTemplate" folder in "WrappTemplate" target */,
 			);
-			path = GameWrapper;
+			path = WrappTemplate;
 			sourceTree = "<group>";
 		};
 		E2FC5BF22F160FB100AC5301 /* Shared */ = {
@@ -150,7 +150,7 @@
 			isa = PBXGroup;
 			children = (
 				E2FC5BF22F160FB100AC5301 /* Shared */,
-				E2C65E102F15FA4700FAFF50 /* GameWrapper */,
+				E2C65E102F15FA4700FAFF50 /* WrappTemplate */,
 				E21733932F04AA580058E8E9 /* SecondChance */,
 				E2A0E3C42F075266007E9F60 /* SecondChanceTests */,
 				AABB00010000000000000001 /* GamePuppeteer */,
@@ -162,7 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				E21733912F04AA580058E8E9 /* Second Chance.app */,
-				E24D78DE2F063E1E00B38683 /* GameWrapper.app */,
+				E24D78DE2F063E1E00B38683 /* WrappTemplate.app */,
 				E2A0E3C32F075266007E9F60 /* SecondChanceTests.xctest */,
 			);
 			name = Products;
@@ -223,9 +223,9 @@
 			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E24D78DD2F063E1E00B38683 /* GameWrapper */ = {
+		E24D78DD2F063E1E00B38683 /* WrappTemplate */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E24D78E62F063E1F00B38683 /* Build configuration list for PBXNativeTarget "GameWrapper" */;
+			buildConfigurationList = E24D78E62F063E1F00B38683 /* Build configuration list for PBXNativeTarget "WrappTemplate" */;
 			buildPhases = (
 				E24D78DA2F063E1E00B38683 /* Sources */,
 				E2E831292F166FF900C3064A /* Frameworks */,
@@ -241,12 +241,12 @@
 			fileSystemSynchronizedGroups = (
 				E2FC5BF22F160FB100AC5301 /* Shared */,
 			);
-			name = GameWrapper;
+			name = WrappTemplate;
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
 			);
-			productName = GameWrapperWine;
-			productReference = E24D78DE2F063E1E00B38683 /* GameWrapper.app */;
+			productName = WrappTemplate;
+			productReference = E24D78DE2F063E1E00B38683 /* WrappTemplate.app */;
 			productType = "com.apple.product-type.application";
 		};
 		E2A0E3C22F075266007E9F60 /* SecondChanceTests */ = {
@@ -316,7 +316,7 @@
 			projectRoot = "";
 			targets = (
 				E21733902F04AA580058E8E9 /* SecondChance */,
-				E24D78DD2F063E1E00B38683 /* GameWrapper */,
+				E24D78DD2F063E1E00B38683 /* WrappTemplate */,
 				E2A0E3C22F075266007E9F60 /* SecondChanceTests */,
 				AABB00030000000000000003 /* GamePuppeteer */,
 			);
@@ -363,7 +363,7 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/GameWrapper/check-output-collisions.sh",
+				"$(SRCROOT)/WrappTemplate/check-output-collisions.sh",
 				"$(DERIVED_FILE_DIR)/scummvm-setup-last-run",
 				"$(DERIVED_FILE_DIR)/wine-setup-last-run",
 			);
@@ -375,7 +375,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/GameWrapper/check-output-collisions.sh\"\n";
+			shellScript = "\"${SRCROOT}/WrappTemplate/check-output-collisions.sh\"\n";
 		};
 		E25DDA6952206C43D18B125E /* Download And Copy AutoIt Files */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -385,7 +385,7 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/GameWrapper/setup-autoit.sh",
+				"$(SRCROOT)/WrappTemplate/setup-autoit.sh",
 			);
 			name = "Download And Copy AutoIt Files";
 			outputFileListPaths = (
@@ -395,7 +395,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/GameWrapper/setup-autoit.sh\"\n";
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-autoit.sh\"\n";
 		};
 		E280B72C30319B6700501790 /* Download And Copy Game Patches */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -405,7 +405,7 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"${SRCROOT}/GameWrapper/setup-game-patches.sh",
+				"${SRCROOT}/WrappTemplate/setup-game-patches.sh",
 			);
 			name = "Download And Copy Game Patches";
 			outputFileListPaths = (
@@ -415,7 +415,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/GameWrapper/setup-game-patches.sh\"\n";
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-game-patches.sh\"\n";
 		};
 		E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -425,7 +425,7 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/GameWrapper/setup-exiftool.sh",
+				"$(SRCROOT)/WrappTemplate/setup-exiftool.sh",
 			);
 			name = "Download And Copy Exiftool Files";
 			outputFileListPaths = (
@@ -435,7 +435,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/GameWrapper/setup-exiftool.sh\"\n";
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-exiftool.sh\"\n";
 		};
 		E2A159062F064DDD00292958 /* Download And Copy Wine Files */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -445,9 +445,9 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/GameWrapper/setup-wine.sh",
-				"$(SRCROOT)/GameWrapper/NativeFullscreen/native_fullscreen.m",
-				"$(SRCROOT)/GameWrapper/NativeFullscreen/patch-winemac.swift",
+				"$(SRCROOT)/WrappTemplate/setup-wine.sh",
+				"$(SRCROOT)/WrappTemplate/NativeFullscreen/native_fullscreen.m",
+				"$(SRCROOT)/WrappTemplate/NativeFullscreen/patch-winemac.swift",
 			);
 			name = "Download And Copy Wine Files";
 			outputFileListPaths = (
@@ -457,7 +457,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/GameWrapper/setup-wine.sh\"\n";
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-wine.sh\"\n";
 		};
 		E2FA29BF2F089B2B00638A54 /* Download And Copy ScummVM Files */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -467,8 +467,8 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/GameWrapper/setup-scummvm.sh",
-				"$(SRCROOT)/GameWrapper/scummvm.ini",
+				"$(SRCROOT)/WrappTemplate/setup-scummvm.sh",
+				"$(SRCROOT)/WrappTemplate/scummvm.ini",
 			);
 			name = "Download And Copy ScummVM Files";
 			outputFileListPaths = (
@@ -478,7 +478,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/GameWrapper/setup-scummvm.sh\"\n";
+			shellScript = "\"$SRCROOT/WrappTemplate/setup-scummvm.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -521,7 +521,7 @@
 		};
 		E2F499242F15E6B90040383D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E24D78DD2F063E1E00B38683 /* GameWrapper */;
+			target = E24D78DD2F063E1E00B38683 /* WrappTemplate */;
 			targetProxy = E2F499232F15E6B90040383D /* PBXContainerItemProxy */;
 		};
 		E2F9AA022F15E6B90040383D /* PBXTargetDependency */ = {
@@ -781,7 +781,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
-				ASSETCATALOG_COMPILER_APPICON_NAME = GameWrapperIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = WrappTemplateIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
@@ -809,7 +809,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.GameWrapper;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappTemplate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -826,7 +826,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
-				ASSETCATALOG_COMPILER_APPICON_NAME = GameWrapperIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = WrappTemplateIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
@@ -854,7 +854,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 0.2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.GameWrapper;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappTemplate;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -937,7 +937,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E24D78E62F063E1F00B38683 /* Build configuration list for PBXNativeTarget "GameWrapper" */ = {
+		E24D78E62F063E1F00B38683 /* Build configuration list for PBXNativeTarget "WrappTemplate" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E24D78E72F063E1F00B38683 /* Debug */,

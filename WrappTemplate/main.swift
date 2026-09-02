@@ -1,6 +1,6 @@
 //
 //  main.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  Main entry point for Nancy Drew game wrappers
 
@@ -319,7 +319,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 func main() {
     // Bootstrap logging before anything else can construct a Logger.
-    AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.GameWrapper")
+    AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappTemplate")
 
     // Get app path for prefix determination
     guard let executablePath = ProcessInfo.processInfo.arguments.first else {
@@ -344,8 +344,8 @@ func main() {
     // terminal, act as a thin pass-through to the bundled Wine binary for this
     // game's prefix, then exit with Wine's status. Stdio is inherited, so output
     // streams to the calling terminal. Examples:
-    //   /path/Game.app/Contents/MacOS/GameWrapper wine --version
-    //   /path/Game.app/Contents/MacOS/GameWrapper wine '\start' explorer.exe
+    //   /path/Game.app/Contents/MacOS/WrappTemplate wine --version
+    //   /path/Game.app/Contents/MacOS/WrappTemplate wine '\start' explorer.exe
     // Returns `nil` for normal launches (double-click, `open`, `--debug`, …),
     // so the regular game-launch flow below is unchanged.
     if let wineArgs = extractWineSubcommand(from: CommandLine.arguments) {

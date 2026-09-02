@@ -1,6 +1,6 @@
 //
 //  InfoWindowView.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  SwiftUI view for the info/warning window shown during game launch.
 

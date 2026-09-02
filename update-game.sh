@@ -1,5 +1,5 @@
 #!/bin/bash
-# update-game.sh - Update GameWrapper in an existing Nancy Drew game wrapper
+# update-game.sh - Update WrappTemplate in an existing Nancy Drew game wrapper
 #
 # Usage:
 #   ./update-game.sh <game-slug> [options]
@@ -92,8 +92,8 @@ echo -e "${BLUE}🔨 Building...${NC}"
 echo -e "${BLUE}📦 Copying updated wrapper to $(basename "$BUILT_APP_PATH")...${NC}"
 
 # Verify the built wrapper exists
-BUILT_WRAPPER="./DerivedData/Build/Products/Debug/GameWrapper.app/Contents/MacOS/GameWrapper"
-BUILT_DYLIB="./DerivedData/Build/Products/Debug/GameWrapper.app/Contents/MacOS/GameWrapper.debug.dylib"
+BUILT_WRAPPER="./DerivedData/Build/Products/Debug/WrappTemplate.app/Contents/MacOS/WrappTemplate"
+BUILT_DYLIB="./DerivedData/Build/Products/Debug/WrappTemplate.app/Contents/MacOS/WrappTemplate.debug.dylib"
 if [[ ! -f "$BUILT_WRAPPER" ]]; then
     echo -e "${RED}Error: Built wrapper not found at $BUILT_WRAPPER${NC}"
     exit 1
@@ -104,24 +104,24 @@ if [[ ! -f "$BUILT_DYLIB" ]]; then
 fi
 
 # Copy both the stub executable and the debug dylib
-if ! cp -f "$BUILT_WRAPPER" "$BUILT_APP_PATH/Contents/MacOS/GameWrapper"; then
+if ! cp -f "$BUILT_WRAPPER" "$BUILT_APP_PATH/Contents/MacOS/WrappTemplate"; then
     echo -e "${RED}❌ Failed to copy wrapper executable${NC}"
     exit 1
 fi
 
-if ! cp -f "$BUILT_DYLIB" "$BUILT_APP_PATH/Contents/MacOS/GameWrapper.debug.dylib"; then
+if ! cp -f "$BUILT_DYLIB" "$BUILT_APP_PATH/Contents/MacOS/WrappTemplate.debug.dylib"; then
     echo -e "${RED}❌ Failed to copy dylib${NC}"
     exit 1
 fi
 
 # Code sign the copied executables (ad-hoc signature for local development)
 echo -e "${BLUE}🔐 Code signing the wrapper...${NC}"
-if ! codesign --force --sign - "$BUILT_APP_PATH/Contents/MacOS/GameWrapper"; then
+if ! codesign --force --sign - "$BUILT_APP_PATH/Contents/MacOS/WrappTemplate"; then
     echo -e "${RED}❌ Failed to code sign wrapper executable${NC}"
     exit 1
 fi
 
-if ! codesign --force --sign - "$BUILT_APP_PATH/Contents/MacOS/GameWrapper.debug.dylib"; then
+if ! codesign --force --sign - "$BUILT_APP_PATH/Contents/MacOS/WrappTemplate.debug.dylib"; then
     echo -e "${RED}❌ Failed to code sign dylib${NC}"
     exit 1
 fi
@@ -132,12 +132,12 @@ echo -e "${GREEN}✅ Wrapper updated successfully!${NC}"
 if [[ "$LAUNCH_GAME_FLAG" == true ]]; then
     echo -e "${BLUE}🎮 Launching game: $(basename "$BUILT_APP_PATH" .app)${NC}"
     # Exec the binary directly so the game's stdio (and thus the
-    # GameWrapper's stderr log stream) reaches this terminal.
+    # WrappTemplate's stderr log stream) reaches this terminal.
     if [[ ${#APP_ARGS[@]} -gt 0 ]]; then
         echo -e "${BLUE}   Arguments: ${APP_ARGS[*]}${NC}"
-        "$BUILT_APP_PATH/Contents/MacOS/GameWrapper" "${APP_ARGS[@]}"
+        "$BUILT_APP_PATH/Contents/MacOS/WrappTemplate" "${APP_ARGS[@]}"
     else
-        "$BUILT_APP_PATH/Contents/MacOS/GameWrapper"
+        "$BUILT_APP_PATH/Contents/MacOS/WrappTemplate"
     fi
 else
     echo -e "${BLUE}You can now run: open '$BUILT_APP_PATH'${NC}"

@@ -1,6 +1,6 @@
 //
 //  GameMonitor.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  Game process monitoring for Nancy Drew game wrappers
 
@@ -38,7 +38,7 @@ class GameMonitor {
     private let debugMode: Bool
     private let exitCodeLock = NSLock()
     private var _exitCode: Int32? = nil
-    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GameWrapper.GameMonitor")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameMonitor")
     
     var exitCode: Int32? {
         exitCodeLock.withLock { _exitCode }
@@ -239,7 +239,7 @@ class GameMonitor {
                 // Notify info window if it exists
                 if let infoWindow = infoWindow {
                     DispatchQueue.main.async {
-                        Logger(label: "au.gare.callum.second-chance.GameWrapper.GameMonitor").notice("[Game Monitor] Notifying info window that game has loaded...")
+                        Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameMonitor").notice("[Game Monitor] Notifying info window that game has loaded...")
                         infoWindow.notifyGameLoaded()
                     }
                 }
@@ -281,7 +281,7 @@ class GameMonitor {
         }
         
         DispatchQueue.main.async {
-            Logger(label: "au.gare.callum.second-chance.GameWrapper.GameMonitor").notice("[Game Monitor] Hiding wrapper app from dock...")
+            Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameMonitor").notice("[Game Monitor] Hiding wrapper app from dock...")
             NSApp.setActivationPolicy(.accessory)
         }
     }

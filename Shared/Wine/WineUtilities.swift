@@ -2,7 +2,7 @@
 //  WineUtilities.swift
 //  Shared Wine utilities
 //
-//  Minimal Wine utilities that can be used by both GameWrapper and SecondChance
+//  Minimal Wine utilities that can be used by both WrappTemplate and SecondChance
 //  without requiring SecondChance-specific dependencies
 
 import Foundation
@@ -14,7 +14,7 @@ private nonisolated let wineUtilitiesLogger = Logger(label: "au.gare.callum.seco
 class WineUtilities {
     
     /// Wait for Wine server to stop with escalating force
-    /// This is a standalone utility that can be used by GameWrapper without needing WineManager
+    /// This is a standalone utility that can be used by WrappTemplate without needing WineManager
     static func waitTillWineserverStopped(at wrappPath: URL, customPrefixDir: URL? = nil) {
         let wine = WineEnvironment(appPath: wrappPath, customPrefixDir: customPrefixDir)
         

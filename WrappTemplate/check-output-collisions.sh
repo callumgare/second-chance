@@ -41,7 +41,7 @@ echo "🔍 Verifying swift-log static linking (no dynamic framework)..."
 GAMEWRAPPER_BINARY="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/MacOS/${PRODUCT_NAME}"
 
 if [ ! -f "${GAMEWRAPPER_BINARY}" ]; then
-    echo "⚠️  Warning: GameWrapper binary not found at ${GAMEWRAPPER_BINARY}, skipping static linking check"
+    echo "⚠️  Warning: WrappTemplate binary not found at ${GAMEWRAPPER_BINARY}, skipping static linking check"
     exit 0
 fi
 
@@ -67,7 +67,7 @@ fi
 
 # Check that the binary contains Logging symbols (confirms it's statically linked)
 if ! nm "${GAMEWRAPPER_BINARY}" | grep -q "7Logging"; then
-    echo "⚠️  Warning: No Logging symbols found in GameWrapper binary"
+    echo "⚠️  Warning: No Logging symbols found in WrappTemplate binary"
     echo "This may indicate swift-log is not linked properly"
 fi
 

@@ -24,7 +24,7 @@
 //  Windows .exe it runs, which makes the main executable's basename a reliable
 //  way to recognise the game process.
 //
-//  Built and installed by GameWrapper/setup-wine.sh.
+//  Built and installed by WrappTemplate/setup-wine.sh.
 //
 
 #import <Cocoa/Cocoa.h>

@@ -1,6 +1,6 @@
 //
 //  InfoWindowController.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  Controller for the info/warning window. Hosts InfoWindowView (SwiftUI).
 

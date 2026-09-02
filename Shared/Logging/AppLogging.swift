@@ -56,7 +56,7 @@ nonisolated enum AppLogging {
             return MultiplexLogHandler(label: label)
         }
 
-        // Check for --mirror-logs flag (GameWrapper and GamePuppeteer have no settings UI).
+        // Check for --mirror-logs flag (WrappTemplate and GamePuppeteer have no settings UI).
         if CommandLine.arguments.contains("--mirror-logs") {
             LogStore.shared.setDiskMirror(enabled: true)
         }

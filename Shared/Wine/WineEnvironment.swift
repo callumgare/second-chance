@@ -2,7 +2,7 @@
 //  WineEnvironment.swift
 //  Shared Wine environment and execution logic
 //
-//  Used by both SecondChance app and GameWrapper runtime
+//  Used by both SecondChance app and WrappTemplate runtime
 
 import Foundation
 import Logging
@@ -230,7 +230,7 @@ public struct WineEnvironment {
         try await runWine(executable: "wine", arguments: args)
     }
     
-    /// Run a Windows executable with wine start /wait (synchronous version for GameWrapper)
+    /// Run a Windows executable with wine start /wait (synchronous version for WrappTemplate)
     /// Returns the Process object for async monitoring
     public func runWindowsExecutableWithStart(
         exePath: String,
@@ -254,7 +254,7 @@ public struct WineEnvironment {
         // this game's window into a real macOS fullscreen Space. Every Mac-driver
         // process loads that dylib, so it needs to be told which one is the game;
         // Wine names each child's loader copy after the .exe it runs.
-        // See GameWrapper/NativeFullscreen/native_fullscreen.m.
+        // See WrappTemplate/NativeFullscreen/native_fullscreen.m.
         var env = environmentVariables()
         env["NATIVE_MACOS_FULLSCREEN_EXE"] = exeFileName
         process.environment = env

@@ -1,6 +1,6 @@
 //
 //  GameLauncher.swift
-//  GameWrapper
+//  WrappTemplate
 //
 //  Game launching logic for Nancy Drew game wrappers
 
@@ -112,7 +112,7 @@ class GameLauncher {
     private var currentProcess: Process?
     private var cleanupCompleted = false
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
-    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GameWrapper.GameLauncher")
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     
     init(config: GameConfig, gameMonitor: GameMonitor) {
         self.config = config
