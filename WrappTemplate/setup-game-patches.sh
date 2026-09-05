@@ -1,108 +1,103 @@
 #!/bin/bash
 set -euo pipefail
 
-# This script downloads and caches game-specific patches for SecondChance
-# Patches are cached per-game to avoid re-downloading during rebuilds
-# Downloaded patches are also copied into the app bundle for use at install time
+# Downloads the official Her Interactive game patches and stages them in the
+# app bundle so GameInstallerRunner can apply them at wrapp-build time.
+#
+# The patch list lives in game-patches.json next to this script — that manifest
+# is the single source of truth, shared with the Swift side (GamePatchCatalog).
+# Adding a patch means editing the manifest, not this script.
+#
+# Downloads are cached per game under ~/Library/Caches/SecondChance so repeated
+# builds do not re-fetch. See docs/game-patches.md.
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Base cache directory
+MANIFEST="${SCRIPT_DIR}/game-patches.json"
 CACHE_DIR="${HOME}/Library/Caches/SecondChance"
 PATCHES_CACHE="${CACHE_DIR}/game-patches"
-
-# Destination in app bundle
 PATCHES_DEST="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/game-patches"
 
 echo "🔍 Setting up game patches for SecondChance..."
 
-# Function to get game data
-#   - Call with "list" to get all game IDs
-#   - Call with <game-id> to get patch URLs for that game
-get_game_data() {
-    case "$1" in
-        "list")
-            echo "castle-malloy stay-tuned"
-            ;;
-        "stay-tuned")
-            echo "https://www.herinteractive.com/wp-content/uploads/stfd-cabinet.zip https://www.herinteractive.com/wp-content/uploads/timepatch.zip"
-            ;;
-        "castle-malloy")
-            echo "https://www.herinteractive.com/wp-content/uploads/HAU-1.1-patch1.zip"
-            ;;
-        # Add more games here:
-        # "your-game-id")
-        #     echo "https://example.com/patch1.zip https://example.com/patch2.exe"
-        #     ;;
-    esac
+if [ ! -f "${MANIFEST}" ]; then
+    echo "❌ Patch manifest not found at ${MANIFEST}"
+    exit 1
+fi
+
+# plutil reads JSON natively and ships with macOS, so this needs no jq/python.
+read_field() {
+    /usr/bin/plutil -extract "patches.$1.$2" raw -o - "${MANIFEST}" 2>/dev/null || true
 }
 
-# Get list of games with patches
-GAME_IDS=$(get_game_data "list")
+PATCH_COUNT=$(/usr/bin/plutil -extract patches raw -o - "${MANIFEST}")
 
-# Check if any patches are defined
-if [ -z "$GAME_IDS" ]; then
-    echo "ℹ️  No patches defined"
-    echo "   Add entries to the get_patch_urls() function."
+if [ -z "${PATCH_COUNT}" ] || [ "${PATCH_COUNT}" -eq 0 ]; then
+    echo "ℹ️  No patches defined in ${MANIFEST}"
     exit 0
 fi
 
-# Loop through all games
-for game_id in $GAME_IDS; do
-    # Convert game ID to slug-like format if needed
-    GAME_SLUG=$(echo "$game_id" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
-    
-    # Get patch URLs for this game
-    PATCH_URLS=$(get_game_data "$game_id")
-    
-    # Skip if no URLs defined
-    if [ -z "$PATCH_URLS" ]; then
-        echo "ℹ️  No patches defined for '${game_id}'"
-        echo ""
+echo "📋 Manifest lists ${PATCH_COUNT} patch(es)"
+echo ""
+
+# Rebuild the bundle directory from scratch so patches dropped from the
+# manifest do not linger in an incremental build.
+rm -rf "${PATCHES_DEST}"
+mkdir -p "${PATCHES_DEST}"
+
+downloaded=0
+cached=0
+failed=0
+
+index=0
+while [ "${index}" -lt "${PATCH_COUNT}" ]; do
+    game=$(read_field "${index}" game)
+    archive=$(read_field "${index}" archive)
+    url=$(read_field "${index}" url)
+    patch_id=$(read_field "${index}" id)
+    index=$((index + 1))
+
+    if [ -z "${game}" ] || [ -z "${archive}" ] || [ -z "${url}" ]; then
+        echo "⚠️  Skipping malformed manifest entry at index $((index - 1))"
+        failed=$((failed + 1))
         continue
     fi
-    
-    # Game-specific cache directory
-    GAME_PATCH_DIR="${PATCHES_CACHE}/${GAME_SLUG}"
-    
-    # Create cache directory if needed
-    mkdir -p "${GAME_PATCH_DIR}"
-    
-    echo "🎮 Game: ${game_id}"
-    echo "📂 Cache directory: ${GAME_PATCH_DIR}"
-    echo ""
-    
-    # Download each patch
-    for url in $PATCH_URLS; do
-        # Extract filename from URL
-        filename=$(basename "$url")
-        cache_file="${GAME_PATCH_DIR}/${filename}"
-        
-        echo "📥 Processing: ${filename}"
-        
-        # Skip if already cached
-        if [ -f "${cache_file}" ]; then
-            echo "   ✓ Using cached file"
-        else
-            echo "   Downloading from ${url}..."
-            curl -fL "${url}" -o "${cache_file}.tmp" || {
-                echo "   ❌ Failed to download ${url}"
-                rm -f "${cache_file}.tmp"
-                continue
-            }
-            mv "${cache_file}.tmp" "${cache_file}"
-            echo "   ✓ Downloaded successfully"
-        fi
-        
-        echo "   → ${cache_file}"
-        echo ""
-    done
 
-    # Copy cached patches into app bundle
-    BUNDLE_GAME_DIR="${PATCHES_DEST}/${GAME_SLUG}"
-    mkdir -p "${BUNDLE_GAME_DIR}"
-    /usr/bin/ditto --rsrc "${GAME_PATCH_DIR}/" "${BUNDLE_GAME_DIR}/"
-    echo "   ✓ Copied to bundle: ${BUNDLE_GAME_DIR}"
+    game_cache_dir="${PATCHES_CACHE}/${game}"
+    cache_file="${game_cache_dir}/${archive}"
+    mkdir -p "${game_cache_dir}"
+
+    echo "📦 ${game} / ${patch_id} (${archive})"
+
+    if [ -f "${cache_file}" ]; then
+        echo "   ✓ Using cached download"
+        cached=$((cached + 1))
+    else
+        echo "   ↓ Downloading ${url}"
+        if curl -fsSL --retry 2 "${url}" -o "${cache_file}.tmp"; then
+            mv "${cache_file}.tmp" "${cache_file}"
+            echo "   ✓ Downloaded"
+            downloaded=$((downloaded + 1))
+        else
+            echo "   ❌ Download failed — the wrapp will be built without this patch"
+            rm -f "${cache_file}.tmp"
+            failed=$((failed + 1))
+            continue
+        fi
+    fi
+
+    bundle_game_dir="${PATCHES_DEST}/${game}"
+    mkdir -p "${bundle_game_dir}"
+    /usr/bin/ditto --rsrc "${cache_file}" "${bundle_game_dir}/${archive}"
 done
 
-echo "✅ Game patches setup complete"
+# The app reads the manifest from the bundle to decide which patches apply to
+# the game and edition being built, so it ships alongside the archives.
+/usr/bin/ditto --rsrc "${MANIFEST}" "${PATCHES_DEST}/manifest.json"
+
+echo ""
+echo "✅ Game patches ready — ${downloaded} downloaded, ${cached} cached, ${failed} failed"
+
+# A failed patch download must not break the build: the wrapp still works, it
+# just ships without that fix, and GameInstallerRunner tolerates the gap.
+exit 0

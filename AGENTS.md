@@ -35,8 +35,8 @@ Never run an unfiltered `xcodebuild test`. With real ISOs in `installers/` the
 integration suite does not skip and the run takes hours.
 
 Build output lands in `DerivedData/Build/Products/Debug/Second Chance.app`. Game
-wrapps are built into `built-apps/`. See `SecondChanceTests/README.md` for the
-full test story.
+wrapps are built into `built-apps/`. See [docs/testing.md](docs/testing.md) for
+the full test story.
 
 
 ## Documentation
@@ -47,6 +47,8 @@ touching — the rows say _when_ to read, not what is in them:
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
+| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, the `-only-testing:` filter, GamePuppeteer's permissions and exit codes, or reading a run's output |
+| [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
 | [docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md](docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md) | You want to know why the wrapp build is split into per-source builders over a shared helper, and what the `InstallationService` / `GameInstaller` / `WrapperBuilder` arrangement it replaced got wrong |
 
@@ -202,12 +204,23 @@ direct assignment.
   `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's executable is
   `Contents/MacOS/WrappTemplate` — GamePuppeteer matches on that name, so
   renaming the target means updating its window-owner heuristic too.
-- **Bundled resources**: `WrappTemplate.app` template, Wine engine, `winetricks`, AutoIt, and ScummVM are bundled. Test that features work with bundled paths, not just system-installed equivalents.
+- **Bundled resources**: `WrappTemplate.app` template, Wine engine, `winetricks`, AutoIt, and ScummVM are bundled. Test
+  that features work with bundled paths, not just system-installed equivalents.
+
+## Terminology
+
+The Nancy Drew games have a set of common abbrevations use for each game
+(https://nancydrew.fandom.com/wiki/User_blog:BanaBerry/Nancy_Drew_Game_Abbreviations). For example
+`Treasure in the Royal Tower` is `TRT` and `The Haunted Carousal` is `CAR`. These abbreviations are hard for me to
+remember so Second Chance avoids these whenever possible and instead uses our shortenings. The full list can be found in
+SecondChance/Services/GameInfoProvider.swift where the id property is the shortening we use for each game. For us
+`Treasure in the Royal Tower` is `royal-tower` and `The Haunted Carousal` is `haunted-carousel`. Not as short but much
+more self-explanatory.
 
 ## Testing
 
-**`SecondChanceTests/README.md` is the detailed guide** — suites, filtering,
-GamePuppeteer permissions and its exit codes, reports. In short:
+**[docs/testing.md](docs/testing.md) is the detailed guide** — suites,
+filtering, GamePuppeteer permissions and its exit codes, reports. In short:
 
 - **Unit tests** live in `SecondChanceTests/`, using Swift Testing.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new

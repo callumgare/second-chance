@@ -173,6 +173,7 @@ run_tests() {
                 -only-testing:SecondChanceTests/LogWindowTests
                 -only-testing:SecondChanceTests/GameDetectorTests
                 -only-testing:SecondChanceTests/GameInstallerTests
+                -only-testing:SecondChanceTests/GamePatchCatalogTests
                 -only-testing:SecondChanceTests/ErrorViewTests
                 -only-testing:SecondChanceTests/WrappBuildCancellationTests
                 -only-testing:SecondChanceTests/DocsTableTests

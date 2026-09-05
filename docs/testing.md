@@ -1,8 +1,14 @@
-# SecondChance Tests
+# Testing
 
-Swift Testing (`@Test` / `#expect`), run through `run-tests.sh`. There is no
-`Package.swift`, so `swift test` does not work here — everything goes through
-`xcodebuild` against the `SecondChance` scheme.
+How the test suite is run, what each layer covers, and the handful of things
+about this setup that will waste an afternoon if you don't know them.
+
+Tests are Swift Testing (`@Test` / `#expect`), driven by `run-tests.sh`. There
+is no `Package.swift`, so `swift test` does not work here — everything goes
+through `xcodebuild` against the `SecondChance` scheme.
+
+For the repo-wide conventions see `AGENTS.md`; for the build flow these tests
+exercise, see [wrapp-build.md](wrapp-build.md).
 
 ## Quick Start
 
@@ -54,9 +60,19 @@ Fast, no installer ISOs required:
 - **ErrorViewTests** — the error screen's log actions
 - **WrappBuildCancellationTests** — cancel routing (initial dialog → welcome
   screen; later prompts → error screen)
+- **DocsTableTests** — keeps AGENTS.md's Documentation table and `docs/` in
+  step, in both directions
+- **GamePatchCatalogTests** — the game-patch manifest and the catalog that
+  reads it: slugs resolve to real games, editions select one patch per source,
+  puzzle solvers stay opt-in
 
-Those seven are what `run-tests.sh unit` selects. `ExiftoolServiceTests` is
+Those nine are what `run-tests.sh unit` selects. `ExiftoolServiceTests` is
 deliberately outside that filter — it shells out to the bundled exiftool.
+
+**The `unit` case is an explicit `-only-testing:` allowlist, not a wildcard.**
+A new suite that isn't listed there does not fail — it simply never runs, and
+the run still reports success. If a suite you just wrote doesn't appear in the
+output, that is the first thing to check.
 
 ### Integration tests (`SecondChanceTests/Integration/`)
 
@@ -132,6 +148,16 @@ passed before it.
 
 Launch timeout defaults to 90 s (`GamePuppetRunner.run(timeout:)`).
 
+## Reading the output
+
+Suites run **concurrently**, so their lines interleave: the tests printed after
+`Suite "X" started` mostly belong to other suites. Don't read a block of output
+as one suite's results, and don't conclude a suite ran from its `started` line
+alone — match on the test names, or on `Suite "X" passed`.
+
+A suite that was filtered out produces no output at all, which looks
+indistinguishable from a clean run unless you go looking for it.
+
 ## Reports
 
 `run-tests.sh` writes `test-results/<timestamp>.xcresult`, converts it with
@@ -160,9 +186,13 @@ struct MyFeatureTests {
 ```
 
 A new unit suite also needs an `-only-testing:` line in `run-tests.sh`'s `unit`
-case, or the fast loop won't run it. Integration coverage for a new game needs
-only its ISOs dropped into `installers/<slug>/`; the suite enumerates games from
-`GameInfoProvider`.
+case, or the fast loop won't run it — and add it to the list above while you are
+there. Integration coverage for a new game needs only its ISOs dropped into
+`installers/<slug>/`; the suite enumerates games from `GameInfoProvider`.
+
+Adding a file under `docs/` also means adding its row to AGENTS.md's
+Documentation table: `DocsTableTests` asserts the two match in both directions,
+so an unlisted doc fails the unit run.
 
 Mark tests needing absent fixtures with an explicit skip rather than returning
 early, so a skipped test is visible as skipped.

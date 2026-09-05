@@ -32,16 +32,19 @@ class GameInstallerRunner {
     private let fileManager = FileManager.default
     private let wineManager: WineManager
     private let exiftool: ExiftoolService
+    private let catalog: GamePatchCatalog
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner")
     let bus: EventBus<AppEvent>
 
     init(
         wineManager: WineManager = .shared,
         exiftool: ExiftoolService = .shared,
+        catalog: GamePatchCatalog = .shared,
         bus: EventBus<AppEvent> = .app
     ) {
         self.wineManager = wineManager
         self.exiftool = exiftool
+        self.catalog = catalog
         self.bus = bus
     }
 
@@ -51,6 +54,7 @@ class GameInstallerRunner {
     func installGameWithWine(
         wrappPath: URL,
         gameInfo: GameInfo,
+        source: WrappSource,
         installerPath: URL? = nil
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
@@ -175,7 +179,8 @@ class GameInstallerRunner {
             try await applyGamePatches(
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
-                gameExePath: "/" + relativePath
+                gameInstallDir: gameExe!.deletingLastPathComponent(),
+                source: source
             )
         } catch WrappBuildError.userCancelled {
             throw WrappBuildError.userCancelled
@@ -189,7 +194,8 @@ class GameInstallerRunner {
     /// Install game using ScummVM (no actual installer needed - just returns disk path)
     func installGameWithScummVM(
         wrappPath: URL,
-        gameInfo: GameInfo
+        gameInfo: GameInfo,
+        source: WrappSource
     ) async throws -> (gameExePath: String, installerDir: String) {
         // For ScummVM games, the "installation" is simply having the disk files available
         // The disk files were already copied by wrappBuilder.copyGameDisks()
@@ -206,6 +212,24 @@ class GameInstallerRunner {
         let relativePath = gameDir.path(relativeTo: driveCPath)
         let relativeInstallerDir = gameDir.path(relativeTo: driveCPath)
         await bus.publishWrappBuild(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
+
+        // The early games run under ScummVM, but their official patches are
+        // still Windows installers that rewrite the game's data files. Wine is
+        // still in the wrapp at this point — `cleanupUnusedEngine` strips it
+        // one step later — so the patches can be applied here and nowhere else.
+        do {
+            try await applyGamePatches(
+                wrappPath: wrappPath,
+                gameInfo: gameInfo,
+                gameInstallDir: gameDir,
+                source: source
+            )
+        } catch WrappBuildError.userCancelled {
+            throw WrappBuildError.userCancelled
+        } catch {
+            logger.error("⚠️  Failed to apply patches: \(error)")
+        }
+
         return ("/" + relativePath, "/" + relativeInstallerDir)
     }
 
@@ -248,104 +272,225 @@ class GameInstallerRunner {
 
     // MARK: - Game Patches
 
-    /// Apply game patches if available
+    /// How long a single patch installer gets before it is assumed to be
+    /// sitting on a dialog that nobody can answer.
+    private static let patchInstallerTimeout: Duration = .seconds(180)
+
+    /// Something that went wrong applying one patch. Every case is recoverable:
+    /// the build continues without that patch unless the user says otherwise.
+    enum GamePatchError: LocalizedError {
+        case archiveMissing(String)
+        case payloadMissing(payload: String, archive: String)
+        case unzipFailed(String)
+        case timedOut(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .archiveMissing(let archive):
+                return "The patch archive \(archive) was not bundled with Second Chance. It may have failed to download when Second Chance was built."
+            case .payloadMissing(let payload, let archive):
+                return "\(archive) did not contain the expected file \(payload)."
+            case .unzipFailed(let archive):
+                return "Could not unzip \(archive)."
+            case .timedOut(let id):
+                return "The patch installer for \(id) did not finish in time and was stopped."
+            }
+        }
+    }
+
+    /// Apply the official Her Interactive patches for this game.
+    ///
+    /// Which patches apply depends on the game *and* on the edition the wrapp
+    /// was built from — Her Interactive shipped separate CD and
+    /// digital-download builds of several patches, and the wrong one does
+    /// nothing useful. Patches the manifest marks non-automatic (puzzle
+    /// solvers, difficulty tweaks, superseded updaters) are logged but never
+    /// applied. See `docs/game-patches.md`.
+    ///
+    /// A failing patch never fails the build on its own: it routes through
+    /// `confirmPatchFailure`, which continues by default.
     private func applyGamePatches(
         wrappPath: URL,
         gameInfo: GameInfo,
-        gameExePath: String
+        gameInstallDir: URL,
+        source: WrappSource
     ) async throws {
         let gameSlug = gameInfo.id
-        guard let patchesCacheDir = Bundle.main.url(forResource: gameSlug, withExtension: nil, subdirectory: "game-patches") else {
-            logger.notice("ℹ️  No patches found for game '\(gameSlug)'")
+        let patches = catalog.automaticPatches(forGame: gameSlug, source: source)
+
+        for skipped in catalog.optionalPatches(forGame: gameSlug, source: source) {
+            logger.notice("⏭️  Optional patch not applied: \(skipped.id) — \(skipped.title)")
+        }
+
+        guard !patches.isEmpty else {
+            logger.notice("ℹ️  No patches to apply for game '\(gameSlug)'")
             return
         }
 
-        // Get list of patch files
-        let patchFiles = try fileManager.contentsOfDirectory(at: patchesCacheDir, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "zip" }
-
-        guard !patchFiles.isEmpty else {
-            logger.notice("ℹ️  No zip patch files found for game '\(gameSlug)'")
-            return
-        }
-
-        logger.notice("🔧 Applying patches for game '\(gameSlug)'...")
-
-        // Get the game installation directory
         let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
-        let gameExeFullPath = driveCPath.appendingPathComponent(String(gameExePath.dropFirst()))
-        let gameInstallDir = gameExeFullPath.deletingLastPathComponent()
 
-        // Process each patch file
-        for patchFile in patchFiles {
-            logger.notice("📦 Processing patch: \(patchFile.lastPathComponent)")
+        logger.notice("🔧 Applying \(patches.count) patch(es) for '\(gameSlug)' (\(source.rawValue))...")
 
-            // Unzip the patch to a temporary directory
-            let tempDir = FileManager.default.temporaryDirectory
-                .appendingPathComponent("patch-\(UUID().uuidString)")
-            try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
-
-            defer {
-                try? fileManager.removeItem(at: tempDir)
-            }
-
-            // Use unzip command to extract the patch
-            let unzipProcess = Process()
-            unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-            unzipProcess.arguments = ["-q", patchFile.path, "-d", tempDir.path]
-
-            try unzipProcess.run()
-            unzipProcess.waitUntilExit()
-
-            guard unzipProcess.terminationStatus == 0 else {
-                logger.error("❌ Failed to unzip patch: \(patchFile.lastPathComponent)")
-                continue
-            }
-
-            // Look for patch exe files in the unzipped content
-            let unzippedFiles = try fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
-                .filter { $0.pathExtension == "exe" }
-
-            guard !unzippedFiles.isEmpty else {
-                logger.notice("⚠️  No exe files found in patch: \(patchFile.lastPathComponent)")
-                continue
-            }
-
-            // Copy unzipped files to game installation directory
-            for unzippedFile in unzippedFiles {
-                let destPath = gameInstallDir.appendingPathComponent(unzippedFile.lastPathComponent)
-                try fileManager.copyItem(at: unzippedFile, to: destPath)
-                logger.notice("✓ Copied \(unzippedFile.lastPathComponent) to game directory")
-            }
-        }
-
-        // Run patch exes found in game directory
-        let patchExes = try fileManager.contentsOfDirectory(at: gameInstallDir, includingPropertiesForKeys: nil)
-            .filter { $0.lastPathComponent.contains("patch") && $0.pathExtension == "exe" }
-
-        for patchExe in patchExes {
-            let winePath = String(patchExe.path.dropFirst(driveCPath.path.count))
-            logger.notice("🚀 Running patch: \(patchExe.lastPathComponent)")
-
+        for patch in patches {
+            logger.notice("📦 Patch: \(patch.id) — \(patch.title)")
             do {
-                _ = try await wineManager.runWindowsExecutable(
-                    at: wrappPath,
-                    exePath: winePath,
-                    arguments: []
+                try await apply(
+                    patch,
+                    wrappPath: wrappPath,
+                    driveCPath: driveCPath,
+                    gameInstallDir: gameInstallDir
                 )
-                logger.notice("✅ Patch completed: \(patchExe.lastPathComponent)")
+                logger.notice("✅ Applied patch: \(patch.id)")
             } catch {
-                logger.error("❌ Patch failed: \(patchExe.lastPathComponent): \(error)")
-                let continueInstall = await confirmPatchFailure(patchName: patchExe.lastPathComponent, error: error)
+                logger.error("❌ Patch failed: \(patch.id): \(error)")
+                let continueInstall = await confirmPatchFailure(patchName: patch.title, error: error)
                 if continueInstall {
-                    logger.notice("⚠️  Continuing installation without patch: \(patchExe.lastPathComponent)")
+                    logger.notice("⚠️  Continuing without patch: \(patch.id)")
                 } else {
                     throw WrappBuildError.userCancelled
                 }
             }
         }
 
-        logger.notice("✅ All patches applied successfully")
+        logger.notice("✅ Finished applying patches for '\(gameSlug)'")
+    }
+
+    /// Unpack one patch archive and apply its payload to the installed game.
+    private func apply(
+        _ patch: GamePatch,
+        wrappPath: URL,
+        driveCPath: URL,
+        gameInstallDir: URL
+    ) async throws {
+        guard let archiveURL = Bundle.main.url(
+            forResource: patch.archive,
+            withExtension: nil,
+            subdirectory: "game-patches/\(patch.game)"
+        ) else {
+            throw GamePatchError.archiveMissing(patch.archive)
+        }
+
+        let tempDir = fileManager.temporaryDirectory
+            .appendingPathComponent("patch-\(UUID().uuidString)")
+        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: tempDir) }
+
+        try unzipPatchArchive(archiveURL, into: tempDir)
+
+        // The manifest names the payload exactly, so there is no guessing at
+        // filenames — they follow no pattern worth pattern-matching.
+        let payload = tempDir.appendingPathComponent(patch.payload)
+        guard fileManager.fileExists(atPath: payload.path) else {
+            throw GamePatchError.payloadMissing(payload: patch.payload, archive: patch.archive)
+        }
+
+        switch patch.action {
+        case .copyIntoGameDir:
+            let destinationDir = patch.destinationSubdirectory.map {
+                gameInstallDir.appendingPathComponent($0)
+            } ?? gameInstallDir
+            try fileManager.createDirectory(at: destinationDir, withIntermediateDirectories: true)
+
+            let destination = destinationDir.appendingPathComponent(patch.payload)
+            // Overwrite rather than fail: rebuilding a wrapp must be idempotent.
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.copyItem(at: payload, to: destination)
+            logger.notice("   → copied \(patch.payload) into \(destinationDir.lastPathComponent)")
+
+        case .runInstaller:
+            // Stage the installer next to the game: these old patchers default
+            // to their own directory when asked where the game lives.
+            let staged = gameInstallDir.appendingPathComponent(patch.payload)
+            if fileManager.fileExists(atPath: staged.path) {
+                try fileManager.removeItem(at: staged)
+            }
+            try fileManager.copyItem(at: payload, to: staged)
+            // Leave the game directory as we found it, patched or not.
+            defer { try? fileManager.removeItem(at: staged) }
+
+            let winePath = String(staged.path.dropFirst(driveCPath.path.count))
+            try await runPatchInstaller(patch, at: wrappPath, hostPath: staged, winePath: winePath)
+        }
+    }
+
+    /// Extract a patch archive with `/usr/bin/unzip`.
+    private func unzipPatchArchive(_ archive: URL, into directory: URL) throws {
+        let unzip = Process()
+        unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        unzip.arguments = ["-q", "-o", archive.path, "-d", directory.path]
+        try unzip.run()
+        unzip.waitUntilExit()
+
+        guard unzip.terminationStatus == 0 else {
+            throw GamePatchError.unzipFailed(archive.lastPathComponent)
+        }
+    }
+
+    /// Run a patch installer under Wine, silently where the installer type
+    /// supports it, and bounded by a timeout.
+    ///
+    /// Wine execution has no timeout of its own and these are twenty-year-old
+    /// wizard installers, so one that decides to show a dialog would otherwise
+    /// hang the build forever. On timeout the prefix's wineserver is killed and
+    /// the patch is reported failed, which routes through the normal
+    /// patch-failure confirmation.
+    private func runPatchInstaller(
+        _ patch: GamePatch,
+        at wrappPath: URL,
+        hostPath: URL,
+        winePath: String
+    ) async throws {
+        let installerType = detectInstallerType(hostPath.path)
+        let arguments = silentPatchArguments(for: installerType)
+        logger.notice("   → running \(patch.payload) (\(installerType)) \(arguments.joined(separator: " "))")
+
+        let finishedInTime = try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask { [wineManager] in
+                _ = try await wineManager.runWindowsExecutable(
+                    at: wrappPath,
+                    exePath: winePath,
+                    arguments: arguments
+                )
+                return true
+            }
+            group.addTask {
+                // `try?` so cancellation resolves quietly; only the first
+                // result is ever read, so a cancelled sleep cannot win.
+                try? await Task.sleep(for: Self.patchInstallerTimeout)
+                return false
+            }
+
+            let first = try await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+
+        guard finishedInTime else {
+            // Cancelling the Swift task does not stop the Windows process;
+            // only the wineserver holding it can.
+            _ = WineEnvironment(appPath: wrappPath).stopWineserver()
+            throw GamePatchError.timedOut(patch.id)
+        }
+    }
+
+    /// Best-effort silent-install flags for a patch installer.
+    ///
+    /// Unlike the game installers there is no recorded `.iss` answer file for
+    /// patches, so this is the generic flag set for each installer family. If
+    /// an installer ignores them and shows a wizard, the timeout catches it.
+    private func silentPatchArguments(for installerType: InstallerType) -> [String] {
+        switch installerType {
+        case .msi:
+            return ["/qn"]
+        case .installShield:
+            return ["/s", "/sms"]
+        case .innoSetup:
+            return ["/verysilent", "/norestart"]
+        case .unknown:
+            return []
+        }
     }
 
     /// Route a patch-failure confirmation through the injected handler when

@@ -406,6 +406,7 @@
 			);
 			inputPaths = (
 				"${SRCROOT}/WrappTemplate/setup-game-patches.sh",
+				"${SRCROOT}/WrappTemplate/game-patches.json",
 			);
 			name = "Download And Copy Game Patches";
 			outputFileListPaths = (

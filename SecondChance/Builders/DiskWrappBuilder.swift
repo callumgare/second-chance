@@ -112,13 +112,15 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 await bus.publishWrappBuild(.engineRouted(engine: .wine, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithWine(
                     wrappPath: wrappPath,
-                    gameInfo: gameInfo
+                    gameInfo: gameInfo,
+                    source: .disk
                 )
             case .scummvm:
                 await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithScummVM(
                     wrappPath: wrappPath,
-                    gameInfo: gameInfo
+                    gameInfo: gameInfo,
+                    source: .disk
                 )
             default:
                 throw WrappBuildError.unsupportedEngine

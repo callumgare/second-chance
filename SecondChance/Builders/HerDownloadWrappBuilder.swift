@@ -62,6 +62,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let (gameExePath, installerDir) = try await installerRunner.installGameWithWine(
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
+                source: .herDownload,
                 installerPath: installerPath
             )
 
