@@ -1,0 +1,18 @@
+{#-
+  Release notes: the grouped bullets for a single version, with no heading of
+  its own — prepare-release.sh supplies the version heading, and GitHub
+  releases carry the version in their title.
+
+  `commit` fields available here: summary, scope, body, breaking_change,
+  author, signature, date, id, type, type_order, footers.
+-#}
+{%- set hidden = ["Miscellaneous Chores", "Continuous Integration", "Build System", "Style", "Tests"] -%}
+{%- for type, typed_commits in commits | group_by(attribute="type") %}
+{%- if type not in hidden %}
+### {{ type }}
+
+{% for commit in typed_commits -%}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.summary | upper_first }}{% if commit.breaking_change %} — **breaking change**{% endif %}
+{% endfor %}
+{%- endif %}
+{%- endfor %}

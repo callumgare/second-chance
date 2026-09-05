@@ -1,0 +1,34 @@
+# cocogitto configuration.
+#
+# Two jobs: it decides what the next version number is (`prepare-release.sh`
+# reads `cog bump --auto --dry-run`), and it keeps commit messages parseable so
+# that decision stays trustworthy.
+#
+# Bump rules are cocogitto's own and aren't configurable: `feat` bumps the
+# minor, `fix` the patch, and a breaking change bumps the minor while the
+# project is pre-1.0 and the major after. Note that `refactor`, `docs`, `ci`,
+# `chore`, `test` and `style` bump NOTHING — a batch of commits with none of
+# feat/fix/breaking among them produces no release, and prepare-release.sh will
+# say so. Use `--version` to force one out anyway.
+
+tag_prefix = "v"
+
+# The pre-conventional commits from before the Swift rewrite don't parse, so
+# `cog check` looks only at what's landed since the last release tag.
+from_latest_tag = true
+ignore_merge_commits = true
+ignore_fixup_commits = true
+
+# prepare-release.sh writes CHANGELOG.md itself, but `cog changelog` still
+# reads this for its default template settings.
+[changelog]
+path = "CHANGELOG.md"
+authors = []
+
+# Installed with `./prepare-release.sh --install-hooks` (git hooks live in
+# .git/ and so can't be committed — every clone runs that once).
+[git_hooks.commit-msg]
+script = """#!/bin/sh
+set -e
+cog verify --file $1
+"""

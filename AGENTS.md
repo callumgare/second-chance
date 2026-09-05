@@ -21,6 +21,9 @@ All commands run from the repo root. The project uses **fish shell** on macOS.
 arch -x86_64 ./run-tests.sh unit              # Unit tests (~6s) — fast feedback loop
 arch -x86_64 ./run-tests.sh i <game-slug>     # Integration test for one game
 arch -x86_64 ./run-tests.sh integration       # All games (hours, needs real installers)
+
+./prepare-release.sh        # Version, changelog, notes and a Release build
+./prepare-release.sh -n     # Dry run — show what a release would contain
 ```
 
 **`run-tests.sh` must be run under Rosetta.** It takes its destination from
@@ -237,6 +240,38 @@ filtering, GamePuppeteer permissions and its exit codes, reports. In short:
 - **Priority test targets** (untested but high-value): `CacheManager`,
   `WrappBuildInput`'s env-var resolution and validation, `WrappBuildHelper` path
   helpers.
+
+## Releasing
+
+**Commit messages are load-bearing.** `./prepare-release.sh` derives the next
+version from the [conventional commits](https://www.conventionalcommits.org)
+since the last tag, using [cocogitto](https://docs.cocogitto.io) configured in
+`cog.toml`, so a malformed message is a message that silently disappears from
+the release notes and doesn't count toward the version.
+
+Run `./prepare-release.sh --install-hooks` once per clone. It installs cog's
+`commit-msg` hook, which rejects a non-conventional message at commit time —
+git hooks live in `.git/` and so can't be committed, which is why this isn't
+automatic.
+
+Only three things move the version: `feat` bumps the minor, `fix` bumps the
+patch, and a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) bumps
+the minor while the project is pre-1.0 and the major after. **`refactor`,
+`docs`, `test`, `ci`, `chore` and `style` bump nothing** — a batch containing
+none of feat/fix/breaking produces no release at all, and the script says so
+rather than inventing a version. Pass `--version X.Y.Z` to force one.
+
+`prepare-release.sh` writes `MARKETING_VERSION` into the `SecondChance` and
+`WrappTemplate` targets only; `GamePuppeteer` and `SecondChanceTests` are never
+shipped and stay at 1.0. It also sets `CURRENT_PROJECT_VERSION` to the commit
+count, which matters beyond bookkeeping: `WineManager` keys its prefix cache on
+the bundle version, so a release that didn't change it would hand users a stale
+Wine prefix.
+
+The script stops before committing, tagging or pushing, and prints those
+commands instead. The app it produces is **ad-hoc signed and not notarized** —
+on macOS 15+ users have to approve it under System Settings → Privacy &
+Security, as the Control-click bypass no longer works.
 
 ## Things Currently In Flux
 
