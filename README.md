@@ -119,6 +119,65 @@ Good luck (and also thank you very much for considering helping out).
 All other dependencies (Wine, ScummVM, winetricks, AutoIt, exiftool) are automatically downloaded and cached in `~/Library/Caches/SecondChance/` during the build process — you don't need to install them yourself.
 
 
+### Building
+
+```bash
+./build.sh
+```
+
+That's the whole thing on a fresh machine — the script already handles the architecture
+setup described below.
+
+#### A note on architectures
+
+The `WrappTemplate` target is `ARCHS = x86_64`, because Wine is 32-bit. Everything else in
+the project is universal. This matters on Apple Silicon: a default build only builds the
+*active* architecture (arm64), so Swift Package Manager emits swift-log for arm64 alone.
+`WrappTemplate` then compiles as x86_64, finds only an arm64 slice of the module, and the
+build dies with:
+
+```
+module file '.../Logging.swiftmodule/arm64-apple-macos.swiftmodule' is incompatible with
+this Swift compiler: built for incompatible target
+unable to resolve module dependency: 'Logging'
+```
+
+The fix is `ONLY_ACTIVE_ARCH=NO`: swift-log gets an x86_64 slice alongside the arm64 one,
+`WrappTemplate` links, and the app itself still builds native rather than Rosetta-only.
+`build.sh`, `prepare-release.sh` and CI all set it.
+
+Wrapping the build in `arch -x86_64` looks like it should work too, and `build.sh` used to
+do exactly that. Don't — the architecture of the `xcodebuild` process doesn't reliably
+decide what the build system picks for the Swift package products, so it works on some
+machines and fails on others with the error above. The build setting is the thing that
+actually decides.
+
+So if you're invoking `xcodebuild` by hand rather than using `build.sh`, pass it:
+
+```bash
+rm -rf DerivedData    # clear any arm64-only Logging module left behind
+xcodebuild -project SecondChance.xcodeproj \
+    -scheme SecondChance \
+    -configuration Debug \
+    -derivedDataPath DerivedData \
+    ONLY_ACTIVE_ARCH=NO \
+    build
+```
+
+If you're building from Xcode's GUI, set **Build Settings → Build Active Architecture Only
+→ Debug → No**, otherwise you'll hit the same error.
+
+`run-tests.sh` sets the same flag, so tests run natively too:
+
+```bash
+./run-tests.sh unit
+```
+
+It still pins `-destination` to a single architecture, but only to stop xcodebuild matching
+both arm64 and x86_64 and launching two parallel test runners, which doubles Wine installs
+on integration runs.
+
+
 ## Built with
 - [wine](https://www.winehq.org/)
 - [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw) - I couldn't seem to get the games to run with the builtin wine

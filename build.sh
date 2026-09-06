@@ -58,10 +58,18 @@ else
     XCBEAUTIFY_OPTIONS=""
 fi
 
-NSUnbufferedIO=YES arch -x86_64 xcodebuild -project "$SCRIPT_DIR/SecondChance.xcodeproj" \
+# ONLY_ACTIVE_ARCH=NO for the same reason CI and prepare-release.sh set it:
+# WrappTemplate is ARCHS = x86_64 (Wine) and needs an x86_64 slice of swift-log to
+# link against, which an active-arch-only build on Apple Silicon never produces —
+# it fails with "unable to resolve module dependency: 'Logging'". This used to be
+# handled by wrapping xcodebuild in `arch -x86_64`, but the process architecture
+# doesn't reliably decide what the build system picks for the package products, so
+# it worked on some machines and not others. The build setting does decide it.
+NSUnbufferedIO=YES xcodebuild -project "$SCRIPT_DIR/SecondChance.xcodeproj" \
     -scheme SecondChance \
     -configuration Debug \
     -derivedDataPath "$DERIVED_DATA_PATH" \
+    ONLY_ACTIVE_ARCH=NO \
     build 2>&1 | xcbeautify $XCBEAUTIFY_OPTIONS
 
 echo -e "${BLUE}📦 App built at: $DERIVED_DATA_PATH/Build/Products/Debug/Second Chance.app${NC}"

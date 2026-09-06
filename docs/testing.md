@@ -12,30 +12,31 @@ exercise, see [wrapp-build.md](wrapp-build.md).
 
 ## Quick Start
 
-**Run these under Rosetta.** `run-tests.sh` picks its destination from
-`uname -m`, and the WrappTemplate target is `ARCHS = x86_64` (Wine is 32-bit),
-so a native arm64 run dies at link with `ld: symbol(s) not found for
-architecture x86_64` for every swift-log symbol. That surfaces as exit 65 and
-`** TEST BUILD FAILED **`, which reads like a failing test but is a link
-failure. (`./build.sh` needs no prefix — it already wraps xcodebuild in
-`arch -x86_64`.)
+These run natively — no Rosetta wrapper. `run-tests.sh` passes
+`ONLY_ACTIVE_ARCH=NO`, which is what makes them work: the WrappTemplate target
+is `ARCHS = x86_64` (Wine is 32-bit), so an active-arch-only build on Apple
+Silicon emits swift-log for arm64 alone and WrappTemplate then dies with
+`unable to resolve module dependency: 'Logging'`, or at link with `ld: symbol(s)
+not found for architecture x86_64` for every swift-log symbol. That surfaces as
+exit 65 and `** TEST BUILD FAILED **`, which reads like a failing test but is a
+build failure. See the README's *Building* section for the full story.
 
 ```bash
 # Unit tests only (fast, ~6s, no installers needed)
-arch -x86_64 ./run-tests.sh unit
+./run-tests.sh unit
 
 # Integration tests — one game
-arch -x86_64 ./run-tests.sh integration stay-tuned
-arch -x86_64 ./run-tests.sh i stay-tuned          # short form
+./run-tests.sh integration stay-tuned
+./run-tests.sh i stay-tuned          # short form
 
 # Integration tests — all games (hours)
-arch -x86_64 ./run-tests.sh integration
+./run-tests.sh integration
 
 # Everything
-arch -x86_64 ./run-tests.sh
+./run-tests.sh
 
 # Skip the rebuild and reuse the existing build
-arch -x86_64 ./run-tests.sh --no-rebuild i stay-tuned
+./run-tests.sh --no-rebuild i stay-tuned
 ```
 
 Other flags: `--raw-logs` (skip xcbeautify), `--quiet`, and
@@ -104,11 +105,11 @@ forward it into the test environment) limits which games run:
 
 ```bash
 # Via run-tests.sh, which adds the prefix for you
-arch -x86_64 ./run-tests.sh integration stay-tuned
+./run-tests.sh integration stay-tuned
 
 # Directly
 TEST_RUNNER_TEST_GAMES=stay-tuned,blackmoor-manor \
-  arch -x86_64 xcodebuild test-without-building -scheme SecondChance \
+  xcodebuild test-without-building -scheme SecondChance \
   -destination 'platform=macOS' -derivedDataPath DerivedData \
   -only-testing:SecondChanceTests/DiskInstallIntegrationTests
 ```

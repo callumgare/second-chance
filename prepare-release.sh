@@ -340,9 +340,9 @@ fi
 
 if [[ "$DRY_RUN" == false && "$NO_BUILD" == false && "$SKIP_TESTS" == false ]]; then
     echo -e "${BLUE}🧪 Running unit tests...${NC}"
-    # run-tests.sh takes its destination from `uname -m` and WrappTemplate is
-    # ARCHS = x86_64, so this has to go through Rosetta or it fails at link.
-    arch -x86_64 "$SCRIPT_DIR/run-tests.sh" unit \
+    # run-tests.sh now passes ONLY_ACTIVE_ARCH=NO itself, so the x86_64 slice
+    # WrappTemplate links against gets built without a Rosetta wrapper here.
+    "$SCRIPT_DIR/run-tests.sh" unit \
         || die "Unit tests failed — not building a release from this."
 fi
 
@@ -364,11 +364,11 @@ else
     XCBEAUTIFY_OPTIONS=""
 fi
 
-# ONLY_ACTIVE_ARCH=NO for the same reason CI sets it: WrappTemplate is
-# ARCHS = x86_64 and swift-log needs an x86_64 slice to link against, while
-# the app itself wants to stay universal. Building every arch satisfies both,
-# and unlike ./build.sh this needs no `arch -x86_64` wrapper — so the shipped
-# app is native on Apple Silicon rather than Rosetta-only.
+# ONLY_ACTIVE_ARCH=NO for the same reason CI, build.sh and run-tests.sh set it:
+# WrappTemplate is ARCHS = x86_64 and swift-log needs an x86_64 slice to link
+# against, while the app itself wants to stay universal. Building every arch
+# satisfies both, and keeps the shipped app native on Apple Silicon rather than
+# Rosetta-only.
 NSUnbufferedIO=YES xcodebuild -project "$PROJECT" \
     -scheme SecondChance \
     -configuration Release \

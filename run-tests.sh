@@ -115,11 +115,12 @@ else
     XCBEAUTIFY_OPTIONS=""
 fi
 
-# Pin to the architecture this script is running under (Rosetta reports x86_64)
-# instead of hardcoding arm64: WrappTemplate is x86_64-only (Wine) and links
-# swift-log via Shared/Logging/, so a native arm64 run produces an arm64-only
-# Logging.o that WrappTemplate cannot link. Run under Rosetta for integration
-# tests: `arch -x86_64 ./run-tests.sh ...`
+# Pin the destination to a single architecture, otherwise xcodebuild matches both
+# arm64 and x86_64 and launches two parallel test runners, doubling Wine installs
+# on integration runs. This does NOT need to be x86_64: WrappTemplate is
+# ARCHS = x86_64 (Wine) and links swift-log, but its x86_64 slice comes from
+# ONLY_ACTIVE_ARCH=NO at build time (see build_for_testing), not from running the
+# script under Rosetta. `arch -x86_64 ./run-tests.sh` is no longer needed.
 ARCH="$(uname -m)"
 
 # Unique result bundle path for this run so parallel runs don't collide
@@ -142,10 +143,15 @@ open_html_report() {
 build_for_testing() {
     echo -e "${BLUE}🔨 Building for testing...${NC}"
     set -o pipefail
+    # ONLY_ACTIVE_ARCH=NO for the same reason CI, build.sh and prepare-release.sh
+    # set it: an active-arch-only build on Apple Silicon emits swift-log for arm64
+    # alone, and the x86_64 WrappTemplate then fails to link with
+    # "unable to resolve module dependency: 'Logging'".
     NSUnbufferedIO=YES xcodebuild build-for-testing \
         -scheme SecondChance \
         -destination "platform=macOS,arch=$ARCH" \
         -derivedDataPath "$DERIVED_DATA" \
+        ONLY_ACTIVE_ARCH=NO \
         2>&1 | xcbeautify $XCBEAUTIFY_OPTIONS
 }
 

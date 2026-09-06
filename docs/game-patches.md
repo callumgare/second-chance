@@ -220,6 +220,6 @@ explicit "don't continue" turns a patch failure into a cancelled build.
 
 `GamePatchCatalogTests` covers the manifest as data — unknown slugs, duplicate
 ids, edition selection, and the opt-in patches staying opt-in. Run it with
-`arch -x86_64 ./run-tests.sh unit`; see
+`./run-tests.sh unit`; see
 [testing.md](testing.md) for how the test suite is run and what the `unit`
 filter does.

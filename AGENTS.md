@@ -18,21 +18,26 @@ All commands run from the repo root. The project uses **fish shell** on macOS.
 ./run.sh --rebuild          # Force rebuild app + any game wrapp
 ./run.sh --clear-wine-cache # Clear cached Wine prefix
 
-arch -x86_64 ./run-tests.sh unit              # Unit tests (~6s) — fast feedback loop
-arch -x86_64 ./run-tests.sh i <game-slug>     # Integration test for one game
-arch -x86_64 ./run-tests.sh integration       # All games (hours, needs real installers)
+./run-tests.sh unit         # Unit tests (~6s) — fast feedback loop
+./run-tests.sh i <game-slug> # Integration test for one game
+./run-tests.sh integration   # All games (hours, needs real installers)
 
 ./prepare-release.sh        # Version, changelog, notes and a Release build
 ./prepare-release.sh -n     # Dry run — show what a release would contain
 ```
 
-**`run-tests.sh` must be run under Rosetta.** It takes its destination from
-`uname -m`, and the WrappTemplate target is `ARCHS = x86_64` (Wine is 32-bit),
-so a native arm64 run fails at link with `ld: symbol(s) not found for
-architecture x86_64` for every swift-log symbol. That shows up as exit 65 and
-`** TEST BUILD FAILED **`, which looks like a failing test but is a link
-failure. `./build.sh` needs no prefix — it already wraps xcodebuild in
-`arch -x86_64`.
+**Every build passes `ONLY_ACTIVE_ARCH=NO`, and that is load-bearing.** The
+WrappTemplate target is `ARCHS = x86_64` (Wine is 32-bit) while everything else
+is universal, so an active-arch-only build on Apple Silicon emits swift-log for
+arm64 alone. WrappTemplate then fails with `unable to resolve module dependency:
+'Logging'`, or at link with `ld: symbol(s) not found for architecture x86_64`
+for every swift-log symbol — which surfaces as exit 65 and `** TEST BUILD
+FAILED **`, looking like a failing test when it is really a build failure.
+`build.sh`, `run-tests.sh`, `prepare-release.sh` and CI all set the flag, so
+none of them need a Rosetta wrapper. If you invoke `xcodebuild` directly, pass
+it yourself. Do not reach for `arch -x86_64` instead: the process architecture
+does not reliably decide what the build system picks for the package products,
+which made it work on some machines and fail on others.
 
 Never run an unfiltered `xcodebuild test`. With real ISOs in `installers/` the
 integration suite does not skip and the run takes hours.
