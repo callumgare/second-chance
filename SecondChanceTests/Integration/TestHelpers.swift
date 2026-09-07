@@ -28,6 +28,24 @@ enum SystemLogReader {
 
     /// Fetch all log lines for `pid` since `start` (padded back 5 s to avoid clipping).
     static func fetch(pid: Int32, since start: Date) -> Data {
+        fetch(
+            predicate: "processIdentifier == \(pid) AND subsystem BEGINSWITH 'au.gare.callum.second-chance'",
+            since: start
+        )
+    }
+
+    /// Fetch log lines emitted by the wrapp itself (the game container) since
+    /// `start`. Unlike `fetch(pid:since:)` this is not pid-scoped: the wrapp is
+    /// launched by GamePuppeteer, so its pid is not known here.
+    static func fetchGame(since start: Date) -> Data {
+        fetch(
+            predicate: "subsystem == 'au.gare.callum.second-chance.WrappTemplate'",
+            since: start
+        )
+    }
+
+    /// Run `log show` with `predicate` and return its stdout.
+    static func fetch(predicate: String, since start: Date) -> Data {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -39,21 +57,48 @@ enum SystemLogReader {
         process.arguments = [
             "show",
             "--start", startStr,
-            "--predicate", "processIdentifier == \(pid) AND subsystem BEGINSWITH 'au.gare.callum.second-chance'",
+            "--predicate", predicate,
             "--style", "syslog",
         ]
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        // `log show` writes progress and warnings to stderr and nothing here
+        // reads them. A Pipe would fill and block the child forever, so discard.
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
+            // Drain BEFORE waiting, never after. A pipe buffers roughly 64 KB;
+            // once `log show` fills it the child blocks waiting for a reader
+            // while waitUntilExit() blocks waiting for the child to exit, and
+            // the test run hangs forever with no output. A long game session
+            // easily clears 64 KB, which is why this only bit sometimes.
+            // readDataToEndOfFile() returns at EOF, which the child's exit gives.
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            return pipe.fileHandleForReading.readDataToEndOfFile()
+            return data
         } catch {
             return Data()
         }
+    }
+}
+
+/// Echoes captured subprocess logs into the test output. Second Chance's own
+/// logs show up because the tests run inside it; GamePuppeteer and the game are
+/// separate processes, so their logs only reach the console via this.
+enum TestConsole {
+    static func echo(_ data: Data, title: String) {
+        guard let text = String(data: data, encoding: .utf8),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        let rule = String(repeating: "─", count: 10)
+        print("\(rule) \(title) \(rule)")
+        print(text, terminator: text.hasSuffix("\n") ? "" : "\n")
+        print("\(rule) end \(title) \(rule)")
+        fflush(stdout)
     }
 }
 
@@ -239,6 +284,15 @@ enum GamePuppetRunner {
         }
 
         Attachment.record(logData, named: "gamepuppeteer-\(attemptLabel)-\(gameSlug).txt")
+        TestConsole.echo(logData, title: "GamePuppeteer log (\(attemptLabel)) — \(gameSlug)")
+
+        // The game runs in its own process inside the wrapp, so it is not covered
+        // by the pid-scoped fetch above and needs its own subsystem query.
+        let gameLogData = SystemLogReader.fetchGame(since: launchTime)
+        if !gameLogData.isEmpty {
+            Attachment.record(gameLogData, named: "game-\(attemptLabel)-\(gameSlug).txt")
+            TestConsole.echo(gameLogData, title: "Game log (\(attemptLabel)) — \(gameSlug)")
+        }
 
         if let logText = String(data: logData, encoding: .utf8) {
             let requestedPermission = logText.contains("PERMISSION_GATE: permission_requested")
