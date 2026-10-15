@@ -317,9 +317,10 @@ the bundle version, so a release that didn't change it would hand users a stale
 Wine prefix.
 
 The script stops before committing, tagging or pushing, and prints those
-commands instead. The app it produces is **ad-hoc signed and not notarized** —
-on macOS 15+ users have to approve it under System Settings → Privacy &
-Security, as the Control-click bypass no longer works.
+commands instead. The app it produces is **signed with an Apple Development
+certificate and not notarized** (only a Developer ID certificate can be) — on
+macOS 15+ users have to approve it under System Settings → Privacy & Security,
+as the Control-click bypass no longer works.
 
 ## Things Currently In Flux
 

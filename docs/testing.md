@@ -155,13 +155,19 @@ Its exit codes (`GamePuppeteer/Configuration.swift`):
 | 4 | Screen Recording permission denied |
 | 5 | Screen Recording granted but a relaunch is required |
 
-**Codes 3–5 are permission problems, not regressions.** Any rebuild of
-`GamePuppeteer.app` produces a newly ad-hoc-signed binary and drops its TCC
-grants, so an unrelated edit can cause them — anything under `Shared/` compiles
-into GamePuppeteer and will rebuild it. Re-grant the permission (`reset-tcc.sh`
-clears stale entries) rather than looking for a bug in the build code. The
-tell-tale: the run reports a single issue, and every wrapp-build event assertion
-passed before it.
+**Codes 3–5 are permission problems, not regressions.** Re-grant the permission
+(`reset-tcc.sh` clears stale entries) rather than looking for a bug in the build
+code. The tell-tale: the run reports a single issue, and every wrapp-build event
+assertion passed before it.
+
+GamePuppeteer is signed with an Apple Development certificate, so TCC ties its
+grants to the bundle ID and the certificate's name rather than to the binary's
+hash — an ordinary rebuild keeps them. A fresh grant is needed when either of
+those changes: a new bundle ID (the target was renamed), or a build signed by a
+different Apple account, such as on another machine. (Before the project signed
+with a certificate, it was ad-hoc signed and every rebuild dropped the grants.)
+`codesign -dr- DerivedData/Build/Products/Debug/GamePuppeteer.app` shows the
+requirement TCC checks against.
 
 Launch timeout defaults to 90 s (`GamePuppetRunner.run(timeout:)`).
 

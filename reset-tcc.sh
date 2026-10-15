@@ -1,6 +1,8 @@
 #!/bin/bash
 # Reset TCC entries for Second Chance and GamePuppeteer.
-# Run this after each rebuild if the TCC prompt shows the wrong app name.
+# Rebuilds keep the grants (the apps are signed with an Apple Development
+# certificate), so this is only needed when they go stale: a changed bundle ID,
+# a build signed by a different account, or a prompt showing the wrong app name.
 set -e
 
 tccutil reset Accessibility au.gare.callum.SecondChance

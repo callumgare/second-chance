@@ -392,11 +392,12 @@ echo -e "${GREEN}   ✓ ${ZIP_PATH#"$SCRIPT_DIR"/} ($(du -h "$ZIP_PATH" | cut -f
 echo -e "${GREEN}   ✓ architectures: $(lipo -archs "$APP_PATH/Contents/MacOS/Second Chance" 2>/dev/null || echo "unknown")${NC}"
 echo -e "${GREEN}   ✓ sha256: $(shasum -a 256 "$ZIP_PATH" | cut -d' ' -f1)${NC}"
 
-# The app is ad-hoc signed (CODE_SIGN_IDENTITY is "-"), so it isn't notarized.
-# On macOS 15+ that means users have to approve it in System Settings →
-# Privacy & Security; the Control-click bypass no longer works.
+# The app is signed with an Apple Development certificate, not a Developer ID
+# one, so it can't be notarized. On macOS 15+ that means users have to approve
+# it in System Settings → Privacy & Security; the Control-click bypass no
+# longer works.
 if ! codesign -dv --verbose=2 "$APP_PATH" 2>&1 | grep -q "Authority=Developer ID"; then
-    echo -e "${YELLOW}⚠️  Ad-hoc signed, not notarized — first launch needs approval in System Settings → Privacy & Security.${NC}"
+    echo -e "${YELLOW}⚠️  Not signed with Developer ID, so not notarized — first launch needs approval in System Settings → Privacy & Security.${NC}"
 fi
 
 # ---------------------------------------------------------------------------
