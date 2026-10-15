@@ -280,7 +280,90 @@ public struct WineEnvironment {
         try process.run()
         return process
     }
-    
+
+    // MARK: - Desktop
+
+    /// Start Wine's desktop process (`explorer.exe /desktop`) for this prefix.
+    ///
+    /// Wine starts it on demand the first time a program needs the desktop
+    /// window, and waits at most 10 seconds for it to become ready. On a busy
+    /// machine under Rosetta it can take longer, and a game that carries on
+    /// before the desktop has registered the display devices finds no display
+    /// adapters (Secrets Can Kill Remastered then crashes on a null Direct3D
+    /// object). Starting it first and waiting with `displayDevicesRegistered()`
+    /// takes that race away. It exits by itself once the last program in the
+    /// session has.
+    public func startDesktop(outputPipe: Pipe? = nil, errorPipe: Pipe? = nil) throws -> Process {
+        let process = Process()
+        process.executableURL = wineBinDir.appendingPathComponent("wine")
+        process.arguments = ["explorer.exe", "/desktop"]
+        process.environment = environmentVariables()
+        process.standardInput = FileHandle.nullDevice
+        if let outputPipe { process.standardOutput = outputPipe }
+        if let errorPipe { process.standardError = errorPipe }
+        try process.run()
+        return process
+    }
+
+    /// Outcome of one `displayDevicesRegistered` check, for logging.
+    public enum DisplayQueryResult: Equatable {
+        case registered
+        case notYet(exitCode: Int32)
+        case timedOut
+        case failedToRun(String)
+    }
+
+    /// Whether the desktop process has registered the display devices — the
+    /// point after which Direct3D can enumerate adapters.
+    public func displayDevicesRegistered(timeout: TimeInterval = 20) -> Bool {
+        queryDisplayDevices(timeout: timeout) == .registered
+    }
+
+    /// `displayDevicesRegistered`, with the reason when it isn't.
+    ///
+    /// `HKLM\HARDWARE\DEVICEMAP\VIDEO` is volatile: wineserver starts with it
+    /// empty and the desktop process fills it in while initialising the display.
+    /// Each call runs `reg.exe`, about a second. Output goes to a file rather
+    /// than a pipe because Wine's background services inherit the child's stdout
+    /// and would hold a pipe open forever.
+    public func queryDisplayDevices(timeout: TimeInterval = 20) -> DisplayQueryResult {
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("second-chance-display-query-\(UUID().uuidString).txt")
+        guard FileManager.default.createFile(atPath: outputURL.path, contents: nil),
+              let output = try? FileHandle(forWritingTo: outputURL) else {
+            return .failedToRun("could not create \(outputURL.path)")
+        }
+        defer {
+            try? output.close()
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+
+        let process = Process()
+        process.executableURL = wineBinDir.appendingPathComponent("wine")
+        process.arguments = ["reg", "query", #"HKLM\HARDWARE\DEVICEMAP\VIDEO"#]
+        process.environment = environmentVariables()
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = output
+
+        let done = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in done.signal() }
+        do {
+            try process.run()
+        } catch {
+            return .failedToRun("\(error)")
+        }
+        if done.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            return .timedOut
+        }
+        let text = (try? String(contentsOf: outputURL, encoding: .utf8)) ?? ""
+        if process.terminationStatus == 0 && text.contains(#"\Device\Video"#) {
+            return .registered
+        }
+        return .notYet(exitCode: process.terminationStatus)
+    }
+
     /// Check if wineserver is running for this prefix
     public func isWineserverRunning() -> Bool {
         let wineserverPath = wineBinDir.appendingPathComponent("wineserver")
