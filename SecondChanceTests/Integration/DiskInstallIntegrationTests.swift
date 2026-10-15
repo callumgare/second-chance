@@ -10,7 +10,9 @@
 //  REQUIREMENTS:
 //    - Real installer ISOs must be present in `installers/<slug>/disk-1.iso`.
 //      These are gitignored (too large for git) so tests auto-disable when
-//      absent via `.disabled(if: !InstallersPresent.check())`.
+//      absent via `.disabled(if: !InstallersPresent.shouldRun())` — except
+//      under run-tests.sh's `integration`, which sets REQUIRE_INSTALLERS so a
+//      missing ISO fails instead.
 //    - Tests are SLOW (minutes per game — real Wine install). Run deliberately:
 //        xcodebuild test -scheme SecondChance -only-testing:SecondChanceTests/DiskInstallIntegrationTests
 //    - Tests are SERIALIZED (.serialized) to avoid concurrent Wine prefixes.
@@ -29,7 +31,7 @@ import Foundation
 @Suite(
     "Disk install — per game",
     .serialized,
-    .disabled(if: !InstallersPresent.check(), "No installer ISOs found in installers/")
+    .disabled(if: !InstallersPresent.shouldRun(), "No installer ISOs found in installers/")
 )
 struct DiskInstallIntegrationTests {
 
@@ -45,6 +47,16 @@ struct DiskInstallIntegrationTests {
     /// Clean up the temp directory after the test.
     private func cleanup(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Game filter
+
+    @Test("Every requested game slug names a known game")
+    func requestedGamesExist() {
+        #expect(
+            TestGameFilter.unknownSlugs.isEmpty,
+            "Unknown game slug(s): \(TestGameFilter.unknownSlugs.joined(separator: ", ")) — see GameInfoProvider for valid ids"
+        )
     }
 
     // MARK: - Per-game parameterized test

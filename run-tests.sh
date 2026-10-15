@@ -168,7 +168,9 @@ run_tests() {
     local test_type="$1"
 
     local extra_args=()
-    local extra_env=()
+    # The tests otherwise locate the repo via #filePath, which is baked in at
+    # compile time — wrong on any machine the build was copied to.
+    local extra_env=(TEST_RUNNER_REPO_ROOT="$SCRIPT_DIR")
 
     case "$test_type" in
         unit)
@@ -193,6 +195,9 @@ run_tests() {
                 echo -e "${BLUE}🎮 Running integration tests for all games...${NC}"
             fi
             [[ "$SKIP_BUILD" == true ]] && extra_env+=(TEST_RUNNER_SKIP_BUILD=1)
+            # Integration was asked for by name, so missing ISOs are a failure,
+            # not a reason to skip the suite and report a pass.
+            extra_env+=(TEST_RUNNER_REQUIRE_INSTALLERS=1)
             extra_args+=(
                 -parallel-testing-worker-count 1
                 -only-testing:SecondChanceTests/DiskInstallIntegrationTests

@@ -79,7 +79,19 @@ output, that is the first thing to check.
 
 Slow (~1.5 min for a cached ScummVM game, minutes for a Wine install), and they
 need real ISOs at `installers/<slug>/disk-1.iso` (gitignored). Absent ISOs, the
-suite disables itself via `.disabled(if: !InstallersPresent.check())`.
+suite disables itself via `.disabled(if: !InstallersPresent.shouldRun())` — so
+a plain `xcodebuild test` on a machine without them skips rather than fails.
+
+`./run-tests.sh integration` is different: asking for the suite by name sets
+`TEST_RUNNER_REQUIRE_INSTALLERS=1`, the suite always runs, and a game whose ISO
+is missing fails its `#require` with the path it looked at. A skipped suite
+there would report a pass having tested nothing.
+
+The tests find the repo, and so `installers/`, through `TestPaths.repoRoot`.
+That defaults to `#filePath`, which is fixed at compile time and wrong on any
+machine the build was copied to, so run-tests.sh passes the real location as
+`TEST_RUNNER_REPO_ROOT`. Calling `xcodebuild` directly on a copied build, pass
+it yourself.
 
 Each game runs the **real** build flow — real Wine/ScummVM install, real file
 copies — and asserts on the events the flow publishes:
@@ -113,6 +125,10 @@ TEST_RUNNER_TEST_GAMES=stay-tuned,blackmoor-manor \
   -destination 'platform=macOS' -derivedDataPath DerivedData \
   -only-testing:SecondChanceTests/DiskInstallIntegrationTests
 ```
+
+A slug that matches no game fails the "Every requested game slug names a known
+game" test, rather than filtering the per-game test down to zero cases — which
+would pass having run nothing.
 
 `TEST_RUNNER_SKIP_BUILD=1` is the env form of `--test-existing-wrapp`.
 

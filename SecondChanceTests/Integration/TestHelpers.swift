@@ -105,7 +105,14 @@ enum TestConsole {
 /// Enumerate the repo root regardless of test working directory.
 enum TestPaths {
     /// The repository root directory (parent of `SecondChanceTests/`).
+    ///
+    /// `REPO_ROOT` (set by run-tests.sh as `TEST_RUNNER_REPO_ROOT`) wins over
+    /// `#filePath`, which is baked in at compile time and so points at the
+    /// wrong place when a build is copied to another machine.
     static let repoRoot: URL = {
+        if let override = ProcessInfo.processInfo.environment["REPO_ROOT"], !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
         // Tests run with the host app's bundle; derive repo root from #filePath.
         let thisFile = URL(fileURLWithPath: #filePath)
         // thisFile = .../SecondChanceTests/Integration/TestHelpers.swift
@@ -148,9 +155,28 @@ enum InstallerPaths {
 /// `.disabled(if:)` trait so integration tests no-op cleanly on CI / machines
 /// without the (gitignored) real installers.
 enum InstallersPresent {
+    /// Set by run-tests.sh (as `TEST_RUNNER_REQUIRE_INSTALLERS`) when the
+    /// integration suite was asked for by name. Then a missing ISO must fail
+    /// the run — the per-game `#require` reports the path it looked at —
+    /// rather than disable the suite and let it pass having tested nothing.
+    static let required = ProcessInfo.processInfo.environment["REQUIRE_INSTALLERS"] == "1"
+
+    /// Whether the integration suite should run: always when required,
+    /// otherwise only if some `installers/<slug>/disk-1.iso` exists.
+    static func shouldRun() -> Bool {
+        required || check()
+    }
+
     static func check() -> Bool {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(atPath: TestPaths.installersDir.path) else {
+        let entries: [String]
+        do {
+            entries = try fm.contentsOfDirectory(atPath: TestPaths.installersDir.path)
+        } catch {
+            TestConsole.echo(
+                Data("Cannot read \(TestPaths.installersDir.path): \(error.localizedDescription)\n".utf8),
+                title: "Installers directory"
+            )
             return false
         }
         for entry in entries {
@@ -176,32 +202,43 @@ enum InstallersPresent {
 ///
 /// The env var takes priority. When neither is set, all games run.
 enum TestGameFilter {
-    static let selectedGames: [GameInfo] = {
-        let allGames = GameInfoProvider.shared.allGames()
-
+    /// The slugs asked for, or `nil` when no filter is set (run everything).
+    static let requestedSlugs: Set<String>? = {
         // Method 1: env var (parallel-safe, preferred)
         if let envFilter = ProcessInfo.processInfo.environment["TEST_GAMES"],
            !envFilter.isEmpty {
-            let slugs = Set(envFilter.split(separator: ",").map {
+            return Set(envFilter.split(separator: ",").map {
                 String($0).trimmingCharacters(in: .whitespaces)
             })
-            return allGames.filter { slugs.contains($0.id) }
         }
 
         // Method 2: file (not parallel-safe, fallback)
         let filterPath = "/tmp/sc-test-games.txt"
         if let content = try? String(contentsOfFile: filterPath, encoding: .utf8),
            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let slugs = Set(
+            return Set(
                 content.split(whereSeparator: { $0 == "," || $0.isWhitespace })
                     .map { String($0) }
                     .filter { !$0.isEmpty }
             )
-            return allGames.filter { slugs.contains($0.id) }
         }
 
-        return allGames
+        return nil
     }()
+
+    static let selectedGames: [GameInfo] = {
+        let allGames = GameInfoProvider.shared.allGames()
+        guard let slugs = requestedSlugs else { return allGames }
+        return allGames.filter { slugs.contains($0.id) }
+    }()
+
+    /// Requested slugs that match no game. A typo would otherwise filter the
+    /// parameterized test down to zero cases, which passes having run nothing.
+    static var unknownSlugs: [String] {
+        guard let slugs = requestedSlugs else { return [] }
+        let known = Set(GameInfoProvider.shared.allGames().map(\.id))
+        return slugs.subtracting(known).sorted()
+    }
 }
 
 /// Reads values from a built wrapp's `Info.plist` for post-install assertions.
