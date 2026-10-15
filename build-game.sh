@@ -183,9 +183,10 @@ if [[ ${#DEBUG_FLAGS[@]} -gt 0 ]]; then
     echo -e "${BLUE}                Debug flags: ${DEBUG_FLAGS[*]}${NC}"
 fi
 
-# Run SecondChance and capture exit code
-"$APP_PATH/Contents/MacOS/Second Chance" "${DEBUG_FLAGS[@]}"
-EXIT_CODE=$?
+# Run SecondChance and capture exit code — the `||` keeps `set -e` from exiting
+# before the failure is reported
+EXIT_CODE=0
+"$APP_PATH/Contents/MacOS/Second Chance" "${DEBUG_FLAGS[@]}" || EXIT_CODE=$?
 
 if [[ "$EXIT_CODE" -ne 0 ]]; then
     echo -e "${RED}❌ SecondChance exited with error code $EXIT_CODE${NC}"

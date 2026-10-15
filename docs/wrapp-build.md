@@ -174,6 +174,13 @@ Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 Note that `LogStore` mirrors to stderr only when `isatty`, so piping a headless
 run's output shows nothing. Run it bare in a terminal to see logs.
 
+Headless doesn't mean windowless: installers and Wine itself still need a
+WindowServer connection. A shell started over SSH has none — it sits in
+launchd's `Background` session — so a build run there fails at the installer
+step. `./in-gui-session.sh <command>` runs the command in the logged-in user's
+`Aqua` session instead (as a one-off LaunchAgent, under a pty so the stderr
+mirror still fires) and passes back its output and exit code.
+
 ## The template
 
 `WrappTemplate.app` is built as its own target and embedded at

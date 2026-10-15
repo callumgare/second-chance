@@ -195,6 +195,13 @@ direct assignment.
 - **Headless stderr is TTY-gated.** `LogStore` only mirrors to stderr when
   `isatty`, so piping or redirecting a headless run's output shows nothing. Run
   it bare in a terminal to see logs.
+- **Over SSH, wrap the command in `./in-gui-session.sh`.** An SSH shell is in
+  launchd's `Background` session with no WindowServer, so Wine's graphics driver
+  can't load (`nodrv_CreateWindow … no driver could be loaded`), installers exit
+  1, and the build fails with `Wine execution failed with exit code 1`, which
+  looks like a broken installer. The script reruns the command in the
+  console user's `Aqua` session under a pty and streams its output back. Someone
+  must be logged in at that Mac's console.
 - **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG). Use `--clear-wine-cache` or `run.sh --clear-wine-cache` if Wine setup misbehaves after code changes.
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`. The `--skip-installer` debug flag
