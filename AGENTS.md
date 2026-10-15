@@ -215,6 +215,18 @@ direct assignment.
   skips the wrapp hiding itself from the Dock once the game starts, and
   `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves the native-fullscreen dylib
   unarmed.
+- **A badly starting Wine game leaves a diagnostics bundle** in
+  `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/`
+  (`StartupDiagnostics`): no window 8 s after the game process appears
+  (`slow-start`), Wine's unhandled-exception line (`crash`), still no window at
+  25 s (`hang`), or an exit before any window. Each holds a `sample` of the game
+  process's thread stacks and of every other Wine process (`explorer.exe`,
+  `wineserver`, …) taken at the same moment, `top`, the process list (taken
+  first, before a crashing game can exit), display/lock/screen-sharing
+  state, the game's system log and the last 300 Wine output lines; the newest 10
+  are kept and the wrapp log names the folder. `SECOND_CHANCE_DIAGNOSTICS=0`
+  turns it off and `SECOND_CHANCE_DIAG_SLOW_SECONDS` moves the threshold — set
+  it to `1` to force a bundle and check the capture works.
 - **Disk path resolution**: installers land in
   `Contents/SharedSupport/prefix/drive_c/nancy-drew-installer/{disk-1,disk-combined}`,
   with multi-disk games merged into `disk-combined`. This lives in

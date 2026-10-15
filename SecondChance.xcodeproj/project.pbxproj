@@ -70,6 +70,7 @@
 				MainLogger.swift,
 				Resources/Assets.xcassets,
 				Resources/WrappTemplateIcon.icon,
+				StartupDiagnostics.swift,
 				Subcommands.swift,
 				Views/InfoWindowView.swift,
 			);

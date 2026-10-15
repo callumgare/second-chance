@@ -21,7 +21,15 @@ nonisolated enum ProcessLineLogger {
     ///
     /// Do NOT pair this with `waitForDataInBackgroundAndNotify` —
     /// `readabilityHandler` already schedules its own background reads.
-    static func attach(to pipe: Pipe, logger: Logging.Logger, level: Logging.Logger.Level) {
+    ///
+    /// `onLine`, when given, also receives each line — on the pipe's reader
+    /// queue, so it must be quick and thread-safe.
+    static func attach(
+        to pipe: Pipe,
+        logger: Logging.Logger,
+        level: Logging.Logger.Level,
+        onLine: (@Sendable (String) -> Void)? = nil
+    ) {
         let fh = pipe.fileHandleForReading
         var buffer = Data()
 
@@ -34,6 +42,7 @@ nonisolated enum ProcessLineLogger {
                         .trimmingCharacters(in: .newlines)
                     if !line.isEmpty {
                         logger.log(level: level, "\(line)")
+                        onLine?(line)
                     }
                     buffer.removeAll()
                 }
@@ -53,6 +62,7 @@ nonisolated enum ProcessLineLogger {
                     .trimmingCharacters(in: .newlines)
                 if !line.isEmpty {
                     logger.log(level: level, "\(line)")
+                    onLine?(line)
                 }
             }
         }

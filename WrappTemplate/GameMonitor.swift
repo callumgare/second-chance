@@ -90,7 +90,10 @@ class GameMonitor {
     }
     
     /// Activate game window and hide wrapper from dock
-    func activateGameWindow(gamePid: Int32, infoWindow: InfoWindowController?) {
+    /// Waits (up to 30s) for the game's first window and activates it.
+    /// Returns whether a window appeared.
+    @discardableResult
+    func activateGameWindow(gamePid: Int32, infoWindow: InfoWindowController?) -> Bool {
         waitForWindowAndActivate(pid: gamePid, infoWindow: infoWindow)
     }
     
@@ -198,7 +201,7 @@ class GameMonitor {
     }
     
     /// Wait for game window to appear and activate it
-    private func waitForWindowAndActivate(pid: Int32, infoWindow: InfoWindowController?) {
+    private func waitForWindowAndActivate(pid: Int32, infoWindow: InfoWindowController?) -> Bool {
         logger.notice("[Game Monitor] Monitoring for windows...")
         
         var windowDetected = false
@@ -270,6 +273,7 @@ class GameMonitor {
                 infoWindow?.notifyGameLoaded()
             }
         }
+        return windowDetected
     }
     
     /// Hide wrapper app from dock

@@ -111,6 +111,8 @@ class GameLauncher {
     private let gameMonitor: GameMonitor
     private var currentProcess: Process?
     private var cleanupCompleted = false
+    /// Captures a diagnostics bundle if a Wine game starts badly; nil for ScummVM.
+    private var diagnostics: StartupDiagnostics?
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     
@@ -223,11 +225,14 @@ class GameLauncher {
             logger.notice("[Game Launch] Waiting for game executable to start...")
             if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
-                
+                diagnostics?.gameStarted(pid: detectedPid)
+
                 // Activate game window (Wine games only)
                 if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") {
                     logger.notice("[Game Launch] Activating game window...")
-                    gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow)
+                    if gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) {
+                        diagnostics?.gameWindowAppeared()
+                    }
                 }
             } else {
                 logger.notice("[Game Launch] Failed to detect game executable, but will continue monitoring process")
@@ -256,6 +261,7 @@ class GameLauncher {
         
         // Get exit code from GameMonitor which captured it safely
         let exitCode = gameMonitor.exitCode ?? 0
+        diagnostics?.gameExited(exitCode: exitCode)
         
         // Handle game termination (just cleanup, no app lifecycle management)
         handleGameTermination(exitCode: exitCode, infoWindow: infoWindow)
@@ -320,8 +326,12 @@ class GameLauncher {
         
         // Stream Wine output line-by-line through the logger (reaches the
         // terminal, the log window and the export; survives chunk splits).
-        ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice)
-        ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .error)
+        // Diagnostics sees the same lines, to keep recent context and spot crashes.
+        let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
+        diagnostics.wineLaunched()
+        self.diagnostics = diagnostics
+        ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice) { diagnostics.observe(line: $0) }
+        ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .error) { diagnostics.observe(line: $0) }
         
         logger.notice("[Wine] Game process started with PID \(process.processIdentifier)")
         
