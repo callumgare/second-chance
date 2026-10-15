@@ -3,6 +3,7 @@
 
 *.profraw
 *.xcuserstate
+xcuserdata/
 
 /DerivedData
 /build
