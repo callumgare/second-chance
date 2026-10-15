@@ -22,6 +22,12 @@
 
 set -euo pipefail
 
+# Snapshot the caller's environment before this script assigns anything: an
+# exported variable that shares a name with one below (LABEL, DOMAIN, …) would
+# otherwise reach the command with this script's value instead of the caller's.
+# Exported readonly variables are skipped — redeclaring them errors.
+CALLER_ENV="$(export -p | grep -v '^declare -[a-zA-Z]*r')"
+
 RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
@@ -40,6 +46,19 @@ if [[ "$CONSOLE_USER" != "$(id -un)" ]]; then
     echo -e "${RED}Error: no GUI session for $(id -un) — the console is owned by '$CONSOLE_USER'.${NC}"
     echo -e "${RED}Log in at the machine (or via Screen Sharing) as $(id -un) first.${NC}"
     exit 1
+fi
+
+# A locked screen still has a GUI session, so Wine runs — but synthetic clicks
+# land on the lock screen and screenshots don't show the game, so anything
+# driven by AppPuppeteer fails late and confusingly. Refuse up front instead.
+if ioreg -n Root -d1 -a | grep -q '<key>CGSSessionScreenIsLocked</key>'; then
+    if [[ "${SKIP_LOCK_CHECK:-}" == 1 ]]; then
+        echo -e "${RED}Warning: $(id -un)'s screen is locked — running anyway (SKIP_LOCK_CHECK=1).${NC}"
+    else
+        echo -e "${RED}Error: $(id -un)'s screen is locked.${NC}"
+        echo -e "${RED}Unlock it (at the machine or via Screen Sharing) first. Set SKIP_LOCK_CHECK=1 to run anyway.${NC}"
+        exit 1
+    fi
 fi
 
 DOMAIN="gui/$(id -u)"
@@ -81,11 +100,11 @@ trap 'exit 129' HUP
 # `script` gives the command a pty. Its stdin is a pipe that never closes — from
 # /dev/null, `script` would forward the EOF into the pty and print a stray ^D.
 #
-# The job script recreates this shell's environment and directory, then runs the
-# command. Exported readonly variables are skipped — redeclaring them errors.
+# The job script recreates the caller's environment and directory, then runs
+# the command.
 {
     echo '#!/bin/bash'
-    export -p | grep -v '^declare -[a-zA-Z]*r'
+    printf '%s\n' "$CALLER_ENV"
     printf 'cd %q || exit 1\n' "$PWD"
     printf '%q ' "$@"
     echo
