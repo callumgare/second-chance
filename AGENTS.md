@@ -206,6 +206,15 @@ direct assignment.
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`. The `--skip-installer` debug flag
   skips running the installer entirely (useful for testing wrapp construction).
+- **`SECOND_CHANCE_WINEDEBUG`** sets Wine's `WINEDEBUG` for every Wine process
+  Second Chance or a wrapp starts (`WineEnvironment`); unset, it is `-all`.
+  Wrapp output lands in the wrapp's log, so `SECOND_CHANCE_WINEDEBUG=+seh,+d3d9
+  open -n "<wrapp>.app"` traces a single launch — `open` passes the shell's
+  environment through. Channels like `+d3d9` log per frame, so keep runs short.
+  Two more debug switches read the same way: `SECOND_CHANCE_KEEP_IN_DOCK=1`
+  skips the wrapp hiding itself from the Dock once the game starts, and
+  `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves the native-fullscreen dylib
+  unarmed.
 - **Disk path resolution**: installers land in
   `Contents/SharedSupport/prefix/drive_c/nancy-drew-installer/{disk-1,disk-combined}`,
   with multi-disk games merged into `disk-combined`. This lives in

@@ -46,12 +46,18 @@ public struct WineEnvironment {
         ].joined(separator: ":")
         
         let originalPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        
+
+        // Wine's debug output is off unless SECOND_CHANCE_WINEDEBUG asks for
+        // channels (e.g. "+seh,+d3d9"). Deliberately not plain WINEDEBUG, which
+        // a user may have set in their shell for some other Wine.
+        let wineDebug = ProcessInfo.processInfo.environment["SECOND_CHANCE_WINEDEBUG"]
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "-all"
+
         return [
             "WINEPREFIX": prefixDir.path,
             "WINE": wineBinDir.appendingPathComponent("wine").path,
             "USER": WineEnvironment.wineUsername,
-            "WINEDEBUG": "-all",
+            "WINEDEBUG": wineDebug,
             "PATH": "\(wineBinDir.path):\(originalPath):/opt/local/bin:/opt/local/sbin",
             "DYLD_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
             "GST_PLUGIN_PATH": frameworksDir.appendingPathComponent("GStreamer.framework/Libraries/gstreamer-1.0").path,
@@ -256,7 +262,11 @@ public struct WineEnvironment {
         // Wine names each child's loader copy after the .exe it runs.
         // See WrappTemplate/NativeFullscreen/native_fullscreen.m.
         var env = environmentVariables()
-        env["NATIVE_MACOS_FULLSCREEN_EXE"] = exeFileName
+        // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves the dylib unarmed — a debug
+        // switch for telling its main-thread polling apart from other causes.
+        if ProcessInfo.processInfo.environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
+            env["NATIVE_MACOS_FULLSCREEN_EXE"] = exeFileName
+        }
         process.environment = env
         process.currentDirectoryURL = URL(fileURLWithPath: exeDir)
         
