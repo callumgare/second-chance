@@ -190,6 +190,14 @@ struct DiskInstallIntegrationTests {
                         "Detected exe path \(recorder.detectedExePath ?? "nil") but expected \(expectedExe)")
             }
 
+            // A failed patch doesn't fail the build, so it has to fail the test.
+            for patch in recorder.failedPatches {
+                outcome.expect(false, "Patch \(patch.id) failed: \(patch.message)")
+            }
+            let expectedPatches = GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .disk).map(\.id)
+            outcome.expect(recorder.appliedPatches == expectedPatches,
+                    "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")
+
             outcome.expect(recorder.configuredWrapp != nil, "wrappConfigured event not emitted")
             outcome.expect(recorder.signedWrapp != nil, "signed event not emitted")
             outcome.expect(recorder.completedWrapp != nil, "completed event not emitted")

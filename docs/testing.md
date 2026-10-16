@@ -112,6 +112,8 @@ copies — and asserts on the events the flow publishes:
 - Game exe path detected, matching `GameInfoProvider.internalGameExePath`
 - The wrapp's `Info.plist`/`AppSettings.plist` carry the right `GameExePath`,
   `GameEngine`, `GameSlug`
+- Every automatic patch for the game applied (`patchApplied`), and none failed:
+  a failed patch doesn't fail the build, so it has to fail the test
 - The full event sequence in order, ending in `signed` then `completed`
 - If `WrappPuppeteer.app` is present: the game launches, reaches its main menu,
   and quits cleanly

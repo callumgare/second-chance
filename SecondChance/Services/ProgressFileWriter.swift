@@ -111,6 +111,8 @@ final class ProgressFileWriter: @unchecked Sendable {
             write(["event": "completed", "path": wrappPath.path])
         case .failed(let error):
             write(["event": "failed", "message": error.localizedDescription])
+        case .patchFailed(let id, let message):
+            write(["event": "patch-failed", "id": id, "message": message])
         default:
             break
         }

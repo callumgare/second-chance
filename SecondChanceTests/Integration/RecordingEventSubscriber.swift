@@ -31,6 +31,8 @@ final class RecordingEventSubscriber: @unchecked Sendable {
     private(set) var signedWrapp: URL?
     private(set) var completedWrapp: URL?
     private(set) var failedError: WrappBuildError?
+    private(set) var appliedPatches: [String] = []
+    private(set) var failedPatches: [(id: String, message: String)] = []
     private(set) var progressStates: [WrappBuildState] = []
 
     private var subscriptionToken: EventBus<AppEvent>.Token?
@@ -81,6 +83,10 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             completedWrapp = url
         case .failed(let error):
             failedError = error
+        case .patchApplied(let id):
+            appliedPatches.append(id)
+        case .patchFailed(let id, let message):
+            failedPatches.append((id, message))
         case .started:
             break
         }

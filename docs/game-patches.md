@@ -149,6 +149,11 @@ headless runs continue without prompting, because a modal alert under a
 `.prohibited` activation policy would be invisible and hang the build. Only an
 explicit "don't continue" turns a patch failure into a cancelled build.
 
+Each patch publishes `.patchApplied` or `.patchFailed` on the bus (and a
+`patch-failed` record in the headless progress file). The integration test
+fails a game whose automatic patches didn't all apply, since the build itself
+succeeds without them.
+
 ## The catalogue
 
 | Game | Patch | Edition | Applied | What it fixes |

@@ -367,8 +367,10 @@ class GameInstallerRunner {
                     gameInstallDir: gameInstallDir
                 )
                 logger.notice("✅ Applied patch: \(patch.id)")
+                await bus.publishWrappBuild(.patchApplied(id: patch.id))
             } catch {
-                logger.warning("❌ Patch failed: \(patch.id): \(error)")
+                logger.error("❌ Patch failed: \(patch.id): \(error.localizedDescription)")
+                await bus.publishWrappBuild(.patchFailed(id: patch.id, message: error.localizedDescription))
                 let continueInstall = await confirmPatchFailure(patchName: patch.title, error: error)
                 if continueInstall {
                     logger.notice("⚠️  Continuing without patch: \(patch.id)")

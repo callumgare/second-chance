@@ -50,6 +50,11 @@ enum WrappBuildEvent {
     case gameExeDetected(path: String, gameInfo: GameInfo)
     case wrappConfigured(exePath: String, installerDir: String, gameInfo: GameInfo)
     case signed(wrappPath: URL)
+
+    // Official game patches. A failed patch doesn't fail the build (headless
+    // runs continue past it), so this is the only record of it beyond the log.
+    case patchApplied(id: String)
+    case patchFailed(id: String, message: String)
 }
 
 // MARK: - Lifecycle events
