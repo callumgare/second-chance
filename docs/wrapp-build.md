@@ -173,7 +173,10 @@ Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 
 An installer killed partway can exit 0 with the game's exe already unpacked,
 so neither the exit code nor finding the exe proves the install finished.
-After a clean exit, `GameInstallerRunner` checks the record each installer
+Nor does `wine start /wait` returning: InstallShield 12's `setup.exe`
+relaunches itself from Temp and exits while the copy carries on, so after a
+clean exit the build first waits (`wineserver -w`, within the install timeout)
+until the prefix has no Windows processes left. Then `GameInstallerRunner` checks the record each installer
 family writes only once it has finished (`InstallCompletion`), and fails the
 attempt with `WrappBuildError.installIncomplete` when it is missing:
 

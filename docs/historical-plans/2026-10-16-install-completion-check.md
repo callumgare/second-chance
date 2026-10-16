@@ -55,3 +55,10 @@ Skull, Phantom of Venice, Lost Queen, Deadly Device) write `setup.ilg` under
 install folder, so the check failed every one of them. A Lost Queen install
 killed at 517 MB of 2.2 GB had that folder but no `setup.ilg`, so the check
 now looks there too._
+
+_Post-implementation note, 2026-10-16 (Claude): after that fix Lost Queen and
+Deadly Device still failed. Their `setup.exe` relaunches itself from Temp and
+exits, so `wine start /wait` returned after 14 s with 71.5 MB of 2.2 GB
+copied, and the build had been carrying on while the copy wrote the rest. The
+hand-run probe had waited for wineserver to exit before looking, which hid
+this. Builds now wait for the prefix's Wine processes to end before checking._

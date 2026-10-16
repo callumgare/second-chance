@@ -517,6 +517,11 @@ class GameInstallerRunner {
         guard exitCode == 0 else {
             throw GamePatchError.installerFailed(id: patch.id, exitCode: exitCode)
         }
+        do {
+            try await waitForInstallerProcesses(at: wrappPath, timeout: Self.patchInstallerTimeout)
+        } catch WineError.timedOut {
+            throw GamePatchError.timedOut(patch.id)
+        }
         if let installerLog {
             try checkInstallerLog(installerLog, failure: { GamePatchError.installerDidNotFinish(id: patch.id, reason: $0) })
         }
@@ -839,6 +844,8 @@ class GameInstallerRunner {
             throw WineError.executionFailed(exitCode: exitCode)
         }
 
+        try await waitForInstallerProcesses(at: wrappPath, timeout: timeout)
+
         // A clean exit isn't proof the install finished: check that the
         // installer's own log says it did.
         if let installerLog {
@@ -854,6 +861,18 @@ class GameInstallerRunner {
             }
         }
         return installerType
+    }
+
+    /// Wait until the prefix has no Windows processes left. `wine start
+    /// /wait` returns when the program it started exits, but installers hand
+    /// over to a copy of themselves and exit first: InstallShield 12's
+    /// setup.exe relaunches from Temp (Lost Queen's returned with 71 MB of
+    /// 2.2 GB copied), and Her Interactive's patch stubs unpack and run
+    /// `_upd1.exe`. Until that copy is done, the install is still being
+    /// written, so nothing about it can be checked.
+    private func waitForInstallerProcesses(at wrappPath: URL, timeout: TimeInterval?) async throws {
+        logger.notice("Waiting for the installer's remaining Wine processes to finish")
+        try await wineManager.runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"], timeout: timeout)
     }
 
     /// Throw `failure(reason)` unless the installer's log records it

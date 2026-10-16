@@ -123,6 +123,9 @@ For each applicable patch, in manifest order:
 3. Either copy it into the game directory, or stage it there and run it under
    Wine. The installer is run by its Windows path (`C:\…`): Wine reads a path
    starting with `/` as a Unix path, which names nothing inside the prefix.
+   The run waits for the prefix's Wine processes to end, since a patcher can
+   hand over to a program it unpacks and exit first (Her Interactive's
+   patch stubs run `_upd1.exe`); that wait shares the patch timeout.
    A non-zero exit from the installer counts as a failed patch, and so does an
    Inno Setup patcher whose `/LOG` lacks `Installation process succeeded.`
    (most patchers are self-extracting updaters with no log to check).
