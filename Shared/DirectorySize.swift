@@ -12,12 +12,17 @@ nonisolated struct DirectorySize: Equatable, Sendable {
     let files: Int
 
     /// Walk `url` and add up its regular files. Symlinks are followed, once
-    /// each: a ScummVM game's `disk-combined` folder is links into its disks.
-    static func measure(_ url: URL) -> DirectorySize {
+    /// each, when they point somewhere inside `within` (default: `url`'s
+    /// parent): a ScummVM game's `disk-combined` folder is links into its
+    /// sibling disk folders, while a Wine prefix's `dosdevices/z:` links to
+    /// `/`, which must not be walked.
+    static func measure(_ url: URL, within boundary: URL? = nil) -> DirectorySize {
+        let root = url.resolvingSymlinksInPath()
+        let limit = (boundary ?? root.deletingLastPathComponent()).resolvingSymlinksInPath().path + "/"
         var visited = Set<String>()
         var bytes: Int64 = 0
         var files = 0
-        var pending = [url.resolvingSymlinksInPath()]
+        var pending = [root]
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]
         while let next = pending.popLast() {
             guard visited.insert(next.path).inserted,
@@ -26,7 +31,9 @@ nonisolated struct DirectorySize: Equatable, Sendable {
                 let children = (try? FileManager.default.contentsOfDirectory(
                     at: next, includingPropertiesForKeys: Array(keys)
                 )) ?? []
-                pending += children.map { $0.resolvingSymlinksInPath() }
+                pending += children
+                    .map { $0.resolvingSymlinksInPath() }
+                    .filter { $0.path.hasPrefix(limit) }
             } else if values.isRegularFile == true {
                 bytes += Int64(values.fileSize ?? 0)
                 files += 1

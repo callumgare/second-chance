@@ -33,5 +33,9 @@ struct RunContextTests {
         try FileManager.default.createDirectory(at: links, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(atPath: links.appendingPathComponent("sub").path, withDestinationPath: "../sub")
         #expect(DirectorySize.measure(links) == DirectorySize(bytes: 500, files: 1))
+
+        // A link out of the tree, like a Wine prefix's z: drive, isn't walked.
+        try FileManager.default.createSymbolicLink(atPath: dir.appendingPathComponent("sub/z:").path, withDestinationPath: "/")
+        #expect(DirectorySize.measure(dir) == DirectorySize(bytes: 1_500, files: 2))
     }
 }
