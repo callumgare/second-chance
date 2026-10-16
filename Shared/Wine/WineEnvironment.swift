@@ -228,6 +228,9 @@ public struct WineEnvironment {
                     return
                 }
                 wineLogger.error("\(watch.name) did not finish within \(SubprocessWatch.duration(timeout ?? 0)) — stopping its Wine session")
+                // What was still running, before it is killed: a hung
+                // installer is often waiting on another Windows process.
+                wineLogger.warning("Wine processes at the timeout:\n\(Self.wineProcessSnapshot())")
                 _ = self.stopWineserver()
                 process.terminate()
                 if exited.wait(timeout: .now() + 10) != .success {
@@ -262,6 +265,28 @@ public struct WineEnvironment {
         case .signalled(let signal):
             throw WineError.terminatedBySignal(signal)
         }
+    }
+
+    /// `ps` lines for every Wine-related process: pid, parent, CPU, elapsed
+    /// time and command.
+    static func wineProcessSnapshot() -> String {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-A", "-o", "pid,ppid,pcpu,etime,command"]
+        let pipe = Pipe()
+        ps.standardOutput = pipe
+        ps.standardError = FileHandle.nullDevice
+        do {
+            try ps.run()
+        } catch {
+            return "(couldn't run ps: \(error.localizedDescription))"
+        }
+        // Read before waiting: the list can be bigger than the pipe's buffer.
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        ps.waitUntilExit()
+        let lines = output.split(separator: "\n")
+        let wine = lines.dropFirst().filter { $0.contains("wine") || $0.lowercased().contains(".exe") }
+        return ([lines.first.map(String.init) ?? ""] + wine.map { "  " + String($0.prefix(240)) }).joined(separator: "\n")
     }
 
     /// `wine setup.exe`, `wine reg`, `wineserver`: what to call a Wine run in

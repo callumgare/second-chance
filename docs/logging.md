@@ -97,7 +97,8 @@ The `■` line says how it ended: `exited N` (an error when N isn't 0) or
 `was killed by SIGKILL (9)`; a signal is never reported as an exit code. The
 `…` heartbeat appears after every 30 s without output, so a hung installer
 still shows up in the log as hung. A run given a `timeout` that passes it
-stops the prefix's wineserver and throws `WineError.timedOut`; an unattended
+logs the Wine processes still running (from `ps`), stops the prefix's
+wineserver and throws `WineError.timedOut`; an unattended
 game install gets `SECOND_CHANCE_INSTALL_TIMEOUT` (default 30 minutes), a
 patch installer 180 s and a registry write 120 s.
 
