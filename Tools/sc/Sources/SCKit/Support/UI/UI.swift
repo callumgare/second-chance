@@ -124,7 +124,7 @@ final class UI: @unchecked Sendable {
 
     /// The command's result, on stdout.
     func result(_ text: String) {
-        FileHandle.standardOutput.write(Data((text + "\n").utf8))
+        TTY.write(Data((text + "\n").utf8), to: STDOUT_FILENO)
     }
 
     func format(_ text: TerminalText) -> String { noora.format(text) }

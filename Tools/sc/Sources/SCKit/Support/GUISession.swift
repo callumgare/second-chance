@@ -226,9 +226,9 @@ private final class LogFollower {
         guard let handle, let data = try? handle.readToEnd(), !data.isEmpty else { return }
         if crlfToLF {
             let text = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\r\n", with: "\n")
-            FileHandle.standardOutput.write(Data(text.utf8))
+            TTY.write(Data(text.utf8), to: STDOUT_FILENO)
         } else {
-            FileHandle.standardOutput.write(data)
+            TTY.write(data, to: STDOUT_FILENO)
         }
     }
 }

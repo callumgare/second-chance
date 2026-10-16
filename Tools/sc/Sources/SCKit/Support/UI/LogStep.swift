@@ -24,7 +24,7 @@ final class LogSink: @unchecked Sendable {
     }
 
     func line(_ text: String) async {
-        file?.write(Data((text + "\n").utf8))
+        try? file?.write(contentsOf: Data((text + "\n").utf8))
         for observe in observers { observe(text) }
         await raw(text)
     }

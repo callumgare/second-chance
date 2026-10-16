@@ -123,9 +123,14 @@ enum Proc {
         // Handlers reset to default across exec, but an *ignored* signal stays
         // ignored — and sc ignores SIGINT to handle it through a dispatch
         // source. Put everything back so the new program behaves normally.
+        // A blocked signal also stays blocked across exec.
+        var unblock = sigset_t()
+        sigemptyset(&unblock)
         for sig in [SIGINT, SIGTERM, SIGHUP, SIGQUIT, SIGWINCH, SIGPIPE] {
             signal(sig, SIG_DFL)
+            sigaddset(&unblock, sig)
         }
+        pthread_sigmask(SIG_UNBLOCK, &unblock, nil)
         for (key, value) in env {
             if let value { setenv(key, value, 1) } else { unsetenv(key) }
         }
@@ -134,7 +139,7 @@ enum Proc {
         let argv = ([path] + args).map { strdup($0) } + [nil]
         execv(path, argv)
         let reason = String(cString: strerror(errno))
-        FileHandle.standardError.write(Data("sc: couldn't run \(path): \(reason)\n".utf8))
+        TTY.write(Data("sc: couldn't run \(path): \(reason)\n".utf8), to: STDERR_FILENO)
         exit(127)
     }
 

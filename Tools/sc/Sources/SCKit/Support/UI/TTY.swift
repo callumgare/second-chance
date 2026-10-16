@@ -10,7 +10,28 @@ enum TTY {
     nonisolated(unsafe) private static var savedTermios: termios?
 
     static func write(_ text: String) {
-        FileHandle.standardError.write(Data(text.utf8))
+        write(Data(text.utf8), to: STDERR_FILENO)
+    }
+
+    /// Write to a standard stream with write(2). When the reader has gone (an
+    /// ssh session dropped, a pipe closed) the bytes are dropped and sc carries
+    /// on with its cleanup: `FileHandle.write` raises an Objective-C exception
+    /// there instead, which aborted sc and left the processes it was running
+    /// behind.
+    static func write(_ data: Data, to fd: Int32) {
+        data.withUnsafeBytes { buffer in
+            guard var pointer = buffer.baseAddress else { return }
+            var remaining = buffer.count
+            while remaining > 0 {
+                let written = Darwin.write(fd, pointer, remaining)
+                if written < 0 {
+                    if errno == EINTR || errno == EAGAIN { continue }
+                    return  // EPIPE, EIO, EBADF: nobody is reading any more.
+                }
+                remaining -= written
+                pointer = pointer.advanced(by: written)
+            }
+        }
     }
 
     static func hideCursor() {
