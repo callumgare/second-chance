@@ -57,7 +57,11 @@ nonisolated enum SubprocessLineClassifier {
             return .debug
         }
 
-        // ScummVM's own prefixes.
+        // ScummVM's own prefixes. It calls not finding the game a warning,
+        // but it then exits: that's the failure.
+        if line.hasPrefix("WARNING: Game data not found") || line.contains("ScummVM could not find any game") {
+            return .error
+        }
         if line.hasPrefix("ERROR:") { return .error }
         if line.hasPrefix("WARNING:") { return .warning }
 

@@ -77,7 +77,7 @@ stderr and real failures to stdout, so a pipe-based level can't be trusted.
 | `msync:`/`esync:` start-up lines                          | debug |
 | `[mvk-info]` and its tab-indented detail lines            | debug |
 | `[mvk-warn]` / `[mvk-error]`                              | warning / error |
-| ScummVM `WARNING:` / `ERROR:`                             | warning / error |
+| ScummVM `WARNING:` / `ERROR:`                             | warning / error, except "Game data not found" and "could not find any game" (error) |
 
 Pass `classify: false` to log every line at exactly the given level.
 

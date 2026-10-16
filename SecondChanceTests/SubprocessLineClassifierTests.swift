@@ -27,6 +27,8 @@ struct SubprocessLineClassifierTests {
         // ScummVM.
         ("WARNING: Could not find theme 'scummremastered' falling back to builtin!", .warning),
         ("ERROR: Could not open file", .error),
+        ("WARNING: Game data not found!", .error),
+        ("WARNING: ScummVM could not find any game in /x/disk-combined", .error),
     ])
     func classifies(line: String, expected: Logger.Level) {
         #expect(SubprocessLineClassifier.level(for: line, fallback: .notice) == expected)
