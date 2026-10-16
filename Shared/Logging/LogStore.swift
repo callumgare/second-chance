@@ -317,8 +317,7 @@ nonisolated final class LogStore: @unchecked Sendable {
             writeToMirror(entries: entries)
         }
         
-        // Write to stderr if isatty
-        if isatty(STDERR_FILENO) != 0 {
+        if Self.mirrorsToStderr {
             writeToStderr(entries: entries)
         }
     }
@@ -427,6 +426,19 @@ nonisolated final class LogStore: @unchecked Sendable {
     }
     
     /// Write entries to stderr using raw write(2) with EINTR retry.
+    /// Whether log lines are also written to stderr: when stderr is a
+    /// terminal, unless `SECOND_CHANCE_LOG_STDERR` says otherwise (`1` forces
+    /// it on, `0` off). The dev CLI forces it on when it runs the app with
+    /// stderr piped to itself, which is how `sc wrapp build` shows the
+    /// headless app's logs.
+    private static let mirrorsToStderr: Bool = {
+        switch ProcessInfo.processInfo.environment["SECOND_CHANCE_LOG_STDERR"] {
+        case "1": return true
+        case "0": return false
+        default: return isatty(STDERR_FILENO) != 0
+        }
+    }()
+
     private func writeToStderr(entries: ContiguousArray<Entry>) {
         for entry in entries {
             let line = LogFormatter.compact(entry: entry) + "\n"

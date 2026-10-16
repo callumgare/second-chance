@@ -172,14 +172,33 @@ Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`.
 
 Note that `LogStore` mirrors to stderr only when `isatty`, so piping a headless
-run's output shows nothing. Run it bare in a terminal to see logs.
+run's output shows nothing — unless `SECOND_CHANCE_LOG_STDERR=1` forces the
+mirror on (`0` forces it off).
+
+**Progress for whoever started the build.** When `SECOND_CHANCE_PROGRESS_PATH`
+is set, `CLIBuilder` attaches a `ProgressFileWriter`: an `EventBus.app`
+subscriber like any other, which appends one JSON object per line to that file —
+
+```
+{"event":"stage","stage":"installingGame","text":"Game installing","fraction":0.5}
+{"event":"completed","path":"/…/Nancy Drew - X.app"}
+{"event":"failed","message":"…"}
+```
+
+`stage` is a stable name for the `WrappBuildState` case and `text` is what the
+progress view would say. This is how `sc wrapp build` shows the build stage
+([dev-cli.md](dev-cli.md)); the integration test writes the same stream (from
+`TEST_RUNNER_PROGRESS_PATH`) with extra per-game `"event":"game"` lines.
+Because the writer is a bus subscriber, a dropped `bus.publish` shows up there
+too. The record format is a contract with `ProgressRecord` in `Tools/sc`.
 
 Headless doesn't mean windowless: installers and Wine itself still need a
 WindowServer connection. A shell started over SSH has none — it sits in
 launchd's `Background` session — so a build run there fails at the installer
-step. `./in-gui-session.sh <command>` runs the command in the logged-in user's
-`Aqua` session instead (as a one-off LaunchAgent, under a pty so the stderr
-mirror still fires) and passes back its output and exit code.
+step. `sc` commands that build or run wrapps re-run themselves in the
+logged-in user's `Aqua` session instead (as a one-off LaunchAgent, under a pty
+so the stderr mirror still fires) and pass back the output and exit code;
+`./sc in-gui-session -- <command>` does the same for any command.
 
 ## The template
 

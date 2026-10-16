@@ -11,10 +11,10 @@
 //    - Real installer ISOs must be present in `installers/<slug>/disk-1.iso`.
 //      These are gitignored (too large for git) so tests auto-disable when
 //      absent via `.disabled(if: !InstallersPresent.shouldRun())` — except
-//      under run-tests.sh's `integration`, which sets REQUIRE_INSTALLERS so a
+//      under `sc test integration`, which sets REQUIRE_INSTALLERS so a
 //      missing ISO fails instead.
 //    - Tests are SLOW (minutes per game — real Wine install). Run deliberately:
-//        xcodebuild test -scheme SecondChance -only-testing:SecondChanceTests/DiskInstallIntegrationTests
+//        ./sc test integration <slug>
 //    - Tests are SERIALIZED (.serialized) to avoid concurrent Wine prefixes.
 //
 //  What these tests verify that test-games.sh does not:
@@ -34,6 +34,9 @@ import Foundation
     .disabled(if: !InstallersPresent.shouldRun(), "No installer ISOs found in installers/")
 )
 struct DiskInstallIntegrationTests {
+
+    /// Where `sc test integration` follows progress (`TEST_RUNNER_PROGRESS_PATH`).
+    static let progress = ProgressFileWriter.fromEnvironment("PROGRESS_PATH")
 
     /// A unique temp directory for each test invocation, so concurrent (if ever
     /// enabled) or repeated runs don't collide.
@@ -66,11 +69,18 @@ struct DiskInstallIntegrationTests {
         arguments: TestGameFilter.selectedGames
     )
     func wrappCreationForGame(game: GameInfo) async throws {
-        // SKIP_BUILD=1 (via --test-existing-wrapp): skip the install and use a
-        // pre-existing wrapp from built-apps/ if present. Useful for iterating
-        // on the WrappPuppeteer test without waiting for a full Wine install.
+        // Per-game progress for `sc test integration`'s live display. The
+        // finished line's result agrees with this test's: any failed
+        // expectation or thrown error makes it "failed".
+        let outcome = GameOutcome(slug: game.id, progress: Self.progress)
+        defer { outcome.finish() }
+
+        // SKIP_BUILD=1 (`sc test integration --refresh-wrapp template|skip`):
+        // skip the install and use a pre-existing wrapp from the wrapps dir if
+        // present. Useful for iterating on the WrappPuppeteer test without
+        // waiting for a full Wine install.
         let skipBuild = ProcessInfo.processInfo.environment["SKIP_BUILD"] == "1"
-        let builtAppsDir = TestPaths.repoRoot.appendingPathComponent("built-apps")
+        let builtAppsDir = TestPaths.wrappsDir
         let prebuiltWrapp = builtAppsDir.appendingPathComponent("Nancy Drew - \(game.title).app")
         let usingPrebuiltWrapp = skipBuild && FileManager.default.fileExists(atPath: prebuiltWrapp.path)
 
@@ -88,7 +98,7 @@ struct DiskInstallIntegrationTests {
             let disk2 = InstallerPaths.diskISO(for: game, diskNumber: 2)
 
             if game.diskCount > 1 {
-                #expect(disk2 != nil, "Game \(game.id) requires \(game.diskCount) disks but disk-2.iso not found")
+                outcome.expect(disk2 != nil, "Game \(game.id) requires \(game.diskCount) disks but disk-2.iso not found")
             }
 
             let outputDir = makeOutputDir()
@@ -97,6 +107,9 @@ struct DiskInstallIntegrationTests {
             let recorder = RecordingEventSubscriber()
             await recorder.subscribe(to: EventBus.app)
             defer { Task { await recorder.unsubscribe(from: EventBus.app) } }
+            outcome.phase("building")
+            // Subscribes once for the whole run; later games reuse it.
+            await Self.progress?.subscribe(to: EventBus.app)
 
             // Capture PID + start time to collect os.Logger output after the install.
             let logPid = ProcessInfo.processInfo.processIdentifier
@@ -132,39 +145,39 @@ struct DiskInstallIntegrationTests {
             let eventTrace = recorder.events.map { "\($0)" }.joined(separator: "\n")
             Attachment.record(Data(eventTrace.utf8), named: "install-events-\(game.id).txt")
 
-            #expect(succeeded, "Installation did not complete within timeout")
+            outcome.expect(succeeded, "Installation did not complete within timeout")
             try #require(recorder.failedError == nil, "Installation failed: \(String(describing: recorder.failedError))")
 
             // ── Per-step assertions ───────────────────────────────────────────
 
-            #expect(recorder.detectedGame?.id == game.id,
+            outcome.expect(recorder.detectedGame?.id == game.id,
                     "Detected game \(recorder.detectedGame?.id ?? "nil") but expected \(game.id)")
-            #expect(recorder.routedEngine == game.gameEngine,
+            outcome.expect(recorder.routedEngine == game.gameEngine,
                     "Routed engine \(String(describing: recorder.routedEngine)) but expected \(game.gameEngine)")
 
             if let expectedExe = game.internalGameExePath {
-                #expect(recorder.detectedExePath == expectedExe,
+                outcome.expect(recorder.detectedExePath == expectedExe,
                         "Detected exe path \(recorder.detectedExePath ?? "nil") but expected \(expectedExe)")
             }
 
-            #expect(recorder.configuredWrapp != nil, "wrappConfigured event not emitted")
-            #expect(recorder.signedWrapp != nil, "signed event not emitted")
-            #expect(recorder.completedWrapp != nil, "completed event not emitted")
+            outcome.expect(recorder.configuredWrapp != nil, "wrappConfigured event not emitted")
+            outcome.expect(recorder.signedWrapp != nil, "signed event not emitted")
+            outcome.expect(recorder.completedWrapp != nil, "completed event not emitted")
 
             if let expectedExe = game.internalGameExePath {
                 let plistExe = try WrappInfo.gameExePath(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
-                #expect(plistExe == expectedExe,
+                outcome.expect(plistExe == expectedExe,
                         "Wrapp plist GameExePath \(plistExe ?? "nil") ≠ \(expectedExe)")
             }
 
             let plistSlug = try WrappInfo.gameSlug(at: outputDir.appendingPathComponent("Nancy Drew - \(game.title).app"))
-            #expect(plistSlug == game.id, "Wrapp plist GameSlug \(plistSlug ?? "nil") ≠ \(game.id)")
+            outcome.expect(plistSlug == game.id, "Wrapp plist GameSlug \(plistSlug ?? "nil") ≠ \(game.id)")
 
             // Event ordering.
             let kinds = recorder.events.map { "\($0)" }
             if let a = kinds.firstIndex(where: { $0.hasPrefix("gameDetected") }),
                let b = kinds.firstIndex(where: { $0.hasPrefix("engineRouted") }) {
-                #expect(a < b, "gameDetected must precede engineRouted")
+                outcome.expect(a < b, "gameDetected must precede engineRouted")
             }
 
             wrappPath = recorder.completedWrapp ?? outputDir.appendingPathComponent("Nancy Drew - \(game.title).app")
@@ -175,16 +188,65 @@ struct DiskInstallIntegrationTests {
         guard WrappInfo.wrappPuppeteerBundle() != nil else {
             Attachment.record(Data("WrappPuppeteer.app not found — skipping launch test".utf8),
                               named: "wrapp-puppeteer-skipped.txt")
+            outcome.completed = true
             return
         }
 
+        outcome.phase("launching")
         let exitCode = try await AppPuppetRunner.run(wrappURL: wrappPath, game: game)
+        outcome.puppeteerExit = exitCode
 
         // Clean up the built wrapp now that WrappPuppeteer is done with it.
         if let dir = builtOutputDir { cleanup(dir) }
 
         // 0 = clean quit
-        #expect(exitCode == 0,
+        outcome.expect(exitCode == 0,
                 "WrappPuppeteer exited with \(exitCode) for \(game.id)")
+        outcome.completed = true
+
+    }
+}
+
+/// One game's result as `sc test integration` shows it, written to the
+/// progress stream when the test ends. Expectations go through `expect` so a
+/// failed one is counted here as well as recorded as an issue.
+final class GameOutcome: @unchecked Sendable {
+    let slug: String
+    let progress: ProgressFileWriter?
+    let started = Date()
+    /// Set once the test has run to its end without throwing.
+    var completed = false
+    var puppeteerExit: Int32?
+    private var failedExpectations = 0
+
+    init(slug: String, progress: ProgressFileWriter?) {
+        self.slug = slug
+        self.progress = progress
+        progress?.write(["event": "game", "slug": slug, "phase": "started"])
+    }
+
+    func expect(_ condition: Bool, _ comment: Comment, sourceLocation: SourceLocation = #_sourceLocation) {
+        #expect(condition, comment, sourceLocation: sourceLocation)
+        if !condition { failedExpectations += 1 }
+    }
+
+    func phase(_ phase: String) {
+        progress?.write(["event": "game", "slug": slug, "phase": phase])
+    }
+
+    func finish() {
+        let result: String
+        if let code = puppeteerExit, (3...5).contains(code) {
+            // WrappPuppeteer is missing a TCC grant — not a regression.
+            result = "permission"
+        } else {
+            result = completed && failedExpectations == 0 ? "passed" : "failed"
+        }
+        var record: [String: Any] = [
+            "event": "game", "slug": slug, "phase": "finished", "result": result,
+            "seconds": Date().timeIntervalSince(started),
+        ]
+        if let puppeteerExit { record["puppeteerExit"] = Int(puppeteerExit) }
+        progress?.write(record)
     }
 }

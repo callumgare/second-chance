@@ -1,0 +1,1 @@
+../../../../SecondChance/Services/GameInfoProvider.swift

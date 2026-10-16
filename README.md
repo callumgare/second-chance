@@ -94,14 +94,17 @@ This provides a user interface for taking the game installer files and installin
 ### Quick Start
 ```bash
 # Run fast unit tests (~5 seconds)
-./run-tests.sh unit
+./sc test unit
 
 # Test one specific game
-./run-tests.sh quick scarlet-hand
+./sc test integration scarlet-hand
 
 # Test all games (takes a bit over an hour and will regularly bring a full screen window to the front)
-./run-tests.sh integration
+./sc test integration
 ```
+
+`./sc` is the developer CLI for building, running, testing and releasing —
+`./sc --help`, or see [docs/dev-cli.md](docs/dev-cli.md).
 
 ## Development
 
@@ -115,6 +118,7 @@ Good luck (and also thank you very much for considering helping out).
   brew install xcbeautify xctesthtmlreport
   ```
   `xcbeautify` pretty-prints build/test output; `xctest-html-report` generates HTML test reports.
+  `./sc setup` checks for these (and `cocogitto`, for releases) and installs the commit hook.
 
 All other dependencies (Wine, ScummVM, winetricks, AutoIt, exiftool) are automatically downloaded and cached in `~/Library/Caches/SecondChance/` during the build process — you don't need to install them yourself.
 
@@ -122,11 +126,12 @@ All other dependencies (Wine, ScummVM, winetricks, AutoIt, exiftool) are automat
 ### Building
 
 ```bash
-./build.sh
+./sc app build      # or ./sc app run to build and launch it
 ```
 
-That's the whole thing on a fresh machine — the script already handles the architecture
-setup described below.
+That's the whole thing on a fresh machine — `sc` already handles the architecture
+setup described below. The first run also builds `sc` itself (a Swift package in
+`Tools/sc/`), which takes half a minute.
 
 #### A note on architectures
 
@@ -144,15 +149,15 @@ unable to resolve module dependency: 'Logging'
 
 The fix is `ONLY_ACTIVE_ARCH=NO`: swift-log gets an x86_64 slice alongside the arm64 one,
 `WrappTemplate` links, and the app itself still builds native rather than Rosetta-only.
-`build.sh`, `prepare-release.sh` and CI all set it.
+`sc` and CI both set it.
 
-Wrapping the build in `arch -x86_64` looks like it should work too, and `build.sh` used to
+Wrapping the build in `arch -x86_64` looks like it should work too, and the old build script used to
 do exactly that. Don't — the architecture of the `xcodebuild` process doesn't reliably
 decide what the build system picks for the Swift package products, so it works on some
 machines and fails on others with the error above. The build setting is the thing that
 actually decides.
 
-So if you're invoking `xcodebuild` by hand rather than using `build.sh`, pass it:
+So if you're invoking `xcodebuild` by hand rather than using `sc`, pass it:
 
 ```bash
 rm -rf DerivedData    # clear any arm64-only Logging module left behind
@@ -167,10 +172,10 @@ xcodebuild -project SecondChance.xcodeproj \
 If you're building from Xcode's GUI, set **Build Settings → Build Active Architecture Only
 → Debug → No**, otherwise you'll hit the same error.
 
-`run-tests.sh` sets the same flag, so tests run natively too:
+`sc test` sets the same flag, so tests run natively too:
 
 ```bash
-./run-tests.sh unit
+./sc test unit
 ```
 
 It still pins `-destination` to a single architecture, but only to stop xcodebuild matching

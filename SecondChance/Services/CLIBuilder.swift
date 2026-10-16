@@ -91,6 +91,12 @@ enum CLIBuilder {
 
         let input = WrappBuildInput(viewModel: nil)
 
+        // Machine-readable progress for whoever started the build (sc wrapp
+        // build). Kept alive for the rest of the process, which ends below.
+        if let progress = ProgressFileWriter.fromEnvironment("SECOND_CHANCE_PROGRESS_PATH") {
+            await progress.subscribe(to: EventBus.app)
+        }
+
         do {
             _ = try await builder.build(input: input)
 

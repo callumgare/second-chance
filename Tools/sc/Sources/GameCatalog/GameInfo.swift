@@ -1,0 +1,1 @@
+../../../../SecondChance/Models/GameInfo.swift

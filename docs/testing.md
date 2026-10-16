@@ -3,16 +3,18 @@
 How the test suite is run, what each layer covers, and the handful of things
 about this setup that will waste an afternoon if you don't know them.
 
-Tests are Swift Testing (`@Test` / `#expect`), driven by `run-tests.sh`. There
-is no `Package.swift`, so `swift test` does not work here — everything goes
-through `xcodebuild` against the `SecondChance` scheme.
+Tests are Swift Testing (`@Test` / `#expect`), driven by `./sc test`
+([dev-cli.md](dev-cli.md)). The app has no `Package.swift`, so `swift test`
+does not work for it — everything goes through `xcodebuild` against the
+`SecondChance` scheme. (`Tools/sc`, the CLI itself, is a Swift package with its
+own tests; `sc test unit` runs those too.)
 
 For the repo-wide conventions see `AGENTS.md`; for the build flow these tests
 exercise, see [wrapp-build.md](wrapp-build.md).
 
 ## Quick Start
 
-These run natively — no Rosetta wrapper. `run-tests.sh` passes
+These run natively — no Rosetta wrapper. `sc` passes
 `ONLY_ACTIVE_ARCH=NO`, which is what makes them work: the WrappTemplate target
 is `ARCHS = x86_64` (Wine is 32-bit), so an active-arch-only build on Apple
 Silicon emits swift-log for arm64 alone and WrappTemplate then dies with
@@ -23,29 +25,36 @@ build failure. See the README's *Building* section for the full story.
 
 ```bash
 # Unit tests only (fast, ~6s, no installers needed)
-./run-tests.sh unit
+./sc test unit
 
-# Integration tests — one game
-./run-tests.sh integration stay-tuned
-./run-tests.sh i stay-tuned          # short form
+# Integration tests — one game, or several
+./sc test integration stay-tuned
+./sc test integration stay-tuned blackmoor-manor
 
 # Integration tests — all games (hours)
-./run-tests.sh integration
+./sc test integration
 
-# Everything
-./run-tests.sh
+# Everything: unit, then integration (hours)
+./sc test
 
 # Skip the rebuild and reuse the existing build
-./run-tests.sh --no-rebuild i stay-tuned
+./sc test integration stay-tuned --skip-app-build
+
+# Launch-test the wrapps already in built-apps/ instead of installing
+# (template: put the latest WrappTemplate into them first)
+./sc test integration stay-tuned --refresh-wrapp skip
+./sc test integration stay-tuned --refresh-wrapp template
 ```
 
-Other flags: `--raw-logs` (skip xcbeautify), `--quiet`, and
-`--test-existing-wrapp` (skip the install and drive a prebuilt app from
-`built-apps/` — note those must have been built since the WrappTemplate
-rename, or their executable name won't match).
+Other options: `--logs collapsed|full|raw` for how output is shown,
+`--wrapps-dir` for where prebuilt wrapps are, and `--open-report
+failures|always|never`. In a terminal the run is shown live — a progress bar,
+what's running now, and a table of suites (or games) — with the full xcodebuild
+output kept in `DerivedData/sc-logs/`.
 
-Never run an unfiltered `xcodebuild test`: with real ISOs present in
-`installers/`, the integration suite does not skip and the run takes hours.
+Never run a bare `./sc test` or an unfiltered `xcodebuild test` by accident:
+with real ISOs present in `installers/`, the integration suite does not skip
+and the run takes hours.
 
 ## Test structure
 
@@ -67,13 +76,15 @@ Fast, no installer ISOs required:
   reads it: slugs resolve to real games, editions select one patch per source,
   puzzle solvers stay opt-in
 
-Those nine are what `run-tests.sh unit` selects. `ExiftoolServiceTests` is
-deliberately outside that filter — it shells out to the bundled exiftool.
+plus `GameDetectorIntegrationTests` and `InstallerIntegrationTests` (which use
+the mock disk in `TestFixtures/`, not real ISOs) and `ProgressFileWriterTests`
+(the progress stream `sc` reads).
 
-**The `unit` case is an explicit `-only-testing:` allowlist, not a wildcard.**
-A new suite that isn't listed there does not fail — it simply never runs, and
-the run still reports success. If a suite you just wrote doesn't appear in the
-output, that is the first thing to check.
+**`sc test unit` runs every suite except a denylist**, `TestRunner.unitExclusions`
+in `Tools/sc/Sources/SCKit/Support/TestRunner.swift`: `DiskInstallIntegrationTests`
+(real installs) and `ExiftoolServiceTests` / `ExiftoolServiceIntegrationTests`
+(they shell out to the bundled exiftool). A new suite therefore runs by default;
+one that is slow or needs the environment set up has to be added to that list.
 
 ### Integration tests (`SecondChanceTests/Integration/`)
 
@@ -82,14 +93,14 @@ need real ISOs at `installers/<slug>/disk-1.iso` (gitignored). Absent ISOs, the
 suite disables itself via `.disabled(if: !InstallersPresent.shouldRun())` — so
 a plain `xcodebuild test` on a machine without them skips rather than fails.
 
-`./run-tests.sh integration` is different: asking for the suite by name sets
+`./sc test integration` is different: asking for the suite by name sets
 `TEST_RUNNER_REQUIRE_INSTALLERS=1`, the suite always runs, and a game whose ISO
 is missing fails its `#require` with the path it looked at. A skipped suite
 there would report a pass having tested nothing.
 
 The tests find the repo, and so `installers/`, through `TestPaths.repoRoot`.
 That defaults to `#filePath`, which is fixed at compile time and wrong on any
-machine the build was copied to, so run-tests.sh passes the real location as
+machine the build was copied to, so `sc test` passes the real location as
 `TEST_RUNNER_REPO_ROOT`. Calling `xcodebuild` directly on a copied build, pass
 it yourself.
 
@@ -116,8 +127,8 @@ succeeds while the test sees nothing.
 forward it into the test environment) limits which games run:
 
 ```bash
-# Via run-tests.sh, which adds the prefix for you
-./run-tests.sh integration stay-tuned
+# Via sc, which adds the prefix for you
+./sc test integration stay-tuned
 
 # Directly
 TEST_RUNNER_TEST_GAMES=stay-tuned,blackmoor-manor \
@@ -130,13 +141,17 @@ A slug that matches no game fails the "Every requested game slug names a known
 game" test, rather than filtering the per-game test down to zero cases — which
 would pass having run nothing.
 
-`TEST_RUNNER_SKIP_BUILD=1` is the env form of `--test-existing-wrapp`.
+`TEST_RUNNER_SKIP_BUILD=1` makes the suite launch-test the wrapps already in
+`TEST_RUNNER_WRAPPS_DIR` (default `built-apps/`) instead of installing; `sc`
+sets both for `--refresh-wrapp skip|template` and `--wrapps-dir`.
+`TEST_RUNNER_PROGRESS_PATH` asks the suite to write its per-game progress as
+JSON lines, which is how `sc` draws the live game table.
 
 ## WrappPuppeteer
 
 `WrappPuppeteer` (a CLI tool wrapped as an `.app` so it can hold TCC grants)
 drives the launch-and-quit phase. It is a **build dependency of the
-SecondChanceTests target**, so `run-tests.sh` builds it for you — no separate
+SecondChanceTests target**, so `sc test` builds it for you — no separate
 build step. If the bundle is missing, the launch phase is skipped and the build
 assertions still run.
 
@@ -155,9 +170,11 @@ Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
 | 4 | Screen Recording permission denied |
 | 5 | Screen Recording granted but a relaunch is required |
 
-**Codes 3–5 are permission problems, not regressions.** Re-grant the permission
-(`reset-tcc.sh` clears stale entries) rather than looking for a bug in the build
-code. The tell-tale: the run reports a single issue, and every wrapp-build event
+**Codes 3–5 are permission problems, not regressions.** `sc test integration`
+shows them as `permission` in its game table. Re-grant the permission rather
+than looking for a bug in the build code; stale entries can be cleared with
+`tccutil reset Accessibility au.gare.callum.SecondChance.WrappPuppeteer` and
+`tccutil reset ScreenCapture au.gare.callum.SecondChance.WrappPuppeteer`. The tell-tale: the run reports a single issue, and every wrapp-build event
 assertion passed before it.
 
 WrappPuppeteer is signed with an Apple Development certificate, so TCC ties its
@@ -235,9 +252,12 @@ indistinguishable from a clean run unless you go looking for it.
 
 ## Reports
 
-`run-tests.sh` writes `test-results/<timestamp>.xcresult`, converts it with
-`xchtmlreport` into `test-results/index.html`, and opens it. Per-run logs and
-WrappPuppeteer output are attached to the test case inside the `.xcresult`.
+`sc test` writes `test-results/<timestamp>-unit.xcresult` and
+`…-integration.xcresult`, converts them with `xchtmlreport` into
+`test-results/<timestamp>/index.html`, and opens that when something failed
+(`--open-report always|never` to change that). The terminal ends with a table
+of suites or games and the totals. Per-run logs and WrappPuppeteer output are
+attached to the test case inside the `.xcresult`.
 
 ## Test fixtures (`TestFixtures/`)
 
@@ -260,9 +280,9 @@ struct MyFeatureTests {
 }
 ```
 
-A new unit suite also needs an `-only-testing:` line in `run-tests.sh`'s `unit`
-case, or the fast loop won't run it — and add it to the list above while you are
-there. Integration coverage for a new game needs only its ISOs dropped into
+A new unit suite runs in `sc test unit` without any registration — add it to
+the list above while you are there. A slow or environment-dependent one belongs
+in `TestRunner.unitExclusions` instead. Integration coverage for a new game needs only its ISOs dropped into
 `installers/<slug>/`; the suite enumerates games from `GameInfoProvider`.
 
 Adding a file under `docs/` also means adding its row to AGENTS.md's

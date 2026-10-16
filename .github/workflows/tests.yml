@@ -42,6 +42,10 @@ jobs:
             ONLY_ACTIVE_ARCH=NO \
             -resultBundlePath TestResults.xcresult
       
+      - name: sc's own tests
+        # The developer CLI (./sc, Tools/sc) is a separate Swift package.
+        run: swift test --package-path Tools/sc
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

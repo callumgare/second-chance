@@ -106,7 +106,7 @@ enum TestConsole {
 enum TestPaths {
     /// The repository root directory (parent of `SecondChanceTests/`).
     ///
-    /// `REPO_ROOT` (set by run-tests.sh as `TEST_RUNNER_REPO_ROOT`) wins over
+    /// `REPO_ROOT` (set by `sc test` as `TEST_RUNNER_REPO_ROOT`) wins over
     /// `#filePath`, which is baked in at compile time and so points at the
     /// wrong place when a build is copied to another machine.
     static let repoRoot: URL = {
@@ -124,6 +124,15 @@ enum TestPaths {
 
     /// The `installers/` directory at the repo root.
     static let installersDir: URL = repoRoot.appendingPathComponent("installers")
+
+    /// Where prebuilt wrapps live: `WRAPPS_DIR` (set by `sc test` as
+    /// `TEST_RUNNER_WRAPPS_DIR` from its `--wrapps-dir`), else `built-apps/`.
+    static let wrappsDir: URL = {
+        if let override = ProcessInfo.processInfo.environment["WRAPPS_DIR"], !override.isEmpty {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
+        return repoRoot.appendingPathComponent("built-apps")
+    }()
 }
 
 /// Resolves installer ISO paths for a given game.
@@ -155,7 +164,7 @@ enum InstallerPaths {
 /// `.disabled(if:)` trait so integration tests no-op cleanly on CI / machines
 /// without the (gitignored) real installers.
 enum InstallersPresent {
-    /// Set by run-tests.sh (as `TEST_RUNNER_REQUIRE_INSTALLERS`) when the
+    /// Set by `sc test integration` (as `TEST_RUNNER_REQUIRE_INSTALLERS`) when the
     /// integration suite was asked for by name. Then a missing ISO must fail
     /// the run — the per-game `#require` reports the path it looked at —
     /// rather than disable the suite and let it pass having tested nothing.

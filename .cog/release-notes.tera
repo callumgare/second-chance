@@ -1,6 +1,6 @@
 {#-
   Release notes: the grouped bullets for a single version, with no heading of
-  its own — prepare-release.sh supplies the version heading, and GitHub
+  its own — `sc release` supplies the version heading, and GitHub
   releases carry the version in their title.
 
   `commit` fields available here: summary, scope, body, breaking_change,

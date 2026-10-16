@@ -1,0 +1,1011 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E2127F512F06402B00E02402 /* WrappTemplate.app in Embeded Wrapper Template App */ = {isa = PBXBuildFile; fileRef = E24D78DE2F063E1E00B38683 /* WrappTemplate.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E2B000002F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
+		E2B000022F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
+		E2B000042F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E2A0E3C72F075266007E9F60 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E21733892F04AA580058E8E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E21733902F04AA580058E8E9;
+			remoteInfo = SecondChance;
+		};
+		E2F499232F15E6B90040383D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E21733892F04AA580058E8E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E24D78DD2F063E1E00B38683;
+			remoteInfo = WrappTemplate;
+		};
+		E2F9AA012F15E6B90040383D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E21733892F04AA580058E8E9 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AABB00030000000000000003;
+			remoteInfo = WrappPuppeteer;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E2127F502F063FF300E02402 /* Embeded Wrapper Template App */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 7;
+			files = (
+				E2127F512F06402B00E02402 /* WrappTemplate.app in Embeded Wrapper Template App */,
+			);
+			name = "Embeded Wrapper Template App";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		E21733912F04AA580058E8E9 /* Second Chance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Second Chance.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E24D78DE2F063E1E00B38683 /* WrappTemplate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WrappTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E2A0E3C32F075266007E9F60 /* SecondChanceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SecondChanceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E2C65E122F15FA4700FAFF50 /* Exceptions for "WrappTemplate" folder in "WrappTemplate" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AlertHelper.swift,
+				Configuration.swift,
+				GameLauncher.swift,
+				GameMonitor.swift,
+				InfoWindowController.swift,
+				main.swift,
+				MainLogger.swift,
+				Resources/Assets.xcassets,
+				Resources/WrappTemplateIcon.icon,
+				StartupDiagnostics.swift,
+				Subcommands.swift,
+				Views/InfoWindowView.swift,
+			);
+			target = E24D78DD2F063E1E00B38683 /* WrappTemplate */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		AABB00010000000000000001 /* WrappPuppeteer */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = WrappPuppeteer;
+			sourceTree = "<group>";
+		};
+		E21733932F04AA580058E8E9 /* SecondChance */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFolders = (
+				"Resources/installer-answer-files",
+			);
+			path = SecondChance;
+			sourceTree = "<group>";
+		};
+		E2A0E3C42F075266007E9F60 /* SecondChanceTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SecondChanceTests;
+			sourceTree = "<group>";
+		};
+		E2C65E102F15FA4700FAFF50 /* WrappTemplate */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E2C65E122F15FA4700FAFF50 /* Exceptions for "WrappTemplate" folder in "WrappTemplate" target */,
+			);
+			path = WrappTemplate;
+			sourceTree = "<group>";
+		};
+		E2FC5BF22F160FB100AC5301 /* Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AABB00050000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E2B000042F01000000000001 /* Logging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E217338E2F04AA580058E8E9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E2B000002F01000000000001 /* Logging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2A0E3C02F075266007E9F60 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2E831292F166FF900C3064A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E2B000022F01000000000001 /* Logging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E21733882F04AA580058E8E9 = {
+			isa = PBXGroup;
+			children = (
+				E2FC5BF22F160FB100AC5301 /* Shared */,
+				E2C65E102F15FA4700FAFF50 /* WrappTemplate */,
+				E21733932F04AA580058E8E9 /* SecondChance */,
+				E2A0E3C42F075266007E9F60 /* SecondChanceTests */,
+				AABB00010000000000000001 /* WrappPuppeteer */,
+				E21733922F04AA580058E8E9 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E21733922F04AA580058E8E9 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E21733912F04AA580058E8E9 /* Second Chance.app */,
+				E24D78DE2F063E1E00B38683 /* WrappTemplate.app */,
+				E2A0E3C32F075266007E9F60 /* SecondChanceTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AABB00030000000000000003 /* WrappPuppeteer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "WrappPuppeteer" */;
+			buildPhases = (
+				AABB00040000000000000004 /* Sources */,
+				AABB00050000000000000005 /* Frameworks */,
+				E21846A6302B452200E56C73 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				AABB00010000000000000001 /* WrappPuppeteer */,
+				E2FC5BF22F160FB100AC5301 /* Shared */,
+			);
+			name = WrappPuppeteer;
+			packageProductDependencies = (
+				E2B000012F01000000000001 /* Logging */,
+			);
+			productName = WrappPuppeteer;
+			productType = "com.apple.product-type.application";
+		};
+		E21733902F04AA580058E8E9 /* SecondChance */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E217339C2F04AA5A0058E8E9 /* Build configuration list for PBXNativeTarget "SecondChance" */;
+			buildPhases = (
+				E217338D2F04AA580058E8E9 /* Sources */,
+				E217338E2F04AA580058E8E9 /* Frameworks */,
+				E217338F2F04AA580058E8E9 /* Resources */,
+				E2127F502F063FF300E02402 /* Embeded Wrapper Template App */,
+				E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */,
+				E25DDA6952206C43D18B125E /* Download And Copy AutoIt Files */,
+				E280B72C30319B6700501790 /* Download And Copy Game Patches */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E2F499242F15E6B90040383D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E21733932F04AA580058E8E9 /* SecondChance */,
+				E2FC5BF22F160FB100AC5301 /* Shared */,
+			);
+			name = SecondChance;
+			packageProductDependencies = (
+				E2B000012F01000000000001 /* Logging */,
+			);
+			productName = SecondChance;
+			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E24D78DD2F063E1E00B38683 /* WrappTemplate */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E24D78E62F063E1F00B38683 /* Build configuration list for PBXNativeTarget "WrappTemplate" */;
+			buildPhases = (
+				E24D78DA2F063E1E00B38683 /* Sources */,
+				E2E831292F166FF900C3064A /* Frameworks */,
+				E2E831282F166FE100C3064A /* Resources */,
+				E2A159062F064DDD00292958 /* Download And Copy Wine Files */,
+				E2FA29BF2F089B2B00638A54 /* Download And Copy ScummVM Files */,
+				E2467E6E2F24D0A800D4773B /* Check for collisions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E2FC5BF22F160FB100AC5301 /* Shared */,
+			);
+			name = WrappTemplate;
+			packageProductDependencies = (
+				E2B000012F01000000000001 /* Logging */,
+			);
+			productName = WrappTemplate;
+			productReference = E24D78DE2F063E1E00B38683 /* WrappTemplate.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E2A0E3C22F075266007E9F60 /* SecondChanceTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E2A0E3C92F075267007E9F60 /* Build configuration list for PBXNativeTarget "SecondChanceTests" */;
+			buildPhases = (
+				E2A0E3BF2F075266007E9F60 /* Sources */,
+				E2A0E3C02F075266007E9F60 /* Frameworks */,
+				E2A0E3C12F075266007E9F60 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E2A0E3C82F075266007E9F60 /* PBXTargetDependency */,
+				E2F9AA022F15E6B90040383D /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E2A0E3C42F075266007E9F60 /* SecondChanceTests */,
+			);
+			name = SecondChanceTests;
+			packageProductDependencies = (
+			);
+			productName = SecondChanceTests;
+			productReference = E2A0E3C32F075266007E9F60 /* SecondChanceTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E21733892F04AA580058E8E9 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					AABB00030000000000000003 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					E21733902F04AA580058E8E9 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					E24D78DD2F063E1E00B38683 = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					E2A0E3C22F075266007E9F60 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = E21733902F04AA580058E8E9;
+					};
+				};
+			};
+			buildConfigurationList = E217338C2F04AA580058E8E9 /* Build configuration list for PBXProject "SecondChance" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E21733882F04AA580058E8E9;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E21733902F04AA580058E8E9 /* SecondChance */,
+				E24D78DD2F063E1E00B38683 /* WrappTemplate */,
+				E2A0E3C22F075266007E9F60 /* SecondChanceTests */,
+				AABB00030000000000000003 /* WrappPuppeteer */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E217338F2F04AA580058E8E9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E21846A6302B452200E56C73 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2A0E3C12F075266007E9F60 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2E831282F166FE100C3064A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		E2467E6E2F24D0A800D4773B /* Check for collisions */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/check-output-collisions.sh",
+				"$(DERIVED_FILE_DIR)/scummvm-setup-last-run",
+				"$(DERIVED_FILE_DIR)/wine-setup-last-run",
+			);
+			name = "Check for collisions";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/check-output-collisions-last-run",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/check-output-collisions.sh\"\n";
+		};
+		E25DDA6952206C43D18B125E /* Download And Copy AutoIt Files */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/setup-autoit.sh",
+			);
+			name = "Download And Copy AutoIt Files";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/autoit",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-autoit.sh\"\n";
+		};
+		E280B72C30319B6700501790 /* Download And Copy Game Patches */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${SRCROOT}/WrappTemplate/setup-game-patches.sh",
+				"${SRCROOT}/WrappTemplate/game-patches.json",
+			);
+			name = "Download And Copy Game Patches";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/game-patches",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-game-patches.sh\"\n";
+		};
+		E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/setup-exiftool.sh",
+			);
+			name = "Download And Copy Exiftool Files";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/exiftool",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-exiftool.sh\"\n";
+		};
+		E2A159062F064DDD00292958 /* Download And Copy Wine Files */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/setup-wine.sh",
+				"$(SRCROOT)/WrappTemplate/InProcessHelpers/native_fullscreen.m",
+				"$(SRCROOT)/WrappTemplate/InProcessHelpers/cursor_lock.m",
+				"$(SRCROOT)/WrappTemplate/InProcessHelpers/patch-winemac.swift",
+			);
+			name = "Download And Copy Wine Files";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/wine-setup-last-run",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/setup-wine.sh\"\n";
+		};
+		E2FA29BF2F089B2B00638A54 /* Download And Copy ScummVM Files */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/setup-scummvm.sh",
+				"$(SRCROOT)/WrappTemplate/scummvm.ini",
+			);
+			name = "Download And Copy ScummVM Files";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/scummvm-setup-last-run",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/WrappTemplate/setup-scummvm.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AABB00040000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E217338D2F04AA580058E8E9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E24D78DA2F063E1E00B38683 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E2A0E3BF2F075266007E9F60 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E2A0E3C82F075266007E9F60 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E21733902F04AA580058E8E9 /* SecondChance */;
+			targetProxy = E2A0E3C72F075266007E9F60 /* PBXContainerItemProxy */;
+		};
+		E2F499242F15E6B90040383D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E24D78DD2F063E1E00B38683 /* WrappTemplate */;
+			targetProxy = E2F499232F15E6B90040383D /* PBXContainerItemProxy */;
+		};
+		E2F9AA022F15E6B90040383D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AABB00030000000000000003 /* WrappPuppeteer */;
+			targetProxy = E2F9AA012F15E6B90040383D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		AABB00060000000000000006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappPuppeteer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AABB00070000000000000007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHighResolutionCapable = YES;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappPuppeteer;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E217339A2F04AA5A0058E8E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E217339B2F04AA5A0058E8E9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALID_ARCHS = "$(ARCHS_STANDARD)";
+			};
+			name = Release;
+		};
+		E217339D2F04AA5A0058E8E9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = SecondChanceIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = SecondChance/SecondChance.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 46;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Second Chance";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance;
+				PRODUCT_MODULE_NAME = SecondChance;
+				PRODUCT_NAME = "Second Chance";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = YES;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E217339E2F04AA5A0058E8E9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = SecondChanceIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_ENTITLEMENTS = SecondChance/SecondChance.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 46;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Second Chance";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance;
+				PRODUCT_MODULE_NAME = SecondChance;
+				PRODUCT_NAME = "Second Chance";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = YES;
+				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
+				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E24D78E72F063E1F00B38683 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = x86_64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = WrappTemplateIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 46;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EXCLUDED_ARCHS = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(USER_LIBRARY_DIR)/Caches/SecondChance/wine-engine/share/wine/mono/wine-mono-9.0.0/lib/mono/gac",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(USER_LIBRARY_DIR)/Caches/SecondChance/wine-engine/lib/wine/x86_64-unix",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappTemplate;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E24D78E82F063E1F00B38683 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = x86_64;
+				ASSETCATALOG_COMPILER_APPICON_NAME = WrappTemplateIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 46;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EXCLUDED_ARCHS = "";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(USER_LIBRARY_DIR)/Caches/SecondChance/wine-engine/share/wine/mono/wine-mono-9.0.0/lib/mono/gac",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(USER_LIBRARY_DIR)/Caches/SecondChance/wine-engine/lib/wine/x86_64-unix",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 0.3.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappTemplate;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E2A0E3CA2F075267007E9F60 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChanceTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Second Chance.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Second Chance";
+			};
+			name = Debug;
+		};
+		E2A0E3CB2F075267007E9F60 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 8VJ5DZRB7T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChanceTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Second Chance.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Second Chance";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "WrappPuppeteer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AABB00060000000000000006 /* Debug */,
+				AABB00070000000000000007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E217338C2F04AA580058E8E9 /* Build configuration list for PBXProject "SecondChance" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E217339A2F04AA5A0058E8E9 /* Debug */,
+				E217339B2F04AA5A0058E8E9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E217339C2F04AA5A0058E8E9 /* Build configuration list for PBXNativeTarget "SecondChance" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E217339D2F04AA5A0058E8E9 /* Debug */,
+				E217339E2F04AA5A0058E8E9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E24D78E62F063E1F00B38683 /* Build configuration list for PBXNativeTarget "WrappTemplate" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E24D78E72F063E1F00B38683 /* Debug */,
+				E24D78E82F063E1F00B38683 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E2A0E3C92F075267007E9F60 /* Build configuration list for PBXNativeTarget "SecondChanceTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E2A0E3CA2F075267007E9F60 /* Debug */,
+				E2A0E3CB2F075267007E9F60 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.15.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E2B000012F01000000000001 /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E21733892F04AA580058E8E9 /* Project object */;
+}

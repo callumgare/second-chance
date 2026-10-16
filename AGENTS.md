@@ -10,21 +10,28 @@ Read `README.md` for the full project background before making non-trivial chang
 
 ## Build, Run, Test
 
-All commands run from the repo root. The project uses **fish shell** on macOS.
+All commands run from the repo root through `./sc`, the developer CLI (a Swift
+package in `Tools/sc/` — [docs/dev-cli.md](docs/dev-cli.md)). The project uses
+**fish shell** on macOS.
 
 ```bash
-./build.sh                  # Build Second Chance.app (use --quiet to suppress output)
-./run.sh                    # Build (if needed) and launch Second Chance.app
-./run.sh --rebuild          # Force rebuild app + any game wrapp
-./run.sh --clear-wine-cache # Clear cached Wine prefix
+./sc app build                     # Build Second Chance.app
+./sc app run                       # Build (incrementally) and launch it
+./sc wrapp build <game-slug>       # Build a game's wrapp headlessly
+./sc wrapp run <game-slug>         # Launch it (building it first if needed)
+./sc clean wine-prefixes           # Clear the cached Wine prefix
 
-./run-tests.sh unit         # Unit tests (~6s) — fast feedback loop
-./run-tests.sh i <game-slug> # Integration test for one game
-./run-tests.sh integration   # All games (hours, needs real installers)
+./sc test unit                     # Unit tests (~6s) — fast feedback loop
+./sc test integration <game-slug>  # Integration test for one game
+./sc test integration              # All games (hours, needs real installers)
 
-./prepare-release.sh        # Version, changelog, notes and a Release build
-./prepare-release.sh -n     # Dry run — show what a release would contain
+./sc release                       # Version, changelog, notes and a Release build
+./sc release --dry-run             # Show what a release would contain
 ```
+
+Commands that need the app build it first; `--skip-app-build` reuses the build in
+`DerivedData/`. Piped or redirected, `sc` prints the tools' raw output
+(`--logs raw`); every step's full log is also kept in `DerivedData/sc-logs/`.
 
 **Every build passes `ONLY_ACTIVE_ARCH=NO`, and that is load-bearing.** The
 WrappTemplate target is `ARCHS = x86_64` (Wine is 32-bit) while everything else
@@ -33,14 +40,16 @@ arm64 alone. WrappTemplate then fails with `unable to resolve module dependency:
 'Logging'`, or at link with `ld: symbol(s) not found for architecture x86_64`
 for every swift-log symbol — which surfaces as exit 65 and `** TEST BUILD
 FAILED **`, looking like a failing test when it is really a build failure.
-`build.sh`, `run-tests.sh`, `prepare-release.sh` and CI all set the flag, so
-none of them need a Rosetta wrapper. If you invoke `xcodebuild` directly, pass
-it yourself. Do not reach for `arch -x86_64` instead: the process architecture
-does not reliably decide what the build system picks for the package products,
-which made it work on some machines and fail on others.
+`sc` and CI both set the flag (`Tools/sc/Sources/SCKit/Support/Xcode.swift` is
+sc's only xcodebuild call site), so neither needs a Rosetta wrapper. If you
+invoke `xcodebuild` directly, pass it yourself. Do not reach for `arch -x86_64`
+instead: the process architecture does not reliably decide what the build
+system picks for the package products, which made it work on some machines and
+fail on others.
 
-Never run an unfiltered `xcodebuild test`. With real ISOs in `installers/` the
-integration suite does not skip and the run takes hours.
+**Never run a bare `./sc test`** (or an unfiltered `xcodebuild test`): it runs the
+integration suite too, which with real ISOs in `installers/` takes hours. Name
+the suite — `./sc test unit`, or `./sc test integration <game-slug>`.
 
 Build output lands in `DerivedData/Build/Products/Debug/Second Chance.app`. Game
 wrapps are built into `built-apps/`. See [docs/testing.md](docs/testing.md) for
@@ -55,10 +64,12 @@ touching — the rows say _when_ to read, not what is in them:
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
-| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, the `-only-testing:` filter, WrappPuppeteer's permissions and exit codes, or reading a run's output |
+| [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
+| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, WrappPuppeteer's permissions and exit codes, or reading a run's output |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
+| [docs/historical-plans/2026-10-16-dev-cli.md](docs/historical-plans/2026-10-16-dev-cli.md) | You want to know why the build/run/test/release shell scripts became one Swift CLI, how its API was designed, and which libraries were weighed for it |
 | [docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md](docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md) | You want to know why the wrapp build is split into per-source builders over a shared helper, and what the `InstallationService` / `GameInstaller` / `WrapperBuilder` arrangement it replaced got wrong |
 
 Adding a doc means adding its row here, and this table is the only place the
@@ -196,19 +207,24 @@ direct assignment.
   process, so the ViewModel is safe to instantiate in tests regardless of
   environment.
 - **Headless stderr is TTY-gated.** `LogStore` only mirrors to stderr when
-  `isatty`, so piping or redirecting a headless run's output shows nothing. Run
-  it bare in a terminal to see logs.
-- **Over SSH, wrap the command in `./in-gui-session.sh`.** An SSH shell is in
-  launchd's `Background` session with no WindowServer, so Wine's graphics driver
-  can't load (`nodrv_CreateWindow … no driver could be loaded`), installers exit
-  1, and the build fails with `Wine execution failed with exit code 1`, which
-  looks like a broken installer. The script reruns the command in the
-  console user's `Aqua` session under a pty and streams its output back. Someone
+  `isatty`, so piping or redirecting a headless run's output shows nothing —
+  unless `SECOND_CHANCE_LOG_STDERR=1` forces it (`0` forces it off), which is
+  what `sc wrapp build` does, since it reads the app's output through a pipe.
+- **Over SSH, Wine needs the GUI session.** An SSH shell is in launchd's
+  `Background` session with no WindowServer, so Wine's graphics driver can't
+  load (`nodrv_CreateWindow … no driver could be loaded`), installers exit 1,
+  and the build fails with `Wine execution failed with exit code 1`, which looks
+  like a broken installer. `sc` commands that open windows re-run themselves in
+  the console user's `Aqua` session under a pty and stream the output back;
+  anything else can be wrapped in `./sc in-gui-session -- <command>`. Someone
   must be logged in at that Mac's console.
-- **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG). Use `--clear-wine-cache` or `run.sh --clear-wine-cache` if Wine setup misbehaves after code changes.
+- **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG). Run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) if Wine setup misbehaves after code changes.
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`. The `--skip-installer` debug flag
   skips running the installer entirely (useful for testing wrapp construction).
+  Through `sc` these are `--debug strict-install` and `--debug skip-installer`;
+  the `SECOND_CHANCE_*` switches below are `--debug` values on `sc wrapp run`
+  too ([docs/dev-cli.md](docs/dev-cli.md#debug-options) has the table).
 - **`SECOND_CHANCE_WINEDEBUG`** sets Wine's `WINEDEBUG` for every Wine process
   Second Chance or a wrapp starts (`WineEnvironment`); unset, it is `-all`.
   Wrapp output lands in the wrapp's log, so `SECOND_CHANCE_WINEDEBUG=+seh,+d3d9
@@ -289,8 +305,9 @@ filtering, WrappPuppeteer permissions and its exit codes, reports. In short:
 
 - **Unit tests** live in `SecondChanceTests/`, using Swift Testing.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new
-  suite also needs an `-only-testing:` line in `run-tests.sh`'s `unit` case, or
-  the fast loop won't run it.
+  suite runs in `sc test unit` automatically — the unit run excludes a short
+  list (`TestRunner.unitExclusions` in `Tools/sc`) rather than listing what to
+  include. A slow or environment-dependent suite needs adding to that list.
 - **Integration tests** need real ISOs in `installers/<slug>/disk-1.iso` and run
   the actual build flow; they disable themselves when the ISOs are absent.
   Prefer unit tests for fast feedback.
@@ -309,14 +326,14 @@ filtering, WrappPuppeteer permissions and its exit codes, reports. In short:
 
 ## Releasing
 
-**Commit messages are load-bearing.** `./prepare-release.sh` derives the next
+**Commit messages are load-bearing.** `./sc release` derives the next
 version from the [conventional commits](https://www.conventionalcommits.org)
 since the last tag, using [cocogitto](https://docs.cocogitto.io) configured in
 `cog.toml`, so a malformed message is a message that silently disappears from
 the release notes and doesn't count toward the version.
 
-Run `./prepare-release.sh --install-hooks` once per clone. It installs cog's
-`commit-msg` hook, which rejects a non-conventional message at commit time —
+Run `./sc setup` once per clone. It installs cog's
+`commit-msg` hook (and checks the tools `sc` needs), which rejects a non-conventional message at commit time —
 git hooks live in `.git/` and so can't be committed, which is why this isn't
 automatic.
 
@@ -324,17 +341,17 @@ Only three things move the version: `feat` bumps the minor, `fix` bumps the
 patch, and a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) bumps
 the minor while the project is pre-1.0 and the major after. **`refactor`,
 `docs`, `test`, `ci`, `chore` and `style` bump nothing** — a batch containing
-none of feat/fix/breaking produces no release at all, and the script says so
+none of feat/fix/breaking produces no release at all, and `sc release` says so
 rather than inventing a version. Pass `--version X.Y.Z` to force one.
 
-`prepare-release.sh` writes `MARKETING_VERSION` into the `SecondChance` and
+`sc release` writes `MARKETING_VERSION` into the `SecondChance` and
 `WrappTemplate` targets only; `WrappPuppeteer` and `SecondChanceTests` are never
 shipped and stay at 1.0. It also sets `CURRENT_PROJECT_VERSION` to the commit
 count, which matters beyond bookkeeping: `WineManager` keys its prefix cache on
 the bundle version, so a release that didn't change it would hand users a stale
 Wine prefix.
 
-The script stops before committing, tagging or pushing, and prints those
+It stops before committing, tagging or pushing, and prints those
 commands instead. The app it produces is **signed with an Apple Development
 certificate and not notarized** (only a Developer ID certificate can be) — on
 macOS 15+ users have to approve it under System Settings → Privacy & Security,

@@ -15,3 +15,6 @@ xcuserdata/
 /test-results
 
 *.build-cache
+# sc (Tools/sc) build output
+/Tools/sc/.build
+/Tools/sc/.swiftpm

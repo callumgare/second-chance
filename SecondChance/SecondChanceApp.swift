@@ -37,7 +37,7 @@ struct SecondChanceApp: App {
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
 
         // Clear the Wine prefix cache before anything else touches it. Works in
-        // both GUI and headless launches (run.sh --clear-wine-cache).
+        // both GUI and headless launches (`--clear-wine-cache`).
         if CommandLine.arguments.contains("--clear-wine-cache") {
             logger.notice("Clearing Wine prefix cache...")
             do {
