@@ -65,6 +65,14 @@ nonisolated enum CrashMarker {
 
     /// The handler: async-signal-safe calls only.
     private static let handle: @convention(c) (Int32) -> Void = { sig in
+        // Put the default action back by hand: macOS ignores SA_RESETHAND for
+        // SIGILL and SIGTRAP, and a handler that re-raises those without
+        // this runs again, for ever.
+        var defaultAction = sigaction()
+        defaultAction.__sigaction_u.__sa_handler = SIG_DFL
+        sigemptyset(&defaultAction.sa_mask)
+        sigaction(sig, &defaultAction, nil)
+
         if sig >= 0, sig < CrashMarker.slots, let pointer = CrashMarker.messageTexts[Int(sig)] {
             let length = CrashMarker.messageLengths[Int(sig)]
             _ = write(STDERR_FILENO, pointer, length)
@@ -72,14 +80,17 @@ nonisolated enum CrashMarker {
                 _ = write(CrashMarker.markerFD, pointer, length)
             }
         }
-        // SA_RESETHAND restored the default action: die as we would have,
-        // so macOS still writes its crash report.
+        // Die as we would have, so macOS still writes its crash report.
         raise(sig)
     }
 
     private static func reportPrevious(marker: URL, logger: Logging.Logger) {
-        guard let text = try? String(contentsOf: marker, encoding: .utf8),
-              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Only the start: the marker holds one line per crash.
+        guard let handle = try? FileHandle(forReadingFrom: marker) else { return }
+        let head = (try? handle.read(upToCount: 4096)) ?? Data()
+        try? handle.close()
+        let text = String(decoding: head, as: UTF8.self).split(separator: "\n").first.map(String.init) ?? ""
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let modified = (try? marker.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         var message = "The previous run crashed: \(text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "💥 ", with: ""))"
         if let report = crashReport(after: modified?.addingTimeInterval(-60)) {
