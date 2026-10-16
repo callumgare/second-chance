@@ -47,3 +47,11 @@ Rejected: the uninstall registry key (InstallShield writes it before copying
 files, and reading it needs wineserver to have flushed the registry), Inno's
 `EstimatedSize` (Inno only), and InstallShield's `setup.log` (written early,
 saying success).
+
+_Post-implementation note, 2026-10-16 (Claude, during the first all-games
+run): InstallShield 7 and later (here InstallShield 12: White Wolf, Crystal
+Skull, Phantom of Venice, Lost Queen, Deadly Device) write `setup.ilg` under
+`Program Files (x86)\InstallShield Installation Information\{GUID}`, not the
+install folder, so the check failed every one of them. A Lost Queen install
+killed at 517 MB of 2.2 GB had that folder but no `setup.ilg`, so the check
+now looks there too._
