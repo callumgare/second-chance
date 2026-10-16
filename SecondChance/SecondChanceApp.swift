@@ -35,6 +35,7 @@ struct SecondChanceApp: App {
         // (Stored-property initialisers that run before init()'s body — e.g.
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
+        RunContext.logHeader(logger)
 
         // Clear the Wine prefix cache before anything else touches it. Works in
         // both GUI and headless launches (`--clear-wine-cache`).

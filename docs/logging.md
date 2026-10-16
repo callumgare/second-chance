@@ -28,6 +28,25 @@ Every level is kept in the in-memory ring, the log window, Save Logs and the
 disk mirror. Only the terminal copy is filtered, so moving chatter to `.debug`
 costs nothing when someone needs it later.
 
+## The header
+
+Every process (the app, a wrapp, WrappPuppeteer) starts its log with one
+block from `RunContext.logHeader`:
+
+```
+━━━ Second Chance 0.4.0 (build 52), pid 4120, run 3f9a2c1e ━━━
+  macOS 15.6.0, Mac14,6, process x86_64 under Rosetta
+  GUI session; WINEDEBUG=-all,err+all
+```
+
+A wrapp's header adds the game, its engine, and the size and file count of
+its installed files, which is where an install that was cut short shows up.
+Without a GUI session (an SSH shell), the header says so and a warning follows:
+Wine can't open windows there, and installers fail with only an exit code.
+
+The run ID is inherited through `SECOND_CHANCE_RUN_ID` when a parent set it,
+and exported otherwise, so a build and the Wine processes it starts share one.
+
 ## Subprocess output
 
 `ProcessLineLogger.attach` (and `TaggedProcess`, which uses it) logs each line
@@ -106,5 +125,6 @@ polling for two minutes.
 | `SECOND_CHANCE_LOG_STDERR` | `1` copies log lines to stderr even when it isn't a terminal, `0` never does. Unset, stderr gets them only when it is a terminal. |
 | `SECOND_CHANCE_LOG_LEVEL`  | The quietest level copied to stderr (`trace` … `critical`). Default `notice`. |
 | `SECOND_CHANCE_LOG_FILE`   | Mirror every entry, at every level, to this file in the full format. `--mirror-logs` does the same with a file in `~/Downloads`. |
+| `SECOND_CHANCE_RUN_ID`     | The run ID in the header. Inherited by child processes; set it to tie several processes' logs together. |
 | `SECOND_CHANCE_INSTALL_TIMEOUT` | Seconds an unattended game install may run before it is stopped. Default 1800. |
 | `SECOND_CHANCE_WINEDEBUG`  | Wine's `WINEDEBUG` for every Wine process Second Chance or a wrapp starts. Unset, it is `-all,err+all`: every channel off except the `err` class. |

@@ -360,12 +360,19 @@ func main() {
         exit(1)
     }
 
-    mainLogger.notice("Game wrapper starting...")
-    mainLogger.notice("App path: \(config.appPath.path)")
-    mainLogger.notice("Game engine: \(config.gameEngine)")
-    mainLogger.notice("Game exe: \(config.gameExePath)")
-    mainLogger.notice("Wine prefix: \(config.winePrefix.path)")
-    mainLogger.notice("App support: \(config.appSupportPath.path)")
+    // The game's files: the exe's folder for Wine, the data folder itself for
+    // ScummVM. An install that was cut short shows up here as too small.
+    let driveC = config.winePrefix.appendingPathComponent("drive_c")
+    let gamePath = driveC.appendingPathComponent(String(config.gameExePath.drop(while: { $0 == "/" })))
+    let gameDir = config.gameEngine == "scummvm" ? gamePath : gamePath.deletingLastPathComponent()
+    RunContext.logHeader(mainLogger, extra: [
+        ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.gameEngine)"),
+        ("game files", "\(DirectorySize.measure(gameDir).description) in \(gameDir.path)"),
+        ("game exe", config.gameExePath),
+        ("app", config.appPath.path),
+        ("prefix", config.winePrefix.path),
+        ("saves", config.appSupportPath.path),
+    ])
     
     // Check if wineserver is already running for this prefix
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)

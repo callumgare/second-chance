@@ -10,6 +10,7 @@ import Logging
 AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappPuppeteer")
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.main")
+RunContext.logHeader(logger)
 
 func printUsage() {
     logger.notice("""

@@ -66,6 +66,9 @@ nonisolated enum AppLogging {
         }
 
         completedBootstrap = true
+
+        // Settle the run ID now, so processes started from here inherit it.
+        _ = RunContext.runID
     }
 
     /// Whether bootstrap() has fully returned. Call sites that construct
