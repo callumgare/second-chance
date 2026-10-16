@@ -56,35 +56,48 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         let disk1 = try await input.getDisk1Path()
         logger.notice("Disk 1: \(disk1.path)")
 
-        let disk1Mounted = try await mountIfISO(disk1, input: input)
-        if let mounted = disk1Mounted {
-            await bus.publishWrappBuild(.isoMounted(mounted))
-        }
-        let disk1Root = disk1Mounted ?? disk1
-
-        // ── Detect the game ONCE; GameInfo threads through from here ──
-        await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
-        let gameSlug = try await gameDetector.detectGame(fromDisk: disk1Root)
-        let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
-        logger.notice("Detected game: \(gameInfo.title)")
-        await bus.publishWrappBuild(.gameDetected(gameInfo))
-        try await input.onGameDetected(gameInfo)
-
-        // ── Disk 2 (multi-disk games) ─────────────────────────────────
+        // Everything from the first mount to the temp wrapp: a failure here
+        // (an unreadable disc, the wrong game) still unmounts what it mounted
+        // and reports itself, like a failure in the build below.
+        let disk1Root: URL
+        let gameSlug: String
+        let gameInfo: GameInfo
         var disk2Root: URL?
-        if gameInfo.diskCount > 1 {
-            if let disk2 = try await input.getDisk2Path(gameInfo: gameInfo) {
-                logger.notice("Disk 2: \(disk2.path)")
-                if let mounted = try await mountIfISO(disk2, input: input) {
-                    await bus.publishWrappBuild(.isoMounted(mounted))
-                    disk2Root = mounted
-                } else {
-                    disk2Root = disk2
+        do {
+            let disk1Mounted = try await mountIfISO(disk1, input: input)
+            if let mounted = disk1Mounted {
+                await bus.publishWrappBuild(.isoMounted(mounted))
+            }
+            disk1Root = disk1Mounted ?? disk1
+
+            // ── Detect the game ONCE; GameInfo threads through from here ──
+            await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
+            gameSlug = try await gameDetector.detectGame(fromDisk: disk1Root)
+            gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
+            logger.notice("Detected game: \(gameInfo.title)")
+            await bus.publishWrappBuild(.gameDetected(gameInfo))
+            try await input.onGameDetected(gameInfo)
+
+            // ── Disk 2 (multi-disk games) ─────────────────────────────────
+            if gameInfo.diskCount > 1 {
+                if let disk2 = try await input.getDisk2Path(gameInfo: gameInfo) {
+                    logger.notice("Disk 2: \(disk2.path)")
+                    if let mounted = try await mountIfISO(disk2, input: input) {
+                        await bus.publishWrappBuild(.isoMounted(mounted))
+                        disk2Root = mounted
+                    } else {
+                        disk2Root = disk2
+                    }
                 }
             }
-        }
 
-        await bus.publishWrappBuild(.disksResolved(disk1: disk1Root, disk2: disk2Root))
+            await bus.publishWrappBuild(.disksResolved(disk1: disk1Root, disk2: disk2Root))
+        } catch {
+            await isoMounter.unmountAll()
+            let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            await bus.publishWrappBuild(.failed(buildError))
+            throw error
+        }
 
         // ── Build ──────────────────────────────────────────────────────
         // The builder owns the temp wrapp lifecycle: removed on both the
