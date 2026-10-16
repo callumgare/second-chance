@@ -68,14 +68,14 @@ struct DiskInstallIntegrationTests {
     func wrappCreationForGame(game: GameInfo) async throws {
         // SKIP_BUILD=1 (via --test-existing-wrapp): skip the install and use a
         // pre-existing wrapp from built-apps/ if present. Useful for iterating
-        // on the GamePuppeteer test without waiting for a full Wine install.
+        // on the WrappPuppeteer test without waiting for a full Wine install.
         let skipBuild = ProcessInfo.processInfo.environment["SKIP_BUILD"] == "1"
         let builtAppsDir = TestPaths.repoRoot.appendingPathComponent("built-apps")
         let prebuiltWrapp = builtAppsDir.appendingPathComponent("Nancy Drew - \(game.title).app")
         let usingPrebuiltWrapp = skipBuild && FileManager.default.fileExists(atPath: prebuiltWrapp.path)
 
         let wrappPath: URL
-        var builtOutputDir: URL? = nil  // cleaned up after GamePuppeteer, not before
+        var builtOutputDir: URL? = nil  // cleaned up after WrappPuppeteer, not before
 
         if usingPrebuiltWrapp {
             wrappPath = prebuiltWrapp
@@ -170,21 +170,21 @@ struct DiskInstallIntegrationTests {
             wrappPath = recorder.completedWrapp ?? outputDir.appendingPathComponent("Nancy Drew - \(game.title).app")
         }
 
-        // ── Launch & quit via GamePuppeteer ──────────────────────────────────
+        // ── Launch & quit via WrappPuppeteer ──────────────────────────────────
 
-        guard WrappInfo.gamePuppeteerBundle() != nil else {
-            Attachment.record(Data("GamePuppeteer.app not found — skipping launch test".utf8),
-                              named: "gamepuppeteer-skipped.txt")
+        guard WrappInfo.wrappPuppeteerBundle() != nil else {
+            Attachment.record(Data("WrappPuppeteer.app not found — skipping launch test".utf8),
+                              named: "wrapp-puppeteer-skipped.txt")
             return
         }
 
-        let exitCode = try await GamePuppetRunner.run(wrappURL: wrappPath, game: game)
+        let exitCode = try await AppPuppetRunner.run(wrappURL: wrappPath, game: game)
 
-        // Clean up the built wrapp now that GamePuppeteer is done with it.
+        // Clean up the built wrapp now that WrappPuppeteer is done with it.
         if let dir = builtOutputDir { cleanup(dir) }
 
         // 0 = clean quit
         #expect(exitCode == 0,
-                "GamePuppeteer exited with \(exitCode) for \(game.id)")
+                "WrappPuppeteer exited with \(exitCode) for \(game.id)")
     }
 }

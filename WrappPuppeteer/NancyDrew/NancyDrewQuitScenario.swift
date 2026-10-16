@@ -1,0 +1,223 @@
+//
+//  NancyDrewQuitScenario.swift
+//  WrappPuppeteer
+//
+//  Launch a Nancy Drew wrapp, get it to the main menu, and quit through the
+//  game's own Exit button — proving the game starts and responds to input.
+
+import Foundation
+import AppKit
+import CoreGraphics
+import Logging
+
+struct NancyDrewQuitScenario {
+    struct Options {
+        var windowDetectTimeout: TimeInterval = 60
+        var infoWindowTimeout: TimeInterval = 15
+        var quitTimeout: TimeInterval = 90
+        /// How long to keep looking for the Exit button
+        var findExitTimeout: TimeInterval = 60
+        /// Only logged — nothing enforces it yet.
+        var maxRuntime: TimeInterval = 60
+        /// Launch the wrapp with `--debug`
+        var debugMode = false
+    }
+
+    let wrapp: Wrapp
+    let options: Options
+    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.NancyDrewQuitScenario")
+
+    func run() -> PuppetResult {
+        logger.notice("🎮 Starting Nancy Drew quit scenario")
+        logger.notice("   App: \(wrapp.appPath)")
+        logger.notice("   Engine: \(wrapp.engineSetting)")
+        logger.notice("   Executable: \(wrapp.gameExeName)")
+        if wrapp.engine == .wine {
+            logger.notice("   Wine prefix: \(wrapp.winePrefix.path)")
+        }
+        logger.notice("   Max runtime: \(Int(options.maxRuntime))s")
+
+        ProcessCleanup.install(pkillArguments: wrapp.engine.helperPkillArguments)
+
+        guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : []) else {
+            return .failed("Failed to launch game")
+        }
+        ProcessCleanup.track(appPid: app.processIdentifier, helperPid: nil)
+
+        let appName = app.localizedName ?? "WrappTemplate"
+        logger.notice("ℹ️  Game process: \(appName) (PID: \(app.processIdentifier))")
+
+        if wrapp.engine == .wine {
+            logger.notice("ℹ️  Wine game - checking for info window...")
+            Thread.sleep(forTimeInterval: 1)
+            guard InfoWindow.dismiss(wrapperPid: app.processIdentifier, timeout: options.infoWindowTimeout) else {
+                forceQuit(app)
+                return .failed("Failed to dismiss info window")
+            }
+        }
+
+        guard let gamePid = waitForGameWindow() else {
+            forceQuit(app)
+            return .failed("Game window did not appear within \(Int(options.windowDetectTimeout))s")
+        }
+
+        logger.notice("ℹ️  Game process PID: \(gamePid)")
+        ProcessCleanup.track(appPid: app.processIdentifier, helperPid: gamePid)
+
+        guard clickExit(appName: appName, app: app, gamePid: gamePid) else {
+            return .failed("OCR could not find Exit button")
+        }
+
+        logger.notice("⏳ Waiting for game to exit...")
+        if ProcessControl.waitForTermination(app, helperPid: gamePid, timeout: options.quitTimeout) {
+            logger.notice("✅ Game exited cleanly")
+            return .passed
+        }
+
+        logger.error("⚠️  Game did not exit cleanly, force quitting...")
+        forceQuit(app)
+        Thread.sleep(forTimeInterval: 2)
+        if app.isTerminated {
+            logger.notice("✅ Game force-quit successful")
+            return .forcedQuit
+        }
+        return .failed("Failed to quit game even after force-quit")
+    }
+
+    // MARK: - Private
+
+    private var focusStrategy: FocusStrategy { wrapp.engine.focusStrategy }
+
+    private func forceQuit(_ app: NSRunningApplication) {
+        ProcessControl.forceQuit(app, pkillArguments: wrapp.engine.helperPkillArguments)
+    }
+
+    /// Wait for the game's process, then its window, then for it to take
+    /// focus. Returns the game process's PID.
+    private func waitForGameWindow() -> Int32? {
+        let processName = wrapp.engine.gameProcessName(gameExeName: wrapp.gameExeName)
+        logger.notice("⏳ Waiting for game window to appear (timeout: \(Int(options.windowDetectTimeout))s)...")
+        let start = Date()
+
+        logger.notice("[Step 1] Monitoring for \(processName) process...")
+        guard let process = ProcessFinder.waitForProcess(named: processName, timeout: options.windowDetectTimeout * 0.7) else {
+            return nil
+        }
+        let pid = process.pid
+
+        logger.notice("[Step 2] Monitoring for windows from \(processName) (PID: \(pid))...")
+        guard let windows = WindowFinder.waitForWindows(timeout: 30, where: { $0.ownerPid == pid }) else {
+            logger.critical("❌ Timeout: \(processName) process found but no windows appeared")
+            WindowFinder.logAllWindows()
+            return nil
+        }
+
+        logger.notice("✅ Game window detected after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
+        for (index, window) in windows.enumerated() {
+            logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
+        }
+
+        logger.notice("[Step 3] Waiting for game to become active...")
+        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy, activate: wrapp.engine.activatesForFocus) else {
+            return nil
+        }
+
+        NSSound.beep()
+
+        // Screenshots of what was detected, for diagnosing later failures
+        if let path = ScreenCapture.captureWindow(number: windows[0].number, prefix: "game-window-detected") {
+            logger.notice("📸 Window screenshot: \(path)")
+        }
+        if let path = ScreenCapture.captureScreen(prefix: "game-fullscreen-detected") {
+            logger.notice("📸 Full screen screenshot: \(path)")
+        }
+
+        return pid
+    }
+
+    /// Look for the Exit button and click it, clicking the Her Interactive
+    /// logo first if the game is still on its splash screen. True once Exit
+    /// has been clicked and the game lost focus or exited.
+    private func clickExit(appName: String, app: NSRunningApplication, gamePid: Int32) -> Bool {
+        logger.notice("🎮 Attempting to quit game...")
+
+        var clickedInteractive = false
+        var clickedExitButton = false
+        let startTime = Date()
+        var attempt = 0
+
+        while Date().timeIntervalSince(startTime) < options.findExitTimeout {
+            attempt += 1
+            let iterationStartTime = Date()
+
+            if attempt == 1 { NSSound.beep() }
+
+            // Losing focus after clicking Exit means the game is shutting down;
+            // losing it before means something else took over the screen.
+            guard FocusDetector.isFocused(pid: gamePid, strategy: focusStrategy) else {
+                if clickedExitButton { return true }
+                forceQuit(app)
+                return false
+            }
+
+            logger.notice("  → Attempt \(attempt) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s)")
+
+            guard let screenshotPath = ScreenCapture.captureScreen(prefix: "game-test") else { continue }
+
+            let searchStartTime = Date()
+            let analysis = MainMenuScreen.analyze(screenshotPath: screenshotPath, app: app)
+            logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
+            try? FileManager.default.removeItem(atPath: screenshotPath)
+
+            if let exitLocation = analysis.quitButton {
+                guard FocusDetector.isFocused(pid: gamePid, strategy: focusStrategy) else {
+                    if clickedExitButton { return true }
+                    forceQuit(app)
+                    return false
+                }
+
+                logger.notice(clickedExitButton ? "  ✓ Clicking 'Exit Game' button again..." : "  ✓ Found 'Exit Game' button, clicking...")
+                clickedExitButton = true
+
+                // Screenshot pixels → screen points
+                let backingScaleFactor = NSScreen.main?.backingScaleFactor ?? 1.0
+                var clickPoint = CGPoint(
+                    x: exitLocation.midX / backingScaleFactor,
+                    y: exitLocation.midY / backingScaleFactor
+                )
+
+                // The Scarlet Hand's Exit hotspot sits above its label
+                if appName.contains("Scarlet Hand") {
+                    clickPoint.y -= exitLocation.height / (2.0 * backingScaleFactor)
+                }
+
+                InputControl.click(at: clickPoint)
+                Thread.sleep(forTimeInterval: 1)
+
+                // Park the cursor so it can't hover-highlight anything in the next screenshot
+                let cornerPoint = CGPoint(x: (NSScreen.main?.frame.maxX ?? 0) - 10,
+                                          y: (NSScreen.main?.frame.maxY ?? 0) - 10)
+                CGWarpMouseCursorPosition(cornerPoint)
+
+                if !ProcessControl.isRunning(app, helperPid: gamePid) {
+                    logger.notice("✅ Game exited successfully")
+                    return true
+                }
+            }
+
+            if let interactiveLocation = analysis.interactiveLogo, !clickedInteractive {
+                logger.notice("  ✓ Found 'interactive' logo, clicking to enable menu...")
+                Thread.sleep(forTimeInterval: 1)
+                InputControl.click(at: CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY))
+                clickedInteractive = true
+                Thread.sleep(forTimeInterval: 2)
+            }
+
+            let remainingTime = 0.2 - Date().timeIntervalSince(iterationStartTime)
+            if remainingTime > 0 { Thread.sleep(forTimeInterval: remainingTime) }
+        }
+
+        forceQuit(app)
+        return false
+    }
+}

@@ -1,6 +1,6 @@
 //
 //  Permissions.swift
-//  GamePuppeteer
+//  WrappPuppeteer
 //
 //  Centralized permission checks and prompts used by startup gating.
 
@@ -10,7 +10,7 @@ import ApplicationServices
 import CoreGraphics
 import Logging
 
-private nonisolated let permissionLogger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.Permissions")
+private nonisolated let permissionLogger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.Permissions")
 
 enum PermissionWaitOutcome {
     case granted
@@ -42,7 +42,7 @@ enum StartupPermissions {
 
         let waitingWindow = PermissionWaitWindowController(
             permissionName: "Accessibility",
-            instructions: "Enable GamePuppeteer in System Settings > Privacy & Security > Accessibility",
+            instructions: "Enable WrappPuppeteer in System Settings > Privacy & Security > Accessibility",
             manualConfirmationRequired: false,
             systemSettingsAnchor: "Privacy_Accessibility"
         )
@@ -72,7 +72,7 @@ enum StartupPermissions {
 
         permissionLogger.error("⚠️  Screen Recording permission required")
         permissionLogger.notice("PERMISSION_GATE: permission_requested screen_recording")
-        permissionLogger.notice("Requesting Screen Recording permission for GamePuppeteer...")
+        permissionLogger.notice("Requesting Screen Recording permission for WrappPuppeteer...")
 
         // CGRequestScreenCaptureAccess triggers the system prompt for this process.
         if CGRequestScreenCaptureAccess() {
@@ -83,7 +83,7 @@ enum StartupPermissions {
 
         let waitingWindow = PermissionWaitWindowController(
             permissionName: "Screen Recording",
-            instructions: "Enable GamePuppeteer in System Settings > Privacy & Security > Screen Recording",
+            instructions: "Enable WrappPuppeteer in System Settings > Privacy & Security > Screen Recording",
             manualConfirmationRequired: true,
             systemSettingsAnchor: "Privacy_ScreenCapture"
         )
@@ -91,7 +91,7 @@ enum StartupPermissions {
         defer { waitingWindow.close() }
 
         permissionLogger.notice("Please:")
-        permissionLogger.notice("  1. Find and enable GamePuppeteer in the list")
+        permissionLogger.notice("  1. Find and enable WrappPuppeteer in the list")
         permissionLogger.notice("  2. Click the lock icon and authenticate if needed")
         permissionLogger.notice("  3. Approve the prompt, then wait for detection to continue")
 
@@ -117,7 +117,7 @@ enum StartupPermissions {
 
     static func warmupPrivilegedAPIs() {
         // Trigger a harmless first-use path early so permission state is settled
-        // before game automation starts.
+        // before any automation starts.
         _ = canReadWindowMetadata()
     }
 
@@ -178,7 +178,7 @@ enum StartupPermissions {
     }
 
     private static func permissionWaitTimeout() -> TimeInterval {
-        let env = Foundation.ProcessInfo.processInfo.environment["GAME_PUPPETEER_PERMISSION_WAIT_SECONDS"]
+        let env = Foundation.ProcessInfo.processInfo.environment["WRAPP_PUPPETEER_PERMISSION_WAIT_SECONDS"]
         guard let env, let parsed = TimeInterval(env), parsed > 0 else {
             return defaultPermissionWaitTimeout
         }

@@ -1,6 +1,6 @@
 //
 //  PermissionWaitWindow.swift
-//  GamePuppeteer
+//  WrappPuppeteer
 //
 //  Small progress window shown while waiting for macOS permission grants.
 
@@ -35,7 +35,7 @@ final class PermissionWaitWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "GamePuppeteer"
+        window.title = "WrappPuppeteer"
         window.level = .floating
         window.isReleasedWhenClosed = false
 

@@ -50,7 +50,7 @@ fi
 
 # A locked screen still has a GUI session, so Wine runs — but synthetic clicks
 # land on the lock screen and screenshots don't show the game, so anything
-# driven by AppPuppeteer fails late and confusingly. Refuse up front instead.
+# driven by WrappPuppeteer fails late and confusingly. Refuse up front instead.
 if ioreg -n Root -d1 -a | grep -q '<key>CGSSessionScreenIsLocked</key>'; then
     if [[ "${SKIP_LOCK_CHECK:-}" == 1 ]]; then
         echo -e "${RED}Warning: $(id -un)'s screen is locked — running anyway (SKIP_LOCK_CHECK=1).${NC}"

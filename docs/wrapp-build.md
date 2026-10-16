@@ -193,9 +193,9 @@ strips whichever one this game doesn't need.
 `au.gare.callum.SecondChance.nancy-drew.<slug>`.
 
 Because the target sets `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's
-executable is `Contents/MacOS/WrappTemplate`. GamePuppeteer matches on that name
-when hunting for the game window, so renaming the target means updating that
-heuristic too.
+executable is `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't rely on that
+name — it tracks the wrapp by the PID it launched and finds the game by the
+game's own process name — so the target can be renamed without touching it.
 
 ## Adding a source
 

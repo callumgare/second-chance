@@ -33,7 +33,7 @@
 			containerPortal = E21733892F04AA580058E8E9 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = AABB00030000000000000003;
-			remoteInfo = GamePuppeteer;
+			remoteInfo = WrappPuppeteer;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -79,9 +79,9 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		AABB00010000000000000001 /* GamePuppeteer */ = {
+		AABB00010000000000000001 /* WrappPuppeteer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = GamePuppeteer;
+			path = WrappPuppeteer;
 			sourceTree = "<group>";
 		};
 		E21733932F04AA580058E8E9 /* SecondChance */ = {
@@ -154,7 +154,7 @@
 				E2C65E102F15FA4700FAFF50 /* WrappTemplate */,
 				E21733932F04AA580058E8E9 /* SecondChance */,
 				E2A0E3C42F075266007E9F60 /* SecondChanceTests */,
-				AABB00010000000000000001 /* GamePuppeteer */,
+				AABB00010000000000000001 /* WrappPuppeteer */,
 				E21733922F04AA580058E8E9 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -172,9 +172,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		AABB00030000000000000003 /* GamePuppeteer */ = {
+		AABB00030000000000000003 /* WrappPuppeteer */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "GamePuppeteer" */;
+			buildConfigurationList = AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "WrappPuppeteer" */;
 			buildPhases = (
 				AABB00040000000000000004 /* Sources */,
 				AABB00050000000000000005 /* Frameworks */,
@@ -185,14 +185,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				AABB00010000000000000001 /* GamePuppeteer */,
+				AABB00010000000000000001 /* WrappPuppeteer */,
 				E2FC5BF22F160FB100AC5301 /* Shared */,
 			);
-			name = GamePuppeteer;
+			name = WrappPuppeteer;
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
 			);
-			productName = GamePuppeteer;
+			productName = WrappPuppeteer;
 			productType = "com.apple.product-type.application";
 		};
 		E21733902F04AA580058E8E9 /* SecondChance */ = {
@@ -319,7 +319,7 @@
 				E21733902F04AA580058E8E9 /* SecondChance */,
 				E24D78DD2F063E1E00B38683 /* WrappTemplate */,
 				E2A0E3C22F075266007E9F60 /* SecondChanceTests */,
-				AABB00030000000000000003 /* GamePuppeteer */,
+				AABB00030000000000000003 /* WrappPuppeteer */,
 			);
 		};
 /* End PBXProject section */
@@ -528,7 +528,7 @@
 		};
 		E2F9AA022F15E6B90040383D /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = AABB00030000000000000003 /* GamePuppeteer */;
+			target = AABB00030000000000000003 /* WrappPuppeteer */;
 			targetProxy = E2F9AA012F15E6B90040383D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -549,7 +549,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.GamePuppeteer;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappPuppeteer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -574,7 +574,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.GamePuppeteer;
+				PRODUCT_BUNDLE_IDENTIFIER = au.gare.callum.SecondChance.WrappPuppeteer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -940,7 +940,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "GamePuppeteer" */ = {
+		AABB00080000000000000008 /* Build configuration list for PBXNativeTarget "WrappPuppeteer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				AABB00060000000000000006 /* Debug */,

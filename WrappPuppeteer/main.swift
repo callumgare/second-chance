@@ -7,27 +7,27 @@ import Logging
 // Bootstrap logging before anything else can construct a Logger — top-level
 // code in main.swift runs in source order, and the logger below (like any
 // earlier Logger construction) must resolve its handler after this call.
-AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.GamePuppeteer")
+AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappPuppeteer")
 
-private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.main")
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.main")
 
 func printUsage() {
     logger.notice("""
-    GamePuppeteer - Automated game launch & quit test tool
+    WrappPuppeteer - drives a Nancy Drew wrapp from launch to quit
 
     Usage:
-        GamePuppeteer <app-path> [options]
-        GamePuppeteer --analyze <screenshot-path> [--quit-image <path>]
+        WrappPuppeteer <app-path> [options]
+        WrappPuppeteer --analyze <screenshot-path>
 
     Options:
         --timeout <seconds>    Maximum runtime (default: 60)
-        --debug                Launch game in debug mode
-        --analyze <path>       Analyze a screenshot for quit buttons (no game launch)
+        --debug                Launch the wrapp in debug mode
+        --analyze <path>       Analyze a screenshot for quit buttons (no launch)
         --help                 Show this help
 
     Exit codes:
-        0   Game exited cleanly
-        2   Game required force-quit (acceptable — some Wine games need this)
+        0   App exited cleanly
+        2   App required force-quit (acceptable — some Wine games need this)
         1   Test failed (launch failure, OCR failure, etc.)
         3   Accessibility permission not granted
         4   Screen Recording permission not granted
@@ -36,8 +36,7 @@ func printUsage() {
 }
 
 var appPath: String?
-var timeout: TimeInterval = 60
-var debugMode = false
+var options = NancyDrewQuitScenario.Options()
 var analyzePath: String?
 
 var i = 1
@@ -51,10 +50,10 @@ while i < CommandLine.arguments.count {
     case "--timeout":
         i += 1
         if i < CommandLine.arguments.count {
-            timeout = TimeInterval(CommandLine.arguments[i]) ?? 60
+            options.maxRuntime = TimeInterval(CommandLine.arguments[i]) ?? 60
         }
     case "--debug":
-        debugMode = true
+        options.debugMode = true
     case "--analyze":
         i += 1
         if i < CommandLine.arguments.count {
@@ -75,8 +74,8 @@ if let screenshotPath = analyzePath {
         fputs("Error: Screenshot not found at \(screenshotPath)\n", stderr)
         exit(1)
     }
-    let result = analyzeScreenshot(at: screenshotPath)
-    // Print human-readable summary to stdout
+    let result = MainMenuScreen.analyze(screenshotPath: screenshotPath)
+    // Human-readable summary on stdout, for use from a terminal
     print("Screenshot analysis: \(screenshotPath)")
     if let r = result.quitButton { print("  Quit button: x=\(Int(r.minX)) y=\(Int(r.minY)) w=\(Int(r.width)) h=\(Int(r.height))") }
     if let r = result.interactiveLogo { print("  Interactive logo: x=\(Int(r.minX)) y=\(Int(r.minY)) w=\(Int(r.width)) h=\(Int(r.height))") }
@@ -93,50 +92,26 @@ guard let path = appPath else {
 }
 
 if !StartupPermissions.ensureAccessibilityPermission() {
-    exit(GamePuppetExitCode.permissionDeniedAccessibility.rawValue)
+    exit(PuppetExitCode.permissionDeniedAccessibility.rawValue)
 }
 
 switch StartupPermissions.ensureScreenRecordingPermission() {
 case .granted:
     break
 case .denied:
-    exit(GamePuppetExitCode.permissionDeniedScreenRecording.rawValue)
+    exit(PuppetExitCode.permissionDeniedScreenRecording.rawValue)
 case .relaunchRequired:
-    exit(GamePuppetExitCode.permissionRelaunchRequiredScreenRecording.rawValue)
+    exit(PuppetExitCode.permissionRelaunchRequiredScreenRecording.rawValue)
 }
 
 logger.notice("PERMISSION_GATE: all_permissions_granted")
 
 StartupPermissions.warmupPrivilegedAPIs()
 
-logger.notice("  → Installing signal handlers...")
-signal(SIGINT, handleTermination)
-signal(SIGTERM, handleTermination)
-signal(SIGHUP, handleTermination)
-logger.notice("  → Signal handlers installed")
-
-let gameEngine = readGameEngine(appPath: path) ?? "unknown"
-let gameExePath = readGameExePath(appPath: path) ?? "/Game.exe"
-let gameExeName = (gameExePath as NSString).lastPathComponent
-let winePrefix = getWinePrefix(appPath: path)
-
-logger.notice("ℹ️  Game engine: \(gameEngine)")
-logger.notice("ℹ️  Game executable: \(gameExeName)")
-if gameEngine.lowercased().contains("wine") {
-    logger.notice("ℹ️  Wine prefix: \(winePrefix.path)")
-}
-
-let config = TestConfig(
-    appPath: path,
-    maxRuntime: timeout,
-    gameEngine: gameEngine,
-    debugMode: debugMode
-)
-
-let session = GamePuppetSession(config: config, gameExeName: gameExeName, winePrefix: winePrefix)
-let result = session.run()
-if result.exitCode == GamePuppetExitCode.passed.rawValue {
-    logger.notice("GAME_PUPPETEER: run_succeeded")
+let scenario = NancyDrewQuitScenario(wrapp: Wrapp(appPath: path), options: options)
+let result = scenario.run()
+if result.exitCode == PuppetExitCode.passed.rawValue {
+    logger.notice("WRAPP_PUPPETEER: run_succeeded")
 }
 LogStore.shared.flush()
 exit(result.exitCode)

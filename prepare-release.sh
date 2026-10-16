@@ -44,7 +44,7 @@ CHANGELOG="$SCRIPT_DIR/CHANGELOG.md"
 NOTES_FILE="$RELEASE_DIR/RELEASE_NOTES.md"
 NOTES_TEMPLATE="$SCRIPT_DIR/.cog/release-notes.tera"
 
-# The targets whose MARKETING_VERSION tracks the release. GamePuppeteer (a test
+# The targets whose MARKETING_VERSION tracks the release. WrappPuppeteer (a test
 # harness) and SecondChanceTests are deliberately left alone — they sit at 1.0
 # and are never shipped.
 VERSIONED_TARGETS_RE='(SecondChance|WrappTemplate)'
@@ -250,7 +250,7 @@ update_pbxproj() {
 }
 
 # The version currently in the project, read from the same blocks the rewrite
-# targets — a plain grep would also pick up the 1.0 that GamePuppeteer and
+# targets — a plain grep would also pick up the 1.0 that WrappPuppeteer and
 # SecondChanceTests sit at.
 OLD_VERSION="$(awk -v targets="$VERSIONED_TARGETS_RE" '
     FNR == NR {

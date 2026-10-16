@@ -1,6 +1,6 @@
 //
 //  InputAutomation.swift
-//  GameTester
+//  WrappPuppeteer
 //
 //  Mouse and keyboard control automation
 
@@ -9,18 +9,20 @@ import AppKit
 import CoreGraphics
 import Logging
 
-private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.GamePuppeteer.InputAutomation")
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.InputAutomation")
 
 // MARK: - Mouse & Keyboard Control
 
 enum InputControl {
     /// Show a visual click animation at the specified point
     static func showClickAnimation(at point: CGPoint) {
+        guard let screen = NSScreen.main else { return }
+
         // Create a window to show the click animation
         let size: CGFloat = 60
         let windowRect = NSRect(
             x: point.x - size/2,
-            y: NSScreen.main!.frame.height - point.y - size/2, // Convert to AppKit coordinates
+            y: screen.frame.height - point.y - size/2, // Convert to AppKit coordinates
             width: size,
             height: size
         )

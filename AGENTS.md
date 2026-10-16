@@ -55,7 +55,7 @@ touching — the rows say _when_ to read, not what is in them:
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
-| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, the `-only-testing:` filter, GamePuppeteer's permissions and exit codes, or reading a run's output |
+| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, the `-only-testing:` filter, WrappPuppeteer's permissions and exit codes, or reading a run's output |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
 | [docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md](docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md) | You want to know why the wrapp build is split into per-source builders over a shared helper, and what the `InstallationService` / `GameInstaller` / `WrapperBuilder` arrangement it replaced got wrong |
@@ -176,7 +176,7 @@ direct assignment.
 ## Code Conventions
 
 - **Async/await** throughout — services use `async throws` methods. Run UI updates on `@MainActor`.
-- **Logging**: All logging goes through [swift-log](https://github.com/apple/swift-log) — `import Logging`, then `private nonisolated let logger = Logger(label: "<subsystem>.<Category>")`. Subsystems: `au.gare.callum.second-chance.SecondChance` (main app), `au.gare.callum.second-chance.WrappTemplate`, `au.gare.callum.second-chance.GamePuppeteer` — all siblings under the `au.gare.callum.second-chance` prefix. Use `.notice` for info, `.error` for warnings/recoverable errors, `.critical` for serious/unexpected failures (no `.fault` — that's the OSLog name). No `privacy:` annotations, no `os.Logger`, no `print()`. Every executable calls `AppLogging.bootstrap(subsystem:)` as its **first** statement (`SecondChanceApp.init()`, `WrappTemplate`'s `main()`, `GamePuppeteer`'s top of `main.swift`) — a `Logger` created before bootstrap is silently orphaned to swift-log's default stdout handler and never reaches the store. Log records fan out in-process via `MultiplexLogHandler` to `LogStore` (in-memory ring, 50k entries) and OSLog (crash-durable, the only place `privacy: .public` still exists — inside `OSLogHandler`). Terminal stderr, the floating log window (`LogWindow`, instant history + live batches), and Save Logs (`LogExporter`, lossless where `log show` dropped `.debug` entries) all read from `LogStore`; no process shells out to `/usr/bin/log` except `SystemLogReader.fetch(pid:since:)` in integration tests. Subprocess output (Wine, ScummVM, winetricks) is captured line-by-line via `ProcessLineLogger`/`TaggedProcess` in `Shared/Logging/`. Integration tests still read OSLog via `log show` after a 2-second flush delay — that's why OSLog stays in the multiplex.
+- **Logging**: All logging goes through [swift-log](https://github.com/apple/swift-log) — `import Logging`, then `private nonisolated let logger = Logger(label: "<subsystem>.<Category>")`. Subsystems: `au.gare.callum.second-chance.SecondChance` (main app), `au.gare.callum.second-chance.WrappTemplate`, `au.gare.callum.second-chance.WrappPuppeteer` — all siblings under the `au.gare.callum.second-chance` prefix. Use `.notice` for info, `.error` for warnings/recoverable errors, `.critical` for serious/unexpected failures (no `.fault` — that's the OSLog name). No `privacy:` annotations, no `os.Logger`, no `print()`. Every executable calls `AppLogging.bootstrap(subsystem:)` as its **first** statement (`SecondChanceApp.init()`, `WrappTemplate`'s `main()`, `WrappPuppeteer`'s top of `main.swift`) — a `Logger` created before bootstrap is silently orphaned to swift-log's default stdout handler and never reaches the store. Log records fan out in-process via `MultiplexLogHandler` to `LogStore` (in-memory ring, 50k entries) and OSLog (crash-durable, the only place `privacy: .public` still exists — inside `OSLogHandler`). Terminal stderr, the floating log window (`LogWindow`, instant history + live batches), and Save Logs (`LogExporter`, lossless where `log show` dropped `.debug` entries) all read from `LogStore`; no process shells out to `/usr/bin/log` except `SystemLogReader.fetch(pid:since:)` in integration tests. Subprocess output (Wine, ScummVM, winetricks) is captured line-by-line via `ProcessLineLogger`/`TaggedProcess` in `Shared/Logging/`. Integration tests still read OSLog via `log show` after a 2-second flush delay — that's why OSLog stays in the multiplex.
 - **Error handling**: The codebase has many `try?` that silently swallow errors. For new code, prefer explicit `do/catch` and log failures. Cleanup operations may use `try?` but should log.
 - **No force unwraps (`!`)** in new code — use `guard let` / `compactMap`. Existing force unwraps (e.g. `gameExe!` in `GameInstallerRunner`) are flagged for removal.
 - **File paths**: Never hardcode absolute user paths (e.g. `/Users/...`). Use `Bundle.main.url(forResource:)`, `FileManager` search paths, or environment variables.
@@ -253,8 +253,8 @@ direct assignment.
   `au.gare.callum.SecondChance.WrappTemplate` to
   `au.gare.callum.SecondChance.nancy-drew.<slug>`. Because
   `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's executable is
-  `Contents/MacOS/WrappTemplate` — GamePuppeteer matches on that name, so
-  renaming the target means updating its window-owner heuristic too.
+  `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't depend on that name: it
+  finds the wrapp by the PID it launched and the game by its own process name.
 - **Bundled resources**: `WrappTemplate.app` template, Wine engine, `winetricks`, AutoIt, and ScummVM are bundled. Test
   that features work with bundled paths, not just system-installed equivalents.
 
@@ -271,7 +271,7 @@ more self-explanatory.
 ## Testing
 
 **[docs/testing.md](docs/testing.md) is the detailed guide** — suites,
-filtering, GamePuppeteer permissions and its exit codes, reports. In short:
+filtering, WrappPuppeteer permissions and its exit codes, reports. In short:
 
 - **Unit tests** live in `SecondChanceTests/`, using Swift Testing.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new
@@ -283,6 +283,10 @@ filtering, GamePuppeteer permissions and its exit codes, reports. In short:
 - **Only the integration test can catch a dropped bus event.** A build with a
   missing `bus.publish` still produces a correct `.app`, so it passes the build
   and the unit tests. Run it after touching orchestration.
+- **WrappPuppeteer keeps its utilities generic.** `WrappPuppeteer/Core/` must not
+  know about Nancy Drew, wrapps or engines; what is specific to driving a game
+  lives in `WrappPuppeteer/NancyDrew/` and configures Core through parameters.
+  [docs/testing.md](docs/testing.md#wrapppuppeteer) has the details.
 - **Test fixtures** are in `TestFixtures/` and `installers/`. Make skips
   explicit rather than returning early, so a skipped test reads as skipped.
 - **Priority test targets** (untested but high-value): `CacheManager`,
@@ -310,7 +314,7 @@ none of feat/fix/breaking produces no release at all, and the script says so
 rather than inventing a version. Pass `--version X.Y.Z` to force one.
 
 `prepare-release.sh` writes `MARKETING_VERSION` into the `SecondChance` and
-`WrappTemplate` targets only; `GamePuppeteer` and `SecondChanceTests` are never
+`WrappTemplate` targets only; `WrappPuppeteer` and `SecondChanceTests` are never
 shipped and stay at 1.0. It also sets `CURRENT_PROJECT_VERSION` to the commit
 count, which matters beyond bookkeeping: `WineManager` keys its prefix cache on
 the bundle version, so a release that didn't change it would hand users a stale

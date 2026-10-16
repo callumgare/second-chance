@@ -102,7 +102,7 @@ copies — and asserts on the events the flow publishes:
 - The wrapp's `Info.plist`/`AppSettings.plist` carry the right `GameExePath`,
   `GameEngine`, `GameSlug`
 - The full event sequence in order, ending in `signed` then `completed`
-- If `GamePuppeteer.app` is present: the game launches, reaches its main menu,
+- If `WrappPuppeteer.app` is present: the game launches, reaches its main menu,
   and quits cleanly
 
 `RecordingEventSubscriber` captures the bus events; the assertions read it.
@@ -132,19 +132,19 @@ would pass having run nothing.
 
 `TEST_RUNNER_SKIP_BUILD=1` is the env form of `--test-existing-wrapp`.
 
-## GamePuppeteer
+## WrappPuppeteer
 
-`GamePuppeteer` (a CLI tool wrapped as an `.app` so it can hold TCC grants)
+`WrappPuppeteer` (a CLI tool wrapped as an `.app` so it can hold TCC grants)
 drives the launch-and-quit phase. It is a **build dependency of the
 SecondChanceTests target**, so `run-tests.sh` builds it for you — no separate
 build step. If the bundle is missing, the launch phase is skipped and the build
 assertions still run.
 
-It needs `DerivedData/Build/Products/Debug/GamePuppeteer.app` granted
+It needs `DerivedData/Build/Products/Debug/WrappPuppeteer.app` granted
 **System Settings → Privacy & Security → Accessibility** *and* **Screen
 Recording**.
 
-Its exit codes (`GamePuppeteer/Configuration.swift`):
+Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
 
 | Code | Meaning |
 | --- | --- |
@@ -160,16 +160,60 @@ Its exit codes (`GamePuppeteer/Configuration.swift`):
 code. The tell-tale: the run reports a single issue, and every wrapp-build event
 assertion passed before it.
 
-GamePuppeteer is signed with an Apple Development certificate, so TCC ties its
+WrappPuppeteer is signed with an Apple Development certificate, so TCC ties its
 grants to the bundle ID and the certificate's name rather than to the binary's
 hash — an ordinary rebuild keeps them. A fresh grant is needed when either of
 those changes: a new bundle ID (the target was renamed), or a build signed by a
 different Apple account, such as on another machine. (Before the project signed
 with a certificate, it was ad-hoc signed and every rebuild dropped the grants.)
-`codesign -dr- DerivedData/Build/Products/Debug/GamePuppeteer.app` shows the
+`codesign -dr- DerivedData/Build/Products/Debug/WrappPuppeteer.app` shows the
 requirement TCC checks against.
 
-Launch timeout defaults to 90 s (`GamePuppetRunner.run(timeout:)`).
+Launch timeout defaults to 90 s (`AppPuppetRunner.run(timeout:)`).
+
+### Core and the Nancy Drew scenario
+
+The game draws its menus with DirectX inside Wine (or with ScummVM), so there
+is no accessibility tree to query: WrappPuppeteer finds things on screen with OCR
+and template matching and clicks by coordinates. It is split in two, and the
+dependency only runs one way:
+
+- **`WrappPuppeteer/Core/`** — reusable automation with no knowledge of Nancy
+  Drew, wrapps or engines: screenshots (`ScreenCapture`), OCR
+  (`TextRecognizer`), template matching (`TemplateMatcher`), window listing
+  (`WindowFinder`), Accessibility (`Accessibility`), focus (`FocusDetector`),
+  processes (`ProcessControl`, `ProcessFinder`, `ProcessCleanup`), input,
+  permissions and exit codes.
+- **`WrappPuppeteer/NancyDrew/`** — everything specific to driving a game: reading
+  the wrapp's `AppSettings.plist` and mapping its engine to process names, kill
+  commands and a focus strategy (`Wrapp`); the wrapp's "save regularly" window
+  (`InfoWindow`); where the Exit button and Her Interactive logo are and how to
+  recognise them (`MainMenuScreen`); and the launch → menu → Exit flow itself
+  (`NancyDrewQuitScenario`).
+
+Core never names a game. When a game-specific fact would make a utility work
+better, Core takes it as a parameter and the scenario supplies it — for
+example the quit-button search is narrowed by
+`MainMenuScreen.quitButtonMatchOptions`, a `TemplateMatchOptions` that limits
+the search to the bottom-right corner, sizes the template relative to the
+screen, and uses red-emphasis greyscale because the button is red. Called
+without options, `TemplateMatcher` searches the whole screen at the template's
+own size.
+
+To check the vision code without launching anything, run it against a saved
+screenshot — this needs no permissions:
+
+```bash
+DerivedData/Build/Products/Debug/WrappPuppeteer.app/Contents/MacOS/WrappPuppeteer \
+  --analyze path/to/screenshot.png
+```
+
+`FIND_IMAGE_EXTRA_DEBUGGING=true` makes the template matcher write heatmaps
+and search-region/match overlays next to the screenshot. Add
+`FIND_IMAGE_DEBUG_PROBE=x,y` (screenshot pixels) to also score the template at
+one position and save the images compared there.
+`WRAPP_PUPPETEER_PERMISSION_WAIT_SECONDS` overrides how long the permission gate
+waits for a grant.
 
 ## Reading the output
 
@@ -185,7 +229,7 @@ indistinguishable from a clean run unless you go looking for it.
 
 `run-tests.sh` writes `test-results/<timestamp>.xcresult`, converts it with
 `xchtmlreport` into `test-results/index.html`, and opens it. Per-run logs and
-GamePuppeteer output are attached to the test case inside the `.xcresult`.
+WrappPuppeteer output are attached to the test case inside the `.xcresult`.
 
 ## Test fixtures (`TestFixtures/`)
 

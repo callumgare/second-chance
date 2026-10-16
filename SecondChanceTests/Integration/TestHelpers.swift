@@ -36,7 +36,7 @@ enum SystemLogReader {
 
     /// Fetch log lines emitted by the wrapp itself (the game container) since
     /// `start`. Unlike `fetch(pid:since:)` this is not pid-scoped: the wrapp is
-    /// launched by GamePuppeteer, so its pid is not known here.
+    /// launched by WrappPuppeteer, so its pid is not known here.
     static func fetchGame(since start: Date) -> Data {
         fetch(
             predicate: "subsystem == 'au.gare.callum.second-chance.WrappTemplate'",
@@ -85,7 +85,7 @@ enum SystemLogReader {
 }
 
 /// Echoes captured subprocess logs into the test output. Second Chance's own
-/// logs show up because the tests run inside it; GamePuppeteer and the game are
+/// logs show up because the tests run inside it; WrappPuppeteer and the game are
 /// separate processes, so their logs only reach the console via this.
 enum TestConsole {
     static func echo(_ data: Data, title: String) {
@@ -244,17 +244,17 @@ enum TestGameFilter {
 /// Reads values from a built wrapp's `Info.plist` for post-install assertions.
 enum WrappInfo {
 
-    /// Locate the built GamePuppeteer.app bundle. Returns `nil` if not found.
-    static func gamePuppeteerBundle() -> URL? {
+    /// Locate the built WrappPuppeteer.app bundle. Returns `nil` if not found.
+    static func wrappPuppeteerBundle() -> URL? {
         let url = TestPaths.repoRoot
-            .appendingPathComponent("DerivedData/Build/Products/Debug/GamePuppeteer.app")
+            .appendingPathComponent("DerivedData/Build/Products/Debug/WrappPuppeteer.app")
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 }
 
-/// Invokes GamePuppeteer as a subprocess to launch a wrapp and verify the
-/// game quits cleanly. Returns the exit code from GamePuppeteer.
-enum GamePuppetRunner {
+/// Invokes WrappPuppeteer as a subprocess to launch a wrapp and verify the
+/// game quits cleanly. Returns the exit code from WrappPuppeteer.
+enum AppPuppetRunner {
     private static let screenRecordingRelaunchExitCode: Int32 = 5
 
     @discardableResult
@@ -263,8 +263,8 @@ enum GamePuppetRunner {
         game: GameInfo,
         timeout: TimeInterval = 90
     ) async throws -> Int32 {
-        guard let bundle = WrappInfo.gamePuppeteerBundle() else {
-            throw TestError.gamePuppeteerNotFound
+        guard let bundle = WrappInfo.wrappPuppeteerBundle() else {
+            throw TestError.wrappPuppeteerNotFound
         }
         let slug = game.id
 
@@ -278,8 +278,8 @@ enum GamePuppetRunner {
 
         if firstAttempt.exitCode == screenRecordingRelaunchExitCode {
             Attachment.record(
-                Data("GamePuppeteer requested relaunch after manual Screen Recording confirmation.\n".utf8),
-                named: "gamepuppeteer-relaunch-\(slug).txt"
+                Data("WrappPuppeteer requested relaunch after manual Screen Recording confirmation.\n".utf8),
+                named: "wrapp-puppeteer-relaunch-\(slug).txt"
             )
 
             firstAttempt = try await Self.launchAndCollect(
@@ -312,16 +312,16 @@ enum GamePuppetRunner {
         let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
         guard !logData.isEmpty else {
             throw NSError(
-                domain: "GamePuppetRunner",
+                domain: "AppPuppetRunner",
                 code: Int(effectiveExitCode),
                 userInfo: [
-                    NSLocalizedDescriptionKey: "GamePuppeteer produced no logs (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                    NSLocalizedDescriptionKey: "WrappPuppeteer produced no logs (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
                 ]
             )
         }
 
-        Attachment.record(logData, named: "gamepuppeteer-\(attemptLabel)-\(gameSlug).txt")
-        TestConsole.echo(logData, title: "GamePuppeteer log (\(attemptLabel)) — \(gameSlug)")
+        Attachment.record(logData, named: "wrapp-puppeteer-\(attemptLabel)-\(gameSlug).txt")
+        TestConsole.echo(logData, title: "WrappPuppeteer log (\(attemptLabel)) — \(gameSlug)")
 
         // The game runs in its own process inside the wrapp, so it is not covered
         // by the pid-scoped fetch above and needs its own subsystem query.
@@ -334,14 +334,14 @@ enum GamePuppetRunner {
         if let logText = String(data: logData, encoding: .utf8) {
             let requestedPermission = logText.contains("PERMISSION_GATE: permission_requested")
             let allPermissionsGranted = logText.contains("PERMISSION_GATE: all_permissions_granted")
-            let runSucceeded = logText.contains("GAME_PUPPETEER: run_succeeded")
+            let runSucceeded = logText.contains("WRAPP_PUPPETEER: run_succeeded")
 
             if logText.contains("Timed out waiting") {
                 throw NSError(
-                    domain: "GamePuppetRunner",
+                    domain: "AppPuppetRunner",
                     code: Int(effectiveExitCode),
                     userInfo: [
-                        NSLocalizedDescriptionKey: "GamePuppeteer timed out waiting for permission grant (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                        NSLocalizedDescriptionKey: "WrappPuppeteer timed out waiting for permission grant (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
                     ]
                 )
             }
@@ -350,31 +350,31 @@ enum GamePuppetRunner {
                 effectiveExitCode = screenRecordingRelaunchExitCode
                 Attachment.record(
                     Data("Permission request detected without all-permissions-granted marker. Treating as relaunch-required.\n".utf8),
-                    named: "gamepuppeteer-exit-code-correction-\(attemptLabel)-\(gameSlug).txt"
+                    named: "wrapp-puppeteer-exit-code-correction-\(attemptLabel)-\(gameSlug).txt"
                 )
             } else if !runSucceeded {
                 throw NSError(
-                    domain: "GamePuppetRunner",
+                    domain: "AppPuppetRunner",
                     code: Int(effectiveExitCode),
                     userInfo: [
-                        NSLocalizedDescriptionKey: "GamePuppeteer did not emit success marker (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                        NSLocalizedDescriptionKey: "WrappPuppeteer did not emit success marker (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
                     ]
                 )
             }
         } else {
             throw NSError(
-                domain: "GamePuppetRunner",
+                domain: "AppPuppetRunner",
                 code: Int(effectiveExitCode),
                 userInfo: [
-                    NSLocalizedDescriptionKey: "GamePuppeteer logs were not UTF-8 decodable (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                    NSLocalizedDescriptionKey: "WrappPuppeteer logs were not UTF-8 decodable (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
                 ]
             )
         }
 
-        let exitCodeSummary = "GamePuppeteer exit code (\(attemptLabel)) for \(gameSlug): observed=\(observedExitCode), effective=\(effectiveExitCode)\n"
+        let exitCodeSummary = "WrappPuppeteer exit code (\(attemptLabel)) for \(gameSlug): observed=\(observedExitCode), effective=\(effectiveExitCode)\n"
         Attachment.record(
             Data(exitCodeSummary.utf8),
-            named: "gamepuppeteer-exit-code-\(attemptLabel)-\(gameSlug).txt"
+            named: "wrapp-puppeteer-exit-code-\(attemptLabel)-\(gameSlug).txt"
         )
 
         return (exitCode: effectiveExitCode, pid: pid)
@@ -433,8 +433,8 @@ enum GamePuppetRunner {
         }
     }
 
-    /// Launch GamePuppeteer through LaunchServices so TCC attributes Accessibility
-    /// and Screen Recording prompts to GamePuppeteer (its own bundle ID), not to
+    /// Launch WrappPuppeteer through LaunchServices so TCC attributes Accessibility
+    /// and Screen Recording prompts to WrappPuppeteer (its own bundle ID), not to
     /// the Second Chance test host.
     private static func launchViaLaunchServices(appBundle: URL, arguments: [String]) async throws -> (exitCode: Int32, pid: Int32) {
         let launchRequestTime = Date()
@@ -478,7 +478,7 @@ enum GamePuppetRunner {
             throw NSError(
                 domain: NSCocoaErrorDomain,
                 code: 0,
-                userInfo: [NSLocalizedDescriptionKey: "GamePuppeteer bundle identifier is missing"]
+                userInfo: [NSLocalizedDescriptionKey: "WrappPuppeteer bundle identifier is missing"]
             )
         }
 
@@ -507,19 +507,19 @@ enum GamePuppetRunner {
             domain: NSCocoaErrorDomain,
             code: 0,
             userInfo: [
-                NSLocalizedDescriptionKey: "GamePuppeteer launched with invalid PID: \(launchedApp.processIdentifier)"
+                NSLocalizedDescriptionKey: "WrappPuppeteer launched with invalid PID: \(launchedApp.processIdentifier)"
             ]
         )
     }
 }
 
 enum TestError: Error, LocalizedError {
-    case gamePuppeteerNotFound
+    case wrappPuppeteerNotFound
 
     var errorDescription: String? {
         switch self {
-        case .gamePuppeteerNotFound:
-            return "GamePuppeteer.app not found in DerivedData — it builds as a SecondChanceTests dependency, so this means the build did not complete"
+        case .wrappPuppeteerNotFound:
+            return "WrappPuppeteer.app not found in DerivedData — it builds as a SecondChanceTests dependency, so this means the build did not complete"
         }
     }
 }
