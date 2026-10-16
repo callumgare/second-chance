@@ -124,15 +124,30 @@ enum ProcessFinder {
 
 enum ProcessControl {
     /// Launch an app bundle through LaunchServices and wait for it to start.
+    ///
+    /// Always a new process. LaunchServices otherwise hands back an instance
+    /// of the same bundle ID that is already running — one left over from an
+    /// earlier run, say, sitting on an error window — and the run then tests
+    /// that instead, which never starts the game. Any such leftover is killed
+    /// first.
     static func launch(appPath: String, arguments: [String] = []) -> NSRunningApplication? {
         logger.notice("🚀 Launching \(appPath)...")
         if !arguments.isEmpty {
             logger.notice("   Arguments: \(arguments.joined(separator: " "))")
         }
 
+        if let bundleID = Bundle(path: appPath)?.bundleIdentifier {
+            for leftover in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
+                logger.warning("⚠️  \(bundleID) is already running (PID \(leftover.processIdentifier), launched \(leftover.launchDate.map { "\($0)" } ?? "at an unknown time")) — killing it first")
+                kill(leftover.processIdentifier, SIGKILL)
+                _ = waitForExit(leftover.processIdentifier, timeout: 5)
+            }
+        }
+
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         configuration.arguments = arguments
+        configuration.createsNewApplicationInstance = true
 
         var app: NSRunningApplication?
         let semaphore = DispatchSemaphore(value: 0)
@@ -147,6 +162,16 @@ enum ProcessControl {
 
         semaphore.wait()
         return app
+    }
+
+    /// Poll until `pid` has exited; false if it is still alive at `timeout`.
+    static func waitForExit(_ pid: Int32, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while isAlive(pid) {
+            if Date() >= deadline { return false }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return true
     }
 
     /// Whether a PID is alive. `kill(pid, 0)` is used because it is the only
@@ -167,7 +192,17 @@ enum ProcessControl {
     /// helper processes that outlive it.
     static func forceQuit(_ app: NSRunningApplication, pkillArguments: [[String]] = []) {
         logger.warning("⚠️  Force quitting \(app.localizedName ?? "app")...")
+        // forceTerminate doesn't always end the process (a wrapp once outlived
+        // it by an hour), so check, and kill it outright if it is still there.
+        let pid = app.processIdentifier
         app.forceTerminate()
+        if !waitForExit(pid, timeout: 3) {
+            logger.warning("⚠️  PID \(pid) survived forceTerminate — sending SIGKILL")
+            kill(pid, SIGKILL)
+            if !waitForExit(pid, timeout: 3) {
+                logger.error("❌ PID \(pid) is still running after SIGKILL")
+            }
+        }
 
         for arguments in pkillArguments {
             let pkill = Process()

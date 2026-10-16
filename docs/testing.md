@@ -190,6 +190,13 @@ requirement TCC checks against.
 
 Launch timeout defaults to 90 s (`AppPuppetRunner.run(timeout:)`).
 
+WrappPuppeteer always starts a new instance of the wrapp, and kills any
+instance of the same bundle ID still running first. LaunchServices would
+otherwise hand back that one: a wrapp left on its "Game Crashed" window by an
+earlier run was once "launched" again an hour later, and the run timed out
+waiting for a game it never started. Its force-quit checks that the process
+really went and sends SIGKILL when `forceTerminate()` didn't do it.
+
 ### Core and the Nancy Drew scenario
 
 The game draws its menus with DirectX inside Wine (or with ScummVM), so there
