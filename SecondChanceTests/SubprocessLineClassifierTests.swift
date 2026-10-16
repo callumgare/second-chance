@@ -44,9 +44,16 @@ struct SubprocessLineClassifierTests {
 
     @Test("MSI log lines worth reading stand out from per-file chatter")
     func msiLog() {
-        #expect(MsiLogStreamer.notableLevel(of: "File: s12.cif, Directory: dir1, Size: 2048") == nil)
-        #expect(MsiLogStreamer.notableLevel(of: "Action ended 12:01:02: InstallFiles. Return value 3.") == .error)
-        #expect(MsiLogStreamer.notableLevel(of: "Error 1335. The cabinet file is corrupt.") == .error)
-        #expect(MsiLogStreamer.notableLevel(of: "MSI (s) (1C:20) [12:01:02:003]: Product: Nancy Drew -- Installation completed successfully.") == .notice)
+        #expect(InstallerLogStreamer.notableLevel(of: "File: s12.cif, Directory: dir1, Size: 2048", format: .msi) == nil)
+        #expect(InstallerLogStreamer.notableLevel(of: "Action ended 12:01:02: InstallFiles. Return value 3.", format: .msi) == .error)
+        #expect(InstallerLogStreamer.notableLevel(of: "Error 1335. The cabinet file is corrupt.", format: .msi) == .error)
+        #expect(InstallerLogStreamer.notableLevel(of: "MSI (s) (1C:20) [12:01:02:003]: Product: Nancy Drew -- Installation completed successfully.", format: .msi) == .notice)
+    }
+
+    @Test("Inno Setup log lines worth reading stand out from per-file chatter")
+    func innoLog() {
+        #expect(InstallerLogStreamer.notableLevel(of: "2026-10-16 20:27:06.623   Dest filename: C:\\Program Files (x86)\\Nancy Drew SCK\\Video\\CWH51_CNV.bik", format: .inno) == nil)
+        #expect(InstallerLogStreamer.notableLevel(of: "2026-10-16 20:25:22.993   Installation process succeeded.", format: .inno) == .notice)
+        #expect(InstallerLogStreamer.notableLevel(of: "2026-10-16 20:25:22.993   Exception message:", format: .inno) == .error)
     }
 }

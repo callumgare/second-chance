@@ -18,11 +18,6 @@ struct GameInfo: Codable, Identifiable, Hashable {
     let doesNotExitInNonInteractiveMode: Bool
     let installInstructions: String?
     let failedInstallInfo: String?
-    /// The least a complete install of the game takes up, in bytes, counted
-    /// in the game exe's folder. An installer that is killed or crashes can
-    /// still exit 0 after unpacking the exe, so the exe being there proves
-    /// nothing; a shortfall here fails the attempt. Nil when not measured.
-    let minimumInstalledBytes: Int64?
     
     enum GameEngine: String, Codable {
         case wine
@@ -47,8 +42,7 @@ struct GameInfo: Codable, Identifiable, Hashable {
         steamID: String? = nil,
         doesNotExitInNonInteractiveMode: Bool = false,
         installInstructions: String? = nil,
-        failedInstallInfo: String? = nil,
-        minimumInstalledBytes: Int64? = nil
+        failedInstallInfo: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -60,7 +54,6 @@ struct GameInfo: Codable, Identifiable, Hashable {
         self.doesNotExitInNonInteractiveMode = doesNotExitInNonInteractiveMode
         self.installInstructions = installInstructions
         self.failedInstallInfo = failedInstallInfo
-        self.minimumInstalledBytes = minimumInstalledBytes
     }
 }
 extension GameInfo {

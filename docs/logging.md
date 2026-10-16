@@ -110,9 +110,13 @@ Second Chance sets are included, not the whole parent environment.
 
 Repetitive output goes in at debug, with a notice that sums it up:
 
-- msiexec's install log (`MsiLogStreamer`) logs each file at debug, the lines
-  that report a failed action (`Return value 3`, `Error …`) at error, and a
-  `MSI log: N lines, N files installed, N error lines` summary when it stops;
+- msiexec's and Inno Setup's install logs (`InstallerLogStreamer`) log each
+  file at debug, the lines that report a failure (`Return value 3`, `Error …`,
+  Inno's `Exception message:`) at error, and a
+  `MSI log: N lines, N files installed, N error lines` summary when they stop.
+  The install is then checked against the same log, and
+  `Install is incomplete: …` names its last line when it never says it
+  finished;
 - the wrapp's process monitor logs the Wine session's process tree as one
   entry when it changes, not every poll;
 - environment dumps, file-attribute checks and mounted-image listings are

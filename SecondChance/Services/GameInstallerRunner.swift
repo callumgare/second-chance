@@ -116,12 +116,13 @@ class GameInstallerRunner {
         // Try installation with automatic/silent mode first
         var installAttempt = 0
         var gameExe: URL?
+        var installerType = InstallerType.unknown
 
         while gameExe == nil && installAttempt < maxAttempts {
             logger.notice("🔄 Installation attempt \(installAttempt + 1) of \(maxAttempts)")
             do {
                 // Run installer
-                try await runInstaller(
+                installerType = try await runInstaller(
                     at: wrappPath,
                     installerPath: installerExe,
                     gameInfo: gameInfo,
@@ -141,7 +142,11 @@ class GameInstallerRunner {
                     )
                     if let found = gameExe {
                         do {
-                            try checkInstallSize(gameDir: found.deletingLastPathComponent(), gameInfo: gameInfo)
+                            try checkInstallFinished(
+                                gameDir: found.deletingLastPathComponent(),
+                                installerType: installerType,
+                                driveCPath: driveCPath
+                            )
                         } catch {
                             gameExe = nil
                             throw error
@@ -307,6 +312,7 @@ class GameInstallerRunner {
         case unzipFailed(String)
         case timedOut(String)
         case installerFailed(id: String, exitCode: Int32)
+        case installerDidNotFinish(id: String, reason: String)
 
         var errorDescription: String? {
             switch self {
@@ -320,6 +326,8 @@ class GameInstallerRunner {
                 return "The patch installer for \(id) did not finish in time and was stopped."
             case .installerFailed(let id, let exitCode):
                 return "The patch installer for \(id) exited with code \(exitCode)."
+            case .installerDidNotFinish(let id, let reason):
+                return "The patch installer for \(id) exited cleanly but didn't finish: \(reason)"
             }
         }
     }
@@ -480,7 +488,17 @@ class GameInstallerRunner {
         winePath: String
     ) async throws {
         let installerType = detectInstallerType(hostPath.path)
-        let arguments = silentPatchArguments(for: installerType)
+        // An Inno Setup patcher keeps a log that says whether it finished;
+        // the self-extracting updaters most patches are don't.
+        let installerLog = installerType == .innoSetup
+            ? try? prepareInstallerLog(in: wrappPath, format: .inno)
+            : nil
+        defer {
+            if let installerLog, !DebugSettings.shared.debugMode {
+                try? fileManager.removeItem(at: installerLog.hostPath)
+            }
+        }
+        let arguments = silentPatchArguments(for: installerType, logPath: installerLog?.windowsPath)
         logger.notice("   → running \(patch.payload) (\(installerType)) \(arguments.joined(separator: " "))")
 
         // runWine stops the prefix's wineserver on timeout, which is the only
@@ -499,6 +517,9 @@ class GameInstallerRunner {
         guard exitCode == 0 else {
             throw GamePatchError.installerFailed(id: patch.id, exitCode: exitCode)
         }
+        if let installerLog {
+            try checkInstallerLog(installerLog, failure: { GamePatchError.installerDidNotFinish(id: patch.id, reason: $0) })
+        }
     }
 
     /// Best-effort silent-install flags for a patch installer.
@@ -506,14 +527,14 @@ class GameInstallerRunner {
     /// Unlike the game installers there is no recorded `.iss` answer file for
     /// patches, so this is the generic flag set for each installer family. If
     /// an installer ignores them and shows a wizard, the timeout catches it.
-    private func silentPatchArguments(for installerType: InstallerType) -> [String] {
+    private func silentPatchArguments(for installerType: InstallerType, logPath: String?) -> [String] {
         switch installerType {
         case .msi:
             return ["/qn"]
         case .installShield:
             return ["/s", "/sms"]
         case .innoSetup:
-            return ["/verysilent", "/norestart"]
+            return ["/verysilent", "/norestart"] + (logPath.map { ["/LOG=\($0)"] } ?? [])
         case .unknown:
             return []
         }
@@ -604,14 +625,15 @@ class GameInstallerRunner {
         let underlyingCommandDescription: String?
     }
 
-    /// Host and Windows paths for an MSI log file.
-    private struct MsiLogDestination {
+    /// Host and Windows paths for an installer's own log file.
+    private struct InstallerLogFile {
+        let format: InstallerLogFormat
         let hostPath: URL
         let windowsPath: String
     }
 
-    /// Build a unique MSI log file path in the Wine prefix temp directory.
-    private func prepareMsiLogDestination(in wrappPath: URL) throws -> MsiLogDestination {
+    /// Build a unique installer log file path in the Wine prefix temp directory.
+    private func prepareInstallerLog(in wrappPath: URL, format: InstallerLogFormat) throws -> InstallerLogFile {
         let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
         let windowsTempDir = driveCPath.appendingPathComponent("windows/temp")
         try fileManager.createDirectory(at: windowsTempDir, withIntermediateDirectories: true)
@@ -620,15 +642,16 @@ class GameInstallerRunner {
         let hostPath = windowsTempDir.appendingPathComponent(fileName)
         fileManager.createFile(atPath: hostPath.path, contents: nil)
 
-        return MsiLogDestination(
+        return InstallerLogFile(
+            format: format,
             hostPath: hostPath,
             windowsPath: "C:\\\\windows\\\\temp\\\\\(fileName)"
         )
     }
 
-    /// Stream an MSI log file line-by-line to a dedicated logger.
-    private func startMsiLogStreaming(at logPath: URL) throws -> MsiLogStreamer {
-        let streamer = MsiLogStreamer(logPath: logPath)
+    /// Stream an installer log file line-by-line to a dedicated logger.
+    private func startInstallerLogStreaming(_ log: InstallerLogFile) throws -> InstallerLogStreamer {
+        let streamer = InstallerLogStreamer(logPath: log.hostPath, format: log.format)
         try streamer.start()
         return streamer
     }
@@ -640,7 +663,7 @@ class GameInstallerRunner {
         gameInfo: GameInfo,
         wrappPath: URL,
         attemptNumber: Int,
-        msiLogPath: String? = nil
+        logPath: String? = nil
     ) -> InstallerCommand {
         // Get installer arguments
         let args = getInstallerArguments(
@@ -649,7 +672,7 @@ class GameInstallerRunner {
             gameInfo: gameInfo,
             wrappPath: wrappPath,
             attemptNumber: attemptNumber,
-            msiLogPath: msiLogPath
+            logPath: logPath
         )
 
         // Check if we need to use AutoIt for this installer
@@ -698,18 +721,19 @@ class GameInstallerRunner {
 
     // MARK: - Install Checks
 
-    /// Log what the install produced and fail when it is short of the
-    /// game's known minimum. An installer that is killed partway can still
-    /// exit 0, after the game exe is already unpacked.
-    func checkInstallSize(gameDir: URL, gameInfo: GameInfo) throws {
+    /// Log what the install produced and, for InstallShield, fail unless it
+    /// left its uninstall log, which it writes only once it has finished.
+    /// (Inno Setup and MSI installs were already checked against their own
+    /// logs in `runInstaller`.) See `InstallCompletion`.
+    func checkInstallFinished(gameDir: URL, installerType: InstallerType, driveCPath: URL) throws {
         let size = DirectorySize.measure(gameDir)
         logger.notice("Installed: \(size.description) in \(gameDir.lastPathComponent)")
-        guard let minimum = gameInfo.minimumInstalledBytes else { return }
-        guard size.bytes >= minimum else {
-            let expected = ByteCountFormatter.string(fromByteCount: minimum, countStyle: .file)
-            logger.error("Install is incomplete: \(size.description), where a full install of \(gameInfo.title) is at least \(expected)")
-            throw WrappBuildError.installIncomplete(installed: size.description, expected: expected)
+        guard installerType == .installShield else { return }
+        if let problem = InstallCompletion.installShieldProblem(gameDir: gameDir, driveC: driveCPath) {
+            logger.error("Install is incomplete: \(problem)")
+            throw WrappBuildError.installIncomplete(reason: problem)
         }
+        logger.notice("InstallShield's uninstall log is in place: the install finished")
     }
 
     // MARK: - Installer Execution
@@ -722,13 +746,17 @@ class GameInstallerRunner {
             .flatMap(TimeInterval.init) ?? 30 * 60
     }
 
-    /// Run the installer with appropriate arguments based on installer type
+    /// Run the installer with appropriate arguments based on installer type,
+    /// and return that type. An Inno Setup or MSI install that exits 0 must
+    /// also say it finished in its own log, or this throws
+    /// `WrappBuildError.installIncomplete`.
+    @discardableResult
     private func runInstaller(
         at wrappPath: URL,
         installerPath: String,
         gameInfo: GameInfo,
         attemptNumber: Int
-    ) async throws {
+    ) async throws -> InstallerType {
         let installerType = detectInstallerType(installerPath)
         let installerTypeDesc = String(describing: installerType)
         logger.notice("Installer type: \(installerTypeDesc)")
@@ -743,11 +771,10 @@ class GameInstallerRunner {
         logger.debug("Setup.iss path: \(setupIssPath.path), exists: \(setupIssExists)")
         logger.debug("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
 
-        let msiLogDestination = installerType == .msi
-            ? try prepareMsiLogDestination(in: wrappPath)
-            : nil
-        if let msiLogDestination {
-            logger.notice("MSI install log file: \(msiLogDestination.hostPath.path)")
+        let installerLog = InstallerLogFormat(installerType)
+            .map { try? prepareInstallerLog(in: wrappPath, format: $0) } ?? nil
+        if let installerLog {
+            logger.notice("\(installerLog.format.name) install log file: \(installerLog.hostPath.path)")
         }
 
         // Build and print the command that will be executed
@@ -757,24 +784,24 @@ class GameInstallerRunner {
             gameInfo: gameInfo,
             wrappPath: wrappPath,
             attemptNumber: attemptNumber,
-            msiLogPath: msiLogDestination?.windowsPath
+            logPath: installerLog?.windowsPath
         )
         logger.notice("Running: \(command.commandDescription)")
         if let underlyingCommand = command.underlyingCommandDescription {
             logger.notice("   Automating: \(underlyingCommand)")
         }
 
-        // Stream MSI log lines independently from Wine stdout/stderr.
-        var msiLogStreamer: MsiLogStreamer?
-        if let msiLogDestination {
-            msiLogStreamer = try startMsiLogStreaming(at: msiLogDestination.hostPath)
+        // Stream the installer's own log independently from Wine stdout/stderr.
+        var logStreamer: InstallerLogStreamer?
+        if let installerLog {
+            logStreamer = try startInstallerLogStreaming(installerLog)
         }
         defer {
-            if let msiLogStreamer {
-                msiLogStreamer.stop()
+            if let logStreamer {
+                logStreamer.stop()
             }
-            if let msiLogDestination, !DebugSettings.shared.debugMode {
-                try? fileManager.removeItem(at: msiLogDestination.hostPath)
+            if let installerLog, !DebugSettings.shared.debugMode {
+                try? fileManager.removeItem(at: installerLog.hostPath)
             }
         }
 
@@ -812,6 +839,12 @@ class GameInstallerRunner {
             throw WineError.executionFailed(exitCode: exitCode)
         }
 
+        // A clean exit isn't proof the install finished: check that the
+        // installer's own log says it did.
+        if let installerLog {
+            try checkInstallerLog(installerLog, failure: { WrappBuildError.installIncomplete(reason: $0) })
+        }
+
         // Cleanup AutoIt if it was used (skip in debug mode to allow manual re-runs)
         if command.underlyingCommandDescription != nil {
             if DebugSettings.shared.debugMode {
@@ -820,6 +853,23 @@ class GameInstallerRunner {
                 cleanupAutoItAfterInstall(in: wrappPath)
             }
         }
+        return installerType
+    }
+
+    /// Throw `failure(reason)` unless the installer's log records it
+    /// finishing; log the verdict either way.
+    private func checkInstallerLog(_ log: InstallerLogFile, failure: (String) -> Error) throws {
+        let text = InstallCompletion.readLog(at: log.hostPath) ?? ""
+        let problem: String?
+        switch log.format {
+        case .inno: problem = InstallCompletion.innoProblem(log: text)
+        case .msi: problem = InstallCompletion.msiProblem(log: text)
+        }
+        if let problem {
+            logger.error("Install is incomplete: \(problem)")
+            throw failure(problem)
+        }
+        logger.notice("\(log.format.name)'s log says the install finished")
     }
 
     // MARK: - Installer Type Detection
@@ -859,11 +909,11 @@ class GameInstallerRunner {
         gameInfo: GameInfo,
         wrappPath: URL,
         attemptNumber: Int,
-        msiLogPath: String? = nil
+        logPath: String? = nil
     ) -> [String] {
         switch installerType {
         case .msi:
-            let logPath = msiLogPath ?? "nancy-drew-install-log.txt"
+            let logPath = logPath ?? "nancy-drew-install-log.txt"
             if attemptNumber == 0 {
                 // Silent install with logging
                 return ["/qn", "/l*", logPath, "/i", installerPath]
@@ -893,12 +943,13 @@ class GameInstallerRunner {
             }
 
         case .innoSetup:
+            let log = logPath.map { ["/LOG=\($0)"] } ?? []
             if attemptNumber == 0 {
                 // Very silent install
-                return ["/verysilent", "/norestart"]
+                return ["/verysilent", "/norestart"] + log
             } else {
                 // Interactive install
-                return []
+                return log
             }
 
         case .unknown:
@@ -1050,22 +1101,48 @@ class GameInstallerRunner {
 }
 
 
-/// Follows an MSI install log (`tail -F`) into the log. msiexec writes a line
-/// or two for every file it installs — 97% of the lines in a run that
-/// installed several games — so those go in at debug, and the lines that say
-/// how the install went (failed actions, errors, the final verdict) at notice
-/// or error. `stop()` logs a one-line summary.
-nonisolated final class MsiLogStreamer: @unchecked Sendable {
+/// Which installer log `InstallerLogStreamer` is following.
+nonisolated enum InstallerLogFormat: Sendable {
+    case msi
+    case inno
+
+    /// Nil for installers whose log Second Chance doesn't read.
+    init?(_ installerType: InstallerType) {
+        switch installerType {
+        case .msi: self = .msi
+        case .innoSetup: self = .inno
+        case .installShield, .unknown: return nil
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .msi: return "MSI"
+        case .inno: return "Inno Setup"
+        }
+    }
+}
+
+/// Follows an installer's own log (`tail -F`) into the log. msiexec writes a
+/// line or two for every file it installs — 97% of the lines in a run that
+/// installed several games — and Inno Setup four, so those go in at debug,
+/// and the lines that say how the install went (failed actions, errors, the
+/// final verdict) at notice or error. `stop()` logs a one-line summary.
+nonisolated final class InstallerLogStreamer: @unchecked Sendable {
     private let logPath: URL
+    private let format: InstallerLogFormat
     private let process = Process()
-    private let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner.msi-log")
+    private let logger: Logger
     private let lock = NSLock()
     private var lines = 0
     private var files = 0
     private var errors = 0
 
-    init(logPath: URL) {
+    init(logPath: URL, format: InstallerLogFormat) {
         self.logPath = logPath
+        self.format = format
+        let suffix = format == .msi ? "msi-log" : "inno-log"
+        self.logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner.\(suffix)")
     }
 
     func start() throws {
@@ -1074,9 +1151,10 @@ nonisolated final class MsiLogStreamer: @unchecked Sendable {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
+        let format = format
         ProcessLineLogger.attach(
             to: pipe, logger: logger, level: .debug,
-            levelFor: { Self.notableLevel(of: $0) ?? .debug },
+            levelFor: { Self.notableLevel(of: $0, format: format) ?? .debug },
             onLine: { [weak self] line in self?.count(line) }
         )
         try process.run()
@@ -1088,25 +1166,41 @@ nonisolated final class MsiLogStreamer: @unchecked Sendable {
             process.waitUntilExit()
         }
         let (lines, files, errors) = lock.withLock { (self.lines, self.files, self.errors) }
-        logger.notice("MSI log: \(lines) lines, \(files) files installed, \(errors) error line\(errors == 1 ? "" : "s")")
+        logger.notice("\(format.name) log: \(lines) lines, \(files) files installed, \(errors) error line\(errors == 1 ? "" : "s")")
     }
 
     /// The level a line deserves beyond the debug copy it already got.
-    static func notableLevel(of line: String) -> Logger.Level? {
-        if line.contains("Return value 3") || line.hasPrefix("Error ") || line.contains("Installation failed")
-            || line.contains("-- Installation operation failed") {
-            return .error
-        }
-        if line.contains("Installation completed successfully") || line.contains("-- Installation operation completed")
-            || line.hasPrefix("MSI (") && line.contains("Product:") {
-            return .notice
+    static func notableLevel(of line: String, format: InstallerLogFormat) -> Logger.Level? {
+        switch format {
+        case .msi:
+            if line.contains("Return value 3") || line.hasPrefix("Error ") || line.contains("Installation failed")
+                || line.contains("-- Installation operation failed") {
+                return .error
+            }
+            if line.contains("Installation completed successfully") || line.contains("-- Installation operation completed")
+                || line.hasPrefix("MSI (") && line.contains("Product:") || line.contains(": INSTALL. Return value") {
+                return .notice
+            }
+        case .inno:
+            // Lines start with a timestamp: "2026-10-16 20:25:22.993   …".
+            if line.contains("Exception message:") || line.contains("Installation process failed")
+                || line.contains("Fatal exception") || line.contains("Setup is aborting") {
+                return .error
+            }
+            if line.contains(InstallCompletion.innoSuccessLine) || line.contains("Setup version: ")
+                || line.contains("Original Setup EXE: ") {
+                return .notice
+            }
         }
         return nil
     }
 
     private func count(_ line: String) {
-        let isFile = line.hasPrefix("File: ") && line.contains("Size:")
-        let isError = Self.notableLevel(of: line) == .error
+        let isFile = switch format {
+        case .msi: line.hasPrefix("File: ") && line.contains("Size:")
+        case .inno: line.contains("Successfully installed the file.")
+        }
+        let isError = Self.notableLevel(of: line, format: format) == .error
         lock.withLock {
             lines += 1
             if isFile { files += 1 }

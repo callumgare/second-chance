@@ -20,8 +20,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     case missingRequiredParameter(String)
     case invalidPath(String)
     case internalError(String)
-    /// The installer exited cleanly but left less than a full install.
-    case installIncomplete(installed: String, expected: String)
+    /// The installer exited cleanly but its own record of finishing is
+    /// missing (`InstallCompletion`), so the install was cut short.
+    case installIncomplete(reason: String)
     /// The finished wrapp couldn't be moved to where it was meant to go.
     case saveFailed(destination: String, reason: String)
     /// The disc is a different game from the one asked for.
@@ -57,8 +58,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Couldn't save the wrapp to \(destination): \(reason)"
         case .wrongGame(let expected, let detected):
             return "This disc is \(detected), not \(expected)"
-        case .installIncomplete(let installed, let expected):
-            return "The game didn't install completely: \(installed), where a full install is at least \(expected)"
+        case .installIncomplete(let reason):
+            return "The game didn't install completely: \(reason)"
 
         }
     }

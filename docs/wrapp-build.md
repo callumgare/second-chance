@@ -171,10 +171,22 @@ a unit test.
 Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`.
 
-After the installer, `GameInstallerRunner` logs the size and file count of the
-game exe's folder and fails the attempt when it is below the game's
-`minimumInstalledBytes` in `GameInfoProvider`. An installer killed partway can
-exit 0 with the exe already unpacked, so finding the exe proves little.
+An installer killed partway can exit 0 with the game's exe already unpacked,
+so neither the exit code nor finding the exe proves the install finished.
+After a clean exit, `GameInstallerRunner` checks the record each installer
+family writes only once it has finished (`InstallCompletion`), and fails the
+attempt with `WrappBuildError.installIncomplete` when it is missing:
+
+| Installer     | Finished when                                                                  |
+| ------------- | ------------------------------------------------------------------------------ |
+| Inno Setup    | Its `/LOG` has `Installation process succeeded.`                               |
+| MSI           | Its `/l*` log has the `INSTALL` action ending with `Return value 1.`           |
+| InstallShield | Its uninstall log, `setup.ilg`, is in the game exe's folder or one above it    |
+
+InstallShield's `/f2` result file and its uninstall registry key are no use
+for this: both say success seconds into an install that is then killed. An
+installer of unknown type gets no check. Either way, the size and file count
+of the game exe's folder are logged (`Installed: …`).
 
 A headless build makes one install attempt. The GUI's fallback, retrying with
 the installer's interactive wizard when the silent install fails, would wait
