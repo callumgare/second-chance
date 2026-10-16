@@ -49,7 +49,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
         logger.notice("Detected game: \(gameInfo.title)")
         await bus.publishWrappBuild(.gameDetected(gameInfo))
-        await input.onGameDetected(gameInfo)
+        try await input.onGameDetected(gameInfo)
 
         // ── Build ──────────────────────────────────────────────────────
         let wrappPath = helper.createTemporaryWrappPath()

@@ -193,7 +193,7 @@ direct assignment.
 - **Async/await** throughout — services use `async throws` methods. Run UI updates on `@MainActor`.
 - **Logging**: All logging goes through [swift-log](https://github.com/apple/swift-log) — `import Logging`, then `private nonisolated let logger = Logger(label: "<subsystem>.<Category>")`. Subsystems: `au.gare.callum.second-chance.SecondChance` (main app), `au.gare.callum.second-chance.WrappTemplate`, `au.gare.callum.second-chance.WrappPuppeteer` — all siblings under the `au.gare.callum.second-chance` prefix. Levels mean something — [docs/logging.md](docs/logging.md#levels) has the rules: `.debug` for detail only useful when digging (it is kept everywhere but not shown on the terminal), `.notice` for the normal story of a run, `.warning` for something unusual the run survives, `.error` for a failure, `.critical` for one that ends the build or the game (no `.fault` — that's the OSLog name). No `privacy:` annotations, no `os.Logger`, no `print()`. Every executable calls `AppLogging.bootstrap(subsystem:)` as its **first** statement (`SecondChanceApp.init()`, `WrappTemplate`'s `main()`, `WrappPuppeteer`'s top of `main.swift`) — a `Logger` created before bootstrap is silently orphaned to swift-log's default stdout handler and never reaches the store. Log records fan out in-process via `MultiplexLogHandler` to `LogStore` (in-memory ring, 50k entries) and OSLog (crash-durable, the only place `privacy: .public` still exists — inside `OSLogHandler`). Terminal stderr, the floating log window (`LogWindow`, instant history + live batches), and Save Logs (`LogExporter`, lossless where `log show` dropped `.debug` entries) all read from `LogStore`; no process shells out to `/usr/bin/log` except `SystemLogReader.fetch(pid:since:)` in integration tests. Subprocess output (Wine, ScummVM, winetricks) is captured line-by-line via `ProcessLineLogger`/`TaggedProcess` in `Shared/Logging/`, each line at the level `SubprocessLineClassifier` picks from its content rather than from the pipe it came down. Integration tests still read OSLog via `log show` after a 2-second flush delay — that's why OSLog stays in the multiplex.
 - **Error handling**: The codebase has many `try?` that silently swallow errors. For new code, prefer explicit `do/catch` and log failures. Cleanup operations may use `try?` but should log.
-- **No force unwraps (`!`)** in new code — use `guard let` / `compactMap`. Existing force unwraps (e.g. `gameExe!` in `GameInstallerRunner`) are flagged for removal.
+- **No force unwraps (`!`)** in new code — use `guard let` / `compactMap`. Existing force unwraps are flagged for removal.
 - **File paths**: Never hardcode absolute user paths (e.g. `/Users/...`). Use `Bundle.main.url(forResource:)`, `FileManager` search paths, or environment variables.
 - **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
 
@@ -202,7 +202,8 @@ direct assignment.
 - **Non-interactive mode**: `NON_INTERACTIVE=true` plus `INSTALLATION_SOURCE`
   (`disk` | `her-download` | `steam`) and `OUTPUT_PATH`; `disk` also needs
   `DISK_1_PATH` (and optionally `DISK_2_PATH`). `HER_INSTALLER_PATH`,
-  `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` and `PATCH_FAILURE_POLICY` are read by
+  `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`, `PATCH_FAILURE_POLICY` and
+  `EXPECTED_GAME_SLUG` (fail if the disc is another game) are read by
   `WrappBuildInput` when the corresponding prompt would appear. **`CLIBuilder`
   owns every `exit()`** — no code path in `WrappBuildViewModel` terminates the
   process, so the ViewModel is safe to instantiate in tests regardless of
@@ -373,7 +374,6 @@ as the Control-click bypass no longer works.
 - **Her download works end-to-end** through the same helpers as disk (it signs
   and publishes the same events), but has far less real-world mileage than the
   disk path.
-- `GameInstallerRunner` still has one force unwrap (`gameExe!`).
 - The produced game app's process is named `WrappTemplate` in Activity Monitor.
   Renaming the executable per-game during configuration would read better.
 

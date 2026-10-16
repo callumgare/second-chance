@@ -16,6 +16,9 @@
 import Foundation
 import AppKit
 import UniformTypeIdentifiers
+import Logging
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildInput")
 
 /// Unified I/O for a wrapp build.
 ///
@@ -32,6 +35,7 @@ import UniformTypeIdentifiers
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
 /// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
+/// | `onGameDetected()`            | `EXPECTED_GAME_SLUG` (fails on mismatch)| accepts whatever was detected  |
 ///
 /// There are **no separate interactive/non-interactive classes** — one code
 /// path handles both.
@@ -198,8 +202,15 @@ class WrappBuildInput {
 
     // MARK: - Callbacks
 
-    /// The detected game (drives the UI).
-    func onGameDetected(_ gameInfo: GameInfo) async {
+    /// The detected game (drives the UI). When `EXPECTED_GAME_SLUG` names the
+    /// game the caller asked for (sc does), a different game fails the build:
+    /// otherwise a wrong disc builds the wrong wrapp, and the caller reports
+    /// success for the game it wanted.
+    func onGameDetected(_ gameInfo: GameInfo) async throws {
+        if let expected = environment["EXPECTED_GAME_SLUG"], !expected.isEmpty, expected != gameInfo.id {
+            logger.critical("❌ Expected \(expected), but the disc is \(gameInfo.title) (\(gameInfo.id))")
+            throw WrappBuildError.wrongGame(expected: expected, detected: gameInfo.id)
+        }
         await MainActor.run {
             viewModel?.detectedGame = gameInfo
         }

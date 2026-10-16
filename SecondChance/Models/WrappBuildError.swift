@@ -20,6 +20,10 @@ enum WrappBuildError: LocalizedError, Equatable {
     case missingRequiredParameter(String)
     case invalidPath(String)
     case internalError(String)
+    /// The installer exited cleanly but left less than a full install.
+    case installIncomplete(installed: String, expected: String)
+    /// The disc is a different game from the one asked for.
+    case wrongGame(expected: String, detected: String)
 
     var errorDescription: String? {
         switch self {
@@ -47,8 +51,18 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Invalid path: \(message)"
         case .internalError(let message):
             return message
+        case .wrongGame(let expected, let detected):
+            return "This disc is \(detected), not \(expected)"
+        case .installIncomplete(let installed, let expected):
+            return "The game didn't install completely: \(installed), where a full install is at least \(expected)"
+
         }
     }
 
     static let cancelled = WrappBuildError.userCancelled
+
+    var isIncompleteInstall: Bool {
+        if case .installIncomplete = self { return true }
+        return false
+    }
 }

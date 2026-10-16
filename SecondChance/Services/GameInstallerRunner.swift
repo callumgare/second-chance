@@ -139,9 +139,19 @@ class GameInstallerRunner {
                         expectedPath: gameInfo.internalGameExePath,
                         driveCPath: driveCPath
                     )
+                    if let found = gameExe {
+                        do {
+                            try checkInstallSize(gameDir: found.deletingLastPathComponent(), gameInfo: gameInfo)
+                        } catch {
+                            gameExe = nil
+                            throw error
+                        }
+                    }
+                } catch let error as WrappBuildError where error.isIncompleteInstall {
+                    throw error
                 } catch {
                     // Game executable not found
-                    if installAttempt == 0 && !strictInstall {
+                    if installAttempt + 1 < maxAttempts {
                         logger.warning("Game exe not found after silent install — retrying with interactive mode...")
                         installAttempt += 1
                     } else {
@@ -171,13 +181,16 @@ class GameInstallerRunner {
             }
         }
 
-        // gameExe is guaranteed to be non-nil here:
-        // - If nil, the loop would have continued to retry
-        // - If still nil after retries, an error would have been thrown
+        // The loop only ends without throwing once the exe is found, but say
+        // so rather than crash if that ever stops being true.
+        guard let gameExe else {
+            logger.critical("❌ Installation finished without a game executable")
+            throw WrappBuildError.gameExecutableNotFound
+        }
 
         // Get relative path from drive_c
         // Use proper path manipulation to avoid issues with /private symlinks
-        let relativePath = gameExe!.path(relativeTo: driveCPath)
+        let relativePath = gameExe.path(relativeTo: driveCPath)
 
         // Determine the installer directory (disk-combined or disk-1)
         let installerDir = installerDirectoryPath(in: driveCPath)
@@ -189,7 +202,7 @@ class GameInstallerRunner {
             try await applyGamePatches(
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
-                gameInstallDir: gameExe!.deletingLastPathComponent(),
+                gameInstallDir: gameExe.deletingLastPathComponent(),
                 source: source
             )
         } catch WrappBuildError.userCancelled {
@@ -678,6 +691,22 @@ class GameInstallerRunner {
                 commandDescription: "wine start /wait \(installerPath) \(args.joined(separator: " "))",
                 underlyingCommandDescription: nil
             )
+        }
+    }
+
+    // MARK: - Install Checks
+
+    /// Log what the install produced and fail when it is short of the
+    /// game's known minimum. An installer that is killed partway can still
+    /// exit 0, after the game exe is already unpacked.
+    func checkInstallSize(gameDir: URL, gameInfo: GameInfo) throws {
+        let size = DirectorySize.measure(gameDir)
+        logger.notice("Installed: \(size.description) in \(gameDir.lastPathComponent)")
+        guard let minimum = gameInfo.minimumInstalledBytes else { return }
+        guard size.bytes >= minimum else {
+            let expected = ByteCountFormatter.string(fromByteCount: minimum, countStyle: .file)
+            logger.error("Install is incomplete: \(size.description), where a full install of \(gameInfo.title) is at least \(expected)")
+            throw WrappBuildError.installIncomplete(installed: size.description, expected: expected)
         }
     }
 

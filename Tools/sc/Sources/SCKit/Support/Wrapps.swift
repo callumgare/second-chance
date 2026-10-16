@@ -139,8 +139,13 @@ struct WrappBuilder {
         env["OUTPUT_PATH"] = wrappsDir.path
         env["SECOND_CHANCE_PROGRESS_PATH"] = progressFile.path
         // The app only copies its logs to stderr when stderr is a terminal;
-        // here it's a pipe to sc.
+        // here it's a pipe to sc. That copy is notice and up; the full log,
+        // every level, goes beside it.
         env["SECOND_CHANCE_LOG_STDERR"] = "1"
+        let fullLog = try ui.makeLogFile("wrapp-build-\(game.slug).full")
+        env["SECOND_CHANCE_LOG_FILE"] = fullLog.path
+        // A disc of another game fails the build instead of building that game.
+        env["EXPECTED_GAME_SLUG"] = game.slug
         if let policy = source.patchFailure { env["PATCH_FAILURE_POLICY"] = policy.rawValue }
         env.merge(debug.environment) { _, new in new }
 
@@ -151,26 +156,34 @@ struct WrappBuilder {
         let arguments = debug.arguments
         let environment: [String: String?] = env.mapValues { $0 }
         let label = "Building \(game.title)"
-        try await ui.progressStep(label, success: "Built \(game.wrappName)", failure: "Couldn't build \(game.wrappName)") { update in
-            // The step's message is replaced by each update, so every update
-            // keeps the game in it.
-            let following = follower.follow { record in
-                switch record.event {
-                case "stage": if let text = record.text { update("\(label) — \(text)") }
-                case "failed": if let message = record.message { update("\(label) — failed: \(message)") }
-                default: break
+        do {
+            try await ui.progressStep(label, success: "Built \(game.wrappName)", failure: "Couldn't build \(game.wrappName)") { update in
+                // The step's message is replaced by each update, so every update
+                // keeps the game in it.
+                let following = follower.follow { record in
+                    switch record.event {
+                    case "stage": if let text = record.text { update("\(label) — \(text)") }
+                    case "failed": if let message = record.message { update("\(label) — failed: \(message)") }
+                    default: break
+                    }
+                }
+                defer { following.cancel() }
+                try await ui.logStep(
+                    "Second Chance", log: "wrapp-build-\(game.slug)", success: "Second Chance finished",
+                    visibleLines: 5, keepOnSuccess: false
+                ) { sink in
+                    try await Proc.stream(app, arguments, env: environment, cwd: repo.root) { await sink.line($0) }
                 }
             }
-            defer { following.cancel() }
-            try await ui.logStep(
-                "Second Chance", log: "wrapp-build-\(game.slug)", success: "Second Chance finished",
-                visibleLines: 5, keepOnSuccess: false
-            ) { sink in
-                try await Proc.stream(app, arguments, env: environment, cwd: repo.root) { await sink.line($0) }
-            }
+        } catch {
+            ui.line(ui.format("\(.muted("  Every level: \(repo.display(fullLog))"))"))
+            throw error
         }
 
-        let wrapp = repo.wrapp(for: game, in: wrappsDir)
+        // Where the app says it saved the wrapp; the expected name only if it
+        // didn't say, so an older wrapp of the same name can't pass for this one.
+        let reported = ProgressRecord.all(in: progressFile).last { $0.event == "completed" }?.path
+        let wrapp = reported.map { URL(fileURLWithPath: $0) } ?? repo.wrapp(for: game, in: wrappsDir)
         guard FileManager.default.fileExists(atPath: wrapp.appendingPathComponent("Contents/Info.plist").path) else {
             throw SCError("Second Chance finished, but there's no wrapp at \(repo.display(wrapp)).",
                           hints: ["Check the log in \(repo.display(repo.scLogs))."])

@@ -99,7 +99,16 @@ and `raw` otherwise, so piped output is the tools' own, unaltered.
 - `raw`: every line as the tool printed it.
 
 Whatever the mode, every step's full output is written to
-`DerivedData/sc-logs/<time>-<step>.log`, and failures print the path.
+`DerivedData/sc-logs/<time>-<step>.log`, and failures print the path. The app
+only sends `notice` and up to stderr ([logging.md](logging.md#levels)), so for a
+wrapp build sc also has it write its complete log, every level, to
+`<time>-wrapp-build-<slug>.full.log` beside it (`SECOND_CHANCE_LOG_FILE`); a
+failed build prints that path as well.
+
+`sc wrapp build` passes the slug it was asked for as `EXPECTED_GAME_SLUG`, so a
+disc of a different game fails the build rather than building that game, and it
+reports the wrapp at the path the app's `completed` record names rather than
+the one it expected, so an older wrapp of the same name can't pass for it.
 
 **Live regions.** Noora's renderer assumes one live component at a time. `LiveRegion`
 gives each component its own slot (Noora components all take a `renderer:`) and

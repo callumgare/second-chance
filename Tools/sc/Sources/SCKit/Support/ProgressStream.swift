@@ -25,6 +25,12 @@ struct ProgressRecord: Decodable, Equatable, Sendable {
     static func decode(_ line: String) -> ProgressRecord? {
         try? JSONDecoder().decode(ProgressRecord.self, from: Data(line.utf8))
     }
+
+    /// Every record in a progress file, from the start.
+    static func all(in url: URL) -> [ProgressRecord] {
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+        return text.components(separatedBy: "\n").compactMap(decode)
+    }
 }
 
 /// Follows a progress file as it grows, handing over each complete record.

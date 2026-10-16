@@ -24,7 +24,10 @@ class GameInfoProvider {
             id: "secrets-can-kill-remastered",
             title: "Secrets Can Kill Remastered",
             diskCount: 1,
-            internalGameExePath: "/Program Files (x86)/Nancy Drew SCK/Secrets.exe"
+            internalGameExePath: "/Program Files (x86)/Nancy Drew SCK/Secrets.exe",
+            // A full install is 559 MB in 2,056 files; one cut short 20 s in
+            // was 248 MB with Secrets.exe already in place.
+            minimumInstalledBytes: 500_000_000
         ),
         GameInfo(
             id: "stay-tuned",

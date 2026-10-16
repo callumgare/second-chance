@@ -68,7 +68,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
         logger.notice("Detected game: \(gameInfo.title)")
         await bus.publishWrappBuild(.gameDetected(gameInfo))
-        await input.onGameDetected(gameInfo)
+        try await input.onGameDetected(gameInfo)
 
         // ── Disk 2 (multi-disk games) ─────────────────────────────────
         var disk2Root: URL?

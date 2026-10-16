@@ -171,6 +171,11 @@ a unit test.
 Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`.
 
+After the installer, `GameInstallerRunner` logs the size and file count of the
+game exe's folder and fails the attempt when it is below the game's
+`minimumInstalledBytes` in `GameInfoProvider`. An installer killed partway can
+exit 0 with the exe already unpacked, so finding the exe proves little.
+
 A headless build makes one install attempt. The GUI's fallback, retrying with
 the installer's interactive wizard when the silent install fails, would wait
 for a click that never comes, so headless runs fail instead and say why.
