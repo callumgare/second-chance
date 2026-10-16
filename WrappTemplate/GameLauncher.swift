@@ -191,6 +191,14 @@ class GameLauncher {
 
     private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
         let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
+        // The wrapp stopping the game on its way out (Cmd-Q, a SIGTERM to the
+        // wrapp) is a quit, not a failure, whatever signal the game got.
+        if cleanupQueue.sync(execute: { cleanupCompleted }) {
+            logger.notice("■ Game stopped after \(ran), because the wrapp is quitting")
+            infoWindow?.close()
+            logger.notice("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
+            return
+        }
         // Only Wine launches track the window (ScummVM has no diagnostics).
         let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
         if let signal {
