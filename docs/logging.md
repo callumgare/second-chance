@@ -18,6 +18,7 @@ what goes into the log and where it ends up.
 | The terminal (stderr) | `notice` and up, compact format, when stderr is a terminal or `SECOND_CHANCE_LOG_STDERR=1`. |
 | `DerivedData/sc-logs/<time>-<step>.log` | What sc showed for each step: for a wrapp build, the app's stderr copy. |
 | `DerivedData/sc-logs/<time>-wrapp-build-<slug>.full.log` | A wrapp build's whole log, every level, full format (`SECOND_CHANCE_LOG_FILE`). |
+| `DerivedData/sc-logs/<time>-wrapp-build-<slug>.jsonl` | The same as JSON lines (`SECOND_CHANCE_LOG_JSONL`). |
 | `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` | Each wrapp launch's whole log, every level; the newest 10 are kept. The header names it. |
 | `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/` | A bundle from a launch that started badly (see AGENTS.md): stacks, process lists, Wine's output and the wrapp's log. |
 | Save Logs, `--mirror-logs` | The app's in-memory ring (the last 50,000 entries), or the whole session, to a file you choose or `~/Downloads`. |
@@ -173,12 +174,31 @@ game's Wine session, and logs the signal; it exits regardless 15 s later.
 The app removes temp wrapps (`$TMPDIR/NancyDrew-*.app`) left by a run that
 was killed before its cleanup, once they are 6 hours old, and logs each one.
 
+## Structured fields
+
+Entries carry swift-log metadata (`logger.notice("…", metadata: ["pid": "\(pid)"])`)
+and the stage they were logged in. The text formats keep the compact line as it
+was; the full format appends metadata as ` {pid=1237 program=wine setup.exe}`;
+the JSON-lines sink writes everything as fields:
+
+```
+{"category":"Wine","label":"au.gare.callum.second-chance.Shared.Wine","level":"error",
+ "message":"0124:err:module:import_dll …","metadata":{"pid":"1237","program":"wine setup.exe"},
+ "pid":4120,"process":"Second Chance","run":"3f9a2c1e","seq":812,"stage":"Game installing",
+ "time":"2026-10-16T06:22:45.627Z"}
+```
+
+so `jq 'select(.level == "error" and .stage == "Game installing")'` or
+`jq 'select(.metadata.pid == "1237")'` replaces parsing columns and prefixes.
+Wine output lines and `SubprocessWatch` lines carry `pid` and `program`.
+
 ## Environment variables
 
 | Variable | Effect |
 | -------- | ------ |
 | `SECOND_CHANCE_LOG_STDERR` | `1` copies log lines to stderr even when it isn't a terminal, `0` never does. Unset, stderr gets them only when it is a terminal. |
 | `SECOND_CHANCE_LOG_LEVEL`  | The quietest level copied to stderr (`trace` … `critical`). Default `notice`. |
+| `SECOND_CHANCE_LOG_JSONL`  | Also write every entry, at every level, to this file as JSON lines. |
 | `SECOND_CHANCE_LOG_FILE`   | Mirror every entry, at every level, to this file in the full format. `--mirror-logs` does the same with a file in `~/Downloads`. |
 | `SECOND_CHANCE_RUN_ID`     | The run ID in the header. Inherited by child processes; set it to tie several processes' logs together. |
 | `SECOND_CHANCE_INSTALL_TIMEOUT` | Seconds an unattended game install may run before it is stopped. Default 1800. |

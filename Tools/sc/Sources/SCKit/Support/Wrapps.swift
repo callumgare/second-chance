@@ -144,6 +144,8 @@ struct WrappBuilder {
         env["SECOND_CHANCE_LOG_STDERR"] = "1"
         let fullLog = try ui.makeLogFile("wrapp-build-\(game.slug).full")
         env["SECOND_CHANCE_LOG_FILE"] = fullLog.path
+        // And as JSON lines, for jq and agents (docs/logging.md).
+        env["SECOND_CHANCE_LOG_JSONL"] = fullLog.path.replacingOccurrences(of: ".full.log", with: ".jsonl")
         // A disc of another game fails the build instead of building that game.
         env["EXPECTED_GAME_SLUG"] = game.slug
         if let policy = source.patchFailure { env["PATCH_FAILURE_POLICY"] = policy.rawValue }

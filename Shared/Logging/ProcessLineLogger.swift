@@ -16,7 +16,8 @@ nonisolated enum ProcessLineLogger {
     /// `SubprocessLineClassifier` picks from the line's content, falling back
     /// to `level` (stdout → `.notice`, stderr → `.warning`, conventionally).
     /// Pass `classify: false` to log every line at exactly `level`, or
-    /// `levelFor` to choose each line's level yourself.
+    /// `levelFor` to choose each line's level yourself. `metadata` goes on
+    /// every line (a subprocess's pid, say).
     ///
     /// Concurrency note: the captured `buffer` needs no lock — a
     /// `readabilityHandler` never runs concurrently with itself for the same
@@ -34,6 +35,7 @@ nonisolated enum ProcessLineLogger {
         level: Logging.Logger.Level,
         classify: Bool = true,
         levelFor: (@Sendable (String) -> Logging.Logger.Level)? = nil,
+        metadata: Logging.Logger.Metadata? = nil,
         onLine: (@Sendable (String) -> Void)? = nil,
         onEOF: (@Sendable () -> Void)? = nil
     ) {
@@ -50,7 +52,7 @@ nonisolated enum ProcessLineLogger {
                     let line = String(decoding: buffer, as: UTF8.self)
                         .trimmingCharacters(in: .newlines)
                     if !line.isEmpty {
-                        logger.log(level: levelOf(line), "\(line)")
+                        logger.log(level: levelOf(line), "\(line)", metadata: metadata)
                         onLine?(line)
                     }
                     buffer.removeAll()
@@ -71,7 +73,7 @@ nonisolated enum ProcessLineLogger {
                 let line = String(decoding: lineData, as: UTF8.self)
                     .trimmingCharacters(in: .newlines)
                 if !line.isEmpty {
-                    logger.log(level: levelOf(line), "\(line)")
+                    logger.log(level: levelOf(line), "\(line)", metadata: metadata)
                     onLine?(line)
                 }
             }

@@ -48,9 +48,9 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
             lastOutput = startTime
         }
         if let detail {
-            logger.notice("▶ \(name) started (pid \(pid)): \(detail)")
+            logger.notice("▶ \(name) started (pid \(pid)): \(detail)", metadata: metadata(pid))
         } else {
-            logger.notice("▶ \(name) started (pid \(pid))")
+            logger.notice("▶ \(name) started (pid \(pid))", metadata: metadata(pid))
         }
 
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
@@ -88,11 +88,11 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
         let suffix = note.map { " — \($0)" } ?? ""
         switch outcome {
         case .exited(0):
-            logger.notice("■ \(name) (pid \(pid)) exited 0 \(summary)\(suffix)")
+            logger.notice("■ \(name) (pid \(pid)) exited 0 \(summary)\(suffix)", metadata: metadata(pid))
         case .exited(let code):
-            logger.error("■ \(name) (pid \(pid)) exited \(code) \(summary)\(suffix)")
+            logger.error("■ \(name) (pid \(pid)) exited \(code) \(summary)\(suffix)", metadata: metadata(pid))
         case .signalled(let signal):
-            logger.error("■ \(name) (pid \(pid)) was killed by \(Self.signalName(signal)) \(summary)\(suffix)")
+            logger.error("■ \(name) (pid \(pid)) was killed by \(Self.signalName(signal)) \(summary)\(suffix)", metadata: metadata(pid))
         }
     }
 
@@ -101,7 +101,11 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
             (Date().timeIntervalSince(startTime), Date().timeIntervalSince(lastOutput), lineCount, self.pid)
         }
         guard quiet >= heartbeat - 0.5 else { return }
-        logger.notice("… \(name) (pid \(pid)) still running after \(Self.duration(elapsed)); no output for \(Self.duration(quiet)) (\(lines) lines so far)")
+        logger.notice("… \(name) (pid \(pid)) still running after \(Self.duration(elapsed)); no output for \(Self.duration(quiet)) (\(lines) lines so far)", metadata: metadata(pid))
+    }
+
+    private func metadata(_ pid: Int32) -> Logging.Logger.Metadata {
+        ["pid": "\(pid)", "program": "\(name)"]
     }
 
     /// `17.1s`, `4m 05s`.

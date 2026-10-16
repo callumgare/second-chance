@@ -199,13 +199,6 @@ public struct WineEnvironment {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
         let eofs = DispatchGroup()
-        eofs.enter()
-        eofs.enter()
-        ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice,
-                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
-        ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning,
-                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
-
         let exited = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in exited.signal() }
 
@@ -216,6 +209,16 @@ public struct WineEnvironment {
             throw error
         }
         watch.started(pid: process.processIdentifier, detail: arguments.joined(separator: " "))
+
+        // Attached once the pid is known, so every line carries it; the pipes
+        // hold anything written in the meantime.
+        let metadata: Logger.Metadata = ["pid": "\(process.processIdentifier)", "program": "\(watch.name)"]
+        eofs.enter()
+        eofs.enter()
+        ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, metadata: metadata,
+                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
+        ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, metadata: metadata,
+                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
 
         let timedOut: Bool = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {

@@ -69,6 +69,10 @@ nonisolated enum AppLogging {
 
         // Settle the run ID now, so processes started from here inherit it.
         _ = RunContext.runID
+
+        if let path = ProcessInfo.processInfo.environment["SECOND_CHANCE_LOG_JSONL"], !path.isEmpty {
+            JSONLinesLogSink.start(path: URL(fileURLWithPath: path))
+        }
     }
 
     /// Whether bootstrap() has fully returned. Call sites that construct

@@ -18,6 +18,10 @@ nonisolated struct Entry: Sendable {
     let label: String
     let message: String
     let error: String?
+    /// swift-log metadata, flattened to strings: a subprocess's pid, …
+    var metadata: [String: String] = [:]
+    /// The run's stage when the entry was logged (`LogContext.enterStage`).
+    var stage: String? = nil
 }
 
 /// Central log storage singleton. Thread-safe via Mutex.
@@ -102,10 +106,11 @@ nonisolated final class LogStore: @unchecked Sendable {
     // MARK: - Public API
     
     /// Append a log entry to the store.
-    nonisolated func append(level: String, label: String, message: String, error: String? = nil) {
+    nonisolated func append(level: String, label: String, message: String, error: String? = nil, metadata: [String: String] = [:]) {
+        let stage = LogContext.stage.name
         // Check for re-entrancy: if called from drain queue, append but don't re-enqueue
         if isRunningInDrainQueue() {
-            guard let entry = createEntry(level: level, label: label, message: message, error: error) else {
+            guard let entry = createEntry(level: level, label: label, message: message, error: error, metadata: metadata, stage: stage) else {
                 return
             }
             _ = lock.withLock { state in
@@ -114,7 +119,7 @@ nonisolated final class LogStore: @unchecked Sendable {
             return
         }
         
-        guard let entry = createEntry(level: level, label: label, message: message, error: error) else {
+        guard let entry = createEntry(level: level, label: label, message: message, error: error, metadata: metadata, stage: stage) else {
             return
         }
         
@@ -200,7 +205,7 @@ nonisolated final class LogStore: @unchecked Sendable {
     // MARK: - Internal
     
     /// Create an entry, truncating if necessary. Returns nil if entry is empty.
-    private func createEntry(level: String, label: String, message: String, error: String?) -> Entry? {
+    private func createEntry(level: String, label: String, message: String, error: String?, metadata: [String: String] = [:], stage: String? = nil) -> Entry? {
         var truncatedMessage = message
         if message.utf8.count > Self.maxEntryBytes {
             let truncatedBytes = message.prefix(Self.maxEntryBytes - 50)
@@ -214,7 +219,9 @@ nonisolated final class LogStore: @unchecked Sendable {
             level: level,
             label: label,
             message: truncatedMessage,
-            error: error
+            error: error,
+            metadata: metadata,
+            stage: stage
         )
         
         // Don't append empty entries
@@ -234,7 +241,9 @@ nonisolated final class LogStore: @unchecked Sendable {
             level: entry.level,
             label: entry.label,
             message: entry.message,
-            error: entry.error
+            error: entry.error,
+            metadata: entry.metadata,
+            stage: entry.stage
         )
         state.nextSeq &+= 1
         

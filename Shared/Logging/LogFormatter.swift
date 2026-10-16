@@ -33,7 +33,8 @@ nonisolated struct LogFormatter {
     
     /// Full format for export and disk mirror.
     /// One line per entry: `<ISO8601 timestamp>  <level>  <full label>  <message>`
-    /// with an attached error appended as ` — Error: <error>`.
+    /// with an attached error appended as ` — Error: <error>` and any
+    /// metadata as ` {key=value …}`.
     ///
     /// Messages that themselves contain newlines (step dividers, Wine output)
     /// naturally span lines — the timestamp/level/label prefix identifies the
@@ -43,6 +44,9 @@ nonisolated struct LogFormatter {
         var line = "\(fullFormatter.string(from: entry.timestamp))  \(entry.level)  \(entry.label)  \(entry.message)"
         if let error = entry.error {
             line += " — Error: \(error)"
+        }
+        if !entry.metadata.isEmpty {
+            line += " {" + entry.metadata.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ") + "}"
         }
         return line
     }

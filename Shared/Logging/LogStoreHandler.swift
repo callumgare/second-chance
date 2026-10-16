@@ -21,11 +21,16 @@ nonisolated struct LogStoreHandler: LogHandler {
     nonisolated func log(event: Logging.LogEvent) {
         // Flatten immediately: store String, never Logger.Message or (any Error)?
         // (retaining errors in a 50k ring pins arbitrary object graphs).
+        var merged = metadata
+        if let eventMetadata = event.metadata {
+            merged.merge(eventMetadata) { _, new in new }
+        }
         LogStore.shared.append(
             level: Self.levelToString(event.level),
             label: label,
             message: event.message.description,
-            error: event.error.map { String(describing: $0) }
+            error: event.error.map { String(describing: $0) },
+            metadata: merged.mapValues { $0.description }
         )
     }
 

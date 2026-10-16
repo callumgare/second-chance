@@ -102,8 +102,9 @@ Whatever the mode, every step's full output is written to
 `DerivedData/sc-logs/<time>-<step>.log`, and failures print the path. The app
 only sends `notice` and up to stderr ([logging.md](logging.md#levels)), so for a
 wrapp build sc also has it write its complete log, every level, to
-`<time>-wrapp-build-<slug>.full.log` beside it (`SECOND_CHANCE_LOG_FILE`); a
-failed build prints that path as well.
+`<time>-wrapp-build-<slug>.full.log` beside it (`SECOND_CHANCE_LOG_FILE`), and
+the same as JSON lines to `<time>-wrapp-build-<slug>.jsonl`
+(`SECOND_CHANCE_LOG_JSONL`); a failed build prints the full log's path as well.
 
 `sc wrapp build` passes the slug it was asked for as `EXPECTED_GAME_SLUG`, so a
 disc of a different game fails the build rather than building that game, and it
