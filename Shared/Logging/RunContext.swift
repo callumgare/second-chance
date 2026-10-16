@@ -26,11 +26,30 @@ nonisolated enum RunContext {
         return id
     }()
 
-    /// Whether this process can reach the WindowServer. Without it (an SSH
-    /// shell's Background session) Wine can't load its graphics driver, and
-    /// installers fail with nothing but an exit code.
+    /// The launchd session this process runs in: `Aqua` for the logged-in
+    /// GUI, `Background` for an SSH shell, nil if it can't be told.
+    static let launchdSession: String? = {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        process.arguments = ["managername"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        let name = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }()
+
+    /// Whether this process can open windows. Outside the Aqua session (an
+    /// SSH shell's Background session) Wine can't load its graphics driver,
+    /// and installers fail with nothing but an exit code. The console
+    /// user's CoreGraphics session is visible from there too, so that can't
+    /// tell; launchd's session type can.
     static var hasWindowServerSession: Bool {
-        CGSessionCopyCurrentDictionary() != nil
+        guard let session = launchdSession else { return CGSessionCopyCurrentDictionary() != nil }
+        return session == "Aqua"
     }
 
     /// Whether this process runs translated by Rosetta.
@@ -53,8 +72,8 @@ nonisolated enum RunContext {
         let arch = "arm64"
         #endif
         let session = hasWindowServerSession
-            ? "GUI session"
-            : "no GUI session — Wine can't open windows here (run through `sc in-gui-session`)"
+            ? "GUI session (\(launchdSession ?? "unknown"))"
+            : "no GUI session (\(launchdSession ?? "unknown")) — Wine can't open windows here (run through `sc in-gui-session`)"
         let wineDebug = ProcessInfo.processInfo.environment["SECOND_CHANCE_WINEDEBUG"]
             .flatMap { $0.isEmpty ? nil : $0 } ?? WineEnvironment.defaultWineDebug
 
