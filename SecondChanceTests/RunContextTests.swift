@@ -26,7 +26,12 @@ struct RunContextTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         try Data(count: 1_000).write(to: dir.appendingPathComponent("a"))
         try Data(count: 500).write(to: dir.appendingPathComponent("sub/b"))
-        let size = DirectorySize.measure(dir)
-        #expect(size == DirectorySize(bytes: 1_500, files: 2))
+        #expect(DirectorySize.measure(dir) == DirectorySize(bytes: 1_500, files: 2))
+
+        // A folder of links into another counts what they point at, once.
+        let links = dir.appendingPathComponent("links")
+        try FileManager.default.createDirectory(at: links, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: links.appendingPathComponent("sub").path, withDestinationPath: "../sub")
+        #expect(DirectorySize.measure(links) == DirectorySize(bytes: 500, files: 1))
     }
 }

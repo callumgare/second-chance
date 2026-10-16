@@ -11,18 +11,26 @@ nonisolated struct DirectorySize: Equatable, Sendable {
     let bytes: Int64
     let files: Int
 
-    /// Walk `url` and add up its regular files. Symlinks aren't followed.
+    /// Walk `url` and add up its regular files. Symlinks are followed, once
+    /// each: a ScummVM game's `disk-combined` folder is links into its disks.
     static func measure(_ url: URL) -> DirectorySize {
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
-        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) else {
-            return DirectorySize(bytes: 0, files: 0)
-        }
+        var visited = Set<String>()
         var bytes: Int64 = 0
         var files = 0
-        for case let file as URL in enumerator {
-            guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
-            bytes += Int64(values.fileSize ?? 0)
-            files += 1
+        var pending = [url.resolvingSymlinksInPath()]
+        let keys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .fileSizeKey]
+        while let next = pending.popLast() {
+            guard visited.insert(next.path).inserted,
+                  let values = try? next.resourceValues(forKeys: keys) else { continue }
+            if values.isDirectory == true {
+                let children = (try? FileManager.default.contentsOfDirectory(
+                    at: next, includingPropertiesForKeys: Array(keys)
+                )) ?? []
+                pending += children.map { $0.resolvingSymlinksInPath() }
+            } else if values.isRegularFile == true {
+                bytes += Int64(values.fileSize ?? 0)
+                files += 1
+            }
         }
         return DirectorySize(bytes: bytes, files: files)
     }

@@ -463,6 +463,8 @@ public struct WineEnvironment {
     /// Check if wineserver is running for this prefix
     public func isWineserverRunning() -> Bool {
         let wineserverPath = wineBinDir.appendingPathComponent("wineserver")
+        // A ScummVM wrapp has no Wine at all, so no wineserver to be running.
+        guard FileManager.default.fileExists(atPath: wineserverPath.path) else { return false }
         
         let process = Process()
         process.executableURL = wineserverPath

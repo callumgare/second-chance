@@ -133,20 +133,20 @@ class GameLauncher {
     /// Cleanup game and Wine processes when quitting
     /// Returns true if async cleanup is needed (caller should wait), false if cleanup is immediate
     func performCleanup(completion: @escaping () -> Void) {
-        logger.notice("[Cleanup/performCleanup] ENTERED performCleanup method")
+        logger.debug("[Cleanup/performCleanup] ENTERED performCleanup method")
         
         // Ensure cleanup only happens once
         cleanupQueue.sync {
-            logger.notice("[Cleanup/performCleanup] Inside cleanupQueue.sync block")
+            logger.debug("[Cleanup/performCleanup] Inside cleanupQueue.sync block")
             if cleanupCompleted {
-                logger.notice("[Cleanup/performCleanup] Cleanup already completed, calling completion handler immediately")
+                logger.debug("[Cleanup/performCleanup] Cleanup already completed, calling completion handler immediately")
                 completion()
                 return
             }
-            logger.notice("[Cleanup/performCleanup] Setting cleanupCompleted = true")
+            logger.debug("[Cleanup/performCleanup] Setting cleanupCompleted = true")
             cleanupCompleted = true
         }
-        logger.notice("[Cleanup/performCleanup] After cleanupQueue.sync block")
+        logger.debug("[Cleanup/performCleanup] After cleanupQueue.sync block")
         
         logger.notice("[Cleanup] Starting cleanup process...")
         
@@ -158,29 +158,29 @@ class GameLauncher {
         
         // For Wine games, we need to ensure wineserver is stopped
         if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") {
-            logger.notice("[Cleanup/performCleanup] Dispatching Wine server cleanup to background queue...")
+            logger.debug("[Cleanup/performCleanup] Dispatching Wine server cleanup to background queue...")
             DispatchQueue.global(qos: .utility).async { [weak self] in
-                self?.logger.notice("[Cleanup/performCleanup] Inside Wine cleanup async block")
+                self?.logger.debug("[Cleanup/performCleanup] Inside Wine cleanup async block")
                 guard let self = self else {
-                    self?.logger.notice("[Cleanup/performCleanup] self is nil, calling completion handler")
+                    self?.logger.debug("[Cleanup/performCleanup] self is nil, calling completion handler")
                     completion()
                     return
                 }
                 
-                self.logger.notice("[Cleanup/performCleanup] Calling WineUtilities.waitTillWineserverStopped...")
+                self.logger.debug("[Cleanup/performCleanup] Calling WineUtilities.waitTillWineserverStopped...")
                 WineUtilities.waitTillWineserverStopped(at: self.config.appPath, customPrefixDir: self.config.winePrefix)
-                self.logger.notice("[Cleanup/performCleanup] WineUtilities.waitTillWineserverStopped returned")
-                self.logger.notice("[Cleanup/performCleanup] About to call completion handler")
+                self.logger.debug("[Cleanup/performCleanup] WineUtilities.waitTillWineserverStopped returned")
+                self.logger.debug("[Cleanup/performCleanup] About to call completion handler")
                 completion()
-                logger.notice("[Cleanup/performCleanup] Completion handler called")
+                logger.debug("[Cleanup/performCleanup] Completion handler called")
             }
-            logger.notice("[Cleanup/performCleanup] Wine cleanup dispatched, exiting performCleanup method")
+            logger.debug("[Cleanup/performCleanup] Wine cleanup dispatched, exiting performCleanup method")
         } else {
             // Non-Wine games, cleanup is immediate
-            logger.notice("[Cleanup/performCleanup] Non-Wine game, cleanup is immediate")
-            logger.notice("[Cleanup/performCleanup] About to call completion handler")
+            logger.debug("[Cleanup/performCleanup] Non-Wine game, cleanup is immediate")
+            logger.debug("[Cleanup/performCleanup] About to call completion handler")
             completion()
-            logger.notice("[Cleanup/performCleanup] Completion handler called, exiting performCleanup method")
+            logger.debug("[Cleanup/performCleanup] Completion handler called, exiting performCleanup method")
         }
     }
     

@@ -274,30 +274,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        mainLogger.notice("[Cleanup/AppDelegate] applicationShouldTerminate called")
+        mainLogger.debug("[Cleanup/AppDelegate] applicationShouldTerminate called")
         
         // Prevent multiple cleanup attempts
         guard !isCleaningUp else {
-            mainLogger.notice("[Cleanup/AppDelegate] Already cleaning up, returning .terminateNow")
+            mainLogger.debug("[Cleanup/AppDelegate] Already cleaning up, returning .terminateNow")
             return .terminateNow
         }
         
-        mainLogger.notice("[Cleanup/AppDelegate] Setting isCleaningUp = true")
+        mainLogger.debug("[Cleanup/AppDelegate] Setting isCleaningUp = true")
         isCleaningUp = true
         
         guard let gameLauncher = gameLauncher else {
-            mainLogger.notice("[Cleanup/AppDelegate] No gameLauncher, returning .terminateNow")
+            mainLogger.debug("[Cleanup/AppDelegate] No gameLauncher, returning .terminateNow")
             return .terminateNow
         }
         
         mainLogger.notice("[Cleanup/AppDelegate] Application terminating, performing cleanup...")
         
         // Perform cleanup and wait for completion
-        mainLogger.notice("[Cleanup/AppDelegate] About to call gameLauncher.performCleanup...")
+        mainLogger.debug("[Cleanup/AppDelegate] About to call gameLauncher.performCleanup...")
         gameLauncher.performCleanup {
-            mainLogger.notice("[Cleanup/AppDelegate] Inside performCleanup completion handler")
+            mainLogger.debug("[Cleanup/AppDelegate] Inside performCleanup completion handler")
             DispatchQueue.main.async {
-                mainLogger.notice("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
+                mainLogger.debug("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
                 mainLogger.notice("[Cleanup] All cleanup complete, terminating application")
                 // Drain pending entries so the disk mirror / stderr keep the last lines.
                 LogStore.shared.flush()
@@ -305,11 +305,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     exit(self.gameExitCode)
                 }
                 NSApp.reply(toApplicationShouldTerminate: true)
-                mainLogger.notice("[Cleanup/AppDelegate] NSApp.reply(toApplicationShouldTerminate: true) called")
+                mainLogger.debug("[Cleanup/AppDelegate] NSApp.reply(toApplicationShouldTerminate: true) called")
             }
         }
         
-        mainLogger.notice("[Cleanup/AppDelegate] Returning .terminateLater")
+        mainLogger.debug("[Cleanup/AppDelegate] Returning .terminateLater")
         // Return later - we'll call reply when cleanup is done
         return .terminateLater
     }
@@ -335,7 +335,7 @@ private func installTerminationHandlers() {
         signal(sig, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
         source.setEventHandler {
-            mainLogger.notice("Received \(SubprocessWatch.signalName(sig)): quitting the game and ending its Wine session")
+            mainLogger.notice("Received \(SubprocessWatch.signalName(sig)): quitting the game")
             DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
                 mainLogger.error("Cleanup didn't finish within 15 s of \(SubprocessWatch.signalName(sig)); exiting anyway")
                 LogStore.shared.flush()
