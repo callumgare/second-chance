@@ -12,7 +12,12 @@ import Logging
 
 struct NancyDrewQuitScenario {
     struct Options {
-        var windowDetectTimeout: TimeInterval = 60
+        /// How long to wait for the game's window once its process is up.
+        var windowDetectTimeout: TimeInterval = 30
+        /// How long to wait for the game's process to appear. A Wine wrapp
+        /// waits up to 60 s for Wine's desktop before it starts the game
+        /// (`GameLauncher.prepareDesktop`), so this has to outlast that.
+        var processDetectTimeout: TimeInterval = 90
         var infoWindowTimeout: TimeInterval = 15
         var quitTimeout: TimeInterval = 90
         /// How long to keep looking for the Exit button
@@ -58,7 +63,7 @@ struct NancyDrewQuitScenario {
 
         guard let gamePid = waitForGameWindow() else {
             forceQuit(app)
-            return .failed("Game window did not appear within \(Int(options.windowDetectTimeout))s")
+            return .failed("Game process or window did not appear in time")
         }
 
         logger.notice("ℹ️  Game process PID: \(gamePid)")
@@ -104,17 +109,17 @@ struct NancyDrewQuitScenario {
     /// focus. Returns the game process's PID.
     private func waitForGameWindow() -> Int32? {
         let processName = wrapp.engine.gameProcessName(gameExeName: wrapp.gameExeName)
-        logger.notice("⏳ Waiting for game window to appear (timeout: \(Int(options.windowDetectTimeout))s)...")
+        logger.notice("⏳ Waiting for game process (timeout: \(Int(options.processDetectTimeout))s), then its window...")
         let start = Date()
 
         logger.notice("[Step 1] Monitoring for \(processName) process...")
-        guard let process = ProcessFinder.waitForProcess(named: processName, timeout: options.windowDetectTimeout * 0.7) else {
+        guard let process = ProcessFinder.waitForProcess(named: processName, timeout: options.processDetectTimeout) else {
             return nil
         }
         let pid = process.pid
 
         logger.notice("[Step 2] Monitoring for windows from \(processName) (PID: \(pid))...")
-        guard let windows = WindowFinder.waitForWindows(timeout: 30, where: { $0.ownerPid == pid }) else {
+        guard let windows = WindowFinder.waitForWindows(timeout: options.windowDetectTimeout, where: { $0.ownerPid == pid }) else {
             logger.critical("❌ Timeout: \(processName) process found but no windows appeared")
             WindowFinder.logAllWindows()
             return nil

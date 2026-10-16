@@ -52,6 +52,31 @@ struct DiskInstallIntegrationTests {
         try? FileManager.default.removeItem(at: url)
     }
 
+    /// A build that times out is still running in this process — typically an
+    /// installer that fell back to interactive mode and is waiting for a
+    /// person. Left alone it carries on into the next game's test, with its
+    /// windows over that game's and its Wine session competing for the
+    /// machine. Kill its Wine session so the installer returns, then give the
+    /// build a moment to fail and tear down (unmount, remove the temp wrapp).
+    private func stopTimedOutBuild(recorder: RecordingEventSubscriber) async {
+        guard let installerPath = recorder.resolvedInstaller?.exePath,
+              let tempWrapp = Self.enclosingAppBundle(of: URL(fileURLWithPath: installerPath)) else {
+            return
+        }
+        WineEnvironment(appPath: tempWrapp).stopWineserver()
+        _ = await recorder.waitForCompletion(timeout: 60)
+    }
+
+    /// The outermost `.app` bundle containing `url`, if any.
+    private static func enclosingAppBundle(of url: URL) -> URL? {
+        var bundle = URL(fileURLWithPath: "/")
+        for component in url.pathComponents.dropFirst() {
+            bundle.appendPathComponent(component)
+            if component.hasSuffix(".app") { return bundle }
+        }
+        return nil
+    }
+
     // MARK: - Game filter
 
     @Test("Every requested game slug names a known game")
@@ -140,6 +165,9 @@ struct DiskInstallIntegrationTests {
             Task { await MainActor.run { Task { await viewModel.buildFromDisk() } } }
 
             let succeeded = await recorder.waitForCompletion(timeout: 600)
+            if !succeeded && recorder.failedError == nil {
+                await stopTimedOutBuild(recorder: recorder)
+            }
 
             // Attach event trace for debugging.
             let eventTrace = recorder.events.map { "\($0)" }.joined(separator: "\n")
