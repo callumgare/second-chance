@@ -469,13 +469,19 @@ class WrappBuildHelper {
 
         logger.notice("Saving wrapp: \(finalPath.path)")
 
-        // Remove existing if present
-        if FileManager.default.fileExists(atPath: finalPath.path) {
-            try FileManager.default.removeItem(at: finalPath)
+        // Name the destination in any failure: Foundation's own message names
+        // the temp bundle ("NancyDrew-<UUID>.app couldn't be moved…"), which
+        // says nothing about where it was going.
+        do {
+            // Remove existing if present
+            if FileManager.default.fileExists(atPath: finalPath.path) {
+                try FileManager.default.removeItem(at: finalPath)
+            }
+            try FileManager.default.moveItem(at: wrappPath, to: finalPath)
+        } catch {
+            logger.error("Couldn't save the wrapp to \(finalPath.path): \(ErrorChain.describe(error))")
+            throw WrappBuildError.saveFailed(destination: finalPath.path, reason: error.localizedDescription)
         }
-
-        // Move wrapp
-        try FileManager.default.moveItem(at: wrappPath, to: finalPath)
 
         logger.notice("Wrapp saved: \(finalPath.path)")
 

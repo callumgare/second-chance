@@ -70,9 +70,14 @@ class ISOMounter {
 
         guard process.terminationStatus == 0 else {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorOutput = String(data: data, encoding: .utf8) ?? "Unknown error"
+            let errorOutput = (String(data: data, encoding: .utf8) ?? "Unknown error")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            // hdiutil says "image not recognised" for a truncated ISO and for a
+            // file that was never one; the image itself can tell them apart.
+            let diagnosis = Self.diagnoseImage(at: isoPath)
+            logger.error("hdiutil couldn't attach \(isoPath.path): \(errorOutput) — \(diagnosis)")
             throw NSError(domain: "ISOMount", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to mount ISO: \(errorOutput)"
+                NSLocalizedDescriptionKey: "Failed to mount ISO: \(errorOutput). \(diagnosis)"
             ])
         }
 
@@ -104,6 +109,36 @@ class ISOMounter {
         throw NSError(domain: "ISOMount", code: 3, userInfo: [
             NSLocalizedDescriptionKey: "Failed to find mount point in hdiutil output"
         ])
+    }
+
+    /// What an ISO 9660 image's own header says about it: its size against
+    /// the size its primary volume descriptor declares, or that it has none.
+    nonisolated static func diagnoseImage(at url: URL) -> String {
+        let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+        let sizeText = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return "the file can't be read (\(sizeText))"
+        }
+        defer { try? handle.close() }
+        // The primary volume descriptor is sector 16 of 2048-byte sectors.
+        let descriptorOffset: UInt64 = 16 * 2048
+        guard (try? handle.seek(toOffset: descriptorOffset)) != nil,
+              let descriptor = try? handle.read(upToCount: 2048), descriptor.count == 2048,
+              descriptor[1...5].elementsEqual("CD001".utf8) else {
+            return "it is \(sizeText) and has no ISO 9660 header, so it isn't a CD image (or is cut off before its first 34 KB)"
+        }
+        func uint32LE(_ offset: Int) -> Int64 {
+            descriptor[offset..<(offset + 4)].reversed().reduce(Int64(0)) { $0 << 8 | Int64($1) }
+        }
+        func uint16LE(_ offset: Int) -> Int64 {
+            Int64(descriptor[offset]) | Int64(descriptor[offset + 1]) << 8
+        }
+        let declared = uint32LE(80) * uint16LE(128)
+        let declaredText = ByteCountFormatter.string(fromByteCount: declared, countStyle: .file)
+        if declared > 0 && size < declared {
+            return "it is truncated: \(sizeText) of the \(declaredText) its header declares (an incomplete download or copy)"
+        }
+        return "it is a \(sizeText) ISO 9660 image whose header declares \(declaredText)"
     }
 
     /// Unmount everything this mounter mounted. Safe to call when nothing is mounted.
