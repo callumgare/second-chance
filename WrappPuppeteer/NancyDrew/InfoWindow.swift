@@ -59,7 +59,7 @@ enum InfoWindow {
             // SwiftUI hosted views may not expose their buttons. Pressing
             // Return would activate the default button, but it is disabled
             // here — this path carries on as if the window were dismissed.
-            logger.error("⚠️  Confirm button not found via Accessibility — continuing without dismissing")
+            logger.warning("⚠️  Confirm button not found via Accessibility — continuing without dismissing")
             // InputControl.pressReturn()
             Thread.sleep(forTimeInterval: 0.5)
             return true

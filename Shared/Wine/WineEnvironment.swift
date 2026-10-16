@@ -65,6 +65,9 @@ public struct WineEnvironment {
             "WINEBOOT_HIDE_DIALOG": "1",
             "CX_ROOT": wineDir.path,
             "MVK_CONFIG_RESUME_LOST_DEVICE": "1",
+            // MoltenVK logs at info by default: ~160 lines of extension and
+            // GPU listings per launch. Warnings and errors still come through.
+            "MVK_CONFIG_LOG_LEVEL": "2",
             "MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE": "1",
             "WINEESYNC": "1",
             "WINEMSYNC": "1",

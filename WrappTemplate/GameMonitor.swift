@@ -257,7 +257,7 @@ class GameMonitor {
                     if activated {
                         logger.notice("[Game Monitor] ✅ Game process activated successfully")
                     } else {
-                        logger.error("[Game Monitor] ⚠️ Failed to activate game process")
+                        logger.warning("[Game Monitor] ⚠️ Failed to activate game process")
                     }
                 }
                 break

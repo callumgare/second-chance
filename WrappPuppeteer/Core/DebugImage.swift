@@ -31,7 +31,7 @@ enum DebugImage {
                   bitsPerPixel: 0
               ),
               let context = NSGraphicsContext(bitmapImageRep: rep) else {
-            logger.error("⚠️  Could not open \(screenshotPath) for annotation")
+            logger.warning("⚠️  Could not open \(screenshotPath) for annotation")
             return
         }
 
@@ -104,14 +104,14 @@ enum DebugImage {
 
     private static func save(_ rep: NSBitmapImageRep, to path: String) {
         guard let pngData = rep.representation(using: .png, properties: [:]) else {
-            logger.error("⚠️  Could not encode debug image \(path)")
+            logger.warning("⚠️  Could not encode debug image \(path)")
             return
         }
         do {
             try pngData.write(to: URL(fileURLWithPath: path))
             logger.notice("  💾 Saved debug image: \(path)")
         } catch {
-            logger.error("⚠️  Could not write debug image \(path): \(error)")
+            logger.warning("⚠️  Could not write debug image \(path): \(error)")
         }
     }
 }

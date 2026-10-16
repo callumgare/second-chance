@@ -101,7 +101,7 @@ final class GamePatchCatalog {
             let data = try Data(contentsOf: url)
             return try JSONDecoder().decode(Manifest.self, from: data).patches
         } catch {
-            logger.error("⚠️  Could not read game-patch manifest at \(url.path): \(error)")
+            logger.warning("⚠️  Could not read game-patch manifest at \(url.path): \(error)")
             return []
         }
     }

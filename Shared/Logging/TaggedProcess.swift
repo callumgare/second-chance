@@ -61,8 +61,9 @@ nonisolated final class TaggedProcess: @unchecked Sendable {
     // MARK: - Run
 
     /// Run the process, capturing stdout and stderr line-by-line and
-    /// forwarding each line to the logger (stdout → `.notice`,
-    /// stderr → `.error`). Returns immediately after starting the process
+    /// forwarding each line to the logger at the level
+    /// `SubprocessLineClassifier` picks (falling back to `.notice` for stdout
+    /// and `.warning` for stderr). Returns immediately after starting the process
     /// (non-blocking); call `waitUntilExit()` to block until it finishes.
     func run() throws {
         let stdoutPipe = Pipe()
@@ -71,7 +72,7 @@ nonisolated final class TaggedProcess: @unchecked Sendable {
         process.standardError = stderrPipe
 
         ProcessLineLogger.attach(to: stdoutPipe, logger: logger, level: .notice)
-        ProcessLineLogger.attach(to: stderrPipe, logger: logger, level: .error)
+        ProcessLineLogger.attach(to: stderrPipe, logger: logger, level: .warning)
 
         try process.run()
     }

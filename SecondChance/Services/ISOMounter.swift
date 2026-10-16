@@ -192,7 +192,7 @@ class ISOMounter {
 
                 // Found our ISO, now get the mount points
                 guard let systemEntities = image["system-entities"] as? [[String: Any]] else {
-                    logger.error("   ⚠️ No system entities found for mounted ISO")
+                    logger.warning("   ⚠️ No system entities found for mounted ISO")
                     continue
                 }
 
@@ -205,7 +205,7 @@ class ISOMounter {
                             logger.notice("   ✓ Mount point verified: \(mountPoint)")
                             return URL(fileURLWithPath: mountPoint)
                         } else {
-                            logger.error("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint)")
+                            logger.warning("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint)")
                         }
                     }
                 }

@@ -6,6 +6,7 @@
 //  Subscribers receive batches of entries from a monotonic sequence, ensuring no gaps or duplicates.
 
 import Foundation
+import Logging
 import os
 import Synchronization
 
@@ -439,8 +440,21 @@ nonisolated final class LogStore: @unchecked Sendable {
         }
     }()
 
+    /// The quietest level copied to stderr: `SECOND_CHANCE_LOG_LEVEL`
+    /// (`trace` … `critical`), default `notice`. Only the terminal copy is
+    /// filtered — the ring, the log window, exports and the disk mirror keep
+    /// every level, so routine detail logged at `debug` is still there when
+    /// someone goes looking.
+    private static let minimumStderrLevel: Logging.Logger.Level = {
+        ProcessInfo.processInfo.environment["SECOND_CHANCE_LOG_LEVEL"]
+            .flatMap { Logging.Logger.Level(rawValue: $0.lowercased()) } ?? .notice
+    }()
+
     private func writeToStderr(entries: ContiguousArray<Entry>) {
         for entry in entries {
+            if let level = Logging.Logger.Level(rawValue: entry.level), level < Self.minimumStderrLevel {
+                continue
+            }
             let line = LogFormatter.compact(entry: entry) + "\n"
             if let data = line.data(using: .utf8) {
                 var bytesToWrite = data.count

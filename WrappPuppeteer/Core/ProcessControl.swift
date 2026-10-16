@@ -166,7 +166,7 @@ enum ProcessControl {
     /// Force-terminate the app, then run each `pkill` invocation to catch
     /// helper processes that outlive it.
     static func forceQuit(_ app: NSRunningApplication, pkillArguments: [[String]] = []) {
-        logger.error("⚠️  Force quitting \(app.localizedName ?? "app")...")
+        logger.warning("⚠️  Force quitting \(app.localizedName ?? "app")...")
         app.forceTerminate()
 
         for arguments in pkillArguments {
@@ -177,7 +177,7 @@ enum ProcessControl {
                 try pkill.run()
                 pkill.waitUntilExit()
             } catch {
-                logger.error("⚠️  pkill \(arguments.joined(separator: " ")) failed: \(error)")
+                logger.warning("⚠️  pkill \(arguments.joined(separator: " ")) failed: \(error)")
             }
         }
     }

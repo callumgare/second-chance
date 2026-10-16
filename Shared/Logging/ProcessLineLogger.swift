@@ -12,8 +12,10 @@ import Logging
 nonisolated enum ProcessLineLogger {
 
     /// Attach a line-buffering reader to a pipe. Each complete line — and any
-    /// trailing partial line at EOF — is forwarded to `logger` at `level`
-    /// (stdout → `.notice`, stderr → `.error`, conventionally).
+    /// trailing partial line at EOF — is forwarded to `logger`, at the level
+    /// `SubprocessLineClassifier` picks from the line's content, falling back
+    /// to `level` (stdout → `.notice`, stderr → `.warning`, conventionally).
+    /// Pass `classify: false` to log every line at exactly `level`.
     ///
     /// Concurrency note: the captured `buffer` needs no lock — a
     /// `readabilityHandler` never runs concurrently with itself for the same
@@ -28,6 +30,7 @@ nonisolated enum ProcessLineLogger {
         to pipe: Pipe,
         logger: Logging.Logger,
         level: Logging.Logger.Level,
+        classify: Bool = true,
         onLine: (@Sendable (String) -> Void)? = nil
     ) {
         let fh = pipe.fileHandleForReading
@@ -41,7 +44,7 @@ nonisolated enum ProcessLineLogger {
                     let line = String(decoding: buffer, as: UTF8.self)
                         .trimmingCharacters(in: .newlines)
                     if !line.isEmpty {
-                        logger.log(level: level, "\(line)")
+                        logger.log(level: classify ? SubprocessLineClassifier.level(for: line, fallback: level) : level, "\(line)")
                         onLine?(line)
                     }
                     buffer.removeAll()
@@ -61,7 +64,7 @@ nonisolated enum ProcessLineLogger {
                 let line = String(decoding: lineData, as: UTF8.self)
                     .trimmingCharacters(in: .newlines)
                 if !line.isEmpty {
-                    logger.log(level: level, "\(line)")
+                    logger.log(level: classify ? SubprocessLineClassifier.level(for: line, fallback: level) : level, "\(line)")
                     onLine?(line)
                 }
             }

@@ -265,7 +265,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 try fileManager.copyItem(atPath: issPath, toPath: setupIssDestPath.path)
                 logger.notice("✅ Copied setup.iss for \(gameSlug)")
             } catch {
-                logger.error("⚠️ Failed to copy setup.iss: \(error)")
+                logger.warning("⚠️ Failed to copy setup.iss: \(error)")
             }
         } else {
             logger.notice("ℹ️ No setup.iss file found for \(gameSlug)")
@@ -315,7 +315,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         for (index, disk) in diskDirs.enumerated() {
             let letterIndex = index + 3 // Start at "d:" which is the 4th letter (index 3)
             guard letterIndex < 26 else {
-                logger.error("Warning: Too many disks to mount (maximum 23)")
+                logger.warning("Warning: Too many disks to mount (maximum 23)")
                 break
             }
 
@@ -353,7 +353,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            logger.error("⚠️ Failed to remove extended attributes: \(errorMessage)")
+            logger.warning("⚠️ Failed to remove extended attributes: \(errorMessage)")
             // Don't throw - this is not critical, codesign will just fail later with a better message
         }
     }

@@ -136,7 +136,7 @@ class GameInstallerRunner {
                 } catch {
                     // Game executable not found
                     if installAttempt == 0 && !strictInstall {
-                        logger.error("Game exe not found after silent install — retrying with interactive mode...")
+                        logger.warning("Game exe not found after silent install — retrying with interactive mode...")
                         installAttempt += 1
                     } else {
                         // Strict mode or second attempt failed, throw the error
@@ -157,7 +157,7 @@ class GameInstallerRunner {
                     throw error
                 }
 
-                logger.error("Silent install failed: \(error) — retrying with interactive mode...")
+                logger.warning("Silent install failed: \(error) — retrying with interactive mode...")
             }
         }
 
@@ -185,7 +185,7 @@ class GameInstallerRunner {
         } catch WrappBuildError.userCancelled {
             throw WrappBuildError.userCancelled
         } catch {
-            logger.error("⚠️  Failed to apply patches: \(error)")
+            logger.warning("⚠️  Failed to apply patches: \(error)")
         }
 
         return ("/" + relativePath, installerDir)
@@ -227,7 +227,7 @@ class GameInstallerRunner {
         } catch WrappBuildError.userCancelled {
             throw WrappBuildError.userCancelled
         } catch {
-            logger.error("⚠️  Failed to apply patches: \(error)")
+            logger.warning("⚠️  Failed to apply patches: \(error)")
         }
 
         return ("/" + relativePath, "/" + relativeInstallerDir)
@@ -345,7 +345,7 @@ class GameInstallerRunner {
                 )
                 logger.notice("✅ Applied patch: \(patch.id)")
             } catch {
-                logger.error("❌ Patch failed: \(patch.id): \(error)")
+                logger.warning("❌ Patch failed: \(patch.id): \(error)")
                 let continueInstall = await confirmPatchFailure(patchName: patch.title, error: error)
                 if continueInstall {
                     logger.notice("⚠️  Continuing without patch: \(patch.id)")
@@ -811,7 +811,7 @@ class GameInstallerRunner {
                 return .innoSetup
             }
         } catch {
-            logger.error("⚠️ Failed to detect installer type via exiftool: \(error)")
+            logger.warning("⚠️ Failed to detect installer type via exiftool: \(error)")
         }
 
         return .unknown
@@ -960,7 +960,7 @@ class GameInstallerRunner {
         logger.notice("Number of new executables found: \(newExes.count)")
 
         if newExes.isEmpty {
-            logger.error("WARNING: No new executables were created during installation")
+            logger.warning("WARNING: No new executables were created during installation")
             logger.notice("First few existing executables:")
             for (index, exe) in after.prefix(5).enumerated() {
                 logger.notice("  \(index + 1). \(exe)")

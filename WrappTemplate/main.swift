@@ -221,7 +221,7 @@ func launchShell(_ config: GameConfig) {
     case "wine", "wine-steam", "wine-steam-silent":
         launchWineShell(config)
     default:
-        mainLogger.error("Warning: Unknown game engine \(config.gameEngine), attempting Wine shell")
+        mainLogger.warning("Warning: Unknown game engine \(config.gameEngine), attempting Wine shell")
         launchWineShell(config)
     }
 }
@@ -370,7 +370,7 @@ func main() {
     // Check if wineserver is already running for this prefix
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
     if wine.isWineserverRunning() {
-        mainLogger.error("WARNING ⚠️: Detected running wineserver process for this prefix")
+        mainLogger.warning("WARNING ⚠️: Detected running wineserver process for this prefix")
         
         // Initialize NSApplication if not already done
         _ = NSApplication.shared
@@ -397,7 +397,7 @@ func main() {
                 // Wait a moment for cleanup
                 Thread.sleep(forTimeInterval: 0.5)
             } else {
-                mainLogger.error("⚠️  Wine server termination returned exit code: \(exitStatus)")
+                mainLogger.warning("⚠️  Wine server termination returned exit code: \(exitStatus)")
             }
         case .alertSecondButtonReturn:  // Continue Anyway
             mainLogger.notice("User chose to continue with Wine server running")

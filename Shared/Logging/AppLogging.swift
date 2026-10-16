@@ -57,7 +57,11 @@ nonisolated enum AppLogging {
         }
 
         // Check for --mirror-logs flag (WrappTemplate and WrappPuppeteer have no settings UI).
-        if CommandLine.arguments.contains("--mirror-logs") {
+        // SECOND_CHANCE_LOG_FILE names the mirror file, for callers that want
+        // the full log somewhere they choose (sc keeps it beside its step logs).
+        if let path = ProcessInfo.processInfo.environment["SECOND_CHANCE_LOG_FILE"], !path.isEmpty {
+            LogStore.shared.setDiskMirror(enabled: true, path: URL(fileURLWithPath: path))
+        } else if CommandLine.arguments.contains("--mirror-logs") {
             LogStore.shared.setDiskMirror(enabled: true)
         }
 

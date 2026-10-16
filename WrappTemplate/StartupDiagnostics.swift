@@ -140,7 +140,7 @@ final class StartupDiagnostics: @unchecked Sendable {
         do {
             dir = try makeBundleDirectory(reason: reason, at: now)
         } catch {
-            logger.error("[Diagnostics] could not create bundle directory: \(error)")
+            logger.warning("[Diagnostics] could not create bundle directory: \(error)")
             return
         }
         let sinceStart = gameStartTime.map { String(format: "%.1fs", now.timeIntervalSince($0)) } ?? "n/a"
@@ -263,7 +263,7 @@ final class StartupDiagnostics: @unchecked Sendable {
             do {
                 try fm.removeItem(at: old)
             } catch {
-                logger.error("[Diagnostics] could not prune \(old.lastPathComponent): \(error)")
+                logger.warning("[Diagnostics] could not prune \(old.lastPathComponent): \(error)")
             }
         }
     }
@@ -272,7 +272,7 @@ final class StartupDiagnostics: @unchecked Sendable {
         do {
             try text.write(to: file, atomically: true, encoding: .utf8)
         } catch {
-            logger.error("[Diagnostics] could not write \(file.lastPathComponent): \(error)")
+            logger.warning("[Diagnostics] could not write \(file.lastPathComponent): \(error)")
         }
     }
 

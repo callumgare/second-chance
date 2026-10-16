@@ -34,7 +34,7 @@ enum ScreenCapture {
             task.waitUntilExit()
             return task.terminationStatus == 0
         } catch {
-            logger.error("⚠️  Failed to capture screenshot: \(error)")
+            logger.warning("⚠️  Failed to capture screenshot: \(error)")
             return false
         }
     }

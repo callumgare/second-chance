@@ -79,7 +79,7 @@ struct NancyDrewQuitScenario {
             return .passed
         }
 
-        logger.error("⚠️  Game did not exit cleanly, force quitting...")
+        logger.warning("⚠️  Game did not exit cleanly, force quitting...")
         forceQuit(app)
         Thread.sleep(forTimeInterval: 2)
         if app.isTerminated {

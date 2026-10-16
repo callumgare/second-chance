@@ -17,7 +17,7 @@ private let findImageDebugProbe: CGPoint? = {
     guard let raw = Foundation.ProcessInfo.processInfo.environment["FIND_IMAGE_DEBUG_PROBE"] else { return nil }
     let parts = raw.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
     guard parts.count == 2 else {
-        logger.error("⚠️  Ignoring FIND_IMAGE_DEBUG_PROBE='\(raw)' — expected 'x,y'")
+        logger.warning("⚠️  Ignoring FIND_IMAGE_DEBUG_PROBE='\(raw)' — expected 'x,y'")
         return nil
     }
     return CGPoint(x: parts[0], y: parts[1])
@@ -448,7 +448,7 @@ enum TemplateMatcher {
         guard debugX >= 0, debugY >= 0,
               debugX + debugWidth <= screenshotWidth,
               debugY + debugHeight <= screenshotHeight else {
-            logger.error("     ⚠️  Probe position is outside the search region — nothing to score")
+            logger.warning("     ⚠️  Probe position is outside the search region — nothing to score")
             return
         }
 

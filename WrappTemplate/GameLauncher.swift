@@ -337,7 +337,7 @@ class GameLauncher {
         diagnostics.wineLaunched()
         self.diagnostics = diagnostics
         ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice) { diagnostics.observe(line: $0) }
-        ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .error) { diagnostics.observe(line: $0) }
+        ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .warning) { diagnostics.observe(line: $0) }
         
         logger.notice("[Wine] Game process started with PID \(process.processIdentifier)")
         
@@ -375,10 +375,10 @@ class GameLauncher {
             let desktop = try wine.startDesktop(outputPipe: outputPipe, errorPipe: errorPipe)
             desktopLauncher = desktop
             ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice)
-            ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .error)
+            ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .warning)
             logger.notice("[Desktop] Started explorer.exe /desktop (launcher PID \(desktop.processIdentifier)), waiting for display devices...")
         } catch {
-            logger.error("[Desktop] Could not start the desktop, leaving it to Wine: \(error)")
+            logger.warning("[Desktop] Could not start the desktop, leaving it to Wine: \(error)")
             return
         }
 
