@@ -44,19 +44,31 @@ nonisolated enum InstallCompletion {
         return "msiexec's log doesn't record the install finishing\(lastLine(of: log))"
     }
 
-    /// Nil when InstallShield's uninstall log is in `gameDir` or a folder
-    /// above it (below `driveC`), else why not. A game's exe can sit in a
-    /// subfolder of the install folder, which is where the log goes.
+    /// Nil when InstallShield's uninstall log is where its version puts it,
+    /// else why not. InstallShield 6 writes it into the install folder, which
+    /// may be a folder above the game's exe; 7 and later into
+    /// `InstallShield Installation Information\{product GUID}` under
+    /// Program Files.
     static func installShieldProblem(gameDir: URL, driveC: URL, fileManager: FileManager = .default) -> String? {
         // Resolved, since the temp wrapp is under /var, which is /private/var.
         let root = driveC.resolvingSymlinksInPath().path
         var dir = gameDir.resolvingSymlinksInPath()
+        var searched: [URL] = []
         while dir.path.hasPrefix(root) && dir.path != root {
-            let names = (try? fileManager.contentsOfDirectory(atPath: dir.path)) ?? []
-            if names.contains(where: isInstallShieldUninstallLog) { return nil }
+            searched.append(dir)
             dir.deleteLastPathComponent()
         }
-        return "InstallShield wrote no setup.ilg uninstall log in \(gameDir.lastPathComponent) or the folders above it, which it does once an install finishes"
+        for programFiles in ["Program Files (x86)", "Program Files"] {
+            let info = driveC.appendingPathComponent(programFiles)
+                .appendingPathComponent("InstallShield Installation Information")
+            let products = (try? fileManager.contentsOfDirectory(at: info, includingPropertiesForKeys: nil)) ?? []
+            searched += products
+        }
+        for folder in searched {
+            let names = (try? fileManager.contentsOfDirectory(atPath: folder.path)) ?? []
+            if names.contains(where: isInstallShieldUninstallLog) { return nil }
+        }
+        return "InstallShield wrote no setup.ilg uninstall log, which it does once an install finishes, in \(gameDir.lastPathComponent), the folders above it or InstallShield Installation Information"
     }
 
     /// `setup.ilg` (InstallShield 6 and later) or `DeIsL1.isu` (InstallShield 5).

@@ -60,6 +60,23 @@ struct InstallCompletionTests {
         #expect(InstallCompletion.installShieldProblem(gameDir: exeDir, driveC: driveC) == nil)
     }
 
+    @Test("InstallShield 7 and later keep the uninstall log under Installation Information")
+    func installShieldInstallationInformation() throws {
+        let driveC = FileManager.default.temporaryDirectory
+            .appendingPathComponent("InstallCompletionTests-\(UUID().uuidString)/drive_c")
+        defer { try? FileManager.default.removeItem(at: driveC.deletingLastPathComponent()) }
+        let gameDir = driveC.appendingPathComponent("Program Files (x86)/Nancy Drew/The White Wolf of Icicle Creek")
+        let info = driveC.appendingPathComponent(
+            "Program Files (x86)/InstallShield Installation Information/{60D8CA34-642C-476F-AB4E-94DECCAEED69}")
+        try FileManager.default.createDirectory(at: gameDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: info, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: info.appendingPathComponent("setup.exe").path, contents: Data())
+
+        #expect(InstallCompletion.installShieldProblem(gameDir: gameDir, driveC: driveC) != nil)
+        FileManager.default.createFile(atPath: info.appendingPathComponent("setup.ilg").path, contents: Data())
+        #expect(InstallCompletion.installShieldProblem(gameDir: gameDir, driveC: driveC) == nil)
+    }
+
     @Test("InstallShield's uninstall log is recognised by name", arguments: [
         ("setup.ilg", true), ("SETUP.ILG", true), ("DeIsL1.isu", true), ("setup.log", false), ("setup.inx", false),
     ])

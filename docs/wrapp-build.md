@@ -181,7 +181,7 @@ attempt with `WrappBuildError.installIncomplete` when it is missing:
 | ------------- | ------------------------------------------------------------------------------ |
 | Inno Setup    | Its `/LOG` has `Installation process succeeded.`                               |
 | MSI           | Its `/l*` log has the `INSTALL` action ending with `Return value 1.`           |
-| InstallShield | Its uninstall log, `setup.ilg`, is in the game exe's folder or one above it    |
+| InstallShield | Its uninstall log, `setup.ilg`, is in the game exe's folder or one above it (InstallShield 6), or under `Program Files (x86)\InstallShield Installation Information\{GUID}` (7 and later) |
 
 InstallShield's `/f2` result file and its uninstall registry key are no use
 for this: both say success seconds into an install that is then killed. An
