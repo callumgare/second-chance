@@ -113,47 +113,38 @@ class WrappBuildHelper {
 
         switch gameEngine {
         case .wine, .wineSteam, .wineSteamSilent:
-            // Using Wine, remove ScummVM files listed in scummvm-files
-            let scummvmFilesPath = resourcesPath.appendingPathComponent("scummvm-files")
-            if fileManager.fileExists(atPath: scummvmFilesPath.path) {
-                logger.notice("Reading ScummVM files list...")
-                if let content = try? String(contentsOf: scummvmFilesPath, encoding: .utf8) {
-                    let lines = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                    logger.notice("Found \(lines.count) ScummVM files/directories to remove")
-
-                    for relativePath in lines {
-                        let pathToRemove = wrappPath.appendingPathComponent(relativePath)
-                        if fileManager.fileExists(atPath: pathToRemove.path) {
-                            try fileManager.removeItem(at: pathToRemove)
-                        }
-                    }
-                }
-            } else {
-                logger.error("Warning: scummvm-files list not found at \(scummvmFilesPath.path)")
-            }
-
+            try removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("scummvm-files"),
+                                  engine: "ScummVM", from: wrappPath)
         case .scummvm:
-            // Using ScummVM, remove Wine files listed in wine-files
-            let wineFilesPath = resourcesPath.appendingPathComponent("wine-files")
-            if fileManager.fileExists(atPath: wineFilesPath.path) {
-                logger.notice("Reading Wine files list...")
-                if let content = try? String(contentsOf: wineFilesPath, encoding: .utf8) {
-                    let lines = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-                    logger.notice("Found \(lines.count) Wine files/directories to remove")
-
-                    for relativePath in lines {
-                        let pathToRemove = wrappPath.appendingPathComponent(relativePath)
-                        if fileManager.fileExists(atPath: pathToRemove.path) {
-                            try fileManager.removeItem(at: pathToRemove)
-                        }
-                    }
-                }
-            } else {
-                logger.error("Warning: wine-files list not found at \(wineFilesPath.path)")
-            }
+            try removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("wine-files"),
+                                  engine: "Wine", from: wrappPath)
         }
 
         logger.notice("Cleanup complete")
+    }
+
+    /// Remove the files an engine list names. The lists are written by
+    /// `setup-wine.sh` and `setup-scummvm.sh` with paths relative to the
+    /// bundle's `Contents/`, and ship in the template's Resources.
+    private func removeEngineFiles(listedIn list: URL, engine: String, from wrappPath: URL) throws {
+        guard fileManager.fileExists(atPath: list.path) else {
+            logger.warning("No \(engine) file list at \(list.path) — leaving \(engine) in the wrapp")
+            return
+        }
+        let content = try String(contentsOf: list, encoding: .utf8)
+        let paths = content.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let contents = wrappPath.appendingPathComponent("Contents")
+        var removed = 0
+        for relativePath in paths {
+            let pathToRemove = contents.appendingPathComponent(relativePath)
+            if fileManager.fileExists(atPath: pathToRemove.path) {
+                try fileManager.removeItem(at: pathToRemove)
+                removed += 1
+            }
+        }
+        logger.notice("Removed \(removed) of \(paths.count) \(engine) files the game doesn't use")
     }
 
     // MARK: - Wrapp Configuration
@@ -295,7 +286,7 @@ class WrappBuildHelper {
         // Check if directory exists
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: gameDir.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            logger.error("⚠️ Warning: Game directory not found at \(gameDir.path)")
+            logger.warning("⚠️ Warning: Game directory not found at \(gameDir.path)")
             return
         }
 
@@ -307,17 +298,18 @@ class WrappBuildHelper {
         )
 
         guard let contents else {
-            logger.error("⚠️ Warning: Failed to read game directory at \(gameDir.path)")
+            logger.warning("⚠️ Warning: Failed to read game directory at \(gameDir.path)")
             return
         }
 
         let iniFiles = contents.filter({ $0.pathExtension.lowercased() == "ini" })
 
         if iniFiles.isEmpty {
-            logger.error("⚠️ No INI files found in game directory")
-            logger.notice("   Files found in directory:")
+            // Normal for ScummVM games and some installers: nothing to configure.
+            logger.notice("No INI files to configure in the game directory")
+            logger.debug("   Files found in directory:")
             for file in contents {
-                logger.notice("     - \(file.lastPathComponent)")
+                logger.debug("     - \(file.lastPathComponent)")
             }
             return
         }
@@ -328,7 +320,7 @@ class WrappBuildHelper {
             logger.notice("  Processing: \(iniFile.lastPathComponent)")
 
             guard let originalContent = try? String(contentsOf: iniFile, encoding: .utf8) else {
-                logger.error("    ⚠️ Failed to read file")
+                logger.warning("    ⚠️ Failed to read file")
                 continue
             }
 
@@ -372,7 +364,7 @@ class WrappBuildHelper {
                     try content.write(to: iniFile, atomically: true, encoding: .utf8)
                     logger.notice("    ✅ Saved changes to \(iniFile.lastPathComponent)")
                 } catch {
-                    logger.error("    ⚠️ Failed to save changes: \(error)")
+                    logger.warning("    ⚠️ Failed to save changes: \(error)")
                 }
             } else {
                 logger.notice("    ℹ️ No changes needed")
@@ -536,7 +528,7 @@ class WrappBuildHelper {
             try fileManager.removeItem(at: path)
             logger.notice("🧹 Removed temp wrapp: \(path.lastPathComponent)")
         } catch {
-            logger.error("   ⚠️ Failed to remove \(path.lastPathComponent): \(error.localizedDescription)")
+            logger.warning("   ⚠️ Failed to remove \(path.lastPathComponent): \(error.localizedDescription)")
         }
     }
 
@@ -568,7 +560,7 @@ class WrappBuildHelper {
                     try fileManager.removeItem(at: wrapp)
                 }
             } catch {
-                logger.error("   ⚠️ Failed to remove \(wrapp.lastPathComponent): \(error.localizedDescription)")
+                logger.warning("   ⚠️ Failed to remove \(wrapp.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }
