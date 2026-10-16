@@ -44,8 +44,44 @@ enum SystemLogReader {
         )
     }
 
-    /// Run `log show` with `predicate` and return its stdout.
+    /// Run `log show` with `predicate` and return its entries as lines in
+    /// Second Chance's own compact format, with the process that logged each
+    /// one in front of the category (`WrappPuppeteer/main`), so they read
+    /// like the rest of the test output instead of in a third format.
     static func fetch(predicate: String, since start: Date) -> Data {
+        Data(compactLines(fromNDJSON: fetchRaw(predicate: predicate, since: start)).utf8)
+    }
+
+    /// `log show --style ndjson` output as compact lines.
+    static func compactLines(fromNDJSON data: Data) -> String {
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.dateFormat = "yyyy-MM-dd HH:mm:ss.SSSSSSZ"
+        let time = DateFormatter()
+        time.locale = Locale(identifier: "en_US_POSIX")
+        time.dateFormat = "HH:mm:ss.SSS"
+        var lines: [String] = []
+        for raw in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+            guard let object = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
+                  let message = object["eventMessage"] as? String else { continue }
+            let stamp = (object["timestamp"] as? String).flatMap(parser.date(from:)).map(time.string(from:)) ?? "??:??:??.???"
+            // OSLogHandler maps warning and error both to OSLog's error type.
+            let level: String
+            switch object["messageType"] as? String {
+            case "Debug": level = "debug"
+            case "Error": level = "error"
+            case "Fault": level = "critical"
+            default: level = "notice"
+            }
+            let process = ((object["processImagePath"] as? String) ?? "?").split(separator: "/").last.map(String.init) ?? "?"
+            let category = (object["category"] as? String) ?? ""
+            lines.append("\(stamp)  \(level)  \(process)/\(category)  \(message)")
+        }
+        return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Run `log show` with `predicate` and return its stdout, as ndjson.
+    private static func fetchRaw(predicate: String, since start: Date) -> Data {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -58,7 +94,7 @@ enum SystemLogReader {
             "show",
             "--start", startStr,
             "--predicate", predicate,
-            "--style", "syslog",
+            "--style", "ndjson",
         ]
 
         let pipe = Pipe()

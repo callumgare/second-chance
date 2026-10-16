@@ -44,6 +44,7 @@ nonisolated enum AppLogging {
         bootstrapped = true
         subsystemUsed = subsystem
 
+
         LoggingSystem.bootstrap { label in
             #if DEBUG
             // Tripwire: the factory runs for every Logger construction. If one

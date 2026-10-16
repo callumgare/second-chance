@@ -136,15 +136,17 @@ struct DiskInstallIntegrationTests {
             // Subscribes once for the whole run; later games reuse it.
             await Self.progress?.subscribe(to: EventBus.app)
 
-            // Capture PID + start time to collect os.Logger output after the install.
-            let logPid = ProcessInfo.processInfo.processIdentifier
-            let logStart = Date()
+            // Attach this build's log, every level, from LogStore: this
+            // process's own log, without a trip through os_log (which the
+            // test host may not be writing to — see MultiplexLogHandler).
+            let logStart = LogStore.shared.nextSequence
             defer {
-                // Wait for os.Logger to flush entries to the persistent store before querying.
-                Thread.sleep(forTimeInterval: 2.0)
-                let logData = SystemLogReader.fetch(pid: logPid, since: logStart)
-                if !logData.isEmpty {
-                    Attachment.record(logData, named: "secondchance-install-\(game.id).txt")
+                LogStore.shared.flush()
+                let lines = LogStore.shared.snapshot().entries
+                    .filter { $0.seq >= logStart }
+                    .map { LogFormatter.full(entry: $0) }
+                if !lines.isEmpty {
+                    Attachment.record(Data((lines.joined(separator: "\n") + "\n").utf8), named: "secondchance-install-\(game.id).txt")
                 }
             }
 
