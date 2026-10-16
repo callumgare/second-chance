@@ -17,6 +17,8 @@ nonisolated enum AppLogging {
 
     private static let lock = NSLock()
     private static var bootstrapped = false
+    /// Set once by `bootstrap`; see there.
+    nonisolated(unsafe) private(set) static var osLogEchoesToStderr = false
     private static var completedBootstrap = false
     private static var subsystemUsed: String?
 
@@ -43,6 +45,16 @@ nonisolated enum AppLogging {
         }
         bootstrapped = true
         subsystemUsed = subsystem
+
+        // Under Xcode and xcodebuild's test runs (`OS_ACTIVITY_DT_MODE`), os_log
+        // copies every entry to stderr itself, beside LogStore's copy: each
+        // line appeared twice in two formats, torn where the two writers met.
+        // os_log has latched the variable by now, so this process skips os_log
+        // instead; and it's unset so the processes this one starts (the
+        // wrapp, WrappPuppeteer) don't inherit it and do write to os_log,
+        // which is how the integration tests read their logs.
+        osLogEchoesToStderr = getenv("OS_ACTIVITY_DT_MODE") != nil
+        unsetenv("OS_ACTIVITY_DT_MODE")
 
 
         LoggingSystem.bootstrap { label in

@@ -36,13 +36,8 @@ nonisolated struct MultiplexLogHandler: LogHandler {
         self.osLogHandler = OSLogHandler(label: label)
     }
 
-    /// Under Xcode and xcodebuild's test runs (`OS_ACTIVITY_DT_MODE`), os_log
-    /// copies every entry to stderr itself, beside LogStore's copy: each line
-    /// appeared twice in two formats, torn where the two writers met. There,
-    /// LogStore's copy (the one that honours `SECOND_CHANCE_LOG_LEVEL`) is the
-    /// only one; os_log has already latched the variable, so unsetting it
-    /// wouldn't help.
-    static let writesToOSLog = ProcessInfo.processInfo.environment["OS_ACTIVITY_DT_MODE"] == nil
+    /// Whether entries go to os_log too. See `AppLogging.osLogEchoesToStderr`.
+    static var writesToOSLog: Bool { !AppLogging.osLogEchoesToStderr }
 
     nonisolated func log(event: Logging.LogEvent) {
         // OSLog first for crash durability (synchronous, on the emitting thread).
