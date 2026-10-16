@@ -94,7 +94,15 @@ class InfoWindowController: NSWindowController {
         }
     }
 
+    /// Safe to call from any thread: the game launcher calls it from its
+    /// background queue when the game exits, and AppKit traps (SIGILL) on a
+    /// window closed off the main thread. Off-main calls are queued, so they
+    /// stay in order with `showError`, which is queued the same way.
     override func close() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.close() }
+            return
+        }
         viewModel.stopTimer()
         window?.close()
     }
