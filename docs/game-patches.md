@@ -137,11 +137,9 @@ whichever installer family `detectInstallerType` reports — `/s /sms` for
 InstallShield, `/verysilent /norestart` for Inno Setup, `/qn` for MSI.
 
 If an installer ignores those and puts up a wizard, nothing would ever answer
-it. **Wine execution in this codebase has no timeout of its own**, so a patch
-installer showing a dialog would hang the build forever. `runPatchInstaller`
-therefore races the Wine call against a 180-second sleep, and on timeout kills
-the prefix's wineserver — cancelling the Swift task alone does not stop a
-Windows process. The patch is then reported as failed.
+it, so `runPatchInstaller` gives the Wine run a 180-second timeout. On timeout
+`WineEnvironment.runWine` stops the prefix's wineserver — the only thing that
+ends a Windows process — and the patch is reported as failed.
 
 ### Failure is not fatal
 

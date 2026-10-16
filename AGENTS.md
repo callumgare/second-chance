@@ -221,7 +221,10 @@ direct assignment.
   must be logged in at that Mac's console.
 - **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG). Run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) if Wine setup misbehaves after code changes.
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
-  retry fallback in `GameInstallerRunner`. The `--skip-installer` debug flag
+  retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
+  never take it either, since the interactive installer is a wizard nobody is
+  there to click through. An unattended install times out after
+  `SECOND_CHANCE_INSTALL_TIMEOUT` seconds (default 1800). The `--skip-installer` debug flag
   skips running the installer entirely (useful for testing wrapp construction).
   Through `sc` these are `--debug strict-install` and `--debug skip-installer`;
   the `SECOND_CHANCE_*` switches below are `--debug` values on `sc wrapp run`

@@ -222,79 +222,81 @@ class WineManager {
                     "/t", "REG_SZ",
                     "/d", driveType,
                     "/f"
-                ]
+                ],
+                // A registry write takes seconds; one that doesn't finish
+                // means the prefix is broken, and waiting won't fix it.
+                timeout: 120
             )
         }
     }
     
     // MARK: - Wine Execution
     
-    /// Run a program with Wine
+    /// Run a program with Wine. See `WineEnvironment.runWine` for what it
+    /// logs and throws.
     func runWine(
         at wrappPath: URL,
         executable: String,
-        arguments: [String] = []
+        arguments: [String] = [],
+        timeout: TimeInterval? = nil
     ) async throws {
         let wine = WineEnvironment(appPath: wrappPath)
-        try await wine.runWine(executable: executable, arguments: arguments)
+        try await wine.runWine(executable: executable, arguments: arguments, timeout: timeout)
     }
-    
+
     /// Run a Windows executable through Wine.
     ///
-    /// Returns the Wine process exit code. A non-zero exit code is logged as a
-    /// warning but does NOT throw — only launch failures (e.g. Wine not found,
-    /// process could not start) throw. Callers that need to treat a non-zero
-    /// exit as an error should inspect the returned code.
+    /// Returns the Wine process exit code rather than throwing for a
+    /// non-zero one, which `WineEnvironment.runWine` has already logged as
+    /// an error. A signal, a timeout or a failure to start still throws.
+    /// Callers that need to treat a non-zero exit as an error should inspect
+    /// the returned code.
     @discardableResult
     func runWindowsExecutable(
         at wrappPath: URL,
         exePath: String,
-        arguments: [String] = []
+        arguments: [String] = [],
+        timeout: TimeInterval? = nil
     ) async throws -> Int32 {
         let args = [exePath] + arguments
         return try await runWineReturningExitCode(
             at: wrappPath,
             executable: "wine",
-            arguments: args
+            arguments: args,
+            timeout: timeout
         )
     }
-    
-    /// Run executable with wine start /wait.
-    ///
-    /// Returns the Wine process exit code. A non-zero exit code is logged as a
-    /// warning but does NOT throw — only launch failures throw. See
-    /// `runWindowsExecutable` for details.
+
+    /// Run executable with wine start /wait. Returns the exit code like
+    /// `runWindowsExecutable`.
     @discardableResult
     func runWindowsExecutableWithStart(
         at wrappPath: URL,
         exePath: String,
-        arguments: [String] = []
+        arguments: [String] = [],
+        timeout: TimeInterval? = nil
     ) async throws -> Int32 {
         let wine = WineEnvironment(appPath: wrappPath)
         do {
-            try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments)
+            try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments, timeout: timeout)
             return 0
         } catch let WineError.executionFailed(exitCode) {
-            logger.error("⚠️  Warning: \(exePath) exited with non-zero code: \(exitCode)")
             return exitCode
         }
     }
-    
-    /// Run a Wine program and return its exit code.
-    ///
-    /// Non-zero exit codes are logged as a warning and returned (not thrown);
-    /// only genuine launch failures throw. Shared helper for
+
+    /// Run a Wine program and return its exit code. Shared helper for
     /// `runWindowsExecutable` and friends.
     private func runWineReturningExitCode(
         at wrappPath: URL,
         executable: String,
-        arguments: [String] = []
+        arguments: [String] = [],
+        timeout: TimeInterval? = nil
     ) async throws -> Int32 {
         do {
-            try await runWine(at: wrappPath, executable: executable, arguments: arguments)
+            try await runWine(at: wrappPath, executable: executable, arguments: arguments, timeout: timeout)
             return 0
         } catch let WineError.executionFailed(exitCode) {
-            logger.error("⚠️  Warning: \(executable) exited with non-zero code: \(exitCode)")
             return exitCode
         }
     }

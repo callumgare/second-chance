@@ -103,9 +103,15 @@ class GameInstallerRunner {
             return ("/" + relativePath, installerDir)
         }
 
-        // Check if strict install mode is enabled (no fallback to interactive)
+        // The fallback is the installer's own wizard, so it needs someone to
+        // click through it: never in strict mode, and never headless, where
+        // it would wait for ever.
         let strictInstall = ProcessInfo.processInfo.environment["STRICT_INSTALL"] == "true"
-        let maxAttempts = strictInstall ? 1 : 2
+        let headless = ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true"
+        let maxAttempts = (strictInstall || headless) ? 1 : 2
+        if headless && !strictInstall {
+            logger.notice("Headless build: no interactive installer retry if the silent install fails")
+        }
 
         // Try installation with automatic/silent mode first
         var installAttempt = 0
@@ -142,6 +148,8 @@ class GameInstallerRunner {
                         // Strict mode or second attempt failed, throw the error
                         if strictInstall {
                             logger.critical("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
+                        } else if headless {
+                            logger.critical("❌ Silent installation failed, and a headless build can't fall back to the interactive installer")
                         }
                         throw error
                     }
@@ -151,6 +159,8 @@ class GameInstallerRunner {
                 if installAttempt >= maxAttempts {
                     if strictInstall {
                         logger.critical("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
+                    } else if headless {
+                        logger.critical("❌ Silent installation failed, and a headless build can't fall back to the interactive installer")
                     } else {
                         logger.critical("❌ Installation failed after \(installAttempt) attempts")
                     }
@@ -274,7 +284,7 @@ class GameInstallerRunner {
 
     /// How long a single patch installer gets before it is assumed to be
     /// sitting on a dialog that nobody can answer.
-    private static let patchInstallerTimeout: Duration = .seconds(180)
+    private static let patchInstallerTimeout: TimeInterval = 180
 
     /// Something that went wrong applying one patch. Every case is recoverable:
     /// the build continues without that patch unless the user says otherwise.
@@ -458,35 +468,21 @@ class GameInstallerRunner {
         let arguments = silentPatchArguments(for: installerType)
         logger.notice("   → running \(patch.payload) (\(installerType)) \(arguments.joined(separator: " "))")
 
-        let finishedInTime = try await withThrowingTaskGroup(of: Bool.self) { group in
-            group.addTask { [wineManager] in
-                let exitCode = try await wineManager.runWindowsExecutable(
-                    at: wrappPath,
-                    exePath: winePath,
-                    arguments: arguments
-                )
-                guard exitCode == 0 else {
-                    throw GamePatchError.installerFailed(id: patch.id, exitCode: exitCode)
-                }
-                return true
-            }
-            group.addTask {
-                // `try?` so cancellation resolves quietly; only the first
-                // result is ever read, so a cancelled sleep cannot win.
-                try? await Task.sleep(for: Self.patchInstallerTimeout)
-                return false
-            }
-
-            let first = try await group.next() ?? false
-            group.cancelAll()
-            return first
-        }
-
-        guard finishedInTime else {
-            // Cancelling the Swift task does not stop the Windows process;
-            // only the wineserver holding it can.
-            _ = WineEnvironment(appPath: wrappPath).stopWineserver()
+        // runWine stops the prefix's wineserver on timeout, which is the only
+        // thing that ends the Windows process.
+        let exitCode: Int32
+        do {
+            exitCode = try await wineManager.runWindowsExecutable(
+                at: wrappPath,
+                exePath: winePath,
+                arguments: arguments,
+                timeout: Self.patchInstallerTimeout
+            )
+        } catch WineError.timedOut {
             throw GamePatchError.timedOut(patch.id)
+        }
+        guard exitCode == 0 else {
+            throw GamePatchError.installerFailed(id: patch.id, exitCode: exitCode)
         }
     }
 
@@ -690,6 +686,14 @@ class GameInstallerRunner {
 
     // MARK: - Installer Execution
 
+    /// How long a silent or AutoIt-driven install may run:
+    /// `SECOND_CHANCE_INSTALL_TIMEOUT` seconds, default 30 minutes — several
+    /// times the slowest install seen under Rosetta.
+    static var unattendedInstallTimeout: TimeInterval {
+        ProcessInfo.processInfo.environment["SECOND_CHANCE_INSTALL_TIMEOUT"]
+            .flatMap(TimeInterval.init) ?? 30 * 60
+    }
+
     /// Run the installer with appropriate arguments based on installer type
     private func runInstaller(
         at wrappPath: URL,
@@ -704,12 +708,12 @@ class GameInstallerRunner {
 
         // Diagnostic logging for the AutoIt decision (the decision itself is
         // made once, inside buildInstallerCommand).
-        logger.notice("Attempt number: \(attemptNumber)")
+        logger.debug("Attempt number: \(attemptNumber)")
         let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
         let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
         let setupIssExists = fileManager.fileExists(atPath: setupIssPath.path)
-        logger.notice("Setup.iss path: \(setupIssPath.path), exists: \(setupIssExists)")
-        logger.notice("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
+        logger.debug("Setup.iss path: \(setupIssPath.path), exists: \(setupIssExists)")
+        logger.debug("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
 
         let msiLogDestination = installerType == .msi
             ? try prepareMsiLogDestination(in: wrappPath)
@@ -753,26 +757,30 @@ class GameInstallerRunner {
         }
 
         // Execute the installer command. The WineManager methods return the
-        // Wine exit code (and log a warning if non-zero) rather than throwing
-        // for non-zero exits.
+        // Wine exit code (already logged) rather than throwing for non-zero
+        // exits. An unattended attempt gets a timeout, since nobody will
+        // notice it hanging; the interactive one is someone working through
+        // a wizard, who can take as long as they like.
+        let timeout = attemptNumber == 0 ? Self.unattendedInstallTimeout : nil
         let exitCode: Int32
         if command.useStartCommand {
             exitCode = try await wineManager.runWindowsExecutableWithStart(
                 at: wrappPath,
                 exePath: command.exePath,
-                arguments: command.arguments
+                arguments: command.arguments,
+                timeout: timeout
             )
         } else {
             exitCode = try await wineManager.runWindowsExecutable(
                 at: wrappPath,
                 exePath: command.exePath,
-                arguments: command.arguments
+                arguments: command.arguments,
+                timeout: timeout
             )
         }
 
         // A non-zero exit code usually means the install failed. Throw so the
-        // caller's silent→interactive retry logic can kick in (WineManager has
-        // already logged the warning with the exit code).
+        // caller's silent→interactive retry logic can kick in.
         if exitCode != 0 {
             throw WineError.executionFailed(exitCode: exitCode)
         }

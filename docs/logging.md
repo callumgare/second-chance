@@ -49,6 +49,30 @@ stderr and real failures to stdout, so a pipe-based level can't be trusted.
 
 Pass `classify: false` to log every line at exactly the given level.
 
+## Subprocess runs
+
+Every Wine run through `WineEnvironment.runWine` (installers, patches,
+`reg add`, …) streams its output into the log as it arrives, under the `Wine`
+category, framed by lines from `WineEnvironment` written by `SubprocessWatch`:
+
+```
+17:22:45.627  notice  WineEnvironment  ▶ wine setup.exe started (pid 1237): start /wait /unix …/setup.exe /verysilent /norestart
+17:23:15.630  notice  WineEnvironment  … wine setup.exe (pid 1237) still running after 30.0s; no output for 30.0s (0 lines so far)
+17:24:24.211  notice  WineEnvironment  ■ wine setup.exe (pid 1237) exited 0 after 1m 39s, 2 lines of output
+```
+
+The `■` line says how it ended: `exited N` (an error when N isn't 0) or
+`was killed by SIGKILL (9)`; a signal is never reported as an exit code. The
+`…` heartbeat appears after every 30 s without output, so a hung installer
+still shows up in the log as hung. A run given a `timeout` that passes it
+stops the prefix's wineserver and throws `WineError.timedOut`; an unattended
+game install gets `SECOND_CHANCE_INSTALL_TIMEOUT` (default 30 minutes), a
+patch installer 180 s and a registry write 120 s.
+
+The exact environment and command, quoted so it can be pasted into a
+terminal, are logged at debug as `To re-run by hand:`. Only the variables
+Second Chance sets are included, not the whole parent environment.
+
 ## Environment variables
 
 | Variable | Effect |
@@ -56,4 +80,5 @@ Pass `classify: false` to log every line at exactly the given level.
 | `SECOND_CHANCE_LOG_STDERR` | `1` copies log lines to stderr even when it isn't a terminal, `0` never does. Unset, stderr gets them only when it is a terminal. |
 | `SECOND_CHANCE_LOG_LEVEL`  | The quietest level copied to stderr (`trace` … `critical`). Default `notice`. |
 | `SECOND_CHANCE_LOG_FILE`   | Mirror every entry, at every level, to this file in the full format. `--mirror-logs` does the same with a file in `~/Downloads`. |
+| `SECOND_CHANCE_INSTALL_TIMEOUT` | Seconds an unattended game install may run before it is stopped. Default 1800. |
 | `SECOND_CHANCE_WINEDEBUG`  | Wine's `WINEDEBUG` for every Wine process Second Chance or a wrapp starts. Unset, it is `-all,err+all`: every channel off except the `err` class. |

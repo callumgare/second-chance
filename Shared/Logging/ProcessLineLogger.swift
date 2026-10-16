@@ -25,13 +25,15 @@ nonisolated enum ProcessLineLogger {
     /// `readabilityHandler` already schedules its own background reads.
     ///
     /// `onLine`, when given, also receives each line — on the pipe's reader
-    /// queue, so it must be quick and thread-safe.
+    /// queue, so it must be quick and thread-safe. `onEOF`, when given, is
+    /// called once the pipe reaches end-of-file and the last line is logged.
     static func attach(
         to pipe: Pipe,
         logger: Logging.Logger,
         level: Logging.Logger.Level,
         classify: Bool = true,
-        onLine: (@Sendable (String) -> Void)? = nil
+        onLine: (@Sendable (String) -> Void)? = nil,
+        onEOF: (@Sendable () -> Void)? = nil
     ) {
         let fh = pipe.fileHandleForReading
         var buffer = Data()
@@ -50,6 +52,7 @@ nonisolated enum ProcessLineLogger {
                     buffer.removeAll()
                 }
                 handle.readabilityHandler = nil
+                onEOF?()
                 return
             }
 

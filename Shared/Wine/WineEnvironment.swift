@@ -11,6 +11,9 @@ import Logging
 /// subsystems, so this file cannot pick one — a stable `.Shared` leaf still
 /// matches `BEGINSWITH 'au.gare.callum.second-chance'`.
 private nonisolated let wineLogger = Logger(label: "au.gare.callum.second-chance.Shared.WineEnvironment")
+/// What Wine and the Windows programs it runs print, as its own category so
+/// it can be told apart from Second Chance's lines about running it.
+private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.Shared.Wine")
 
 /// Wine configuration and execution utilities
 public struct WineEnvironment {
@@ -124,63 +127,49 @@ public struct WineEnvironment {
         }
     }
     
-    /// Run a Wine program with proper environment and architecture support
+    /// Run a Wine program and wait for it, streaming its output into the
+    /// log line by line as it arrives.
+    ///
+    /// The log gets one `▶` line when it starts (with its pid and arguments),
+    /// a `…` heartbeat whenever it has been quiet for 30 s, and one `■` line
+    /// saying how it ended — exit code or signal, how long it ran, how much
+    /// it printed. Its output is logged under the `Wine` category.
+    ///
+    /// Throws `WineError.executionFailed` on a non-zero exit,
+    /// `.terminatedBySignal` when it was killed, and `.timedOut` when
+    /// `timeout` passes first — in which case the prefix's wineserver is
+    /// stopped, which ends every Windows process in it.
     public func runWine(
         executable: String,
-        arguments: [String] = []
+        arguments: [String] = [],
+        timeout: TimeInterval? = nil
     ) async throws {
         let winePath = wineBinDir.appendingPathComponent(executable)
-        
-        // Check if Wine exists
+
         guard FileManager.default.fileExists(atPath: winePath.path) else {
             throw NSError(domain: "WineEnvironment", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: """
                 Wine framework not found at: \(winePath.path)
-                
+
                 To use this app, you need to bundle Wine:
                 1. Download CrossOver or extract Wine from Wineskin
                 2. Copy the wine folder to: Second Chance.app/Contents/SharedSupport/wine/
                 3. The structure should be: Second Chance.app/Contents/SharedSupport/wine/bin/wine
-                
+
                 Or run from Xcode: copy wine to the app's built location.
                 """
             ])
         }
-        
-        let process = Process()
-        process.executableURL = winePath
-        process.arguments = arguments
+        guard FileManager.default.isExecutableFile(atPath: winePath.path) else {
+            wineLogger.error("Wine at \(winePath.path) is not executable")
+            throw WineError.executionFailed(exitCode: 126)
+        }
+
         let env = environmentVariables()
-        process.environment = env
-        
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-        
-        wineLogger.notice("Attempting to execute: \(winePath.path)")
-        wineLogger.notice("With arguments: \(arguments.joined(separator: " "))")
-        wineLogger.notice("Checking if file exists: \(FileManager.default.fileExists(atPath: winePath.path))")
-        wineLogger.notice("Checking if file is readable: \(FileManager.default.isReadableFile(atPath: winePath.path))")
-        
-        // Check attributes
-        if let attrs = try? FileManager.default.attributesOfItem(atPath: winePath.path) {
-            let perms = attrs[.posixPermissions] as? NSNumber
-            wineLogger.notice("File permissions: \(String(format: "%o", perms?.uint16Value ?? 0))")
-            let fileType = attrs[.type] as? FileAttributeType
-            wineLogger.notice("File type: \(fileType?.rawValue ?? "unknown")")
-        }
-        
-        // Try to read the file to see if we have access
-        if let fileHandle = try? FileHandle(forReadingFrom: winePath) {
-            wineLogger.notice("Successfully opened file handle")
-            try? fileHandle.close()
-        } else {
-            wineLogger.error("WARNING: Could not open file handle")
-        }
-        
-        // Wine is x86_64, so we need to use arch -x86_64 on Apple Silicon
-        // Use /bin/sh to execute wine with proper architecture support
+        let quotedArguments = arguments.map { "\"\($0)\"" }.joined(separator: " ")
+
+        // Run through /bin/sh so Wine gets exactly these variables exported,
+        // whatever the parent's environment holds.
         let shellScript = """
         export WINEPREFIX="\(env["WINEPREFIX"] ?? "")"
         export WINE="\(env["WINE"] ?? "")"
@@ -192,58 +181,121 @@ public struct WineEnvironment {
         export USER="\(env["USER"] ?? "")"
         export WINEESYNC="\(env["WINEESYNC"] ?? "")"
         export WINEMSYNC="\(env["WINEMSYNC"] ?? "")"
-        exec "\(winePath.path)" \(arguments.map { "\"\($0)\"" }.joined(separator: " "))
+        exec "\(winePath.path)" \(quotedArguments)
         """
-        
-        // Execute via shell
+
+        let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
         process.arguments = ["-c", shellScript]
+        process.environment = env
 
-        let envPrefix = env.sorted(by: { $0.key < $1.key })
-            .map { k, v in "\(k)=\(v.contains(" ") ? "\"\(v)\"" : v)" }
-            .joined(separator: " ")
-        wineLogger.notice("Exact command: \(envPrefix) \"\(winePath.path)\" \(arguments.map { "\"\($0)\"" }.joined(separator: " "))")
-        
+        // What someone would paste into a terminal to run it again: only the
+        // variables Second Chance sets, not the whole parent environment.
+        wineLogger.debug("To re-run by hand:\n\(reproductionCommand(winePath: winePath, arguments: arguments))")
+
+        let watch = SubprocessWatch(name: Self.displayName(executable: executable, arguments: arguments), logger: wineLogger)
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        let eofs = DispatchGroup()
+        eofs.enter()
+        eofs.enter()
+        ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice,
+                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
+        ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning,
+                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
+
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+
         do {
             try process.run()
         } catch {
-            wineLogger.error("ERROR: Failed to execute wine: \(error.localizedDescription)")
-            wineLogger.error("Error details: \(error)")
+            wineLogger.error("Could not start \(watch.name): \(error)")
             throw error
         }
-        
-        // Wait for process to complete asynchronously (don't block the main thread)
-        await withCheckedContinuation { continuation in
+        watch.started(pid: process.processIdentifier, detail: arguments.joined(separator: " "))
+
+        let timedOut: Bool = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                process.waitUntilExit()
-                continuation.resume()
+                let deadline: DispatchTime = timeout.map { .now() + $0 } ?? .distantFuture
+                if exited.wait(timeout: deadline) == .success {
+                    continuation.resume(returning: false)
+                    return
+                }
+                wineLogger.error("\(watch.name) did not finish within \(SubprocessWatch.duration(timeout ?? 0)) — stopping its Wine session")
+                _ = self.stopWineserver()
+                process.terminate()
+                if exited.wait(timeout: .now() + 10) != .success {
+                    kill(process.processIdentifier, SIGKILL)
+                    exited.wait()
+                }
+                continuation.resume(returning: true)
             }
         }
-        
-        // Log output
-        let outputHandle = outputPipe.fileHandleForReading
-        let errorHandle = errorPipe.fileHandleForReading
-        
-        if let output = String(data: outputHandle.readDataToEndOfFile(), encoding: .utf8), !output.isEmpty {
-            wineLogger.notice("Wine output: \(output)")
+
+        // Let the last lines through. Wine's background services inherit the
+        // pipes and hold them open until the wineserver exits (a few seconds
+        // after the last Windows process), so EOF may never come promptly;
+        // don't wait for it longer than that.
+        _ = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: eofs.wait(timeout: .now() + 5))
+            }
         }
-        
-        if let error = String(data: errorHandle.readDataToEndOfFile(), encoding: .utf8), !error.isEmpty {
-            wineLogger.error("Wine error: \(error)")
+        outputPipe.fileHandleForReading.readabilityHandler = nil
+        errorPipe.fileHandleForReading.readabilityHandler = nil
+
+        let outcome = watch.finished(process, note: timedOut ? "timed out" : nil)
+        if timedOut {
+            throw WineError.timedOut(seconds: timeout ?? 0)
         }
-        
-        if process.terminationStatus != 0 {
-            throw WineError.executionFailed(exitCode: process.terminationStatus)
+        switch outcome {
+        case .exited(0):
+            return
+        case .exited(let code):
+            throw WineError.executionFailed(exitCode: code)
+        case .signalled(let signal):
+            throw WineError.terminatedBySignal(signal)
         }
     }
-    
+
+    /// `wine setup.exe`, `wine reg`, `wineserver`: what to call a Wine run in
+    /// the log. For `start`, the program it starts.
+    static func displayName(executable: String, arguments: [String]) -> String {
+        guard executable == "wine" else { return executable }
+        var rest = arguments[...]
+        if rest.first?.lowercased() == "start" {
+            rest = rest.dropFirst()
+            while let flag = rest.first, flag.hasPrefix("/"), ["/wait", "/unix", "/min", "/max", "/b"].contains(flag.lowercased()) {
+                rest = rest.dropFirst()
+            }
+        }
+        guard let program = rest.first else { return "wine" }
+        let name = program.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? program
+        return "wine \(name)"
+    }
+
+    /// A shell command that runs `winePath` with the variables Second Chance
+    /// sets, one per line.
+    func reproductionCommand(winePath: URL, arguments: [String]) -> String {
+        let quote: (String) -> String = { "'" + $0.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let variables = wineSpecificEnvironmentVariables()
+            .sorted { $0.key < $1.key }
+            .map { "  \($0.key)=\(quote($0.value)) \\" }
+        return (["env \\"] + variables + ["  " + ([winePath.path] + arguments).map(quote).joined(separator: " ")])
+            .joined(separator: "\n")
+    }
+
     /// Run a Windows executable with wine start /wait (async version using runWine)
     public func runWindowsExecutableWithStartAsync(
         exePath: String,
-        arguments: [String] = []
+        arguments: [String] = [],
+        timeout: TimeInterval? = nil
     ) async throws {
         let args = ["start", "/wait", "/unix", exePath] + arguments
-        try await runWine(executable: "wine", arguments: args)
+        try await runWine(executable: "wine", arguments: args, timeout: timeout)
     }
     
     /// Run a Windows executable with wine start /wait (synchronous version for WrappTemplate)
@@ -425,6 +477,8 @@ public struct WineEnvironment {
 
 public enum WineError: LocalizedError {
     case executionFailed(exitCode: Int32)
+    case terminatedBySignal(Int32)
+    case timedOut(seconds: TimeInterval)
     case winetricksNotFound
     case winetricksFailed(trick: String)
     
@@ -432,6 +486,10 @@ public enum WineError: LocalizedError {
         switch self {
         case .executionFailed(let code):
             return "Wine execution failed with exit code \(code)"
+        case .terminatedBySignal(let signal):
+            return "Wine was killed by \(SubprocessWatch.signalName(signal))"
+        case .timedOut(let seconds):
+            return "Wine did not finish within \(SubprocessWatch.duration(seconds)) and was stopped"
         case .winetricksNotFound:
             return "Winetricks not found in bundle"
         case .winetricksFailed(let trick):

@@ -171,6 +171,10 @@ a unit test.
 Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`.
 
+A headless build makes one install attempt. The GUI's fallback, retrying with
+the installer's interactive wizard when the silent install fails, would wait
+for a click that never comes, so headless runs fail instead and say why.
+
 Note that `LogStore` mirrors to stderr only when `isatty`, so piping a headless
 run's output shows nothing — unless `SECOND_CHANCE_LOG_STDERR=1` forces the
 mirror on (`0` forces it off).
