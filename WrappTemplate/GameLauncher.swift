@@ -118,6 +118,10 @@ class GameLauncher {
     private var desktopLauncher: Process?
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
+    /// What Wine and the game print, and what ScummVM prints: categories of
+    /// their own, so they read apart from the launcher's lines about them.
+    private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Wine")
+    private nonisolated let scummvmOutputLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.ScummVM")
     
     init(config: GameConfig, gameMonitor: GameMonitor) {
         self.config = config
@@ -187,15 +191,25 @@ class GameLauncher {
 
     private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
         let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
-        let window = diagnostics?.hasSeenWindow == true ? "after its window appeared" : "before any window appeared"
+        // Only Wine launches track the window (ScummVM has no diagnostics).
+        let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
         if let signal {
-            logger.error("■ Game was killed by \(SubprocessWatch.signalName(signal)) after \(ran), \(window)")
+            logger.error("■ Game was killed by \(SubprocessWatch.signalName(signal)) after \(ran)\(window)")
         } else if let exitCode, exitCode != 0 {
-            logger.error("■ Game exited \(exitCode) after \(ran), \(window) — a crash or an error on the way out")
+            logger.error("■ Game exited \(exitCode) after \(ran)\(window) — a crash or an error on the way out")
         } else if exitCode != nil {
             logger.notice("■ Game exited 0 after \(ran)")
         } else {
             logger.notice("■ Game ended after \(ran) (exit status unknown)")
+        }
+
+        let endedBadly = signal != nil || (exitCode ?? 0) != 0 || diagnostics?.hasSeenWindow == false
+        if endedBadly {
+            var files: [(String, String)] = []
+            if let bundle = diagnostics?.lastBundle {
+                files.append(("Diagnostics", bundle.path))
+            }
+            FailureSummary.log(logger, what: "Running \(config.gameTitle)", files: files)
         }
         
         // Close info window if it's still open
@@ -208,6 +222,7 @@ class GameLauncher {
     
     func launchGame(infoWindow: InfoWindowController? = nil, debugMode: Bool = false) -> Int32 {
         launchedAt = Date()
+        LogContext.enterStage("Starting the game")
         // Launch the game process (engine-specific)
         let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
         
@@ -263,6 +278,7 @@ class GameLauncher {
         
         // Hide info window now that game has started
         infoWindow?.notifyGameLoaded()
+        LogContext.enterStage("Playing")
         
         
         // Wait for game to stop
@@ -342,8 +358,8 @@ class GameLauncher {
         let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
         diagnostics.wineLaunched()
         self.diagnostics = diagnostics
-        ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice, onLine: { diagnostics.observe(line: $0) })
-        ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .warning, onLine: { diagnostics.observe(line: $0) })
+        ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, onLine: { diagnostics.observe(line: $0) })
+        ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, onLine: { diagnostics.observe(line: $0) })
         
         logger.notice("[Wine] Game process started with PID \(process.processIdentifier)")
         
@@ -380,8 +396,8 @@ class GameLauncher {
         do {
             let desktop = try wine.startDesktop(outputPipe: outputPipe, errorPipe: errorPipe)
             desktopLauncher = desktop
-            ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice)
-            ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .warning)
+            ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice)
+            ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning)
             logger.notice("[Desktop] Started explorer.exe /desktop (launcher PID \(desktop.processIdentifier)), waiting for display devices...")
         } catch {
             logger.warning("[Desktop] Could not start the desktop, leaving it to Wine: \(error)")
@@ -440,7 +456,7 @@ class GameLauncher {
         // Execute ScummVM with output captured line-by-line through the
         // logger (terminal users still see it via stderr when isatty, and it
         // now also reaches the log window and the export).
-        let task = TaggedProcess(logger: logger)
+        let task = TaggedProcess(logger: scummvmOutputLogger)
         task.executableURL = URL(fileURLWithPath: launchInfo.executable)
         task.arguments = launchInfo.arguments
         

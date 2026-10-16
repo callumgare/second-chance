@@ -56,6 +56,7 @@ final class StartupDiagnostics: @unchecked Sendable {
     private var captured: Set<Reason> = []
     private var recentLines: [String] = []
     private var timers: [DispatchWorkItem] = []
+    private var latestBundle: URL?
 
     init(gameSlug: String, gameTitle: String) {
         self.gameSlug = gameSlug
@@ -115,6 +116,11 @@ final class StartupDiagnostics: @unchecked Sendable {
         }
     }
 
+    /// The most recent bundle this launch captured, if any.
+    var lastBundle: URL? {
+        queue.sync { latestBundle }
+    }
+
     /// Whether the game's first window was seen.
     var hasSeenWindow: Bool {
         queue.sync { windowAppeared }
@@ -148,6 +154,7 @@ final class StartupDiagnostics: @unchecked Sendable {
             logger.warning("[Diagnostics] could not create bundle directory: \(error)")
             return
         }
+        latestBundle = dir
         let sinceStart = gameStartTime.map { String(format: "%.1fs", now.timeIntervalSince($0)) } ?? "n/a"
         logger.error("[Diagnostics] \(reason.rawValue) (\(sinceStart) after game start) — capturing to \(dir.path)")
 

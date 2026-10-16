@@ -118,6 +118,32 @@ If the launcher exits before the game's exe ever appears (a missing exe, a
 DLL that won't load), the wrapp stops waiting at once and says so, rather than
 polling for two minutes.
 
+## The failure summary
+
+A failed build, and a game that crashes, quits with an error or never shows
+its window, ends its log with one critical entry between fixed markers:
+
+```
+=== FAILURE SUMMARY ===
+What failed: Building the wrapp, during "Game installing"
+Error: Wine execution failed with exit code 1 [SecondChance.WineError.executionFailed(exitCode: 1)]
+First error in this stage: 17:28:07.695  error  Wine  00d8:err:winediag:nodrv_CreateWindow Application tried to create a window, but no driver could be loaded.
+Last Wine/ScummVM output:
+  …the last ten lines…
+Full log: …/sc-logs/20261016-172710-wrapp-build-secrets-can-kill-remastered.full.log
+Run: 3f9a2c1e
+=== END FAILURE SUMMARY ===
+```
+
+The cause of a failure is usually logged well before the failure: the "first
+error in this stage" line is there because the last errors are usually
+consequences. Stages are what the build's progress shows (`LogContext.enterStage`,
+called next to each `━━━ Stage ━━━` divider); a wrapp has "Starting the game"
+and "Playing". The error line keeps the error's type and case and its chain of
+underlying errors, which `localizedDescription` drops. A wrapp's summary also
+names its diagnostics bundle when it captured one. `grep -A20 'FAILURE SUMMARY'`
+finds it. Cancelling a build produces no summary.
+
 ## Environment variables
 
 | Variable | Effect |

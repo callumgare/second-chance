@@ -108,6 +108,7 @@ class WrappBuildViewModel: ObservableObject {
         guard isNewStep else { return }
 
         logger.notice("━━━ \(state.displayText) ━━━")
+        LogContext.enterStage(state.displayText)
 
         stepStartTime = Date()
         shouldShowElapsed = false
@@ -184,12 +185,21 @@ class WrappBuildViewModel: ObservableObject {
             _ = try await builder.build(input: input)
             currentState = .completed
         } catch {
+            if !Self.isCancellation(error) {
+                FailureSummary.log(logger, what: "Building the wrapp", error: error)
+            }
             handleBuildFailure(error)
         }
     }
     
     // MARK: - Helper Methods
     
+    /// Whether `error` is the user cancelling, which needs no summary.
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        guard let buildError = error as? WrappBuildError else { return error is CancellationError }
+        return buildError == .userCancelled || buildError == .userCancelledBeforeStart
+    }
+
     /// Handle errors
     private func handleError(_ error: Error) {
         currentState = .error(error.localizedDescription)

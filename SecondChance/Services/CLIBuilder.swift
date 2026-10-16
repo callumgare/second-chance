@@ -113,6 +113,9 @@ enum CLIBuilder {
     /// Log, flush, and terminate with a failure exit code. Never returns.
     private static func exitWithFailure(_ error: Error) -> Never {
         logger.critical("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription)")
+        if !WrappBuildViewModel.isCancellation(error) {
+            FailureSummary.log(logger, what: "Building the wrapp", error: error)
+        }
         fflush(stdout)
         fflush(stderr)
         LogStore.shared.flush()

@@ -179,6 +179,17 @@ nonisolated final class LogStore: @unchecked Sendable {
         }
     }
     
+    /// The sequence number the next entry will get. Entries with a `seq` at
+    /// or above a value read here were logged after it was read.
+    nonisolated var nextSequence: UInt64 {
+        lock.withLock { $0.nextSeq }
+    }
+
+    /// The disk mirror's file, when mirroring is on.
+    nonisolated var diskMirrorPath: URL? {
+        lock.withLock { $0.mirrorEnabled ? $0.mirrorPath : nil }
+    }
+
     /// Get a snapshot of all current entries and drop count.
     nonisolated func snapshot() -> (entries: [Entry], dropped: UInt64) {
         lock.withLock { state in
