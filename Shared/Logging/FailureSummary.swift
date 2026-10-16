@@ -41,7 +41,10 @@ nonisolated enum ErrorChain {
         // The type and case, without the associated values, which usually
         // repeat the message.
         let reflected = String(reflecting: error)
-        let kind = reflected.split(separator: "(", maxSplits: 1).first.map(String.init) ?? reflected
+        let ns = error as NSError
+        let kind = reflected.hasPrefix("Error Domain=")
+            ? "\(ns.domain) \(ns.code)"
+            : reflected.split(separator: "(", maxSplits: 1).first.map(String.init) ?? reflected
         var parts = ["\(error.localizedDescription) [\(kind)]"]
         var next = (error as NSError).userInfo[NSUnderlyingErrorKey] as? Error
         var depth = 0

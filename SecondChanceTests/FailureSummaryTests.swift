@@ -22,7 +22,7 @@ struct FailureSummaryTests {
         #expect(text.hasPrefix(FailureSummary.startMarker))
         #expect(text.hasSuffix(FailureSummary.endMarker))
         #expect(text.contains("What failed: Testing, during \"Stage \(marker)\""))
-        #expect(text.contains("outer thing"))
+        #expect(text.contains("Error: outer thing [Outer 1]"))
         #expect(text.contains("caused by: inner thing [Inner 7]"))
         #expect(text.contains("First error in this stage:") && text.contains("first \(marker)"))
         #expect(!text.contains("second \(marker)"))
