@@ -90,7 +90,8 @@ nonisolated enum FailureSummary {
             lines.append("First error in this stage: \(oneLine(first))")
         }
 
-        let engine = entries.filter { isEngineOutput($0) }.suffix(10)
+        // Debug lines are chatter by definition (msync start-up, fixme:).
+        let engine = entries.filter { isEngineOutput($0) && $0.level != "debug" && $0.level != "trace" }.suffix(10)
         if !engine.isEmpty {
             lines.append("Last Wine/ScummVM output:")
             lines += engine.map { "  \(oneLine($0))" }
