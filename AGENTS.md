@@ -227,7 +227,9 @@ direct assignment.
   the `SECOND_CHANCE_*` switches below are `--debug` values on `sc wrapp run`
   too ([docs/dev-cli.md](docs/dev-cli.md#debug-options) has the table).
 - **`SECOND_CHANCE_WINEDEBUG`** sets Wine's `WINEDEBUG` for every Wine process
-  Second Chance or a wrapp starts (`WineEnvironment`); unset, it is `-all`.
+  Second Chance or a wrapp starts (`WineEnvironment`); unset, it is
+  `-all,err+all` — only Wine's `err:` lines, which is where it names the cause
+  of most failures.
   Wrapp output lands in the wrapp's log, so `SECOND_CHANCE_WINEDEBUG=+seh,+d3d9
   open -n "<wrapp>.app"` traces a single launch — `open` passes the shell's
   environment through. Channels like `+d3d9` log per frame, so keep runs short.

@@ -20,6 +20,10 @@ public struct WineEnvironment {
     let frameworksDir: URL
     
     static let wineUsername = "crossover"
+
+    /// `WINEDEBUG` when `SECOND_CHANCE_WINEDEBUG` is unset: every channel
+    /// off except the err class. See docs/logging.md.
+    static let defaultWineDebug = "-all,err+all"
     
     public init(appPath: URL, customPrefixDir: URL? = nil) {
         self.wineDir = appPath.appendingPathComponent("Contents/SharedSupport/wine")
@@ -47,11 +51,14 @@ public struct WineEnvironment {
         
         let originalPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
 
-        // Wine's debug output is off unless SECOND_CHANCE_WINEDEBUG asks for
-        // channels (e.g. "+seh,+d3d9"). Deliberately not plain WINEDEBUG, which
-        // a user may have set in their shell for some other Wine.
+        // Only Wine's err class by default: it costs a line or two on a
+        // healthy run, and it is where Wine names the cause when something
+        // fails (a DLL that won't load, no graphics driver outside the GUI
+        // session). SECOND_CHANCE_WINEDEBUG replaces it with other channels
+        // (e.g. "+seh,+d3d9"). Deliberately not plain WINEDEBUG, which a user
+        // may have set in their shell for some other Wine.
         let wineDebug = ProcessInfo.processInfo.environment["SECOND_CHANCE_WINEDEBUG"]
-            .flatMap { $0.isEmpty ? nil : $0 } ?? "-all"
+            .flatMap { $0.isEmpty ? nil : $0 } ?? Self.defaultWineDebug
 
         return [
             "WINEPREFIX": prefixDir.path,
