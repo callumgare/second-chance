@@ -123,28 +123,56 @@ class WrappBuildHelper {
         logger.notice("Cleanup complete")
     }
 
-    /// Remove the files an engine list names. The lists are written by
-    /// `setup-wine.sh` and `setup-scummvm.sh` with paths relative to the
-    /// bundle's `Contents/`, and ship in the template's Resources.
-    private func removeEngineFiles(listedIn list: URL, engine: String, from wrappPath: URL) throws {
+    /// Remove what an engine list names. The lists are written by
+    /// `setup-wine.sh` and `setup-scummvm.sh` with the engine's files,
+    /// relative to the bundle's `Contents/`, and ship in the template's
+    /// Resources.
+    ///
+    /// They list regular files only, so removing just those would leave
+    /// framework skeletons and versioned-dylib symlinks behind, which
+    /// codesign rejects ("bundle format unrecognized"). Each listed entry is
+    /// removed whole at its top two levels (`Frameworks/GStreamer.framework`,
+    /// `SharedSupport/wine`, `MacOS/scummvm`) — the two engines share none of
+    /// those — and then any symlink left pointing at nothing.
+    func removeEngineFiles(listedIn list: URL, engine: String, from wrappPath: URL) throws {
         guard fileManager.fileExists(atPath: list.path) else {
             logger.warning("No \(engine) file list at \(list.path) — leaving \(engine) in the wrapp")
             return
         }
         let content = try String(contentsOf: list, encoding: .utf8)
-        let paths = content.components(separatedBy: .newlines)
+        let entries = Set(content.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+            .map { $0.split(separator: "/").prefix(2).joined(separator: "/") })
         let contents = wrappPath.appendingPathComponent("Contents")
-        var removed = 0
-        for relativePath in paths {
-            let pathToRemove = contents.appendingPathComponent(relativePath)
-            if fileManager.fileExists(atPath: pathToRemove.path) {
-                try fileManager.removeItem(at: pathToRemove)
-                removed += 1
+        let before = DirectorySize.measure(contents)
+        for entry in entries.sorted() {
+            let path = contents.appendingPathComponent(entry)
+            if (try? path.checkResourceIsReachable()) == true || isSymlink(path) {
+                try fileManager.removeItem(at: path)
             }
         }
-        logger.notice("Removed \(removed) of \(paths.count) \(engine) files the game doesn't use")
+        for dir in ["Frameworks", "MacOS", "Resources", "SharedSupport"] {
+            removeDanglingSymlinks(in: contents.appendingPathComponent(dir))
+        }
+        let after = DirectorySize.measure(contents)
+        logger.notice("Removed \(engine), which the game doesn't use: \(entries.count) entries, \(ByteCountFormatter.string(fromByteCount: before.bytes - after.bytes, countStyle: .file))")
+    }
+
+    private func isSymlink(_ url: URL) -> Bool {
+        (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
+    }
+
+    /// Remove symlinks directly in `directory` whose target no longer exists.
+    private func removeDanglingSymlinks(in directory: URL) {
+        let items = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for item in items where isSymlink(item) && !fileManager.fileExists(atPath: item.path) {
+            do {
+                try fileManager.removeItem(at: item)
+            } catch {
+                logger.warning("Can't remove the dangling symlink \(item.path): \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Wrapp Configuration

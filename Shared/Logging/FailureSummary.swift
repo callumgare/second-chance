@@ -38,7 +38,11 @@ nonisolated enum LogContext {
 /// case, and the chain of underlying errors.
 nonisolated enum ErrorChain {
     static func describe(_ error: Error) -> String {
-        var parts = ["\(error.localizedDescription) [\(String(reflecting: error))]"]
+        // The type and case, without the associated values, which usually
+        // repeat the message.
+        let reflected = String(reflecting: error)
+        let kind = reflected.split(separator: "(", maxSplits: 1).first.map(String.init) ?? reflected
+        var parts = ["\(error.localizedDescription) [\(kind)]"]
         var next = (error as NSError).userInfo[NSUnderlyingErrorKey] as? Error
         var depth = 0
         while let underlying = next, depth < 5 {
