@@ -104,17 +104,17 @@ struct LogStoreTests {
 
     // MARK: - Eviction and truncation
 
-    @Test("Messages over 4 KB are truncated with a marker")
+    @Test("Messages over 16 KB are truncated with a marker")
     func truncation() {
         let store = LogStore.shared
         let label = "au.gare.callum.second-chance.Test.Truncate"
-        let long = String(repeating: "x", count: 8_192)
+        let long = String(repeating: "x", count: 32_768)
         store.append(level: "notice", label: label, message: long)
 
         let (entries, _) = store.snapshot()
         let entry = entries.last { $0.label == label && $0.message.contains("x") }
         #expect(entry != nil)
-        #expect(entry!.message.utf8.count <= 4_100, "truncated message should be ≤ ~4 KB")
+        #expect(entry!.message.utf8.count <= 16_400, "truncated message should be ≤ ~16 KB")
         #expect(entry!.message.contains("[truncated"), "truncation marker missing")
     }
 

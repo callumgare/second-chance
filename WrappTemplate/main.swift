@@ -557,17 +557,17 @@ func main() {
             var targetPath: URL? = documentsPath
             
             // Check if documentsPath exists (including broken symlinks)
-            mainLogger.notice("Checking if Documents directory exists at: \(documentsPath.path)")
+            mainLogger.debug("Checking if Documents directory exists at: \(documentsPath.path)")
             
             // Check for symlink existence (works even if target doesn't exist)
             let attributes = try? FileManager.default.attributesOfItem(atPath: documentsPath.path)
-            mainLogger.notice("Attributes: \(String(describing: attributes))")
+            mainLogger.debug("Attributes: \(String(describing: attributes))")
             let itemExists = attributes != nil
             
             if itemExists {
-                mainLogger.notice("Documents directory exists at: \(documentsPath.path)")
+                mainLogger.debug("Documents directory exists at: \(documentsPath.path)")
             } else {
-                mainLogger.notice("Documents directory does not exist at: \(documentsPath.path)")
+                mainLogger.debug("Documents directory does not exist at: \(documentsPath.path)")
             }
             
             if itemExists {

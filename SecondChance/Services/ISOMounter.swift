@@ -159,7 +159,7 @@ class ISOMounter {
         // Parse the plist
         guard let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any],
               let images = plist["images"] as? [[String: Any]] else {
-            logger.notice("   ℹ️ No mounted disk images found")
+            logger.debug("   ℹ️ No mounted disk images found")
             return nil
         }
 
@@ -169,13 +169,13 @@ class ISOMounter {
         let canonicalISOPath: String
         if let resolved = try? fileManager.destinationOfSymbolicLink(atPath: isoPath.path) {
             canonicalISOPath = (resolved as NSString).resolvingSymlinksInPath
-            logger.notice("   ℹ️ Resolved symlink: \(isoPath.path) -> \(canonicalISOPath)")
+            logger.debug("   ℹ️ Resolved symlink: \(isoPath.path) -> \(canonicalISOPath)")
         } else {
             canonicalISOPath = (isoPath.path as NSString).resolvingSymlinksInPath
         }
 
-        logger.notice("   ℹ️ Looking for mounted ISO: \(canonicalISOPath)")
-        logger.notice("   ℹ️ Found \(images.count) mounted disk image(s)")
+        logger.debug("   ℹ️ Looking for mounted ISO: \(canonicalISOPath)")
+        logger.debug("   ℹ️ Found \(images.count) mounted disk image(s)")
 
         // Find our ISO in the list of mounted images
         for image in images {
@@ -185,10 +185,10 @@ class ISOMounter {
 
             let canonicalImagePath = (imagePath as NSString).resolvingSymlinksInPath
 
-            logger.notice("   ℹ️ Checking mounted image: \(canonicalImagePath)")
+            logger.debug("   ℹ️ Checking mounted image: \(canonicalImagePath)")
 
             if canonicalImagePath == canonicalISOPath {
-                logger.notice("   ✓ Found matching mounted ISO")
+                logger.debug("   ✓ Found matching mounted ISO")
 
                 // Found our ISO, now get the mount points
                 guard let systemEntities = image["system-entities"] as? [[String: Any]] else {
@@ -202,7 +202,7 @@ class ISOMounter {
                         // Verify that the mount point actually exists as a directory
                         var isDirectory: ObjCBool = false
                         if fileManager.fileExists(atPath: mountPoint, isDirectory: &isDirectory), isDirectory.boolValue {
-                            logger.notice("   ✓ Mount point verified: \(mountPoint)")
+                            logger.debug("   ✓ Mount point verified: \(mountPoint)")
                             return URL(fileURLWithPath: mountPoint)
                         } else {
                             logger.warning("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint)")
@@ -212,7 +212,7 @@ class ISOMounter {
             }
         }
 
-        logger.notice("   ℹ️ ISO not found in mounted images")
+        logger.debug("   ℹ️ ISO not found in mounted images")
         return nil
     }
 }

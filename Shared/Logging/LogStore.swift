@@ -27,7 +27,7 @@ nonisolated final class LogStore: @unchecked Sendable {
     
     private static let maxEntries = 50_000
     private static let maxMessageBytes = 32 * 1024 * 1024  // 32 MB
-    private static let maxEntryBytes = 4_096  // 4 KB per message
+    private static let maxEntryBytes = 16_384  // 16 KB per message
     
     // MARK: - State (guarded by lock)
     

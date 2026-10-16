@@ -18,11 +18,11 @@ class ExiftoolService {
     private init() {
         // Get path to exiftool bundled in app
         let bundleResourcePath = Bundle.main.resourceURL?.appendingPathComponent("exiftool/exiftool")
-        logger.notice("🔍 Looking for bundled exiftool at: \(bundleResourcePath?.path ?? "nil")")
+        logger.debug("🔍 Looking for bundled exiftool at: \(bundleResourcePath?.path ?? "nil")")
         
         if let bundlePath = bundleResourcePath?.path, fileManager.fileExists(atPath: bundlePath) {
             exiftoolPath = bundlePath
-            logger.notice("✅ Found bundled exiftool at: \(bundlePath)")
+            logger.debug("✅ Found bundled exiftool at: \(bundlePath)")
         } else {
             logger.critical("❌ ERROR: Bundled exiftool not found!")
             logger.notice("   Bundle.main.resourceURL: \(Bundle.main.resourceURL?.path ?? "nil")")
@@ -78,7 +78,7 @@ class ExiftoolService {
         process.arguments = args
         
         let cmd = formatShellCommand(executable: exiftoolPath, arguments: args)
-        logger.notice("Running exiftool command: \(cmd)")
+        logger.debug("Running exiftool command: \(cmd)")
         
         let pipe = Pipe()
         process.standardOutput = pipe

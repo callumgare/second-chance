@@ -73,6 +73,32 @@ The exact environment and command, quoted so it can be pasted into a
 terminal, are logged at debug as `To re-run by hand:`. Only the variables
 Second Chance sets are included, not the whole parent environment.
 
+## Keeping the terminal readable
+
+Repetitive output goes in at debug, with a notice that sums it up:
+
+- msiexec's install log (`MsiLogStreamer`) logs each file at debug, the lines
+  that report a failed action (`Return value 3`, `Error …`) at error, and a
+  `MSI log: N lines, N files installed, N error lines` summary when it stops;
+- the wrapp's process monitor logs the Wine session's process tree as one
+  entry when it changes, not every poll;
+- environment dumps, file-attribute checks and mounted-image listings are
+  debug.
+
+## How a game's end is reported
+
+The wrapp logs one `■` line when the game ends, with the real exit status of
+the `wine start /wait` launcher (which passes through the game's own), or the
+signal that killed it, how long it ran, and whether its window had appeared:
+
+```
+16:23:54.173  error   GameLauncher  ■ Game exited 1 after 6.1s, after its window appeared — a crash or an error on the way out
+```
+
+If the launcher exits before the game's exe ever appears (a missing exe, a
+DLL that won't load), the wrapp stops waiting at once and says so, rather than
+polling for two minutes.
+
 ## Environment variables
 
 | Variable | Effect |

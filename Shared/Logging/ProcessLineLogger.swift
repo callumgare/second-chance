@@ -15,7 +15,8 @@ nonisolated enum ProcessLineLogger {
     /// trailing partial line at EOF — is forwarded to `logger`, at the level
     /// `SubprocessLineClassifier` picks from the line's content, falling back
     /// to `level` (stdout → `.notice`, stderr → `.warning`, conventionally).
-    /// Pass `classify: false` to log every line at exactly `level`.
+    /// Pass `classify: false` to log every line at exactly `level`, or
+    /// `levelFor` to choose each line's level yourself.
     ///
     /// Concurrency note: the captured `buffer` needs no lock — a
     /// `readabilityHandler` never runs concurrently with itself for the same
@@ -32,9 +33,12 @@ nonisolated enum ProcessLineLogger {
         logger: Logging.Logger,
         level: Logging.Logger.Level,
         classify: Bool = true,
+        levelFor: (@Sendable (String) -> Logging.Logger.Level)? = nil,
         onLine: (@Sendable (String) -> Void)? = nil,
         onEOF: (@Sendable () -> Void)? = nil
     ) {
+        let levelOf: @Sendable (String) -> Logging.Logger.Level = levelFor
+            ?? (classify ? { SubprocessLineClassifier.level(for: $0, fallback: level) } : { _ in level })
         let fh = pipe.fileHandleForReading
         var buffer = Data()
 
@@ -46,7 +50,7 @@ nonisolated enum ProcessLineLogger {
                     let line = String(decoding: buffer, as: UTF8.self)
                         .trimmingCharacters(in: .newlines)
                     if !line.isEmpty {
-                        logger.log(level: classify ? SubprocessLineClassifier.level(for: line, fallback: level) : level, "\(line)")
+                        logger.log(level: levelOf(line), "\(line)")
                         onLine?(line)
                     }
                     buffer.removeAll()
@@ -67,7 +71,7 @@ nonisolated enum ProcessLineLogger {
                 let line = String(decoding: lineData, as: UTF8.self)
                     .trimmingCharacters(in: .newlines)
                 if !line.isEmpty {
-                    logger.log(level: classify ? SubprocessLineClassifier.level(for: line, fallback: level) : level, "\(line)")
+                    logger.log(level: levelOf(line), "\(line)")
                     onLine?(line)
                 }
             }

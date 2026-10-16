@@ -182,14 +182,20 @@ class GameLauncher {
     
     // MARK: - Common Cleanup
     
-    private func handleGameTermination(exitCode: Int32, infoWindow: InfoWindowController?) {
-        logger.error("[Process Monitor] ⚠️ Game process termination detected!")
-        logger.notice("[Process Monitor] Exit code: \(exitCode)")
-        
-        // Print warning if game didn't exit cleanly
-        if exitCode != 0 {
-            logger.error("⚠️ WARNING: Game did not exit cleanly! Exit code: \(exitCode)")
-            logger.error("This may indicate a crash or error during shutdown.")
+    /// When the game was launched, for how long it ran.
+    private var launchedAt = Date()
+
+    private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
+        let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
+        let window = diagnostics?.hasSeenWindow == true ? "after its window appeared" : "before any window appeared"
+        if let signal {
+            logger.error("■ Game was killed by \(SubprocessWatch.signalName(signal)) after \(ran), \(window)")
+        } else if let exitCode, exitCode != 0 {
+            logger.error("■ Game exited \(exitCode) after \(ran), \(window) — a crash or an error on the way out")
+        } else if exitCode != nil {
+            logger.notice("■ Game exited 0 after \(ran)")
+        } else {
+            logger.notice("■ Game ended after \(ran) (exit status unknown)")
         }
         
         // Close info window if it's still open
@@ -201,6 +207,7 @@ class GameLauncher {
     // MARK: - Game Launching
     
     func launchGame(infoWindow: InfoWindowController? = nil, debugMode: Bool = false) -> Int32 {
+        launchedAt = Date()
         // Launch the game process (engine-specific)
         let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
         
@@ -226,7 +233,7 @@ class GameLauncher {
         // Wait for game to start
         if let gameExeName = launchResult.gameExeName {
             logger.notice("[Game Launch] Waiting for game executable to start...")
-            if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid) {
+            if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
                 diagnostics?.gameStarted(pid: detectedPid)
 
@@ -238,7 +245,7 @@ class GameLauncher {
                     }
                 }
             } else {
-                logger.notice("[Game Launch] Failed to detect game executable, but will continue monitoring process")
+                logger.error("[Game Launch] \(gameExeName) was never seen running; waiting for Wine's launcher to finish")
             }
         } else {
             // ScummVM - starts immediately
@@ -268,7 +275,7 @@ class GameLauncher {
         releaseDesktop()
         
         // Handle game termination (just cleanup, no app lifecycle management)
-        handleGameTermination(exitCode: exitCode, infoWindow: infoWindow)
+        handleGameTermination(exitCode: gameMonitor.exitCode, signal: gameMonitor.exitSignal, infoWindow: infoWindow)
         
         return exitCode
     }
@@ -289,19 +296,18 @@ class GameLauncher {
         // Get Wine-specific environment variables
         let wineEnvVars = wine.wineSpecificEnvironmentVariables()
         
-        // Print export commands for manual use
-        logger.notice("Wine-specific environment variables (for manual debugging):")
-        logger.notice("# These are the custom env vars needed for Wine to work properly")
-        for (key, value) in wineEnvVars.sorted(by: { $0.key < $1.key }) {
-            let escapedValue = value.replacingOccurrences(of: "\"", with: "\\\"")
-            logger.notice("export \(key)=\"\(escapedValue)\"")
+        // Export commands for running Wine by hand against this prefix, as one
+        // entry at debug: needed when reproducing, noise otherwise.
+        let exports = wineEnvVars.sorted(by: { $0.key < $1.key }).map { key, value in
+            "export \(key)=\"\(value.replacingOccurrences(of: "\"", with: "\\\""))\""
         }
+        logger.debug("Wine environment, for running Wine by hand:\n\(exports.joined(separator: "\n"))")
 
         prepareDesktop(wine)
 
         // Print full command with proper quoting
         let fullCommand = launchInfo.formatLaunchCommand()
-        logger.notice("Full command: \(fullCommand)")
+        logger.debug("Full command: \(fullCommand)")
         
         // Launch the game
         logger.notice("[Wine] Launching game process...")
@@ -336,8 +342,8 @@ class GameLauncher {
         let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
         diagnostics.wineLaunched()
         self.diagnostics = diagnostics
-        ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice) { diagnostics.observe(line: $0) }
-        ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .warning) { diagnostics.observe(line: $0) }
+        ProcessLineLogger.attach(to: outputPipe, logger: logger, level: .notice, onLine: { diagnostics.observe(line: $0) })
+        ProcessLineLogger.attach(to: errorPipe, logger: logger, level: .warning, onLine: { diagnostics.observe(line: $0) })
         
         logger.notice("[Wine] Game process started with PID \(process.processIdentifier)")
         

@@ -115,6 +115,11 @@ final class StartupDiagnostics: @unchecked Sendable {
         }
     }
 
+    /// Whether the game's first window was seen.
+    var hasSeenWindow: Bool {
+        queue.sync { windowAppeared }
+    }
+
     /// Call when the game has exited.
     func gameExited(exitCode: Int32) {
         guard enabled else { return }

@@ -38,14 +38,33 @@ class GameMonitor {
     private let debugMode: Bool
     private let exitCodeLock = NSLock()
     private var _exitCode: Int32? = nil
+    private var _exitSignal: Int32? = nil
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameMonitor")
     
     var exitCode: Int32? {
         exitCodeLock.withLock { _exitCode }
     }
     
-    private func setExitCode(_ code: Int32?) {
-        exitCodeLock.withLock { _exitCode = code }
+    /// The signal that killed the game's launcher, when one did; `exitCode`
+    /// then holds the signal number too.
+    var exitSignal: Int32? {
+        exitCodeLock.withLock { _exitSignal }
+    }
+
+    private func setExitCode(_ code: Int32?, signal: Int32? = nil) {
+        exitCodeLock.withLock {
+            _exitCode = code
+            _exitSignal = signal
+        }
+    }
+
+    /// Record how `process` ended: its exit status, or the signal that killed it.
+    private func setExit(from process: Process) {
+        if process.terminationReason == .uncaughtSignal {
+            setExitCode(process.terminationStatus, signal: process.terminationStatus)
+        } else {
+            setExitCode(process.terminationStatus)
+        }
     }
     
     init(config: GameConfig, debugMode: Bool = false) {
@@ -57,10 +76,12 @@ class GameMonitor {
     // MARK: - Game Lifecycle Monitoring
     
     /// Wait for game to start (works for both Wine and ScummVM games)
-    func waitForGameToStart(gameExeName: String, gamePid: Int32, timeout: TimeInterval = 120) -> Int32? {
+    /// `launcher` is the `wine start` process: if it exits before the game's
+    /// exe appears, the game never started and there is nothing to wait for.
+    func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil, timeout: TimeInterval = 120) -> Int32? {
         switch gameEngine {
         case "wine", _ where gameEngine.hasPrefix("wine-"):
-            return waitForWineGameToStart(gameExeName: gameExeName, timeout: timeout)
+            return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, timeout: timeout)
         case "scummvm":
             return waitForScummVMGameToStart(gamePid: gamePid)
         default:
@@ -80,7 +101,7 @@ class GameMonitor {
         
         switch gameEngine {
         case "wine", _ where gameEngine.hasPrefix("wine-"):
-            waitForWineGameToStop(winePid: gamePid)
+            waitForWineGameToStop(winePid: gamePid, process: process)
         case "scummvm":
             waitForScummVMGameToStop(gamePid: gamePid, process: process)
         default:
@@ -101,7 +122,6 @@ class GameMonitor {
     
     /// Get all Wine-related processes
     func getAllWineProcesses() -> Set<WineProcessInfo> {
-        logger.notice("[Wine Processes] Fetching all wine-related processes...")
         
         let psProcess = Process()
         psProcess.executableURL = URL(fileURLWithPath: "/bin/ps")
@@ -136,7 +156,7 @@ class GameMonitor {
                 }
                 
                 let pids = processes.map { $0.pid }.sorted().joined(separator: ", ")
-                logger.notice("[Wine Processes] Found \(processes.count) wine-related processes: \(pids)")
+                logger.debug("[Wine Processes] Found \(processes.count) wine-related processes: \(pids)")
             }
         } catch {
             logger.error("[Wine Processes] Error checking processes: \(error)")
@@ -146,24 +166,28 @@ class GameMonitor {
     }
     
     /// Wait for Wine game executable to start
-    private func waitForWineGameToStart(gameExeName: String, timeout: TimeInterval = 120) -> Int32? {
+    private func waitForWineGameToStart(gameExeName: String, launcher: Process?, timeout: TimeInterval = 120) -> Int32? {
         logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName)")
-        logger.notice("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
+        logger.debug("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
         
         let startTime = Date()
         var gamePid: Int32? = nil
         
         while Date().timeIntervalSince(startTime) < timeout && gamePid == nil {
+            if let launcher, !launcher.isRunning {
+                setExit(from: launcher)
+                let how = launcher.terminationReason == .uncaughtSignal
+                    ? "was killed by \(SubprocessWatch.signalName(launcher.terminationStatus))"
+                    : "exited \(launcher.terminationStatus)"
+                logger.error("[Game Monitor] Wine's launcher \(how) after \(SubprocessWatch.duration(Date().timeIntervalSince(startTime))) and \(gameExeName) never appeared — the game did not start")
+                return nil
+            }
             let processes = self.getAllWineProcesses()
             
             for process in processes {
                 if process.basename.lowercased() == gameExeName.lowercased() {
-                    logger.notice("[Game Monitor] ✅ Game executable started!")
-                    logger.notice("[Game Monitor]   - Process: \(process.basename)")
-                    logger.notice("[Game Monitor]   - PID: \(process.pid)")
-                    logger.notice("[Game Monitor]   - Parent PID: \(process.ppid)")
-                    logger.notice("[Game Monitor]   - Full path: \(process.command)")
-                    logger.notice("[Game Monitor]   - Time to start: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s")
+                    logger.notice("[Game Monitor] ✅ \(process.basename) started (pid \(process.pid)) after \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s")
+                    logger.debug("[Game Monitor]   parent pid \(process.ppid), path \(process.command)")
                     
                     if let pid = Int32(process.pid) {
                         gamePid = pid
@@ -171,11 +195,10 @@ class GameMonitor {
                     }
                     
                     // Log all related wine processes
-                    logger.notice("[Game Monitor] All Wine processes in this session:")
-                    for proc in processes.sorted(by: { $0.basename < $1.basename }) {
-                        let marker = proc.basename.lowercased() == gameExeName.lowercased() ? " 🎮" : ""
-                        logger.notice("[Game Monitor]   - \(proc.basename) (PID \(proc.pid))\(marker)")
-                    }
+                    let list = processes.sorted(by: { $0.basename < $1.basename })
+                        .map { "  - \($0.basename) (PID \($0.pid))\($0.basename.lowercased() == gameExeName.lowercased() ? " 🎮" : "")" }
+                        .joined(separator: "\n")
+                    logger.debug("[Game Monitor] All Wine processes in this session:\n\(list)")
                     
                     break
                 }
@@ -298,8 +321,10 @@ class GameMonitor {
     
     // MARK: - Game Stop Monitoring
     
-    /// Wait for Wine game to stop
-    private func waitForWineGameToStop(winePid: Int32) {
+    /// Wait for Wine game to stop. With the launcher's `Process`, its exit
+    /// status (which `wine start /wait` passes through from the game) or the
+    /// signal that killed it is recorded; without one, only that it ended.
+    private func waitForWineGameToStop(winePid: Int32, process: Process?) {
         logger.notice("[Process Monitor] Waiting for Wine game to stop (PID \(winePid))")
         
         var lastProcessList: Set<String> = []
@@ -307,39 +332,19 @@ class GameMonitor {
         // Give Wine a moment to spawn child processes before first check
         Thread.sleep(forTimeInterval: 2)
         
-        logger.notice("[Process Monitor] Beginning process checks...")
-        
         while true {
-            // Check if main wine process is still running
-            let checkProcess = Process()
-            checkProcess.executableURL = URL(fileURLWithPath: "/bin/ps")
-            checkProcess.arguments = ["-p", String(winePid)]
-            checkProcess.standardOutput = Pipe()
-            checkProcess.standardError = Pipe()
-            
-            do {
-                try checkProcess.run()
-                checkProcess.waitUntilExit()
-                
-                if checkProcess.terminationStatus != 0 {
-                    logger.notice("[Process Monitor] Wine process \(winePid) has terminated")
-                    // Store exit code - Wine exit codes are typically 0 or non-zero from wineserver
-                    self.setExitCode(Int32(checkProcess.terminationStatus))
-                    self.isMonitoring = false
-                    self.delegate?.gameMonitorGameDidTerminate(exitCode: self.exitCode)
+            if let process {
+                if !process.isRunning {
+                    setExit(from: process)
                     break
                 }
-                
-                logger.notice("[Process Monitor] Wine process \(winePid) is still running")
-            } catch {
-                logger.error("[Process Monitor] Error checking wine process: \(error)")
-                self.setExitCode(-1)
-                self.isMonitoring = false
-                self.delegate?.gameMonitorGameDidTerminate(exitCode: -1)
+            } else if !isProcessRunning(pid: winePid) {
+                // No Process to ask, so no exit status to report.
+                setExitCode(nil)
                 break
             }
-            
-            // Get all wine-related processes
+
+            // Log the session's process tree when it changes.
             let wineProcesses = self.getAllWineProcessesDetailed()
             lastProcessList = self.logWineProcesses(wineProcesses, mainWinePid: winePid, lastProcessList: lastProcessList)
             
@@ -347,7 +352,14 @@ class GameMonitor {
             Thread.sleep(forTimeInterval: 3)
         }
         
-        logger.notice("[Process Monitor] Monitoring stopped")
+        logger.notice("[Process Monitor] Wine process \(winePid) has ended")
+        self.isMonitoring = false
+        self.delegate?.gameMonitorGameDidTerminate(exitCode: self.exitCode)
+    }
+
+    /// Whether a process with this pid exists (`kill(pid, 0)`).
+    private func isProcessRunning(pid: Int32) -> Bool {
+        kill(pid, 0) == 0 || errno == EPERM
     }
     
     /// Wait for ScummVM game to stop
@@ -359,11 +371,9 @@ class GameMonitor {
             if process.isRunning {
                 process.waitUntilExit()
             }
-            logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
-            // Capture exit code while we safely have access to the process object
-            let exitCode = process.terminationStatus
-            self.setExitCode(exitCode)
-            logger.notice("[Process Monitor] ScummVM exit code: \(exitCode)")
+            // Capture how it ended while we safely have access to the process object
+            self.setExit(from: process)
+            logger.notice("[Process Monitor] ScummVM process \(gamePid) has ended")
         } else {
             // Fallback: poll using ps if we don't have the process object
             while true {
@@ -379,11 +389,10 @@ class GameMonitor {
                     
                     if checkProcess.terminationStatus != 0 {
                         logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
-                        self.setExitCode(0)  // Process is gone, assume success
+                        self.setExitCode(nil)  // Process is gone; its status is unknown
                         break
                     }
                     
-                    logger.notice("[Process Monitor] ScummVM process \(gamePid) is still running")
                 } catch {
                     logger.error("[Process Monitor] Error checking ScummVM process: \(error)")
                     self.setExitCode(-1)
@@ -410,22 +419,17 @@ class GameMonitor {
         psProcess.standardOutput = pipe
         psProcess.standardError = Pipe()
         
-        logger.notice("[Process Monitor] Fetching process list...")
         
         var wineProcesses: [(pid: String, ppid: String, name: String)] = []
         
         do {
             try psProcess.run()
-            logger.notice("[Process Monitor] ps command started, reading output...")
             
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            logger.notice("[Process Monitor] Read \(data.count) bytes from ps output")
             
             psProcess.waitUntilExit()
-            logger.notice("[Process Monitor] ps command completed with status: \(psProcess.terminationStatus)")
             
             if let output = String(data: data, encoding: .utf8) {
-                logger.notice("[Process Monitor] Successfully decoded output, parsing lines...")
                 let lines = output.split(separator: "\n")
                 
                 for line in lines {
@@ -454,7 +458,9 @@ class GameMonitor {
         var currentProcessList: Set<String> = []
         
         if wineProcesses.isEmpty {
-            logger.notice("[Process Monitor] No wine-related processes found")
+            if !lastProcessList.isEmpty {
+                logger.notice("[Process Monitor] No wine-related processes left")
+            }
             return currentProcessList
         }
         
@@ -546,13 +552,10 @@ class GameMonitor {
         }
         
         // Only print if the process list has changed
+        // One entry, so the tree reads as one block and can't be interleaved.
         if currentProcessList != lastProcessList {
-            logger.notice("[Process Monitor] Wine processes (\(wineProcesses.count) total):")
-            for line in processLines {
-                logger.notice("\(line)")
-            }
-        } else {
-            logger.notice("[Process Monitor] Process list unchanged (\(wineProcesses.count) processes)")
+            let tree = processLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            logger.notice("[Process Monitor] Wine processes changed (\(wineProcesses.count) total):\n\(tree)")
         }
         
         return currentProcessList

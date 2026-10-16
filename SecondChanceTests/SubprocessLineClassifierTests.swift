@@ -39,4 +39,12 @@ struct SubprocessLineClassifierTests {
         // A time of day is not a Wine debug class.
         #expect(SubprocessLineClassifier.level(for: "12:30:01 err happened", fallback: .notice) == .notice)
     }
+
+    @Test("MSI log lines worth reading stand out from per-file chatter")
+    func msiLog() {
+        #expect(MsiLogStreamer.notableLevel(of: "File: s12.cif, Directory: dir1, Size: 2048") == nil)
+        #expect(MsiLogStreamer.notableLevel(of: "Action ended 12:01:02: InstallFiles. Return value 3.") == .error)
+        #expect(MsiLogStreamer.notableLevel(of: "Error 1335. The cabinet file is corrupt.") == .error)
+        #expect(MsiLogStreamer.notableLevel(of: "MSI (s) (1C:20) [12:01:02:003]: Product: Nancy Drew -- Installation completed successfully.") == .notice)
+    }
 }

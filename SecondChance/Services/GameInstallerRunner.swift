@@ -612,13 +612,10 @@ class GameInstallerRunner {
     }
 
     /// Stream an MSI log file line-by-line to a dedicated logger.
-    private func startMsiLogStreaming(at logPath: URL) throws -> TaggedProcess {
-        let msiLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner.msi-log")
-        let process = TaggedProcess(logger: msiLogger)
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/tail")
-        process.arguments = ["-n", "+1", "-F", logPath.path]
-        try process.run()
-        return process
+    private func startMsiLogStreaming(at logPath: URL) throws -> MsiLogStreamer {
+        let streamer = MsiLogStreamer(logPath: logPath)
+        try streamer.start()
+        return streamer
     }
 
     /// Build the installer command that should be executed
@@ -737,14 +734,13 @@ class GameInstallerRunner {
         }
 
         // Stream MSI log lines independently from Wine stdout/stderr.
-        var msiLogStreamer: TaggedProcess?
+        var msiLogStreamer: MsiLogStreamer?
         if let msiLogDestination {
             msiLogStreamer = try startMsiLogStreaming(at: msiLogDestination.hostPath)
         }
         defer {
             if let msiLogStreamer {
-                msiLogStreamer.terminate()
-                msiLogStreamer.waitUntilExit()
+                msiLogStreamer.stop()
             }
             if let msiLogDestination, !DebugSettings.shared.debugMode {
                 try? fileManager.removeItem(at: msiLogDestination.hostPath)
@@ -1019,5 +1015,71 @@ class GameInstallerRunner {
         logger.notice("  - New executables: \(newExes.count)")
 
         throw WrappBuildError.gameExecutableNotFound
+    }
+}
+
+
+/// Follows an MSI install log (`tail -F`) into the log. msiexec writes a line
+/// or two for every file it installs — 97% of the lines in a run that
+/// installed several games — so those go in at debug, and the lines that say
+/// how the install went (failed actions, errors, the final verdict) at notice
+/// or error. `stop()` logs a one-line summary.
+nonisolated final class MsiLogStreamer: @unchecked Sendable {
+    private let logPath: URL
+    private let process = Process()
+    private let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner.msi-log")
+    private let lock = NSLock()
+    private var lines = 0
+    private var files = 0
+    private var errors = 0
+
+    init(logPath: URL) {
+        self.logPath = logPath
+    }
+
+    func start() throws {
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tail")
+        process.arguments = ["-n", "+1", "-F", logPath.path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        ProcessLineLogger.attach(
+            to: pipe, logger: logger, level: .debug,
+            levelFor: { Self.notableLevel(of: $0) ?? .debug },
+            onLine: { [weak self] line in self?.count(line) }
+        )
+        try process.run()
+    }
+
+    func stop() {
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+        let (lines, files, errors) = lock.withLock { (self.lines, self.files, self.errors) }
+        logger.notice("MSI log: \(lines) lines, \(files) files installed, \(errors) error line\(errors == 1 ? "" : "s")")
+    }
+
+    /// The level a line deserves beyond the debug copy it already got.
+    static func notableLevel(of line: String) -> Logger.Level? {
+        if line.contains("Return value 3") || line.hasPrefix("Error ") || line.contains("Installation failed")
+            || line.contains("-- Installation operation failed") {
+            return .error
+        }
+        if line.contains("Installation completed successfully") || line.contains("-- Installation operation completed")
+            || line.hasPrefix("MSI (") && line.contains("Product:") {
+            return .notice
+        }
+        return nil
+    }
+
+    private func count(_ line: String) {
+        let isFile = line.hasPrefix("File: ") && line.contains("Size:")
+        let isError = Self.notableLevel(of: line) == .error
+        lock.withLock {
+            lines += 1
+            if isFile { files += 1 }
+            if isError { errors += 1 }
+        }
     }
 }
