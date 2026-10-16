@@ -64,7 +64,7 @@ enum TemplateMatcher {
     static func findImage(_ templatePath: String, in screenshotPath: String, options: TemplateMatchOptions = TemplateMatchOptions()) -> CGRect? {
         let startTime = Date()
         var stepStartTime = Date()
-        logger.notice("\n⏱️  Starting template matching...")
+        logger.debug("⏱️  Starting template matching for \((templatePath as NSString).lastPathComponent)...")
 
         guard let screenshot = NSImage(contentsOfFile: screenshotPath),
               let screenshotCG = screenshot.cgImage(forProposedRect: nil, context: nil, hints: nil),
@@ -73,7 +73,7 @@ enum TemplateMatcher {
             logger.error("⚠️  Failed to load images for template matching")
             return nil
         }
-        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Loaded images")
+        logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Loaded images")
         stepStartTime = Date()
 
         var scaledTemplates: [(scale: CGFloat, cgImage: CGImage, width: Int, height: Int)] = []
@@ -90,13 +90,13 @@ enum TemplateMatcher {
             return nil
         }
 
-        logger.notice("  → Prepared \(scaledTemplates.count) template scales (\(options.scaleVariations.map { "\(Int($0 * 100))%" }.joined(separator: ", ")))")
-        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Scaled templates")
+        logger.debug("  → Prepared \(scaledTemplates.count) template scales (\(options.scaleVariations.map { "\(Int($0 * 100))%" }.joined(separator: ", ")))")
+        logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Scaled templates")
         stepStartTime = Date()
 
         if findImageExtraDebugging {
             TemplateMatchDebugImages.saveTemplate(templatePath: templatePath, screenshotPath: screenshotPath)
-            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Saved debug template")
+            logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Saved debug template")
             stepStartTime = Date()
         }
 
@@ -110,8 +110,8 @@ enum TemplateMatcher {
         let searchWidth = searchEndX - searchStartX
         let searchHeight = searchEndY - searchStartY
 
-        logger.notice("  → Full screenshot: \(fullWidth)x\(fullHeight)")
-        logger.notice("  → Search region: x[\(searchStartX)-\(searchEndX)], y[\(searchStartY)-\(searchEndY)] (\(searchWidth)x\(searchHeight))")
+        logger.debug("  → Full screenshot: \(fullWidth)x\(fullHeight)")
+        logger.debug("  → Search region: x[\(searchStartX)-\(searchEndX)], y[\(searchStartY)-\(searchEndY)] (\(searchWidth)x\(searchHeight))")
 
         // Crop the screenshot to the search region only (huge performance win!)
         let searchRect = CGRect(x: searchStartX, y: searchStartY, width: searchWidth, height: searchHeight)
@@ -126,14 +126,14 @@ enum TemplateMatcher {
             logger.error("⚠️  Failed to convert screenshot to grayscale")
             return nil
         }
-        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Converted search region to grayscale")
+        logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Converted search region to grayscale")
         stepStartTime = Date()
 
         // Coordinates from here on are relative to the crop
         let screenshotWidth = Int(screenshotGray.width)
         let screenshotHeight = Int(screenshotGray.height)
 
-        logger.notice("  → Searching entire cropped region: \(screenshotWidth)x\(screenshotHeight)")
+        logger.debug("  → Searching entire cropped region: \(screenshotWidth)x\(screenshotHeight)")
 
         if findImageExtraDebugging {
             TemplateMatchDebugImages.searchRegion(
@@ -143,7 +143,7 @@ enum TemplateMatcher {
                 searchEndX: searchEndX,
                 searchEndY: searchEndY
             )
-            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Saved search region debug")
+            logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Saved search region debug")
             stepStartTime = Date()
         }
 
@@ -164,7 +164,7 @@ enum TemplateMatcher {
                 searchStartX: searchStartX,
                 searchStartY: searchStartY
             )
-            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Debug position test")
+            logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Debug position test")
             stepStartTime = Date()
         }
 
@@ -175,22 +175,22 @@ enum TemplateMatcher {
         // Try each scale variation
         for (scaleIndex, scaleInfo) in scaledTemplates.enumerated() {
             let scalePercent = Int(scaleInfo.scale * 100)
-            logger.notice("  → [Scale \(scaleIndex + 1)/\(scaledTemplates.count)] Searching at \(scalePercent)% (\(scaleInfo.width)x\(scaleInfo.height))...")
+            logger.debug("  → [Scale \(scaleIndex + 1)/\(scaledTemplates.count)] Searching at \(scalePercent)% (\(scaleInfo.width)x\(scaleInfo.height))...")
 
             let templateWidth = scaleInfo.width
             let templateHeight = scaleInfo.height
 
             guard templateWidth < screenshotWidth && templateHeight < screenshotHeight else {
-                logger.notice("    → Template too large for search area, skipping")
+                logger.debug("    → Template too large for search area, skipping")
                 continue
             }
 
             guard let templateGray = convertToGrayscale(cgImage: scaleInfo.cgImage, conversion: options.grayscale) else {
-                logger.notice("    → Failed to convert template to grayscale, skipping")
+                logger.debug("    → Failed to convert template to grayscale, skipping")
                 continue
             }
             let templateData = templateGray.data.assumingMemoryBound(to: UInt8.self)
-            logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Template grayscale conversion")
+            logger.debug("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Template grayscale conversion")
             stepStartTime = Date()
 
             // STAGE 1: Coarse search. Stride and sampling scale with the
@@ -200,7 +200,7 @@ enum TemplateMatcher {
             let coarseStride = max(1, Int(10.0 * scaleFactor))
             let coarseSampleStep = max(1, Int(3.0 * scaleFactor))
 
-            logger.notice("    → Resolution-scaled search: stride=\(coarseStride), sampleStep=\(coarseSampleStep) (width=\(fullWidth), scale=\(String(format: "%.2f", scaleFactor)))")
+            logger.debug("    → Resolution-scaled search: stride=\(coarseStride), sampleStep=\(coarseSampleStep) (width=\(fullWidth), scale=\(String(format: "%.2f", scaleFactor)))")
 
             var coarseMatches: [(x: Int, y: Int, correlation: Float)] = []
 
@@ -224,7 +224,7 @@ enum TemplateMatcher {
                 }
             }
 
-            logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Coarse search completed")
+            logger.debug("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Coarse search completed")
             stepStartTime = Date()
 
             if findImageExtraDebugging {
@@ -251,17 +251,17 @@ enum TemplateMatcher {
                         sampleStep: 1
                     )
                 }
-                logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Heatmap generation")
+                logger.debug("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Heatmap generation")
                 stepStartTime = Date()
             }
 
             if coarseMatches.isEmpty {
-                logger.notice("    → No promising matches found")
+                logger.debug("    → No promising matches found")
                 free(templateGray.data)
                 continue
             }
 
-            logger.notice("    → Found \(coarseMatches.count) coarse candidates")
+            logger.debug("    → Found \(coarseMatches.count) coarse candidates")
 
             allScaleMatches.append((scaleIndex: scaleIndex, scale: scaleInfo.scale, matches: coarseMatches))
 
@@ -272,7 +272,7 @@ enum TemplateMatcher {
             let fineStride = max(1, Int(2.0 * scaleFactor))
             let fineSampleStep = max(1, Int(2.0 * scaleFactor))
 
-            logger.notice("    → Fine search: stride=\(fineStride), sampleStep=\(fineSampleStep), radius=\(fineSearchRadius)")
+            logger.debug("    → Fine search: stride=\(fineStride), sampleStep=\(fineSampleStep), radius=\(fineSearchRadius)")
 
             for candidate in topCandidates {
                 let fineStartX = max(0, candidate.x - fineSearchRadius)
@@ -306,7 +306,7 @@ enum TemplateMatcher {
                 }
             }
 
-            logger.notice("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Fine search completed")
+            logger.debug("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Fine search completed")
             stepStartTime = Date()
 
             // Only free the template if it isn't the best one
@@ -323,22 +323,22 @@ enum TemplateMatcher {
                 offsetX: searchStartX,
                 offsetY: searchStartY
             )
-            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] All-matches debug")
+            logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] All-matches debug")
             stepStartTime = Date()
         }
 
         guard let bestMatch = globalBestMatch, let templateGray = bestTemplateGray else {
-            logger.notice("  ✗ No matches found across any scale")
+            logger.notice("✗ \((templatePath as NSString).lastPathComponent): no match in any scale (\(String(format: "%.2f", Date().timeIntervalSince(startTime)))s)")
             if findImageExtraDebugging {
-                logger.notice("  💾 Check debug images:")
-                logger.notice("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-search-region.png"))")
-                logger.notice("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-all-matches.png"))")
+                logger.debug("  💾 Check debug images:")
+                logger.debug("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-search-region.png"))")
+                logger.debug("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-all-matches.png"))")
             }
             free(screenshotGray.data)
             return nil
         }
 
-        logger.notice("  ℹ️  Best match: scale=\(Int(scaledTemplates[bestMatch.scaleIndex].scale * 100))% at (\(bestMatch.x), \(bestMatch.y)) confidence=\(String(format: "%.2f", bestMatch.correlation))")
+        logger.debug("  ℹ️  Best match: scale=\(Int(scaledTemplates[bestMatch.scaleIndex].scale * 100))% at (\(bestMatch.x), \(bestMatch.y)) confidence=\(String(format: "%.2f", bestMatch.correlation))")
 
         let templateData = templateGray.data.assumingMemoryBound(to: UInt8.self)
         let templateWidth = bestMatch.templateWidth
@@ -377,7 +377,7 @@ enum TemplateMatcher {
             }
         }
 
-        logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Refinement completed")
+        logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Refinement completed")
         stepStartTime = Date()
 
         free(screenshotGray.data)
@@ -385,12 +385,12 @@ enum TemplateMatcher {
 
         let lowerThreshold = options.minConfidence * 0.9  // 10% tolerance
         guard refinedMatch.correlation >= lowerThreshold else {
-            logger.notice("  ✗ Template not found (best: \(String(format: "%.2f", refinedMatch.correlation)), threshold: \(String(format: "%.2f", lowerThreshold)))")
+            logger.notice("✗ \((templatePath as NSString).lastPathComponent) not found (best: \(String(format: "%.2f", refinedMatch.correlation)), threshold: \(String(format: "%.2f", lowerThreshold)))")
             return nil
         }
 
         let scalePercent = Int(scaledTemplates[bestMatch.scaleIndex].scale * 100)
-        logger.notice("  ✓ Found template at (\(refinedMatch.x), \(refinedMatch.y)) scale=\(scalePercent)% confidence=\(String(format: "%.2f", refinedMatch.correlation))")
+        logger.notice("✓ \((templatePath as NSString).lastPathComponent) found at (\(refinedMatch.x), \(refinedMatch.y)) scale=\(scalePercent)% confidence=\(String(format: "%.2f", refinedMatch.correlation))")
 
         // Convert coordinates back to full screenshot space
         let result = CGRect(
@@ -402,10 +402,10 @@ enum TemplateMatcher {
 
         if findImageExtraDebugging {
             TemplateMatchDebugImages.finalMatch(screenshotPath: screenshotPath, match: result, correlation: refinedMatch.correlation)
-            logger.notice("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Final match debug")
+            logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Final match debug")
         }
 
-        logger.notice("⏱️  TOTAL: [\(String(format: "%.3f", Date().timeIntervalSince(startTime)))s]")
+        logger.debug("⏱️  TOTAL: [\(String(format: "%.3f", Date().timeIntervalSince(startTime)))s]")
 
         return result
     }
@@ -441,7 +441,7 @@ enum TemplateMatcher {
         searchStartX: Int,
         searchStartY: Int
     ) {
-        logger.notice("  🔍 DEBUG: Testing match at specific position (\(debugX + searchStartX), \(debugY + searchStartY))...")
+        logger.debug("  🔍 DEBUG: Testing match at specific position (\(debugX + searchStartX), \(debugY + searchStartY))...")
 
         let debugWidth = templateSize.width
         let debugHeight = templateSize.height
@@ -470,8 +470,8 @@ enum TemplateMatcher {
             offsetY: debugY,
             sampleStep: 1
         )
-        logger.notice("     Template \(templateCG.width)x\(templateCG.height) scaled to \(debugWidth)x\(debugHeight)")
-        logger.notice("     Correlation: \(String(format: "%.4f", correlation))")
+        logger.debug("     Template \(templateCG.width)x\(templateCG.height) scaled to \(debugWidth)x\(debugHeight)")
+        logger.debug("     Correlation: \(String(format: "%.4f", correlation))")
 
         TemplateMatchDebugImages.probe(
             screenshotPath: screenshotPath,

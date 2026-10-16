@@ -95,6 +95,9 @@ enum SystemLogReader {
             "--start", startStr,
             "--predicate", predicate,
             "--style", "ndjson",
+            // Debug entries too: the attachments keep the detail, the
+            // console echo leaves it out.
+            "--info", "--debug",
         ]
 
         let pipe = Pipe()
@@ -130,9 +133,13 @@ enum TestConsole {
             return
         }
 
+        // Debug detail stays in the attachment; the console gets notice and up.
+        let shown = text.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.contains("  debug  ") }
+            .joined(separator: "\n")
         let rule = String(repeating: "─", count: 10)
         print("\(rule) \(title) \(rule)")
-        print(text, terminator: text.hasSuffix("\n") ? "" : "\n")
+        print(shown, terminator: shown.hasSuffix("\n") ? "" : "\n")
         print("\(rule) end \(title) \(rule)")
         fflush(stdout)
     }
