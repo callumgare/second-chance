@@ -3,8 +3,9 @@
 //  WrappTemplate
 //
 //  Captures a diagnostics bundle when a Wine game starts badly — no window
-//  after a few seconds, a crash, or a hang — so an intermittent failure leaves
-//  evidence behind instead of only a log line.
+//  after a few seconds, a crash, a hang, Wine's launcher giving up before the
+//  game appears, or the game quitting moments after its window does — so an
+//  intermittent failure leaves evidence behind instead of only a log line.
 //
 //  The motivating case: Secrets Can Kill Remastered sometimes stalls while
 //  Wine's Mac driver initialises, and if Direct3D isn't up ~10s in, the game
@@ -35,6 +36,12 @@ final class StartupDiagnostics: @unchecked Sendable {
         case hang
         /// The game exited without ever showing a window.
         case exitedBeforeWindow = "exited-before-window"
+        /// Wine's launcher exited before the game's exe ever appeared: a
+        /// missing exe, a DLL that won't load.
+        case exitedBeforeGame = "exited-before-game"
+        /// The game quit within `quickQuitSeconds` of its window appearing,
+        /// as a game missing its data files does.
+        case quitEarly = "quit-early"
     }
 
     private let gameSlug: String
@@ -45,6 +52,7 @@ final class StartupDiagnostics: @unchecked Sendable {
     private let enabled: Bool
     private let slowSeconds: Double
     private let hangSeconds: Double = 25
+    private let quickQuitSeconds: Double = 15
     private let maxBundles = 10
     private let recentLineLimit = 300
 
@@ -53,6 +61,7 @@ final class StartupDiagnostics: @unchecked Sendable {
     private var gamePid: Int32?
     private var gameStartTime: Date?
     private var windowAppeared = false
+    private var windowTime: Date?
     private var captured: Set<Reason> = []
     private var recentLines: [String] = []
     private var timers: [DispatchWorkItem] = []
@@ -111,6 +120,7 @@ final class StartupDiagnostics: @unchecked Sendable {
     func gameWindowAppeared() {
         queue.async {
             self.windowAppeared = true
+            self.windowTime = Date()
             self.timers.forEach { $0.cancel() }
             self.timers.removeAll()
         }
@@ -132,9 +142,16 @@ final class StartupDiagnostics: @unchecked Sendable {
         queue.async {
             self.timers.forEach { $0.cancel() }
             self.timers.removeAll()
-            if !self.windowAppeared && self.gameStartTime != nil {
-                self.recentLines.append("\(Self.timestamp(Date())) [diagnostics] game exited with code \(exitCode)")
+            let note = "\(Self.timestamp(Date())) [diagnostics] game exited with code \(exitCode)"
+            if self.gameStartTime == nil {
+                self.recentLines.append(note)
+                self.capture(.exitedBeforeGame)
+            } else if !self.windowAppeared {
+                self.recentLines.append(note)
                 self.capture(.exitedBeforeWindow)
+            } else if let windowTime = self.windowTime, Date().timeIntervalSince(windowTime) < self.quickQuitSeconds {
+                self.recentLines.append(note)
+                self.capture(.quitEarly)
             }
         }
     }
@@ -177,11 +194,14 @@ final class StartupDiagnostics: @unchecked Sendable {
             Files: sample.txt (thread stacks of the game process), sample-<name>-<pid>.txt
             (every other Wine process, sampled at the same moment), top.txt (CPU/memory),
             processes.txt, session.txt (display/lock/screen-sharing), log.txt (system
-            log for the game process), wine-output.txt (last \(recentLineLimit) Wine lines).
+            log for the game process), wine-output.txt (last \(recentLineLimit) Wine lines),
+            wrapp-log.txt (this launch's whole log so far, every level).
 
             """
         write(summary, to: dir.appendingPathComponent("summary.txt"))
         write(lines.joined(separator: "\n") + "\n", to: dir.appendingPathComponent("wine-output.txt"))
+        let wrappLog = LogStore.shared.snapshot().entries.map { LogFormatter.full(entry: $0) }
+        write(wrappLog.joined(separator: "\n") + "\n", to: dir.appendingPathComponent("wrapp-log.txt"))
 
         // The slow part runs off `queue` so later lines and triggers still get in.
         DispatchQueue.global(qos: .utility).async {

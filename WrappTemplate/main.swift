@@ -365,7 +365,16 @@ func main() {
     let driveC = config.winePrefix.appendingPathComponent("drive_c")
     let gamePath = driveC.appendingPathComponent(String(config.gameExePath.drop(while: { $0 == "/" })))
     let gameDir = config.gameEngine == "scummvm" ? gamePath : gamePath.deletingLastPathComponent()
+    // Every launch keeps its own log, since a wrapp opened from Finder has no
+    // terminal to show it. Started before the header; it backfills anyway.
+    let launchLog = RotatingLogFile.start(
+        in: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/SecondChance/\(config.gameSlug)", isDirectory: true),
+        prefix: "launch",
+        logger: mainLogger
+    )
     RunContext.logHeader(mainLogger, extra: [
+        ("log", launchLog?.path ?? "none"),
         ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.gameEngine)"),
         ("game files", "\(DirectorySize.measure(gameDir).description) in \(gameDir.path)"),
         ("game exe", config.gameExePath),

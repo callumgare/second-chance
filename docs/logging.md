@@ -11,6 +11,18 @@ The plumbing (swift-log → `MultiplexLogHandler` → `LogStore` and OSLog) is
 described in the logging bullet of [AGENTS.md](../AGENTS.md). This page covers
 what goes into the log and where it ends up.
 
+## Where each log lives
+
+| Log | What's in it |
+| --- | ------------ |
+| The terminal (stderr) | `notice` and up, compact format, when stderr is a terminal or `SECOND_CHANCE_LOG_STDERR=1`. |
+| `DerivedData/sc-logs/<time>-<step>.log` | What sc showed for each step: for a wrapp build, the app's stderr copy. |
+| `DerivedData/sc-logs/<time>-wrapp-build-<slug>.full.log` | A wrapp build's whole log, every level, full format (`SECOND_CHANCE_LOG_FILE`). |
+| `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` | Each wrapp launch's whole log, every level; the newest 10 are kept. The header names it. |
+| `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/` | A bundle from a launch that started badly (see AGENTS.md): stacks, process lists, Wine's output and the wrapp's log. |
+| Save Logs, `--mirror-logs` | The app's in-memory ring (the last 50,000 entries), or the whole session, to a file you choose or `~/Downloads`. |
+| OSLog (`log show`) | Every entry, crash-durable, under the `au.gare.callum.second-chance` subsystems. |
+
 ## Levels
 
 | Level       | Use it for | Shown on the terminal |
