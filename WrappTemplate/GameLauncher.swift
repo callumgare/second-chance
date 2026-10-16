@@ -188,6 +188,8 @@ class GameLauncher {
     
     /// When the game was launched, for how long it ran.
     private var launchedAt = Date()
+    /// Whether the game's own process was ever seen (always, for ScummVM).
+    private var gameStarted = false
 
     private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
         let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
@@ -201,7 +203,10 @@ class GameLauncher {
         }
         // Only Wine launches track the window (ScummVM has no diagnostics).
         let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
-        if let signal {
+        if !gameStarted {
+            let how = signal.map { "was killed by \(SubprocessWatch.signalName($0))" } ?? "exited \(exitCode.map(String.init) ?? "?")"
+            logger.error("■ The game never started: Wine's launcher \(how) after \(ran)")
+        } else if let signal {
             logger.error("■ Game was killed by \(SubprocessWatch.signalName(signal)) after \(ran)\(window)")
         } else if let exitCode, exitCode != 0 {
             logger.error("■ Game exited \(exitCode) after \(ran)\(window) — a crash or an error on the way out")
@@ -211,7 +216,7 @@ class GameLauncher {
             logger.notice("■ Game ended after \(ran) (exit status unknown)")
         }
 
-        let endedBadly = signal != nil || (exitCode ?? 0) != 0 || diagnostics?.hasSeenWindow == false
+        let endedBadly = !gameStarted || signal != nil || (exitCode ?? 0) != 0 || diagnostics?.hasSeenWindow == false
         if endedBadly {
             var files: [(String, String)] = []
             if let bundle = diagnostics?.lastBundle {
@@ -230,6 +235,7 @@ class GameLauncher {
     
     func launchGame(infoWindow: InfoWindowController? = nil, debugMode: Bool = false) -> Int32 {
         launchedAt = Date()
+        gameStarted = false
         LogContext.enterStage("Starting the game")
         // Launch the game process (engine-specific)
         let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
@@ -258,6 +264,7 @@ class GameLauncher {
             logger.notice("[Game Launch] Waiting for game executable to start...")
             if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
+                gameStarted = true
                 diagnostics?.gameStarted(pid: detectedPid)
 
                 // Activate game window (Wine games only)
@@ -271,6 +278,7 @@ class GameLauncher {
                 logger.error("[Game Launch] \(gameExeName) was never seen running; waiting for Wine's launcher to finish")
             }
         } else {
+            gameStarted = true
             // ScummVM - starts immediately
             _ = gameMonitor.waitForGameToStart(gameExeName: "scummvm", gamePid: gamePid)
         }
@@ -286,7 +294,9 @@ class GameLauncher {
         
         // Hide info window now that game has started
         infoWindow?.notifyGameLoaded()
-        LogContext.enterStage("Playing")
+        if gameStarted {
+            LogContext.enterStage("Playing")
+        }
         
         
         // Wait for game to stop
