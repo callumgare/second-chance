@@ -315,11 +315,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// MARK: - Termination signals
+
+/// Kept alive for the life of the process.
+private var terminationSignalSources: [DispatchSourceSignal] = []
+
+/// Quit like Cmd-Q on SIGTERM, SIGINT or SIGHUP: end the game and its Wine
+/// session and log that it happened, instead of dying silently or (when the
+/// signal arrived masked) not at all.
+private func installTerminationHandlers() {
+    // A signal blocked by whoever started us stays blocked across exec;
+    // unblock these so they are delivered at all.
+    var set = sigset_t()
+    sigemptyset(&set)
+    for sig in [SIGTERM, SIGINT, SIGHUP] { sigaddset(&set, sig) }
+    pthread_sigmask(SIG_UNBLOCK, &set, nil)
+
+    for (sig, code) in [(SIGTERM, Int32(143)), (SIGINT, 130), (SIGHUP, 129)] {
+        signal(sig, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+        source.setEventHandler {
+            mainLogger.notice("Received \(SubprocessWatch.signalName(sig)): quitting the game and ending its Wine session")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                mainLogger.error("Cleanup didn't finish within 15 s of \(SubprocessWatch.signalName(sig)); exiting anyway")
+                LogStore.shared.flush()
+                exit(code)
+            }
+            NSApplication.shared.terminate(nil)
+        }
+        source.resume()
+        terminationSignalSources.append(source)
+    }
+}
+
 // MARK: - Main
 
 func main() {
     // Bootstrap logging before anything else can construct a Logger.
     AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappTemplate")
+    installTerminationHandlers()
 
     // Get app path for prefix determination
     guard let executablePath = ProcessInfo.processInfo.arguments.first else {
@@ -367,12 +401,9 @@ func main() {
     let gameDir = config.gameEngine == "scummvm" ? gamePath : gamePath.deletingLastPathComponent()
     // Every launch keeps its own log, since a wrapp opened from Finder has no
     // terminal to show it. Started before the header; it backfills anyway.
-    let launchLog = RotatingLogFile.start(
-        in: FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/SecondChance/\(config.gameSlug)", isDirectory: true),
-        prefix: "launch",
-        logger: mainLogger
-    )
+    let gameLogs = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/SecondChance/\(config.gameSlug)", isDirectory: true)
+    let launchLog = RotatingLogFile.start(in: gameLogs, prefix: "launch", logger: mainLogger)
     RunContext.logHeader(mainLogger, extra: [
         ("log", launchLog?.path ?? "none"),
         ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.gameEngine)"),
@@ -382,6 +413,7 @@ func main() {
         ("prefix", config.winePrefix.path),
         ("saves", config.appSupportPath.path),
     ])
+    CrashMarker.install(in: gameLogs, logger: mainLogger)
     
     // Check if wineserver is already running for this prefix
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)

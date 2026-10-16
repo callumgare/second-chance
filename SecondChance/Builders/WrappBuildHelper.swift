@@ -533,6 +533,30 @@ class WrappBuildHelper {
     }
 
     /// Clean up all tracked temporary wrapps (app termination / crash paths).
+    /// Remove temp wrapps an earlier run left behind: one that was killed,
+    /// or crashed, never got to its cleanup, and each holds a whole Wine
+    /// prefix. Only those untouched for `olderThan`, so another build in
+    /// progress keeps its own; none in debug mode, which keeps them on purpose.
+    func sweepStaleTemporaryWrapps(olderThan age: TimeInterval = 6 * 60 * 60) {
+        guard !DebugSettings.shared.debugMode else { return }
+        let tempDir = fileManager.temporaryDirectory
+        let candidates = (try? fileManager.contentsOfDirectory(
+            at: tempDir, includingPropertiesForKeys: [.contentModificationDateKey]
+        )) ?? []
+        let cutoff = Date().addingTimeInterval(-age)
+        for wrapp in candidates where wrapp.lastPathComponent.hasPrefix("NancyDrew-") && wrapp.pathExtension == "app" {
+            guard let modified = (try? wrapp.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+                  modified < cutoff else { continue }
+            let size = DirectorySize.measure(wrapp)
+            do {
+                try fileManager.removeItem(at: wrapp)
+                logger.notice("🧹 Removed a temp wrapp left by an earlier run: \(wrapp.lastPathComponent) (\(size.description), last changed \(modified))")
+            } catch {
+                logger.warning("Can't remove the stale temp wrapp \(wrapp.path): \(error.localizedDescription)")
+            }
+        }
+    }
+
     func cleanupTemporaryWrapps() {
         wrappsLock.lock()
         let wrapps = Array(temporaryWrapps)

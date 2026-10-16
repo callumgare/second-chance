@@ -36,6 +36,12 @@ struct SecondChanceApp: App {
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
         RunContext.logHeader(logger)
+        CrashMarker.install(
+            in: FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Logs/SecondChance/app", isDirectory: true),
+            logger: logger
+        )
+        WrappBuildHelper.shared.sweepStaleTemporaryWrapps()
 
         // Clear the Wine prefix cache before anything else touches it. Works in
         // both GUI and headless launches (`--clear-wine-cache`).

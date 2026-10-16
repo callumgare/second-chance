@@ -156,6 +156,23 @@ underlying errors, which `localizedDescription` drops. A wrapp's summary also
 names its diagnostics bundle when it captured one. `grep -A20 'FAILURE SUMMARY'`
 finds it. Cancelling a build produces no summary.
 
+## Crashes and signals
+
+A Swift trap, an AppKit assertion or a segfault ends a process before anything
+in its log says why. `CrashMarker.install` (the app and every wrapp) arms a
+handler for the fatal signals that writes one line to stderr and to a
+`crash-marker` file in the process's log folder, then lets the crash proceed
+so macOS still writes its report. At the next start the previous crash is
+logged as an error with the path of that report in
+`~/Library/Logs/DiagnosticReports`. The handler only makes async-signal-safe
+calls, so it never touches the log itself.
+
+A wrapp quits on SIGTERM, SIGINT or SIGHUP the way it does on Cmd-Q, ending the
+game's Wine session, and logs the signal; it exits regardless 15 s later.
+
+The app removes temp wrapps (`$TMPDIR/NancyDrew-*.app`) left by a run that
+was killed before its cleanup, once they are 6 hours old, and logs each one.
+
 ## Environment variables
 
 | Variable | Effect |
