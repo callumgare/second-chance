@@ -121,7 +121,9 @@ For each applicable patch, in manifest order:
 1. Unzip the bundled archive to a temp directory.
 2. Find the payload by its exact manifest name.
 3. Either copy it into the game directory, or stage it there and run it under
-   Wine.
+   Wine. The installer is run by its Windows path (`C:\…`): Wine reads a path
+   starting with `/` as a Unix path, which names nothing inside the prefix.
+   A non-zero exit from the installer counts as a failed patch.
 4. Remove a staged installer afterwards, so the game directory is left as it was
    found — patched, but without a stray Windows exe in it.
 

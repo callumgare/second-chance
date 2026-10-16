@@ -283,6 +283,7 @@ class GameInstallerRunner {
         case payloadMissing(payload: String, archive: String)
         case unzipFailed(String)
         case timedOut(String)
+        case installerFailed(id: String, exitCode: Int32)
 
         var errorDescription: String? {
             switch self {
@@ -294,6 +295,8 @@ class GameInstallerRunner {
                 return "Could not unzip \(archive)."
             case .timedOut(let id):
                 return "The patch installer for \(id) did not finish in time and was stopped."
+            case .installerFailed(let id, let exitCode):
+                return "The patch installer for \(id) exited with code \(exitCode)."
             }
         }
     }
@@ -410,9 +413,18 @@ class GameInstallerRunner {
             // Leave the game directory as we found it, patched or not.
             defer { try? fileManager.removeItem(at: staged) }
 
-            let winePath = String(staged.path.dropFirst(driveCPath.path.count))
+            let winePath = Self.windowsPath(of: staged, driveC: driveCPath)
             try await runPatchInstaller(patch, at: wrappPath, hostPath: staged, winePath: winePath)
         }
+    }
+
+    /// The Windows path (`C:\\…`) of a file inside the prefix's `drive_c`.
+    ///
+    /// Wine reads a path that starts with `/` as a Unix path, so cutting the
+    /// `drive_c` prefix off alone leaves a path that names nothing.
+    static func windowsPath(of file: URL, driveC: URL) -> String {
+        let relative = file.standardizedFileURL.path.dropFirst(driveC.standardizedFileURL.path.count)
+        return "C:" + relative.replacingOccurrences(of: "/", with: "\\")
     }
 
     /// Extract a patch archive with `/usr/bin/unzip`.
@@ -448,11 +460,14 @@ class GameInstallerRunner {
 
         let finishedInTime = try await withThrowingTaskGroup(of: Bool.self) { group in
             group.addTask { [wineManager] in
-                _ = try await wineManager.runWindowsExecutable(
+                let exitCode = try await wineManager.runWindowsExecutable(
                     at: wrappPath,
                     exePath: winePath,
                     arguments: arguments
                 )
+                guard exitCode == 0 else {
+                    throw GamePatchError.installerFailed(id: patch.id, exitCode: exitCode)
+                }
                 return true
             }
             group.addTask {

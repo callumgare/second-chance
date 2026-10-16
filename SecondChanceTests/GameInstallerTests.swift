@@ -170,4 +170,12 @@ struct InstallerIntegrationTests {
         // We just check that it doesn't crash - actual type depends on fixture
         #expect(true, "Should detect installer type without crashing")
     }
+
+    @Test("Patch installers get a C: path, not a Unix-looking one")
+    func patchInstallerWindowsPath() {
+        let driveC = URL(fileURLWithPath: "/tmp/w.app/Contents/SharedSupport/prefix/drive_c")
+        let staged = driveC.appendingPathComponent("nancy-drew-installer/disk-combined/ndsck1.exe")
+        #expect(GameInstallerRunner.windowsPath(of: staged, driveC: driveC)
+                == "C:\\nancy-drew-installer\\disk-combined\\ndsck1.exe")
+    }
 }
