@@ -57,6 +57,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, the `-only-testing:` filter, WrappPuppeteer's permissions and exit codes, or reading a run's output |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
+| [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
 | [docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md](docs/historical-plans/2026-09-03-wrapp-build-architecture-refactor.md) | You want to know why the wrapp build is split into per-source builders over a shared helper, and what the `InstallationService` / `GameInstaller` / `WrapperBuilder` arrangement it replaced got wrong |
 
@@ -88,6 +89,8 @@ Documentation is part of a change, not a follow-up to it.
   They are not updated as the code moves on. If one has to be edited because it
   is actively misleading someone, mark the edit inline as post-implementation,
   dated, with who changed it and why — never a silent rewrite.
+- In any files that are commited (unlike files such as this in the .local dir) you should never refer to details specific
+to the current user's setup such as file paths outside the source code repo or remote machines they may connect to for testing. 
 
 Reach for a doc when the material is one feature deep; reach for `AGENTS.md`
 when it applies across the repo. Link between them rather than repeating.
@@ -211,10 +214,21 @@ direct assignment.
   Wrapp output lands in the wrapp's log, so `SECOND_CHANCE_WINEDEBUG=+seh,+d3d9
   open -n "<wrapp>.app"` traces a single launch — `open` passes the shell's
   environment through. Channels like `+d3d9` log per frame, so keep runs short.
-  Two more debug switches read the same way: `SECOND_CHANCE_KEEP_IN_DOCK=1`
-  skips the wrapp hiding itself from the Dock once the game starts, and
-  `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves the native-fullscreen dylib
-  unarmed.
+  More debug switches read the same way: `SECOND_CHANCE_KEEP_IN_DOCK=1`
+  skips the wrapp hiding itself from the Dock once the game starts,
+  `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves native fullscreen unarmed, and
+  `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet).
+- **cnc-ddraw swallows the first click unless the wrapp locks the cursor.**
+  Wine games draw through cnc-ddraw in windowed mode, which only takes hold of
+  the mouse on the first button release inside the window — eating it, while
+  handing the game a stale cursor position — and lets go whenever the app is
+  deactivated. A helper running inside the game process posts a middle click
+  (which the games ignore, so the publisher logo isn't skipped) until Wine's
+  cursor state shows the lock, and again on every return to the app.
+  `WineEnvironment` arms it alongside native fullscreen; both live in
+  `WrappTemplate/InProcessHelpers/`. Read
+  [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before
+  touching either, or cnc-ddraw's `ddraw.ini` settings in `WineManager`.
 - **Wrapps start Wine's desktop before the game.** Left to Wine, a game's
   first desktop access starts `explorer.exe /desktop` and waits only 10 s for
   it; on a loaded machine under Rosetta that runs out, and the game carries on
@@ -339,3 +353,7 @@ as the Control-click bypass no longer works.
 - `GameInstallerRunner` still has one force unwrap (`gameExe!`).
 - The produced game app's process is named `WrappTemplate` in Activity Monitor.
   Renaming the executable per-game during configuration would read better.
+
+## Additional Info
+
+If the file `.local/AGENTS.md` exists please read that and follow any instructions there too.

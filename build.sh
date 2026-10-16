@@ -50,12 +50,14 @@ DERIVED_DATA_PATH="$SCRIPT_DIR/DerivedData"
 
 echo -e "${BLUE}🔨 Building SecondChance...${NC}"
 
+# An array, not a string: IFS is newline/tab here, so a space-separated string
+# would reach xcbeautify as one unknown option.
 if [[ "$QUIET" == true ]]; then
-    XCBEAUTIFY_OPTIONS="--quiet --disable-logging"
+    XCBEAUTIFY_OPTIONS=(--quiet --disable-logging)
 elif [[ "$RAW_LOGS" == true ]]; then
-    XCBEAUTIFY_OPTIONS="--preserve-unbeautified"
+    XCBEAUTIFY_OPTIONS=(--preserve-unbeautified)
 else
-    XCBEAUTIFY_OPTIONS=""
+    XCBEAUTIFY_OPTIONS=()
 fi
 
 # ONLY_ACTIVE_ARCH=NO for the same reason CI and prepare-release.sh set it:
@@ -70,6 +72,6 @@ NSUnbufferedIO=YES xcodebuild -project "$SCRIPT_DIR/SecondChance.xcodeproj" \
     -configuration Debug \
     -derivedDataPath "$DERIVED_DATA_PATH" \
     ONLY_ACTIVE_ARCH=NO \
-    build 2>&1 | xcbeautify $XCBEAUTIFY_OPTIONS
+    build 2>&1 | xcbeautify ${XCBEAUTIFY_OPTIONS[@]+"${XCBEAUTIFY_OPTIONS[@]}"}
 
 echo -e "${BLUE}📦 App built at: $DERIVED_DATA_PATH/Build/Products/Debug/Second Chance.app${NC}"

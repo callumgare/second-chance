@@ -15,7 +15,7 @@
 //  entry point before dyld's initializer phase, then loads the real wine binary
 //  in a second pass. An inserted dylib belongs only to the first pass, so it gets
 //  mapped into the game process but its constructor never runs. Instead,
-//  patch-winemac.py adds a weak dependency on this dylib to winemac.so, putting
+//  patch-winemac.swift adds a weak dependency on this dylib to winemac.so, putting
 //  it in the second pass's image graph where dyld does run initializers.
 //
 //  winemac.so is loaded by every process that talks to Wine's Mac driver
@@ -23,6 +23,9 @@
 //  executable that should act. Wine names each child's loader copy after the
 //  Windows .exe it runs, which makes the main executable's basename a reliable
 //  way to recognise the game process.
+//
+//  The same dylib also carries cursor_lock.m, which uses this loading trick
+//  for a different job and is armed separately (docs/wine-in-process-helpers.md).
 //
 //  Built and installed by WrappTemplate/setup-wine.sh.
 //
@@ -57,11 +60,11 @@ static double nowSeconds(void) {
     return (double)clock_gettime_nsec_np(CLOCK_MONOTONIC) / NSEC_PER_SEC;
 }
 
-/// Appends to NATIVE_MACOS_FULLSCREEN_LOG when that variable is set. Worth having
+/// Appends to IN_PROCESS_HELPERS_LOG when that variable is set. Worth having
 /// alongside os_log because this runs inside Wine child processes, whose log
 /// output is otherwise awkward to attribute to a particular game.
 static void debugLog(const char *format, ...) {
-    const char *path = getenv("NATIVE_MACOS_FULLSCREEN_LOG");
+    const char *path = getenv("IN_PROCESS_HELPERS_LOG");
     if (!path || !*path) return;
 
     char executable[PATH_MAX] = {0};

@@ -562,8 +562,13 @@ enum TemplateMatcher {
                     let maxGB = max(g, b)
                     grayData[dstIndex] = r > maxGB ? r &- maxGB : 0
                 case .luminance:
-                    // Rec. 601 weights in fixed point (77 + 150 + 29 = 256)
-                    grayData[dstIndex] = UInt8((77 * Int(r) + 150 * Int(g) + 29 * Int(b)) >> 8)
+                    // Rec. 601 weights in fixed point (77 + 150 + 29 = 256).
+                    // Summed in steps: as one expression it can exceed the
+                    // type checker's time limit on slower machines.
+                    var weighted: Int = 77 * Int(r)
+                    weighted += 150 * Int(g)
+                    weighted += 29 * Int(b)
+                    grayData[dstIndex] = UInt8(weighted >> 8)
                 }
 
                 srcIndex += bytesPerPixel

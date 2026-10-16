@@ -77,18 +77,21 @@ echo "📋 Installing winetricks..."
 ditto --rsrc "$WINETRICKS_FILE" "${TEMP_DIR}/Resources/winetricks"
 chmod +x "${TEMP_DIR}/Resources/winetricks"
     
-# Build the native fullscreen helper and hook it into Wine's Mac driver.
+# Build the in-process helpers and hook them into Wine's Mac driver.
 #
-# The helper has to run inside the Wine process that owns the game window, since
-# macOS only lets a process fullscreen its own NSWindow without the Accessibility
-# permission. DYLD_INSERT_LIBRARIES does not work here -- wine-preloader reaches
-# its entry point before dyld runs initializers -- so instead the driver gets a
-# weak dependency on the dylib. See NativeFullscreen/native_fullscreen.m.
-echo "🖥️  Building native fullscreen helper..."
-NATIVE_FS_DIR="${SCRIPT_DIR}/NativeFullscreen"
+# The helpers have to run inside the Wine process that owns the game window:
+# macOS only lets a process fullscreen its own NSWindow, or send its own window
+# events, without the Accessibility permission. DYLD_INSERT_LIBRARIES does not
+# work here -- wine-preloader reaches its entry point before dyld runs
+# initializers -- so instead the driver gets a weak dependency on the dylib.
+# Both helpers share the one dylib: native_fullscreen.m (macOS fullscreen) and
+# cursor_lock.m (cnc-ddraw's cursor lock). See docs/wine-in-process-helpers.md.
+echo "🖥️  Building in-process helpers (native fullscreen, cursor lock)..."
+HELPERS_DIR="${SCRIPT_DIR}/InProcessHelpers"
 clang -dynamiclib \
-    -o "${TEMP_DIR}/Frameworks/native_fullscreen.dylib" \
-    "${NATIVE_FS_DIR}/native_fullscreen.m" \
+    -o "${TEMP_DIR}/Frameworks/in_process_helpers.dylib" \
+    "${HELPERS_DIR}/native_fullscreen.m" \
+    "${HELPERS_DIR}/cursor_lock.m" \
     -framework Cocoa \
     -arch arm64 -arch x86_64 \
     -mmacosx-version-min=11.0 \
@@ -99,11 +102,11 @@ clang -dynamiclib \
 # reports on the native slice alone -- so the loop sees "already signed", skips
 # the file, and Xcode's bundle signing then fails on the unsigned x86_64 slice.
 # --force signs every slice.
-codesign --force --sign - "${TEMP_DIR}/Frameworks/native_fullscreen.dylib"
-echo "✓ Built and signed native_fullscreen.dylib"
+codesign --force --sign - "${TEMP_DIR}/Frameworks/in_process_helpers.dylib"
+echo "✓ Built and signed in_process_helpers.dylib"
 
-echo "🔧 Patching winemac.so to load the native fullscreen helper..."
-"${NATIVE_FS_DIR}/patch-winemac.swift" \
+echo "🔧 Patching winemac.so to load the in-process helpers..."
+"${HELPERS_DIR}/patch-winemac.swift" \
     "${TEMP_DIR}/SharedSupport/wine/lib/wine/x86_64-unix/winemac.so"
 
 # Fix rpaths

@@ -88,6 +88,14 @@ struct NancyDrewQuitScenario {
 
     private var focusStrategy: FocusStrategy { wrapp.engine.focusStrategy }
 
+    private var backingScaleFactor: CGFloat { NSScreen.main?.backingScaleFactor ?? 1.0 }
+
+    /// The centre of a rect found in a screenshot, which is in pixels, as the
+    /// screen point a click needs.
+    private func screenPoint(atCentreOf rect: CGRect) -> CGPoint {
+        CGPoint(x: rect.midX / backingScaleFactor, y: rect.midY / backingScaleFactor)
+    }
+
     private func forceQuit(_ app: NSRunningApplication) {
         ProcessControl.forceQuit(app, pkillArguments: wrapp.engine.helperPkillArguments)
     }
@@ -179,12 +187,7 @@ struct NancyDrewQuitScenario {
                 logger.notice(clickedExitButton ? "  ✓ Clicking 'Exit Game' button again..." : "  ✓ Found 'Exit Game' button, clicking...")
                 clickedExitButton = true
 
-                // Screenshot pixels → screen points
-                let backingScaleFactor = NSScreen.main?.backingScaleFactor ?? 1.0
-                var clickPoint = CGPoint(
-                    x: exitLocation.midX / backingScaleFactor,
-                    y: exitLocation.midY / backingScaleFactor
-                )
+                var clickPoint = screenPoint(atCentreOf: exitLocation)
 
                 // The Scarlet Hand's Exit hotspot sits above its label
                 if appName.contains("Scarlet Hand") {
@@ -194,10 +197,14 @@ struct NancyDrewQuitScenario {
                 InputControl.click(at: clickPoint)
                 Thread.sleep(forTimeInterval: 1)
 
-                // Park the cursor so it can't hover-highlight anything in the next screenshot
-                let cornerPoint = CGPoint(x: (NSScreen.main?.frame.maxX ?? 0) - 10,
-                                          y: (NSScreen.main?.frame.maxY ?? 0) - 10)
-                CGWarpMouseCursorPosition(cornerPoint)
+                // The game draws its own cursor into the frame, so left on the
+                // button it hides part of the label from OCR (or hover-
+                // highlights it) and a retry can't find it. Park it against the
+                // left edge, clear of the centred menu text and of the
+                // bottom-right corner the quit-button template is searched in.
+                // Not on the edge itself, which would reveal a left-hand Dock.
+                let screenFrame = NSScreen.main?.frame ?? .zero
+                InputControl.moveMouse(to: CGPoint(x: screenFrame.minX + 20, y: screenFrame.midY))
 
                 if !ProcessControl.isRunning(app, helperPid: gamePid) {
                     logger.notice("✅ Game exited successfully")
@@ -208,7 +215,7 @@ struct NancyDrewQuitScenario {
             if let interactiveLocation = analysis.interactiveLogo, !clickedInteractive {
                 logger.notice("  ✓ Found 'interactive' logo, clicking to enable menu...")
                 Thread.sleep(forTimeInterval: 1)
-                InputControl.click(at: CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY))
+                InputControl.click(at: screenPoint(atCentreOf: interactiveLocation))
                 clickedInteractive = true
                 Thread.sleep(forTimeInterval: 2)
             }

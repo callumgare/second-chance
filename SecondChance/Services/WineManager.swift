@@ -126,7 +126,10 @@ class WineManager {
         Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Installing cnc-ddraw"))) }
         try await installWinetrick("cnc_ddraw", at: wrappPath)
         
-        // Configure cnc-ddraw to maintain aspect ratio
+        // Configure cnc-ddraw to maintain aspect ratio. windowed=true is what lets
+        // native fullscreen adopt the window, but it also makes cnc-ddraw swallow
+        // the first click; the wrapp's cursor-lock helper works around that.
+        // See docs/wine-in-process-helpers.md before changing these settings.
         let ddrawIniPath = prefixPath.appendingPathComponent("drive_c/windows/syswow64/ddraw.ini")
             if fileManager.fileExists(atPath: ddrawIniPath.path) {
                 if let contents = try? String(contentsOf: ddrawIniPath, encoding: .utf8) {

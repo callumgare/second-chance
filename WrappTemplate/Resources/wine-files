@@ -4649,7 +4649,6 @@ Frameworks/libgmpxx.4.dylib
 Frameworks/libMacportsLegacySystem.B.dylib
 Frameworks/libp11-kit.0.dylib
 Frameworks/libxml2.2.dylib
-Frameworks/native_fullscreen.dylib
 Frameworks/libffi.8.dylib
 Frameworks/SikarugirSdk.framework/Versions/A/_CodeSignature/CodeResources
 Frameworks/SikarugirSdk.framework/Versions/A/Resources/Info.plist
@@ -5346,6 +5345,7 @@ Frameworks/liblzma.5.dylib
 Frameworks/libicui18n.76.1.dylib
 Frameworks/libunistring.5.dylib
 Frameworks/libbrotlienc.1.1.0.dylib
+Frameworks/in_process_helpers.dylib
 Frameworks/libgmp.10.dylib
 Frameworks/libinotify.0.dylib
 Frameworks/libhogweed.6.9.dylib

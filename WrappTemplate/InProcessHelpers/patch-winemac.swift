@@ -1,7 +1,7 @@
 #!/usr/bin/env swift
 
 //  patch-winemac.swift
-//  Adds a weak dependency on native_fullscreen.dylib to Wine's Mac driver.
+//  Adds a weak dependency on in_process_helpers.dylib to Wine's Mac driver.
 //
 //  Wine child processes are launched through wine-preloader, which loads the real
 //  wine binary in a second dyld pass. DYLD_INSERT_LIBRARIES only applies to the
@@ -11,7 +11,8 @@
 //  puts it in the second pass's image graph, where dyld does run initializers.
 //
 //  The dependency is weak (LC_LOAD_WEAK_DYLIB) so a missing or unreadable dylib
-//  degrades to "no native fullscreen" instead of breaking Wine's graphics driver.
+//  degrades to "no in-process helpers" -- no native fullscreen or cursor lock --
+//  instead of breaking Wine's graphics driver.
 //
 //  Usage: patch-winemac.swift <path-to-winemac.so>
 
@@ -27,7 +28,7 @@ let LC_REEXPORT_DYLIB: UInt32 = 0x8000_001f
 // winemac.so lives at Contents/SharedSupport/wine/lib/wine/x86_64-unix/, so five
 // levels up from its directory is Contents/. Keeping the reference relative to
 // @loader_path means the patch survives the .app being renamed or moved.
-let dylibReference = "@loader_path/../../../../../Frameworks/native_fullscreen.dylib"
+let dylibReference = "@loader_path/../../../../../Frameworks/in_process_helpers.dylib"
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data("error: \(message)\n".utf8))

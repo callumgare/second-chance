@@ -256,16 +256,22 @@ public struct WineEnvironment {
         process.executableURL = wineExecutable
         process.arguments = args
 
-        // Ask the native-fullscreen dylib bundled into Wine's Mac driver to put
-        // this game's window into a real macOS fullscreen Space. Every Mac-driver
-        // process loads that dylib, so it needs to be told which one is the game;
-        // Wine names each child's loader copy after the .exe it runs.
-        // See WrappTemplate/NativeFullscreen/native_fullscreen.m.
+        // Arm the in-process helpers bundled into Wine's Mac driver: native
+        // fullscreen puts this game's window into a real macOS fullscreen Space,
+        // and cursor lock gets cnc-ddraw to take the mouse without swallowing the
+        // player's first click. Every Mac-driver process loads them, so each is
+        // told which one is the game; Wine names each child's loader copy after
+        // the .exe it runs. See docs/wine-in-process-helpers.md.
         var env = environmentVariables()
-        // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves the dylib unarmed — a debug
-        // switch for telling its main-thread polling apart from other causes.
+        // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
+        // debug switch for telling its main-thread polling apart from other causes.
         if ProcessInfo.processInfo.environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
             env["NATIVE_MACOS_FULLSCREEN_EXE"] = exeFileName
+        }
+        // SECOND_CHANCE_CURSOR_LOCK=0 leaves cursor lock unarmed, bringing back
+        // cnc-ddraw's swallowed first click — for comparison.
+        if ProcessInfo.processInfo.environment["SECOND_CHANCE_CURSOR_LOCK"] != "0" {
+            env["CURSOR_LOCK_EXE"] = exeFileName
         }
         process.environment = env
         process.currentDirectoryURL = URL(fileURLWithPath: exeDir)

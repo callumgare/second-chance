@@ -84,6 +84,15 @@ enum InputControl {
         Thread.sleep(forTimeInterval: 0.1)
     }
     
+    /// Move the cursor without clicking. Posts a move event as well as warping:
+    /// a warp alone moves the macOS pointer but sends the app nothing, so a
+    /// game that draws its own cursor keeps drawing it where it was.
+    static func moveMouse(to point: CGPoint) {
+        CGWarpMouseCursorPosition(point)
+        let moveEvent = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)
+        moveEvent?.post(tap: .cghidEventTap)
+    }
+
     /// Click at screen coordinates
     static func click(at point: CGPoint) {
         logger.notice("  → Clicking at (\(Int(point.x)), \(Int(point.y)))...")

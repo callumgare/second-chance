@@ -200,6 +200,14 @@ screen, and uses red-emphasis greyscale because the button is red. Called
 without options, `TemplateMatcher` searches the whole screen at the template's
 own size.
 
+The scenario clicks Exit, then parks the cursor at the left edge with a real
+mouse-move event — the game draws its own cursor, and left over the button it
+hides the label from the next OCR pass. If the game is still on the menu, it
+clicks Exit again. A Wine game should quit on the first click: a log showing
+"Clicking 'Exit Game' button again" on every run means the wrapp's cursor lock
+isn't taking, and cnc-ddraw is swallowing the first click — see
+[wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock).
+
 To check the vision code without launching anything, run it against a saved
 screenshot — this needs no permissions:
 
