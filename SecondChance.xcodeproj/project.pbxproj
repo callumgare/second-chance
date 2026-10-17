@@ -90,6 +90,7 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			explicitFolders = (
 				"Resources/installer-answer-files",
+				"Resources/patch-automation",
 			);
 			path = SecondChance;
 			sourceTree = "<group>";

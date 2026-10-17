@@ -22,6 +22,10 @@ struct GamePatch: Codable, Identifiable, Hashable {
         case runInstaller = "run-installer"
         /// A plain data file to drop into the game directory.
         case copyIntoGameDir = "copy-into-game-dir"
+        /// A self-extracting zip, unzipped into the game directory (optionally
+        /// under `destinationSubdirectory`) rather than run: its dialog only
+        /// asks where to put the files.
+        case extractIntoGameDir = "extract-into-game-dir"
     }
 
     /// Which edition of the game a patch is built for. Her Interactive shipped
@@ -57,7 +61,8 @@ struct GamePatch: Codable, Identifiable, Hashable {
     /// filenames follow no pattern worth guessing at.
     let payload: String
     let action: Action
-    /// For `copyIntoGameDir`, a folder beneath the game directory to copy into.
+    /// For `copyIntoGameDir` and `extractIntoGameDir`, a folder beneath the
+    /// game directory to put the files in.
     let destinationSubdirectory: String?
     let edition: Edition
     /// Whether to apply this during a build without being asked.
@@ -67,6 +72,10 @@ struct GamePatch: Codable, Identifiable, Hashable {
     let automatic: Bool
     let fixes: String
     let sourceUrl: String
+    /// For `runInstaller`, the AutoIt script in `patch-automation/` (without
+    /// `.au3`) that clicks through the installer's wizard, for patchers with
+    /// no silent mode. Nil runs the installer with silent flags.
+    let automation: String?
 }
 
 /// Loads `game-patches/manifest.json` from the app bundle.

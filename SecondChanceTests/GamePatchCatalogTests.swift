@@ -63,12 +63,28 @@ struct GamePatchCatalogTests {
         }
     }
 
-    @Test("Only copy-into-game-dir patches name a destination subdirectory")
+    @Test("Only patches that copy or extract files name a destination subdirectory")
     func destinationOnlyForCopies() {
         let catalog = catalog()
         for slug in catalog.patchedGameSlugs {
             for patch in catalog.allPatches(forGame: slug) where patch.action == .runInstaller {
                 #expect(patch.destinationSubdirectory == nil, "\(patch.id) is an installer but names a destination")
+            }
+        }
+    }
+
+    @Test("Every automated patch is an installer whose AutoIt script exists")
+    func automationScriptsExist() {
+        let scripts = Self.sourceManifestURL
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("SecondChance/Resources/patch-automation")
+        let catalog = catalog()
+        for slug in catalog.patchedGameSlugs {
+            for patch in catalog.allPatches(forGame: slug) {
+                guard let automation = patch.automation else { continue }
+                #expect(patch.action == .runInstaller, "\(patch.id) is automated but isn't an installer")
+                let script = scripts.appendingPathComponent("\(automation).au3")
+                #expect(FileManager.default.fileExists(atPath: script.path), "\(patch.id) names \(automation).au3, which doesn't exist")
             }
         }
     }

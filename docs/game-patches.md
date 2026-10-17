@@ -38,7 +38,8 @@ with macOS — so the build needs no `jq`, no Python, no extra tooling.
   "edition": "cd",                  // "any" | "cd" | "digital-download"
   "automatic": true,                // false = listed but never auto-applied
   "fixes": "…",
-  "sourceUrl": "https://…"          // the page documenting this patch
+  "sourceUrl": "https://…",         // the page documenting this patch
+  "automation": "her-update-wizard" // optional: the AutoIt script that drives it
 }
 ```
 
@@ -52,11 +53,16 @@ folder without ever running them.
 ### `action`
 
 - **`run-installer`** — the payload is a Windows installer. It is staged next to
-  the game and run under Wine. Twenty-two of the twenty-three patches are this.
+  the game and run under Wine. Twenty-one of the twenty-three patches are this.
 - **`copy-into-game-dir`** — the payload is a data file to drop into the game
   directory, optionally under `destinationSubdirectory`. Only Tomb of the Lost
   Queen's decode-puzzle fix works this way; it is a `.cif` that belongs in
   `Ciftree`.
+- **`extract-into-game-dir`** — the payload is a self-extracting zip, unzipped
+  straight into the game directory (optionally under `destinationSubdirectory`)
+  rather than run, since its dialog only asks where to put the files. Secret
+  of the Scarlet Hand's phone/monolith fix is a WinZip self-extractor holding
+  one `.CIF`, whose dialog offers `<game>\DataFiles`.
 
 ### `edition`
 
@@ -76,7 +82,7 @@ picked per build. There is a unit test asserting precisely that.
 ### `automatic`
 
 `false` means the patch is downloaded and bundled but never applied on its own.
-Three reasons a patch is marked opt-in:
+Four reasons a patch is marked opt-in:
 
 - **Puzzle solvers.** `haunted-mansion-bird-inlay-solver` and `ghost-dogs-cola-solver` mark a
   puzzle as already solved. Her Interactive's own pages say in capitals not to
@@ -88,6 +94,12 @@ Three reasons a patch is marked opt-in:
 - **Superseded updaters.** `white-wolf-isis-command-box` is ICE Updater 1.0.1, older
   than the 1.1.2 that ships as the automatic CD patch. Applying it afterwards
   would roll the game back.
+- **Nothing for a wrapp to gain.** `secrets-can-kill-flower-puzzle` is a 16-bit
+  DOS self-extractor whose only file is a new `GAME.EXE`; the wrapp runs Secrets
+  Can Kill under ScummVM, which never runs `GAME.EXE` (and the bundled Wine
+  can't run 16-bit programs anyway). `final-scene-install-patch` only rewrites
+  the uninstall registry entries and Start-menu shortcuts that clash when
+  Treasure in the Royal Tower is installed too; it holds no game files.
 
 Manifest order is applied order, so where a game has several updaters the newer
 one is listed first and an older one can never overwrite it.
@@ -134,12 +146,40 @@ For each applicable patch, in manifest order:
 
 Copies overwrite rather than fail, so rebuilding a wrapp is idempotent.
 
-### Installers are run silently, and on a timer
+### Installers are run silently or through AutoIt, and on a timer
 
-There is no recorded `.iss` answer file for patches the way there is for the
-game installers, so `silentPatchArguments` uses the generic silent flags for
-whichever installer family `detectInstallerType` reports — `/s /sms` for
-InstallShield, `/verysilent /norestart` for Inno Setup, `/qn` for MSI.
+Most of Her Interactive's patchers have no silent mode: they are wizards that
+wait for clicks. A patch whose manifest entry names an `automation` script is
+run through AutoIt with that script from `SecondChance/Resources/patch-automation/`
+(`runAutomatedPatchInstaller`), which clicks through the wizard and exits 0 only
+once the patcher says the game was updated; anything else fails the patch, and
+the script's log lines, which name each page it saw, are in the build log.
+AutoIt is copied into the prefix for the run and removed afterwards.
+
+| Script | Patchers | What it drives |
+| ------ | -------- | -------------- |
+| `update-installation-wizard` | Crystal Skull, Water's Edge, Trail of the Twister, Castle Malloy (both editions), White Wolf (CD) | An "Update Installation Wizard" that finds the game and patches on its own, then stops on a Finished page with a Close button; its Details pane lists each file backed up, updated or added |
+| `her-update-wizard` | Stay Tuned (cabinet), Haunted Mansion, Ghost Dogs, Deception Island (wood/C-sound), Shadow Ranch, Blackmoor Manor, Blue Moon (taffy sort) | A small stub that unpacks and runs an "Update Program" wizard (window class `UpdShClass`): Welcome, Information, Directory, Confirmation (Start), End, which says "has been successfully updated". Pages are told apart by their text, since only some builds name the page in the window title. The Directory box is filled from the game's registry entry, so for a ScummVM game (no installed copy) it is empty and the patcher would write to the root of `C:`; the script sets it to the folder the patcher runs from, which the build makes the game folder |
+
+Every applied patch logs which files under the game directory it added (`+`),
+changed (`~`) or removed (`-`), and warns when it changed none, which is how a
+patcher that "succeeds" without finding the game shows up. For a patcher driven
+by AutoIt, changing nothing fails the patch: the exit code there is AutoIt's,
+not the patcher's, and AutoIt has once exited 0 without the patcher ever
+starting.
+
+To probe a new patcher's dialogs without a screen, run it under AutoIt with a
+script that logs `WinList()`, each window's `WinGetText` and its controls
+after every step; that is how these pages were found. Pass AutoIt
+`/ErrorStdOut`, or a script error becomes an invisible dialog and AutoIt exits
+1 with no output. Querying every control of the Update Installation Wizard
+crashed AutoIt there, so start with `WinGetText` and `WinGetClassList`.
+
+Without an `automation` script, there is no recorded `.iss` answer file for
+patches the way there is for the game installers, so `silentPatchArguments`
+uses the generic silent flags for whichever installer family
+`detectInstallerType` reports — `/s /sms` for InstallShield,
+`/verysilent /norestart` for Inno Setup, `/qn` for MSI.
 
 If an installer ignores those and puts up a wizard, nothing would ever answer
 it, so `runPatchInstaller` gives the Wine run a 180-second timeout. On timeout
@@ -200,7 +240,9 @@ succeeds without them.
   only window in which it can. These patchers were written to target a normal
   Windows install rather than the disk layout a ScummVM wrapp uses, so treat
   them as best-effort: the timeout and the failure path exist precisely because
-  one may not find what it expects.
+  one may not find what it expects. A patcher that adds a file there puts it
+  loose beside the CD's `data1.cab`, which also holds a copy; whether ScummVM
+  prefers the loose one has not been checked.
 - **Shadow at the Water's Edge is labelled "PC only".** Her Interactive's Mac
   build self-updates over the internet instead. A wrapp runs the Windows build,
   so the PC patch is the correct one.

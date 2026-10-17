@@ -10,8 +10,8 @@
       "payload": "ndsck1.exe",
       "action": "run-installer",
       "edition": "any",
-      "automatic": true,
-      "fixes": "Corrects the flower puzzle in Aunt Eloise's safe.",
+      "automatic": false,
+      "fixes": "Corrects the flower puzzle in Aunt Eloise's safe. Not applied automatically: the patcher is a 16-bit DOS self-extractor that only replaces GAME.EXE, and the wrapp runs the game under ScummVM, which never runs GAME.EXE.",
       "sourceUrl": "https://www.herinteractive.com/support/game-patches/"
     },
     {
@@ -25,7 +25,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Clicking Mattie's cabinet wrongly sends the player to Dwayne's office.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-stay-tuned-for-danger-matties-cabinet-and-senior-detective-timer/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-stay-tuned-for-danger-matties-cabinet-and-senior-detective-timer/",
+      "automation": "her-update-wizard"
     },
     {
       "id": "stay-tuned-senior-detective-timer",
@@ -51,7 +52,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Resolves multiple freezes and assorted CSound errors.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-message-in-a-haunted-mansion-bird-inlay-puzzle-and-csound-error/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-message-in-a-haunted-mansion-bird-inlay-puzzle-and-csound-error/",
+      "automation": "her-update-wizard"
     },
     {
       "id": "haunted-mansion-bird-inlay-solver",
@@ -75,8 +77,8 @@
       "payload": "hi-installpatch.exe",
       "action": "run-installer",
       "edition": "any",
-      "automatic": true,
-      "fixes": "Closing Simone's purse with closed captioning off, a Modify/Repair/Remove prompt when Treasure in the Royal Tower is already installed, and being confined to the projector room on day 3.",
+      "automatic": false,
+      "fixes": "Closing Simone's purse with closed captioning off, a Modify/Repair/Remove prompt when Treasure in the Royal Tower is already installed, and being confined to the projector room on day 3. Not applied automatically: hi-installpatch.exe only rewrites the uninstall registry entries and shortcuts, which a wrapp has no use for, and contains no game files.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-final-scene-simones-purse-stuck-in-projector-room-and-installer/"
     },
     {
@@ -86,11 +88,12 @@
       "url": "https://www.herinteractive.com/wp-content/uploads/sshphone.zip",
       "archive": "sshphone.zip",
       "payload": "sshphone.exe",
-      "action": "run-installer",
+      "action": "extract-into-game-dir",
       "edition": "any",
       "automatic": true,
       "fixes": "Freezes while on the phone or at the monolith.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-secret-of-the-scarlet-hand-phonecall-and-monolith-freeze/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-secret-of-the-scarlet-hand-phonecall-and-monolith-freeze/",
+      "destinationSubdirectory": "DataFiles"
     },
     {
       "id": "ghost-dogs-full",
@@ -103,7 +106,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Dead navigation arrows, exits while photographing birds, being unable to leave the journal, repeated bird-photo requests, and the bucket not leaving inventory.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-ghost-dogs-of-moon-lake-cola-puzzle-and-gameplay-errors/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-ghost-dogs-of-moon-lake-cola-puzzle-and-gameplay-errors/",
+      "automation": "her-update-wizard"
     },
     {
       "id": "ghost-dogs-cola-solver",
@@ -129,7 +133,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Crash with a CSound/DirectSound error when talking to Casey about the wood samples.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-danger-on-deception-island-clams-missing-and-csound-error/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-danger-on-deception-island-clams-missing-and-csound-error/",
+      "automation": "her-update-wizard"
     },
     {
       "id": "deception-island-clamming",
@@ -155,7 +160,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Zrender error during the campfire scene, a scene-stack error at the painting, and the fifth key vanishing before it reaches inventory.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-secret-of-shadow-ranch-zrender-error-fifth-key-and-gameplay-error/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-secret-of-shadow-ranch-zrender-error-fifth-key-and-gameplay-error/",
+      "automation": "her-update-wizard"
     },
     {
       "id": "blackmoor-manor-full",
@@ -168,7 +174,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "The cricket ball never being added to inventory, and the column key vanishing before it reaches inventory.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-curse-of-blackmoor-manor-cricket-ball-and-column-key-missing/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-curse-of-blackmoor-manor-cricket-ball-and-column-key-missing/",
+      "automation": "her-update-wizard"
     },
     {
       "id": "blue-moon-taffy-sort",
@@ -181,7 +188,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Cursor freeze during the taffy sort puzzle.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-last-train-to-blue-moon-canyon-taffy-sort-puzzle-2/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-last-train-to-blue-moon-canyon-taffy-sort-puzzle-2/",
+      "automation": "her-update-wizard"
     },
     {
       "id": "white-wolf-updater-cd",
@@ -194,7 +202,8 @@
       "edition": "cd",
       "automatic": true,
       "fixes": "Ned phone freeze, Guadalupe availability, S3/VIA Unichrome picture-in-picture, and slow end-game chase performance. The site lists this same file again on its S3/VIA Unichrome page.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-white-wolf-of-icicle-creek-cd-version/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-white-wolf-of-icicle-creek-cd-version/",
+      "automation": "update-installation-wizard"
     },
     {
       "id": "white-wolf-updater-download",
@@ -233,7 +242,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Inventory showing only four mushrooms after five have been collected. Her Interactive states this updater covers both the CD and digital-download editions.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-legend-of-the-crystal-skull-mushroom-missing-from-inventory/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-legend-of-the-crystal-skull-mushroom-missing-from-inventory/",
+      "automation": "update-installation-wizard"
     },
     {
       "id": "castle-malloy-walk-in-place-cd",
@@ -246,7 +256,8 @@
       "edition": "cd",
       "automatic": true,
       "fixes": "Nancy walking in place on the map early on, and the conversation with Kyler freezing later.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-haunting-of-castle-malloy-nancy-walks-in-place-and-kyler-conversation-freeze-cd-version/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-haunting-of-castle-malloy-nancy-walks-in-place-and-kyler-conversation-freeze-cd-version/",
+      "automation": "update-installation-wizard"
     },
     {
       "id": "castle-malloy-walk-in-place-download",
@@ -259,7 +270,8 @@
       "edition": "digital-download",
       "automatic": true,
       "fixes": "The digital-download build of the same two fixes as HAU 1.1.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-haunting-of-castle-malloy-nancy-walks-in-place-and-kyler-conversation-freeze-digital-download/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-haunting-of-castle-malloy-nancy-walks-in-place-and-kyler-conversation-freeze-digital-download/",
+      "automation": "update-installation-wizard"
     },
     {
       "id": "trail-of-the-twister-doppler-radar",
@@ -272,7 +284,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Flickering or black screen on the Doppler cable puzzle with GeForce 2/4 MX cards.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-trail-of-the-twister-doppler-radar-screen/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-trail-of-the-twister-doppler-radar-screen/",
+      "automation": "update-installation-wizard"
     },
     {
       "id": "waters-edge-recorder-tea-ceremony",
@@ -285,7 +298,8 @@
       "edition": "any",
       "automatic": true,
       "fixes": "Being unable to delete recorder channels when all are full, and missing item labels during the tea ceremony. Her Interactive labels this PC-only because the Mac build self-updates; a wrapp runs the Windows build, so the PC patch is the right one.",
-      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-shadow-at-the-waters-edge-delete-channels-on-recorder-tea-ceremony-labels/"
+      "sourceUrl": "https://www.herinteractive.com/2014/04/patch-shadow-at-the-waters-edge-delete-channels-on-recorder-tea-ceremony-labels/",
+      "automation": "update-installation-wizard"
     },
     {
       "id": "lost-queen-decode-puzzle",

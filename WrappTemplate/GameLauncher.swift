@@ -113,9 +113,8 @@ class GameLauncher {
     private var cleanupCompleted = false
     /// Captures a diagnostics bundle if a Wine game starts badly; nil for ScummVM.
     private var diagnostics: StartupDiagnostics?
-    /// The `wine explorer.exe /desktop` launcher from `prepareDesktop`, if it
-    /// started one. See `releaseDesktop`.
-    private var desktopLauncher: Process?
+    /// The desktop `prepareDesktop` started, if it did. See `releaseDesktop`.
+    private var desktop: WineDesktop?
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     /// What Wine and the game print, and what ScummVM prints: categories of
@@ -390,69 +389,24 @@ class GameLauncher {
     // MARK: - Wine Desktop
 
     /// Start Wine's desktop and wait until it has registered the display
-    /// devices, before the game runs. Left to Wine, the game's first desktop
-    /// access starts the desktop and gives it 10 seconds; past that the game
-    /// carries on without display adapters and can crash. Here there is no
-    /// deadline that matters — the info window stays up meanwhile — and if the
-    /// desktop is somehow never ready the game launches anyway, as before.
-    /// See `WineEnvironment.startDesktop`.
+    /// devices, before the game runs. There is no deadline here that matters —
+    /// the info window stays up meanwhile. See `WineDesktop`.
     private func prepareDesktop(_ wine: WineEnvironment) {
         // Debug switch, for comparing against Wine's own on-demand start.
         guard ProcessInfo.processInfo.environment["SECOND_CHANCE_PRESTART_DESKTOP"] != "0" else {
             logger.notice("[Desktop] Not pre-starting the desktop (SECOND_CHANCE_PRESTART_DESKTOP=0)")
             return
         }
-
-        let start = Date()
-        if wine.displayDevicesRegistered() {
-            logger.notice("[Desktop] Already running (checked in \(String(format: "%.1f", Date().timeIntervalSince(start)))s)")
-            return
-        }
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        do {
-            let desktop = try wine.startDesktop(outputPipe: outputPipe, errorPipe: errorPipe)
-            desktopLauncher = desktop
-            ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice)
-            ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning)
-            logger.notice("[Desktop] Started explorer.exe /desktop (launcher PID \(desktop.processIdentifier)), waiting for display devices...")
-        } catch {
-            logger.warning("[Desktop] Could not start the desktop, leaving it to Wine: \(error)")
-            return
-        }
-
-        let deadline = start.addingTimeInterval(60)
-        var attempt = 0
-        while Date() < deadline {
-            attempt += 1
-            let queryStart = Date()
-            let result = wine.queryDisplayDevices()
-            let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
-            if result == .registered {
-                logger.notice("[Desktop] Ready after \(elapsed)s (\(attempt) checks)")
-                return
-            }
-            logger.notice("[Desktop] Check \(attempt): \(result) (query took \(String(format: "%.1f", Date().timeIntervalSince(queryStart)))s, \(elapsed)s since start)")
-            Thread.sleep(forTimeInterval: 0.25)
-        }
-        logger.error("[Desktop] Display devices still not registered after 60s — launching the game anyway")
+        desktop = WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
     }
 
-    /// Let the pre-started desktop shut down once the game has exited.
-    ///
-    /// Wine runs `wine explorer.exe /desktop` through `start.exe /exec`, and
-    /// `start.exe` is itself a Windows program waiting for explorer — while explorer
-    /// only exits once no programs are left. Without this the two keep each
-    /// other, and the whole Wine session, alive after the game quits. Ending just
-    /// `start.exe` lets explorer close down normally: straight away if the game
-    /// was the last program, or later if it left something running.
+    /// Let the pre-started desktop shut down once the game has exited, or it
+    /// keeps the whole Wine session alive. See `WineDesktop.release`.
     private func releaseDesktop() {
-        guard let launcher = desktopLauncher else { return }
-        desktopLauncher = nil
-        guard launcher.isRunning else { return }
-        logger.notice("[Desktop] Game exited; releasing the desktop launcher (PID \(launcher.processIdentifier))")
-        launcher.terminate()
+        guard let desktop else { return }
+        self.desktop = nil
+        logger.notice("[Desktop] Game exited")
+        desktop.release()
     }
 
     // MARK: - ScummVM Game Launching

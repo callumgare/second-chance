@@ -258,14 +258,17 @@ direct assignment.
   first desktop access starts `explorer.exe /desktop` and waits only 10 s for
   it; on a loaded machine under Rosetta that runs out, and the game carries on
   with no display adapters — Secrets Can Kill Remastered then crashes on a null
-  Direct3D object exactly 10 s in. `GameLauncher.prepareDesktop` starts the
+  Direct3D object exactly 10 s in. `WineDesktop` (`Shared/Wine/`) starts the
   desktop itself and waits (up to 60 s) until it has registered the display
   devices, which it detects through the volatile
-  `HKLM\HARDWARE\DEVICEMAP\VIDEO` key. Wine runs that desktop through
-  `start.exe /exec`, which is itself a Windows program waiting on explorer, so
-  the two would keep the whole Wine session alive after the game quits;
-  `releaseDesktop` ends the `start.exe` once the game exits and explorer then
-  closes normally. `SECOND_CHANCE_PRESTART_DESKTOP=0`
+  `HKLM\HARDWARE\DEVICEMAP\VIDEO` key. `GameLauncher` does this before the
+  game, and `GameInstallerRunner` before every installer and patcher, which
+  fail the same way (with an exit code rather than a crash). Wine runs that
+  desktop through `start.exe /exec`, which is itself a Windows program waiting
+  on explorer, so the two would keep the whole Wine session alive after the
+  game quits; `WineDesktop.release()` ends the `start.exe` once the programs
+  are done and explorer then closes normally. A build releases it before
+  `wineserver -w`, which would otherwise wait for ever. `SECOND_CHANCE_PRESTART_DESKTOP=0`
   restores Wine's on-demand start, for comparison. Anything that runs `wine`
   and reads its output must not wait for EOF on a pipe: Wine's background
   services inherit the child's stdout and hold the pipe open.

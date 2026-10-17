@@ -11,6 +11,8 @@
 import Foundation
 import Logging
 
+private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.Wine")
+
 /// Runs the game's own installer (setup.exe / .msi) inside the Wine prefix
 /// and finds what it installed.
 ///
@@ -313,6 +315,8 @@ class GameInstallerRunner {
         case timedOut(String)
         case installerFailed(id: String, exitCode: Int32)
         case installerDidNotFinish(id: String, reason: String)
+        case automationFailed(id: String, script: String)
+        case changedNothing(id: String)
 
         var errorDescription: String? {
             switch self {
@@ -328,6 +332,10 @@ class GameInstallerRunner {
                 return "The patch installer for \(id) exited with code \(exitCode)."
             case .installerDidNotFinish(let id, let reason):
                 return "The patch installer for \(id) exited cleanly but didn't finish: \(reason)"
+            case .automationFailed(let id, let script):
+                return "\(script).au3 couldn't get the patch installer for \(id) to finish; its last lines above say where it stopped."
+            case .changedNothing(let id):
+                return "The patch installer for \(id) reported success but changed no game files."
             }
         }
     }
@@ -368,12 +376,24 @@ class GameInstallerRunner {
         for patch in patches {
             logger.notice("📦 Patch: \(patch.id) — \(patch.title)")
             do {
+                let before = GameFileSnapshot(of: gameInstallDir)
                 try await apply(
                     patch,
                     wrappPath: wrappPath,
                     driveCPath: driveCPath,
                     gameInstallDir: gameInstallDir
                 )
+                let changed = GameFileSnapshot(of: gameInstallDir).changes(since: before)
+                if changed.isEmpty {
+                    // A driven patcher's exit code is only AutoIt's: it has
+                    // once exited 0 without the patcher ever running.
+                    guard patch.automation == nil else {
+                        throw GamePatchError.changedNothing(id: patch.id)
+                    }
+                    logger.warning("   → \(patch.id) changed no files in \(gameInstallDir.lastPathComponent)")
+                } else {
+                    logger.notice("   → changed: \(changed.joined(separator: ", "))")
+                }
                 logger.notice("✅ Applied patch: \(patch.id)")
                 await bus.publishWrappBuild(.patchApplied(id: patch.id))
             } catch {
@@ -435,6 +455,16 @@ class GameInstallerRunner {
             try fileManager.copyItem(at: payload, to: destination)
             logger.notice("   → copied \(patch.payload) into \(destinationDir.lastPathComponent)")
 
+        case .extractIntoGameDir:
+            let destinationDir = patch.destinationSubdirectory.map {
+                gameInstallDir.appendingPathComponent($0)
+            } ?? gameInstallDir
+            try fileManager.createDirectory(at: destinationDir, withIntermediateDirectories: true)
+            // A self-extracting zip is a zip with an exe in front, which unzip
+            // reads as is. -o overwrites, so a rebuild is idempotent.
+            try unzipPatchArchive(payload, into: destinationDir)
+            logger.notice("   → extracted \(patch.payload) into \(destinationDir.lastPathComponent)")
+
         case .runInstaller:
             // Stage the installer next to the game: these old patchers default
             // to their own directory when asked where the game lives.
@@ -487,6 +517,11 @@ class GameInstallerRunner {
         hostPath: URL,
         winePath: String
     ) async throws {
+        if let automation = patch.automation {
+            try await runAutomatedPatchInstaller(patch, script: automation, at: wrappPath, winePath: winePath)
+            return
+        }
+
         let installerType = detectInstallerType(hostPath.path)
         // An Inno Setup patcher keeps a log that says whether it finished;
         // the self-extracting updaters most patches are don't.
@@ -503,6 +538,8 @@ class GameInstallerRunner {
 
         // runWine stops the prefix's wineserver on timeout, which is the only
         // thing that ends the Windows process.
+        let desktop = await startDesktop(at: wrappPath)
+        defer { desktop?.release() }
         let exitCode: Int32
         do {
             exitCode = try await wineManager.runWindowsExecutable(
@@ -518,12 +555,80 @@ class GameInstallerRunner {
             throw GamePatchError.installerFailed(id: patch.id, exitCode: exitCode)
         }
         do {
-            try await waitForInstallerProcesses(at: wrappPath, timeout: Self.patchInstallerTimeout)
+            try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.patchInstallerTimeout)
         } catch WineError.timedOut {
             throw GamePatchError.timedOut(patch.id)
         }
         if let installerLog {
             try checkInstallerLog(installerLog, failure: { GamePatchError.installerDidNotFinish(id: patch.id, reason: $0) })
+        }
+    }
+
+    /// Run a patcher that has no silent mode through its AutoIt script, which
+    /// clicks through the wizard and exits 0 only once the patcher says the
+    /// game was updated. The script's output lands in the log.
+    private func runAutomatedPatchInstaller(
+        _ patch: GamePatch,
+        script: String,
+        at wrappPath: URL,
+        winePath: String
+    ) async throws {
+        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let scriptPath = try stageAutoIt(script: script, inDriveC: driveCPath)
+        defer { removeAutoIt(script: scriptPath, inDriveC: driveCPath) }
+
+        let scriptWinePath = Self.windowsPath(of: scriptPath, driveC: driveCPath)
+        logger.notice("   → running \(patch.payload) through AutoIt (\(script).au3)")
+        let desktop = await startDesktop(at: wrappPath)
+        defer { desktop?.release() }
+        let exitCode: Int32
+        do {
+            exitCode = try await wineManager.runWindowsExecutable(
+                at: wrappPath,
+                exePath: Self.windowsPath(of: driveCPath.appendingPathComponent("autoit/AutoIt3.exe"), driveC: driveCPath),
+                // /ErrorStdOut: a script error is printed (and logged) rather than
+                // shown in a message box nobody will close.
+                arguments: ["/ErrorStdOut", scriptWinePath, winePath],
+                timeout: Self.patchInstallerTimeout
+            )
+            try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.patchInstallerTimeout)
+        } catch WineError.timedOut {
+            throw GamePatchError.timedOut(patch.id)
+        }
+        guard exitCode == 0 else {
+            throw GamePatchError.automationFailed(id: patch.id, script: script)
+        }
+    }
+
+    /// Copy AutoIt and a `patch-automation` script into the prefix, returning
+    /// the script's host path.
+    private func stageAutoIt(script: String, inDriveC driveCPath: URL) throws -> URL {
+        guard AutoItService.shared.isAvailable else {
+            throw WrappBuildError.autoItNotAvailable
+        }
+        guard let source = Bundle.main.url(forResource: script, withExtension: "au3", subdirectory: "patch-automation") else {
+            throw WrappBuildError.autoItScriptNotFound
+        }
+        let autoitDestDir = driveCPath.appendingPathComponent("autoit")
+        if !fileManager.fileExists(atPath: autoitDestDir.path) {
+            try fileManager.copyItem(at: AutoItService.shared.autoitDir, to: autoitDestDir)
+        }
+        let destination = driveCPath.appendingPathComponent("\(script).au3")
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.copyItem(at: source, to: destination)
+        return destination
+    }
+
+    /// Remove what `stageAutoIt` copied, so the wrapp doesn't ship AutoIt.
+    private func removeAutoIt(script: URL, inDriveC driveCPath: URL) {
+        for item in [driveCPath.appendingPathComponent("autoit"), script] {
+            do {
+                try fileManager.removeItem(at: item)
+            } catch {
+                logger.warning("Couldn't remove \(item.lastPathComponent) from the prefix: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -821,6 +926,8 @@ class GameInstallerRunner {
         // notice it hanging; the interactive one is someone working through
         // a wizard, who can take as long as they like.
         let timeout = attemptNumber == 0 ? Self.unattendedInstallTimeout : nil
+        let desktop = await startDesktop(at: wrappPath)
+        defer { desktop?.release() }
         let exitCode: Int32
         if command.useStartCommand {
             exitCode = try await wineManager.runWindowsExecutableWithStart(
@@ -844,7 +951,7 @@ class GameInstallerRunner {
             throw WineError.executionFailed(exitCode: exitCode)
         }
 
-        try await waitForInstallerProcesses(at: wrappPath, timeout: timeout)
+        try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: timeout)
 
         // A clean exit isn't proof the install finished: check that the
         // installer's own log says it did.
@@ -870,9 +977,24 @@ class GameInstallerRunner {
     /// 2.2 GB copied), and Her Interactive's patch stubs unpack and run
     /// `_upd1.exe`. Until that copy is done, the install is still being
     /// written, so nothing about it can be checked.
-    private func waitForInstallerProcesses(at wrappPath: URL, timeout: TimeInterval?) async throws {
+    ///
+    /// The pre-started desktop is released first: it would otherwise keep the
+    /// session, and so this wait, going for ever.
+    private func waitForInstallerProcesses(at wrappPath: URL, releasing desktop: WineDesktop?, timeout: TimeInterval?) async throws {
+        desktop?.release()
         logger.notice("Waiting for the installer's remaining Wine processes to finish")
         try await wineManager.runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"], timeout: timeout)
+    }
+
+    /// Start Wine's desktop before an installer or patcher runs, so it isn't
+    /// left to Wine's 10-second on-demand start ("The explorer process failed
+    /// to start", which once failed Stay Tuned's patch). See `WineDesktop`.
+    private func startDesktop(at wrappPath: URL) async -> WineDesktop? {
+        let wine = WineEnvironment(appPath: wrappPath)
+        let logger = self.logger
+        return await Task.detached {
+            WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
+        }.value
     }
 
     /// Throw `failure(reason)` unless the installer's log records it
@@ -1225,5 +1347,42 @@ nonisolated final class InstallerLogStreamer: @unchecked Sendable {
             if isFile { files += 1 }
             if isError { errors += 1 }
         }
+    }
+}
+
+/// The files under a game directory, by size and modification date, so a
+/// patch's effect can be logged. Archive extraction keeps a file's original
+/// date, so a file a patch adds shows up as new rather than as newer.
+struct GameFileSnapshot {
+    private var files: [String: (size: Int, modified: Date)] = [:]
+
+    init(of directory: URL, fileManager: FileManager = .default) {
+        let root = directory.resolvingSymlinksInPath().path
+        guard let walker = fileManager.enumerator(
+            at: directory.resolvingSymlinksInPath(),
+            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
+        ) else { return }
+        for case let url as URL in walker {
+            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]),
+                  values.isRegularFile == true else { continue }
+            let relative = String(url.resolvingSymlinksInPath().path.dropFirst(root.count + 1))
+            files[relative] = (values.fileSize ?? 0, values.contentModificationDate ?? .distantPast)
+        }
+    }
+
+    /// Paths added, changed or removed since `earlier`, each marked `+`, `~` or `-`.
+    func changes(since earlier: GameFileSnapshot) -> [String] {
+        var result: [String] = []
+        for (path, now) in files {
+            if let then = earlier.files[path] {
+                if then.size != now.size || then.modified != now.modified { result.append("~\(path)") }
+            } else {
+                result.append("+\(path)")
+            }
+        }
+        for path in earlier.files.keys where files[path] == nil {
+            result.append("-\(path)")
+        }
+        return result.sorted { $0.dropFirst() < $1.dropFirst() }
     }
 }
