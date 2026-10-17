@@ -26,12 +26,41 @@ Say("Starting " & $patcher)
 Local $workDir = StringLeft($patcher, StringInStr($patcher, "\", 0, -1) - 1)
 Local $pid = Run('"' & $patcher & '"', $workDir)
 If $pid = 0 Then
-    Say("ERROR: could not start the patcher")
-    Exit 1
+    Fail("could not start the patcher")
 EndIf
+
+; Every visible window, for when the wizard stops changing: a message box the
+; patcher raised is a separate window the main loop never looks at.
+; Give up: close the patcher too, or it holds the Wine session open until the
+; build's wait for it times out.
+Func Fail($msg)
+    Say("ERROR: " & $msg)
+    If $pid <> 0 Then ProcessClose($pid)
+    Exit 1
+EndFunc
+
+Func LogWindows()
+    Local $windows = WinList()
+    For $i = 1 To $windows[0][0]
+        If $windows[$i][0] <> "" And BitAND(WinGetState($windows[$i][1]), 2) Then
+            Say("Window: [" & $windows[$i][0] & "] " & StringLeft(PageText($windows[$i][1]), 500))
+        EndIf
+    Next
+EndFunc
 
 Func ButtonLive($hWnd, $button)
     Return ControlCommand($hWnd, "", $button, "IsVisible", "") = 1 And ControlCommand($hWnd, "", $button, "IsEnabled", "") = 1
+EndFunc
+
+; Last Train to Blue Moon Canyon's patcher stayed running after its End page
+; was closed, which keeps the Wine session (and the build's wait for it)
+; alive. Give it a while, log whatever windows it still shows, then close it:
+; the update is done by then.
+Func WaitForPatcherExit()
+    If ProcessWaitClose($pid, 15) Then Return
+    LogWindows()
+    Say("Patcher still running 15s after its End page - closing it")
+    ProcessClose($pid)
 EndFunc
 
 ; Pages are told apart by their text: some builds put the page name in the
@@ -39,17 +68,24 @@ EndFunc
 ; Mansion's) leave the title the same throughout.
 Local $deadline = TimerInit()
 Local $lastText = ""
+Local $changed = TimerInit()
+Local $loggedStuck = False
 While TimerDiff($deadline) < 150000
     Local $hWnd = WinWait("[CLASS:UpdShClass]", "", 5)
     If $hWnd = 0 Then
-        Say("ERROR: no update wizard window" & ($lastText = "" ? "" : " after the page: " & StringLeft($lastText, 120)))
-        Exit 1
+        Fail("no update wizard window" & ($lastText = "" ? "" : " after the page: " & StringLeft($lastText, 120)))
     EndIf
     Local $title = WinGetTitle($hWnd)
     Local $text = PageText($hWnd)
     If $text <> $lastText Then
         Say("Page: " & $title & " | " & StringLeft($text, 300))
         $lastText = $text
+        $changed = TimerInit()
+        $loggedStuck = False
+    ElseIf Not $loggedStuck And TimerDiff($changed) > 15000 Then
+        Say("No change for 15s; the windows showing:")
+        LogWindows()
+        $loggedStuck = True
     EndIf
 
     Local $canStart = ButtonLive($hWnd, "&Start")
@@ -59,10 +95,10 @@ While TimerDiff($deadline) < 150000
         ControlClick($hWnd, "", "E&xit")
         If StringInStr($text, "successfully updated") Then
             Say("Updated")
+            WaitForPatcherExit()
             Exit 0
         EndIf
-        Say("ERROR: the End page doesn't say the game was updated")
-        Exit 1
+        Fail("the End page doesn't say the game was updated")
     EndIf
 
     ; The Directory page's box is filled from the game's registry entry, so it
@@ -90,5 +126,4 @@ While TimerDiff($deadline) < 150000
         Sleep(200)
     WEnd
 WEnd
-Say("ERROR: timed out on the page: " & StringLeft($lastText, 120))
-Exit 1
+Fail("timed out on the page: " & StringLeft($lastText, 120))

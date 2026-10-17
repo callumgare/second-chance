@@ -154,12 +154,16 @@ run through AutoIt with that script from `SecondChance/Resources/patch-automatio
 (`runAutomatedPatchInstaller`), which clicks through the wizard and exits 0 only
 once the patcher says the game was updated; anything else fails the patch, and
 the script's log lines, which name each page it saw, are in the build log.
+When a page stops changing for 15 seconds a script logs every visible window
+(a message box the patcher raised is a window of its own), and when it gives
+up it closes the patcher, which would otherwise keep the Wine session alive
+until the build's wait for it times out.
 AutoIt is copied into the prefix for the run and removed afterwards.
 
 | Script | Patchers | What it drives |
 | ------ | -------- | -------------- |
-| `update-installation-wizard` | Crystal Skull, Water's Edge, Trail of the Twister, Castle Malloy (both editions), White Wolf (CD) | An "Update Installation Wizard" that finds the game and patches on its own, then stops on a Finished page with a Close button; its Details pane lists each file backed up, updated or added |
-| `her-update-wizard` | Stay Tuned (cabinet), Haunted Mansion, Ghost Dogs, Deception Island (wood/C-sound), Shadow Ranch, Blackmoor Manor, Blue Moon (taffy sort) | A small stub that unpacks and runs an "Update Program" wizard (window class `UpdShClass`): Welcome, Information, Directory, Confirmation (Start), End, which says "has been successfully updated". Pages are told apart by their text, since only some builds name the page in the window title. The Directory box is filled from the game's registry entry, so for a ScummVM game (no installed copy) it is empty and the patcher would write to the root of `C:`; the script sets it to the folder the patcher runs from, which the build makes the game folder |
+| `update-installation-wizard` | Crystal Skull, Water's Edge, Trail of the Twister, Castle Malloy (both editions), White Wolf (CD) | An "Update Installation Wizard" that finds the game and patches on its own, then stops on a Finished page with a Close button; its Details pane lists each file backed up, updated or added. Castle Malloy's CD updater first asks for the game folder, which it can't find in the registry ("Folder \"(null)\" doesn't exist"), so the script fills in the folder the patcher runs from |
+| `her-update-wizard` | Stay Tuned (cabinet), Haunted Mansion, Ghost Dogs, Deception Island (wood/C-sound), Shadow Ranch, Blackmoor Manor, Blue Moon (taffy sort) | A small stub that unpacks and runs an "Update Program" wizard (window class `UpdShClass`): Welcome, Information, Directory, Confirmation (Start), End, which says "has been successfully updated". Pages are told apart by their text, since only some builds name the page in the window title. The Directory box is filled from the game's registry entry, so for a ScummVM game (no installed copy) it is empty and the patcher would write to the root of `C:`; the script sets it to the folder the patcher runs from, which the build makes the game folder. A patcher still running 15 s after its End page (Blue Moon's shows a Clickteam Patch Maker advert after Exit) has its open windows logged and is closed, since it would otherwise hold the Wine session open until the patch timeout |
 
 Every applied patch logs which files under the game directory it added (`+`),
 changed (`~`) or removed (`-`), and warns when it changed none, which is how a

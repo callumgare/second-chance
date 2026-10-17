@@ -14,6 +14,8 @@
 
 Opt("WinTitleMatchMode", 2)
 
+Global $pid = 0
+
 Func Say($msg)
     ConsoleWrite("[update-installation-wizard] " & $msg & @CRLF)
 EndFunc
@@ -22,35 +24,66 @@ Func WindowText($hWnd)
     Return StringStripWS(StringReplace(StringReplace(WinGetText($hWnd), @CRLF, " "), @LF, " "), 4)
 EndFunc
 
+; Every visible window, for when the wizard stops changing: a message box the
+; patcher raised is a separate window the main loop never looks at.
+; Give up: close the patcher too, or it holds the Wine session open until the
+; build's wait for it times out.
+Func Fail($msg)
+    Say("ERROR: " & $msg)
+    If $pid <> 0 Then ProcessClose($pid)
+    Exit 1
+EndFunc
+
+Func LogWindows()
+    Local $windows = WinList()
+    For $i = 1 To $windows[0][0]
+        If $windows[$i][0] <> "" And BitAND(WinGetState($windows[$i][1]), 2) Then
+            Say("Window: [" & $windows[$i][0] & "] " & StringLeft(WindowText($windows[$i][1]), 500))
+        EndIf
+    Next
+EndFunc
+
 Local $patcher = $CmdLine[1]
 Say("Starting " & $patcher)
 Local $workDir = StringLeft($patcher, StringInStr($patcher, "\", 0, -1) - 1)
-Local $pid = Run('"' & $patcher & '"', $workDir)
+$pid = Run('"' & $patcher & '"', $workDir)
 If $pid = 0 Then
-    Say("ERROR: could not start the patcher")
-    Exit 1
+    Fail("could not start the patcher")
 EndIf
 
 Local $hWnd = WinWait("[REGEXPTITLE:(?i)update]", "Update Installation Wizard", 60)
 If $hWnd = 0 Then
-    Say("ERROR: no Update Installation Wizard window within 60s")
-    Exit 1
+    Fail("no Update Installation Wizard window within 60s")
 EndIf
 Say("Window: " & WinGetTitle($hWnd))
 
 Local $start = TimerInit()
 Local $lastText = ""
+Local $changed = TimerInit()
+Local $loggedStuck = False
 While TimerDiff($start) < 150000
     If Not WinExists($hWnd) Then
-        Say("ERROR: the wizard closed before its Finished page")
-        Exit 1
+        Fail("the wizard closed before its Finished page")
     EndIf
     Local $text = WindowText($hWnd)
     If $text <> $lastText Then
         Say("Page: " & StringLeft($text, 300))
         $lastText = $text
+        $changed = TimerInit()
+        $loggedStuck = False
+    ElseIf Not $loggedStuck And TimerDiff($changed) > 15000 Then
+        Say("No change for 15s; the windows showing:")
+        LogWindows()
+        $loggedStuck = True
     EndIf
     If StringInStr($text, "&Close") Then ExitLoop
+    ; Castle Malloy's CD updater asks for the game folder, and finds no
+    ; registry entry to fill it from ('Folder "(null)" doesn't exist'). The
+    ; build always runs the patcher from the game's folder.
+    If StringInStr($text, "Select application folder") And ControlGetText($hWnd, "", "obj_EDIT1") <> $workDir Then
+        Say("Folder was [" & ControlGetText($hWnd, "", "obj_EDIT1") & "], setting it to " & $workDir)
+        ControlSetText($hWnd, "", "obj_EDIT1", $workDir)
+    EndIf
     For $button In StringSplit("&Next >|Next >|&Next|&Update|&Start|Update|Start", "|", 2)
         If ControlCommand($hWnd, "", $button, "IsVisible", "") = 1 And ControlCommand($hWnd, "", $button, "IsEnabled", "") = 1 Then
             Say("Clicking " & $button)
@@ -62,8 +95,7 @@ While TimerDiff($start) < 150000
     Sleep(500)
 WEnd
 If Not StringInStr($lastText, "&Close") Then
-    Say("ERROR: timed out before the Finished page")
-    Exit 1
+    Fail("timed out before the Finished page")
 EndIf
 
 ; The Details pane is what says which files changed.
@@ -77,5 +109,4 @@ If StringInStr($details, "successfully updated") Or StringInStr($details, "succe
     Say("Updated")
     Exit 0
 EndIf
-Say("ERROR: the Finished page doesn't say the update completed")
-Exit 1
+Fail("the Finished page doesn't say the update completed")
