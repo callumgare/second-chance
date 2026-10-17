@@ -166,7 +166,10 @@ struct DiskInstallIntegrationTests {
             }
             Task { await MainActor.run { Task { await viewModel.buildFromDisk() } } }
 
-            let succeeded = await recorder.waitForCompletion(timeout: 600)
+            // Only a backstop for a build that hangs: the build times out
+            // its own installer (30 minutes) and each patch, and reports
+            // which one, so this must not cut a slow but healthy build short.
+            let succeeded = await recorder.waitForCompletion(timeout: 3000)
             if !succeeded && recorder.failedError == nil {
                 await stopTimedOutBuild(recorder: recorder)
             }
