@@ -131,7 +131,14 @@ struct NancyDrewQuitScenario {
         }
 
         logger.notice("[Step 3] Waiting for game to become active...")
-        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy, activate: wrapp.engine.activatesForFocus) else {
+        // 30s, not the default 10: on a loaded machine a game's first window
+        // can take a while before macOS will bring it in front (Ghost of
+        // Thornton Hall's has stayed behind the wrapp for over 10s).
+        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy, activate: wrapp.engine.activatesForFocus, timeout: 30) else {
+            WindowFinder.logAllWindows()
+            if let path = ScreenCapture.captureScreen(prefix: "game-not-focused") {
+                logger.notice("📸 Full screen screenshot: \(path)")
+            }
             return nil
         }
 
