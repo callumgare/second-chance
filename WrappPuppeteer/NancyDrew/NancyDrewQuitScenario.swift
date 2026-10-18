@@ -238,6 +238,13 @@ struct NancyDrewQuitScenario {
             if remainingTime > 0 { Thread.sleep(forTimeInterval: remainingTime) }
         }
 
+        // Each attempt's screenshot is deleted once analysed, so without this
+        // a menu that never appeared leaves no trace of what was on screen.
+        logger.error("❌ No Exit button or logo found within \(Int(options.findExitTimeout))s")
+        if let path = ScreenCapture.captureScreen(prefix: "exit-not-found") {
+            logger.notice("📸 Full screen screenshot: \(path)")
+        }
+        WindowFinder.logAllWindows()
         forceQuit(app)
         return false
     }

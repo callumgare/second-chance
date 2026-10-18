@@ -191,7 +191,11 @@ requirement TCC checks against.
 The scenario waits up to 240 s for the game's process to appear (the wrapp
 may first spend up to 180 s waiting for Wine's desktop), then 30 s for its
 window and 30 s for that window to come to the front. The `--timeout` that
-`AppPuppetRunner.run(timeout:)` passes is only logged.
+`AppPuppetRunner.run(timeout:)` passes is only logged. When the game never
+comes to the front, or no Exit button or logo turns up within 60 s, the
+scenario logs the windows on screen and saves a full-screen screenshot to
+`/tmp` (`game-not-focused-*.png`, `exit-not-found-*.png`), naming it in its
+log; the per-attempt screenshots are deleted as they are analysed.
 
 WrappPuppeteer always starts a new instance of the wrapp, and kills any
 instance of the same bundle ID still running first. LaunchServices would
