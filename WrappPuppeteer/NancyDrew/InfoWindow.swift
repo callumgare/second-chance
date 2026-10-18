@@ -75,10 +75,12 @@ enum InfoWindow {
         InputControl.click(at: clickPoint)
 
         // A click can be lost on a loaded machine (the wrapp then sat on this
-        // window for the whole test), so check the window went, and if it
-        // didn't, press the button through Accessibility instead.
+        // window for the whole test), so check the warning went, and if it
+        // didn't, press the button through Accessibility instead. The window
+        // itself stays up after a confirm, showing a loading message until
+        // the game has loaded, so what goes is the confirm button.
         for attempt in 1...5 {
-            if waitForWindowToClose(wrapperPid: wrapperPid, timeout: 10) {
+            if waitForWarningToGo(wrapperPid: wrapperPid, timeout: 10) {
                 logger.notice("✅ Info window dismissed")
                 return true
             }
@@ -92,13 +94,23 @@ enum InfoWindow {
         return false
     }
 
-    private static func waitForWindowToClose(wrapperPid: Int32, timeout: TimeInterval) -> Bool {
+    /// True once the window has closed or no longer shows its confirm button.
+    private static func waitForWarningToGo(wrapperPid: Int32, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             let open = WindowFinder.onScreenWindows().contains { $0.ownerPid == wrapperPid && $0.title == title }
-            if !open { return true }
-            Thread.sleep(forTimeInterval: 0.3)
+            if !open || !showsConfirmButton(wrapperPid: wrapperPid) { return true }
+            Thread.sleep(forTimeInterval: 0.5)
         }
         return false
+    }
+
+    private static func showsConfirmButton(wrapperPid: Int32) -> Bool {
+        guard case .success(let windows) = Accessibility.windows(ofPid: wrapperPid, retries: 1),
+              let axWindow = windows.first(where: { Accessibility.title(of: $0)?.contains(title) == true }) else {
+            // Can't tell; keep waiting rather than call it gone.
+            return true
+        }
+        return Accessibility.findButton(in: axWindow, containing: confirmButtonTerms) != nil
     }
 }

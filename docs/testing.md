@@ -195,8 +195,10 @@ to appear (the wrapp may first spend up to 600 s waiting for Wine's desktop),
 then 300 s for its window, 120 s for that window to come to the front, 300 s
 to find and click Exit and 300 s for the game to quit. The `--timeout` that
 `AppPuppetRunner.run(timeout:)` passes is only logged. The wrapp's "save
-regularly" window counts as dismissed only once it has gone: a click lost on
-a loaded machine is followed by pressing the button through Accessibility. When the game never
+regularly" warning counts as dismissed only once its confirm button has gone
+(the window itself stays up, showing a loading message, until the game has
+loaded): a click lost on a loaded machine is followed by pressing the button
+through Accessibility. When the game never
 comes to the front, or no Exit button or logo turns up in time, the
 scenario logs the windows on screen and saves a full-screen screenshot to
 `/tmp` (`game-not-focused-*.png`, `exit-not-found-*.png`), naming it in its
