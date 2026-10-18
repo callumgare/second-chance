@@ -188,11 +188,14 @@ with a certificate, it was ad-hoc signed and every rebuild dropped the grants.)
 `codesign -dr- DerivedData/Build/Products/Debug/WrappPuppeteer.app` shows the
 requirement TCC checks against.
 
-The scenario waits up to 240 s for the game's process to appear (the wrapp
-may first spend up to 180 s waiting for Wine's desktop), then 30 s for its
-window and 30 s for that window to come to the front. The `--timeout` that
+The scenario's waits are sized for a machine with every core busy, where Wine
+runs many times slower; each ends as soon as what it waits for happens, so
+they only lengthen a failing run. It waits up to 900 s for the game's process
+to appear (the wrapp may first spend up to 600 s waiting for Wine's desktop),
+then 300 s for its window, 120 s for that window to come to the front, 300 s
+to find and click Exit and 300 s for the game to quit. The `--timeout` that
 `AppPuppetRunner.run(timeout:)` passes is only logged. When the game never
-comes to the front, or no Exit button or logo turns up within 60 s, the
+comes to the front, or no Exit button or logo turns up in time, the
 scenario logs the windows on screen and saves a full-screen screenshot to
 `/tmp` (`game-not-focused-*.png`, `exit-not-found-*.png`), naming it in its
 log; the per-attempt screenshots are deleted as they are analysed.

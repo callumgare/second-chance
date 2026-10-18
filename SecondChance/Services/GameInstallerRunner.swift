@@ -188,6 +188,14 @@ class GameInstallerRunner {
                 }
 
                 logger.warning("Silent install failed: \(error) — retrying with interactive mode...")
+                // Start the next attempt in a fresh Wine session: what the
+                // failed one left running is no use to it, and its desktop
+                // may be on its way out while its display key still says it
+                // is up, which would let the next attempt skip starting one.
+                let status = WineEnvironment(appPath: wrappPath).stopWineserver()
+                if status != 0 {
+                    logger.debug("wineserver -k before the next attempt exited \(status) (no session running)")
+                }
             }
         }
 
@@ -306,8 +314,9 @@ class GameInstallerRunner {
     // MARK: - Game Patches
 
     /// How long a single patch installer gets before it is assumed to be
-    /// sitting on a dialog that nobody can answer.
-    private static let patchInstallerTimeout: TimeInterval = 180
+    /// sitting on a dialog that nobody can answer. Most take seconds, but with
+    /// every core busy one has needed minutes just to start its Wine session.
+    private static let patchInstallerTimeout: TimeInterval = 900
 
     /// Something that went wrong applying one patch. Every case is recoverable:
     /// the build continues without that patch unless the user says otherwise.

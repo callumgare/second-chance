@@ -261,8 +261,10 @@ direct assignment.
   Direct3D object exactly 10 s in. `WineDesktop` (`Shared/Wine/`) starts the
   desktop itself and waits until it has registered the display devices,
   which it detects through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key.
-  It waits up to 180 s, since on a heavily loaded machine it has taken over a
-  minute, and what runs without it is sure to fail. `GameLauncher` does this
+  It waits up to 600 s, since with every core busy a fresh session has taken
+  two and a half minutes to bring it up, and what runs without it is sure to
+  fail; each check is itself a Wine program and gets 120 s, because one cut
+  short at 20 s never saw the desktop ready. `GameLauncher` does this
   before the game, and `GameInstallerRunner` before every installer and
   patcher, which fail the same way: with an exit code rather than a crash, or
   for AutoIt with no window and an exit 0 before its script runs. A program

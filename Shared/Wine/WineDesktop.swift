@@ -14,10 +14,12 @@ import Logging
 /// it 10 seconds; on a loaded machine under Rosetta that runs out, and the
 /// program carries on with no display adapters ("The explorer process failed
 /// to start"). A game then crashes, and an installer or patcher exits non-zero.
-/// Here the wait is up to `timeout` — three minutes by default, since on a
-/// heavily loaded machine (load average 40+) the desktop has taken over a
-/// minute, and a program run without it is sure to fail — and if the desktop
-/// is never ready the program runs anyway, as it would have.
+/// Here the wait is up to `timeout` — ten minutes by default: with every core
+/// busy, a fresh Wine session has taken two and a half minutes to bring its
+/// desktop up, and a program run without it is sure to fail. A desktop that is
+/// ready ends the wait at once, so this only costs time when something is
+/// wrong. If the desktop is never ready the program runs anyway, as it would
+/// have.
 ///
 /// Wine runs the desktop through `start.exe /exec`, which is itself a Windows
 /// program waiting for explorer, while explorer only exits once no programs are
@@ -39,7 +41,7 @@ public final class WineDesktop {
     /// cases there is nothing to release. Blocks: each check runs `reg.exe`.
     public static func start(
         _ wine: WineEnvironment,
-        timeout: TimeInterval = 180,
+        timeout: TimeInterval = 600,
         logger: Logger,
         outputLogger: Logger
     ) -> WineDesktop? {
@@ -68,7 +70,10 @@ public final class WineDesktop {
         while Date() < deadline {
             attempt += 1
             let queryStart = Date()
-            let result = wine.queryDisplayDevices()
+            // Each check is a Wine program of its own, which on a loaded
+            // machine has taken over 30 seconds; cut short, no check would
+            // ever see the desktop ready.
+            let result = wine.queryDisplayDevices(timeout: 120)
             let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
             if result == .registered {
                 logger.notice("[Desktop] Ready after \(elapsed)s (\(attempt) checks)")

@@ -78,7 +78,7 @@ class GameMonitor {
     /// Wait for game to start (works for both Wine and ScummVM games)
     /// `launcher` is the `wine start` process: if it exits before the game's
     /// exe appears, the game never started and there is nothing to wait for.
-    func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil, timeout: TimeInterval = 120) -> Int32? {
+    func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil, timeout: TimeInterval = 600) -> Int32? {
         switch gameEngine {
         case "wine", _ where gameEngine.hasPrefix("wine-"):
             return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, timeout: timeout)
@@ -166,7 +166,7 @@ class GameMonitor {
     }
     
     /// Wait for Wine game executable to start
-    private func waitForWineGameToStart(gameExeName: String, launcher: Process?, timeout: TimeInterval = 120) -> Int32? {
+    private func waitForWineGameToStart(gameExeName: String, launcher: Process?, timeout: TimeInterval = 600) -> Int32? {
         logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName)")
         logger.debug("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
         

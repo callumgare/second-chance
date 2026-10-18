@@ -66,12 +66,16 @@ EndFunc
 ; Pages are told apart by their text: some builds put the page name in the
 ; title ("... Update Program - Welcome"), others (Message in a Haunted
 ; Mansion's) leave the title the same throughout.
+;
+; The waits allow for a machine with every core busy, where the wizard can take
+; minutes to appear and seconds to turn each page; the build's own timeout on
+; the patcher is longer still.
 Local $deadline = TimerInit()
 Local $lastText = ""
 Local $changed = TimerInit()
 Local $loggedStuck = False
-While TimerDiff($deadline) < 150000
-    Local $hWnd = WinWait("[CLASS:UpdShClass]", "", 5)
+While TimerDiff($deadline) < 600000
+    Local $hWnd = WinWait("[CLASS:UpdShClass]", "", $lastText = "" ? 300 : 30)
     If $hWnd = 0 Then
         Fail("no update wizard window" & ($lastText = "" ? "" : " after the page: " & StringLeft($lastText, 120)))
     EndIf
@@ -82,8 +86,8 @@ While TimerDiff($deadline) < 150000
         $lastText = $text
         $changed = TimerInit()
         $loggedStuck = False
-    ElseIf Not $loggedStuck And TimerDiff($changed) > 15000 Then
-        Say("No change for 15s; the windows showing:")
+    ElseIf Not $loggedStuck And TimerDiff($changed) > 60000 Then
+        Say("No change for 60s; the windows showing:")
         LogWindows()
         $loggedStuck = True
     EndIf
@@ -122,7 +126,7 @@ While TimerDiff($deadline) < 150000
     EndIf
     ; Wait for the page to change before looking again.
     Local $waited = TimerInit()
-    While WinExists($hWnd) And PageText($hWnd) = $text And TimerDiff($waited) < 20000
+    While WinExists($hWnd) And PageText($hWnd) = $text And TimerDiff($waited) < 120000
         Sleep(200)
     WEnd
 WEnd

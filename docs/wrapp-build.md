@@ -70,7 +70,9 @@ The division that keeps this from re-tangling:
   over an internal `temporaryWrapps` set; the builder decides when to call them.
   Note the asymmetry on success: `finalize` *moves* the wrapp to its final home,
   which makes it non-temporary, so the builder calls `unregisterTemporaryWrapp`
-  (not `removeTempWrapp`) afterwards.
+  (not `removeTempWrapp`) afterwards. `removeTempWrapp` stops the wrapp's
+  Wine session before deleting it: a build that failed partway can leave one
+  running, and once the wrapp is gone so is the wineserver that could end it.
 - **The helper never calls a builder.** One direction only.
 - **Source-specific work stays out of the helper.** Disk layout and CD-ROM
   mounting live in `DiskWrappBuilder` because no other source has disks.
@@ -175,7 +177,8 @@ An installer or patcher that prints Wine's `nodrv_CreateWindow` error found
 no desktop to open its windows on, so `runWine` throws `WineError.noDisplay`
 whatever its exit code (AutoIt in that state exits 0 without running its
 script). `GameInstallerRunner` then stops the Wine session and runs that step
-once more with a fresh desktop: on a loaded machine a program has failed to
+once more with a fresh desktop (a failed install attempt likewise gets a fresh
+session before the next one): on a loaded machine a program has failed to
 find a desktop `WineDesktop` had just reported ready, and every program after
 it in the same session failed the same way.
 

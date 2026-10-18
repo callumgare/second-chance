@@ -558,6 +558,17 @@ class WrappBuildHelper {
             return
         }
 
+        // A build that failed partway can leave its Wine session running,
+        // and once the wrapp is gone so is the wineserver that could stop it:
+        // the processes then run on, one of them using most of a core.
+        let wine = WineEnvironment(appPath: path)
+        if fileManager.fileExists(atPath: wine.wineBinDir.appendingPathComponent("wineserver").path) {
+            let status = wine.stopWineserver()
+            if status != 0 {
+                logger.debug("wineserver -k for \(path.lastPathComponent) exited \(status) (no session running)")
+            }
+        }
+
         do {
             try fileManager.removeItem(at: path)
             logger.notice("🧹 Removed temp wrapp: \(path.lastPathComponent)")

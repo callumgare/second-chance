@@ -223,9 +223,10 @@ class WineManager {
                     "/d", driveType,
                     "/f"
                 ],
-                // A registry write takes seconds; one that doesn't finish
-                // means the prefix is broken, and waiting won't fix it.
-                timeout: 120
+                // A registry write takes seconds on an idle machine, but over
+                // a minute with every core busy (starting the Wine session is
+                // most of it); one that runs for ten means the prefix is broken.
+                timeout: 600
             )
         }
     }

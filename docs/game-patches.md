@@ -154,10 +154,12 @@ run through AutoIt with that script from `SecondChance/Resources/patch-automatio
 (`runAutomatedPatchInstaller`), which clicks through the wizard and exits 0 only
 once the patcher says the game was updated; anything else fails the patch, and
 the script's log lines, which name each page it saw, are in the build log.
-When a page stops changing for 15 seconds a script logs every visible window
+When a page stops changing for 60 seconds a script logs every visible window
 (a message box the patcher raised is a window of its own), and when it gives
 up it closes the patcher, which would otherwise keep the Wine session alive
-until the build's wait for it times out.
+until the build's wait for it times out. The scripts wait up to five minutes
+for the wizard to appear and ten for it to finish: with every core busy, Wine
+takes minutes to start a patcher that opens in seconds on an idle machine.
 AutoIt is copied into the prefix for the run and removed afterwards.
 
 | Script | Patchers | What it drives |
@@ -186,7 +188,8 @@ uses the generic silent flags for whichever installer family
 `/verysilent /norestart` for Inno Setup, `/qn` for MSI.
 
 If an installer ignores those and puts up a wizard, nothing would ever answer
-it, so `runPatchInstaller` gives the Wine run a 180-second timeout. On timeout
+it, so `runPatchInstaller` gives the Wine run a 15-minute timeout, long enough
+for a patcher on a fully loaded machine (most finish in seconds). On timeout
 `WineEnvironment.runWine` stops the prefix's wineserver — the only thing that
 ends a Windows process — and the patch is reported as failed.
 

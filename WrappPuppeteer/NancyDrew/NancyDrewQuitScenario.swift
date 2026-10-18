@@ -12,18 +12,20 @@ import Logging
 
 struct NancyDrewQuitScenario {
     struct Options {
+        // The waits are sized for a machine with every core busy, where Wine
+        // runs many times slower than on an idle one; each ends as soon as
+        // what it waits for happens, so they only cost time on a failure.
+
         /// How long to wait for the game's window once its process is up.
-        var windowDetectTimeout: TimeInterval = 30
+        var windowDetectTimeout: TimeInterval = 300
         /// How long to wait for the game's process to appear. A Wine wrapp
-        /// waits up to 60 s for Wine's desktop before it starts the game
+        /// waits up to 600 s for Wine's desktop before it starts the game
         /// (`GameLauncher.prepareDesktop`), so this has to outlast that.
-        // Long enough for the wrapp to wait out Wine's desktop (up to 180s
-        // on a loaded machine) before it starts the game.
-        var processDetectTimeout: TimeInterval = 240
-        var infoWindowTimeout: TimeInterval = 15
-        var quitTimeout: TimeInterval = 90
+        var processDetectTimeout: TimeInterval = 900
+        var infoWindowTimeout: TimeInterval = 60
+        var quitTimeout: TimeInterval = 300
         /// How long to keep looking for the Exit button
-        var findExitTimeout: TimeInterval = 60
+        var findExitTimeout: TimeInterval = 300
         /// Only logged — nothing enforces it yet.
         var maxRuntime: TimeInterval = 60
         /// Launch the wrapp with `--debug`
@@ -133,10 +135,10 @@ struct NancyDrewQuitScenario {
         }
 
         logger.notice("[Step 3] Waiting for game to become active...")
-        // 30s, not the default 10: on a loaded machine a game's first window
+        // 120s, not the default 10: on a loaded machine a game's first window
         // can take a while before macOS will bring it in front (Ghost of
         // Thornton Hall's has stayed behind the wrapp for over 10s).
-        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy, activate: wrapp.engine.activatesForFocus, timeout: 30) else {
+        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy, activate: wrapp.engine.activatesForFocus, timeout: 120) else {
             WindowFinder.logAllWindows()
             if let path = ScreenCapture.captureScreen(prefix: "game-not-focused") {
                 logger.notice("📸 Full screen screenshot: \(path)")

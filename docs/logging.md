@@ -100,7 +100,9 @@ still shows up in the log as hung. A run given a `timeout` that passes it
 logs the Wine processes still running (from `ps`), stops the prefix's
 wineserver and throws `WineError.timedOut`; an unattended
 game install gets `SECOND_CHANCE_INSTALL_TIMEOUT` (default 30 minutes), a
-patch installer 180 s and a registry write 120 s.
+patch installer 15 minutes and a registry write 10 minutes — long, because
+with every core busy Wine takes minutes to start a session that takes seconds
+on an idle machine.
 
 The exact environment and command, quoted so it can be pasted into a
 terminal, are logged at debug as `To re-run by hand:`. Only the variables

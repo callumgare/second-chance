@@ -51,9 +51,11 @@ If $pid = 0 Then
     Fail("could not start the patcher")
 EndIf
 
-Local $hWnd = WinWait("[REGEXPTITLE:(?i)update]", "Update Installation Wizard", 60)
+; The waits allow for a machine with every core busy, where the wizard can take
+; minutes to appear; the build's own timeout on the patcher is longer still.
+Local $hWnd = WinWait("[REGEXPTITLE:(?i)update]", "Update Installation Wizard", 300)
 If $hWnd = 0 Then
-    Fail("no Update Installation Wizard window within 60s")
+    Fail("no Update Installation Wizard window within 300s")
 EndIf
 Say("Window: " & WinGetTitle($hWnd))
 
@@ -61,7 +63,7 @@ Local $start = TimerInit()
 Local $lastText = ""
 Local $changed = TimerInit()
 Local $loggedStuck = False
-While TimerDiff($start) < 150000
+While TimerDiff($start) < 600000
     If Not WinExists($hWnd) Then
         Fail("the wizard closed before its Finished page")
     EndIf
@@ -71,8 +73,8 @@ While TimerDiff($start) < 150000
         $lastText = $text
         $changed = TimerInit()
         $loggedStuck = False
-    ElseIf Not $loggedStuck And TimerDiff($changed) > 15000 Then
-        Say("No change for 15s; the windows showing:")
+    ElseIf Not $loggedStuck And TimerDiff($changed) > 60000 Then
+        Say("No change for 60s; the windows showing:")
         LogWindows()
         $loggedStuck = True
     EndIf
