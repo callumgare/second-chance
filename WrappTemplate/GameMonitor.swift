@@ -228,7 +228,11 @@ class GameMonitor {
         logger.notice("[Game Monitor] Monitoring for windows...")
         
         var windowDetected = false
-        let windowTimeout: TimeInterval = 30.0 // Wait up to 30 seconds for windows
+        // Long, because the game is only brought to the front once its window
+        // is up: on a loaded machine that has taken almost two minutes, and a
+        // window that came after a shorter wait opened behind whatever the
+        // user had in front. The wait ends as soon as the window appears.
+        let windowTimeout: TimeInterval = 600
         let windowStartTime = Date()
         
         while !windowDetected && Date().timeIntervalSince(windowStartTime) < windowTimeout {
