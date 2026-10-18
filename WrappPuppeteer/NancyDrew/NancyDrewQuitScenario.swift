@@ -167,6 +167,11 @@ struct NancyDrewQuitScenario {
 
         var clickedInteractive = false
         var clickedExitButton = false
+        // Where Exit was last found, and when it was last clicked: on a
+        // loaded machine the game can miss the click, and with its own
+        // cursor then drawn over the label OCR may never find it again.
+        var lastExitLocation: CGRect?
+        var lastExitClick = Date.distantPast
         let startTime = Date()
         var attempt = 0
 
@@ -193,7 +198,15 @@ struct NancyDrewQuitScenario {
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
             try? FileManager.default.removeItem(atPath: screenshotPath)
 
-            if let exitLocation = analysis.quitButton {
+            var exitTarget = analysis.quitButton
+            if let found = exitTarget {
+                lastExitLocation = found
+            } else if let remembered = lastExitLocation, Date().timeIntervalSince(lastExitClick) >= 3 {
+                logger.notice("  ↻ 'Exit Game' not found this time — clicking where it was found before")
+                exitTarget = remembered
+            }
+
+            if let exitLocation = exitTarget {
                 guard FocusDetector.isFocused(pid: gamePid, strategy: focusStrategy) else {
                     if clickedExitButton { return true }
                     forceQuit(app)
@@ -211,6 +224,7 @@ struct NancyDrewQuitScenario {
                 }
 
                 InputControl.click(at: clickPoint)
+                lastExitClick = Date()
                 Thread.sleep(forTimeInterval: 1)
 
                 // The game draws its own cursor into the frame, so left on the
