@@ -47,9 +47,27 @@ struct DiskInstallIntegrationTests {
         return dir
     }
 
-    /// Clean up the temp directory after the test.
+    /// Clean up the temp directory after the test. A wrapp built from discs
+    /// can hold read-only directories (a build before they were made writable,
+    /// or one stopped partway), which `removeItem` can't delete; give the owner
+    /// write permission and try once more, since each one left behind is
+    /// gigabytes.
     private func cleanup(_ url: URL) {
-        try? FileManager.default.removeItem(at: url)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            let chmod = Process()
+            chmod.executableURL = URL(fileURLWithPath: "/bin/chmod")
+            chmod.arguments = ["-R", "u+w", url.path]
+            do {
+                try chmod.run()
+                chmod.waitUntilExit()
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                Issue.record("Could not remove the test's output directory \(url.path): \(error.localizedDescription)")
+            }
+        }
     }
 
     /// A build that times out is still running in this process — typically an
@@ -111,6 +129,9 @@ struct DiskInstallIntegrationTests {
 
         let wrappPath: URL
         var builtOutputDir: URL? = nil  // cleaned up after WrappPuppeteer, not before
+        // On every path out, including a build or check that throws: an output
+        // directory left behind holds a whole wrapp.
+        defer { if let dir = builtOutputDir { cleanup(dir) } }
 
         if usingPrebuiltWrapp {
             wrappPath = prebuiltWrapp
@@ -236,9 +257,6 @@ struct DiskInstallIntegrationTests {
         outcome.phase("launching")
         let exitCode = try await AppPuppetRunner.run(wrappURL: wrappPath, game: game)
         outcome.puppeteerExit = exitCode
-
-        // Clean up the built wrapp now that WrappPuppeteer is done with it.
-        if let dir = builtOutputDir { cleanup(dir) }
 
         // 0 = clean quit
         outcome.expect(exitCode == 0,

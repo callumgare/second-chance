@@ -44,7 +44,7 @@ other builders are the same shape with less in the middle.
 | 4 | Disk 2, only when `gameInfo.diskCount > 1` | `.isoMounted` |
 | 5 | — | `.disksResolved` |
 | 6 | `helper.createTemporaryWrappPath()`, then `createBaseWrapp` copies `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
-| 7 | `copyGameDisks` lays out `disk-1` / `disk-2` / `disk-combined` | `.progress(.copyingInstaller)` |
+| 7 | `copyGameDisks` lays out `disk-1` / `disk-2` / `disk-combined`, stripping extended attributes and making the copies writable (a CD's directories are read-only, which left copies nothing could delete) | `.progress(.copyingInstaller)` |
 | 8 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 9 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
 | 10 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` / game INI | `.progress(.configuringWrapp)`, `.wrappConfigured` |

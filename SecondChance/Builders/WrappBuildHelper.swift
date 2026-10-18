@@ -570,10 +570,29 @@ class WrappBuildHelper {
         }
 
         do {
-            try fileManager.removeItem(at: path)
+            try removeWrappDirectory(path)
             logger.notice("🧹 Removed temp wrapp: \(path.lastPathComponent)")
         } catch {
             logger.warning("   ⚠️ Failed to remove \(path.lastPathComponent): \(error.localizedDescription)")
+        }
+    }
+
+    /// Delete a wrapp, read-only parts and all. A wrapp built from discs
+    /// before they were made writable on copy holds read-only directories that
+    /// `removeItem` can't empty, so on failure give the owner write permission
+    /// throughout and try again.
+    private func removeWrappDirectory(_ url: URL) throws {
+        do {
+            try fileManager.removeItem(at: url)
+        } catch {
+            let chmod = Process()
+            chmod.executableURL = URL(fileURLWithPath: "/bin/chmod")
+            chmod.arguments = ["-R", "u+w", url.path]
+            chmod.standardOutput = FileHandle.nullDevice
+            chmod.standardError = FileHandle.nullDevice
+            try chmod.run()
+            chmod.waitUntilExit()
+            try fileManager.removeItem(at: url)
         }
     }
 
@@ -594,7 +613,7 @@ class WrappBuildHelper {
                   modified < cutoff else { continue }
             let size = DirectorySize.measure(wrapp)
             do {
-                try fileManager.removeItem(at: wrapp)
+                try removeWrappDirectory(wrapp)
                 logger.notice("🧹 Removed a temp wrapp left by an earlier run: \(wrapp.lastPathComponent) (\(size.description), last changed \(modified))")
             } catch {
                 logger.warning("Can't remove the stale temp wrapp \(wrapp.path): \(error.localizedDescription)")
@@ -626,7 +645,7 @@ class WrappBuildHelper {
             do {
                 if fileManager.fileExists(atPath: wrapp.path) {
                     logger.notice("   Removing: \(wrapp.path)")
-                    try fileManager.removeItem(at: wrapp)
+                    try removeWrappDirectory(wrapp)
                 }
             } catch {
                 logger.warning("   ⚠️ Failed to remove \(wrapp.lastPathComponent): \(error.localizedDescription)")

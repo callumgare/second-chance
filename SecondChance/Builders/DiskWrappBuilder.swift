@@ -233,6 +233,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         // Remove extended attributes, resource forks, and Finder info that would cause codesign to fail
         try removeExtendedAttributes(from: disk1Dest)
+        makeWritable(disk1Dest)
 
         // Copy disk 2 if present
         if let disk2 = disk2 {
@@ -243,6 +244,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
             // Remove extended attributes from disk 2 as well
             try removeExtendedAttributes(from: disk2Dest)
+            makeWritable(disk2Dest)
 
             // Create combined disk directory with symlinks
             let combinedDest = installerPath.appendingPathComponent("disk-combined")
@@ -344,6 +346,31 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 type: "cdrom",
                 in: wrappPath
             )
+        }
+    }
+
+    /// Give the owner write permission throughout a copied disc. A CD's
+    /// directories are read-only and a copy keeps that, so nothing could
+    /// delete the copy afterwards: not a failed build's cleanup, not the
+    /// integration test's, and not a user deleting the wrapp. Each such copy
+    /// left behind is gigabytes, and they had filled a test machine's disk.
+    private func makeWritable(_ path: URL) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        process.arguments = ["-R", "u+w", path.path]
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        process.standardOutput = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            logger.warning("⚠️ Could not run chmod on \(path.lastPathComponent): \(error.localizedDescription)")
+            return
+        }
+        if process.terminationStatus != 0 {
+            let message = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            logger.warning("⚠️ Could not make \(path.lastPathComponent) writable: \(message)")
         }
     }
 
