@@ -989,23 +989,15 @@ class GameInstallerRunner {
     /// Start Wine's desktop before an installer or patcher runs, so it isn't
     /// left to Wine's 10-second on-demand start ("The explorer process failed
     /// to start", which once failed Stay Tuned's patch). See `WineDesktop`.
-    ///
-    /// Waits up to `desktopTimeout`, three times as long as a game launch
-    /// does: nobody is watching a build, and a program run without a desktop
-    /// is sure to fail — AutoIt then can't open its window and exits 0
-    /// without having run its script.
+    /// A program run without it is sure to fail: AutoIt then can't open its
+    /// window and exits 0 without having run its script.
     private func startDesktop(at wrappPath: URL) async -> WineDesktop? {
         let wine = WineEnvironment(appPath: wrappPath)
         let logger = self.logger
-        let timeout = Self.desktopTimeout
         return await Task.detached {
-            WineDesktop.start(wine, timeout: timeout, logger: logger, outputLogger: wineOutputLogger)
+            WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
         }.value
     }
-
-    /// How long a build waits for Wine's desktop. On a heavily loaded machine
-    /// (load average 40+) 60 seconds has not been enough.
-    static let desktopTimeout: TimeInterval = 180
 
     /// Throw `failure(reason)` unless the installer's log records it
     /// finishing; log the verdict either way.

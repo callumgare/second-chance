@@ -17,7 +17,9 @@ struct NancyDrewQuitScenario {
         /// How long to wait for the game's process to appear. A Wine wrapp
         /// waits up to 60 s for Wine's desktop before it starts the game
         /// (`GameLauncher.prepareDesktop`), so this has to outlast that.
-        var processDetectTimeout: TimeInterval = 90
+        // Long enough for the wrapp to wait out Wine's desktop (up to 180s
+        // on a loaded machine) before it starts the game.
+        var processDetectTimeout: TimeInterval = 240
         var infoWindowTimeout: TimeInterval = 15
         var quitTimeout: TimeInterval = 90
         /// How long to keep looking for the Exit button

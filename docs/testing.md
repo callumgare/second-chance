@@ -188,7 +188,10 @@ with a certificate, it was ad-hoc signed and every rebuild dropped the grants.)
 `codesign -dr- DerivedData/Build/Products/Debug/WrappPuppeteer.app` shows the
 requirement TCC checks against.
 
-Launch timeout defaults to 90 s (`AppPuppetRunner.run(timeout:)`).
+The scenario waits up to 240 s for the game's process to appear (the wrapp
+may first spend up to 180 s waiting for Wine's desktop), then 30 s for its
+window and 30 s for that window to come to the front. The `--timeout` that
+`AppPuppetRunner.run(timeout:)` passes is only logged.
 
 WrappPuppeteer always starts a new instance of the wrapp, and kills any
 instance of the same bundle ID still running first. LaunchServices would
