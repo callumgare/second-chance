@@ -265,7 +265,10 @@ direct assignment.
   minute, and what runs without it is sure to fail. `GameLauncher` does this
   before the game, and `GameInstallerRunner` before every installer and
   patcher, which fail the same way: with an exit code rather than a crash, or
-  for AutoIt with no window and an exit 0 before its script runs. Wine runs that
+  for AutoIt with no window and an exit 0 before its script runs. A program
+  that still prints `nodrv_CreateWindow` fails with `WineError.noDisplay`,
+  and a build then restarts the Wine session and retries that step once
+  ([docs/wrapp-build.md](docs/wrapp-build.md)). Wine runs that
   desktop through `start.exe /exec`, which is itself a Windows program waiting
   on explorer, so the two would keep the whole Wine session alive after the
   game quits; `WineDesktop.release()` ends the `start.exe` once the programs

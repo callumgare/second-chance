@@ -171,6 +171,14 @@ a unit test.
 Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`.
 
+An installer or patcher that prints Wine's `nodrv_CreateWindow` error found
+no desktop to open its windows on, so `runWine` throws `WineError.noDisplay`
+whatever its exit code (AutoIt in that state exits 0 without running its
+script). `GameInstallerRunner` then stops the Wine session and runs that step
+once more with a fresh desktop: on a loaded machine a program has failed to
+find a desktop `WineDesktop` had just reported ready, and every program after
+it in the same session failed the same way.
+
 An installer killed partway can exit 0 with the game's exe already unpacked,
 so neither the exit code nor finding the exe proves the install finished.
 Nor does `wine start /wait` returning: InstallShield 12's `setup.exe`

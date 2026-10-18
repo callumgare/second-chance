@@ -213,12 +213,17 @@ public struct WineEnvironment {
         // Attached once the pid is known, so every line carries it; the pipes
         // hold anything written in the meantime.
         let metadata: Logger.Metadata = ["pid": "\(process.processIdentifier)", "program": "\(watch.name)"]
+        let noDisplay = NoDisplaySignal()
+        let onLine: @Sendable (String) -> Void = { line in
+            watch.sawLine()
+            noDisplay.check(line)
+        }
         eofs.enter()
         eofs.enter()
         ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, metadata: metadata,
-                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
+                                 onLine: onLine, onEOF: { eofs.leave() })
         ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, metadata: metadata,
-                                 onLine: { _ in watch.sawLine() }, onEOF: { eofs.leave() })
+                                 onLine: onLine, onEOF: { eofs.leave() })
 
         let timedOut: Bool = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -256,6 +261,12 @@ public struct WineEnvironment {
         let outcome = watch.finished(process, note: timedOut ? "timed out" : nil)
         if timedOut {
             throw WineError.timedOut(seconds: timeout ?? 0)
+        }
+        // Whatever the exit code: a program that couldn't open a window has
+        // not done its job, and AutoIt in that state exits 0 without running
+        // its script.
+        if noDisplay.seen {
+            throw WineError.noDisplay
         }
         switch outcome {
         case .exited(0):
@@ -511,6 +522,9 @@ public enum WineError: LocalizedError {
     case timedOut(seconds: TimeInterval)
     case winetricksNotFound
     case winetricksFailed(trick: String)
+    /// The program printed Wine's `nodrv_CreateWindow` error: it found no
+    /// usable desktop, so it ran without a display.
+    case noDisplay
     
     public var errorDescription: String? {
         switch self {
@@ -524,6 +538,22 @@ public enum WineError: LocalizedError {
             return "Winetricks not found in bundle"
         case .winetricksFailed(let trick):
             return "Failed to install winetrick: \(trick)"
+        case .noDisplay:
+            return "The Windows program found no display to open its windows on (Wine's nodrv_CreateWindow)"
         }
+    }
+}
+
+/// Watches a Wine program's output for `nodrv_CreateWindow`, the line Wine
+/// prints when a program tries to open a window without a working desktop.
+private nonisolated final class NoDisplaySignal: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flagged = false
+
+    var seen: Bool { lock.withLock { flagged } }
+
+    func check(_ line: String) {
+        guard line.contains("nodrv_CreateWindow") else { return }
+        lock.withLock { flagged = true }
     }
 }

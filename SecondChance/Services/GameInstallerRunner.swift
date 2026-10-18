@@ -124,12 +124,15 @@ class GameInstallerRunner {
             logger.notice("🔄 Installation attempt \(installAttempt + 1) of \(maxAttempts)")
             do {
                 // Run installer
-                installerType = try await runInstaller(
-                    at: wrappPath,
-                    installerPath: installerExe,
-                    gameInfo: gameInfo,
-                    attemptNumber: installAttempt
-                )
+                let attempt = installAttempt
+                installerType = try await retryingIfNoDisplay(at: wrappPath, "The installer") {
+                    try await self.runInstaller(
+                        at: wrappPath,
+                        installerPath: installerExe,
+                        gameInfo: gameInfo,
+                        attemptNumber: attempt
+                    )
+                }
 
                 // Get list of exe files after installation
                 let exesAfter = findExecutableFiles(in: driveCPath)
@@ -512,6 +515,17 @@ class GameInstallerRunner {
     /// the patch is reported failed, which routes through the normal
     /// patch-failure confirmation.
     private func runPatchInstaller(
+        _ patch: GamePatch,
+        at wrappPath: URL,
+        hostPath: URL,
+        winePath: String
+    ) async throws {
+        try await retryingIfNoDisplay(at: wrappPath, "\(patch.id)'s patcher") {
+            try await self.runPatchInstallerOnce(patch, at: wrappPath, hostPath: hostPath, winePath: winePath)
+        }
+    }
+
+    private func runPatchInstallerOnce(
         _ patch: GamePatch,
         at wrappPath: URL,
         hostPath: URL,
@@ -984,6 +998,32 @@ class GameInstallerRunner {
         desktop?.release()
         logger.notice("Waiting for the installer's remaining Wine processes to finish")
         try await wineManager.runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"], timeout: timeout)
+    }
+
+    /// Run `step`, and if its Windows program found no display, end the Wine
+    /// session and run it once more, which starts it a fresh desktop.
+    ///
+    /// On a loaded machine a program has failed to find a desktop that
+    /// `WineDesktop` had just reported ready (the cause isn't known), and the
+    /// session then stays that way: the next program fails the same way
+    /// within a second. Restarting the session is the surest way to a fresh
+    /// desktop.
+    private func retryingIfNoDisplay<T>(
+        at wrappPath: URL,
+        _ what: String,
+        _ step: () async throws -> T
+    ) async throws -> T {
+        do {
+            return try await step()
+        } catch WineError.noDisplay {
+            logger.warning("\(what) found no display to open its windows on — restarting the Wine session and trying once more")
+            let wine = WineEnvironment(appPath: wrappPath)
+            let status = wine.stopWineserver()
+            if status != 0 {
+                logger.warning("wineserver -k exited \(status)")
+            }
+            return try await step()
+        }
     }
 
     /// Start Wine's desktop before an installer or patcher runs, so it isn't
