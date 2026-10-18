@@ -259,11 +259,13 @@ direct assignment.
   it; on a loaded machine under Rosetta that runs out, and the game carries on
   with no display adapters — Secrets Can Kill Remastered then crashes on a null
   Direct3D object exactly 10 s in. `WineDesktop` (`Shared/Wine/`) starts the
-  desktop itself and waits (up to 60 s) until it has registered the display
-  devices, which it detects through the volatile
-  `HKLM\HARDWARE\DEVICEMAP\VIDEO` key. `GameLauncher` does this before the
-  game, and `GameInstallerRunner` before every installer and patcher, which
-  fail the same way (with an exit code rather than a crash). Wine runs that
+  desktop itself and waits until it has registered the display devices,
+  which it detects through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key.
+  `GameLauncher` does this before the game (waiting up to 60 s), and
+  `GameInstallerRunner` before every installer and patcher (up to 180 s,
+  since nobody is watching a build), which fail the same way: with an exit
+  code rather than a crash, or for AutoIt with no window and an exit 0
+  before its script runs. Wine runs that
   desktop through `start.exe /exec`, which is itself a Windows program waiting
   on explorer, so the two would keep the whole Wine session alive after the
   game quits; `WineDesktop.release()` ends the `start.exe` once the programs
