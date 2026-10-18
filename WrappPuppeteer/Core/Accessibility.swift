@@ -100,6 +100,13 @@ enum Accessibility {
         return CGRect(origin: position, size: size)
     }
 
+    /// Press a button through Accessibility (`AXPress`). Unlike a synthesised
+    /// click, this doesn't depend on the app handling a mouse event in time.
+    @discardableResult
+    static func press(_ element: AXUIElement) -> AXError {
+        AXUIElementPerformAction(element, kAXPressAction as CFString)
+    }
+
     /// True when any of the app's windows is in native full screen.
     static func hasFullscreenWindow(pid: Int32) -> Bool {
         guard case .success(let windows) = Accessibility.windows(ofPid: pid, retries: 1) else { return false }

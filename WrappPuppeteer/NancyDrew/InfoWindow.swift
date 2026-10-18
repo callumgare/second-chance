@@ -73,9 +73,32 @@ enum InfoWindow {
         let clickPoint = CGPoint(x: frame.midX, y: frame.midY)
         logger.notice("  ✓ Clicking confirm button at (\(Int(clickPoint.x)), \(Int(clickPoint.y)))")
         InputControl.click(at: clickPoint)
-        Thread.sleep(forTimeInterval: 0.5)
 
-        logger.notice("✅ Info window dismissed")
-        return true
+        // A click can be lost on a loaded machine (the wrapp then sat on this
+        // window for the whole test), so check the window went, and if it
+        // didn't, press the button through Accessibility instead.
+        for attempt in 1...5 {
+            if waitForWindowToClose(wrapperPid: wrapperPid, timeout: 10) {
+                logger.notice("✅ Info window dismissed")
+                return true
+            }
+            logger.warning("⚠️  Info window still open — pressing its confirm button through Accessibility (attempt \(attempt))")
+            let result = Accessibility.press(button)
+            if result != .success {
+                logger.warning("   AXPress failed: \(Accessibility.describe(result))")
+            }
+        }
+        logger.critical("❌ Info window still open after clicking and pressing its confirm button")
+        return false
+    }
+
+    private static func waitForWindowToClose(wrapperPid: Int32, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let open = WindowFinder.onScreenWindows().contains { $0.ownerPid == wrapperPid && $0.title == title }
+            if !open { return true }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        return false
     }
 }
