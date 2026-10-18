@@ -80,7 +80,11 @@ public final class WineDesktop {
                 return desktop
             }
             logger.debug("[Desktop] Check \(attempt): \(result) (query took \(String(format: "%.1f", Date().timeIntervalSince(queryStart)))s, \(elapsed)s since start)")
-            Thread.sleep(forTimeInterval: 0.25)
+            // Back off as the wait grows: each check starts a whole Wine
+            // process, which on a machine short of CPU competes with the
+            // desktop it is waiting for. A tenth of the time waited so far,
+            // between a quarter of a second and ten seconds.
+            Thread.sleep(forTimeInterval: min(10, max(0.25, Date().timeIntervalSince(start) / 10)))
         }
         logger.error("[Desktop] Display devices still not registered after \(Int(timeout))s — running the program anyway")
         return desktop

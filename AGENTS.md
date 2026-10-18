@@ -264,7 +264,8 @@ direct assignment.
   It waits up to 600 s, since with every core busy a fresh session has taken
   two and a half minutes to bring it up, and what runs without it is sure to
   fail; each check is itself a Wine program and gets 120 s, because one cut
-  short at 20 s never saw the desktop ready. `GameLauncher` does this
+  short at 20 s never saw the desktop ready, and the checks back off to one
+  every 10 s as the wait grows, so they don't take the CPU the desktop needs. `GameLauncher` does this
   before the game, and `GameInstallerRunner` before every installer and
   patcher, which fail the same way: with an exit code rather than a crash, or
   for AutoIt with no window and an exit 0 before its script runs. A program
