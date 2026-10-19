@@ -1,3 +1,4 @@
+import ArgumentParser
 import Foundation
 import GameCatalog
 import Testing
@@ -319,6 +320,41 @@ struct GameTests {
         let viaSteam = try SteamSourceOptions.parse(["--steam-launch", "steam"])
         #expect(try viaSteam.environment(for: choice, repo: repo)["STEAM_LAUNCH_MODE"] == "steam")
         #expect(throws: SCError.self) { try viaSteam.environment(for: drm, repo: repo) }
+    }
+
+    @Test("--source takes a list, all, and suggests a fix for a typo")
+    func integrationSources() throws {
+        #expect(try IntegrationOptions.parseSources("disk") == [.disk])
+        #expect(try IntegrationOptions.parseSources("steam,disk") == [.disk, .steam])
+        #expect(try IntegrationOptions.parseSources("all") == WrappSourceKind.allCases)
+        #expect(throws: ValidationError.self) { try IntegrationOptions.parseSources("") }
+        do {
+            _ = try IntegrationOptions.parseSources("stam")
+            Issue.record("a typo should be refused")
+        } catch let error as ValidationError {
+            #expect(error.message.contains("Did you mean 'steam'?"))
+        }
+        #expect(TestRunner.integrationSelection([.disk, .steam]).filter { $0.hasPrefix("-only-testing:") } == [
+            "-only-testing:SecondChanceTests/DiskInstallIntegrationTests",
+            "-only-testing:SecondChanceTests/SteamInstallIntegrationTests",
+        ])
+        #expect(TestRunner.unitExclusions.contains("SteamInstallIntegrationTests"))
+    }
+
+    @Test("A game tested from disk and from Steam is two rows")
+    func boardBySource() throws {
+        let game = try #require(Catalog.game(slug: "thornton-hall"))
+        let board = GameBoard(entries: [(source: "disk", game: game), (source: "steam", game: game)])
+        board.apply(ProgressRecord(event: "game", source: "steam", slug: "thornton-hall", phase: "started"))
+        board.apply(ProgressRecord(event: "game", source: "steam", slug: "thornton-hall", phase: "finished", result: "passed", seconds: 9))
+        #expect(board.rows.map(\.status) == ["pending", "passed"])
+        // A record with no source is the disk suite's, as before.
+        board.apply(ProgressRecord(event: "game", slug: "thornton-hall", phase: "finished", result: "failed"))
+        #expect(board.rows.map(\.status) == ["failed", "passed"])
+        // A row the suite adds itself (a second launch mode) appears as it arrives.
+        board.apply(ProgressRecord(event: "game", source: "steam", slug: "haunted-mansion (via Steam)", phase: "started"))
+        #expect(board.rows.map(\.slug).last == "haunted-mansion (via Steam)")
+        #expect(board.statusLine.contains("haunted-mansion (via Steam) (steam)"))
     }
 
     @Test("Progress records decode, and junk is skipped")

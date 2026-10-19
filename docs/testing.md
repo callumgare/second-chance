@@ -44,6 +44,9 @@ build failure. See the README's *Building* section for the full story.
 # (template: put the latest WrappTemplate into them first)
 ./sc test integration stay-tuned --refresh-wrapp skip
 ./sc test integration stay-tuned --refresh-wrapp template
+
+# Build from Steam instead (or as well: --source disk,steam, or all)
+./sc test integration thornton-hall --source steam
 ```
 
 Other options: `--logs collapsed|full|raw` for how output is shown,
@@ -103,6 +106,23 @@ a plain `xcodebuild test` on a machine without them skips rather than fails.
 `TEST_RUNNER_REQUIRE_INSTALLERS=1`, the suite always runs, and a game whose ISO
 is missing fails its `#require` with the path it looked at. A skipped suite
 there would report a pass having tested nothing.
+
+**Each build source has its own suite**, picked with `--source`:
+`DiskInstallIntegrationTests` (`disk`, the default) and
+`SteamInstallIntegrationTests` (`steam`). A game tested both ways is two rows
+in the table, with a Source column. The Steam suite:
+
+- builds each requested game that's on Steam from Steam, headless, and
+  launches it with WrappPuppeteer, like the disk suite (a DRM-free game is
+  built to launch directly);
+- needs a saved Steam sign-in on the Mac it runs on (build a Steam game from
+  the app once, or copy `~/Library/Application Support/SecondChance/Steam/`
+  over) — without one the suite disables itself and says why;
+- reports a game the account doesn't own as `skipped`, not failed;
+- checks the finished wrapp carries none of the sign-in;
+- always builds: `--refresh-wrapp` applies to the disk suite's wrapps only;
+- downloads every game it tests, so it's slow, and run often could trip
+  Steam's rate limits. It is in `TestRunner.unitExclusions`.
 
 The tests find the repo, and so `installers/`, through `TestPaths.repoRoot`.
 That defaults to `#filePath`, which is fixed at compile time and wrong on any
@@ -234,6 +254,13 @@ otherwise hand back that one: a wrapp left on its "Game Crashed" window by an
 earlier run was once "launched" again an hour later, and the run timed out
 waiting for a game it never started. Its force-quit checks that the process
 really went and sends SIGKILL when `forceTerminate()` didn't do it.
+
+**It goes when the test that started it goes.** Started through
+LaunchServices, WrappPuppeteer's parent is launchd, not the test, so stopping
+a run (`sc attach --stop`, Ctrl-C) or a crashed test host used to leave it —
+and the wrapp it was driving, Steam and all — running. The test passes
+`--parent-pid <its own pid>`, and WrappPuppeteer kills what it launched and
+exits once that process has gone.
 
 ### Core and the Nancy Drew scenario
 

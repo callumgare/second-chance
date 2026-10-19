@@ -91,9 +91,9 @@ struct GamePatchCatalogTests {
 
     // MARK: - Edition matching
 
-    @Test("Edition 'any' applies to every source")
+    @Test("Edition 'any' applies to every source Her's patches can update")
     func anyEditionMatchesAll() {
-        for source in WrappSource.allCases {
+        for source in WrappSource.allCases where source != .steam {
             #expect(GamePatch.Edition.any.matches(source))
         }
     }
@@ -105,11 +105,17 @@ struct GamePatchCatalogTests {
         #expect(!GamePatch.Edition.cd.matches(.steam))
     }
 
-    @Test("Digital-download patches apply to download and Steam builds")
+    @Test("Digital-download patches apply to download builds")
     func downloadEdition() {
         #expect(!GamePatch.Edition.digitalDownload.matches(.disk))
         #expect(GamePatch.Edition.digitalDownload.matches(.herDownload))
-        #expect(GamePatch.Edition.digitalDownload.matches(.steam))
+    }
+
+    @Test("No patch applies to a Steam build: Steam has its own current build", arguments: [
+        GamePatch.Edition.any, .cd, .digitalDownload,
+    ])
+    func steamGetsNoPatches(edition: GamePatch.Edition) {
+        #expect(!edition.matches(.steam))
     }
 
     /// Castle Malloy is the clearest case of a game whose CD and

@@ -56,24 +56,25 @@ struct GameInfo: Codable, Identifiable, Hashable {
 
     var isOnSteam: Bool { steamAppID != nil }
 
-    /// Only a game known to have no DRM can run without Steam.
-    var offersSteamLaunchChoice: Bool { isOnSteam && steamDRM == .no }
+    /// Only a game known to have no DRM can run without Steam — and the games
+    /// ScummVM runs always do (see `steamEngine`), so they offer no choice.
+    var offersSteamLaunchChoice: Bool { isOnSteam && steamDRM == .no && gameEngine != .scummvm }
 
     /// The engine a Steam-sourced wrapp of this game uses.
     ///
-    /// A game whose DRM hasn't been worked out launches through Steam
-    /// (`-applaunch`), which works whatever its DRM turns out to be. Running
-    /// "directly" uses the engine the disc version does — so the games
-    /// ScummVM runs from disc run in ScummVM on Steam's files too.
+    /// A game ScummVM runs from disc runs in ScummVM on Steam's files too,
+    /// whatever its DRM: ScummVM reads the data, never the exe, and Steam's
+    /// exe under Wine ignores the mouse (its cursor stays put while clicks
+    /// land elsewhere). Any other game that needs Steam is launched by Steam
+    /// (`-applaunch`), which works whatever its DRM: starting the exe
+    /// ourselves with Steam running (`.wineSteamSilent`) left Blue Moon's
+    /// Steam release running with no window, though its DRM is meant to need
+    /// only Steam running. Only a DRM-free game the user chose to launch
+    /// directly runs without Steam.
     func steamEngine(launchMode: SteamLaunchMode?) -> GameEngine {
-        switch steamDRM {
-        case .yesLaunchViaSteamOnly, nil:
-            return .wineSteam
-        case .yesLaunchWhenSteamRunning:
-            return .wineSteamSilent
-        case .no:
-            return launchMode == .direct ? gameEngine : .wineSteamSilent
-        }
+        if gameEngine == .scummvm { return .scummvm }
+        if steamDRM == .no && launchMode == .direct { return gameEngine }
+        return .wineSteam
     }
     
     init(

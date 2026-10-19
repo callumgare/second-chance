@@ -26,6 +26,8 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         case inUse(by: String?)
         case signInTimedOut
         case notStarted(String)
+        /// The wrapp is quitting.
+        case cancelled
     }
 
     let client: SteamClient
@@ -36,8 +38,10 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     private var signedIn = false
     private var finished = false
 
-    /// Take the lock and start Steam signed in. `status` gets what the
-    /// loading window should say.
+    /// Take the lock and start Steam. `waitUntilSignedIn` then waits for it
+    /// to sign in. Two steps, so the launcher holds this — and can stop
+    /// Steam on quit — while the wait goes on: a wrapp quit mid-wait used to
+    /// leave its Steam running. `status` gets what the loading window should say.
     init(config: GameConfig, status: (String) -> Void) throws {
         switch try SteamActiveLock.acquire(bundleID: config.bundleId) {
         case .acquired(let lock):
@@ -63,25 +67,38 @@ nonisolated final class WrappSteam: @unchecked Sendable {
             let restored = try Self.waitThrowing { try await client.restoreLogin(from: store) }
             logger.notice(restored ? "Restored the shared Steam sign-in" : "No saved Steam sign-in; Steam will ask for one")
             try Self.waitThrowing { try await client.start(silent: true) }
-
-            switch Self.wait({ await client.waitForLogin(timeout: Self.startTimeout) }) {
-            case .signedIn:
-                break
-            case .pending:
-                throw Failure.signInTimedOut
-            case .needsCredentials:
-                status("Sign in to Steam in its window — you can scan the QR code with the Steam app.")
-                let deadline = Date().addingTimeInterval(Self.signInTimeout)
-                while Self.wait({ await client.waitForLogin(timeout: 2) }) != .signedIn {
-                    guard Date() < deadline else { throw Failure.signInTimedOut }
-                    Thread.sleep(forTimeInterval: 2)
-                }
-            }
-            state.withLock { signedIn = true }
-            status("Starting the game…")
         } catch {
             finish(timeout: 30)
             throw error
+        }
+    }
+
+    /// Wait for Steam to sign in, asking the player to when it shows its
+    /// sign-in window. Checks every couple of seconds, so `finish` (a quit)
+    /// ends the wait promptly with `.cancelled`.
+    func waitUntilSignedIn(status: (String) -> Void) throws {
+        let client = client
+        var deadline = Date().addingTimeInterval(Self.startTimeout)
+        var asked = false
+        while true {
+            if state.withLock({ finished }) { throw Failure.cancelled }
+            switch Self.wait({ await client.waitForLogin(timeout: 2) }) {
+            case .signedIn:
+                state.withLock { signedIn = true }
+                status("Starting the game…")
+                return
+            case .needsCredentials where !asked:
+                asked = true
+                deadline = Date().addingTimeInterval(Self.signInTimeout)
+                status("Sign in to Steam in its window — you can scan the QR code with the Steam app.")
+            case .pending, .needsCredentials:
+                break
+            }
+            if Date() >= deadline {
+                finish(timeout: 30)
+                throw Failure.signInTimedOut
+            }
+            Thread.sleep(forTimeInterval: 1)
         }
     }
 

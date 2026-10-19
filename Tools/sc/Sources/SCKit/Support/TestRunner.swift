@@ -25,6 +25,8 @@ struct TestRunner {
     static let unitExclusions = [
         // Real installs, hours for all games: `sc test integration`.
         "DiskInstallIntegrationTests",
+        // Real Steam downloads: `sc test integration --source steam`.
+        "SteamInstallIntegrationTests",
         // Shell out to the bundled exiftool.
         "ExiftoolServiceTests",
         "ExiftoolServiceIntegrationTests",
@@ -34,10 +36,17 @@ struct TestRunner {
         unitExclusions.map { "-skip-testing:SecondChanceTests/\($0)" }
     }
 
-    static let integrationSelection = [
-        "-parallel-testing-worker-count", "1",
-        "-only-testing:SecondChanceTests/DiskInstallIntegrationTests",
-    ]
+    /// The suite that tests each source's builds.
+    static func integrationSuite(_ source: WrappSourceKind) -> String {
+        switch source {
+        case .disk: "DiskInstallIntegrationTests"
+        case .steam: "SteamInstallIntegrationTests"
+        }
+    }
+
+    static func integrationSelection(_ sources: [WrappSourceKind]) -> [String] {
+        ["-parallel-testing-worker-count", "1"] + sources.map { "-only-testing:SecondChanceTests/\(integrationSuite($0))" }
+    }
 
     // MARK: - Unit
 
@@ -75,9 +84,19 @@ struct TestRunner {
 
     // MARK: - Integration
 
-    func integration(games requested: [CatalogGame], refresh: WrappRefresh, wrappsDir: URL, ignoreLoad: Bool = false, stamp: String) async throws -> TestRun {
+    func integration(games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL, ignoreLoad: Bool = false, stamp: String) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
-        if refresh != .full {
+        // Each source tests the games it can build: the Steam suite, those on Steam.
+        let entries = sources.flatMap { source in
+            games.filter { source != .steam || $0.isOnSteam }.map { (source: source.rawValue, game: $0) }
+        }
+        if entries.isEmpty {
+            throw SCError("None of those games is on Steam.",
+                          hints: ["Games on Steam: \(Catalog.games.filter(\.isOnSteam).map(\.slug).joined(separator: ", "))"])
+        }
+        // The prebuilt wrapps --refresh-wrapp reuses are disk builds; the Steam
+        // suite always builds its own.
+        if refresh != .full && sources.contains(.disk) {
             let builder = WrappBuilder(session: session)
             let wrapps = try games.map { try builder.existingWrapp($0, in: wrappsDir) }
             if refresh == .template {
@@ -92,18 +111,19 @@ struct TestRunner {
 
         var env = [
             "TEST_RUNNER_REPO_ROOT": repo.root.path,
-            // Asked for by name, so missing ISOs are a failure, not a skip
-            // that would report a pass having tested nothing.
-            "TEST_RUNNER_REQUIRE_INSTALLERS": "1",
             "TEST_RUNNER_PROGRESS_PATH": progressFile.path,
             "TEST_RUNNER_WRAPPS_DIR": wrappsDir.path,
         ]
+        // Asked for by name, so missing ISOs are a failure, not a skip that
+        // would report a pass having tested nothing.
+        if sources.contains(.disk) { env["TEST_RUNNER_REQUIRE_INSTALLERS"] = "1" }
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
         let environment = env
 
-        let board = GameBoard(games: games)
+        let board = GameBoard(entries: entries)
+        let showSource = sources != [.disk]
         let live = ui.isLive
         let following = follower.follow { record in
             if record.event == "load", let message = record.message {
@@ -122,12 +142,13 @@ struct TestRunner {
             title: "Integration tests", log: "test-integration", observer: observer,
             fraction: { board.fraction },
             statusLine: { board.statusLine },
-            table: { gameTable(board) }
+            table: { gameTable(board, showSource: showSource) }
         ) { sink in
-            try await xcode.runTests(selection: Self.integrationSelection, environment: environment, resultBundle: bundle, sink: sink)
+            try await xcode.runTests(selection: Self.integrationSelection(sources), environment: environment, resultBundle: bundle, sink: sink)
         }
         for record in follower.poll() { board.apply(record) }
-        await ui.table(headers: gameTable(board).headers, rows: gameTable(board).rows)
+        let table = gameTable(board, showSource: showSource)
+        await ui.table(headers: table.headers, rows: table.rows)
         if board.hasOverloadedGames {
             ui.warning("Some games weren't tested: the Mac was heavily loaded, so Wine would have taken minutes to start, or never started.",
                        next: "Quit the busy programs and run those games again, or pass --ignore-load to test them anyway.")
@@ -139,11 +160,12 @@ struct TestRunner {
         return TestRun(name: "Integration", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle))
     }
 
-    private func gameTable(_ board: GameBoard) -> (headers: [String], rows: [StyledTableRow]) {
+    private func gameTable(_ board: GameBoard, showSource: Bool) -> (headers: [String], rows: [StyledTableRow]) {
         let rows: [StyledTableRow] = board.rows.map { game in
-            [.plain(game.slug), .muted(game.engine), statusCell(game.status), .muted(game.seconds.map { String(format: "%.0fs", $0) } ?? "")]
+            (showSource ? [.muted(game.source)] : [])
+                + [.plain(game.slug), .muted(game.engine), statusCell(game.status), .muted(game.seconds.map { String(format: "%.0fs", $0) } ?? "")]
         }
-        return (["Game", "Engine", "Result", "Time"], rows)
+        return ((showSource ? ["Source"] : []) + ["Game", "Engine", "Result", "Time"], rows)
     }
 
     private func statusCell(_ status: String) -> TableCellStyle {
@@ -242,6 +264,7 @@ final class DoneFlag: @unchecked Sendable {
 /// The state of an integration run, game by game, from the progress stream.
 final class GameBoard: @unchecked Sendable {
     struct Row: Sendable {
+        let source: String
         let slug: String
         let engine: String
         var status: String
@@ -250,13 +273,23 @@ final class GameBoard: @unchecked Sendable {
     }
 
     private let lock = NSLock()
-    private var rowsBySlug: [String: Row]
-    private let order: [String]
+    /// Rows are keyed by source and slug: a game tested from disk and from
+    /// Steam is two rows.
+    private var rowsByKey: [String: Row]
+    private var order: [String]
     private var current: String?
 
-    init(games: [CatalogGame]) {
-        order = games.map(\.slug)
-        rowsBySlug = Dictionary(uniqueKeysWithValues: games.map { ($0.slug, Row(slug: $0.slug, engine: $0.engine, status: "pending")) })
+    private static func key(_ source: String, _ slug: String) -> String { "\(source)/\(slug)" }
+
+    convenience init(games: [CatalogGame]) {
+        self.init(entries: games.map { (source: "disk", game: $0) })
+    }
+
+    init(entries: [(source: String, game: CatalogGame)]) {
+        order = entries.map { Self.key($0.source, $0.game.slug) }
+        rowsByKey = Dictionary(uniqueKeysWithValues: entries.map {
+            (Self.key($0.source, $0.game.slug), Row(source: $0.source, slug: $0.game.slug, engine: $0.game.engine, status: "pending"))
+        })
     }
 
     /// Apply a record; returns a plain line describing it, for non-live output.
@@ -266,25 +299,29 @@ final class GameBoard: @unchecked Sendable {
             switch record.event {
             case "game":
                 guard let slug = record.slug else { return nil }
-                var row = rowsBySlug[slug] ?? Row(slug: slug, engine: "", status: "pending")
+                let source = record.source ?? "disk"
+                let key = Self.key(source, slug)
+                if rowsByKey[key] == nil { order.append(key) }  // a row the suite added, e.g. a second launch mode
+                var row = rowsByKey[key] ?? Row(source: source, slug: slug, engine: "", status: "pending")
                 switch record.phase {
                 case "started":
                     row.status = "running"
                     row.stage = "starting"
-                    current = slug
+                    current = key
                 case "finished":
                     row.status = record.result ?? "failed"
                     row.seconds = record.seconds
                     row.stage = nil
-                    if current == slug { current = nil }
+                    if current == key { current = nil }
                 default:
                     row.stage = record.phase
                 }
-                rowsBySlug[slug] = row
-                return "▸ \(slug): \(record.phase ?? "")\(record.result.map { " (\($0))" } ?? "")"
+                rowsByKey[key] = row
+                let label = source == "disk" ? slug : "\(slug) (\(source))"
+                return "▸ \(label): \(record.phase ?? "")\(record.result.map { " (\($0))" } ?? "")"
             case "stage":
-                guard let slug = current, let text = record.text else { return nil }
-                rowsBySlug[slug]?.stage = text
+                guard let key = current, let text = record.text else { return nil }
+                rowsByKey[key]?.stage = text
                 return nil
             default:
                 return nil
@@ -296,33 +333,34 @@ final class GameBoard: @unchecked Sendable {
     /// around as games finish. The status line names the running game even
     /// when a short window trims the table.
     var rows: [Row] {
-        lock.withLock { order.compactMap { rowsBySlug[$0] } }
+        lock.withLock { order.compactMap { rowsByKey[$0] } }
     }
 
     var fraction: Double {
         lock.withLock {
             guard !order.isEmpty else { return 0 }
-            let done = rowsBySlug.values.filter { !["pending", "running"].contains($0.status) }.count
+            let done = rowsByKey.values.filter { !["pending", "running"].contains($0.status) }.count
             return Double(done) / Double(order.count)
         }
     }
 
     var statusLine: String {
         lock.withLock {
-            let done = rowsBySlug.values.filter { !["pending", "running"].contains($0.status) }.count
+            let done = rowsByKey.values.filter { !["pending", "running"].contains($0.status) }.count
             var line = "\(done)/\(order.count) games"
-            if let current, let row = rowsBySlug[current] {
-                line += " · \(current): \(row.stage ?? "running")"
+            if let current, let row = rowsByKey[current] {
+                let label = row.source == "disk" ? row.slug : "\(row.slug) (\(row.source))"
+                line += " · \(label): \(row.stage ?? "running")"
             }
             return line
         }
     }
 
     var hasOverloadedGames: Bool {
-        lock.withLock { rowsBySlug.values.contains { $0.status == "overloaded" } }
+        lock.withLock { rowsByKey.values.contains { $0.status == "overloaded" } }
     }
 
     var hasPermissionProblems: Bool {
-        lock.withLock { rowsBySlug.values.contains { $0.status == "permission" } }
+        lock.withLock { rowsByKey.values.contains { $0.status == "permission" } }
     }
 }

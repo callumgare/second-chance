@@ -7,7 +7,7 @@ import Foundation
 /// `{"event":"stage","stage":"installingGame","text":"Game installing","fraction":0.5}`
 /// `{"event":"completed","path":"…/Nancy Drew - X.app"}`
 /// `{"event":"failed","message":"…"}`
-/// `{"event":"game","slug":"stay-tuned","phase":"launching"}`
+/// `{"event":"game","source":"disk","slug":"stay-tuned","phase":"launching"}` (`source` defaults to disk)
 /// `{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":81.2}`
 struct ProgressRecord: Decodable, Equatable, Sendable {
     let event: String
@@ -16,6 +16,7 @@ struct ProgressRecord: Decodable, Equatable, Sendable {
     var fraction: Double?
     var path: String?
     var message: String?
+    var source: String?
     var slug: String?
     var phase: String?
     var result: String?

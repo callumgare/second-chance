@@ -38,4 +38,22 @@ extension WrappBuildInput {
         }
         self.init(environment: environment, viewModel: viewModel)
     }
+
+    /// A headless input for a Steam build of `slug`. Headless, so Steam can't
+    /// ask anyone to sign in: the build needs a saved sign-in.
+    convenience init(
+        steamGame slug: String,
+        launchMode: GameInfo.SteamLaunchMode? = nil,
+        outputDir: URL,
+        viewModel: WrappBuildViewModel? = nil
+    ) {
+        var environment = [
+            "STEAM_GAME_SLUG": slug,
+            "OUTPUT_PATH": outputDir.path,
+        ]
+        if let launchMode {
+            environment["STEAM_LAUNCH_MODE"] = launchMode.rawValue
+        }
+        self.init(environment: environment, viewModel: viewModel)
+    }
 }

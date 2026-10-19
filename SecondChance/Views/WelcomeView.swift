@@ -61,7 +61,22 @@ struct WelcomeView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("installSourceDisk")
                     .onHover { hovering in isHoveringDisk = hovering }
-                    
+
+                    // Steam option
+                    Button {
+                        Task { await viewModel.buildFromSteam() }
+                    } label: {
+                        WrappSourceOptionCard(
+                            icon: "cloud",
+                            title: "Steam",
+                            description: "Install from your Steam library",
+                            isHovering: isHoveringSteam
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("installSourceSteam")
+                    .onHover { hovering in isHoveringSteam = hovering }
+
                     if debugSettings.showUnsupportedInstallOptions {
                         // Her Download option
                         Button {
@@ -76,20 +91,6 @@ struct WelcomeView: View {
                         }
                         .buttonStyle(.plain)
                         .onHover { hovering in isHoveringHer = hovering }
-
-                        // Steam option
-                        Button {
-                            Task { await viewModel.buildFromSteam() }
-                        } label: {
-                            WrappSourceOptionCard(
-                                icon: "cloud",
-                                title: "Steam",
-                                description: "Install from Steam library",
-                                isHovering: isHoveringSteam
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .onHover { hovering in isHoveringSteam = hovering }
                     }
                 }
             }

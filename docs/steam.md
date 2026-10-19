@@ -6,9 +6,16 @@ sign-in window (with QR sign-in) means Second Chance never handles a password.
 The parts that drive it live in `Shared/Steam/`, compiled into the app, the
 wrapp and WrappPuppeteer alike.
 
-Steam builds and Steam wrapps work end to end; the Steam option on the
-welcome screen is still behind the debug setting until the Steam integration
-suite exists (AGENTS.md, "Things Currently In Flux").
+Steam builds and Steam wrapps work end to end, tested by
+`sc test integration --source steam` ([testing.md](testing.md)).
+
+**Known problem: Steam's permission prompts.** At start-up Steam asks macOS
+for the microphone (voice chat) and the local network (Remote Play / LAN
+discovery), and hangs until both prompts are answered — on a test Mac a build's
+Steam sat for 20 minutes, then signed in in 66 s once they were. The prompts
+name the responsible Mac app: `sc`, Second Chance, or the game itself.
+Rebuilding `sc` makes macOS ask again. Until Steam is stopped from asking,
+answer them (the microphone can be refused; the local network either way).
 
 ## Building
 
@@ -44,7 +51,8 @@ suite exists (AGENTS.md, "Things Currently In Flux").
    `steamapps/common/` into `Program Files (x86)/Nancy Drew/`, and the Steam
    client is deleted; otherwise its exe stays in Steam's library and
    `AppSettings.plist` gets `SteamGameId`. `SteamLaunchMode` records the
-   user's choice. Patches for digital editions apply as for a Her download.
+   user's choice. Her Interactive's patches are not applied: Steam's build is
+   current, and the patchers refuse it ([game-patches.md](game-patches.md)).
 
 Steam is stopped on the failure path too, and the session saved if it signed
 in, so a failed build neither leaves Steam running nor loses a refreshed
@@ -59,16 +67,27 @@ for Danger aren't (Steam's Secrets Can Kill is the Remastered edition), and
 Ransom of the Seven Ships (31980) is no longer sold but still installs for
 those who own it.
 
-The engine a Steam wrapp uses (`GameInfo.steamEngine(launchMode:)`) follows
-the game's `steamDRM`:
+The engine a Steam wrapp uses (`GameInfo.steamEngine(launchMode:)`):
 
-| `steamDRM` | Choice offered | Engine | Starts by |
+| Game | Choice offered | Engine | Starts by |
 | --- | --- | --- | --- |
-| `.yesLaunchViaSteamOnly` | none | `.wineSteam` | `steam.exe -applaunch <id>` |
-| `.yesLaunchWhenSteamRunning` | none | `.wineSteamSilent` | Steam `-silent`, then the exe |
-| `.no` | "via Steam" | `.wineSteamSilent` | as above |
-| `.no` | "directly" | the disc engine (`.wine`, or `.scummvm` for the games ScummVM runs from disc) | the exe, or ScummVM on Steam's files; Steam is removed from the wrapp |
-| not worked out (`nil`) | none | `.wineSteam` | `-applaunch`, which works whatever the DRM turns out to be |
+| one ScummVM runs from disc, any `steamDRM` | none | `.scummvm` | ScummVM on Steam's files; Steam is removed from the wrapp |
+| `.yesLaunchViaSteamOnly`, `.yesLaunchWhenSteamRunning`, or not worked out (`nil`) | none | `.wineSteam` | `steam.exe -applaunch <id>` |
+| `.no` | "via Steam" | `.wineSteam` | as above |
+| `.no` | "directly" | `.wine` | the exe; Steam is removed from the wrapp |
+
+**Everything that needs Steam is launched by Steam** (`-applaunch`), which
+works whatever the DRM. The other way — Steam `-silent`, then the wrapp
+starting the exe itself (`.wineSteamSilent`, still understood by the wrapp) —
+left Blue Moon's Steam release running with no window for minutes, though
+its `steamDRM` says it only needs Steam running; through `-applaunch` its
+window was up in a second.
+
+**The ScummVM games always run in ScummVM**, so they get no launch choice
+and no Steam Cloud saves. Their Steam release is the Windows exe, and run
+under Wine it ignores the mouse — its cursor stays put while clicks land
+elsewhere — while ScummVM reads only the data and so doesn't care about the
+exe's DRM.
 
 The choice (`offersSteamLaunchChoice`) is put to the user without naming
 engines: launching directly is quicker and more reliable, launching via Steam

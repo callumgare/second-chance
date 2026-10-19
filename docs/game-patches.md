@@ -72,9 +72,14 @@ patches, and the wrong one does nothing useful. The catalogue maps the wrapp's
 
 | `edition` | Applies to |
 | --- | --- |
-| `any` | every source |
+| `any` | `.disk`, `.herDownload` |
 | `cd` | `.disk` |
-| `digital-download` | `.herDownload`, `.steam` (Steam copies are digital builds, not pressed discs) |
+| `digital-download` | `.herDownload` |
+
+**No patch applies to a Steam build.** Steam ships its own current build of
+each game, and Her's patchers refuse it: Shadow Ranch's says "This program
+cannot update the installed version of …" and waits on that box until the
+automation times out.
 
 Castle Malloy and White Wolf of Icicle Creek each have both, so exactly one is
 picked per build. There is a unit test asserting precisely that.

@@ -34,7 +34,7 @@ struct GameInfoSteamTests {
     @Test("Only a game known to be DRM-free offers the launch choice")
     func launchChoice() throws {
         let byID = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
-        #expect(try #require(byID["haunted-mansion"]).offersSteamLaunchChoice)  // .no
+        #expect(try !#require(byID["haunted-mansion"]).offersSteamLaunchChoice)  // .no, but always ScummVM
         #expect(try #require(byID["shadow-ranch"]).offersSteamLaunchChoice)  // .no
         #expect(try !#require(byID["blue-moon"]).offersSteamLaunchChoice)  // DRM
         #expect(try !#require(byID["sea-of-darkness"]).offersSteamLaunchChoice)  // not worked out
@@ -44,15 +44,18 @@ struct GameInfoSteamTests {
     @Test("The engine follows the DRM and, for DRM-free games, the user's choice", arguments: [
         // (DRM, disc engine, choice, expected)
         (GameInfo.SteamDRM?.some(.yesLaunchViaSteamOnly), GameInfo.GameEngine.wine, GameInfo.SteamLaunchMode?.none, GameInfo.GameEngine.wineSteam),
-        (.yesLaunchWhenSteamRunning, .wine, nil, .wineSteamSilent),
-        (.no, .wine, .steam, .wineSteamSilent),
+        // Everything that needs Steam is launched by Steam.
+        (.yesLaunchWhenSteamRunning, .wine, nil, .wineSteam),
+        (.no, .wine, .steam, .wineSteam),
         (.no, .wine, .direct, .wine),
+        // ScummVM games run in ScummVM from Steam too, whatever the DRM or choice.
         (.no, .scummvm, .direct, .scummvm),
-        (.no, .scummvm, .steam, .wineSteamSilent),
-        (.no, .wine, nil, .wineSteamSilent),
+        (.no, .scummvm, .steam, .scummvm),
+        (.yesLaunchViaSteamOnly, .scummvm, nil, .scummvm),
+        (.no, .wine, nil, .wineSteam),
         // DRM not worked out: through Steam, which works whatever it is.
         (nil, .wine, nil, .wineSteam),
-        (nil, .scummvm, .direct, .wineSteam),
+        (nil, .scummvm, nil, .scummvm),
     ])
     func engine(drm: GameInfo.SteamDRM?, disc: GameInfo.GameEngine, choice: GameInfo.SteamLaunchMode?, expected: GameInfo.GameEngine) {
         let game = GameInfo(id: "x", title: "X", gameEngine: disc, steamDRM: drm,

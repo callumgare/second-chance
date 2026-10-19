@@ -172,16 +172,16 @@ struct SteamWrappBuilderTests {
         }
     }
 
-    @Test("Launching directly moves the game out of Steam and removes Steam; ScummVM runs the old games")
+    @Test("A ScummVM game is moved out of Steam, Steam is removed, and ScummVM runs it")
     func direct() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
-        let wrapp = try await build(game: "haunted-mansion", mode: "direct").result.get()
+        let wrapp = try await build(game: "haunted-mansion").result.get()
         let prefix = wrapp.appendingPathComponent("Contents/SharedSupport/prefix")
         let plist = try settings(wrapp)
         #expect(plist["GameEngine"] as? String == "scummvm")
         #expect(plist["GameExePath"] as? String == "/Program Files (x86)/Nancy Drew/Nancy Drew Message in a Haunted Mansion")
         #expect(plist["SteamGameId"] == nil)
-        #expect(plist["SteamLaunchMode"] as? String == "direct")
+        #expect(plist["SteamLaunchMode"] == nil)  // no choice offered
         #expect(FileManager.default.fileExists(atPath: prefix.appendingPathComponent("drive_c/Program Files (x86)/Nancy Drew/Nancy Drew Message in a Haunted Mansion/Game.exe").path))
         #expect(!FileManager.default.fileExists(atPath: prefix.appendingPathComponent(SteamClient.steamDirInPrefix).path))
     }
@@ -190,7 +190,7 @@ struct SteamWrappBuilderTests {
     func directChoiceViaSteam() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
         let plist = try settings(try await build(game: "shadow-ranch", mode: "steam").result.get())
-        #expect(plist["GameEngine"] as? String == "wine-steam-silent")
+        #expect(plist["GameEngine"] as? String == "wine-steam")
         #expect(plist["SteamLaunchMode"] as? String == "steam")
     }
 

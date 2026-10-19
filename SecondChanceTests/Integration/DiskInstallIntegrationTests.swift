@@ -285,6 +285,8 @@ struct DiskInstallIntegrationTests {
 /// failed one is counted here as well as recorded as an issue.
 final class GameOutcome: @unchecked Sendable {
     let slug: String
+    /// Which suite: `disk` or `steam`, so `sc` keeps one row per game per source.
+    let source: String
     let progress: ProgressFileWriter?
     let started = Date()
     /// Set once the test has run to its end without throwing.
@@ -292,12 +294,16 @@ final class GameOutcome: @unchecked Sendable {
     var puppeteerExit: Int32?
     /// Held back because the Mac was too busy to test the game fairly.
     var overloaded = false
+    /// Not tested, for a reason that isn't a failure (e.g. the Steam account
+    /// doesn't own the game).
+    var skipped: String?
     private var failedExpectations = 0
 
-    init(slug: String, progress: ProgressFileWriter?) {
+    init(slug: String, source: String = "disk", progress: ProgressFileWriter?) {
         self.slug = slug
+        self.source = source
         self.progress = progress
-        progress?.write(["event": "game", "slug": slug, "phase": "started"])
+        progress?.write(["event": "game", "source": source, "slug": slug, "phase": "started"])
     }
 
     func expect(_ condition: Bool, _ comment: Comment, sourceLocation: SourceLocation = #_sourceLocation) {
@@ -306,13 +312,15 @@ final class GameOutcome: @unchecked Sendable {
     }
 
     func phase(_ phase: String) {
-        progress?.write(["event": "game", "slug": slug, "phase": phase])
+        progress?.write(["event": "game", "source": source, "slug": slug, "phase": phase])
     }
 
     func finish() {
         let result: String
         if overloaded {
             result = "overloaded"
+        } else if skipped != nil {
+            result = "skipped"
         } else if let code = puppeteerExit, (3...5).contains(code) {
             // WrappPuppeteer is missing a TCC grant — not a regression.
             result = "permission"
@@ -320,10 +328,11 @@ final class GameOutcome: @unchecked Sendable {
             result = completed && failedExpectations == 0 ? "passed" : "failed"
         }
         var record: [String: Any] = [
-            "event": "game", "slug": slug, "phase": "finished", "result": result,
+            "event": "game", "source": source, "slug": slug, "phase": "finished", "result": result,
             "seconds": Date().timeIntervalSince(started),
         ]
         if let puppeteerExit { record["puppeteerExit"] = Int(puppeteerExit) }
+        if let skipped { record["message"] = skipped }
         progress?.write(record)
     }
 }

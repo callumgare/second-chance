@@ -170,8 +170,9 @@ class GameLauncher {
                 
                 // Steam would keep the Wine session alive, and its sign-in
                 // has to be saved and taken out of the wrapp on the way out.
-                // Briefly: the quit fallback kills everything after 15s.
-                self.steam?.finish(timeout: 10)
+                // Briefly: the quit fallback kills everything after 15s, and
+                // Steam has been seen to ignore -shutdown when it's stuck.
+                self.steam?.finish(timeout: 8)
                 self.logger.debug("[Cleanup/performCleanup] Calling WineUtilities.waitTillWineserverStopped...")
                 WineUtilities.waitTillWineserverStopped(at: self.config.appPath, customPrefixDir: self.config.winePrefix)
                 self.logger.debug("[Cleanup/performCleanup] WineUtilities.waitTillWineserverStopped returned")
@@ -245,7 +246,12 @@ class GameLauncher {
         if config.gameEngine.hasPrefix("wine-steam") {
             LogContext.enterStage("Starting Steam")
             do {
-                steam = try WrappSteam(config: config, status: { infoWindow?.updateMessage($0) })
+                let started = try WrappSteam(config: config, status: { infoWindow?.updateMessage($0) })
+                steam = started  // from here a quit can stop it
+                try started.waitUntilSignedIn(status: { infoWindow?.updateMessage($0) })
+            } catch WrappSteam.Failure.cancelled {
+                logger.notice("[Steam] Quit while waiting for Steam to sign in")
+                return -1
             } catch {
                 reportSteamFailure(error)
                 return -1

@@ -62,6 +62,10 @@ source is a case of `WrappSourceKind` with its own options type conforming to
 app's `INSTALLATION_SOURCE` and inputs. Adding the Her installer is a new case
 and a new type — the same shape as the app's `WrappBuildStrategy`.
 
+`sc test integration --source disk|steam|all` (comma-separated) picks which
+build sources' suites run; [testing.md](testing.md) has what the Steam one
+needs.
+
 `--from steam` builds any game on Steam that the signed-in account owns;
 `--steam-launch steam|direct` answers the launch question for a DRM-free one.
 It needs the shared Steam sign-in to exist already — a headless build can't

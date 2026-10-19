@@ -37,15 +37,19 @@ struct GamePatch: Codable, Identifiable, Hashable {
         case digitalDownload = "digital-download"
 
         /// Whether this edition covers a wrapp built from `source`.
+        ///
+        /// None of Her Interactive's patches cover a Steam copy: Steam ships
+        /// its own current build of each game, which the patchers refuse
+        /// ("This program cannot update the installed version of …").
         func matches(_ source: WrappSource) -> Bool {
+            if source == .steam { return false }
             switch self {
             case .any:
                 return true
             case .cd:
                 return source == .disk
             case .digitalDownload:
-                // Steam copies are digital builds, not pressed discs.
-                return source == .herDownload || source == .steam
+                return source == .herDownload
             }
         }
     }

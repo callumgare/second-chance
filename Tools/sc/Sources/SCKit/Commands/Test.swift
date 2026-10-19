@@ -29,7 +29,35 @@ struct IntegrationOptions: ParsableArguments {
     ))
     var ignoreLoad = false
 
+    @Option(help: ArgumentHelp(
+        "Which builds to test: disk, steam, or all — comma-separated. Default: disk.",
+        discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own; it always builds, whatever --refresh-wrapp says.",
+        valueName: "sources"
+    ))
+    var source = "disk"
+
     @OptionGroup var wrapps: WrappsDirOptions
+
+    /// The sources `--source` names, in their canonical order.
+    var sources: [WrappSourceKind] { (try? Self.parseSources(source)) ?? [.disk] }
+
+    func validate() throws { _ = try Self.parseSources(source) }
+
+    static func parseSources(_ value: String) throws -> [WrappSourceKind] {
+        let names = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        if names.contains("all") { return WrappSourceKind.allCases }
+        var sources = Set<WrappSourceKind>()
+        for name in names {
+            guard let source = WrappSourceKind(rawValue: name) else {
+                let known = WrappSourceKind.allCases.map(\.rawValue) + ["all"]
+                let guess = known.min { Games.distance(name, $0) < Games.distance(name, $1) }
+                throw ValidationError("Unknown source '\(name)'.\(guess.map { " Did you mean '\($0)'?" } ?? "") Sources: \(known.joined(separator: ", ")).")
+            }
+            sources.insert(source)
+        }
+        guard !sources.isEmpty else { throw ValidationError("Give at least one source: disk, steam or all.") }
+        return WrappSourceKind.allCases.filter(sources.contains)
+    }
 }
 
 struct ReportOptions: ParsableArguments {
@@ -61,7 +89,7 @@ struct TestAllCommand: AsyncParsableCommand {
         try await runner.xcode.ensureTestBuild(appBuild)
         let unit = try await runner.unit(stamp: stamp)
         let integrationRun = try await runner.integration(
-            games: games, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
+            games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
             ignoreLoad: integration.ignoreLoad, stamp: stamp
         )
         try await TestCommandSupport.finish([unit, integrationRun], stamp: stamp, policy: report.openReport, session: session)
@@ -115,7 +143,7 @@ struct TestIntegrationCommand: AsyncParsableCommand {
         let runner = TestRunner(session: session)
         try await runner.xcode.ensureTestBuild(appBuild)
         let run = try await runner.integration(
-            games: games, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
+            games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
             ignoreLoad: integration.ignoreLoad, stamp: stamp
         )
         try await TestCommandSupport.finish([run], stamp: stamp, policy: report.openReport, session: session)
