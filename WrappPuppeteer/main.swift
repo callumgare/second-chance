@@ -23,6 +23,7 @@ func printUsage() {
     Options:
         --timeout <seconds>    Maximum runtime (default: 60)
         --debug                Launch the wrapp in debug mode
+        --parent-pid <pid>     Stop, killing the wrapp, once this process exits
         --analyze <path>       Analyze a screenshot for quit buttons (no launch)
         --help                 Show this help
 
@@ -55,6 +56,11 @@ while i < CommandLine.arguments.count {
         }
     case "--debug":
         options.debugMode = true
+    case "--parent-pid":
+        i += 1
+        if i < CommandLine.arguments.count, let pid = Int32(CommandLine.arguments[i]) {
+            ProcessCleanup.watchParent(pid)
+        }
     case "--analyze":
         i += 1
         if i < CommandLine.arguments.count {

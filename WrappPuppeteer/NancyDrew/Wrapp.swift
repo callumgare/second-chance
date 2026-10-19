@@ -32,14 +32,6 @@ enum WrappEngine {
         self == .scummvm ? "scummvm" : gameExeName
     }
 
-    /// Engine processes that can outlive the wrapp and must be killed with it.
-    var helperPkillArguments: [[String]] {
-        switch self {
-        case .wine: return [["-9", "-f", "wine"]]
-        case .scummvm: return [["-9", "scummvm"]]
-        case .other: return []
-        }
-    }
 
     /// ScummVM goes full screen without reliably becoming the active app, so
     /// it's judged by its window, and activating it would fight its own
@@ -76,6 +68,29 @@ struct Wrapp {
             return try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] ?? [:]
         } catch {
             return [:]
+        }
+    }
+}
+
+extension Wrapp {
+    /// Commands that end the engine processes that can outlive the wrapp
+    /// (see `ProcessCleanup.install`). For Wine, first the wrapp's own
+    /// `wineserver -k`, which ends everything in its prefix — Steam included —
+    /// whatever it's called: under Wine 10 a Windows program's command line
+    /// is its Windows path (`C:\Program Files (x86)\Steam\steam.exe`), which
+    /// the old `pkill -f wine` never matched.
+    var cleanupCommands: [[String]] {
+        switch engine {
+        case .wine:
+            let wineserver = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/SharedSupport/wine/bin/wineserver").path
+            return [
+                ["/usr/bin/env", "WINEPREFIX=\(winePrefix.path)", wineserver, "-k"],
+                ["/usr/bin/pkill", "-9", "-f", "wine"],
+            ]
+        case .scummvm:
+            return [["/usr/bin/pkill", "-9", "scummvm"]]
+        case .other:
+            return []
         }
     }
 }

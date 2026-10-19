@@ -356,7 +356,9 @@ enum AppPuppetRunner {
         let launchTime = Date()
         let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
             appBundle: appBundle,
-            arguments: [wrappURL.path, "--timeout", String(Int(timeout))]
+            // So a stopped or crashed test run takes the puppeteer, and the
+            // wrapp it's driving, down with it.
+            arguments: [wrappURL.path, "--timeout", String(Int(timeout)), "--parent-pid", String(getpid())]
         )
 
         var effectiveExitCode = observedExitCode

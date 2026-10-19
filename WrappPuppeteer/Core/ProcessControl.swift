@@ -16,7 +16,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 // nothing in the handler allocates.
 private var cleanupAppPid: Int32 = 0
 private var cleanupHelperPid: Int32 = 0
-private var cleanupPkillArgvs: [[UnsafeMutablePointer<CChar>?]] = []
+private var cleanupCommandArgvs: [[UnsafeMutablePointer<CChar>?]] = []
 
 private func handleTermination(_ sig: Int32) {
     let message = "\n⚠️  Received termination signal - killing processes under test...\n"
@@ -25,9 +25,10 @@ private func handleTermination(_ sig: Int32) {
     if cleanupAppPid > 0 { kill(cleanupAppPid, SIGKILL) }
     if cleanupHelperPid > 0 { kill(cleanupHelperPid, SIGKILL) }
 
-    for index in cleanupPkillArgvs.indices {
+    for index in cleanupCommandArgvs.indices {
+        guard let path = cleanupCommandArgvs[index].first ?? nil else { continue }
         var pid: pid_t = 0
-        posix_spawn(&pid, "/usr/bin/pkill", nil, nil, &cleanupPkillArgvs[index], nil)
+        posix_spawn(&pid, path, nil, nil, &cleanupCommandArgvs[index], nil)
     }
 
     _exit(143)
@@ -36,17 +37,35 @@ private func handleTermination(_ sig: Int32) {
 /// Kills the app under test (and anything it spawned) if WrappPuppeteer is
 /// interrupted, so an aborted run doesn't leave it holding the screen.
 enum ProcessCleanup {
-    /// Install SIGINT/SIGTERM/SIGHUP handlers. `pkillArguments` are extra
-    /// `pkill` invocations for helper processes that outlive the app, e.g.
-    /// `[["-9", "-f", "wine"]]`.
-    static func install(pkillArguments: [[String]]) {
-        cleanupPkillArgvs = pkillArguments.map { args in
-            (["pkill"] + args).map { strdup($0) } + [nil]
+    /// Install SIGINT/SIGTERM/SIGHUP handlers. `cleanupCommands` are run
+    /// after the app is killed, for helper processes that outlive it: each a
+    /// whole argv with an absolute path first, e.g. `["/usr/bin/pkill", "-9", "scummvm"]`.
+    static func install(cleanupCommands: [[String]]) {
+        cleanupCommandArgvs = cleanupCommands.map { argv in
+            argv.map { strdup($0) } + [nil]
         }
         signal(SIGINT, handleTermination)
         signal(SIGTERM, handleTermination)
         signal(SIGHUP, handleTermination)
         logger.notice("  → Signal handlers installed")
+    }
+
+    /// Clean up as for a termination signal once `pid` has gone. Whoever
+    /// starts WrappPuppeteer through LaunchServices isn't its parent —
+    /// launchd is — so without this, stopping or crashing the run that
+    /// started it would leave it, and the app under test, running.
+    static func watchParent(_ pid: Int32) {
+        let watcher = Thread {
+            // EPERM: alive, just not ours to signal.
+            while kill(pid, 0) == 0 || errno == EPERM {
+                Thread.sleep(forTimeInterval: 1)
+            }
+            logger.warning("The process that started WrappPuppeteer (pid \(pid)) has gone; stopping what it was testing")
+            handleTermination(SIGHUP)
+        }
+        watcher.name = "parent watcher"
+        watcher.start()
+        logger.notice("  → Watching the process that started WrappPuppeteer (pid \(pid))")
     }
 
     /// Record the processes to kill. `helperPid` is a second process that
@@ -188,15 +207,19 @@ enum ProcessControl {
         return appRunning || helperRunning
     }
 
-    /// Force-terminate the app, then run each `pkill` invocation to catch
-    /// helper processes that outlive it.
-    static func forceQuit(_ app: NSRunningApplication, pkillArguments: [[String]] = []) {
+    /// How long a force-quit app gets to clean up before SIGKILL. A wrapp
+    /// stops its Steam and Wine on the way out, and gives itself 15 s.
+    static let forceQuitGrace: TimeInterval = 20
+
+    /// Force-terminate the app, then run each cleanup command (see
+    /// `ProcessCleanup.install`) to catch helper processes that outlive it.
+    static func forceQuit(_ app: NSRunningApplication, cleanupCommands: [[String]] = []) {
         logger.warning("⚠️  Force quitting \(app.localizedName ?? "app")...")
         // forceTerminate doesn't always end the process (a wrapp once outlived
         // it by an hour), so check, and kill it outright if it is still there.
         let pid = app.processIdentifier
         app.forceTerminate()
-        if !waitForExit(pid, timeout: 3) {
+        if !waitForExit(pid, timeout: forceQuitGrace) {
             logger.warning("⚠️  PID \(pid) survived forceTerminate — sending SIGKILL")
             kill(pid, SIGKILL)
             if !waitForExit(pid, timeout: 3) {
@@ -204,15 +227,16 @@ enum ProcessControl {
             }
         }
 
-        for arguments in pkillArguments {
-            let pkill = Process()
-            pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-            pkill.arguments = arguments
+        for argv in cleanupCommands {
+            guard let path = argv.first else { continue }
+            let command = Process()
+            command.executableURL = URL(fileURLWithPath: path)
+            command.arguments = Array(argv.dropFirst())
             do {
-                try pkill.run()
-                pkill.waitUntilExit()
+                try command.run()
+                command.waitUntilExit()
             } catch {
-                logger.warning("⚠️  pkill \(arguments.joined(separator: " ")) failed: \(error)")
+                logger.warning("⚠️  \(argv.joined(separator: " ")) failed: \(error)")
             }
         }
     }

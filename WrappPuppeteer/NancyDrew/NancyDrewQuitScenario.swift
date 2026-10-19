@@ -50,7 +50,7 @@ struct NancyDrewQuitScenario {
         }
         logger.notice("   Max runtime: \(Int(options.maxRuntime))s")
 
-        ProcessCleanup.install(pkillArguments: wrapp.engine.helperPkillArguments)
+        ProcessCleanup.install(cleanupCommands: wrapp.cleanupCommands)
 
         guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : []) else {
             return .failed("Failed to launch game")
@@ -124,7 +124,7 @@ struct NancyDrewQuitScenario {
     }
 
     private func forceQuit(_ app: NSRunningApplication) {
-        ProcessControl.forceQuit(app, pkillArguments: wrapp.engine.helperPkillArguments)
+        ProcessControl.forceQuit(app, cleanupCommands: wrapp.cleanupCommands)
     }
 
     /// Wait for the game's process, then its window. Returns the game
