@@ -168,6 +168,32 @@ nonisolated final class SteamSessionStore: @unchecked Sendable {
         return nil
     }
 
+    /// Take the session out of `prefix`: the files and the registry value
+    /// naming the account. For a wrapp about to ship — its sign-in comes from
+    /// the store when it runs. Wine must not be running, as it rewrites
+    /// user.reg from memory.
+    static func strip(from prefix: URL) {
+        for file in files {
+            try? FileManager.default.removeItem(at: prefix.appendingPathComponent(file))
+        }
+        let userReg = prefix.appendingPathComponent("user.reg")
+        guard let text = try? String(contentsOf: userReg, encoding: .utf8) else { return }
+        var inSection = false
+        let kept = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).filter { line in
+            if line.hasPrefix("[") {
+                inSection = line.hasPrefix(registrySection + " ") || line == registrySection
+                return true
+            }
+            return !(inSection && line.hasPrefix("\"\(registryValue)\"="))
+        }.joined(separator: "\n")
+        guard kept != text else { return }
+        do {
+            try kept.write(to: userReg, atomically: true, encoding: .utf8)
+        } catch {
+            logger.warning("Couldn't remove \(registryValue) from \(userReg.path): \(error.localizedDescription)")
+        }
+    }
+
     /// A `.reg` file setting that one value. user.reg and `.reg` files quote
     /// and escape values the same way, so the line carries across unchanged.
     static func fragment(registryLine: String) -> String {

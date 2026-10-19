@@ -4,12 +4,13 @@ import GameCatalog
 
 // MARK: - Sources
 
-/// Where a wrapp is built from. Only `disk` exists today; Her Interactive
-/// downloads and Steam become new cases, each with its own options type
+/// Where a wrapp is built from. Each source has its own options type
 /// conforming to `WrappSourceInput` — the same shape as the app's
-/// `WrappBuildStrategy`, where a new source is a new builder.
+/// `WrappBuildStrategy`, where a new source is a new builder. Her Interactive
+/// downloads would be the next case.
 enum WrappSourceKind: String, CaseIterable, ExpressibleByArgument, Sendable {
     case disk
+    case steam
 }
 
 /// What a source contributes to a headless build: the app's
@@ -77,6 +78,43 @@ struct DiskSourceOptions: ParsableArguments, WrappSourceInput {
     }
 }
 
+/// `--from steam`: the game through Steam, signed in with the shared session
+/// (docs/steam.md). A headless build can't sign in, so the session has to
+/// exist already — build one game from the app first.
+struct SteamSourceOptions: ParsableArguments, WrappSourceInput {
+    @Option(help: ArgumentHelp(
+        "For a DRM-free Steam game: start it via steam (cloud saves) or direct (quicker). Default: direct.",
+        valueName: "mode"
+    ))
+    var steamLaunch: SteamLaunch?
+
+    enum SteamLaunch: String, CaseIterable, ExpressibleByArgument, Sendable {
+        case steam
+        case direct
+    }
+
+    func availableGames(repo: Repo) -> [CatalogGame] {
+        Catalog.games.filter(\.isOnSteam)
+    }
+
+    var availabilityDescription: String { "Steam" }
+
+    func environment(for game: CatalogGame, repo: Repo) throws -> [String: String] {
+        guard game.isOnSteam else {
+            throw SCError("\(game.title) isn't on Steam.",
+                          hints: ["Games on Steam: \(availableGames(repo: repo).map(\.slug).joined(separator: ", "))"])
+        }
+        var env = ["INSTALLATION_SOURCE": "steam", "STEAM_GAME_SLUG": game.slug]
+        if let steamLaunch {
+            guard game.offersSteamLaunchChoice else {
+                throw SCError("\(game.title) has no launch choice: its DRM decides how it starts.")
+            }
+            env["STEAM_LAUNCH_MODE"] = steamLaunch.rawValue
+        }
+        return env
+    }
+}
+
 enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
     case `continue`
     case cancel
@@ -84,11 +122,14 @@ enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
 
 /// Everything about what a wrapp is built from.
 struct WrappSourceOptions: ParsableArguments {
-    @Option(help: "What to build the wrapp from. Only disk is supported so far.")
+    @Option(help: "What to build the wrapp from: disk or steam.")
     var from: WrappSourceKind = .disk
 
     @OptionGroup(title: "Disk source")
     var disk: DiskSourceOptions
+
+    @OptionGroup(title: "Steam source")
+    var steam: SteamSourceOptions
 
     @Option(help: "What to do when an official game patch fails to apply: continue or cancel. Default: continue.")
     var patchFailure: PatchFailurePolicy?
@@ -96,6 +137,7 @@ struct WrappSourceOptions: ParsableArguments {
     var input: WrappSourceInput {
         switch from {
         case .disk: disk
+        case .steam: steam
         }
     }
 }

@@ -76,9 +76,9 @@ The division that keeps this from re-tangling:
 - **The helper never calls a builder.** One direction only.
 - **Source-specific work stays out of the helper.** Disk layout and CD-ROM
   mounting live in `DiskWrappBuilder` because no other source has disks.
-  (`WrappBuildHelper.installSteamClient` is the one exception in waiting: it
-  sits in the helper but currently has no callers, since `SteamWrappBuilder`
-  throws before it would be used.)
+  Driving Steam lives in `Shared/Steam/` and `SteamWrappBuilder`
+  ([steam.md](steam.md)); the helper only installs the Steam client
+  (`installSteamClient`), as it installs Wine's other pieces.
 - **Resources created and consumed inside one function** are cleaned up inside
   that function, so builders never see them.
 
@@ -171,7 +171,10 @@ terminates the process, which is what makes the ViewModel safe to instantiate in
 a unit test.
 
 Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
-`OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`.
+`OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`, and `steam` needs
+`STEAM_GAME_SLUG` (plus `STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game,
+default `direct`) and a saved Steam sign-in, since a headless build can't sign
+in — it fails with `steamSignInRequired` rather than wait.
 
 An installer or patcher that prints Wine's `nodrv_CreateWindow` error found
 no desktop to open its windows on, so `runWine` throws `WineError.noDisplay`
@@ -262,7 +265,8 @@ game's own process name — so the target can be renamed without touching it.
 5. Add any new prompt to `WrappBuildInput` with an env-var override, or headless
    runs will hang on it.
 
-Do **not** ship a partial source. `SteamWrappBuilder` throws
-`.steamNotFullyImplemented` *before* creating anything, precisely so a failed
-attempt leaves no temp wrapp behind; an earlier version built a wrapp and
-installed the Steam client before giving up, and leaked it every time.
+Do **not** ship a partial source. A builder that creates a temp wrapp and then
+gives up has to remove it: an early Steam builder installed the Steam client
+and then threw, leaking the wrapp every time. `SteamWrappBuilder` also stops
+Steam on its failure path, as anything left running would hold the Wine
+session (and the Steam lock) open.

@@ -363,7 +363,7 @@ class GameInstallerRunner {
     ///
     /// A failing patch never fails the build on its own: it routes through
     /// `confirmPatchFailure`, which continues by default.
-    private func applyGamePatches(
+    func applyGamePatches(
         wrappPath: URL,
         gameInfo: GameInfo,
         gameInstallDir: URL,

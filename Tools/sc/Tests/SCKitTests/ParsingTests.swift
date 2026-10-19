@@ -31,7 +31,8 @@ struct ParsingTests {
 
     @Test("Invalid values are rejected", arguments: [
         ["wrapp", "run", "stay-tuned", "--refresh-wrapp", "sometimes"],
-        ["wrapp", "build", "stay-tuned", "--from", "steam"],
+        ["wrapp", "build", "stay-tuned", "--from", "stam"],
+        ["wrapp", "build", "shadow-ranch", "--from", "steam", "--steam-launch", "sometimes"],
         ["app", "run", "--debug", "bogus"],
         ["app", "run", "--debug", "settings-dialog"],
         ["wrapp", "run", "x", "--debug", "wine"],

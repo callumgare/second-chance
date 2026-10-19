@@ -56,11 +56,17 @@ app at all — launching a wrapp as it is doesn't need it.
 is the only place xcodebuild is run from; see AGENTS.md for why the flag is
 load-bearing.
 
-**Sources.** `wrapp build --from disk` is the only source so far. Each source is
-a case of `WrappSourceKind` with its own options type conforming to
+**Sources.** `wrapp build --from disk` (the default) or `--from steam`. Each
+source is a case of `WrappSourceKind` with its own options type conforming to
 `WrappSourceInput` (`Support/Wrapps.swift`), which turns the options into the
-app's `INSTALLATION_SOURCE` and inputs. Adding the Her installer or Steam is a
-new case and a new type — the same shape as the app's `WrappBuildStrategy`.
+app's `INSTALLATION_SOURCE` and inputs. Adding the Her installer is a new case
+and a new type — the same shape as the app's `WrappBuildStrategy`.
+
+`--from steam` builds any game on Steam that the signed-in account owns;
+`--steam-launch steam|direct` answers the launch question for a DRM-free one.
+It needs the shared Steam sign-in to exist already — a headless build can't
+show Steam's sign-in window — so sign in once by building a Steam game from
+the app. [steam.md](steam.md) has the details.
 
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`

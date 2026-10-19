@@ -304,6 +304,23 @@ struct GameTests {
         #expect(throws: SCError.self) { try source.environment(for: oneDisk, repo: repo) }
     }
 
+    @Test("The Steam source names the game, and the launch choice only where there is one")
+    func steamSource() throws {
+        let repo = Repo(root: FileManager.default.temporaryDirectory)
+        let choice = try #require(Catalog.game(slug: "shadow-ranch"))  // DRM-free
+        let drm = try #require(Catalog.game(slug: "thornton-hall"))
+        let notOnSteam = try #require(Catalog.game(slug: "stay-tuned"))
+
+        let plain = try SteamSourceOptions.parse([])
+        #expect(try plain.environment(for: drm, repo: repo) == ["INSTALLATION_SOURCE": "steam", "STEAM_GAME_SLUG": "thornton-hall"])
+        #expect(throws: SCError.self) { try plain.environment(for: notOnSteam, repo: repo) }
+        #expect(!plain.availableGames(repo: repo).contains(notOnSteam))
+
+        let viaSteam = try SteamSourceOptions.parse(["--steam-launch", "steam"])
+        #expect(try viaSteam.environment(for: choice, repo: repo)["STEAM_LAUNCH_MODE"] == "steam")
+        #expect(throws: SCError.self) { try viaSteam.environment(for: drm, repo: repo) }
+    }
+
     @Test("Progress records decode, and junk is skipped")
     func progressRecords() {
         let record = ProgressRecord.decode(#"{"event":"game","slug":"stay-tuned","phase":"finished","result":"permission","seconds":3.5,"puppeteerExit":4}"#)

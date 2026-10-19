@@ -184,6 +184,20 @@ struct SteamSessionStoreTests {
         #expect(!store.hasSession)
     }
 
+    @Test("Stripping a prefix leaves no sign-in and nothing naming the account")
+    func strip() throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let source = try prefix("a", token: "t", user: "someone")
+        SteamSessionStore.strip(from: source)
+        for file in SteamSessionStore.files {
+            #expect(!FileManager.default.fileExists(atPath: source.appendingPathComponent(file).path))
+        }
+        let reg = try String(contentsOf: source.appendingPathComponent("user.reg"), encoding: .utf8)
+        #expect(!reg.contains("someone"))
+        #expect(reg.contains(#""Language"="english""#))  // the rest of the key stays
+        #expect(reg.contains(#""AutoLoginUser"="not this one""#))  // another key's value of the same name
+    }
+
     @Test("Without a session, restore does nothing; signing out removes it")
     func signOut() throws {
         defer { try? FileManager.default.removeItem(at: base) }

@@ -115,6 +115,26 @@ struct SecondChanceApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
+            CommandGroup(after: .appSettings) {
+                Button("Sign Out of Steam") { Self.signOutOfSteam() }
+            }
         }
+    }
+
+    /// Forget the Steam sign-in every wrapp shares (docs/steam.md). The next
+    /// Steam build, or Steam wrapp, asks for it again.
+    private static func signOutOfSteam() {
+        let alert = NSAlert()
+        do {
+            try SteamSessionStore().signOut()
+            alert.messageText = "Signed out of Steam"
+            alert.informativeText = "Your games will ask you to sign in to Steam again the next time they need it."
+        } catch {
+            logger.error("Couldn't sign out of Steam: \(error.localizedDescription)")
+            alert.messageText = "Couldn't sign out of Steam"
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+        }
+        alert.runModal()
     }
 }

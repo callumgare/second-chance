@@ -184,7 +184,9 @@ class WrappBuildHelper {
         gameInfo: GameInfo,
         gameExePath: String,
         installerDir: String,
-        steamID: String? = nil
+        steamID: String? = nil,
+        gameEngine: GameInfo.GameEngine? = nil,
+        steamLaunchMode: GameInfo.SteamLaunchMode? = nil
     ) throws {
         Task { await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Updating configuration files"))) }
 
@@ -222,7 +224,9 @@ class WrappBuildHelper {
             gameInfo: gameInfo,
             gameExePath: gameExePath,
             installerDir: installerDir,
-            steamID: steamID
+            steamID: steamID,
+            gameEngine: gameEngine ?? gameInfo.gameEngine,
+            steamLaunchMode: steamLaunchMode
         )
 
         // Remap documents folder to point to a namespaced dir in the user's Application Support
@@ -255,7 +259,9 @@ class WrappBuildHelper {
         gameInfo: GameInfo,
         gameExePath: String,
         installerDir: String,
-        steamID: String?
+        steamID: String?,
+        gameEngine engine: GameInfo.GameEngine,
+        steamLaunchMode: GameInfo.SteamLaunchMode?
     ) throws {
         let resourcesPath = wrappPath.appendingPathComponent("Contents/Resources")
         let appSettingsPath = resourcesPath.appendingPathComponent("AppSettings.plist")
@@ -267,7 +273,7 @@ class WrappBuildHelper {
 
         // Convert GameEngine enum to string for config
         let gameEngine: String
-        switch gameInfo.gameEngine {
+        switch engine {
         case .wine:
             gameEngine = "wine"
         case .scummvm:
@@ -289,6 +295,9 @@ class WrappBuildHelper {
         // Add Steam ID if present
         if let steamID = steamID {
             settings["SteamGameId"] = steamID
+        }
+        if let steamLaunchMode {
+            settings["SteamLaunchMode"] = steamLaunchMode.rawValue
         }
 
         // Write plist
@@ -402,6 +411,29 @@ class WrappBuildHelper {
 
     // MARK: - Steam Client
 
+    static let steamInstallerURL = "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe"
+
+    /// Valve's Steam installer, downloaded once into the caches directory.
+    /// It only lays down a bootstrapper that updates itself on first start,
+    /// so an old copy is as good as a new one.
+    func steamInstaller() async throws -> URL {
+        let cached = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/SteamSetup.exe")
+        if fileManager.fileExists(atPath: cached.path) { return cached }
+        guard let url = URL(string: Self.steamInstallerURL) else {
+            throw WrappBuildError.internalError("Bad Steam installer URL: \(Self.steamInstallerURL)")
+        }
+        logger.notice("Downloading the Steam installer from \(url.absoluteString)")
+        let (download, response) = try await URLSession.shared.download(from: url)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw WrappBuildError.internalError("Couldn't download the Steam installer (HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0))")
+        }
+        try fileManager.createDirectory(at: cached.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? fileManager.removeItem(at: cached)
+        try fileManager.moveItem(at: download, to: cached)
+        return cached
+    }
+
     /// Install the Steam client in the wrapp (used by SteamWrappBuilder).
     func installSteamClient(in wrappPath: URL) async throws {
         // Check cache first
@@ -415,8 +447,12 @@ class WrappBuildHelper {
         let wine = WineEnvironment(appPath: wrappPath)
         _ = wine.stopWineserver()
 
-        // Install Steam via winetricks
-        try await wineManager.installWinetrick("steam", at: wrappPath)
+        // Valve's installer, run silently. Not `winetricks steam`: that first
+        // installs Microsoft's core fonts (for a Wine bug that crashed Steam's
+        // web helper without them), which needs cabextract, which isn't
+        // bundled — and Steam signs in fine under the bundled Wine without them.
+        let installer = try await steamInstaller()
+        try await wine.runWine(executable: "wine", arguments: [installer.path, "/S"], timeout: 300)
 
         // Save to cache
         try cacheManager.saveCache(wrappPath: wrappPath, stage: .steamClientInstalled)

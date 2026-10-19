@@ -204,7 +204,9 @@ direct assignment.
 
 - **Non-interactive mode**: `NON_INTERACTIVE=true` plus `INSTALLATION_SOURCE`
   (`disk` | `her-download` | `steam`) and `OUTPUT_PATH`; `disk` also needs
-  `DISK_1_PATH` (and optionally `DISK_2_PATH`). `HER_INSTALLER_PATH`,
+  `DISK_1_PATH` (and optionally `DISK_2_PATH`), and `steam` needs
+  `STEAM_GAME_SLUG` (`STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game) and
+  a saved Steam sign-in ([docs/steam.md](docs/steam.md)). `HER_INSTALLER_PATH`,
   `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`, `PATCH_FAILURE_POLICY` and
   `EXPECTED_GAME_SLUG` (fail if the disc is another game) are read by
   `WrappBuildInput` when the corresponding prompt would appear. **`CLIBuilder`
@@ -397,13 +399,13 @@ as the Control-click bypass no longer works.
 
 ## Things Currently In Flux
 
-- **Steam is a deliberate stub.** `SteamWrappBuilder.build` throws
-  `WrappBuildError.steamNotFullyImplemented` *before* creating anything, so a
-  failed attempt leaves no temp wrapp. Implementing it means the whole flow —
-  install the Steam client into the wrapp, sign in, install the game, then
-  locate and configure it — not a partial version. The pieces it builds on
-  (the shared sign-in, driving Steam, reading its files) are in `Shared/Steam/`
-  and described in [docs/steam.md](docs/steam.md).
+- **Steam builds, but only DRM-free games launched directly run yet.**
+  `SteamWrappBuilder` installs and configures any game on Steam the account
+  owns, but the wrapp's `wine-steam` / `wine-steam-silent` launch path still
+  exits 1 (`WrappTemplate/main.swift`), so a wrapp that needs Steam running
+  can't start its game. The Steam option on the welcome screen stays behind
+  the debug setting until it can. [docs/steam.md](docs/steam.md) has the
+  rest.
 - **Her download works end-to-end** through the same helpers as disk (it signs
   and publishes the same events), but has far less real-world mileage than the
   disk path.

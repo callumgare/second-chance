@@ -9,7 +9,18 @@ import Foundation
 
 enum WrappBuildError: LocalizedError, Equatable {
     case unsupportedEngine
-    case steamNotFullyImplemented
+    /// The signed-in Steam account doesn't own the game.
+    case steamGameNotOwned(title: String)
+    /// Steam needs someone to sign in, and nobody can: a headless build
+    /// with no saved session.
+    case steamSignInRequired
+    /// Steam neither signed in nor asked for credentials in time, or nobody
+    /// signed in to the window it showed.
+    case steamSignInTimedOut
+    /// Steam's own install of the game failed.
+    case steamInstallFailed(reason: String)
+    /// Another wrapp, or another build, is running Steam.
+    case steamInUse(by: String?)
     case installerNotFound
     case gameExecutableNotFound
     case userCancelled
@@ -32,8 +43,16 @@ enum WrappBuildError: LocalizedError, Equatable {
         switch self {
         case .unsupportedEngine:
             return "Unsupported game engine"
-        case .steamNotFullyImplemented:
-            return "Steam installation not fully implemented"
+        case .steamGameNotOwned(let title):
+            return "Your Steam account doesn't own \(title)"
+        case .steamSignInRequired:
+            return "Steam needs you to sign in, which a headless build can't do. Build once from the app to sign in."
+        case .steamSignInTimedOut:
+            return "Steam didn't sign in in time"
+        case .steamInstallFailed(let reason):
+            return "Steam couldn't install the game: \(reason)"
+        case .steamInUse(let holder):
+            return "Another game is using Steam\(holder.map { " (\($0))" } ?? ""). Quit it and try again."
         case .installerNotFound:
             return "Could not find game installer executable"
         case .gameExecutableNotFound:

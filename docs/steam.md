@@ -6,9 +6,50 @@ sign-in window (with QR sign-in) means Second Chance never handles a password.
 The parts that drive it live in `Shared/Steam/`, compiled into the app, the
 wrapp and WrappPuppeteer alike.
 
-**The building blocks below are in place; the Steam builder and the wrapp's
-Steam launch path that use them are not yet** — `SteamWrappBuilder` still
-throws `steamNotFullyImplemented` (see AGENTS.md, "Things Currently In Flux").
+**Building a Steam wrapp works; a wrapp that has to start Steam to run its
+game doesn't yet** — the wrapp's `wine-steam*` launch path is still to come
+(AGENTS.md, "Things Currently In Flux"). A DRM-free game built to launch
+directly runs today.
+
+## Building
+
+`SteamWrappBuilder`, in order:
+
+1. **Pick the game** (`WrappBuildInput.getSteamGame`, `STEAM_GAME_SLUG`) and,
+   for a DRM-free one, how it launches (`getSteamLaunchMode`,
+   `STEAM_LAUNCH_MODE`). The engine follows (`engineRouted`).
+2. **Take the Steam lock**, or fail with `steamInUse` naming who has it.
+3. **Make the wrapp and install the Steam client into it** — the template,
+   the cached prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
+   `~/Library/Caches/SecondChance/`). Not `winetricks steam`: it installs
+   Microsoft's core fonts first, which needs `cabextract`, which isn't
+   bundled, and Steam doesn't need them under the bundled Wine. Then lay the
+   cached updated client
+   over it (`SteamClientCache`, `~/Library/Caches/SecondChance/steam-client`),
+   so Steam's own update (most of a gigabyte) is downloaded once, not per
+   build. The cache leaves out the account's sign-in, licences, settings and
+   games.
+4. **Sign in**: restore the shared session, queue the game's install, start
+   Steam silently. With no session, or one Steam rejects, the GUI says to
+   sign in in Steam's window (QR or password) and waits up to 30 minutes; a
+   headless build fails with `steamSignInRequired` instead.
+5. **Check ownership** (`steamGameNotOwned` otherwise), then **wait for the
+   install**, showing Steam's phase — "Downloading 397 MB through Steam",
+   "Checking the download", "Finishing the install".
+6. **Stop Steam, save the session, and take the sign-in out of the wrapp.**
+   The build runs Steam inside the wrapp's own prefix, so without this the
+   finished `.app` would carry the account's token, and anyone given a copy
+   could use the account. A wrapp gets the sign-in from the shared store when
+   it runs, and on a Mac without one asks for it once.
+7. **Configure.** A game that runs without Steam is moved out of
+   `steamapps/common/` into `Program Files (x86)/Nancy Drew/`, and the Steam
+   client is deleted; otherwise its exe stays in Steam's library and
+   `AppSettings.plist` gets `SteamGameId`. `SteamLaunchMode` records the
+   user's choice. Patches for digital editions apply as for a Her download.
+
+Steam is stopped on the failure path too, and the session saved if it signed
+in, so a failed build neither leaves Steam running nor loses a refreshed
+sign-in. `./sc wrapp build <slug> --from steam` runs the whole thing headless.
 
 ## Which games, and how they launch
 
@@ -23,7 +64,7 @@ The engine a Steam wrapp uses (`GameInfo.steamEngine(launchMode:)`) follows
 the game's `steamDRM`:
 
 | `steamDRM` | Choice offered | Engine | Starts by |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `.yesLaunchViaSteamOnly` | none | `.wineSteam` | `steam.exe -applaunch <id>` |
 | `.yesLaunchWhenSteamRunning` | none | `.wineSteamSilent` | Steam `-silent`, then the exe |
 | `.no` | "via Steam" | `.wineSteamSilent` | as above |
@@ -47,7 +88,7 @@ A remembered sign-in is exactly these, found by trying subsets of them in a
 Steam that had never signed in:
 
 | What | Where, in the prefix |
-|---|---|
+| --- | --- |
 | The remembered accounts | `drive_c/Program Files (x86)/Steam/config/loginusers.vdf` |
 | Steam's config (the token is rejected without it) | `drive_c/Program Files (x86)/Steam/config/config.vdf` |
 | The token (a JWT, valid for months) | `drive_c/users/crossover/AppData/Local/Steam/local.vdf` |

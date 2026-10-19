@@ -31,6 +31,8 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
 /// | `getDisk2Path(gameInfo:)`     | `DISK_2_PATH`                           | NSOpenPanel (disk/ISO)         |
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe)             |
+/// | `getSteamGame(from:)`         | `STEAM_GAME_SLUG`                       | NSAlert with a game menu       |
+/// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
 /// | `requestVolumeAccess()`       | — (skipped when paths env-supplied)     | NSOpenPanel grant-access       |
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
@@ -107,6 +109,65 @@ class WrappBuildInput {
         return url
     }
 
+    /// The game to build from Steam: one of the games on Steam.
+    @MainActor
+    func getSteamGame(from games: [GameInfo]) async throws -> GameInfo {
+        let onSteam = games.filter(\.isOnSteam).sorted { $0.title < $1.title }
+        if let slug = environment["STEAM_GAME_SLUG"] {
+            guard let game = onSteam.first(where: { $0.id == slug }) else {
+                throw WrappBuildError.invalidPath("STEAM_GAME_SLUG \(slug) isn't a game on Steam")
+            }
+            return game
+        }
+        if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("STEAM_GAME_SLUG") }
+
+        let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
+        menu.addItems(withTitles: onSteam.map { "Nancy Drew: \($0.title)" })
+        let alert = NSAlert()
+        alert.messageText = "Which game do you want from Steam?"
+        alert.informativeText = "Second Chance installs it through Steam, with your Steam account. It needs to be a game you own."
+        alert.accessoryView = menu
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            throw WrappBuildError.userCancelledBeforeStart
+        }
+        return onSteam[menu.indexOfSelectedItem]
+    }
+
+    /// How a DRM-free Steam game should start. Only asked when the game
+    /// offers the choice; the engine behind each answer is not the user's
+    /// concern, so the question is about what they'll notice.
+    @MainActor
+    func getSteamLaunchMode(for game: GameInfo) async throws -> GameInfo.SteamLaunchMode {
+        if let value = environment["STEAM_LAUNCH_MODE"] {
+            guard let mode = GameInfo.SteamLaunchMode(rawValue: value.lowercased()) else {
+                throw WrappBuildError.invalidPath("STEAM_LAUNCH_MODE must be steam or direct, not \(value)")
+            }
+            return mode
+        }
+        if isHeadlessRun { return .direct }
+
+        let alert = NSAlert()
+        alert.messageText = "How should \(game.title) start?"
+        alert.informativeText = """
+        Launch directly: starts faster and is more reliable, but saves stay on this Mac.
+
+        Launch via Steam: keeps your saves in Steam Cloud, but starts slower.
+        """
+        alert.addButton(withTitle: "Launch Directly")
+        alert.addButton(withTitle: "Launch via Steam")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .direct
+        case .alertSecondButtonReturn: return .steam
+        default: throw WrappBuildError.userCancelled
+        }
+    }
+
+    /// Whether a person is there to sign in to Steam if it asks.
+    var canSignInToSteam: Bool { !isHeadlessRun }
+
     /// Grant access to a mounted volume (sandbox). Skipped entirely when the
     /// disk paths came from env vars — headless runs have no sandbox prompts.
     @MainActor
@@ -175,7 +236,7 @@ class WrappBuildInput {
     ///
     /// Resolution order:
     /// 1. `PATCH_FAILURE_POLICY=continue|cancel` env var (headless automation)
-    /// 2. Env-supplied disk paths (headless run) → continue
+    /// 2. A headless run (env-supplied disks or game, or NON_INTERACTIVE) → continue
     /// 3. NSAlert (GUI)
     ///
     /// A modal alert under a `.prohibited` activation policy (non-interactive
@@ -189,7 +250,7 @@ class WrappBuildInput {
         default: break
         }
 
-        if anyDiskPathFromEnv { return true }
+        if isHeadlessRun { return true }
 
         let alert = NSAlert()
         alert.messageText = "Game patch failed"
@@ -235,7 +296,7 @@ class WrappBuildInput {
     /// True when running headless (any build input env var set or the
     /// NON_INTERACTIVE flag present).
     private var isHeadlessRun: Bool {
-        anyDiskPathFromEnv || environment["NON_INTERACTIVE"] == "true"
+        anyDiskPathFromEnv || environment["STEAM_GAME_SLUG"] != nil || environment["NON_INTERACTIVE"] == "true"
     }
 
     /// Resolve a disk path (directory or ISO) from an env var with validation.
