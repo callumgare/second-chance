@@ -96,7 +96,7 @@ enum ProcessFinder {
             let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
             guard parts.count == 2, let pid = Int32(parts[0]) else { return nil }
             let command = String(parts[1]).trimmingCharacters(in: .whitespaces)
-            return RunningProcess(pid: pid, name: (command as NSString).lastPathComponent, command: command)
+            return RunningProcess(pid: pid, name: ProcessName.executable(fromPSCommand: command), command: command)
         }
     }
 

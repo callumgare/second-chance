@@ -94,6 +94,39 @@ enum InfoWindow {
         return false
     }
 
+    /// Wait for the window to close, which the wrapp does once the game's
+    /// window is up. False if it is still open at `timeout` — the wrapp then
+    /// missed the game starting, and leaves "Loading…" up until the game exits.
+    static func waitForClose(wrapperPid: Int32, timeout: TimeInterval) -> Bool {
+        logger.notice("🔍 Checking the wrapp's info window has closed...")
+        let start = Date()
+        while isOpen(wrapperPid: wrapperPid) {
+            if Date().timeIntervalSince(start) >= timeout {
+                logger.critical("❌ Info window still open \(Int(timeout))s after the game's window appeared")
+                WindowFinder.logAllWindows()
+                if let path = ScreenCapture.captureScreen(prefix: "info-window-still-open") {
+                    logger.notice("📸 Full screen screenshot: \(path)")
+                }
+                return false
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        logger.notice("✅ Info window closed after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
+        return true
+    }
+
+    /// Whether the window is open. Asks Accessibility as well as the on-screen
+    /// window list, since a full-screen game puts the window on another Space,
+    /// where the list no longer counts it as on screen.
+    private static func isOpen(wrapperPid: Int32) -> Bool {
+        if WindowFinder.onScreenWindows().contains(where: { $0.ownerPid == wrapperPid && $0.title == title }) {
+            return true
+        }
+        guard case .success(let windows) = Accessibility.windows(ofPid: wrapperPid, retries: 1) else { return false }
+        // Exact match: in debug mode the wrapp also has a "… - Launch Log" window.
+        return windows.contains { Accessibility.title(of: $0) == title }
+    }
+
     /// True once the window has closed or no longer shows its confirm button.
     private static func waitForWarningToGo(wrapperPid: Int32, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)

@@ -111,8 +111,15 @@ StartupPermissions.warmupPrivilegedAPIs()
 
 let scenario = NancyDrewQuitScenario(wrapp: Wrapp(appPath: path), options: options)
 let result = scenario.run()
-if result.exitCode == PuppetExitCode.passed.rawValue {
+switch result {
+case .passed:
     logger.notice("WRAPP_PUPPETEER: run_succeeded")
+case .failed(let reason):
+    // The integration test quotes this in its failure, so the reason reads
+    // there and not only in the attached log.
+    logger.error("WRAPP_PUPPETEER: run_failed: \(reason)")
+case .forcedQuit:
+    break
 }
 LogStore.shared.flush()
 exit(result.exitCode)

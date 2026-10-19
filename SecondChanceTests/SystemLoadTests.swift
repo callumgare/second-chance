@@ -48,6 +48,8 @@ struct SystemLoadTests {
 
     @Test("Wine's processes are recognised", arguments: [
         ("/var/folders/xx/T//winetemp-1/Game.exe", true),
+        // Wine 10 reports the Windows path, with a trailing space
+        (#"C:\Program Files (x86)\Her Interactive\Nancy Drew Alibi in Ashes\Alibi.exe "#, true),
         ("/private/var/folders/xx/T/NancyDrew-1.app/Contents/SharedSupport/wine/lib/wine/../../bin/wineserver", true),
         ("/usr/bin/yes", false),
         ("/Applications/Firefox.app/Contents/MacOS/firefox", false),

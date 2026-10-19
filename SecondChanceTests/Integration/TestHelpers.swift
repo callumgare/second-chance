@@ -405,12 +405,16 @@ enum AppPuppetRunner {
                     named: "wrapp-puppeteer-exit-code-correction-\(attemptLabel)-\(gameSlug).txt"
                 )
             } else if !runSucceeded {
+                let failureMarker = "WRAPP_PUPPETEER: run_failed: "
+                let reason = logText.components(separatedBy: "\n")
+                    .last(where: { $0.contains(failureMarker) })?
+                    .components(separatedBy: failureMarker).last
+                let description = reason.map { "WrappPuppeteer failed: \($0) (exit code: \(effectiveExitCode), attempt: \(attemptLabel))" }
+                    ?? "WrappPuppeteer did not emit success marker (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
                 throw NSError(
                     domain: "AppPuppetRunner",
                     code: Int(effectiveExitCode),
-                    userInfo: [
-                        NSLocalizedDescriptionKey: "WrappPuppeteer did not emit success marker (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
-                    ]
+                    userInfo: [NSLocalizedDescriptionKey: description]
                 )
             }
         } else {

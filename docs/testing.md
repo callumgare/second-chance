@@ -208,11 +208,19 @@ to find and click Exit and 300 s for the game to quit. The `--timeout` that
 regularly" warning counts as dismissed only once its confirm button has gone
 (the window itself stays up, showing a loading message, until the game has
 loaded): a click lost on a loaded machine is followed by pressing the button
-through Accessibility. When the game never
+through Accessibility. Once the game's window is up, the window itself must
+close within 30 s, or the run fails: the wrapp closes it when it sees the game
+start, so one still open means the wrapp missed the game, and players would
+have "Loading…" over the game until they quit. This is checked before the
+focus wait, since a wrapp that missed the game never brings it to the front
+either, and the focus failure would hide the cause. When the game never
 comes to the front, or no Exit button or logo turns up in time, the
 scenario logs the windows on screen and saves a full-screen screenshot to
-`/tmp` (`game-not-focused-*.png`, `exit-not-found-*.png`), naming it in its
-log; the per-attempt screenshots are deleted as they are analysed.
+`/tmp` (`game-not-focused-*.png`, `exit-not-found-*.png`,
+`info-window-still-open-*.png`), naming it in its log; the per-attempt
+screenshots are deleted as they are analysed. A failed run logs
+`WRAPP_PUPPETEER: run_failed: <reason>`, and the integration test quotes that
+reason in its failure.
 
 WrappPuppeteer always starts a new instance of the wrapp, and kills any
 instance of the same bundle ID still running first. LaunchServices would

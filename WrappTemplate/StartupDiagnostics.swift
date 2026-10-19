@@ -262,7 +262,7 @@ final class StartupDiagnostics: @unchecked Sendable {
         processList.split(separator: "\n").compactMap { line in
             let fields = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
             guard fields.count == 6, let pid = Int32(fields[0]) else { return nil }
-            let name = (String(fields[5]) as NSString).lastPathComponent
+            let name = ProcessName.executable(fromPSCommand: String(fields[5]))
             guard name.lowercased().hasSuffix(".exe") || name == "wineserver" else { return nil }
             let safeName = name.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
             return (pid, safeName)

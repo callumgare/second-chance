@@ -9,13 +9,15 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 echo "🔍 Setting up Wine for SecondChance..."
 
 # Configuration
-WINE_URL="https://github.com/Kegworks-App/Engines/releases/download/v1.0/WS12WineCX24.0.7.tar.xz"
+WINE_URL="https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz"
 WINESKIN_URL="https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"
 WINETRICKS_URL="https://raw.githubusercontent.com/Kegworks-App/winetricks/kegworks/src/winetricks"
 
 # Download cache (persistent across builds)
 DOWNLOAD_CACHE_DIR="$HOME/Library/Caches/SecondChance"
-WINE_ARCHIVE="$DOWNLOAD_CACHE_DIR/wine-engine.tar.xz"
+# Named after the engine, so changing WINE_URL downloads the new one rather
+# than reusing whichever engine was cached first.
+WINE_ARCHIVE="$DOWNLOAD_CACHE_DIR/$(basename "$WINE_URL")"
 WINESKIN_ARCHIVE="$DOWNLOAD_CACHE_DIR/wineskin.tar.xz"
 WINETRICKS_FILE="$DOWNLOAD_CACHE_DIR/winetricks"
 

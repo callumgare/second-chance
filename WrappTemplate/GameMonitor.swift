@@ -16,7 +16,7 @@ struct WineProcessInfo: Hashable {
     let command: String
     
     var basename: String {
-        return (command as NSString).lastPathComponent
+        return ProcessName.executable(fromPSCommand: command)
     }
 }
 

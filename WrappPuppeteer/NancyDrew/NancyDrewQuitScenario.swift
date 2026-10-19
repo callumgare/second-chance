@@ -23,6 +23,10 @@ struct NancyDrewQuitScenario {
         /// (`GameLauncher.prepareDesktop`), so this has to outlast that.
         var processDetectTimeout: TimeInterval = 900
         var infoWindowTimeout: TimeInterval = 60
+        /// How long the info window may stay up once the game's window is.
+        /// The wrapp closes it as soon as it sees that window, so this is
+        /// only slack for a loaded machine.
+        var infoWindowCloseTimeout: TimeInterval = 30
         var quitTimeout: TimeInterval = 300
         /// How long to keep looking for the Exit button
         var findExitTimeout: TimeInterval = 300
@@ -65,13 +69,27 @@ struct NancyDrewQuitScenario {
             }
         }
 
-        guard let gamePid = waitForGameWindow() else {
+        guard let (gamePid, gameWindows) = waitForGameWindow() else {
             forceQuit(app)
             return .failed("Game process or window did not appear in time")
         }
 
         logger.notice("ℹ️  Game process PID: \(gamePid)")
         ProcessCleanup.track(appPid: app.processIdentifier, helperPid: gamePid)
+
+        // Checked before waiting for focus: a wrapp that missed the game
+        // starting leaves "Loading…" over the game until it exits, and never
+        // brings the game to the front either, so the focus wait would fail
+        // first and hide the cause.
+        guard InfoWindow.waitForClose(wrapperPid: app.processIdentifier, timeout: options.infoWindowCloseTimeout) else {
+            forceQuit(app)
+            return .failed("The wrapp's info window was still open \(Int(options.infoWindowCloseTimeout))s after the game's window appeared")
+        }
+
+        guard waitForGameFocus(pid: gamePid, windows: gameWindows) else {
+            forceQuit(app)
+            return .failed("Game window did not become active in time")
+        }
 
         guard clickExit(appName: appName, app: app, gamePid: gamePid) else {
             return .failed("OCR could not find Exit button")
@@ -109,9 +127,9 @@ struct NancyDrewQuitScenario {
         ProcessControl.forceQuit(app, pkillArguments: wrapp.engine.helperPkillArguments)
     }
 
-    /// Wait for the game's process, then its window, then for it to take
-    /// focus. Returns the game process's PID.
-    private func waitForGameWindow() -> Int32? {
+    /// Wait for the game's process, then its window. Returns the game
+    /// process's PID and its windows.
+    private func waitForGameWindow() -> (pid: Int32, windows: [WindowInfo])? {
         let processName = wrapp.engine.gameProcessName(gameExeName: wrapp.gameExeName)
         logger.notice("⏳ Waiting for game process (timeout: \(Int(options.processDetectTimeout))s), then its window...")
         let start = Date()
@@ -133,7 +151,11 @@ struct NancyDrewQuitScenario {
         for (index, window) in windows.enumerated() {
             logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
         }
+        return (pid, windows)
+    }
 
+    /// Wait for the game's window to take focus.
+    private func waitForGameFocus(pid: Int32, windows: [WindowInfo]) -> Bool {
         logger.notice("[Step 3] Waiting for game to become active...")
         // 120s, not the default 10: on a loaded machine a game's first window
         // can take a while before macOS will bring it in front (Ghost of
@@ -143,7 +165,7 @@ struct NancyDrewQuitScenario {
             if let path = ScreenCapture.captureScreen(prefix: "game-not-focused") {
                 logger.notice("📸 Full screen screenshot: \(path)")
             }
-            return nil
+            return false
         }
 
         NSSound.beep()
@@ -156,7 +178,7 @@ struct NancyDrewQuitScenario {
             logger.notice("📸 Full screen screenshot: \(path)")
         }
 
-        return pid
+        return true
     }
 
     /// Look for the Exit button and click it, clicking the Her Interactive

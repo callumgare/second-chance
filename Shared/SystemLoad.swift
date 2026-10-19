@@ -90,7 +90,7 @@ public enum SystemLoad {
             guard pid != excludingPid, !isWine(command: command) else { continue }
             let cores = percent / 100
             total += cores
-            let name = (command as NSString).lastPathComponent
+            let name = ProcessName.executable(fromPSCommand: command)
             byName[name, default: 0] += cores
         }
         let top = byName
@@ -104,7 +104,7 @@ public enum SystemLoad {
     /// Wine's own processes: the loader and server, and every Windows program
     /// it runs (named by its `.exe`, from a `winetemp-` directory).
     static func isWine(command: String) -> Bool {
-        command.hasSuffix(".exe")
+        ProcessName.executable(fromPSCommand: command).lowercased().hasSuffix(".exe")
             || command.contains("/winetemp-")
             || command.contains("/wine/bin/")
             || command.contains("/wine/lib/")
