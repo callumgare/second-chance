@@ -267,10 +267,11 @@ class GameLauncher {
             LogContext.enterStage("Starting Steam")
             do {
                 let helperReport = helperReport
-                let started = try WrappSteam(config: config, status: { infoWindow?.updateMessage($0) },
+                let status = steamStatusHandler(infoWindow)
+                let started = try WrappSteam(config: config, status: status,
                                              onOutputLine: { helperReport?.observe(line: $0) })
                 steam = started  // from here a quit can stop it
-                try started.waitUntilSignedIn(status: { infoWindow?.updateMessage($0) })
+                try started.waitUntilSignedIn(status: status)
             } catch WrappSteam.Failure.cancelled {
                 logger.notice("[Steam] Quit while waiting for Steam to sign in")
                 return -1
@@ -488,6 +489,21 @@ class GameLauncher {
         logger.critical("[Steam] \(title): \(detail)")
         FailureSummary.log(logger, what: "Starting Steam for \(config.gameTitle)", files: [])
         DispatchQueue.main.sync { showAlert(message: title, informativeText: detail) }
+    }
+
+    /// Show Steam's progress in the loading window. Once signed in, what
+    /// starts the game is Steam (`wine-steam`) or the wrapp, with Steam
+    /// running (`wine-steam-silent`).
+    private func steamStatusHandler(_ infoWindow: InfoWindowController?) -> (WrappSteam.Status) -> Void {
+        let title = config.gameTitle
+        let launchedBySteam = config.gameEngine == "wine-steam"
+        return { status in
+            switch status {
+            case .starting: infoWindow?.setStage(.startingSteam)
+            case .waitingForSignIn: infoWindow?.setStage(.signingInToSteam)
+            case .signedIn: infoWindow?.setStage(launchedBySteam ? .steamStartingGame(title: title) : .startingGame(title: title))
+            }
+        }
     }
 
     // MARK: - Wine Desktop

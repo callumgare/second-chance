@@ -566,7 +566,9 @@ func main() {
     // Create info window with game title
     // Only show save warning for Wine games (ScummVM games are more stable)
     let saveWarningEnabled = config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-")
-    let infoWindow = InfoWindowController(gameTitle: config.gameTitle, appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled)
+    let infoWindow = InfoWindowController(
+        stage: config.gameEngine.hasPrefix("wine-steam") ? .startingSteam : .startingGame(title: config.gameTitle),
+        appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled)
     globalInfoWindow = infoWindow
     
     if debugMode {

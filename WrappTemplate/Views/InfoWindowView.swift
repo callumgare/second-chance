@@ -15,7 +15,7 @@ class InfoWindowViewModel: ObservableObject {
     }
 
     @Published var phase: Phase
-    @Published var message: String
+    @Published private(set) var stage: LoadingStage
     @Published var showSlowLoadingNote = false
     @Published var showSuspectedHang = false
     /// Set while the Mac is too busy for the game to start promptly.
@@ -30,8 +30,8 @@ class InfoWindowViewModel: ObservableObject {
     private var slowLoadingTimer: Timer?
     private var suspectedHangTimer: Timer?
 
-    init(message: String, saveWarningEnabled: Bool, gameSlug: String = "nancy-drew") {
-        self.message = message
+    init(stage: LoadingStage, saveWarningEnabled: Bool, gameSlug: String = "nancy-drew") {
+        self.stage = stage
         self.saveWarningEnabled = saveWarningEnabled
         self.gameSlug = gameSlug
         self.phase = saveWarningEnabled ? .warning : .loading
@@ -39,28 +39,37 @@ class InfoWindowViewModel: ObservableObject {
 
     func confirm() {
         phase = .loading
-        startSlowLoadingTimer()
+        startStageTimers()
         onConfirm?()
     }
 
-    func startSlowLoadingTimer() {
-        slowLoadingTimer?.invalidate()
-        slowLoadingTimer = Timer.scheduledTimer(withTimeInterval: 20.0, repeats: false) { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self, !self.gameHasLoaded else { return }
-                self.showSlowLoadingNote = true
-                self.startSuspectedHangTimer()
-            }
+    /// Move on to `stage`, starting its clock afresh: a note or warning about
+    /// the previous stage doesn't carry over.
+    func setStage(_ stage: LoadingStage) {
+        guard stage != self.stage else { return }
+        self.stage = stage
+        guard case .loading = phase else { return }
+        startStageTimers()
+    }
+
+    /// Start the current stage's clock: the slow note, then the possible
+    /// failure, each after the stage's own delay.
+    func startStageTimers() {
+        stopTimer()
+        showSlowLoadingNote = false
+        showSuspectedHang = false
+        slowLoadingTimer = Self.timer(after: stage.slowNoteAfter) { [weak self] in
+            self?.showSlowLoadingNote = true
+        }
+        suspectedHangTimer = Self.timer(after: stage.possibleFailureAfter) { [weak self] in
+            self?.showSuspectedHang = true
         }
     }
 
-    private func startSuspectedHangTimer() {
-        suspectedHangTimer?.invalidate()
-        suspectedHangTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: false) { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self, !self.gameHasLoaded else { return }
-                self.showSuspectedHang = true
-            }
+    private static func timer(after delay: TimeInterval?, _ fire: @escaping () -> Void) -> Timer? {
+        guard let delay else { return nil }
+        return Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
+            DispatchQueue.main.async(execute: fire)
         }
     }
 
@@ -101,7 +110,7 @@ struct InfoWindowView: View {
         .fixedSize(horizontal: true, vertical: true)
         .onAppear {
             if case .loading = viewModel.phase {
-                viewModel.startSlowLoadingTimer()
+                viewModel.startStageTimers()
             }
         }
     }
@@ -140,50 +149,63 @@ struct InfoWindowView: View {
 
     // MARK: - Loading
 
+    /// The spinner stays up for as long as the launch is still going: a
+    /// launch that has definitely failed (the game or its launcher exited)
+    /// shows the error content instead, so while this shows, the game may
+    /// yet start.
     private var loadingContent: some View {
         VStack(spacing: 15) {
-            // On a heavily loaded Mac a long wait is expected, not a sign the
-            // launch failed: keep the spinner and say why instead.
-            if viewModel.showSuspectedHang && viewModel.heavyLoad == nil {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.orange)
+            ProgressView()
+                .controlSize(.regular)
 
-                Text("Possible Launch Failure")
-                    .font(.title3)
-                    .fontWeight(.bold)
+            Text(viewModel.stage.message)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("loading-message")
 
-                Text("The game is taking suspiciously long to start. It may have failed to launch.")
+            if let detail = viewModel.stage.detail {
+                Text(detail)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
+            }
 
-                LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
-
-                BugReportCallout()
-
-                Button("Quit") {
-                    NSApp.terminate(nil)
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                ProgressView()
-                    .controlSize(.regular)
-
-                Text(viewModel.message)
+            // On a heavily loaded Mac a long wait is expected, not a sign the
+            // launch failed: say why instead.
+            if let load = viewModel.heavyLoad {
+                heavyLoadNote(load)
+            } else if viewModel.showSuspectedHang {
+                possibleFailureNote
+            } else if viewModel.showSlowLoadingNote {
+                Text("This is taking longer than usual. Please be patient…")
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
-
-                if let load = viewModel.heavyLoad {
-                    heavyLoadNote(load)
-                } else if viewModel.showSlowLoadingNote {
-                    Text("This is taking longer than expected. Please be patient...")
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                }
             }
         }
+    }
+
+    private var possibleFailureNote: some View {
+        VStack(spacing: 12) {
+            Label("Possible Launch Failure", systemImage: "questionmark.circle")
+                .font(.system(size: NSFont.systemFontSize, weight: .semibold))
+                .foregroundStyle(.orange)
+
+            Text("\(viewModel.stage.subject) is taking much longer than usual to start, and may have failed. It's still trying, so you can keep waiting — or look at the log, or quit.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+
+            LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
+
+            BugReportCallout()
+
+            Button("Quit") {
+                NSApp.terminate(nil)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .accessibilityIdentifier("possible-launch-failure")
     }
 
     private func heavyLoadNote(_ load: SystemLoadReading) -> some View {
@@ -239,13 +261,13 @@ struct InfoWindowView: View {
 }
 
 #Preview("Warning") {
-    InfoWindowView(viewModel: InfoWindowViewModel(message: "Loading Stay Tuned for Danger...", saveWarningEnabled: true))
+    InfoWindowView(viewModel: InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: true))
         .frame(width: 450)
 }
 
 #Preview("Heavy load") {
     InfoWindowView(viewModel: {
-        let vm = InfoWindowViewModel(message: "Loading Stay Tuned for Danger...", saveWarningEnabled: false)
+        let vm = InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: false)
         vm.heavyLoad = SystemLoadReading(
             otherCores: 7.4, fastCores: 8,
             topPrograms: [.init(name: "Google Chrome", cores: 4), .init(name: "node", cores: 2)]
@@ -255,9 +277,18 @@ struct InfoWindowView: View {
     .frame(width: 450)
 }
 
+#Preview("Possible launch failure, through Steam") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(stage: .steamStartingGame(title: "Curse of Blackmoor Manor"), saveWarningEnabled: false)
+        vm.showSuspectedHang = true
+        return vm
+    }())
+    .frame(width: 450)
+}
+
 #Preview("Error") {
     InfoWindowView(viewModel: {
-        let vm = InfoWindowViewModel(message: "", saveWarningEnabled: false)
+        let vm = InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: false)
         vm.phase = .error(exitCode: 1)
         return vm
     }())

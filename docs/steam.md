@@ -139,6 +139,16 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
    back to the store, take it out of the wrapp, release the lock. On quit this
    is cut short (10 s for Steam) to fit inside the wrapp's 15 s quit fallback.
 
+The loading window names each step: "Starting Steam…", the sign-in prompt,
+then "Steam is starting *Title*…" (`WrappSteam.Status`, shown as a
+`LoadingStage`). Each step has its own clock for the "taking longer than
+usual" note and the possible-launch-failure warning, far longer than a game
+the wrapp starts itself gets (20 s and 50 s): 2 and 10 minutes for Steam's
+start, which on a first run includes its update, and 90 s and 5 minutes for
+Steam starting the game. Waiting for the player to sign in has no clock. The
+warning leaves the spinner up, since the launch may still succeed; a launch
+that has definitely failed shows the error instead.
+
 A wrapp moved to a Mac without the store asks for the sign-in once and
 creates the store there. A wrapp that's killed outright (SIGKILL, a test
 harness timing out) can't stop Steam; the next launch cleans it up (step 2).

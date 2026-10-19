@@ -29,12 +29,13 @@ class InfoWindowController: NSWindowController {
         viewModel.gameHasLoaded
     }
 
-    init(gameTitle: String, appSupportPath: URL, gameSlug: String = "nancy-drew", saveWarningEnabled: Bool = true, customMessage: String? = nil) {
+    /// `stage` is what the launch waits on first: Steam, for a game that
+    /// needs it, or else the game.
+    init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", saveWarningEnabled: Bool = true) {
         self.appSupportPath = appSupportPath
 
-        let message = customMessage ?? "Loading \(gameTitle)..."
         let shouldShow = saveWarningEnabled && !Self.hasUserDismissedSaveWarning(appSupportPath: appSupportPath)
-        self.viewModel = InfoWindowViewModel(message: message, saveWarningEnabled: shouldShow, gameSlug: gameSlug)
+        self.viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: shouldShow, gameSlug: gameSlug)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 450, height: 100),
@@ -81,9 +82,10 @@ class InfoWindowController: NSWindowController {
         monitor.start()
     }
 
-    func updateMessage(_ message: String) {
+    /// Show that the launch has moved on to `stage`. Safe from any thread.
+    func setStage(_ stage: LoadingStage) {
         DispatchQueue.main.async {
-            self.viewModel.message = message
+            self.viewModel.setStage(stage)
         }
     }
 
@@ -97,7 +99,7 @@ class InfoWindowController: NSWindowController {
 
     func hideWarning() {
         viewModel.phase = .loading
-        viewModel.startSlowLoadingTimer()
+        viewModel.startStageTimers()
     }
 
     func showError(exitCode: Int32) {

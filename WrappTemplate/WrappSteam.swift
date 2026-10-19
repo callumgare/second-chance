@@ -22,6 +22,13 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     /// Steam's start and sign-in, which on a first run includes its update.
     static let startTimeout: TimeInterval = 20 * 60
 
+    /// Where Steam has got to, for the loading window.
+    enum Status {
+        case starting
+        case waitingForSignIn
+        case signedIn
+    }
+
     enum Failure: Error {
         case inUse(by: String?)
         case signInTimedOut
@@ -43,7 +50,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     /// Steam on quit — while the wait goes on: a wrapp quit mid-wait used to
     /// leave its Steam running. `status` gets what the loading window should say;
     /// `onOutputLine` each line Steam and the game it launches print.
-    init(config: GameConfig, status: (String) -> Void, onOutputLine: (@Sendable (String) -> Void)? = nil) throws {
+    init(config: GameConfig, status: (Status) -> Void, onOutputLine: (@Sendable (String) -> Void)? = nil) throws {
         switch try SteamActiveLock.acquire(bundleID: config.bundleId) {
         case .acquired(let lock):
             self.lock = lock
@@ -63,7 +70,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         }
 
         do {
-            status("Starting Steam…")
+            status(.starting)
             let client = client
             let store = store
             let restored = try Self.waitThrowing { try await client.restoreLogin(from: store) }
@@ -78,7 +85,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     /// Wait for Steam to sign in, asking the player to when it shows its
     /// sign-in window. Checks every couple of seconds, so `finish` (a quit)
     /// ends the wait promptly with `.cancelled`.
-    func waitUntilSignedIn(status: (String) -> Void) throws {
+    func waitUntilSignedIn(status: (Status) -> Void) throws {
         let client = client
         var deadline = Date().addingTimeInterval(Self.startTimeout)
         var asked = false
@@ -87,12 +94,12 @@ nonisolated final class WrappSteam: @unchecked Sendable {
             switch Self.wait({ await client.waitForLogin(timeout: 2) }) {
             case .signedIn:
                 state.withLock { signedIn = true }
-                status("Starting the game…")
+                status(.signedIn)
                 return
             case .needsCredentials where !asked:
                 asked = true
                 deadline = Date().addingTimeInterval(Self.signInTimeout)
-                status("Sign in to Steam in its window — you can scan the QR code with the Steam app.")
+                status(.waitingForSignIn)
             case .pending, .needsCredentials:
                 break
             }
