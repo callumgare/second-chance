@@ -39,6 +39,24 @@ enum Proc {
         return options
     }
 
+    /// `platformOptions`, with the child its own "responsible process": macOS
+    /// asks about privacy access (microphone, local network…) on behalf of the
+    /// responsible process, which for anything sc starts is sc — a bare
+    /// command-line tool, so macOS prompts, and Steam inside a build waits on
+    /// those prompts. Started like this, the Second Chance app answers for
+    /// itself, as an app bundle with no usage descriptions, which macOS
+    /// quietly declines. `responsibility_spawnattrs_setdisclaim` is private
+    /// API, looked up at run time; without it the child is started as before.
+    static var disclaimingPlatformOptions: PlatformOptions {
+        var options = platformOptions
+        options.preSpawnProcessConfigurator = { attributes, _ in
+            typealias Disclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+            guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim") else { return }
+            _ = unsafeBitCast(symbol, to: Disclaim.self)(&attributes, 1)
+        }
+        return options
+    }
+
     static func code(_ status: TerminationStatus) -> Int32 {
         switch status {
         case .exited(let code): return code
@@ -84,11 +102,13 @@ enum Proc {
         _ args: [String],
         env: [String: String?] = [:],
         cwd: URL? = nil,
+        disclaimResponsibility: Bool = false,
         onLine: @escaping @Sendable (String) async -> Void
     ) async throws -> Int32 {
         let result = try await run(
             executable(exe), arguments: Arguments(args), environment: environment(env),
-            workingDirectory: cwd.map { FilePath($0.path) }, platformOptions: platformOptions,
+            workingDirectory: cwd.map { FilePath($0.path) },
+            platformOptions: disclaimResponsibility ? disclaimingPlatformOptions : platformOptions,
             input: .none, output: .sequence, error: .combinedWithOutput
         ) { execution in
             for try await line in execution.standardOutput.strings(bufferingPolicy: .unbounded) {

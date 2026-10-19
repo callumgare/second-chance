@@ -216,7 +216,9 @@ struct WrappBuilder {
                     "Second Chance", log: "wrapp-build-\(game.slug)", success: "Second Chance finished",
                     visibleLines: 5, keepOnSuccess: false
                 ) { sink in
-                    try await Proc.stream(app, arguments, env: environment, cwd: repo.root) { await sink.line($0) }
+                    // The app answers for itself, so Steam inside a Steam build
+                    // doesn't wait on macOS prompts addressed to sc (docs/steam.md).
+                    try await Proc.stream(app, arguments, env: environment, cwd: repo.root, disclaimResponsibility: true) { await sink.line($0) }
                 }
             }
         } catch {

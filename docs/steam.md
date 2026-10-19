@@ -22,10 +22,13 @@ macOS attributes that to the responsible Mac app:
   sat for 20 minutes, then signed in in 66 s once they were. Rebuilding `sc`
   makes macOS ask again, as it's a new binary.
 
-So for `sc wrapp build --from steam` and the Steam suite, answer them on the
-Mac they run on (the microphone can be refused). Having `sc` disclaim
-responsibility for the app it runs, so the app is the responsible process,
-would end this.
+So `sc wrapp build` starts the app as its own responsible process
+(`Proc.stream(…, disclaimResponsibility: true)`, using the private
+`responsibility_spawnattrs_setdisclaim`): the app answers for itself and
+macOS asks nothing. Checked with a freshly rebuilt `sc`, which used to
+prompt again every time. Anything else that runs the app under `sc` without
+it — or the test host under xcodebuild — can still meet the prompts; answer
+them (the microphone can be refused).
 
 ## Building
 
