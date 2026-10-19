@@ -50,7 +50,15 @@ block from `RunContext.logHeader`:
 ━━━ Second Chance 0.4.0 (build 52), pid 4120, run 3f9a2c1e ━━━
   macOS 15.6.0, Mac14,6, process x86_64 under Rosetta
   GUI session; WINEDEBUG=-all,err+all
+  load: other programs are keeping 0.6 cores busy, and this Mac has 8 performance cores
 ```
+
+The `load` line (`SystemLoad`) is the CPU every process but Wine's and the
+logging one is using, in cores, against the performance-core count; when it
+reaches all but one of them a warning follows, since Wine then takes minutes
+to start a program, or never does. A wrapp also samples it every 5 s while the
+game loads and logs `[Load]` lines when the Mac becomes, or stops being,
+heavily loaded.
 
 A wrapp's header adds the game, its engine, and the size and file count of
 its installed files, which is where an install that was cut short shows up.

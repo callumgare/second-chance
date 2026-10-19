@@ -12,6 +12,9 @@ var globalInfoWindow: InfoWindowController?
 
 class InfoWindowController: NSWindowController {
     private let viewModel: InfoWindowViewModel
+    /// Watches for a heavily loaded Mac while the game loads; stopped once it
+    /// has loaded, failed, or the window closes.
+    private var loadMonitor: SystemLoadMonitor?
     let appSupportPath: URL
     var onWarningConfirmed: (() -> Void)?
 
@@ -65,6 +68,17 @@ class InfoWindowController: NSWindowController {
 
     func show() {
         window?.makeKeyAndOrderFront(nil)
+        startLoadMonitor()
+    }
+
+    private func startLoadMonitor() {
+        guard loadMonitor == nil else { return }
+        let monitor = SystemLoadMonitor { [weak self] reading in
+            guard let self, !self.viewModel.gameHasLoaded else { return }
+            self.viewModel.heavyLoad = reading
+        }
+        loadMonitor = monitor
+        monitor.start()
     }
 
     func updateMessage(_ message: String) {
@@ -75,6 +89,7 @@ class InfoWindowController: NSWindowController {
 
     func notifyGameLoaded() {
         DispatchQueue.main.async {
+            self.loadMonitor?.stop()
             self.viewModel.markGameLoaded()
             self.close()
         }
@@ -87,6 +102,8 @@ class InfoWindowController: NSWindowController {
 
     func showError(exitCode: Int32) {
         DispatchQueue.main.async {
+            self.loadMonitor?.stop()
+            self.viewModel.heavyLoad = nil
             self.viewModel.showError(exitCode: exitCode)
             self.window?.makeKeyAndOrderFront(nil)
             NSApp.setActivationPolicy(.regular)
@@ -104,6 +121,7 @@ class InfoWindowController: NSWindowController {
             return
         }
         viewModel.stopTimer()
+        loadMonitor?.stop()
         window?.close()
     }
 

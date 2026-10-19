@@ -74,6 +74,7 @@
 				Resources/wine-files,
 				StartupDiagnostics.swift,
 				Subcommands.swift,
+				SystemLoadMonitor.swift,
 				Views/InfoWindowView.swift,
 			);
 			target = E24D78DD2F063E1E00B38683 /* WrappTemplate */;

@@ -81,6 +81,8 @@ nonisolated enum RunContext {
             "\(name) \(version) (build \(build)), pid \(ProcessInfo.processInfo.processIdentifier), run \(runID)",
             "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(machineModel()), process \(arch)",
             "\(session); WINEDEBUG=\(wineDebug)",
+            // A busy Mac is the likeliest cause of a slow or failed Wine start.
+            "load: \(SystemLoad.read().map(\.summary) ?? "unknown (ps failed)")",
         ]
         lines += extra.map { "\($0.0): \($0.1)" }
         return lines
@@ -92,6 +94,9 @@ nonisolated enum RunContext {
         logger.notice("━━━ \(lines[0]) ━━━\n\(lines.dropFirst().map { "  \($0)" }.joined(separator: "\n"))")
         if !hasWindowServerSession {
             logger.warning("No GUI session: Wine programs that open windows (installers, games) will fail")
+        }
+        if let load = SystemLoad.read(), load.isHeavy {
+            logger.warning("The Mac is heavily loaded: \(load.summary). Wine may take minutes to start programs, or fail to")
         }
     }
 

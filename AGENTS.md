@@ -280,6 +280,17 @@ direct assignment.
   restores Wine's on-demand start, for comparison. Anything that runs `wine`
   and reads its output must not wait for EOF on a pipe: Wine's background
   services inherit the child's stdout and hold the pipe open.
+- **Wine can't start on a Mac whose performance cores are all busy.** With
+  other programs on every performance core, Wine (under Rosetta) is left the
+  efficiency cores and takes minutes to bring its desktop up, or never does;
+  with a couple of performance cores free it starts in seconds, so it is a
+  cliff, not a slope. `SystemLoad` (`Shared/`) measures it — other programs'
+  CPU in cores, against the performance-core count, heavy at all but one;
+  the load average is useless here, since starved Wine threads push it past
+  100. Every log header carries a `load:` line; a wrapp's loading window warns
+  while the Mac is heavily loaded (`SystemLoadMonitor`) instead of declaring a
+  possible launch failure; and the integration test reports such a game as
+  `overloaded` rather than testing it, unless run with `--ignore-load`.
 - **A badly starting Wine game leaves a diagnostics bundle** in
   `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/`
   (`StartupDiagnostics`): no window 8 s after the game process appears

@@ -11,6 +11,7 @@ struct RunContextTests {
         #expect(lines[0].contains("run \(RunContext.runID)"))
         #expect(lines[1].hasPrefix("macOS "))
         #expect(lines[2].contains("WINEDEBUG="))
+        #expect(lines[3].hasPrefix("load: other programs are keeping "))
         #expect(lines.last == "game: Test")
     }
 

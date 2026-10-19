@@ -18,6 +18,8 @@ class InfoWindowViewModel: ObservableObject {
     @Published var message: String
     @Published var showSlowLoadingNote = false
     @Published var showSuspectedHang = false
+    /// Set while the Mac is too busy for the game to start promptly.
+    @Published var heavyLoad: SystemLoadReading?
     @Published var dontShowAgain = false
 
     let saveWarningEnabled: Bool
@@ -140,7 +142,9 @@ struct InfoWindowView: View {
 
     private var loadingContent: some View {
         VStack(spacing: 15) {
-            if viewModel.showSuspectedHang {
+            // On a heavily loaded Mac a long wait is expected, not a sign the
+            // launch failed: keep the spinner and say why instead.
+            if viewModel.showSuspectedHang && viewModel.heavyLoad == nil {
                 Image(systemName: "questionmark.circle")
                     .font(.system(size: 40))
                     .foregroundStyle(.orange)
@@ -170,7 +174,9 @@ struct InfoWindowView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
 
-                if viewModel.showSlowLoadingNote {
+                if let load = viewModel.heavyLoad {
+                    heavyLoadNote(load)
+                } else if viewModel.showSlowLoadingNote {
                     Text("This is taking longer than expected. Please be patient...")
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -178,6 +184,29 @@ struct InfoWindowView: View {
                 }
             }
         }
+    }
+
+    private func heavyLoadNote(_ load: SystemLoadReading) -> some View {
+        VStack(spacing: 6) {
+            Label("Your Mac is very busy", systemImage: "gauge.with.dots.needle.100percent")
+                .font(.system(size: NSFont.systemFontSize, weight: .semibold))
+                .foregroundStyle(.orange)
+            Text(Self.heavyLoadMessage(load))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+        }
+        .accessibilityIdentifier("heavy-load-warning")
+    }
+
+    /// For players, so names the programs rather than counting cores (the
+    /// log has the numbers).
+    static func heavyLoadMessage(_ load: SystemLoadReading) -> String {
+        let names = load.topPrograms.map(\.name)
+        let who = names.isEmpty
+            ? "Other programs are using most of your Mac's processing power right now."
+            : "Other programs (\(names.joined(separator: ", "))) are using most of your Mac's processing power right now."
+        return "\(who) The game may take several minutes to start, and may not start at all. Quitting some of them will help."
     }
 
     // MARK: - Error
@@ -212,6 +241,18 @@ struct InfoWindowView: View {
 #Preview("Warning") {
     InfoWindowView(viewModel: InfoWindowViewModel(message: "Loading Stay Tuned for Danger...", saveWarningEnabled: true))
         .frame(width: 450)
+}
+
+#Preview("Heavy load") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(message: "Loading Stay Tuned for Danger...", saveWarningEnabled: false)
+        vm.heavyLoad = SystemLoadReading(
+            otherCores: 7.4, fastCores: 8,
+            topPrograms: [.init(name: "Google Chrome", cores: 4), .init(name: "node", cores: 2)]
+        )
+        return vm
+    }())
+    .frame(width: 450)
 }
 
 #Preview("Error") {
