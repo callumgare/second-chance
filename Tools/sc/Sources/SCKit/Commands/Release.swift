@@ -55,7 +55,57 @@ private struct Release {
         try await Proc.collect("git", ["-C", repo.root.path] + args)
     }
 
+    var notesFile: URL { repo.releaseDir.appendingPathComponent("RELEASE_NOTES.md") }
+    var zip: URL { repo.releaseDir.appendingPathComponent("SecondChance.zip") }
+
     func run(versionOverride: String?, build: Bool, test: Bool) async throws {
+        // A release that stops partway — a failed test or build, or Ctrl-C —
+        // would leave the version bump and changelog behind, and the next
+        // attempt then refuses to start on the dirty tree. So everything it
+        // writes is put back as it was before the error is reported. The zip
+        // is only removed: packaging deletes the previous one before writing.
+        let restorable = [repo.pbxproj, repo.changelog, notesFile]
+        let originals = restorable.map { (url: $0, data: try? Data(contentsOf: $0)) }
+        let zipExisted = FileManager.default.fileExists(atPath: zip.path)
+        do {
+            try await perform(versionOverride: versionOverride, build: build, test: test)
+        } catch {
+            var undone: [String] = []
+            var failed: [String] = []
+            for original in originals {
+                let current = try? Data(contentsOf: original.url)
+                guard current != original.data else { continue }
+                do {
+                    if let data = original.data {
+                        try data.write(to: original.url, options: .atomic)
+                    } else {
+                        try FileManager.default.removeItem(at: original.url)
+                    }
+                    undone.append(repo.display(original.url))
+                } catch {
+                    failed.append("\(repo.display(original.url)): \(error.localizedDescription)")
+                }
+            }
+            if !zipExisted, FileManager.default.fileExists(atPath: zip.path) {
+                do {
+                    try FileManager.default.removeItem(at: zip)
+                    undone.append(repo.display(zip))
+                } catch {
+                    failed.append("\(repo.display(zip)): \(error.localizedDescription)")
+                }
+            }
+            if !undone.isEmpty {
+                ui.line(ui.format("\(.accent("↩︎ Release stopped — put back \(undone.joined(separator: ", "))."))"))
+            }
+            if !failed.isEmpty {
+                ui.warning("Couldn't undo every change the release made — check `git status`.",
+                           next: TerminalText(stringLiteral: failed.joined(separator: "\n")))
+            }
+            throw error
+        }
+    }
+
+    private func perform(versionOverride: String?, build: Bool, test: Bool) async throws {
         try Proc.require("cog", brew: "cocogitto")
         if build { try Proc.require("xcbeautify", brew: "xcbeautify") }
 
@@ -98,7 +148,6 @@ private struct Release {
 
         // 4. Changelog and notes
         try FileManager.default.createDirectory(at: repo.releaseDir, withIntermediateDirectories: true)
-        let notesFile = repo.releaseDir.appendingPathComponent("RELEASE_NOTES.md")
         try (notes + "\n").write(to: notesFile, atomically: true, encoding: .utf8)
         let existing = try? String(contentsOf: repo.changelog, encoding: .utf8)
         if let existing, Changelog.hasSection(for: version, in: existing) {
@@ -134,7 +183,6 @@ private struct Release {
         guard FileManager.default.fileExists(atPath: app.path) else {
             throw SCError("The build reported success but \(repo.display(app)) is missing.")
         }
-        let zip = repo.releaseDir.appendingPathComponent("SecondChance.zip")
         try await ui.progressStep("Package", success: "Packaged \(repo.display(zip))") { _ in
             try? FileManager.default.removeItem(at: zip)
             // ditto, not zip: the Wine and ScummVM payloads inside
