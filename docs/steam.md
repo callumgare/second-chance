@@ -13,9 +13,14 @@ Steam builds and Steam wrapps work end to end, tested by
 microphone (voice chat) and the local network (Remote Play / LAN discovery).
 macOS attributes that to the responsible Mac app:
 
-- **Second Chance or a wrapp** (an app bundle, with no usage description for
-  either): macOS quietly declines, Steam carries on. This is what players get,
-  and a build started from the app was checked to raise no prompt.
+- **Second Chance or a wrapp** (an app bundle): with no microphone usage
+  description, macOS quietly declines the microphone and Steam carries on.
+  The local network can still raise "Allow 'Second Chance' to find devices
+  on local networks?". macOS fixes that title, but the text under it is the
+  app's `NSLocalNetworkUsageDescription` (`INFOPLIST_KEY_…` in the app and
+  WrappTemplate build settings), which says it is for Steam, why Steam wants
+  it, and that Don't Allow is fine. Don't add a microphone description: with
+  one, macOS would ask about the microphone instead of declining it.
 - **`sc`** (a bare command-line tool): macOS asks — "Allow 'sc' to find
   devices on local networks?", "'sc' would like to access the Microphone" —
   and **Steam hangs until both are answered**: on a test Mac a build's Steam

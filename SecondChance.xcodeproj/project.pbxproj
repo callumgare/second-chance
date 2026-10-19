@@ -737,6 +737,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Second Chance";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This is for Steam, which Second Chance uses to install Steam games. Steam looks for other computers on your network for Remote Play and local game transfers. Nancy Drew games don't need it, so you can choose Don't Allow.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -782,6 +783,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Second Chance";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This is for Steam, which Second Chance uses to install Steam games. Steam looks for other computers on your network for Remote Play and local game transfers. Nancy Drew games don't need it, so you can choose Don't Allow.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -829,6 +831,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This is for Steam, which this game runs through. Steam looks for other computers on your network for Remote Play and local game transfers. The game doesn't need it, so you can choose Don't Allow.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -876,6 +879,7 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "This is for Steam, which this game runs through. Steam looks for other computers on your network for Remote Play and local game transfers. The game doesn't need it, so you can choose Don't Allow.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
