@@ -41,8 +41,9 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     /// Take the lock and start Steam. `waitUntilSignedIn` then waits for it
     /// to sign in. Two steps, so the launcher holds this — and can stop
     /// Steam on quit — while the wait goes on: a wrapp quit mid-wait used to
-    /// leave its Steam running. `status` gets what the loading window should say.
-    init(config: GameConfig, status: (String) -> Void) throws {
+    /// leave its Steam running. `status` gets what the loading window should say;
+    /// `onOutputLine` each line Steam and the game it launches print.
+    init(config: GameConfig, status: (String) -> Void, onOutputLine: (@Sendable (String) -> Void)? = nil) throws {
         switch try SteamActiveLock.acquire(bundleID: config.bundleId) {
         case .acquired(let lock):
             self.lock = lock
@@ -50,7 +51,8 @@ nonisolated final class WrappSteam: @unchecked Sendable {
             throw Failure.inUse(by: bundleID)
         }
         prefix = config.winePrefix
-        client = SteamClient(wrappPath: config.appPath, prefixDir: config.winePrefix)
+        client = SteamClient(wrappPath: config.appPath, prefixDir: config.winePrefix,
+                             gameExe: getGameLaunchInfo(config).gameExeName, onOutputLine: onOutputLine)
 
         // A wrapp that was force-quit or crashed never stopped its Steam, which
         // is still running here, signed in. This wrapp holds the Steam lock, so

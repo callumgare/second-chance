@@ -22,11 +22,25 @@ driver, `winemac.so`, a weak dependency on the dylib. The header comment of
 
 Every process that talks to the Mac driver loads `winemac.so` — `explorer.exe`
 as well as the game — so each helper checks whether it is in the game before
-doing anything. `WineEnvironment.runWindowsExecutableWithStart` sets
+doing anything. `WineEnvironment.inProcessHelperVariables(gameExe:)` sets
 `NATIVE_MACOS_FULLSCREEN_EXE` and `CURSOR_LOCK_EXE` to the game's `.exe` name,
-and a helper only arms when its process's executable has that name (Wine names
-each child's loader copy after the `.exe` it runs). Leaving a variable unset is
-what the off switches do.
+and a helper only arms in the process running that `.exe`
+(`InProcessHelpers/helper_common.h`). Wine 10 runs every Windows program
+from the one `bin/wine` binary and rewrites the process's argv[0] to the
+Windows path (`C:\…\Game.exe`, as `ps` shows it), so the helper reads argv[0]
+back from the kernel and matches its last component. Older Wine started each
+program through a copy of its loader named after the `.exe`, so the
+executable's own name is matched as well. (Matching the executable alone is
+why both helpers silently stopped arming when the bundled Wine moved to 10.)
+Leaving a variable unset is what the off switches do.
+
+A Wine program passes its environment on to the programs it starts, so the
+variables reach the game from whichever process launches it.
+`runWindowsExecutableWithStart` sets them on the `wine start` it runs the game
+with. A game Steam launches (`-applaunch`, the `wine-steam` engine) is started
+by the Steam client, which has the environment it was started with — not the
+`-applaunch` call's — so the wrapp's `SteamClient` sets them on every Steam
+process it runs. Steam's own processes have other names and never arm.
 
 Both log to os_log under subsystem `com.secondchance.gamewrapper` (categories
 `NativeFullscreen` and `CursorLock`), and additionally append to the file named
@@ -36,6 +50,24 @@ watch one launch:
 ```bash
 IN_PROCESS_HELPERS_LOG=/tmp/helpers.log open -n "built-apps/<game>.app"
 ```
+
+That step-by-step detail goes nowhere else. Only `os_log` and that file get
+it. The few lines that say how a helper got on (armed; entering fullscreen
+or staying windowed; the cursor locked or left alone) also go to stderr, as
+`second-chance-helper[<helper>] <level>: <message>` (`helper_common.h`). Wine
+passes stderr on to whatever started the game, so the lines reach the wrapp's
+log through its own pipe or, for a game Steam launches, Steam's.
+`InProcessHelperReport` (`Shared/Wine/`) watches them. The wrapp logs
+`[Helpers] Native fullscreen armed` and `[Helpers] Cursor lock armed` as each
+helper arms. If a helper it armed hasn't reported arming a minute after the
+game's window appeared, it logs an error naming that helper. A helper that
+fails to arm is otherwise silent: the game plays in a window, or swallows its
+first click. The integration tests fail a Wine game whose log lacks either
+`armed` line ([testing.md](testing.md)).
+
+A cursor lock that gives up is reported but isn't an error. Only games that
+draw through cnc-ddraw ever take the cursor; in a Direct3D game the helper
+posts its middle clicks, sees no lock and leaves it.
 
 ## Native fullscreen
 

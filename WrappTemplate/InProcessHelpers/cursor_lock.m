@@ -40,6 +40,8 @@
 #include <stdarg.h>
 #include <unistd.h>
 
+#include "helper_common.h"
+
 static const double kPollInterval = 0.25;
 /// The window must hold one frame this long before clicking, so a lock is not
 /// taken mid-resize and confined to the old frame.
@@ -183,6 +185,7 @@ static void *lockerMain(void *arg) {
     while (current()) {
         if (nowSeconds() > deadline) {
             debugLog("no settled game window after %.0fs; not locking", kGiveUpWaitingSeconds);
+            helperReport("CursorLock", "warning", "no settled game window after %.0fs; not locking", kGiveUpWaitingSeconds);
             return NULL;
         }
         __block NSRect frame = NSZeroRect;
@@ -215,12 +218,16 @@ static void *lockerMain(void *arg) {
             if (lockedSince == 0) lockedSince = nowSeconds();
             if (nowSeconds() - lockedSince >= kLockedForSeconds) {
                 debugLog("cursor locked after %d middle click(s)", clicks);
+                helperReport("CursorLock", "notice", "cursor locked after %d middle click(s)", clicks);
                 return NULL;
             }
         } else {
             lockedSince = 0;
             if (clicks >= kMaxClicks) {
                 debugLog("gave up: cursor still not locked after %d middle clicks", clicks);
+                // Expected in a game that doesn't draw through cnc-ddraw, so
+                // not a warning: nothing there ever takes the cursor.
+                helperReport("CursorLock", "notice", "cursor not locked after %d middle clicks; leaving it", clicks);
                 return NULL;
             }
             BOOL posted = onMainThread(^BOOL {
@@ -245,30 +252,18 @@ static void startLocker(void) {
         pthread_detach(thread);
     } else {
         debugLog("could not start locker thread");
+        helperReport("CursorLock", "error", "could not start locker thread");
     }
 }
 
-/// Whether this process's executable is the one the variable names -- how both
-/// helpers decide they are in the game rather than explorer.exe and the like.
-static BOOL executableNamedBy(const char *variable) {
-    const char *wanted = getenv(variable);
-    if (!wanted || !*wanted) return NO;
-    char path[PATH_MAX] = {0};
-    uint32_t size = sizeof(path);
-    if (_NSGetExecutablePath(path, &size) != 0) return NO;
-    const char *name = strrchr(path, '/');
-    name = name ? name + 1 : path;
-    return strcasecmp(name, wanted) == 0;
-}
-
 static BOOL shouldActivate(void) {
-    return executableNamedBy("CURSOR_LOCK_EXE");
+    return processRunsExeNamedBy("CURSOR_LOCK_EXE");
 }
 
 /// Whether native_fullscreen.m is armed in this process, and so will resize
 /// the window into a fullscreen Space.
 static BOOL nativeFullscreenArmed(void) {
-    return executableNamedBy("NATIVE_MACOS_FULLSCREEN_EXE");
+    return processRunsExeNamedBy("NATIVE_MACOS_FULLSCREEN_EXE");
 }
 
 __attribute__((constructor))
@@ -276,6 +271,7 @@ static void cursorLockInit(void) {
     gLog = os_log_create("com.secondchance.gamewrapper", "CursorLock");
     if (!shouldActivate()) return;
     debugLog("armed");
+    helperReport("CursorLock", "notice", "armed in %s", getenv("CURSOR_LOCK_EXE"));
     startLocker();
 
     // cnc-ddraw unlocks when the app is deactivated; lock again on return.

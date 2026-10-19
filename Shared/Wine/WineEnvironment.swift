@@ -87,6 +87,30 @@ nonisolated public struct WineEnvironment: Sendable {
         ]
     }
     
+    /// The variables that arm the in-process helpers bundled into Wine's Mac
+    /// driver for the game `gameExe` (its file name, e.g. `Game.exe`): native
+    /// fullscreen puts the game's window into a real macOS fullscreen Space,
+    /// and cursor lock gets cnc-ddraw to take the mouse without swallowing the
+    /// player's first click. Every Mac-driver process loads them, so each is
+    /// told which one is the game (by the .exe's name, which Wine puts in the
+    /// process's argv[0]), and a Wine program passes its environment on to the
+    /// programs it starts — so these work set on Steam as well as on the game.
+    /// See docs/wine-in-process-helpers.md.
+    public static func inProcessHelperVariables(gameExe: String) -> [String: String] {
+        var env: [String: String] = [:]
+        // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
+        // debug switch for telling its main-thread polling apart from other causes.
+        if ProcessInfo.processInfo.environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
+            env["NATIVE_MACOS_FULLSCREEN_EXE"] = gameExe
+        }
+        // SECOND_CHANCE_CURSOR_LOCK=0 leaves cursor lock unarmed, bringing back
+        // cnc-ddraw's swallowed first click — for comparison.
+        if ProcessInfo.processInfo.environment["SECOND_CHANCE_CURSOR_LOCK"] != "0" {
+            env["CURSOR_LOCK_EXE"] = gameExe
+        }
+        return env
+    }
+
     /// Generate Wine environment variables (includes system vars + Wine-specific vars)
     public func environmentVariables() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
@@ -357,24 +381,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.executableURL = wineExecutable
         process.arguments = args
 
-        // Arm the in-process helpers bundled into Wine's Mac driver: native
-        // fullscreen puts this game's window into a real macOS fullscreen Space,
-        // and cursor lock gets cnc-ddraw to take the mouse without swallowing the
-        // player's first click. Every Mac-driver process loads them, so each is
-        // told which one is the game; Wine names each child's loader copy after
-        // the .exe it runs. See docs/wine-in-process-helpers.md.
-        var env = environmentVariables()
-        // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
-        // debug switch for telling its main-thread polling apart from other causes.
-        if ProcessInfo.processInfo.environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
-            env["NATIVE_MACOS_FULLSCREEN_EXE"] = exeFileName
-        }
-        // SECOND_CHANCE_CURSOR_LOCK=0 leaves cursor lock unarmed, bringing back
-        // cnc-ddraw's swallowed first click — for comparison.
-        if ProcessInfo.processInfo.environment["SECOND_CHANCE_CURSOR_LOCK"] != "0" {
-            env["CURSOR_LOCK_EXE"] = exeFileName
-        }
-        process.environment = env
+        process.environment = environmentVariables().merging(Self.inProcessHelperVariables(gameExe: exeFileName)) { $1 }
         process.currentDirectoryURL = URL(fileURLWithPath: exeDir)
         
         if let outputPipe = outputPipe {

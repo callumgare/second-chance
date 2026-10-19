@@ -117,6 +117,8 @@ class GameLauncher {
     private var desktop: WineDesktop?
     /// Steam, for a game that needs it running (`wine-steam*`).
     private var steam: WrappSteam?
+    /// What the in-process helpers report from inside the game; Wine games only.
+    private var helperReport: InProcessHelperReport?
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     /// What Wine and the game print, and what ScummVM prints: categories of
@@ -256,10 +258,17 @@ class GameLauncher {
         launchedAt = Date()
         gameStarted = false
         LogContext.enterStage("Starting the game")
+        if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-"),
+           let gameExe = getGameLaunchInfo(config).gameExeName {
+            helperReport = InProcessHelperReport(
+                armingVariables: WineEnvironment.inProcessHelperVariables(gameExe: gameExe), logger: logger)
+        }
         if config.gameEngine.hasPrefix("wine-steam") {
             LogContext.enterStage("Starting Steam")
             do {
-                let started = try WrappSteam(config: config, status: { infoWindow?.updateMessage($0) })
+                let helperReport = helperReport
+                let started = try WrappSteam(config: config, status: { infoWindow?.updateMessage($0) },
+                                             onOutputLine: { helperReport?.observe(line: $0) })
                 steam = started  // from here a quit can stop it
                 try started.waitUntilSignedIn(status: { infoWindow?.updateMessage($0) })
             } catch WrappSteam.Failure.cancelled {
@@ -315,6 +324,7 @@ class GameLauncher {
                     logger.notice("[Game Launch] Activating game window...")
                     if gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) {
                         diagnostics?.gameWindowAppeared()
+                        helperReport?.gameWindowAppeared()
                     }
                 }
             } else if launchedBySteam {
@@ -427,8 +437,13 @@ class GameLauncher {
         let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
         diagnostics.wineLaunched()
         self.diagnostics = diagnostics
-        ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, onLine: { diagnostics.observe(line: $0) })
-        ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, onLine: { diagnostics.observe(line: $0) })
+        let helperReport = helperReport
+        let observe: @Sendable (String) -> Void = { line in
+            diagnostics.observe(line: line)
+            helperReport?.observe(line: line)
+        }
+        ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, onLine: observe)
+        ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, onLine: observe)
         
         logger.notice("[Wine] Game process started with PID \(process.processIdentifier)")
         

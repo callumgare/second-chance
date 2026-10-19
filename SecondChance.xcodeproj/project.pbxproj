@@ -455,6 +455,7 @@
 				"$(SRCROOT)/WrappTemplate/setup-wine.sh",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/native_fullscreen.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/cursor_lock.m",
+				"$(SRCROOT)/WrappTemplate/InProcessHelpers/helper_common.h",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/patch-winemac.swift",
 			);
 			name = "Download And Copy Wine Files";

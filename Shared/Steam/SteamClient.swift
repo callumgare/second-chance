@@ -58,10 +58,21 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     /// and only what this one wrote counts.
     private var logOffsets: [String: UInt64] = [:]
 
+    /// The exe of the game Steam will launch, whose in-process helpers
+    /// (native fullscreen, cursor lock) are armed through Steam's environment:
+    /// a game Steam starts gets Steam's, not the `-applaunch` call's.
+    private let gameExe: String?
+    /// Sees each line Steam's processes print — the game's among them, when
+    /// Steam launches it.
+    private let onOutputLine: (@Sendable (String) -> Void)?
+
     /// `prefixDir` when the wrapp runs from a prefix outside its bundle
-    /// (a read-only wrapp's copy; see the wrapp's `getWinePrefix`).
-    init(wrappPath: URL, prefixDir: URL? = nil) {
+    /// (a read-only wrapp's copy; see the wrapp's `getWinePrefix`). `gameExe`
+    /// when Steam will launch a game — not while a build installs one.
+    init(wrappPath: URL, prefixDir: URL? = nil, gameExe: String? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
         wine = WineEnvironment(appPath: wrappPath, customPrefixDir: prefixDir)
+        self.gameExe = gameExe
+        self.onOutputLine = onOutputLine
     }
 
     var isInstalled: Bool {
@@ -192,15 +203,19 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         let process = Process()
         process.executableURL = wine.wineBinDir.appendingPathComponent("wine")
         process.arguments = [Self.windowsExecutable] + arguments
-        process.environment = wine.environmentVariables()
+        var env = wine.environmentVariables()
+        if let gameExe {
+            env.merge(WineEnvironment.inProcessHelperVariables(gameExe: gameExe)) { $1 }
+        }
+        process.environment = env
         process.standardInput = FileHandle.nullDevice
         // Not read to EOF: Wine's services inherit the pipes and hold them open.
         let output = Pipe()
         let errors = Pipe()
         process.standardOutput = output
         process.standardError = errors
-        ProcessLineLogger.attach(to: output, logger: outputLogger, level: .notice)
-        ProcessLineLogger.attach(to: errors, logger: outputLogger, level: .warning)
+        ProcessLineLogger.attach(to: output, logger: outputLogger, level: .notice, onLine: onOutputLine)
+        ProcessLineLogger.attach(to: errors, logger: outputLogger, level: .warning, onLine: onOutputLine)
         try process.run()
     }
 

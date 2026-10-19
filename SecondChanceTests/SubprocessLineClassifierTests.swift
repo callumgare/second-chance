@@ -29,6 +29,10 @@ struct SubprocessLineClassifierTests {
         ("ERROR: Could not open file", .error),
         ("WARNING: Game data not found!", .error),
         ("WARNING: ScummVM could not find any game in /x/disk-combined", .error),
+        // The in-process helpers name their own level.
+        ("second-chance-helper[CursorLock] notice: armed in Game.exe", .notice),
+        ("second-chance-helper[NativeFullscreen] warning: no eligible window after 90s; staying windowed", .warning),
+        ("second-chance-helper[NativeFullscreen] error: could not start watcher thread", .error),
     ])
     func classifies(line: String, expected: Logger.Level) {
         #expect(SubprocessLineClassifier.level(for: line, fallback: .notice) == expected)

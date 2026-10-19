@@ -20,9 +20,8 @@
 //
 //  winemac.so is loaded by every process that talks to Wine's Mac driver
 //  (explorer.exe, the game, ...), so NATIVE_MACOS_FULLSCREEN_EXE names the one
-//  executable that should act. Wine names each child's loader copy after the
-//  Windows .exe it runs, which makes the main executable's basename a reliable
-//  way to recognise the game process.
+//  executable that should act; helper_common.h has how the game's process
+//  is recognised.
 //
 //  The same dylib also carries cursor_lock.m, which uses this loading trick
 //  for a different job and is armed separately (docs/wine-in-process-helpers.md).
@@ -39,6 +38,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "helper_common.h"
 
 // Require the frame to be unchanged across one extra poll before toggling, so a
 // window caught mid-resize is not dragged into a wrongly-sized Space. Measured on
@@ -153,6 +154,8 @@ static void attemptFullscreen(void) {
            title, (int)frame.size.width, (int)frame.size.height);
     debugLog("entering native fullscreen: '%s' %dx%d",
              title, (int)frame.size.width, (int)frame.size.height);
+    helperReport("NativeFullscreen", "notice", "entering native fullscreen: '%s' %dx%d",
+                 title, (int)frame.size.width, (int)frame.size.height);
 
     [window toggleFullScreen:nil];
 }
@@ -168,6 +171,7 @@ static void *watcherMain(void *unused) {
     if (!mainLoop) {
         os_log_error(gLog, "[NativeFS] no main run loop; giving up");
         debugLog("no main run loop; giving up");
+        helperReport("NativeFullscreen", "error", "no main run loop; giving up");
         return NULL;
     }
 
@@ -182,21 +186,13 @@ static void *watcherMain(void *unused) {
         os_log(gLog, "[NativeFS] no eligible window after %.0fs; staying windowed",
                kGiveUpSeconds);
         debugLog("no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
+        helperReport("NativeFullscreen", "warning", "no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
     }
     return NULL;
 }
 
 static BOOL shouldActivate(void) {
-    const char *wanted = getenv("NATIVE_MACOS_FULLSCREEN_EXE");
-    if (!wanted || !*wanted) return NO;
-
-    char path[PATH_MAX] = {0};
-    uint32_t size = sizeof(path);
-    if (_NSGetExecutablePath(path, &size) != 0) return NO;
-
-    const char *name = strrchr(path, '/');
-    name = name ? name + 1 : path;
-    return strcasecmp(name, wanted) == 0;
+    return processRunsExeNamedBy("NATIVE_MACOS_FULLSCREEN_EXE");
 }
 
 __attribute__((constructor))
@@ -207,6 +203,7 @@ static void nativeFullscreenInit(void) {
 
     os_log(gLog, "[NativeFS] armed");
     debugLog("armed");
+    helperReport("NativeFullscreen", "notice", "armed in %s", getenv("NATIVE_MACOS_FULLSCREEN_EXE"));
 
     pthread_t thread;
     if (pthread_create(&thread, NULL, watcherMain, NULL) == 0) {
@@ -214,5 +211,6 @@ static void nativeFullscreenInit(void) {
     } else {
         os_log_error(gLog, "[NativeFS] could not start watcher thread");
         debugLog("could not start watcher thread");
+        helperReport("NativeFullscreen", "error", "could not start watcher thread");
     }
 }
