@@ -119,7 +119,9 @@ private struct Release {
         // 5. Tests
         if test {
             let runner = TestRunner(session: session)
-            try await runner.xcode.ensureTestBuild(AppBuildOptions())
+            // Not ensureTestBuild(AppBuildOptions()): an option group built
+            // with init() rather than parsed has no values, and reading one traps.
+            try await runner.xcode.buildForTesting()
             let unit = try await runner.unit(stamp: UI.timestamp())
             guard unit.status == 0 else {
                 throw SCError("Unit tests failed — not building a release from this.", exitCode: unit.status)
