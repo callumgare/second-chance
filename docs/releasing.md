@@ -30,8 +30,15 @@ next attempt.
 
 ## Publishing
 
-It stops before committing, tagging or pushing, and prints those commands
-instead. The app it produces is **signed with an Apple Development certificate
+Once the build is packaged it commits the project file and `CHANGELOG.md` as
+`chore(release): vX.Y.Z` and tags the commit `vX.Y.Z`, both locally — the
+rollback above takes them back out if either fails. It then asks whether to
+push the branch and tag to `origin` and create the GitHub release with `gh`.
+Answering no, or running with no terminal to ask, prints those commands
+instead. A failed push or `gh release create` leaves the commit and tag in
+place and names what is left to run.
+
+The app it produces is **signed with an Apple Development certificate
 and not notarized** (only a Developer ID certificate can be) — on macOS 15+
 users have to approve it under System Settings → Privacy & Security, as the
 Control-click bypass no longer works.

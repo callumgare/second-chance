@@ -10,8 +10,8 @@ struct ReleaseCommand: AsyncParsableCommand {
         Works out the next version from the conventional commits since the last \
         tag (cocogitto, configured in cog.toml), writes it into the SecondChance \
         and WrappTemplate targets, regenerates CHANGELOG.md and the release notes, \
-        runs the unit tests, then builds and zips a Release app. It stops before \
-        committing, tagging and pushing, and prints those commands instead — \
+        runs the unit tests, then builds and zips a Release app, commits and tags \
+        it. Pushing and creating the GitHub release are asked first — \
         publishing stays a decision you make.
         """
     )
@@ -67,8 +67,9 @@ private struct Release {
         let restorable = [repo.pbxproj, repo.changelog, notesFile]
         let originals = restorable.map { (url: $0, data: try? Data(contentsOf: $0)) }
         let zipExisted = FileManager.default.fileExists(atPath: zip.path)
+        let committed: (version: String, branch: String)?
         do {
-            try await perform(versionOverride: versionOverride, build: build, test: test)
+            committed = try await perform(versionOverride: versionOverride, build: build, test: test)
         } catch {
             var undone: [String] = []
             var failed: [String] = []
@@ -103,9 +104,16 @@ private struct Release {
             }
             throw error
         }
+        // Outside the rollback: once committed, the files are the commit's,
+        // and a failed push mustn't put the old ones back over it.
+        if let committed {
+            try await publish(version: committed.version, branch: committed.branch)
+        }
     }
 
-    private func perform(versionOverride: String?, build: Bool, test: Bool) async throws {
+    /// Returns the release's version and branch once it's committed and
+    /// tagged, or nil when it stopped short of that (a dry run, --notes-only).
+    private func perform(versionOverride: String?, build: Bool, test: Bool) async throws -> (version: String, branch: String)? {
         try Proc.require("cog", brew: "cocogitto")
         if build { try Proc.require("xcbeautify", brew: "xcbeautify") }
 
@@ -141,7 +149,7 @@ private struct Release {
             ui.line(ui.format("\(.accent("🔎 Dry run — release notes would read:"))"))
             ui.line(notes.split(separator: "\n", omittingEmptySubsequences: false).map { "   " + $0 }.joined(separator: "\n"))
             ui.line(ui.format("\(.accent("Skipped the build."))"))
-            return
+            return nil
         }
         try rewritten.write(to: repo.pbxproj, atomically: true, encoding: .utf8)
         ui.line(ui.format("\(.success("✔︎ MARKETING_VERSION \(oldVersion) → \(version), CURRENT_PROJECT_VERSION → \(buildNumber)"))"))
@@ -171,7 +179,7 @@ private struct Release {
 
         guard build else {
             ui.line(ui.format("\(.accent("Skipped the tests and build (--notes-only)."))"))
-            return
+            return nil
         }
 
         // 5. Tests
@@ -220,15 +228,69 @@ private struct Release {
             ui.warning("Not signed with Developer ID, so not notarized — first launch needs approval in System Settings → Privacy & Security.")
         }
 
-        // 7. What's left to do by hand
-        let notesPath = repo.display(notesFile)
-        ui.success("v\(version) is ready. Review, then publish:", takeaways: [
-            "git diff",
-            "git add -A && git commit -m \"chore(release): v\(version)\"",
-            "git tag -a \"v\(version)\" -m \"v\(version)\"",
-            "git push origin \"\(branch)\" \"v\(version)\"",
-            "gh release create \"v\(version)\" \"\(repo.display(zip))\" --title \"v\(version)\" --notes-file \"\(notesPath)\"",
-        ].map { TerminalText(stringLiteral: $0) })
+        // 7. Commit and tag locally — still undoable, so the rollback covers
+        // them too. Pushing is what other people see, so `run` asks first.
+        try await commitAndTag(version: version)
+        return (version, branch)
+    }
+
+    /// The release commit and its tag. If either fails, whatever was done is
+    /// taken back out of git, leaving the files for `run`'s rollback.
+    private func commitAndTag(version: String) async throws {
+        let tag = "v\(version)"
+        let files = [repo.pbxproj.path, repo.changelog.path]
+        try await ui.progressStep("Commit and tag", success: "Committed and tagged \(tag)") { _ in
+            let add = try await git(["add", "--"] + files)
+            guard add.succeeded else { throw SCError("git add failed: \(add.error)") }
+            let commit = try await git(["commit", "-m", "chore(release): \(tag)", "--"] + files)
+            guard commit.succeeded else {
+                _ = try? await git(["reset", "-q", "--"] + files)
+                throw SCError("git commit failed.", hints: [commit.output + commit.error])
+            }
+            let tagged = try await git(["tag", "-a", tag, "-m", tag])
+            guard tagged.succeeded else {
+                // Mixed reset: the commit goes, its changes stay in the tree
+                // for the rollback to put back.
+                _ = try? await git(["reset", "-q", "HEAD~1"])
+                throw SCError("git tag failed: \(tagged.error)")
+            }
+        }
+    }
+
+    /// Push the branch and tag and create the GitHub release, if the user says
+    /// so. Otherwise — or with no terminal to ask — print the commands. A
+    /// failure here leaves the commit and tag alone: they're correct, and
+    /// whatever didn't happen can be run by hand.
+    private func publish(version: String, branch: String) async throws {
+        let tag = "v\(version)"
+        let push = ["git", "push", "origin", branch, tag]
+        let release = ["gh", "release", "create", tag, repo.display(zip), "--title", tag, "--notes-file", repo.display(notesFile)]
+        let pushLine = push.map(Self.shellQuoted).joined(separator: " ")
+        let releaseLine = release.map(Self.shellQuoted).joined(separator: " ")
+
+        guard ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub release?") == true else {
+            ui.success("\(tag) is committed and tagged locally. To publish:", takeaways: [TerminalText(stringLiteral: pushLine), TerminalText(stringLiteral: releaseLine)])
+            return
+        }
+        let pushed = try await ui.progressStep("Push", success: "Pushed \(branch) and \(tag)") { _ in
+            try await git(["push", "origin", branch, tag])
+        }
+        guard pushed.succeeded else {
+            throw SCError("git push failed — \(tag) is still committed and tagged locally.",
+                          hints: [pushed.error, "Then run: \(pushLine) && \(releaseLine)"])
+        }
+        try Proc.require("gh", brew: "gh")
+        let created = try await ui.progressStep("GitHub release", success: "Created the \(tag) release") { _ in
+            try await Proc.collect("gh", Array(release.dropFirst()), cwd: repo.root)
+        }
+        guard created.succeeded else {
+            throw SCError("gh release create failed — \(tag) is pushed.", hints: [created.error, "Then run: \(releaseLine)"])
+        }
+        ui.success("\(tag) is released.", takeaways: [TerminalText(stringLiteral: created.output.trimmingCharacters(in: .whitespacesAndNewlines))])
+    }
+
+    private static func shellQuoted(_ word: String) -> String {
+        word.allSatisfy { $0.isLetter || $0.isNumber || "-_./:=@".contains($0) } ? word : "\"\(word)\""
     }
 
     /// Returns the current branch.
