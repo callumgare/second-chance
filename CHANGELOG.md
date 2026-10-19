@@ -1,8 +1,6 @@
 # Changelog
 
-All notable changes to Second Chance. Generated from the commit history by
-[cocogitto](https://docs.cocogitto.io); run `./prepare-release.sh` rather than
-editing this file by hand.
+All notable changes to Second Chance.
 
 ## 0.3.0 — 2026-09-05
 

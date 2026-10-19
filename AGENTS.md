@@ -67,6 +67,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, WrappPuppeteer's permissions and exit codes, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
+| [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` is generated and why not to edit it by hand, its rollback on failure, and the signing caveat |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing |
@@ -392,20 +393,8 @@ the minor while the project is pre-1.0 and the major after. **`refactor`,
 none of feat/fix/breaking produces no release at all, and `sc release` says so
 rather than inventing a version. Pass `--version X.Y.Z` to force one.
 
-`sc release` writes `MARKETING_VERSION` into the `SecondChance` and
-`WrappTemplate` targets only; `WrappPuppeteer` and `SecondChanceTests` are never
-shipped and stay at 1.0. It also sets `CURRENT_PROJECT_VERSION` to the commit
-count, which matters beyond bookkeeping: `WineManager` keys its prefix cache on
-the bundle version, so a release that didn't change it would hand users a stale
-Wine prefix.
-
-It stops before committing, tagging or pushing, and prints those
-commands instead. If it fails or is interrupted partway, it puts back the
-project file, `CHANGELOG.md` and the release notes it changed, so the tree is
-clean for the next attempt. The app it produces is **signed with an Apple Development
-certificate and not notarized** (only a Developer ID certificate can be) — on
-macOS 15+ users have to approve it under System Settings → Privacy & Security,
-as the Control-click bypass no longer works.
+What `sc release` writes, how it treats `CHANGELOG.md`, and what is left to
+do by hand afterwards is in [docs/releasing.md](docs/releasing.md).
 
 ## Things Currently In Flux
 

@@ -105,9 +105,7 @@ enum Changelog {
     static let defaultHeader = """
     # Changelog
 
-    All notable changes to Second Chance. Generated from the commit history by
-    [cocogitto](https://docs.cocogitto.io); run `./sc release` rather than
-    editing this file by hand.
+    All notable changes to Second Chance.
 
 
     """
