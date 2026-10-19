@@ -11,6 +11,7 @@
 //  game it tests, so it is slow and, run often, could trip Steam's limits.
 
 import Foundation
+import os
 import Testing
 @testable import SecondChance
 
@@ -21,10 +22,18 @@ struct SteamInstallIntegrationTests {
 
     static var selectedGames: [GameInfo] { TestGameFilter.selectedGames.filter(\.isOnSteam) }
 
+    /// The slugs the account owns, from the first build that signed in. Each
+    /// build signs in to Steam afresh, and signing in again and again just
+    /// to learn a game isn't owned got the account's sign-ins stalled for an
+    /// hour and a half partway through a full run.
+    private static let ownedSlugs = OSAllocatedUnfairLock<Set<String>?>(initialState: nil)
+
     @Test("Each game on Steam builds from Steam and launches", .timeLimit(.minutes(60)), arguments: selectedGames)
     func game(_ game: GameInfo) async throws {
         // A DRM-free game is built to launch directly, the default answer.
-        try await buildAndLaunch(game, launchMode: game.offersSteamLaunchChoice ? .direct : nil)
+        try await IntegrationSerial.shared.run {
+            try await buildAndLaunch(game, launchMode: game.offersSteamLaunchChoice ? .direct : nil)
+        }
     }
 
     // MARK: - One game
@@ -48,6 +57,11 @@ struct SteamInstallIntegrationTests {
             Self.progress?.write(["event": "load", "message": "\(reading)"])
             outcome.overloaded = true
             Issue.record("The Mac is too busy to test \(game.id) fairly: \(reading)")
+            return
+        }
+
+        if let owned = Self.ownedSlugs.withLock({ $0 }), !owned.contains(game.id) {
+            outcome.skipped = "The Steam account doesn't own \(game.title) (checked by an earlier build in this run)"
             return
         }
 
@@ -77,6 +91,9 @@ struct SteamInstallIntegrationTests {
         // A backstop only: the build times out Steam's sign-in and download itself.
         let succeeded = await recorder.waitForCompletion(timeout: 3000)
         Attachment.record(Data(recorder.events.map { "\($0)" }.joined(separator: "\n").utf8), named: "steam-events-\(game.id).txt")
+        if let owned = recorder.steamGamesOwned {
+            Self.ownedSlugs.withLock { $0 = Set(owned.map(\.id)) }
+        }
 
         if case .steamGameNotOwned = recorder.failedError {
             outcome.skipped = "The Steam account doesn't own \(game.title)"

@@ -110,7 +110,9 @@ there would report a pass having tested nothing.
 **Each build source has its own suite**, picked with `--source`:
 `DiskInstallIntegrationTests` (`disk`, the default) and
 `SteamInstallIntegrationTests` (`steam`). A game tested both ways is two rows
-in the table, with a Source column. The Steam suite:
+in the table, with a Source column. Swift Testing would run the two suites side
+by side, so each per-game test runs inside `IntegrationSerial`, which lets one
+game build and launch at a time across both. The Steam suite:
 
 - builds each requested game that's on Steam from Steam, headless, and
   launches it with WrappPuppeteer, like the disk suite (a DRM-free game is
@@ -118,7 +120,11 @@ in the table, with a Source column. The Steam suite:
 - needs a saved Steam sign-in on the Mac it runs on (build a Steam game from
   the app once, or copy `~/Library/Application Support/SecondChance/Steam/`
   over) — without one the suite disables itself and says why;
-- reports a game the account doesn't own as `skipped`, not failed;
+- reports a game the account doesn't own as `skipped`, not failed. Each
+  build signs in to Steam on its own, so the first one to sign in tells the
+  suite (a `steamGamesOwned` bus event) which games the account owns, and the
+  rest of the run skips the others without building: signing in for every game
+  in a full run once got Steam's sign-ins stalled for an hour and a half;
 - checks the finished wrapp carries none of the sign-in;
 - always builds: `--refresh-wrapp` applies to the disk suite's wrapps only;
 - downloads every game it tests, so it's slow, and run often could trip
@@ -141,8 +147,13 @@ copies — and asserts on the events the flow publishes:
 - Every automatic patch for the game applied (`patchApplied`), and none failed:
   a failed patch doesn't fail the build, so it has to fail the test
 - The full event sequence in order, ending in `signed` then `completed`
-- If `WrappPuppeteer.app` is present: the game launches, reaches its main menu,
-  and quits cleanly
+- If `WrappPuppeteer.app` is present: the game launches, its window goes
+  fullscreen (covers a whole display — native fullscreen for Wine, `-f` for
+  ScummVM; a game left in a window fails), it reaches its main menu, and it
+  quits cleanly
+- For a Wine game, both in-process helpers armed in it: the wrapp's log has
+  `[Helpers] Native fullscreen armed` and `[Helpers] Cursor lock armed`
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md))
 
 `RecordingEventSubscriber` captures the bus events; the assertions read it.
 **The bus events are the integration contract** — when moving orchestration

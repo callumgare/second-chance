@@ -304,6 +304,38 @@ enum WrappInfo {
     }
 }
 
+/// One integration game at a time, across suites. Each suite is `.serialized`,
+/// but Swift Testing runs separate suites side by side, so `--source disk,steam`
+/// built and launched two games at once: two wrapps on screen confuse
+/// WrappPuppeteer, and the two builds starve each other's Wine.
+actor IntegrationSerial {
+    static let shared = IntegrationSerial()
+
+    private var busy = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    nonisolated func run<T: Sendable>(_ body: () async throws -> T) async throws -> T {
+        await acquire()
+        do {
+            let result = try await body()
+            await release()
+            return result
+        } catch {
+            await release()
+            throw error
+        }
+    }
+
+    private func acquire() async {
+        guard busy else { busy = true; return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    private func release() {
+        if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
+    }
+}
+
 /// Invokes WrappPuppeteer as a subprocess to launch a wrapp and verify the
 /// game quits cleanly. Returns the exit code from WrappPuppeteer.
 enum AppPuppetRunner {
@@ -320,12 +352,18 @@ enum AppPuppetRunner {
         }
         let slug = game.id
 
+        // A Wine game has to arm both in-process helpers; nothing else would
+        // notice if they didn't (the game still plays, in a window).
+        let engine = WrappInfo.gameEngine(at: wrappURL) ?? ""
+        let requiredHelpers = engine == "wine" || engine.hasPrefix("wine-") ? InProcessHelperReport.Helper.allCases : []
+
         var firstAttempt = try await Self.launchAndCollect(
             appBundle: bundle,
             wrappURL: wrappURL,
             timeout: timeout,
             gameSlug: slug,
-            attemptLabel: "initial"
+            attemptLabel: "initial",
+            requiredHelpers: requiredHelpers
         )
 
         if firstAttempt.exitCode == screenRecordingRelaunchExitCode {
@@ -339,7 +377,8 @@ enum AppPuppetRunner {
                 wrappURL: wrappURL,
                 timeout: timeout,
                 gameSlug: slug,
-                attemptLabel: "relaunch"
+                attemptLabel: "relaunch",
+                requiredHelpers: requiredHelpers
             )
         }
 
@@ -351,7 +390,8 @@ enum AppPuppetRunner {
         wrappURL: URL,
         timeout: TimeInterval,
         gameSlug: String,
-        attemptLabel: String
+        attemptLabel: String,
+        requiredHelpers: [InProcessHelperReport.Helper]
     ) async throws -> (exitCode: Int32, pid: Int32) {
         let launchTime = Date()
         let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
@@ -426,6 +466,18 @@ enum AppPuppetRunner {
                 userInfo: [
                     NSLocalizedDescriptionKey: "WrappPuppeteer logs were not UTF-8 decodable (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
                 ]
+            )
+        }
+
+        // Checked after the puppeteer's own verdict, which says more when the
+        // game didn't get as far as its window at all.
+        let gameLog = String(decoding: gameLogData, as: UTF8.self)
+        let unarmed = requiredHelpers.filter { !gameLog.contains($0.armedMarker) }
+        if !unarmed.isEmpty {
+            throw NSError(
+                domain: "AppPuppetRunner",
+                code: Int(effectiveExitCode),
+                userInfo: [NSLocalizedDescriptionKey: "\(unarmed.map(\.name).joined(separator: " and ")) never armed in the game (no \"\(unarmed[0].armedMarker)\" in the wrapp's log, attempt: \(attemptLabel))"]
             )
         }
 
@@ -611,12 +663,22 @@ extension WrappInfo {
 
     /// The `GameSlug` value from the wrapp's AppSettings.plist.
     static func gameSlug(at wrappPath: URL) throws -> String? {
+        appSetting("GameSlug", at: wrappPath)
+    }
+
+    /// The `GameEngine` value from the wrapp's AppSettings.plist
+    /// (`wine`, `wine-steam`, `scummvm`, …).
+    static func gameEngine(at wrappPath: URL) -> String? {
+        appSetting("GameEngine", at: wrappPath)
+    }
+
+    private static func appSetting(_ key: String, at wrappPath: URL) -> String? {
         let settingsPath = wrappPath.appendingPathComponent("Contents/Resources/AppSettings.plist")
         guard FileManager.default.fileExists(atPath: settingsPath.path),
               let data = try? Data(contentsOf: settingsPath),
               let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
             return nil
         }
-        return plist["GameSlug"] as? String
+        return plist[key] as? String
     }
 }

@@ -135,6 +135,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             let owned = try await client.ownedAppIDs(timeout: 120)
             let ownedGames = gameInfoProvider.allGames().filter { $0.isOnSteam && $0.steamAppID.map(owned.contains) == true }
             logger.notice("The Steam account owns \(ownedGames.count) of the games: \(ownedGames.map(\.id).joined(separator: ", "))")
+            await bus.publishWrappBuild(.steamGamesOwned(ownedGames))
             let gameInfo: GameInfo
             if let preselected {
                 guard ownedGames.contains(where: { $0.id == preselected.id }) else {

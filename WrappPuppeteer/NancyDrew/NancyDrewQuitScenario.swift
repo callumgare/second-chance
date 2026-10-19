@@ -27,6 +27,10 @@ struct NancyDrewQuitScenario {
         /// The wrapp closes it as soon as it sees that window, so this is
         /// only slack for a loaded machine.
         var infoWindowCloseTimeout: TimeInterval = 30
+        /// How long the game's window may take to go fullscreen once it
+        /// has focus. Native fullscreen waits for the window to settle
+        /// first, which on a loaded machine can take a while.
+        var fullScreenTimeout: TimeInterval = 120
         var quitTimeout: TimeInterval = 300
         /// How long to keep looking for the Exit button
         var findExitTimeout: TimeInterval = 300
@@ -89,6 +93,14 @@ struct NancyDrewQuitScenario {
         guard waitForGameFocus(pid: gamePid, windows: gameWindows) else {
             forceQuit(app)
             return .failed("Game window did not become active in time")
+        }
+
+        // Every wrapp opens its game fullscreen: native fullscreen for Wine,
+        // `-f` for ScummVM. A game left in a window still plays, so nothing
+        // else here would notice.
+        guard waitForFullScreen(pid: gamePid) else {
+            forceQuit(app)
+            return .failed("Game window did not go fullscreen within \(Int(options.fullScreenTimeout))s")
         }
 
         guard clickExit(appName: appName, app: app, gamePid: gamePid) else {
@@ -178,6 +190,21 @@ struct NancyDrewQuitScenario {
             logger.notice("📸 Full screen screenshot: \(path)")
         }
 
+        return true
+    }
+
+    /// Wait for one of the game's windows to cover a whole display.
+    private func waitForFullScreen(pid: Int32) -> Bool {
+        logger.notice("[Step 4] Waiting for the game's window to go fullscreen...")
+        guard let window = WindowFinder.waitForFullScreenWindow(pid: pid, timeout: options.fullScreenTimeout) else {
+            logger.error("❌ The game's window never covered a whole display")
+            WindowFinder.logAllWindows()
+            if let path = ScreenCapture.captureScreen(prefix: "game-not-fullscreen") {
+                logger.notice("📸 Full screen screenshot: \(path)")
+            }
+            return false
+        }
+        logger.notice("✅ Game window is fullscreen (\(Int(window.bounds.width))x\(Int(window.bounds.height)))")
         return true
     }
 

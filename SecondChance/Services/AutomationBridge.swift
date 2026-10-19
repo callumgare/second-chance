@@ -167,6 +167,8 @@ final class AutomationBridge: @unchecked Sendable {
             d["type"] = "wrappBuild.patchApplied"; d["patchId"] = id
         case .patchFailed(let id, let message):
             d["type"] = "wrappBuild.patchFailed"; d["patchId"] = id; d["error"] = message
+        case .steamGamesOwned(let games):
+            d["type"] = "wrappBuild.steamGamesOwned"; d["slugs"] = games.map(\.id)
         case .completed(let url):
             d["type"] = "wrappBuild.completed"; d["wrappPath"] = url.path
         case .failed(let error):

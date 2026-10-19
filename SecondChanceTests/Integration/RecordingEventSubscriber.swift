@@ -33,6 +33,7 @@ final class RecordingEventSubscriber: @unchecked Sendable {
     private(set) var failedError: WrappBuildError?
     private(set) var appliedPatches: [String] = []
     private(set) var failedPatches: [(id: String, message: String)] = []
+    private(set) var steamGamesOwned: [GameInfo]?
     private(set) var progressStates: [WrappBuildState] = []
 
     private var subscriptionToken: EventBus<AppEvent>.Token?
@@ -87,6 +88,8 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             appliedPatches.append(id)
         case .patchFailed(let id, let message):
             failedPatches.append((id, message))
+        case .steamGamesOwned(let games):
+            steamGamesOwned = games
         case .started:
             break
         }

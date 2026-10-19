@@ -50,6 +50,10 @@ enum WrappBuildEvent {
     case gameExeDetected(path: String, gameInfo: GameInfo)
     case wrappConfigured(exePath: String, installerDir: String, gameInfo: GameInfo)
     case signed(wrappPath: URL)
+    /// The Nancy Drew games the signed-in Steam account owns, once a Steam
+    /// build has checked. The integration tests use it to skip the games the
+    /// account doesn't own without signing in to Steam for each.
+    case steamGamesOwned([GameInfo])
 
     // Official game patches. A failed patch doesn't fail the build (headless
     // runs continue past it), so this is the only record of it beyond the log.

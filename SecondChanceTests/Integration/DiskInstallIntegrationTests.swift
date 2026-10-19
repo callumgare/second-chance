@@ -112,6 +112,10 @@ struct DiskInstallIntegrationTests {
         arguments: TestGameFilter.selectedGames
     )
     func wrappCreationForGame(game: GameInfo) async throws {
+        try await IntegrationSerial.shared.run { try await testGame(game) }
+    }
+
+    private func testGame(_ game: GameInfo) async throws {
         // Per-game progress for `sc test integration`'s live display. The
         // finished line's result agrees with this test's: any failed
         // expectation or thrown error makes it "failed".
