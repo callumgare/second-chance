@@ -27,11 +27,18 @@ struct ReleaseCommand: AsyncParsableCommand {
     @Flag(help: "Version, changelog and notes only; no tests or build.")
     var notesOnly = false
 
+    @Flag(help: ArgumentHelp(
+        "Build and package the next version without changing the repo.",
+        discussion: "No changelog, notes, commit or tag: the version is written into the project for the build and put back afterwards."
+    ))
+    var buildOnly = false
+
     @Flag(help: "Don't run the unit tests before building.")
     var skipTests = false
 
     func validate() throws {
         if dryRun && notesOnly { throw ValidationError("--dry-run and --notes-only can't be combined.") }
+        if buildOnly && (dryRun || notesOnly) { throw ValidationError("--build-only can't be combined with --dry-run or --notes-only.") }
         if let version, !ProjectVersion.isSemanticVersion(version.hasPrefix("v") ? String(version.dropFirst()) : version) {
             throw ValidationError("'\(version)' isn't a three-part semantic version.")
         }
@@ -39,7 +46,7 @@ struct ReleaseCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let release = Release(session: session, dryRun: dryRun)
+        let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly)
         try await release.run(versionOverride: version.map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 },
                               build: !dryRun && !notesOnly, test: !dryRun && !notesOnly && !skipTests)
     }
@@ -48,6 +55,9 @@ struct ReleaseCommand: AsyncParsableCommand {
 private struct Release {
     let session: Session
     let dryRun: Bool
+    /// Build the next version and leave the repo as it was: no changelog,
+    /// notes, commit or tag, and the project file put back afterwards.
+    let buildOnly: Bool
     var repo: Repo { session.repo }
     var ui: UI { session.ui }
 
@@ -71,38 +81,16 @@ private struct Release {
         do {
             committed = try await perform(versionOverride: versionOverride, build: build, test: test)
         } catch {
-            var undone: [String] = []
-            var failed: [String] = []
-            for original in originals {
-                let current = try? Data(contentsOf: original.url)
-                guard current != original.data else { continue }
-                do {
-                    if let data = original.data {
-                        try data.write(to: original.url, options: .atomic)
-                    } else {
-                        try FileManager.default.removeItem(at: original.url)
-                    }
-                    undone.append(repo.display(original.url))
-                } catch {
-                    failed.append("\(repo.display(original.url)): \(error.localizedDescription)")
-                }
-            }
-            if !zipExisted, FileManager.default.fileExists(atPath: zip.path) {
-                do {
-                    try FileManager.default.removeItem(at: zip)
-                    undone.append(repo.display(zip))
-                } catch {
-                    failed.append("\(repo.display(zip)): \(error.localizedDescription)")
-                }
-            }
-            if !undone.isEmpty {
-                ui.line(ui.format("\(.accent("↩︎ Release stopped — put back \(undone.joined(separator: ", "))."))"))
-            }
-            if !failed.isEmpty {
-                ui.warning("Couldn't undo every change the release made — check `git status`.",
-                           next: TerminalText(stringLiteral: failed.joined(separator: "\n")))
-            }
+            restore(originals, removingZip: !zipExisted, reason: "Release stopped")
             throw error
+        }
+        if buildOnly {
+            // The build has the version baked in; the repo goes back as it was.
+            restore(originals, removingZip: false, reason: "Build only")
+            if let committed {
+                ui.success("Built v\(committed.version) — not committed or tagged.", takeaways: [TerminalText(stringLiteral: repo.display(zip))])
+            }
+            return
         }
         // Outside the rollback: once committed, the files are the commit's,
         // and a failed push mustn't put the old ones back over it.
@@ -111,8 +99,45 @@ private struct Release {
         }
     }
 
+    /// Put the files back as they were before the release touched them, and
+    /// remove a zip it created when `removingZip`.
+    private func restore(_ originals: [(url: URL, data: Data?)], removingZip: Bool, reason: String) {
+        var undone: [String] = []
+        var failed: [String] = []
+        for original in originals {
+            let current = try? Data(contentsOf: original.url)
+            guard current != original.data else { continue }
+            do {
+                if let data = original.data {
+                    try data.write(to: original.url, options: .atomic)
+                } else {
+                    try FileManager.default.removeItem(at: original.url)
+                }
+                undone.append(repo.display(original.url))
+            } catch {
+                failed.append("\(repo.display(original.url)): \(error.localizedDescription)")
+            }
+        }
+        if removingZip, FileManager.default.fileExists(atPath: zip.path) {
+            do {
+                try FileManager.default.removeItem(at: zip)
+                undone.append(repo.display(zip))
+            } catch {
+                failed.append("\(repo.display(zip)): \(error.localizedDescription)")
+            }
+        }
+        if !undone.isEmpty {
+            ui.line(ui.format("\(.accent("↩︎ \(reason) — put back \(undone.joined(separator: ", "))."))"))
+        }
+        if !failed.isEmpty {
+            ui.warning("Couldn't undo every change the release made — check `git status`.",
+                       next: TerminalText(stringLiteral: failed.joined(separator: "\n")))
+        }
+    }
+
     /// Returns the release's version and branch once it's committed and
-    /// tagged, or nil when it stopped short of that (a dry run, --notes-only).
+    /// tagged (for --build-only, once it's packaged), or nil when it stopped
+    /// short of that (a dry run, --notes-only).
     private func perform(versionOverride: String?, build: Bool, test: Bool) async throws -> (version: String, branch: String)? {
         try Proc.require("cog", brew: "cocogitto")
         if build { try Proc.require("xcbeautify", brew: "xcbeautify") }
@@ -132,11 +157,16 @@ private struct Release {
         let buildNumber = try await git(["rev-list", "--count", "HEAD"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
         ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(versionOverride != nil ? "from --version" : "up from \(previous ?? "no tag")")"))"))
 
-        let range = previous.map { "\($0)..HEAD" } ?? "HEAD"
-        let notesResult = try await Proc.collect("cog", ["changelog", range, "--template", repo.notesTemplate.path], cwd: repo.root)
-        let notes = Changelog.trimLeadingBlankLines(notesResult.output)
-        guard !notes.isEmpty else {
-            throw SCError("cog produced empty release notes for \(range).")
+        let notes: String
+        if buildOnly {
+            notes = ""
+        } else {
+            let range = previous.map { "\($0)..HEAD" } ?? "HEAD"
+            let notesResult = try await Proc.collect("cog", ["changelog", range, "--template", repo.notesTemplate.path], cwd: repo.root)
+            notes = Changelog.trimLeadingBlankLines(notesResult.output)
+            guard !notes.isEmpty else {
+                throw SCError("cog produced empty release notes for \(range).")
+            }
         }
 
         // 3. Project version
@@ -156,26 +186,28 @@ private struct Release {
 
         // 4. Changelog and notes
         try FileManager.default.createDirectory(at: repo.releaseDir, withIntermediateDirectories: true)
-        try (notes + "\n").write(to: notesFile, atomically: true, encoding: .utf8)
-        let existing = try? String(contentsOf: repo.changelog, encoding: .utf8)
-        let date = { let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
-        if let existing, Changelog.hasSection(for: version, in: existing) {
-            // Usually left over from an earlier attempt at this release, so
-            // missing whatever has been committed since. Without a terminal
-            // to ask, keep it: replacing it would drop any hand edits.
-            if ui.confirm("CHANGELOG.md already has a \(version) section. Replace it with the notes generated now?") == true {
-                try Changelog.replacing(version: version, date: date, notes: notes, in: existing)
-                    .write(to: repo.changelog, atomically: true, encoding: .utf8)
-                ui.line(ui.format("\(.success("✔︎ CHANGELOG.md (replaced the \(version) section)"))"))
+        if !buildOnly {
+            try (notes + "\n").write(to: notesFile, atomically: true, encoding: .utf8)
+            let existing = try? String(contentsOf: repo.changelog, encoding: .utf8)
+            let date = { let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
+            if let existing, Changelog.hasSection(for: version, in: existing) {
+                // Usually left over from an earlier attempt at this release, so
+                // missing whatever has been committed since. Without a terminal
+                // to ask, keep it: replacing it would drop any hand edits.
+                if ui.confirm("CHANGELOG.md already has a \(version) section. Replace it with the notes generated now?") == true {
+                    try Changelog.replacing(version: version, date: date, notes: notes, in: existing)
+                        .write(to: repo.changelog, atomically: true, encoding: .utf8)
+                    ui.line(ui.format("\(.success("✔︎ CHANGELOG.md (replaced the \(version) section)"))"))
+                } else {
+                    ui.warning("CHANGELOG.md already has a \(version) section — leaving it alone.")
+                }
             } else {
-                ui.warning("CHANGELOG.md already has a \(version) section — leaving it alone.")
+                try Changelog.adding(version: version, date: date, notes: notes, to: existing)
+                    .write(to: repo.changelog, atomically: true, encoding: .utf8)
+                ui.line(ui.format("\(.success("✔︎ CHANGELOG.md"))"))
             }
-        } else {
-            try Changelog.adding(version: version, date: date, notes: notes, to: existing)
-                .write(to: repo.changelog, atomically: true, encoding: .utf8)
-            ui.line(ui.format("\(.success("✔︎ CHANGELOG.md"))"))
+            ui.line(ui.format("\(.success("✔︎ \(repo.display(notesFile))"))"))
         }
-        ui.line(ui.format("\(.success("✔︎ \(repo.display(notesFile))"))"))
 
         guard build else {
             ui.line(ui.format("\(.accent("Skipped the tests and build (--notes-only)."))"))
@@ -227,6 +259,8 @@ private struct Release {
         if !(signature.output + signature.error).contains("Authority=Developer ID") {
             ui.warning("Not signed with Developer ID, so not notarized — first launch needs approval in System Settings → Privacy & Security.")
         }
+
+        if buildOnly { return (version, branch) }
 
         // 7. Commit and tag locally — still undoable, so the rollback covers
         // them too. Pushing is what other people see, so `run` asks first.
@@ -299,8 +333,10 @@ private struct Release {
         guard FileManager.default.fileExists(atPath: repo.notesTemplate.path) else { throw SCError("Can't find \(repo.display(repo.notesTemplate)).") }
 
         // A dirty tree would get swept into the release commit, and the
-        // version bump needs to be the only change in it.
-        if !dryRun {
+        // version bump needs to be the only change in it. A build-only run
+        // commits nothing and puts the project file back byte for byte, so
+        // uncommitted work is safe — and gets built.
+        if !dryRun && !buildOnly {
             let status = try await git(["status", "--porcelain"])
             if !status.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw SCError("The working tree isn't clean.", hints: ["Commit or stash first (or use --dry-run).", status.output])

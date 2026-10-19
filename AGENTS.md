@@ -27,6 +27,7 @@ package in `Tools/sc/` — [docs/dev-cli.md](docs/dev-cli.md)). The project uses
 
 ./sc release                       # Version, changelog, notes and a Release build
 ./sc release --dry-run             # Show what a release would contain
+./sc release --build-only          # Build the next version; commit, tag and change nothing
 ```
 
 Commands that need the app build it first; `--skip-app-build` reuses the build in

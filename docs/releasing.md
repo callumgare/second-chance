@@ -28,6 +28,12 @@ If it fails or is interrupted partway, it puts back the project file,
 `CHANGELOG.md` and the release notes it changed, so the tree is clean for the
 next attempt.
 
+`--build-only` builds what the next release would be without changing the
+repo: it writes the version into the project file for the build, runs the
+tests (unless `--skip-tests`), builds and zips the app, then puts the project
+file back. It writes no changelog or notes and doesn't commit, tag or push,
+so it works on a dirty tree, building whatever is uncommitted.
+
 ## Publishing
 
 Once the build is packaged it commits the project file and `CHANGELOG.md` as
