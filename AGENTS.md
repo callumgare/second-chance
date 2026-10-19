@@ -406,13 +406,12 @@ as the Control-click bypass no longer works.
 
 ## Things Currently In Flux
 
-- **Steam works, with one known problem left.** Steam wrapps build and
-  launch (`SteamWrappBuilder`, `WrappTemplate/WrappSteam.swift`), the Steam
-  option is on the welcome screen, and `sc test integration --source steam`
-  tests them. But Steam inside Wine asks macOS for the microphone and the
-  local network when it starts, and **hangs until those prompts are
-  answered** — on a player's Mac they appear under the game's name. Stopping
-  Steam asking is the open item in [docs/steam.md](docs/steam.md).
+- **Steam works.** Steam wrapps build and launch (`SteamWrappBuilder`,
+  `WrappTemplate/WrappSteam.swift`), the Steam option is on the welcome
+  screen, and `sc test integration --source steam` tests them. One catch,
+  for development only: run under `sc`, Steam waits on macOS microphone and
+  local-network prompts addressed to `sc`, and hangs until they're answered
+  ([docs/steam.md](docs/steam.md)). Run from the app, macOS asks nothing.
 - **Her download works end-to-end** through the same helpers as disk (it signs
   and publishes the same events), but has far less real-world mileage than the
   disk path.

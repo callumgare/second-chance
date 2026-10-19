@@ -9,13 +9,23 @@ wrapp and WrappPuppeteer alike.
 Steam builds and Steam wrapps work end to end, tested by
 `sc test integration --source steam` ([testing.md](testing.md)).
 
-**Known problem: Steam's permission prompts.** At start-up Steam asks macOS
-for the microphone (voice chat) and the local network (Remote Play / LAN
-discovery), and hangs until both prompts are answered — on a test Mac a build's
-Steam sat for 20 minutes, then signed in in 66 s once they were. The prompts
-name the responsible Mac app: `sc`, Second Chance, or the game itself.
-Rebuilding `sc` makes macOS ask again. Until Steam is stopped from asking,
-answer them (the microphone can be refused; the local network either way).
+**Steam's permission prompts, under `sc`.** At start-up Steam touches the
+microphone (voice chat) and the local network (Remote Play / LAN discovery).
+macOS attributes that to the responsible Mac app:
+
+- **Second Chance or a wrapp** (an app bundle, with no usage description for
+  either): macOS quietly declines, Steam carries on. This is what players get,
+  and a build started from the app was checked to raise no prompt.
+- **`sc`** (a bare command-line tool): macOS asks — "Allow 'sc' to find
+  devices on local networks?", "'sc' would like to access the Microphone" —
+  and **Steam hangs until both are answered**: on a test Mac a build's Steam
+  sat for 20 minutes, then signed in in 66 s once they were. Rebuilding `sc`
+  makes macOS ask again, as it's a new binary.
+
+So for `sc wrapp build --from steam` and the Steam suite, answer them on the
+Mac they run on (the microphone can be refused). Having `sc` disclaim
+responsibility for the app it runs, so the app is the responsible process,
+would end this.
 
 ## Building
 
