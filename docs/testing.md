@@ -86,6 +86,12 @@ in `Tools/sc/Sources/SCKit/Support/TestRunner.swift`: `DiskInstallIntegrationTes
 (they shell out to the bundled exiftool). A new suite therefore runs by default;
 one that is slow or needs the environment set up has to be added to that list.
 
+The exception is a suite that switches itself off unless told where its
+setup is. `SteamClientSmokeTests` drives a real Steam and is `.enabled(if:)`
+the `TEST_RUNNER_STEAM_SMOKE_*` variables are set, so a normal `sc test unit`
+reports it as skipped in no time. [steam.md](steam.md#testing) has how to
+run it.
+
 ### Integration tests (`SecondChanceTests/Integration/`)
 
 Slow (~1.5 min for a cached ScummVM game, minutes for a Wine install), and they

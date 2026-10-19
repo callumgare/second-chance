@@ -68,6 +68,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, WrappPuppeteer's permissions and exit codes, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
+| [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
 | [docs/historical-plans/2026-10-16-logging-overhaul.md](docs/historical-plans/2026-10-16-logging-overhaul.md) | You want to know why the logs are structured as they are — how the failures that hid their causes were found, what was wrong, and which changes were chosen |
@@ -399,8 +400,10 @@ as the Control-click bypass no longer works.
 - **Steam is a deliberate stub.** `SteamWrappBuilder.build` throws
   `WrappBuildError.steamNotFullyImplemented` *before* creating anything, so a
   failed attempt leaves no temp wrapp. Implementing it means the whole flow —
-  install the Steam client into the wrapp, let the user install through Steam's
-  UI, then locate and configure the game — not a partial version.
+  install the Steam client into the wrapp, sign in, install the game, then
+  locate and configure it — not a partial version. The pieces it builds on
+  (the shared sign-in, driving Steam, reading its files) are in `Shared/Steam/`
+  and described in [docs/steam.md](docs/steam.md).
 - **Her download works end-to-end** through the same helpers as disk (it signs
   and publishes the same events), but has far less real-world mileage than the
   disk path.

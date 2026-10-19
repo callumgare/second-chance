@@ -16,7 +16,7 @@ private nonisolated let wineLogger = Logger(label: "au.gare.callum.second-chance
 private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.Shared.Wine")
 
 /// Wine configuration and execution utilities
-public struct WineEnvironment {
+nonisolated public struct WineEnvironment: Sendable {
     let wineDir: URL
     let wineBinDir: URL
     let prefixDir: URL

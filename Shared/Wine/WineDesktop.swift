@@ -27,7 +27,7 @@ import Logging
 /// `release()` ends `start.exe` once the programs are done; explorer then
 /// closes normally. Call it before `wineserver -w`, which would otherwise wait
 /// for ever.
-public final class WineDesktop {
+nonisolated public final class WineDesktop {
     private let launcher: Process
     private let logger: Logger
 
