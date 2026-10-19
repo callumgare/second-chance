@@ -224,7 +224,7 @@ direct assignment.
   must be logged in at that Mac's console. That run is a LaunchAgent, so it
   outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
   picks it up again.
-- **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG). Run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) if Wine setup misbehaves after code changes.
+- **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG) plus the bundled Wine engine's version (`Contents/SharedSupport/wine/version`), so a Wine upgrade starts a fresh prefix by itself. Caching a prefix removes every other key's. Other changes to how the prefix is set up (winetricks verbs, `ddraw.ini`) don't change the key: run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after those, or if Wine setup misbehaves after code changes.
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
   never take it either, since the interactive installer is a wizard nobody is

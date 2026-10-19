@@ -28,23 +28,40 @@ class WineManager {
     
     // MARK: - Wine Prefix Management
     
-    /// Get the build identifier for cache invalidation
-    private func getBuildIdentifier() -> String {
+    /// The prefix cache key for a wrapp: the build, plus the Wine engine it
+    /// carries. A prefix is only reused by the engine that created it, so a
+    /// Wine upgrade starts a fresh one without anyone clearing the cache.
+    private func getBuildIdentifier(for wrappPath: URL) -> String {
         #if DEBUG
-        // In debug mode, use a static identifier so cache persists across builds
-        return "dev"
+        // In debug mode the build part is static, so the cache persists across builds
+        let build = "dev"
         #else
         // In release mode, use the bundle version to invalidate cache on updates
-        if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String {
-            return version
-        }
-        return "unknown"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         #endif
+        let versionFile = wrappPath.appendingPathComponent("Contents/SharedSupport/wine/version")
+        let engine: String?
+        do {
+            engine = try String(contentsOf: versionFile, encoding: .utf8)
+        } catch {
+            logger.warning("Couldn't read the Wine engine's version from \(versionFile.path), so the prefix cache isn't keyed on it: \(error.localizedDescription)")
+            engine = nil
+        }
+        return Self.prefixCacheKey(build: build, engineVersion: engine)
+    }
+
+    /// `build`, then the engine's version as a path-safe slug:
+    /// "wine sikarugir 10.0 (revision 8)" → "dev-wine-sikarugir-10-0-revision-8".
+    static func prefixCacheKey(build: String, engineVersion: String?) -> String {
+        let slug = (engineVersion ?? "")
+            .lowercased()
+            .split(whereSeparator: { !($0.isASCII && ($0.isLetter || $0.isNumber)) })
+            .joined(separator: "-")
+        return slug.isEmpty ? build : "\(build)-\(slug)"
     }
     
     /// Get the cached Wine prefix if available and valid
-    private func getCachedPrefix() -> URL? {
-        let buildId = getBuildIdentifier()
+    private func getCachedPrefix(buildId: String) -> URL? {
         let cachedPrefixDir = prefixCacheDir.appendingPathComponent(buildId)
         let cachedPrefix = cachedPrefixDir.appendingPathComponent("prefix")
         
@@ -67,15 +84,32 @@ class WineManager {
     }
     
     /// Save Wine prefix to cache
-    private func cachePrefix(from sourcePath: URL) throws {
-        let buildId = getBuildIdentifier()
+    private func cachePrefix(from sourcePath: URL, buildId: String) throws {
         let cachedPrefixDir = prefixCacheDir.appendingPathComponent(buildId)
         let cachedPrefix = cachedPrefixDir.appendingPathComponent("prefix")
         
         logger.notice("Caching Wine prefix for build: \(buildId)...")
         
-        // Remove old cache for this build if it exists
-        try? fileManager.removeItem(at: cachedPrefixDir)
+        // Remove old cache for this build if it exists, and every other build's:
+        // a prefix only serves the build and engine that made it, and each is
+        // hundreds of MB.
+        let entries: [URL]
+        do {
+            entries = try fileManager.contentsOfDirectory(at: prefixCacheDir, includingPropertiesForKeys: nil)
+        } catch {
+            logger.warning("Couldn't list the Wine prefix cache to remove old prefixes: \(error.localizedDescription)")
+            entries = []
+        }
+        for entry in entries {
+            do {
+                try fileManager.removeItem(at: entry)
+                if entry.lastPathComponent != buildId {
+                    logger.notice("Removed the cached Wine prefix for build \(entry.lastPathComponent)")
+                }
+            } catch {
+                logger.warning("Couldn't remove cached Wine prefix \(entry.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
         
         // Create cache directory
         try fileManager.createDirectory(at: cachedPrefixDir, withIntermediateDirectories: true)
@@ -101,8 +135,8 @@ class WineManager {
         let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
         
         // Check if we have a cached prefix
-        if let cachedPrefix = getCachedPrefix() {
-            let buildId = getBuildIdentifier()
+        let buildId = getBuildIdentifier(for: wrappPath)
+        if let cachedPrefix = getCachedPrefix(buildId: buildId) {
             logger.notice("✓ Using cached Wine prefix (build: \(buildId))")
             
             // Copy cached prefix to wrapp
@@ -185,7 +219,7 @@ class WineManager {
         try await waitForWineToExit(at: wrappPath)
         
         // Cache the prefix for future use
-        try cachePrefix(from: prefixPath)
+        try cachePrefix(from: prefixPath, buildId: buildId)
     }    
     /// Mount a directory as a drive in Wine
     func mountDirectory(
