@@ -129,6 +129,20 @@ enum Changelog {
         return header + "\n" + section + releases
     }
 
+    /// `existing` with its `<version>` section — up to the next release's
+    /// heading, or the end — swapped for a freshly generated one.
+    static func replacing(version: String, date: String, notes: String, in existing: String) -> String {
+        let lines = existing.components(separatedBy: "\n")
+        guard let start = lines.firstIndex(where: { $0.hasPrefix("## \(version) ") }) else {
+            return adding(version: version, date: date, notes: notes, to: existing)
+        }
+        let end = lines[(start + 1)...].firstIndex(where: { $0.hasPrefix("## ") }) ?? lines.endIndex
+        let section = "## \(version) — \(date)\n\n\(notes)\n\n"
+        let before = start == 0 ? "" : lines[..<start].joined(separator: "\n") + "\n"
+        let after = lines[end...].joined(separator: "\n")
+        return before + section + after
+    }
+
     /// Drop leading blank lines from cog's output.
     static func trimLeadingBlankLines(_ text: String) -> String {
         // Like `sed '/./,$!d'` then `$(...)`: only empty lines go from the

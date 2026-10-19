@@ -119,6 +119,20 @@ struct ChangelogTests {
         #expect(created.hasSuffix("## 0.1.0 — 2026-01-01\n\n- First\n\n"))
     }
 
+    @Test("A replaced section keeps the releases around it")
+    func replacesBetweenReleases() {
+        let existing = "# Changelog\n\nIntro.\n\n## 0.4.0 — 2026-10-01\n\nStale.\n\n## 0.3.0 — 2026-09-01\n\nOld notes.\n"
+        let updated = Changelog.replacing(version: "0.4.0", date: "2026-10-20", notes: "- Fresh", in: existing)
+        #expect(updated == "# Changelog\n\nIntro.\n\n## 0.4.0 — 2026-10-20\n\n- Fresh\n\n## 0.3.0 — 2026-09-01\n\nOld notes.\n")
+    }
+
+    @Test("Replacing the oldest release runs to the end of the file")
+    func replacesLast() {
+        let existing = "# Changelog\n\n## 0.1.0 — 2026-01-01\n\nStale.\n"
+        let updated = Changelog.replacing(version: "0.1.0", date: "2026-10-20", notes: "- Fresh", in: existing)
+        #expect(updated == "# Changelog\n\n## 0.1.0 — 2026-10-20\n\n- Fresh\n\n")
+    }
+
     @Test("Only leading empty lines are trimmed from cog's notes")
     func trimsLikeSed() {
         #expect(Changelog.trimLeadingBlankLines("\n\n  indented\n- item\n\n") == "  indented\n- item")

@@ -150,10 +150,19 @@ private struct Release {
         try FileManager.default.createDirectory(at: repo.releaseDir, withIntermediateDirectories: true)
         try (notes + "\n").write(to: notesFile, atomically: true, encoding: .utf8)
         let existing = try? String(contentsOf: repo.changelog, encoding: .utf8)
+        let date = { let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
         if let existing, Changelog.hasSection(for: version, in: existing) {
-            ui.warning("CHANGELOG.md already has a \(version) section — leaving it alone.")
+            // Usually left over from an earlier attempt at this release, so
+            // missing whatever has been committed since. Without a terminal
+            // to ask, keep it: replacing it would drop any hand edits.
+            if ui.confirm("CHANGELOG.md already has a \(version) section. Replace it with the notes generated now?") == true {
+                try Changelog.replacing(version: version, date: date, notes: notes, in: existing)
+                    .write(to: repo.changelog, atomically: true, encoding: .utf8)
+                ui.line(ui.format("\(.success("✔︎ CHANGELOG.md (replaced the \(version) section)"))"))
+            } else {
+                ui.warning("CHANGELOG.md already has a \(version) section — leaving it alone.")
+            }
         } else {
-            let date = { let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
             try Changelog.adding(version: version, date: date, notes: notes, to: existing)
                 .write(to: repo.changelog, atomically: true, encoding: .utf8)
             ui.line(ui.format("\(.success("✔︎ CHANGELOG.md"))"))
