@@ -3,7 +3,11 @@
 `./sc` at the repo root builds, runs, tests and releases Second Chance. It is a
 Swift package in `Tools/sc/`; the `./sc` script only builds that package (when
 its sources have changed) and runs it. `./sc --help` and `./sc <command> --help`
-are the full reference; this page explains how the pieces fit.
+are the full reference; this page explains how the pieces fit. Commands are noun
+first, then verb (`wrapp build`, not `build wrapp`); a help request naming a
+command `sc` doesn't have is an error, with a suggestion when the words are just
+in the wrong order, rather than swift-argument-parser's silent fallback to the
+nearest command's help.
 
 ```bash
 ./sc app build                         # Build Second Chance.app (Debug)

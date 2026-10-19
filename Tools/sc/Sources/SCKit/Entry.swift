@@ -8,6 +8,7 @@ public enum Entry {
         Invocation.arguments = arguments
 
         do {
+            try HelpRequestCheck.validate(arguments)
             if let remote {
                 // Validate here, so a typo fails before anything is synced.
                 _ = try SC.parseAsRoot(arguments)

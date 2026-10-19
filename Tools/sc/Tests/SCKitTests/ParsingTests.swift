@@ -72,6 +72,37 @@ struct ParsingTests {
         #expect(build.wrapps.wrappsDir == "/tmp/w")
     }
 
+    @Test("Help for a command sc doesn't have is an error", arguments: [
+        ["build", "wrapp", "--help"],
+        ["build", "--help"],
+        ["wrapp", "bild", "-h"],
+        ["help", "build", "wrapp"],
+    ])
+    func helpForUnknownCommand(arguments: [String]) {
+        #expect(throws: SCError.self) { try HelpRequestCheck.validate(arguments) }
+    }
+
+    @Test("Help for real commands, and their arguments, passes", arguments: [
+        ["--help"],
+        ["wrapp", "--help"],
+        ["wrapp", "build", "--help"],
+        ["wrapp", "build", "royal-tower", "--from", "disk", "-h"],
+        ["test", "stay-tuned", "--help"],
+        ["help", "wrapp", "build"],
+        ["build", "wrapp"],
+        ["in-gui-session", "--", "x", "--help"],
+    ])
+    func helpForKnownCommand(arguments: [String]) throws {
+        try HelpRequestCheck.validate(arguments)
+    }
+
+    @Test("Swapped words suggest the command they spell")
+    func helpSuggestsReorder() throws {
+        let error = try #require(throws: SCError.self) { try HelpRequestCheck.validate(["build", "wrapp", "--help"]) }
+        #expect(error.message == "Unknown command 'sc build'.")
+        #expect(error.hints.first == "Did you mean 'sc wrapp build'?")
+    }
+
     @Test("clean takes its targets by name")
     func cleanTargets() throws {
         let clean = try #require(try SC.parseAsRoot(["clean", "wine-prefixes", "test-results", "--yes"]) as? CleanCommand)
