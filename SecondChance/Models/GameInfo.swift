@@ -13,7 +13,12 @@ struct GameInfo: Codable, Identifiable, Hashable {
     let diskCount: Int
     let gameEngine: GameEngine
     let steamDRM: SteamDRM?
-    let steamID: String?
+    /// The game's Steam app ID, when it is sold (or was) on Steam.
+    let steamAppID: Int?
+    /// The folder Steam installs it into, under `steamapps/common/`.
+    let steamInstallDir: String?
+    /// The Windows executable Steam launches, relative to `steamInstallDir`.
+    let steamExePath: String?
     let internalGameExePath: String?
     let doesNotExitInNonInteractiveMode: Bool
     let installInstructions: String?
@@ -31,6 +36,45 @@ struct GameInfo: Codable, Identifiable, Hashable {
         case yesLaunchWhenSteamRunning = "yes-launch-when-steam-running"
         case yesLaunchViaSteamOnly = "yes-launch-via-steam-only"
     }
+
+    /// Where a game lives on Steam, from its app info.
+    struct SteamApp: Hashable {
+        let appID: Int
+        let installDir: String
+        let exe: String
+    }
+
+    /// How a Steam-sourced wrapp starts its game, when the game lets the
+    /// user choose (`offersSteamLaunchChoice`).
+    enum SteamLaunchMode: String, Codable, CaseIterable {
+        /// Through Steam: slower, but Steam Cloud keeps the saves.
+        case steam
+        /// Without Steam, which is removed from the wrapp: quicker and more
+        /// reliable, saves stay on this Mac.
+        case direct
+    }
+
+    var isOnSteam: Bool { steamAppID != nil }
+
+    /// Only a game known to have no DRM can run without Steam.
+    var offersSteamLaunchChoice: Bool { isOnSteam && steamDRM == .no }
+
+    /// The engine a Steam-sourced wrapp of this game uses.
+    ///
+    /// A game whose DRM hasn't been worked out launches through Steam
+    /// (`-applaunch`), which works whatever its DRM turns out to be. Running
+    /// "directly" uses the engine the disc version does — so the games
+    /// ScummVM runs from disc run in ScummVM on Steam's files too.
+    func steamEngine(launchMode: SteamLaunchMode?) -> GameEngine {
+        switch steamDRM {
+        case .yesLaunchViaSteamOnly, nil:
+            return .wineSteam
+        case .yesLaunchWhenSteamRunning:
+            return .wineSteamSilent
+        case .no:
+            return launchMode == .direct ? gameEngine : .wineSteamSilent
+        }
+    }
     
     init(
         id: String,
@@ -39,7 +83,7 @@ struct GameInfo: Codable, Identifiable, Hashable {
         gameEngine: GameEngine = .wine,
         internalGameExePath: String? = nil,
         steamDRM: SteamDRM? = nil,
-        steamID: String? = nil,
+        steam: SteamApp? = nil,
         doesNotExitInNonInteractiveMode: Bool = false,
         installInstructions: String? = nil,
         failedInstallInfo: String? = nil
@@ -49,7 +93,9 @@ struct GameInfo: Codable, Identifiable, Hashable {
         self.diskCount = diskCount
         self.gameEngine = gameEngine
         self.steamDRM = steamDRM
-        self.steamID = steamID
+        self.steamAppID = steam?.appID
+        self.steamInstallDir = steam?.installDir
+        self.steamExePath = steam?.exe
         self.internalGameExePath = internalGameExePath
         self.doesNotExitInNonInteractiveMode = doesNotExitInNonInteractiveMode
         self.installInstructions = installInstructions

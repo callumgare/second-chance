@@ -10,6 +10,31 @@ wrapp and WrappPuppeteer alike.
 Steam launch path that use them are not yet** — `SteamWrappBuilder` still
 throws `steamNotFullyImplemented` (see AGENTS.md, "Things Currently In Flux").
 
+## Which games, and how they launch
+
+`GameInfo` carries each game's Steam app ID, install folder (under
+`steamapps/common/`) and Windows executable, taken from Steam's app info.
+30 of the 33 games are on Steam; the original Secrets Can Kill and Stay Tuned
+for Danger aren't (Steam's Secrets Can Kill is the Remastered edition), and
+Ransom of the Seven Ships (31980) is no longer sold but still installs for
+those who own it.
+
+The engine a Steam wrapp uses (`GameInfo.steamEngine(launchMode:)`) follows
+the game's `steamDRM`:
+
+| `steamDRM` | Choice offered | Engine | Starts by |
+|---|---|---|---|
+| `.yesLaunchViaSteamOnly` | none | `.wineSteam` | `steam.exe -applaunch <id>` |
+| `.yesLaunchWhenSteamRunning` | none | `.wineSteamSilent` | Steam `-silent`, then the exe |
+| `.no` | "via Steam" | `.wineSteamSilent` | as above |
+| `.no` | "directly" | the disc engine (`.wine`, or `.scummvm` for the games ScummVM runs from disc) | the exe, or ScummVM on Steam's files; Steam is removed from the wrapp |
+| not worked out (`nil`) | none | `.wineSteam` | `-applaunch`, which works whatever the DRM turns out to be |
+
+The choice (`offersSteamLaunchChoice`) is put to the user without naming
+engines: launching directly is quicker and more reliable, launching via Steam
+keeps Steam Cloud saves. A game whose DRM is worked out and set in
+`GameInfoProvider` gets the faster path from then on.
+
 ## One sign-in for every wrapp
 
 Each wrapp has its own Steam install, so wrapps stay self-contained. The
