@@ -66,6 +66,10 @@ and a new type — the same shape as the app's `WrappBuildStrategy`.
 build sources' suites run; [testing.md](testing.md) has what the Steam one
 needs.
 
+`wrapp build` starts the app as its own responsible process, so macOS
+privacy prompts (which Steam waits on) aren't addressed to `sc`; see
+[steam.md](steam.md).
+
 `--from steam` builds any game on Steam that the signed-in account owns;
 `--steam-launch steam|direct` answers the launch question for a DRM-free one.
 It needs the shared Steam sign-in to exist already — a headless build can't

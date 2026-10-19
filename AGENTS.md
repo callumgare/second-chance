@@ -408,10 +408,11 @@ as the Control-click bypass no longer works.
 
 - **Steam works.** Steam wrapps build and launch (`SteamWrappBuilder`,
   `WrappTemplate/WrappSteam.swift`), the Steam option is on the welcome
-  screen, and `sc test integration --source steam` tests them. One catch,
-  for development only: run under `sc`, Steam waits on macOS microphone and
-  local-network prompts addressed to `sc`, and hangs until they're answered
-  ([docs/steam.md](docs/steam.md)). Run from the app, macOS asks nothing.
+  screen, and `sc test integration --source steam` tests them. Steam
+  touches the microphone and the local network at start-up and waits on any
+  macOS prompt that raises: an app bundle gets none, a bare CLI like `sc`
+  does, so `sc wrapp build` starts the app as its own responsible process
+  ([docs/steam.md](docs/steam.md)).
 - **Her download works end-to-end** through the same helpers as disk (it signs
   and publishes the same events), but has far less real-world mileage than the
   disk path.
