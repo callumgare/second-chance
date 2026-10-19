@@ -40,6 +40,10 @@ command that takes it.
   none exists); `test integration` defaults to `full`, because the wrapp build is
   what it tests.
 
+`test integration --ignore-load` tests every game even on a heavily loaded Mac,
+which it otherwise reports as `overloaded` without testing
+([testing.md](testing.md)).
+
 `wrapp run` with `--refresh-wrapp skip` and an existing wrapp doesn't build the
 app at all — launching a wrapp as it is doesn't need it.
 

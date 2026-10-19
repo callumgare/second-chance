@@ -118,6 +118,20 @@ struct DiskInstallIntegrationTests {
         let outcome = GameOutcome(slug: game.id, progress: Self.progress)
         defer { outcome.finish() }
 
+        // A Mac too busy for Wine to start would make this a test of the load,
+        // not the game; see LoadGate.
+        if LoadGate.ignoringLoad {
+            if let load = LoadGate.heavyReadingNow() {
+                Self.progress?.write(["event": "load", "message": "Testing \(game.id) on a heavily loaded Mac (--ignore-load): \(load.summary)."])
+            }
+        } else if let load = await LoadGate.overloadedReading() {
+            let message = "Not testing \(game.id): the Mac is heavily loaded — \(load.summary). Wine would take minutes to start, or never start; quit the busy programs, or pass --ignore-load to test anyway."
+            Self.progress?.write(["event": "load", "message": message])
+            outcome.overloaded = true
+            Issue.record(Comment(rawValue: message))
+            return
+        }
+
         // SKIP_BUILD=1 (`sc test integration --refresh-wrapp template|skip`):
         // skip the install and use a pre-existing wrapp from the wrapps dir if
         // present. Useful for iterating on the WrappPuppeteer test without
@@ -276,6 +290,8 @@ final class GameOutcome: @unchecked Sendable {
     /// Set once the test has run to its end without throwing.
     var completed = false
     var puppeteerExit: Int32?
+    /// Held back because the Mac was too busy to test the game fairly.
+    var overloaded = false
     private var failedExpectations = 0
 
     init(slug: String, progress: ProgressFileWriter?) {
@@ -295,7 +311,9 @@ final class GameOutcome: @unchecked Sendable {
 
     func finish() {
         let result: String
-        if let code = puppeteerExit, (3...5).contains(code) {
+        if overloaded {
+            result = "overloaded"
+        } else if let code = puppeteerExit, (3...5).contains(code) {
             // WrappPuppeteer is missing a TCC grant — not a regression.
             result = "permission"
         } else {

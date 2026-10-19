@@ -23,6 +23,12 @@ struct IntegrationOptions: ParsableArguments {
     ))
     var refreshWrapp: WrappRefresh = .full
 
+    @Flag(help: ArgumentHelp(
+        "Test each game even when the Mac is heavily loaded.",
+        discussion: "Normally a game is reported as overloaded, not tested, when other programs keep all but one performance core busy for a minute: Wine then takes minutes to start, or never does, so the result would say more about the load than the game."
+    ))
+    var ignoreLoad = false
+
     @OptionGroup var wrapps: WrappsDirOptions
 }
 
@@ -55,7 +61,8 @@ struct TestAllCommand: AsyncParsableCommand {
         try await runner.xcode.ensureTestBuild(appBuild)
         let unit = try await runner.unit(stamp: stamp)
         let integrationRun = try await runner.integration(
-            games: games, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo), stamp: stamp
+            games: games, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
+            ignoreLoad: integration.ignoreLoad, stamp: stamp
         )
         try await TestCommandSupport.finish([unit, integrationRun], stamp: stamp, policy: report.openReport, session: session)
     }
@@ -108,7 +115,8 @@ struct TestIntegrationCommand: AsyncParsableCommand {
         let runner = TestRunner(session: session)
         try await runner.xcode.ensureTestBuild(appBuild)
         let run = try await runner.integration(
-            games: games, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo), stamp: stamp
+            games: games, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
+            ignoreLoad: integration.ignoreLoad, stamp: stamp
         )
         try await TestCommandSupport.finish([run], stamp: stamp, policy: report.openReport, session: session)
     }

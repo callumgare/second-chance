@@ -23,7 +23,10 @@ struct ParsingTests {
         let integration = try #require(try SC.parseAsRoot(["test", "integration", "stay-tuned", "--refresh-wrapp", "template"]) as? TestIntegrationCommand)
         #expect(integration.games == ["stay-tuned"])
         #expect(integration.integration.refreshWrapp == .template)
+        #expect(integration.integration.ignoreLoad == false)
         #expect(integration.report.openReport == .failures)
+        let loaded = try #require(try SC.parseAsRoot(["test", "integration", "--ignore-load"]) as? TestIntegrationCommand)
+        #expect(loaded.integration.ignoreLoad)
     }
 
     @Test("Invalid values are rejected", arguments: [

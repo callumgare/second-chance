@@ -172,6 +172,16 @@ Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
 | 4 | Screen Recording permission denied |
 | 5 | Screen Recording granted but a relaunch is required |
 
+**A game the Mac was too busy to test is `overloaded`, not failed.** Before
+each game the test checks `SystemLoad`; while other programs keep all but one
+performance core busy it waits up to a minute (ten seconds after a game
+already held back) for that to ease, and if it doesn't, records why and moves
+on rather than spending half an hour on a build Wine can't start. The table
+shows those games as `overloaded` and `sc` says to quit the busy programs and
+rerun them. `--ignore-load` tests them anyway, for deliberate stress runs; the
+run then only notes the load. The run itself still fails, since those games
+went untested.
+
 **Codes 3–5 are permission problems, not regressions.** `sc test integration`
 shows them as `permission` in its game table. Re-grant the permission rather
 than looking for a bug in the build code; stale entries can be cleared with

@@ -75,7 +75,7 @@ struct TestRunner {
 
     // MARK: - Integration
 
-    func integration(games requested: [CatalogGame], refresh: WrappRefresh, wrappsDir: URL, stamp: String) async throws -> TestRun {
+    func integration(games requested: [CatalogGame], refresh: WrappRefresh, wrappsDir: URL, ignoreLoad: Bool = false, stamp: String) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         if refresh != .full {
             let builder = WrappBuilder(session: session)
@@ -100,11 +100,16 @@ struct TestRunner {
         ]
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
+        if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
         let environment = env
 
         let board = GameBoard(games: games)
         let live = ui.isLive
         let following = follower.follow { record in
+            if record.event == "load", let message = record.message {
+                ui.warning("\(message)")
+                return
+            }
             if let line = board.apply(record), !live { ui.line(line) }
         }
         defer { following.cancel() }
@@ -123,6 +128,10 @@ struct TestRunner {
         }
         for record in follower.poll() { board.apply(record) }
         await ui.table(headers: gameTable(board).headers, rows: gameTable(board).rows)
+        if board.hasOverloadedGames {
+            ui.warning("Some games weren't tested: the Mac was heavily loaded, so Wine would have taken minutes to start, or never started.",
+                       next: "Quit the busy programs and run those games again, or pass --ignore-load to test them anyway.")
+        }
         if board.hasPermissionProblems {
             ui.warning("WrappPuppeteer was missing a permission (exit 3–5) — that's a TCC grant, not a regression.",
                        next: "See the WrappPuppeteer section of docs/testing.md.")
@@ -142,6 +151,7 @@ struct TestRunner {
         case "passed": .success(status)
         case "failed": .danger(status)
         case "permission": .warning(status)
+        case "overloaded": .warning(status)
         case "running": .accent(status)
         default: .muted(status)
         }
@@ -306,6 +316,10 @@ final class GameBoard: @unchecked Sendable {
             }
             return line
         }
+    }
+
+    var hasOverloadedGames: Bool {
+        lock.withLock { rowsBySlug.values.contains { $0.status == "overloaded" } }
     }
 
     var hasPermissionProblems: Bool {
