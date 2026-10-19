@@ -11,6 +11,8 @@ enum WrappBuildError: LocalizedError, Equatable {
     case unsupportedEngine
     /// The signed-in Steam account doesn't own the game.
     case steamGameNotOwned(title: String)
+    /// The signed-in Steam account owns none of the games on Steam.
+    case steamNoGamesOwned
     /// Steam needs someone to sign in, and nobody can: a headless build
     /// with no saved session.
     case steamSignInRequired
@@ -45,6 +47,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Unsupported game engine"
         case .steamGameNotOwned(let title):
             return "Your Steam account doesn't own \(title)"
+        case .steamNoGamesOwned:
+            return "Your Steam account doesn't own any of the Nancy Drew games on Steam"
         case .steamSignInRequired:
             return "Steam needs you to sign in, which a headless build can't do. Build once from the app to sign in."
         case .steamSignInTimedOut:

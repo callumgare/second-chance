@@ -39,11 +39,8 @@ them (the microphone can be refused).
 
 `SteamWrappBuilder`, in order:
 
-1. **Pick the game** (`WrappBuildInput.getSteamGame`, `STEAM_GAME_SLUG`) and,
-   for a DRM-free one, how it launches (`getSteamLaunchMode`,
-   `STEAM_LAUNCH_MODE`). The engine follows (`engineRouted`).
-2. **Take the Steam lock**, or fail with `steamInUse` naming who has it.
-3. **Make the wrapp and install the Steam client into it** — the template,
+1. **Take the Steam lock**, or fail with `steamInUse` naming who has it.
+2. **Make the wrapp and install the Steam client into it** — the template,
    the cached prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
    `~/Library/Caches/SecondChance/`). Not `winetricks steam`: it installs
    Microsoft's core fonts first, which needs `cabextract`, which isn't
@@ -53,13 +50,24 @@ them (the microphone can be refused).
    so Steam's own update (most of a gigabyte) is downloaded once, not per
    build. The cache leaves out the account's sign-in, licences, settings and
    games.
-4. **Sign in**: restore the shared session, queue the game's install, start
-   Steam silently. With no session, or one Steam rejects, the GUI says to
-   sign in in Steam's window (QR or password) and waits up to 30 minutes; a
-   headless build fails with `steamSignInRequired` instead.
-5. **Check ownership** (`steamGameNotOwned` otherwise), then **wait for the
-   install**, showing Steam's phase — "Downloading 397 MB through Steam",
-   "Checking the download", "Finishing the install".
+3. **Sign in**: restore the shared session and start Steam silently. With no
+   session, or one Steam rejects, the GUI says to sign in in Steam's window
+   (QR or password) and waits up to 30 minutes; a headless build fails with
+   `steamSignInRequired` instead.
+4. **Pick the game from the ones the account owns** (`ownedAppIDs`), so
+   nobody is offered a game Steam won't install. From the app,
+   `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
+   when there are none); for a DRM-free one it then asks how it launches
+   (`getSteamLaunchMode`, `STEAM_LAUNCH_MODE`), and the engine follows
+   (`engineRouted`). Steam only installs a queued game when it starts, so the
+   build then stops Steam — saving the session but leaving it in the prefix —
+   queues the install and starts Steam again, which signs straight back in.
+   A game named up front (`STEAM_GAME_SLUG`: headless builds and the
+   integration tests) is read before anything else, queued before Steam's
+   first start, and checked against the licences here instead
+   (`steamGameNotOwned`), so it needs no restart.
+5. **Wait for the install**, showing Steam's phase — "Downloading 397 MB
+   through Steam", "Checking the download", "Finishing the install".
 6. **Stop Steam, save the session, and take the sign-in out of the wrapp.**
    The build runs Steam inside the wrapp's own prefix, so without this the
    finished `.app` would carry the account's token, and anyone given a copy

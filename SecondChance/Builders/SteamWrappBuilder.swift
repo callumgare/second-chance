@@ -81,27 +81,16 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .steam))
 
-        // ── Pick the game ──────────────────────────────────────────────
-        let gameInfo: GameInfo
-        let launchMode: GameInfo.SteamLaunchMode?
+        // A game named up front (headless, tests) is queued before Steam's
+        // first start; otherwise the user picks once Steam has signed in, from
+        // the games the account owns, and Steam restarts to install it.
+        let preselected: GameInfo?
         do {
-            gameInfo = try await input.getSteamGame(from: gameInfoProvider.allGames())
-            await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
-            await bus.publishWrappBuild(.gameDetected(gameInfo))
-            try await input.onGameDetected(gameInfo)
-            launchMode = gameInfo.offersSteamLaunchChoice ? try await input.getSteamLaunchMode(for: gameInfo) : nil
+            preselected = try input.steamGameFromEnvironment(among: gameInfoProvider.allGames())
         } catch {
             await bus.publishWrappBuild(.failed((error as? WrappBuildError) ?? .internalError(error.localizedDescription)))
             throw error
         }
-        guard let appID = gameInfo.steamAppID, let installDir = gameInfo.steamInstallDir, let exe = gameInfo.steamExePath else {
-            let error = WrappBuildError.internalError("\(gameInfo.title) has no Steam app data")
-            await bus.publishWrappBuild(.failed(error))
-            throw error
-        }
-        let engine = gameInfo.steamEngine(launchMode: launchMode)
-        await bus.publishWrappBuild(.engineRouted(engine: engine, gameInfo: gameInfo))
-        logger.notice("Building \(gameInfo.title) from Steam (app \(appID)), engine \(engine.rawValue)\(launchMode.map { ", launching \($0.rawValue)" } ?? "")")
 
         // ── One Steam at a time ────────────────────────────────────────
         let lock: SteamActiveLock
@@ -133,14 +122,49 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.progress(.installingGame(substep: "Starting Steam")))
             let restored = try await client.restoreLogin(from: sessionStore)
             if !restored && !input.canSignInToSteam { throw WrappBuildError.steamSignInRequired }
-            try client.queueInstall(appID: appID, installDir: installDir)
+            if let preselected, let steam = Self.steamData(preselected) {
+                try client.queueInstall(appID: steam.appID, installDir: steam.installDir)
+            }
             try await client.start(silent: true)
             steamRunning = true
 
             signedIn = try await signIn(client: client, input: input)
 
-            guard try await client.ownedAppIDs(timeout: 120).contains(appID) else {
-                throw WrappBuildError.steamGameNotOwned(title: gameInfo.title)
+            // ── Pick the game ──────────────────────────────────────────
+            await bus.publishWrappBuild(.progress(.installingGame(substep: "Checking which games your Steam account owns")))
+            let owned = try await client.ownedAppIDs(timeout: 120)
+            let ownedGames = gameInfoProvider.allGames().filter { $0.isOnSteam && $0.steamAppID.map(owned.contains) == true }
+            logger.notice("The Steam account owns \(ownedGames.count) of the games: \(ownedGames.map(\.id).joined(separator: ", "))")
+            let gameInfo: GameInfo
+            if let preselected {
+                guard ownedGames.contains(where: { $0.id == preselected.id }) else {
+                    throw WrappBuildError.steamGameNotOwned(title: preselected.title)
+                }
+                gameInfo = preselected
+            } else {
+                guard !ownedGames.isEmpty else { throw WrappBuildError.steamNoGamesOwned }
+                gameInfo = try await input.chooseSteamGame(from: ownedGames)
+            }
+            await bus.publishWrappBuild(.gameDetected(gameInfo))
+            try await input.onGameDetected(gameInfo)
+            let launchMode = gameInfo.offersSteamLaunchChoice ? try await input.getSteamLaunchMode(for: gameInfo) : nil
+            guard let steam = Self.steamData(gameInfo) else {
+                throw WrappBuildError.internalError("\(gameInfo.title) has no Steam app data")
+            }
+            let (appID, installDir, exe) = (steam.appID, steam.installDir, steam.exe)
+            let engine = gameInfo.steamEngine(launchMode: launchMode)
+            await bus.publishWrappBuild(.engineRouted(engine: engine, gameInfo: gameInfo))
+            logger.notice("Building \(gameInfo.title) from Steam (app \(appID)), engine \(engine.rawValue)\(launchMode.map { ", launching \($0.rawValue)" } ?? "")")
+
+            if preselected == nil {
+                // Steam only installs a queued game when it starts.
+                await bus.publishWrappBuild(.progress(.installingGame(substep: "Restarting Steam to install \(gameInfo.title)")))
+                await stopSteam(client, prefix: prefix, signedIn: signedIn, keepSignIn: true)
+                steamRunning = false
+                try client.queueInstall(appID: appID, installDir: installDir)
+                try await client.start(silent: true)
+                steamRunning = true
+                signedIn = try await signIn(client: client, input: input)
             }
 
             try await waitForInstall(client: client, appID: appID)
@@ -210,6 +234,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
     // MARK: - Steps
 
+    /// What Steam needs to install `game`, and the exe it will put there.
+    private static func steamData(_ game: GameInfo) -> (appID: Int, installDir: String, exe: String)? {
+        guard let appID = game.steamAppID, let installDir = game.steamInstallDir, let exe = game.steamExePath else { return nil }
+        return (appID, installDir, exe)
+    }
+
     /// Wait for Steam to sign in, asking the user when it shows its sign-in
     /// window. True once signed in.
     private func signIn(client: SteamClientDriving, input: WrappBuildInput) async throws -> Bool {
@@ -278,8 +308,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
     /// Stop Steam, save a signed-in session to the shared store, then take
     /// the sign-in out of the wrapp: it would otherwise ship inside the app,
-    /// and anyone given a copy could use the account.
-    private func stopSteam(_ client: SteamClientDriving, prefix: URL, signedIn: Bool) async {
+    /// and anyone given a copy could use the account. `keepSignIn` leaves it
+    /// in for Steam to start again with, as the build itself does.
+    private func stopSteam(_ client: SteamClientDriving, prefix: URL, signedIn: Bool, keepSignIn: Bool = false) async {
         await client.shutdown(timeout: 90)
         do {
             let result = try client.saveLogin(to: sessionStore, signedIn: signedIn)
@@ -287,7 +318,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         } catch {
             logger.warning("Couldn't save the Steam session: \(error.localizedDescription)")
         }
-        SteamSessionStore.strip(from: prefix)
+        if !keepSignIn { SteamSessionStore.strip(from: prefix) }
     }
 
     /// Move the game out of Steam's library so Steam can be removed.

@@ -114,7 +114,9 @@ Two subtleties:
 - Cancelling the *first* dialog throws `.userCancelledBeforeStart`, not
   `.userCancelled`. The ViewModel routes the former back to the welcome screen
   (nothing had happened yet) and the latter to the error screen (work is being
-  abandoned).
+  abandoned). For Steam the first dialog is the game picker, which comes
+  after Steam has signed in: the builder cleans up its temporary wrapp as on
+  any failure, but to the user it is still backing out before they began.
 
 ## Seam 2: the ViewModel's input factory
 

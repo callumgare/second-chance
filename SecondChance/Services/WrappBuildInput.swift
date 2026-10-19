@@ -31,7 +31,8 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
 /// | `getDisk2Path(gameInfo:)`     | `DISK_2_PATH`                           | NSOpenPanel (disk/ISO)         |
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe)             |
-/// | `getSteamGame(from:)`         | `STEAM_GAME_SLUG`                       | NSAlert with a game menu       |
+/// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
+/// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
 /// | `requestVolumeAccess()`       | — (skipped when paths env-supplied)     | NSOpenPanel grant-access       |
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
@@ -109,30 +110,40 @@ class WrappBuildInput {
         return url
     }
 
-    /// The game to build from Steam: one of the games on Steam.
-    @MainActor
-    func getSteamGame(from games: [GameInfo]) async throws -> GameInfo {
-        let onSteam = games.filter(\.isOnSteam).sorted { $0.title < $1.title }
-        if let slug = environment["STEAM_GAME_SLUG"] {
-            guard let game = onSteam.first(where: { $0.id == slug }) else {
-                throw WrappBuildError.invalidPath("STEAM_GAME_SLUG \(slug) isn't a game on Steam")
-            }
-            return game
+    /// The Steam game `STEAM_GAME_SLUG` names, or nil when it isn't set.
+    /// Read before Steam starts, so the install can go in with Steam's
+    /// first start; a headless run must set it, as there's no one to ask.
+    func steamGameFromEnvironment(among games: [GameInfo]) throws -> GameInfo? {
+        guard let slug = environment["STEAM_GAME_SLUG"] else {
+            if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("STEAM_GAME_SLUG") }
+            return nil
         }
+        guard let game = games.first(where: { $0.id == slug && $0.isOnSteam }) else {
+            throw WrappBuildError.invalidPath("STEAM_GAME_SLUG \(slug) isn't a game on Steam")
+        }
+        return game
+    }
+
+    /// Which of the games the signed-in Steam account owns to build. Asked
+    /// once Steam has signed in, so the list holds only games it can install.
+    @MainActor
+    func chooseSteamGame(from owned: [GameInfo]) async throws -> GameInfo {
         if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("STEAM_GAME_SLUG") }
+        let games = owned.sorted { $0.title < $1.title }
 
         let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
-        menu.addItems(withTitles: onSteam.map { "Nancy Drew: \($0.title)" })
+        menu.addItems(withTitles: games.map { "Nancy Drew: \($0.title)" })
         let alert = NSAlert()
         alert.messageText = "Which game do you want from Steam?"
-        alert.informativeText = "Second Chance installs it through Steam, with your Steam account. It needs to be a game you own."
+        alert.informativeText = "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."
         alert.accessoryView = menu
         alert.addButton(withTitle: "Continue")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else {
+            // The first question the user is asked: back to the welcome screen.
             throw WrappBuildError.userCancelledBeforeStart
         }
-        return onSteam[menu.indexOfSelectedItem]
+        return games[menu.indexOfSelectedItem]
     }
 
     /// How a DRM-free Steam game should start. Only asked when the game

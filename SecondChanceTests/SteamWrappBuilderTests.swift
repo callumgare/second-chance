@@ -60,6 +60,22 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     }
 }
 
+/// Answers the game picker as a person would, offering what it was shown.
+final class PickingInput: WrappBuildInput {
+    let pick: String
+    private(set) var offered: [String]?
+
+    init(pick: String, environment: [String: String]) {
+        self.pick = pick
+        super.init(environment: environment, viewModel: nil)
+    }
+
+    override func chooseSteamGame(from owned: [GameInfo]) async throws -> GameInfo {
+        offered = owned.map(\.id)
+        return try #require(owned.first { $0.id == pick })
+    }
+}
+
 struct FakePreparer: SteamWrappPreparing {
     func prepare(wrappAt path: URL) async throws { try SteamWrappBuilderTests.fakeWrapp(at: path) }
 }
@@ -104,7 +120,10 @@ struct SteamWrappBuilderTests {
         var all: [WrappBuildEvent] { lock.withLock { list } }
     }
 
-    func build(game: String, mode: String? = nil, configure: @escaping (FakeSteamClient) -> Void = { _ in }) async -> Run {
+    /// Build `game` headless, named up front as `STEAM_GAME_SLUG`; or, with
+    /// `picking`, as the app does, choosing it once Steam has signed in.
+    func build(game: String, mode: String? = nil, picking: PickingInput? = nil,
+               configure: @escaping (FakeSteamClient) -> Void = { _ in }) async -> Run {
         let bus = EventBus<AppEvent>()
         let events = Events()
         _ = await bus.subscribe { event in
@@ -116,6 +135,7 @@ struct SteamWrappBuilderTests {
             "NON_INTERACTIVE": "true",
         ]
         environment["STEAM_LAUNCH_MODE"] = mode
+        if picking != nil { environment = Self.appEnvironment(base: base) }
         var client: FakeSteamClient?
         let builder = SteamWrappBuilder(
             helper: WrappBuildHelper(bus: bus),
@@ -135,11 +155,16 @@ struct SteamWrappBuilderTests {
         )
         let result: Result<URL, Error>
         do {
-            result = .success(try await builder.build(input: WrappBuildInput(environment: environment, viewModel: nil)))
+            result = .success(try await builder.build(input: picking ?? WrappBuildInput(environment: environment, viewModel: nil)))
         } catch {
             result = .failure(error)
         }
         return Run(result: result, events: events.all, client: client)
+    }
+
+    /// A build from the app: nothing named, so the game is asked for.
+    static func appEnvironment(base: URL) -> [String: String] {
+        ["OUTPUT_PATH": base.appendingPathComponent("out").path]
     }
 
     func settings(_ wrapp: URL) throws -> [String: Any] {
@@ -202,6 +227,51 @@ struct SteamWrappBuilderTests {
         #expect(run.client?.calls.contains("shutdown") == true)
         #expect(run.client?.savedSignedIn == true)  // the session itself was fine
         #expect(run.events.contains { if case .failed = $0 { return true }; return false })
+    }
+
+    @Test("From the app, the game is picked from those the account owns, and Steam restarts to install it")
+    func pickAfterSignIn() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let picking = PickingInput(pick: "thornton-hall", environment: Self.appEnvironment(base: base))
+        let thornton = 226820, shadowRanch = try #require(GameInfoProvider.shared.allGames().first { $0.id == "shadow-ranch" }?.steamAppID)
+        let run = await build(game: "thornton-hall", picking: picking) { $0.owned = [thornton, shadowRanch, 999_999_999] }
+        let wrapp = try run.result.get()
+
+        #expect(picking.offered.map(Set.init) == ["thornton-hall", "shadow-ranch"])
+        #expect(try settings(wrapp)["SteamGameId"] as? String == "226820")
+        // Nothing is queued until the game is known, and Steam installs it on its next start.
+        #expect(run.client?.calls == ["restoreLogin", "start", "shutdown", "saveLogin", "queueInstall 226820", "start", "shutdown", "saveLogin"])
+        let prefix = wrapp.appendingPathComponent("Contents/SharedSupport/prefix")
+        for file in SteamSessionStore.files {
+            #expect(!FileManager.default.fileExists(atPath: prefix.appendingPathComponent(file).path), "\(file) shipped in the wrapp")
+        }
+    }
+
+    @Test("A game named up front is queued before Steam's first start, with no restart")
+    func preselectedNoRestart() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall")
+        _ = try run.result.get()
+        #expect(run.client?.calls == ["restoreLogin", "queueInstall 226820", "start", "shutdown", "saveLogin"])
+    }
+
+    @Test("An account that owns none of the games fails without asking which to build")
+    func ownsNone() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let picking = PickingInput(pick: "thornton-hall", environment: Self.appEnvironment(base: base))
+        let run = await build(game: "thornton-hall", picking: picking) { $0.owned = [999_999_999] }
+        #expect(throws: WrappBuildError.steamNoGamesOwned) { try run.result.get() }
+        #expect(picking.offered == nil)
+        #expect(run.client?.calls.contains("shutdown") == true)
+    }
+
+    @Test("Headless with no game named fails before Steam is touched")
+    func headlessNeedsGame() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let input = WrappBuildInput(environment: ["NON_INTERACTIVE": "true"], viewModel: nil)
+        #expect(throws: WrappBuildError.missingRequiredParameter("STEAM_GAME_SLUG")) {
+            try input.steamGameFromEnvironment(among: GameInfoProvider.shared.allGames())
+        }
     }
 
     @Test("Headless with no saved sign-in fails before starting Steam")
