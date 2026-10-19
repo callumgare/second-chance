@@ -64,6 +64,8 @@ struct CleanCommand: AsyncParsableCommand {
         discussion: """
         wine-prefixes: the cached Wine prefix (start the next build from a fresh one). \
         build: DerivedData. wrapps: the wrapps dir. test-results: reports and result bundles. \
+        steam-session: the saved Steam sign-in (signs every Steam wrapp out, like Sign Out of Steam). \
+        steam-client: the cached Steam client (the next Steam build downloads Steam's update again). \
         With no target in a terminal, asks which.
         """
     )
@@ -73,6 +75,8 @@ struct CleanCommand: AsyncParsableCommand {
         case build
         case wrapps
         case testResults = "test-results"
+        case steamSession = "steam-session"
+        case steamClient = "steam-client"
         var description: String { rawValue }
     }
 
@@ -82,7 +86,7 @@ struct CleanCommand: AsyncParsableCommand {
     @Flag(name: [.customLong("yes"), .customShort("y")], help: "Don't ask before deleting.")
     var yes = false
 
-    @Argument(help: "What to delete: wine-prefixes, build, wrapps, test-results.")
+    @Argument(help: "What to delete: wine-prefixes, build, wrapps, test-results, steam-session, steam-client.")
     var targets: [Target] = []
 
     func run() async throws {
@@ -93,6 +97,8 @@ struct CleanCommand: AsyncParsableCommand {
             .build: session.repo.derivedData,
             .wrapps: wrapps.resolve(session.repo),
             .testResults: session.repo.testResults,
+            .steamSession: Repo.steamSession,
+            .steamClient: Repo.steamClientCache,
         ]
         let sizes = await withTaskGroup(of: (Target, Int64).self) { group in
             for (target, url) in paths { group.addTask { (target, await Self.size(of: url)) } }

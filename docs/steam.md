@@ -169,6 +169,10 @@ Rules the store follows, each from something seen to go wrong:
   one whole.
 - **Nothing logs file contents.**
 
+Signing out — Second Chance's *Sign Out of Steam*, or `sc clean
+steam-session` — deletes the store; every Steam wrapp then asks for a
+sign-in once. `sc clean steam-client` drops the cached Steam client.
+
 ## One wrapp on Steam at a time
 
 Two wrapps signed in to the same account would knock each other off, and race

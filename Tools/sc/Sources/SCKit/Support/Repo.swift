@@ -64,6 +64,19 @@ struct Repo: Sendable {
             .appendingPathComponent("SecondChance/wine-prefix-cache")
     }
 
+    /// The Steam sign-in every Steam wrapp shares (`SteamSessionStore`,
+    /// `~/Library/Application Support/SecondChance/Steam/session`).
+    static var steamSession: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/Steam/session")
+    }
+
+    /// The updated Steam client Steam builds reuse (`SteamClientCache`).
+    static var steamClientCache: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/steam-client")
+    }
+
     /// The path to show the user: relative to the repo when inside it.
     func display(_ url: URL) -> String {
         let path = url.standardizedFileURL.path

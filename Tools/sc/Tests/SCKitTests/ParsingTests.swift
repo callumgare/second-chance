@@ -110,6 +110,8 @@ struct ParsingTests {
     func cleanTargets() throws {
         let clean = try #require(try SC.parseAsRoot(["clean", "wine-prefixes", "test-results", "--yes"]) as? CleanCommand)
         #expect(clean.targets == [.winePrefixes, .testResults])
+        let steam = try #require(try SC.parseAsRoot(["clean", "steam-session", "steam-client"]) as? CleanCommand)
+        #expect(steam.targets == [.steamSession, .steamClient])
         #expect(clean.yes)
         #expect(throws: (any Error).self) { try SC.parseAsRoot(["clean", "everything"]) }
     }
