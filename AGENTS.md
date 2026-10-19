@@ -315,6 +315,15 @@ direct assignment.
   `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` (newest 10). `SECOND_CHANCE_DIAGNOSTICS=0`
   turns it off and `SECOND_CHANCE_DIAG_SLOW_SECONDS` moves the threshold — set
   it to `1` to force a bundle and check the capture works.
+- **A Wine wrapp waits on a dialog before it starts the game.** Launched by
+  hand (`open`, its `Contents/MacOS/WrappTemplate`, `sc wrapp run`), a wrapp
+  whose engine is Wine shows a save-progress warning and starts nothing until
+  someone clicks **I Understand**, so a script that launches a wrapp and waits
+  for the game waits for ever on an unattended Mac. The wrapp skips the dialog
+  when `~/Library/Application Support/<bundle id>/dont-show-save-warning`
+  exists (`InfoWindowController`). Create it for the experiment and remove it
+  afterwards: WrappPuppeteer expects to dismiss that dialog, and fails with
+  `Failed to dismiss info window` when it never appears.
 - **Disk path resolution**: installers land in
   `Contents/SharedSupport/prefix/drive_c/nancy-drew-installer/{disk-1,disk-combined}`,
   with multi-disk games merged into `disk-combined`. This lives in
