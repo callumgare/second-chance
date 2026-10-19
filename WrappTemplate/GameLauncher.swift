@@ -196,6 +196,11 @@ class GameLauncher {
     private var launchedAt = Date()
     /// Whether the game's own process was ever seen (always, for ScummVM).
     private var gameStarted = false
+    /// The prefix's Documents, where the games keep their folders (a link to
+    /// the wrapp's saves).
+    private var documentsDirectory: URL {
+        config.winePrefix.appendingPathComponent("drive_c/users/\(WineEnvironment.wineUsername)/Documents")
+    }
 
     private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
         let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
@@ -209,11 +214,18 @@ class GameLauncher {
         }
         // Only Wine launches track the window (ScummVM has no diagnostics).
         let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
+        // The later Her Interactive games exit with whatever code MFC has
+        // lying around, so for them a non-zero exit is judged by their own log.
+        let cleanExitLog = gameStarted && signal == nil && (exitCode ?? 0) != 0
+            ? HerEngineLog.cleanExitLog(inDocuments: documentsDirectory, since: launchedAt)
+            : nil
         if !gameStarted {
             let how = signal.map { "was killed by \(SubprocessWatch.signalName($0))" } ?? "exited \(exitCode.map(String.init) ?? "?")"
             logger.error("■ The game never started: Wine's launcher \(how) after \(ran)")
         } else if let signal {
             logger.error("■ Game was killed by \(SubprocessWatch.signalName(signal)) after \(ran)\(window)")
+        } else if let exitCode, let cleanExitLog {
+            logger.notice("■ Game exited \(exitCode) after \(ran), a clean quit: its \(cleanExitLog.lastPathComponent) reports a good exit, and this engine's exit code means nothing")
         } else if let exitCode, exitCode != 0 {
             logger.error("■ Game exited \(exitCode) after \(ran)\(window) — a crash or an error on the way out")
         } else if exitCode != nil {
@@ -222,7 +234,8 @@ class GameLauncher {
             logger.notice("■ Game ended after \(ran) (exit status unknown)")
         }
 
-        let endedBadly = !gameStarted || signal != nil || (exitCode ?? 0) != 0 || diagnostics?.hasSeenWindow == false
+        let endedBadly = !gameStarted || signal != nil || ((exitCode ?? 0) != 0 && cleanExitLog == nil)
+            || diagnostics?.hasSeenWindow == false
         if endedBadly {
             var files: [(String, String)] = []
             if let bundle = diagnostics?.lastBundle {

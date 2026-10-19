@@ -142,6 +142,17 @@ signal that killed it, how long it ran, and whether its window had appeared:
 16:23:54.173  error   GameLauncher  ■ Game exited 1 after 6.1s, after its window appeared — a crash or an error on the way out
 ```
 
+The exception is the games from Ghost of Thornton Hall on, whose exit code
+means nothing: their `ExitInstance` ends in MFC's, which returns the `wParam`
+of the last message MFC handled, and since the games run their own message
+loop that is whatever passed through last — 1 on most clean quits, 0 on
+some. Those games write their own `Debug.LOG` to their Documents folder on
+every launch, ending in `ExitInstance(), good exit...` once their cleanup is
+done, so for a non-zero exit the wrapp reads that (`HerEngineLog`). A log
+from this launch that says so makes it a clean quit, logged as a notice
+naming the log, with no failure summary; anything else is still the error
+above.
+
 If the launcher exits before the game's exe ever appears (a missing exe, a
 DLL that won't load), the wrapp stops waiting at once and says so, rather than
 polling for two minutes.
