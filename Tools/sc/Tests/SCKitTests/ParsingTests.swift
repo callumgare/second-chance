@@ -40,6 +40,8 @@ struct ParsingTests {
         ["release", "--version", "1.2"],
         ["test", "unit", "--logs", "pretty"],
         ["in-gui-session"],
+        ["attach", "--list", "--stop"],
+        ["attach", "--list", "20260101"],
     ])
     func invalidValues(arguments: [String]) {
         #expect(throws: (any Error).self) { try SC.parseAsRoot(arguments) }

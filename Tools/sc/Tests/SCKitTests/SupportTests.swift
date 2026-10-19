@@ -157,6 +157,72 @@ struct RemoteTests {
         #expect(Invocation.forwarding(logs: .raw, ["wrapp", "run", "x", "--", "a"]) == ["wrapp", "run", "x", "--logs", "raw", "--", "a"])
         #expect(Invocation.forwarding(logs: .raw, ["app", "build", "--logs", "full"]) == ["app", "build", "--logs", "full"])
     }
+
+    @Test("attach follows a run already there, so it doesn't sync")
+    func attachDoesNotSync() {
+        #expect(!Remote.syncs(["attach", "--list"]))
+        #expect(Remote.syncs(["test", "integration"]))
+    }
+
+    @Test("The running-jobs check is valid shell and skips jobs that aren't running")
+    func runningJobsCommand() throws {
+        let checkout = FileManager.default.temporaryDirectory.appendingPathComponent("sc remote \(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: checkout) }
+        let jobs = checkout.appendingPathComponent("DerivedData/sc-jobs")
+        // One finished, one never loaded in launchd: neither is running.
+        try FileManager.default.createDirectory(at: jobs.appendingPathComponent("20260101-000000-1"), withIntermediateDirectories: true)
+        try "0\n".write(to: jobs.appendingPathComponent("20260101-000000-1/exit-code"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: jobs.appendingPathComponent("20260101-000001-2"), withIntermediateDirectories: true)
+
+        let command = Remote.runningJobsCommand(path: checkout.path)
+        #expect(Remote.runningJobsCommand(path: "~/a dir").hasPrefix("cd ~/'a dir' 2>/dev/null && bash -c '"))
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        let output = Pipe()
+        let errors = Pipe()
+        process.standardOutput = output
+        process.standardError = errors
+        try process.run()
+        process.waitUntilExit()
+        #expect(String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) == "")
+        #expect(String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) == "")
+    }
+}
+
+@Suite("GUI-session jobs")
+struct GUISessionJobTests {
+    /// A jobs dir holding finished runs with these ids.
+    func jobsDir(finished ids: [String]) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-jobs-\(UUID().uuidString)")
+        for id in ids {
+            let job = dir.appendingPathComponent(id)
+            try FileManager.default.createDirectory(at: job, withIntermediateDirectories: true)
+            try "0\n".write(to: job.appendingPathComponent("exit-code"), atomically: true, encoding: .utf8)
+        }
+        return dir
+    }
+
+    @Test("With nothing running, attach picks the newest run")
+    func picksNewest() throws {
+        let dir = try jobsDir(finished: ["20260101-000000-1", "20260102-000000-2"])
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let jobs = LaunchAgentJob.all(in: dir)
+        #expect(try AttachCommand.pick(nil, from: jobs).id == "20260102-000000-2")
+        #expect(try AttachCommand.pick("20260101", from: jobs).id == "20260101-000000-1")
+        #expect(throws: SCError.self) { try AttachCommand.pick("2026", from: jobs) }
+        #expect(throws: SCError.self) { try AttachCommand.pick("1999", from: jobs) }
+        #expect(throws: SCError.self) { try AttachCommand.pick(nil, from: []) }
+    }
+
+    @Test("Pruning keeps the newest finished runs")
+    func prunes() throws {
+        let ids = (10..<22).map { "202601\($0)-000000-1" }
+        let dir = try jobsDir(finished: ids)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        LaunchAgentJob.prune(in: dir)
+        #expect(LaunchAgentJob.all(in: dir).map(\.id) == Array(ids.suffix(LaunchAgentJob.keptFinished)))
+    }
 }
 
 @Suite("Live region")

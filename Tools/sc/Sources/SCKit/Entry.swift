@@ -57,13 +57,18 @@ public enum Entry {
 /// files and LaunchAgents, and puts the terminal back. A second one exits
 /// straight away.
 enum Interrupts {
+    /// Whether that first signal was SIGHUP: the terminal went away (a dropped
+    /// SSH connection), rather than someone asking to stop. A GUI-session job
+    /// is left running then, for `sc attach`.
+    static var hungUp: Bool { Counter.hungUp }
+
     static func run<T: Sendable>(_ body: @escaping @Sendable () async throws -> T) async throws -> T {
         let task = Task { try await body() }
         let sources = [SIGINT, SIGTERM, SIGHUP].map { sig -> DispatchSourceSignal in
             signal(sig, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: sig, queue: .global())
             source.setEventHandler {
-                if Counter.increment() == 1 {
+                if Counter.increment(hangUp: sig == SIGHUP) == 1 {
                     // Through the UI, so a live region is erased and redrawn
                     // below the message rather than torn.
                     let message = "Stopping — letting running tools clean up (Ctrl-C again to quit immediately)…"
@@ -88,7 +93,15 @@ enum Interrupts {
     private enum Counter {
         private static let lock = NSLock()
         nonisolated(unsafe) private static var count = 0
-        static func increment() -> Int { lock.withLock { count += 1; return count } }
+        nonisolated(unsafe) private static var firstWasHangUp = false
+        static var hungUp: Bool { lock.withLock { firstWasHangUp } }
+        static func increment(hangUp: Bool) -> Int {
+            lock.withLock {
+                count += 1
+                if count == 1 { firstWasHangUp = hangUp }
+                return count
+            }
+        }
     }
 }
 

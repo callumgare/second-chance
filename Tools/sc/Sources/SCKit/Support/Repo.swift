@@ -42,6 +42,8 @@ struct Repo: Sendable {
     var builtTemplate: URL { debugProducts.appendingPathComponent("WrappTemplate.app") }
     var testResults: URL { root.appendingPathComponent("test-results") }
     var scLogs: URL { derivedData.appendingPathComponent("sc-logs") }
+    /// GUI-session jobs (`GUISession`), kept so `sc attach` can find them.
+    var scJobs: URL { derivedData.appendingPathComponent("sc-jobs") }
     var releaseDir: URL { root.appendingPathComponent("build/release") }
     var changelog: URL { root.appendingPathComponent("CHANGELOG.md") }
     var notesTemplate: URL { root.appendingPathComponent(".cog/release-notes.tera") }

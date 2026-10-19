@@ -23,6 +23,7 @@ nearest command's help.
 ./sc setup                             # Once per clone: tools, commit hook, completions
 ./sc clean wine-prefixes               # Start the next build from a fresh Wine prefix
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
+./sc --on <host> attach                # Pick up a remote run after the connection dropped
 ```
 
 ## Shape of the API
@@ -181,14 +182,38 @@ and carry on.
 The re-run gets an explicit `--logs`: it runs under a pty, so it would
 otherwise decide it was interactive even when the original command was piped.
 
+**A GUI-session run outlives its connection.** The LaunchAgent's parent is
+launchd, not the SSH session, so stopping a run and losing it are kept apart:
+
+- **Ctrl-C** stops the run.
+- **A dropped connection** (SIGHUP with a pty; sshd vanishing from sc's
+  ancestors without one) only stops sc *following* it. The run carries on,
+  including through a restart of the Mac you connected from, but not one of
+  the Mac it runs on, which ends its GUI session.
+- **`sc attach`** picks it up again. It replays the output from the start,
+  forwards keys, and exits with the run's status. With no id, it takes the
+  run still going, or the newest if that has already finished. `--list` shows
+  the runs and `--stop` stops one.
+
+Each run keeps its job script, output, exit code and input pipe in
+`DerivedData/sc-jobs/<id>/`. The id is the start time plus sc's pid. The input
+pipe is held open by the job itself, so it survives the sc that started it.
+The newest 10 finished runs are kept.
+
 **`--on <host>[:<path>]` runs a command on another Mac.** It rsyncs the repo
-there (excluding `.git`, `built-apps`, `test-results`, `tmp`, sc's own `.build`
-and `DerivedData/sc-logs`) and runs `./sc` with the same arguments over `ssh`
-(`-t` when interactive). Output stays there: a test run's results and report
-are in the remote Mac's `test-results/`, and the terminal shows the summary
-table. `<path>` defaults to this repo's path relative to
+there (excluding `.git`, `built-apps`, `test-results`, `tmp`, sc's own `.build`,
+`DerivedData/sc-logs` and `DerivedData/sc-jobs`) and runs `./sc` with the same
+arguments over `ssh` (`-t` when interactive). Output stays there: a test run's
+results and report are in the remote Mac's `test-results/`, and the terminal
+shows the summary table. `<path>` defaults to this repo's path relative to
 your home directory. On the remote Mac, the GUI-session re-run applies as
 usual.
+
+- **If the connection drops,** sc says so: ssh's exit 255. Pick the run up
+  with `sc --on <host>[:<path>] attach`, which doesn't sync.
+- **While a run is still going there, `--on` refuses to sync.** rsync would
+  replace the build and the sc it is using. Attach to it, or stop it with
+  `attach --stop`, first.
 
 ## Changing sc
 

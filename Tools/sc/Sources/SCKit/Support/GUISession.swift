@@ -9,6 +9,7 @@ import Foundation
 /// `ensure`, which — outside Aqua — re-runs the same sc command as a one-off
 /// LaunchAgent in `gui/<uid>`, under a pty (so TTY-gated output still shows),
 /// streams its output back, forwards keystrokes, and exits with its status.
+/// The job outlives a dropped connection; `sc attach` follows it again.
 enum GUISession {
     /// Whether the command needs to *see or click* the screen
     /// (WrappPuppeteer), or only to open windows.
@@ -70,62 +71,98 @@ enum GUISession {
             return try await Proc.inheritingTerminal(command[0], Array(command.dropFirst()), cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         }
 
-        let job = try LaunchAgentJob(command: command)
-        defer { job.cleanUp() }
-        session.ui.detail("Running in \(user)'s GUI session…")
+        let job = try LaunchAgentJob(command: command, in: session.repo.scJobs)
+        session.ui.detail("Running in \(user)'s GUI session (job \(job.id))…")
         try job.start()
+        return try await follow(job, session: session)
+    }
 
+    /// The exit status `follow` returns when its caller has gone and the job
+    /// is left running: 128 + SIGHUP, as for a hung-up shell.
+    static let detachedStatus: Int32 = 129
+
+    /// Stream a job's output (from the start) and forward keystrokes until it
+    /// exits, then return its status.
+    ///
+    /// Stopping and losing the caller are different things. Ctrl-C stops the
+    /// job. A dropped connection only stops following it: the job carries on,
+    /// and `sc attach` picks it up again.
+    static func follow(_ job: LaunchAgentJob, session: Session) async throws -> Int32 {
         // A dropped SSH connection without a pty sends no signal: sshd just
         // exits and the shells in between are reparented to launchd. So note
         // every ancestor now and treat any of them disappearing as the caller
-        // being gone.
+        // being gone. (With a pty it sends SIGHUP; see the catch below.)
         let ancestors = Ancestors.current()
         let forwarder = session.terminal.canReadKeys ? KeyForwarder(fifo: job.inputFIFO) : nil
         forwarder?.start()
         defer { forwarder?.stop() }
 
         let output = LogFollower(url: job.logFile, crlfToLF: !session.terminal.isInteractive)
-        while true {
-            output.drain()
-            if let status = job.exitStatus() {
-                try await Task.sleep(for: .milliseconds(200))
+        do {
+            while true {
                 output.drain()
-                return status
+                if let status = job.exitStatus() {
+                    try await Task.sleep(for: .milliseconds(200))
+                    output.drain()
+                    job.unload()
+                    return status
+                }
+                if !ancestors.allAlive() { return detachedStatus }
+                if !job.isRunning() {
+                    try await Task.sleep(for: .seconds(1))
+                    output.drain()
+                    job.unload()
+                    if let status = job.exitStatus() { return status }
+                    session.ui.error(SCError("The command exited without reporting an exit status."))
+                    return 1
+                }
+                try await Task.sleep(for: .milliseconds(100))
             }
-            if !ancestors.allAlive() { return 129 }
-            if !job.isRunning() {
-                try await Task.sleep(for: .seconds(1))
-                output.drain()
-                if let status = job.exitStatus() { return status }
-                session.ui.error(SCError("The command exited without reporting an exit status."))
-                return 1
-            }
-            try await Task.sleep(for: .milliseconds(100))
+        } catch is CancellationError {
+            if !Interrupts.hungUp { job.stop() }
+            throw CancellationError()
         }
     }
 }
 
-/// The one-off LaunchAgent the command runs as.
-private final class LaunchAgentJob: @unchecked Sendable {
-    let label = "au.gare.callum.second-chance.in-gui-session.\(getpid())"
-    let domain = "gui/\(getuid())"
+/// A one-off LaunchAgent a command runs as, kept in its own directory under
+/// `DerivedData/sc-jobs/` so it outlives the sc that started it: a later
+/// `sc attach` finds it there, replays its output and waits for its exit.
+final class LaunchAgentJob: @unchecked Sendable {
+    static let labelPrefix = "au.gare.callum.second-chance.sc-job."
+    /// Finished jobs kept for `sc attach` to replay; older ones are removed.
+    static let keptFinished = 10
+
+    let id: String
     let workDir: URL
-    let logFile: URL
-    let exitFile: URL
-    let inputFIFO: URL
-    private let plist: URL
+    var label: String { Self.labelPrefix + id }
+    let domain = "gui/\(getuid())"
+    var logFile: URL { workDir.appendingPathComponent("output.log") }
+    var exitFile: URL { workDir.appendingPathComponent("exit-code") }
+    var inputFIFO: URL { workDir.appendingPathComponent("input") }
+    /// The command line, for `sc attach --list`.
+    var commandFile: URL { workDir.appendingPathComponent("command") }
+    private var plist: URL { workDir.appendingPathComponent("\(label).plist") }
     private var fifoHolder: FileHandle?
 
-    init(command: [String]) throws {
-        workDir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-gui-\(UUID().uuidString)")
+    /// An existing job, found by `all(in:)`.
+    private init(workDir: URL) {
+        self.workDir = workDir
+        id = workDir.lastPathComponent
+    }
+
+    /// A new job for `command`, not yet started.
+    convenience init(command: [String], in jobsDir: URL, now: Date = Date()) throws {
+        Self.prune(in: jobsDir)
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyyMMdd-HHmmss"
+        self.init(workDir: jobsDir.appendingPathComponent("\(stamp.string(from: now))-\(getpid())"))
         try FileManager.default.createDirectory(at: workDir, withIntermediateDirectories: true)
-        logFile = workDir.appendingPathComponent("output.log")
-        exitFile = workDir.appendingPathComponent("exit-code")
-        inputFIFO = workDir.appendingPathComponent("input")
-        plist = workDir.appendingPathComponent("\(label).plist")
         guard mkfifo(inputFIFO.path, 0o600) == 0 else {
             throw SCError("Couldn't create the input pipe for the GUI session.")
         }
+        try command.joined(separator: " ").write(to: commandFile, atomically: true, encoding: .utf8)
 
         // The job script recreates this process's environment and directory,
         // then runs the command and records its exit status.
@@ -142,14 +179,22 @@ private final class LaunchAgentJob: @unchecked Sendable {
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: jobScript.path)
 
         // `script` gives the command a pty. Its stdin comes from the FIFO,
-        // which sc holds open (and writes keystrokes into) — it must never
-        // see EOF, or `script` forwards it into the pty as a stray ^D. The
-        // FIFO goes through `cat` because `script` rejects a FIFO as stdin
+        // which must never see EOF, or `script` forwards it into the pty as a
+        // stray ^D. The job's own bash holds it open (fd 3) for as long as the
+        // job runs, so it outlives whichever sc is following — keystrokes from
+        // that sc, or a later `sc attach`, are written into it. The FIFO goes
+        // through `cat` because `script` rejects a FIFO as stdin
         // ("tcgetattr/ioctl: Operation not supported on socket") but accepts
-        // a pipe.
+        // a pipe. A process substitution rather than a pipeline, so bash
+        // waits only for `script`: `cat` never sees EOF and would hold the job
+        // open for ever; launchd ends it with the job's process group.
         let agent: [String: Any] = [
             "Label": label,
-            "ProgramArguments": ["/bin/bash", "-c", "/bin/cat \"$1\" | exec /usr/bin/script -q /dev/null \"$0\"", jobScript.path, inputFIFO.path],
+            "ProgramArguments": [
+                "/bin/bash", "-c",
+                "exec 3<>\"$1\"; /usr/bin/script -q /dev/null \"$0\" 3>&- < <(exec /bin/cat \"$1\" 3>&-)",
+                jobScript.path, inputFIFO.path,
+            ],
             "StandardOutPath": logFile.path,
             "StandardErrorPath": logFile.path,
             "RunAtLoad": true,
@@ -182,7 +227,9 @@ private final class LaunchAgentJob: @unchecked Sendable {
         return code
     }
 
+    /// Loaded in launchd with a live process, and no exit recorded yet.
     func isRunning() -> Bool {
+        guard exitStatus() == nil else { return false }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         process.arguments = ["print", "\(domain)/\(label)"]
@@ -195,16 +242,52 @@ private final class LaunchAgentJob: @unchecked Sendable {
         return String(decoding: data, as: UTF8.self).contains("pid = ")
     }
 
-    /// Booting out the job kills its whole process group, which stops the
-    /// command if sc is leaving early (Ctrl-C, dropped connection).
-    func cleanUp() {
+    /// Remove the finished job from launchd. Its directory stays, for
+    /// `sc attach` to replay until `prune` removes it.
+    func unload() {
+        bootout()
+        try? fifoHolder?.close()
+        fifoHolder = nil
+    }
+
+    /// Stop the job. Booting it out kills its whole process group.
+    func stop() {
+        unload()
+        if exitStatus() == nil {
+            try? "130\n".write(to: exitFile, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func bootout() {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/launchctl")
         process.arguments = ["bootout", "\(domain)/\(label)"]
         process.standardError = FileHandle.nullDevice
         if (try? process.run()) != nil { process.waitUntilExit() }
-        try? fifoHolder?.close()
-        try? FileManager.default.removeItem(at: workDir)
+    }
+
+    var command: String {
+        (try? String(contentsOf: commandFile, encoding: .utf8)) ?? "?"
+    }
+
+    /// Every job in `jobsDir`, oldest first (ids start with the time).
+    static func all(in jobsDir: URL) -> [LaunchAgentJob] {
+        let dirs = (try? FileManager.default.contentsOfDirectory(at: jobsDir, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+        return dirs
+            .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .map { LaunchAgentJob(workDir: $0) }
+    }
+
+    /// Remove all but the newest `keptFinished` jobs that aren't running.
+    /// One that never recorded an exit (its Mac restarted under it) counts
+    /// as finished.
+    static func prune(in jobsDir: URL) {
+        let finished = all(in: jobsDir).filter { !$0.isRunning() }
+        for job in finished.dropLast(keptFinished) {
+            job.bootout()
+            try? FileManager.default.removeItem(at: job.workDir)
+        }
     }
 
     static func quote(_ value: String) -> String {

@@ -221,7 +221,9 @@ direct assignment.
   like a broken installer. `sc` commands that open windows re-run themselves in
   the console user's `Aqua` session under a pty and stream the output back;
   anything else can be wrapped in `./sc in-gui-session -- <command>`. Someone
-  must be logged in at that Mac's console.
+  must be logged in at that Mac's console. That run is a LaunchAgent, so it
+  outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
+  picks it up again.
 - **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG). Run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) if Wine setup misbehaves after code changes.
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
