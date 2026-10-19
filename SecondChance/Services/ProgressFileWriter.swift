@@ -37,20 +37,18 @@ final class ProgressFileWriter: @unchecked Sendable {
 
     /// A writer appending to `path` (created if missing), or nil when it
     /// can't be opened — logged, since progress is a nicety.
+    ///
+    /// Opened with `O_APPEND`, so every record lands at the file's end at the
+    /// moment it's written: the integration suites each have a writer on the
+    /// same file, and with an offset of their own (seeking to the end only
+    /// once, on opening) each overwrote the other's records.
     convenience init?(path: String) {
-        if !FileManager.default.fileExists(atPath: path) {
-            FileManager.default.createFile(atPath: path, contents: nil)
-        }
-        guard let handle = FileHandle(forWritingAtPath: path) else {
-            Self.logger.error("Can't open progress file \(path); progress won't be reported")
+        let descriptor = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        guard descriptor >= 0 else {
+            Self.logger.error("Can't open progress file \(path) (\(String(cString: strerror(errno)))); progress won't be reported")
             return nil
         }
-        do {
-            try handle.seekToEnd()
-        } catch {
-            Self.logger.error("Can't seek to the end of progress file \(path): \(error.localizedDescription)")
-        }
-        self.init(handle: handle)
+        self.init(handle: FileHandle(fileDescriptor: descriptor, closeOnDealloc: true))
     }
 
     private init(handle: FileHandle) {

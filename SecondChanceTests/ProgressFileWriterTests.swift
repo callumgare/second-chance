@@ -73,4 +73,16 @@ struct ProgressFileWriterTests {
         #expect(lines.map { $0["phase"] as? String } == ["started", "finished"])
         #expect(lines[1]["result"] as? String == "passed")
     }
+
+    @Test("Two writers on one file keep each other's records")
+    func twoWritersAppend() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("progress-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let disk = try #require(ProgressFileWriter(path: url.path))
+        let steam = try #require(ProgressFileWriter(path: url.path))
+        disk.write(["event": "game", "slug": "stay-tuned", "phase": "started"])
+        steam.write(["event": "game", "slug": "old-clock", "source": "steam", "phase": "started"])
+        disk.write(["event": "game", "slug": "stay-tuned", "phase": "finished", "result": "passed", "seconds": 1.5])
+        #expect(try records(at: url).map { $0["slug"] as? String } == ["stay-tuned", "old-clock", "stay-tuned"])
+    }
 }
