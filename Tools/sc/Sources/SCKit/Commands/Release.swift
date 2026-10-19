@@ -29,7 +29,7 @@ struct ReleaseCommand: AsyncParsableCommand {
 
     @Flag(help: ArgumentHelp(
         "Build and package the next version without changing the repo.",
-        discussion: "No changelog, notes, commit or tag: the version is written into the project for the build and put back afterwards."
+        discussion: "No changelog, notes, commit or tag, and no tests: the version is written into the project for the build and put back afterwards."
     ))
     var buildOnly = false
 
@@ -48,7 +48,7 @@ struct ReleaseCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly)
         try await release.run(versionOverride: version.map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 },
-                              build: !dryRun && !notesOnly, test: !dryRun && !notesOnly && !skipTests)
+                              build: !dryRun && !notesOnly, test: !dryRun && !notesOnly && !buildOnly && !skipTests)
     }
 }
 
