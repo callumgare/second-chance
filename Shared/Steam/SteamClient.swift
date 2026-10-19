@@ -58,8 +58,10 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     /// and only what this one wrote counts.
     private var logOffsets: [String: UInt64] = [:]
 
-    init(wrappPath: URL) {
-        wine = WineEnvironment(appPath: wrappPath)
+    /// `prefixDir` when the wrapp runs from a prefix outside its bundle
+    /// (a read-only wrapp's copy; see the wrapp's `getWinePrefix`).
+    init(wrappPath: URL, prefixDir: URL? = nil) {
+        wine = WineEnvironment(appPath: wrappPath, customPrefixDir: prefixDir)
     }
 
     var isInstalled: Bool {

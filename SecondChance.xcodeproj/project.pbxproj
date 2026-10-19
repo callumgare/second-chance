@@ -75,6 +75,7 @@
 				StartupDiagnostics.swift,
 				Subcommands.swift,
 				SystemLoadMonitor.swift,
+				WrappSteam.swift,
 				Views/InfoWindowView.swift,
 			);
 			target = E24D78DD2F063E1E00B38683 /* WrappTemplate */;

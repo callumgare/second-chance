@@ -317,6 +317,13 @@ direct assignment.
   with multi-disk games merged into `disk-combined`. This lives in
   `DiskWrappBuilder` — it is deliberately not in the shared helper, because no
   other source has disks.
+- **A new file in `WrappTemplate/` must be listed to be built.** Unlike
+  `SecondChance/` and `Shared/`, the WrappTemplate target takes only the files
+  named in its `membershipExceptions` list in `project.pbxproj` (Xcode's
+  synchronized-folder exception set, used here as an allow-list). A file left
+  off it isn't compiled, and the build fails with `cannot find type … in
+  scope` wherever it's used. Add it to the list (or tick the target in Xcode's
+  File inspector).
 - **The template is `WrappTemplate.app`**, embedded in
   `Second Chance.app/Contents/Resources/`. `WrappBuildHelper` copies it per game
   and rewrites `CFBundleIdentifier` from
@@ -399,13 +406,12 @@ as the Control-click bypass no longer works.
 
 ## Things Currently In Flux
 
-- **Steam builds, but only DRM-free games launched directly run yet.**
-  `SteamWrappBuilder` installs and configures any game on Steam the account
-  owns, but the wrapp's `wine-steam` / `wine-steam-silent` launch path still
-  exits 1 (`WrappTemplate/main.swift`), so a wrapp that needs Steam running
-  can't start its game. The Steam option on the welcome screen stays behind
-  the debug setting until it can. [docs/steam.md](docs/steam.md) has the
-  rest.
+- **Steam is built and runs, but has no integration suite yet.** Steam
+  wrapps build (`SteamWrappBuilder`) and launch their games through Steam
+  (`WrappTemplate/WrappSteam.swift`), but only by hand and with the
+  real-Steam smoke test: there's no `SteamInstallIntegrationTests` yet, so
+  the Steam option on the welcome screen stays behind the debug setting.
+  [docs/steam.md](docs/steam.md) has the rest.
 - **Her download works end-to-end** through the same helpers as disk (it signs
   and publishes the same events), but has far less real-world mileage than the
   disk path.

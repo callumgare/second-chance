@@ -707,9 +707,8 @@ func main() {
         }
 
     case "wine-steam", "wine-steam-silent":
-        mainLogger.critical("ERROR: Steam engine not yet implemented in Swift runtime")
-        mainLogger.critical("Please use the bash runtime for Steam games")
-        exit(1)
+        mainLogger.notice("Launching through Steam...")
+        launchGameAsync()
 
     case "scummvm":
         mainLogger.notice("Launching ScummVM game...")

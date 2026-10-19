@@ -96,9 +96,12 @@ struct LogStoreTests {
         for seq in liveSeqs {
             #expect(!snapshotSeqs.contains(seq), "entry \(seq) appeared in snapshot AND live delivery")
         }
-        let sorted = liveSeqs.sorted()
-        if sorted.count == 3 {
-            #expect(sorted[2] - sorted[0] == 2, "live seqs should be contiguous, got \(sorted)")
+        // In order, and all after the snapshot. Not contiguous: seqs are
+        // global, and suites running in parallel log into the same store, so
+        // another test's entry can land between two of these.
+        #expect(liveSeqs == liveSeqs.sorted(), "live seqs should arrive in order, got \(liveSeqs)")
+        if let lastSnapshot = snapshotSeqs.max(), let firstLive = liveSeqs.min() {
+            #expect(lastSnapshot < firstLive, "a live entry (\(firstLive)) predates the snapshot (\(lastSnapshot))")
         }
     }
 

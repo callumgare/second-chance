@@ -115,6 +115,8 @@ class GameLauncher {
     private var diagnostics: StartupDiagnostics?
     /// The desktop `prepareDesktop` started, if it did. See `releaseDesktop`.
     private var desktop: WineDesktop?
+    /// Steam, for a game that needs it running (`wine-steam*`).
+    private var steam: WrappSteam?
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     /// What Wine and the game print, and what ScummVM prints: categories of
@@ -166,6 +168,10 @@ class GameLauncher {
                     return
                 }
                 
+                // Steam would keep the Wine session alive, and its sign-in
+                // has to be saved and taken out of the wrapp on the way out.
+                // Briefly: the quit fallback kills everything after 15s.
+                self.steam?.finish(timeout: 10)
                 self.logger.debug("[Cleanup/performCleanup] Calling WineUtilities.waitTillWineserverStopped...")
                 WineUtilities.waitTillWineserverStopped(at: self.config.appPath, customPrefixDir: self.config.winePrefix)
                 self.logger.debug("[Cleanup/performCleanup] WineUtilities.waitTillWineserverStopped returned")
@@ -236,12 +242,29 @@ class GameLauncher {
         launchedAt = Date()
         gameStarted = false
         LogContext.enterStage("Starting the game")
+        if config.gameEngine.hasPrefix("wine-steam") {
+            LogContext.enterStage("Starting Steam")
+            do {
+                steam = try WrappSteam(config: config, status: { infoWindow?.updateMessage($0) })
+            } catch {
+                reportSteamFailure(error)
+                return -1
+            }
+            LogContext.enterStage("Starting the game")
+            // The game's own start is timed from here, not from Steam's.
+            launchedAt = Date()
+        }
         // Launch the game process (engine-specific)
         let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
-        
+        // Steam starts the game itself, so there's no launcher process of
+        // ours to watch: the game is found, and watched, by its exe.
+        let launchedBySteam = config.gameEngine == "wine-steam"
+
         switch config.gameEngine {
         case "wine":
             launchResult = launchWineProcess()
+        case "wine-steam":
+            launchResult = launchViaSteam()
         case _ where config.gameEngine.hasPrefix("wine-"):
             launchResult = launchWineProcess()
         case "scummvm":
@@ -251,12 +274,13 @@ class GameLauncher {
             return -1
         }
         
-        guard launchResult.gamePid > 0 else {
+        guard launchResult.gamePid > 0 || (launchedBySteam && launchResult.gameExeName != nil) else {
             logger.critical("ERROR: Failed to launch game")
+            steam?.finish(timeout: 90)
             return -1
         }
         
-        let gamePid = launchResult.gamePid
+        var gamePid = launchResult.gamePid
         
         // Wait for game to start
         if let gameExeName = launchResult.gameExeName {
@@ -264,6 +288,7 @@ class GameLauncher {
             if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
                 gameStarted = true
+                if launchedBySteam { gamePid = detectedPid }
                 diagnostics?.gameStarted(pid: detectedPid)
 
                 // Activate game window (Wine games only)
@@ -273,6 +298,13 @@ class GameLauncher {
                         diagnostics?.gameWindowAppeared()
                     }
                 }
+            } else if launchedBySteam {
+                logger.error("[Game Launch] Steam never started \(gameExeName)")
+                diagnostics?.gameExited(exitCode: -1)
+                steam?.finish(timeout: 90)
+                releaseDesktop()
+                handleGameTermination(exitCode: nil, signal: nil, infoWindow: infoWindow)
+                return -1
             } else {
                 logger.error("[Game Launch] \(gameExeName) was never seen running; waiting for Wine's launcher to finish")
             }
@@ -305,6 +337,7 @@ class GameLauncher {
         // Get exit code from GameMonitor which captured it safely
         let exitCode = gameMonitor.exitCode ?? 0
         diagnostics?.gameExited(exitCode: exitCode)
+        steam?.finish(timeout: 90)
         releaseDesktop()
         
         // Handle game termination (just cleanup, no app lifecycle management)
@@ -386,6 +419,43 @@ class GameLauncher {
         return (process, process.processIdentifier, launchInfo.gameExeName)
     }
     
+    // MARK: - Steam
+
+    /// Have Steam start the game (`-applaunch`), for DRM that insists on it.
+    private func launchViaSteam() -> (process: Process?, gamePid: Int32, gameExeName: String?) {
+        let launchInfo = getGameLaunchInfo(config)
+        guard let steam, let appID = config.steamGameId.flatMap({ Int($0) }) else {
+            logger.critical("ERROR: no Steam app ID for a game launched through Steam")
+            return (nil, -1, nil)
+        }
+        do {
+            try steam.client.launch(appID: appID)
+        } catch {
+            logger.critical("ERROR: Couldn't ask Steam to launch the game: \(error.localizedDescription)")
+            return (nil, -1, nil)
+        }
+        let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
+        diagnostics.wineLaunched()
+        self.diagnostics = diagnostics
+        return (nil, 0, launchInfo.gameExeName)
+    }
+
+    private func reportSteamFailure(_ error: Error) {
+        let (title, detail): (String, String)
+        switch error {
+        case WrappSteam.Failure.inUse(let holder):
+            (title, detail) = ("Another game is using Steam",
+                               "\(holder.map { "\($0) has" } ?? "Another game has") Steam open. Quit it, then open \(config.gameTitle) again.")
+        case WrappSteam.Failure.signInTimedOut:
+            (title, detail) = ("Steam didn't sign in", "\(config.gameTitle) needs Steam signed in to start. Open it again to have another go.")
+        default:
+            (title, detail) = ("Couldn't start Steam", error.localizedDescription)
+        }
+        logger.critical("[Steam] \(title): \(detail)")
+        FailureSummary.log(logger, what: "Starting Steam for \(config.gameTitle)", files: [])
+        DispatchQueue.main.sync { showAlert(message: title, informativeText: detail) }
+    }
+
     // MARK: - Wine Desktop
 
     /// Start Wine's desktop and wait until it has registered the display

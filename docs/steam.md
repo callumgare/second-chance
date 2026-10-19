@@ -6,10 +6,9 @@ sign-in window (with QR sign-in) means Second Chance never handles a password.
 The parts that drive it live in `Shared/Steam/`, compiled into the app, the
 wrapp and WrappPuppeteer alike.
 
-**Building a Steam wrapp works; a wrapp that has to start Steam to run its
-game doesn't yet** — the wrapp's `wine-steam*` launch path is still to come
-(AGENTS.md, "Things Currently In Flux"). A DRM-free game built to launch
-directly runs today.
+Steam builds and Steam wrapps work end to end; the Steam option on the
+welcome screen is still behind the debug setting until the Steam integration
+suite exists (AGENTS.md, "Things Currently In Flux").
 
 ## Building
 
@@ -75,6 +74,29 @@ The choice (`offersSteamLaunchChoice`) is put to the user without naming
 engines: launching directly is quicker and more reliable, launching via Steam
 keeps Steam Cloud saves. A game whose DRM is worked out and set in
 `GameInfoProvider` gets the faster path from then on.
+
+## Running
+
+A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
+`WrappTemplate/WrappSteam.swift`, before the game starts:
+
+1. **Take the Steam lock**, or tell the player which game has Steam open.
+2. **End any Steam left over** from a run that was force-quit or crashed —
+   it would still be running in this prefix, signed in.
+3. **Restore the shared sign-in, start Steam silently, wait for it to sign
+   in.** Without a sign-in, the loading window says to sign in in Steam's
+   window, and waits for up to 30 minutes.
+4. **Start the game.** `wine-steam` asks Steam to (`-applaunch`): no launcher
+   of the wrapp's own to watch, so the game is found, and watched, by its exe;
+   `wine-steam-silent` starts the exe itself, as a Wine game does. Startup
+   diagnostics are timed from here, not from Steam's start.
+5. **When the game ends, or the wrapp quits:** stop Steam, save the sign-in
+   back to the store, take it out of the wrapp, release the lock. On quit this
+   is cut short (10 s for Steam) to fit inside the wrapp's 15 s quit fallback.
+
+A wrapp moved to a Mac without the store asks for the sign-in once and
+creates the store there. A wrapp that's killed outright (SIGKILL, a test
+harness timing out) can't stop Steam; the next launch cleans it up (step 2).
 
 ## One sign-in for every wrapp
 
