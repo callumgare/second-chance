@@ -87,6 +87,8 @@ chmod +x "${TEMP_DIR}/Resources/winetricks"
 # work here -- wine-preloader reaches its entry point before dyld runs
 # initializers -- so instead the driver gets a weak dependency on the dylib.
 # The helpers share the one dylib: native_fullscreen.m (macOS fullscreen),
+# display_below_notch.m (shows Wine a notched display without the notch's
+# strip, so a game in a fullscreen Space gets matching mouse positions),
 # cursor_lock.m (cnc-ddraw's cursor lock) and puppet_control.m (lets the
 # integration tests' WrappPuppeteer see and click the game). ScummVM wrapps
 # load the same dylib into scummvm, for puppet_control.m alone. ScreenCaptureKit
@@ -97,6 +99,7 @@ HELPERS_DIR="${SCRIPT_DIR}/InProcessHelpers"
 clang -dynamiclib \
     -o "${TEMP_DIR}/Frameworks/in_process_helpers.dylib" \
     "${HELPERS_DIR}/native_fullscreen.m" \
+    "${HELPERS_DIR}/display_below_notch.m" \
     "${HELPERS_DIR}/cursor_lock.m" \
     "${HELPERS_DIR}/puppet_control.m" \
     -framework Cocoa \

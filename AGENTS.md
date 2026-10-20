@@ -251,7 +251,8 @@ direct assignment.
   environment through. Channels like `+d3d9` log per frame, so keep runs short.
   More debug switches read the same way: `SECOND_CHANCE_KEEP_IN_DOCK=1`
   skips the wrapp hiding itself from the Dock once the game starts,
-  `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves native fullscreen unarmed, and
+  `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves native fullscreen unarmed (and
+  stops Wine seeing a notched display without its notch strip), and
   `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet).
   For Second Chance itself, `SECOND_CHANCE_UPDATES=1` turns on the update
   checks a Debug build leaves off ([docs/updates.md](docs/updates.md)).

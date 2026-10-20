@@ -94,6 +94,23 @@ nonisolated public struct WineEnvironment: Sendable {
         return directory
     }
 
+    /// Variables a wrapp sets on itself at start-up, so that every Wine
+    /// process it starts inherits them — the desktop, the game, Steam — and
+    /// Second Chance's own installer runs don't.
+    ///
+    /// `NATIVE_FULLSCREEN_BELOW_NOTCH` shows Wine a notched display without the
+    /// strip the notch sits in, which a fullscreen Space leaves out, so a game
+    /// in one gets mouse positions that match its picture. It has to reach
+    /// explorer.exe, which registers the displays the game sees, which is why
+    /// it isn't among `inProcessHelperVariables`. Native fullscreen's off switch
+    /// turns it off too.
+    public static func wrappSessionVariables(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        guard environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" else { return [:] }
+        return ["NATIVE_FULLSCREEN_BELOW_NOTCH": "1"]
+    }
+
     /// The variables that arm the in-process helpers bundled into Wine's Mac
     /// driver for the game `gameExe` (its file name, e.g. `Game.exe`): native
     /// fullscreen puts the game's window into a real macOS fullscreen Space,

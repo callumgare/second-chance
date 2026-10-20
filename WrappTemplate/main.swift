@@ -396,6 +396,10 @@ func main() {
     // Bootstrap logging before anything else can construct a Logger.
     AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappTemplate")
     installTerminationHandlers()
+    // Before any Wine process starts, so that every one inherits them.
+    for (name, value) in WineEnvironment.wrappSessionVariables() {
+        setenv(name, value, 1)
+    }
 
     // Get app path for prefix determination
     guard let executablePath = ProcessInfo.processInfo.arguments.first else {

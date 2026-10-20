@@ -46,6 +46,12 @@ struct InProcessHelperReportTests {
         #expect(InProcessHelperReport(armingVariables: puppeteer, logger: logger).check() == [.nativeFullscreen, .cursorLock, .puppetControl])
     }
 
+    @Test("A wrapp shows Wine the display below the notch unless native fullscreen is off")
+    func belowNotchFollowsNativeFullscreen() {
+        #expect(WineEnvironment.wrappSessionVariables(environment: [:]) == ["NATIVE_FULLSCREEN_BELOW_NOTCH": "1"])
+        #expect(WineEnvironment.wrappSessionVariables(environment: ["SECOND_CHANCE_NATIVE_FULLSCREEN": "0"]) == [:])
+    }
+
     @Test("A helper switched off isn't expected to arm")
     func ignoresHelpersNotArmed() {
         let report = InProcessHelperReport(armingVariables: ["CURSOR_LOCK_EXE": "Game.exe"], logger: logger)

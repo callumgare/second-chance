@@ -8,12 +8,13 @@ wrapp does not have:
 | Helper | Source | What it does | Armed by | Off switch |
 | --- | --- | --- | --- | --- |
 | Native fullscreen | `WrappTemplate/InProcessHelpers/native_fullscreen.m` | Puts the game window into a real macOS fullscreen Space | `NATIVE_MACOS_FULLSCREEN_EXE` | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
+| Display below the notch | `WrappTemplate/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE` | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Puppet control | `WrappTemplate/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 
 ## How they get into the game process
 
-All three are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
+All of them are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
 by `WrappTemplate/setup-wine.sh` (an Xcode build phase of the WrappTemplate
 target — add any new source to that phase's input files too, or edits to it
 won't rebuild). `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
@@ -111,6 +112,46 @@ closed while the app was active goes back into one when it is shown again.
 A window the player took out of fullscreen themselves is left windowed.
 
 The header comment of `native_fullscreen.m` has the details.
+
+### On a display with a notch
+
+A fullscreen Space on a display with a notch leaves out the strip the notch
+sits in. On a 1512×982 display the game's window is 1512×945. Wine tells the
+game its window has shrunk, but a Direct3D game keeps drawing for the whole
+display. Direct3D squeezes that picture into the window, and mouse positions
+aren't adjusted to match. Measured on Secrets Can Kill Remastered, the
+game's cursor sat 12 points above the real one near the top of the screen and
+37 points above it near the bottom, enough to miss a button. (cnc-ddraw
+games aren't affected, because cnc-ddraw scales mouse positions itself.)
+
+`display_below_notch.m` makes Wine see a display that ends at the notch, by
+using the display's own below-notch mode (1512×945 there), which macOS offers
+for apps to run below the notch. The game then starts with a desktop the size
+of the Space, and its picture and the mouse agree. In every Wine process of
+the wrapp, for Wine's Mac driver (`winemac.so`) only:
+
+| What Wine calls | What it gets |
+| --- | --- |
+| `-[NSScreen frame]`, `-visibleFrame` | The screen without the strip. Wine builds its displays from these, and converts window and cursor positions with them. |
+| `CGDisplayCopyDisplayMode` | The below-notch mode. Wine sizes the Win32 desktop from the current mode. |
+| `CGDisplaySetDisplayMode` with the below-notch mode | Nothing happens, so Wine "restoring the original mode" never switches your display. |
+| `CGEventGetLocation`, `CGWarpMouseCursorPosition` | Positions shifted by the strip's height, since these count from the true top of the display. |
+
+The first is a method replacement that checks its caller is `winemac.so`. The
+others replace `winemac.so`'s imported addresses (its `__got` entries), so the
+rest of the process, AppKit included, sees the display as it is.
+
+It has to act in `explorer.exe` too, not only in the game: in Wine 10 the
+desktop process registers the displays, and the game takes them from there.
+So rather than naming the game's `.exe`, it is armed by
+`NATIVE_FULLSCREEN_BELOW_NOTCH=1`. The wrapp sets that on itself at start-up
+(`WineEnvironment.wrappSessionVariables`), and every Wine process it starts
+inherits it. Second Chance's own installer runs never have it.
+
+It does nothing unless the main display is a built-in one with a below-notch
+mode, and it stops adjusting anything if that display's mode changes while
+the game runs. The game's process logs `showing Wine the display below the
+notch` when it applies.
 
 ## Cursor lock
 
