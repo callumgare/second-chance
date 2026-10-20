@@ -67,6 +67,8 @@ private struct Release {
 
     var notesFile: URL { repo.releaseDir.appendingPathComponent("RELEASE_NOTES.md") }
     var zip: URL { repo.releaseDir.appendingPathComponent("SecondChance.zip") }
+    /// Sparkle's update feed, published with the zip (docs/updates.md).
+    var appcast: URL { repo.releaseDir.appendingPathComponent("appcast.xml") }
 
     func run(versionOverride: String?, build: Bool, test: Bool) async throws {
         // A release that stops partway — a failed test or build, or Ctrl-C —
@@ -74,20 +76,20 @@ private struct Release {
         // attempt then refuses to start on the dirty tree. So everything it
         // writes is taken back out before the error is reported — only what
         // it wrote: anything else changed in those files, before or during
-        // the run, stays. The zip is only removed: packaging deletes the
-        // previous one before writing.
+        // the run, stays. The zip and appcast are only removed: packaging
+        // deletes the previous ones before writing.
         let rollback = FileRollback([repo.pbxproj, repo.changelog, notesFile])
-        let zipExisted = FileManager.default.fileExists(atPath: zip.path)
+        let created = [zip, appcast].filter { !FileManager.default.fileExists(atPath: $0.path) }
         let committed: (version: String, branch: String)?
         do {
             committed = try await perform(versionOverride: versionOverride, build: build, test: test, rollback: rollback)
         } catch {
-            await restore(rollback, removingZip: !zipExisted, reason: "Release stopped")
+            await restore(rollback, removing: created, reason: "Release stopped")
             throw error
         }
         if buildOnly {
             // The build has the version baked in; the repo goes back as it was.
-            await restore(rollback, removingZip: false, reason: "Build only")
+            await restore(rollback, removing: [], reason: "Build only")
             if let committed {
                 ui.success("Built v\(committed.version) — not committed or tagged.", takeaways: [TerminalText(stringLiteral: repo.display(zip))])
             }
@@ -100,18 +102,18 @@ private struct Release {
         }
     }
 
-    /// Take the release's writes back out of the files, and remove a zip it
-    /// created when `removingZip`.
-    private func restore(_ rollback: FileRollback, removingZip: Bool, reason: String) async {
+    /// Take the release's writes back out of the files, and remove the
+    /// packaged files in `removing` — the ones it created.
+    private func restore(_ rollback: FileRollback, removing: [URL], reason: String) async {
         let outcome = await rollback.restore()
         var undone = outcome.undone.map(repo.display)
         var failed = outcome.failed.map { "\(repo.display($0.url)): \($0.reason)" }
-        if removingZip, FileManager.default.fileExists(atPath: zip.path) {
+        for file in removing where FileManager.default.fileExists(atPath: file.path) {
             do {
-                try FileManager.default.removeItem(at: zip)
-                undone.append(repo.display(zip))
+                try FileManager.default.removeItem(at: file)
+                undone.append(repo.display(file))
             } catch {
-                failed.append("\(repo.display(zip)): \(error.localizedDescription)")
+                failed.append("\(repo.display(file)): \(error.localizedDescription)")
             }
         }
         if !undone.isEmpty {
@@ -250,10 +252,72 @@ private struct Release {
 
         if buildOnly { return (version, branch) }
 
-        // 7. Commit and tag locally — still undoable, so the rollback covers
+        // 7. The update feed. Sparkle in the installed apps reads it from the
+        // latest GitHub release and only installs what this key signed.
+        try await writeAppcast(app: app, version: version, notes: notes)
+
+        // 8. Commit and tag locally — still undoable, so the rollback covers
         // them too. Pushing is what other people see, so `run` asks first.
         try await commitAndTag(version: version)
         return (version, branch)
+    }
+
+    /// Sign the zip with the Sparkle key in the login keychain and write
+    /// `appcast.xml` for it, with the release notes embedded. Stops if the
+    /// key isn't the one the app checks updates against: the release would
+    /// publish, and every installed copy would then refuse it.
+    private func writeAppcast(app: URL, version: String, notes: String) async throws {
+        let generateKeys = repo.sparkleTools.appendingPathComponent("generate_keys")
+        let generateAppcast = repo.sparkleTools.appendingPathComponent("generate_appcast")
+        guard FileManager.default.isExecutableFile(atPath: generateAppcast.path) else {
+            throw SCError("Can't find Sparkle's tools in \(repo.display(repo.sparkleTools)).",
+                          hints: ["The build downloads them with the Sparkle package — check it resolved."])
+        }
+        let infoPlist = app.appendingPathComponent("Contents/Info.plist")
+        guard let info = NSDictionary(contentsOf: infoPlist),
+              let appKey = info["SUPublicEDKey"] as? String,
+              let feed = info["SUFeedURL"] as? String,
+              let feedRange = feed.range(of: "/releases/latest/download/") else {
+            throw SCError("\(repo.display(infoPlist)) has no SUPublicEDKey, or no SUFeedURL pointing at a GitHub release.")
+        }
+        let repoURL = String(feed[..<feedRange.lowerBound])
+
+        try await ui.progressStep("Update feed", success: "Signed the update and wrote \(repo.display(appcast))") { _ in
+            let lookup = try await Proc.collect(generateKeys.path, ["-p"])
+            let keychainKey = lookup.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard lookup.succeeded, !keychainKey.isEmpty else {
+                throw SCError("There's no Sparkle signing key in the login keychain.",
+                              hints: ["Import it with `\(repo.display(generateKeys)) -f <exported key file>` (docs/updates.md)."])
+            }
+            guard keychainKey == appKey else {
+                throw SCError("The keychain's Sparkle key isn't the one in SecondChance/Info.plist.",
+                              hints: ["Keychain: \(keychainKey)", "Info.plist: \(appKey)",
+                                      "Installed copies would reject an update signed with it (docs/updates.md)."])
+            }
+
+            // generate_appcast reads every archive in a directory, finds the
+            // notes by the archive's name and moves things it considers old
+            // aside — so it gets a directory of its own each time.
+            let staging = repo.releaseDir.appendingPathComponent("appcast-staging")
+            try? FileManager.default.removeItem(at: staging)
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: staging) }
+            try FileManager.default.linkItem(at: zip, to: staging.appendingPathComponent(zip.lastPathComponent))
+            try (notes + "\n").write(to: staging.appendingPathComponent("SecondChance.md"), atomically: true, encoding: .utf8)
+
+            try? FileManager.default.removeItem(at: appcast)
+            let result = try await Proc.collect(generateAppcast.path, [
+                "--embed-release-notes",
+                "--download-url-prefix", "\(repoURL)/releases/download/v\(version)/",
+                "--full-release-notes-url", "\(repoURL)/releases",
+                "--link", repoURL,
+                "-o", appcast.path,
+                staging.path,
+            ])
+            guard result.succeeded, FileManager.default.fileExists(atPath: appcast.path) else {
+                throw SCError("generate_appcast failed.", hints: [result.output + result.error])
+            }
+        }
     }
 
     /// The release commit and its tag. If either fails, whatever was done is
@@ -286,7 +350,7 @@ private struct Release {
     private func publish(version: String, branch: String) async throws {
         let tag = "v\(version)"
         let push = ["git", "push", "origin", branch, tag]
-        let release = ["gh", "release", "create", tag, repo.display(zip), "--title", tag, "--notes-file", repo.display(notesFile)]
+        let release = ["gh", "release", "create", tag, repo.display(zip), repo.display(appcast), "--title", tag, "--notes-file", repo.display(notesFile)]
         let pushLine = push.map(Self.shellQuoted).joined(separator: " ")
         let releaseLine = release.map(Self.shellQuoted).joined(separator: " ")
 

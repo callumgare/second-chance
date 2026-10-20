@@ -47,6 +47,9 @@ struct Repo: Sendable {
     var releaseDir: URL { root.appendingPathComponent("build/release") }
     var changelog: URL { root.appendingPathComponent("CHANGELOG.md") }
     var notesTemplate: URL { root.appendingPathComponent(".cog/release-notes.tera") }
+    /// Sparkle's command-line tools (`generate_keys`, `generate_appcast`),
+    /// which Xcode downloads with the package on the first build.
+    var sparkleTools: URL { derivedData.appendingPathComponent("SourcePackages/artifacts/sparkle/Sparkle/bin") }
 
     var defaultWrappsDir: URL { root.appendingPathComponent("built-apps") }
 
