@@ -237,26 +237,27 @@ struct WrappBuilder {
         return wrapp
     }
 
-    /// Copy the app build's WrappTemplate executable and debug dylib into an
-    /// existing wrapp and re-sign it — the fast loop for WrappTemplate
-    /// changes, without reinstalling the game.
+    /// Copy the app build's WrappTemplate executable, its debug dylib and the
+    /// in-process helpers (which both engines load from the wrapp's
+    /// Frameworks) into an existing wrapp and re-sign it — the fast loop for
+    /// WrappTemplate changes, without reinstalling the game.
     func updateTemplate(of wrapp: URL) async throws {
-        let sourceDir = repo.builtTemplate.appendingPathComponent("Contents/MacOS")
-        let targetDir = wrapp.appendingPathComponent("Contents/MacOS")
-        let files = ["WrappTemplate", "WrappTemplate.debug.dylib"]
+        let files = ["Contents/MacOS/WrappTemplate", "Contents/MacOS/WrappTemplate.debug.dylib",
+                     "Contents/Frameworks/in_process_helpers.dylib"]
         try await ui.progressStep("Update template in \(wrapp.lastPathComponent)", success: "Updated template in \(wrapp.lastPathComponent)") { update in
             for file in files {
-                let source = sourceDir.appendingPathComponent(file)
+                let source = repo.builtTemplate.appendingPathComponent(file)
                 guard FileManager.default.fileExists(atPath: source.path) else {
-                    throw SCError("The app build has no \(file) at \(repo.display(source)).")
+                    throw SCError("The app build has no \(source.lastPathComponent) at \(repo.display(source)).")
                 }
-                update("Copying \(file)")
-                let target = targetDir.appendingPathComponent(file)
+                update("Copying \(source.lastPathComponent)")
+                let target = wrapp.appendingPathComponent(file)
+                try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? FileManager.default.removeItem(at: target)
                 try FileManager.default.copyItem(at: source, to: target)
             }
             // Ad-hoc, like WrappBuildHelper.signWrapp: the files, then the bundle.
-            for target in files.map({ targetDir.appendingPathComponent($0).path }) + [wrapp.path] {
+            for target in files.map({ wrapp.appendingPathComponent($0).path }) + [wrapp.path] {
                 update("Signing \(URL(fileURLWithPath: target).lastPathComponent)")
                 let result = try await Proc.collect("/usr/bin/codesign", ["--force", "--sign", "-", target])
                 guard result.succeeded else {
