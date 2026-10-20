@@ -2,44 +2,48 @@
 //  SystemLoadMonitor.swift
 //  Shared
 //
-//  Samples how busy the Mac is for as long as Wine work runs, so a log
-//  shows the load at the moment something went wrong, not only at start-up.
+//  Watches how busy the Mac is for as long as Wine work runs, so a log
+//  says when the Mac was too busy, not only how busy it was at start-up.
 
 import Foundation
 import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.SystemLoad")
 
-/// Samples `SystemLoad` every `interval` while Wine work runs: a build, or a
-/// wrapp's whole run.
+/// Samples `SystemLoad` while Wine work runs — a build, or a wrapp's whole
+/// run — and logs only while the Mac is heavily loaded: a warning when it
+/// becomes so, a reminder every `reminderInterval` while it stays so, and a
+/// notice when it stops. The header already has the load at start-up, and a
+/// light load is not worth a line. Two readings in a row decide a change
+/// either way, so a moment's spike neither raises the warning nor makes it
+/// flicker. Every reading also goes into `history`, which a failure summary
+/// quotes.
 ///
-/// It logs the first reading as a notice, one reading a minute at `.debug`
-/// (kept in every saved log, kept off the terminal), and a warning when the
-/// Mac becomes heavily loaded, and a notice when it stops being. Two readings
-/// in a row decide a change either way, so a moment's spike neither raises
-/// the warning nor makes it flicker. Every reading also goes into `history`,
-/// which a failure summary quotes.
+/// It samples often while things are starting, when load decides whether
+/// Wine starts at all; `slowDown()` switches to the steady-state interval
+/// once the game is running.
 ///
 /// An observer (the wrapp's loading window) hears on the main queue: a
 /// reading while the Mac is heavily loaded, nil once it is not.
 nonisolated final class SystemLoadMonitor: @unchecked Sendable {
+    /// While a build runs or a game starts.
+    static let busyInterval: TimeInterval = 5
+    /// Once the game is running.
+    static let steadyInterval: TimeInterval = 60
+
     private let queue = DispatchQueue(label: "au.gare.callum.second-chance.Shared.SystemLoadMonitor", qos: .utility)
-    private let context: String
-    private let interval: TimeInterval
-    private let logInterval: TimeInterval
+    private let reminderInterval: TimeInterval
+    private var interval: TimeInterval
     private var observer: (@Sendable (SystemLoadReading?) -> Void)?
     private var timer: DispatchSourceTimer?
     private var heavyStreak = 0
     private var lightStreak = 0
-    private var warning = false
-    private var lastLogged: Date?
+    private var heavySince: Date?
+    private var lastReminder: Date?
 
-    /// - Parameter context: What the load is being watched during, for the
-    ///   first line: "the build", "the launch".
-    init(context: String, interval: TimeInterval = 5, logInterval: TimeInterval = 60) {
-        self.context = context
+    init(interval: TimeInterval = SystemLoadMonitor.busyInterval, reminderInterval: TimeInterval = 300) {
         self.interval = interval
-        self.logInterval = logInterval
+        self.reminderInterval = reminderInterval
     }
 
     func start() {
@@ -58,7 +62,15 @@ nonisolated final class SystemLoadMonitor: @unchecked Sendable {
         queue.async {
             self.timer?.cancel()
             self.timer = nil
-            self.lastLogged = nil
+        }
+    }
+
+    /// Sample at the steady-state interval from now on.
+    func slowDown() {
+        queue.async {
+            guard self.interval != Self.steadyInterval else { return }
+            self.interval = Self.steadyInterval
+            self.timer?.schedule(deadline: .now() + Self.steadyInterval, repeating: Self.steadyInterval)
         }
     }
 
@@ -73,30 +85,28 @@ nonisolated final class SystemLoadMonitor: @unchecked Sendable {
         guard let reading = SystemLoad.read() else { return }
         let now = Date()
         SystemLoadHistory.shared.record(reading, at: now)
-        if let last = lastLogged {
-            if now.timeIntervalSince(last) >= logInterval {
-                lastLogged = now
-                logger.debug("[Load] \(reading.summary)")
-            }
-        } else {
-            lastLogged = now
-            logger.notice("[Load] At the start of \(context): \(reading.summary)")
-        }
         if reading.isHeavy {
             heavyStreak += 1
             lightStreak = 0
             guard heavyStreak >= 2 else { return }
-            if !warning {
-                warning = true
+            if let since = heavySince {
+                if let last = lastReminder, now.timeIntervalSince(last) >= reminderInterval {
+                    lastReminder = now
+                    logger.warning("[Load] Still heavily loaded after \(Int(now.timeIntervalSince(since) / 60)) min: \(reading.summary)")
+                }
+            } else {
+                heavySince = now
+                lastReminder = now
                 logger.warning("[Load] The Mac is heavily loaded: \(reading.summary). Wine may take minutes to start programs, or fail to")
             }
             notify(reading)
         } else {
             lightStreak += 1
             heavyStreak = 0
-            guard warning, lightStreak >= 2 else { return }
-            warning = false
-            logger.notice("[Load] No longer heavily loaded: \(reading.summary)")
+            guard let since = heavySince, lightStreak >= 2 else { return }
+            heavySince = nil
+            lastReminder = nil
+            logger.notice("[Load] No longer heavily loaded, after \(Int(now.timeIntervalSince(since) / 60)) min: \(reading.summary)")
             notify(nil)
         }
     }

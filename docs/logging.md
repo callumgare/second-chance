@@ -59,14 +59,14 @@ reaches all but one of them a warning follows, since Wine then takes minutes
 to start a program, or never does.
 
 The header is only the start, and a build can begin hours after the app
-opened, so load is also sampled while Wine work runs: for the whole of each
-build, and for a wrapp's whole run (`SystemLoadMonitor`). It samples every
-5 s and logs `[Load]` lines: the first reading as a notice ("At the start of
-the build: …"), one reading a minute at `.debug`, so they're in every saved
-log but off the terminal, a warning when the Mac becomes heavily loaded, and a
-notice when it stops being. A wrapp's loading window watches the same monitor
-to say why the wait is long. The readings of the last ten minutes go into the
-failure summary.
+opened, so load is also watched while Wine work runs: for the whole of each
+build, and for a wrapp's whole run (`SystemLoadMonitor`). It samples every 5 s
+while a build runs or a game starts, when load decides whether Wine starts at
+all, and every 60 s once the game has loaded. It logs nothing while the load
+is light: only a `[Load]` warning when the Mac becomes heavily loaded, another
+every 5 minutes while it stays so, and a notice when it stops being. A wrapp's
+loading window watches the same monitor to say why the wait is long. The
+readings of the last ten minutes go into the failure summary.
 
 A wrapp's header adds the game, its engine, and the size and file count of
 its installed files, which is where an install that was cut short shows up.

@@ -460,8 +460,9 @@ func main() {
     ])
     CrashMarker.install(in: gameLogs, logger: mainLogger)
     // For the whole run: a game that crashes an hour in may have been
-    // starved of CPU, too. The loading window observes it.
-    let loadMonitor = SystemLoadMonitor(context: "the launch")
+    // starved of CPU, too. The loading window observes it, and slows it down
+    // once the game has loaded.
+    let loadMonitor = SystemLoadMonitor()
     loadMonitor.start()
     if launchingWithoutSteam {
         mainLogger.notice("Starting the game without Steam this time (\(launchWithoutSteamArgument)), after a launch through Steam failed")

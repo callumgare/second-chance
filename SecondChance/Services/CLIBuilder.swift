@@ -98,7 +98,7 @@ enum CLIBuilder {
         }
 
         // Runs until the process exits below.
-        SystemLoadMonitor(context: "the build").start()
+        SystemLoadMonitor().start()
 
         do {
             _ = try await builder.build(input: input)

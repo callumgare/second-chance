@@ -14,7 +14,8 @@ class InfoWindowController: NSWindowController {
     private let viewModel: InfoWindowViewModel
     /// The wrapp's load monitor, observed while the game loads; the window
     /// stops listening once the game has loaded, failed, or the window
-    /// closes. The monitor itself runs on for the rest of the wrapp's run.
+    /// closes. The monitor itself runs on for the rest of the wrapp's run,
+    /// sampling less often once the game has loaded.
     private let loadMonitor: SystemLoadMonitor?
     let appSupportPath: URL
     var onWarningConfirmed: (() -> Void)?
@@ -94,6 +95,7 @@ class InfoWindowController: NSWindowController {
     func notifyGameLoaded() {
         DispatchQueue.main.async {
             self.loadMonitor?.observe(nil)
+            self.loadMonitor?.slowDown()
             self.viewModel.markGameLoaded()
             self.close()
         }

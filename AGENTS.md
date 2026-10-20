@@ -299,7 +299,7 @@ direct assignment.
   CPU in cores, against the performance-core count, heavy at all but one;
   the load average is useless here, since starved Wine threads push it past
   100. Every log header carries a `load:` line, `SystemLoadMonitor` logs
-  `[Load]` lines through every build and wrapp run, and a failure summary
+  `[Load]` lines while the Mac is heavily loaded during a build or wrapp run, and a failure summary
   gives the load now and over the last ten minutes; a wrapp's loading window warns
   while the Mac is heavily loaded (`SystemLoadMonitor`) instead of declaring a
   possible launch failure; and the integration test reports such a game as
