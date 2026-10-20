@@ -90,6 +90,11 @@ struct ControlledWindowState {
     let native: Bool
     let key: Bool
     let active: Bool
+    /// The app has hidden the cursor and confined it to its window.
+    let cursorHeld: Bool
+    /// What the app's own cursor-locking, if it has any, says it is doing;
+    /// nil when the app doesn't say.
+    let cursorLock: String?
 }
 
 /// A window served over a control socket: `state`, `capture <path>`,
@@ -107,7 +112,8 @@ struct WindowControl {
         return ControlledWindowState(
             windowNumber: window, size: CGSize(width: width, height: height), scale: CGFloat(scale),
             fullscreen: fields["fullscreen"] == "1", native: fields["native"] == "1",
-            key: fields["key"] == "1", active: fields["active"] == "1")
+            key: fields["key"] == "1", active: fields["active"] == "1",
+            cursorHeld: fields["cursor"] == "held", cursorLock: fields["cursorlock"])
     }
 
     /// Capture the window to a PNG at `path`; its size in pixels, or nil.

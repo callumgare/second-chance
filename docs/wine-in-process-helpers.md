@@ -219,6 +219,13 @@ refuses to post anything that doesn't come out as button 2 on the game window.
 
 ### Checking it
 
+The integration test checks it on every Wine game: WrappPuppeteer waits for the
+cursor lock to finish, notes whether the game holds the cursor, and makes its
+first click. If the cursor was free before that click and held after it, the
+click is what cnc-ddraw locked on — so it swallowed it — and the run fails with
+"The game's first click was swallowed". A Direct3D game's cursor stays free
+either way, and passes ([testing.md](testing.md#wrapppuppeteer)).
+
 The helper log should show the lock taking hold, normally on the first click:
 
 ```
@@ -276,7 +283,7 @@ capture's pixels divided by `scale` — so no screen geometry is involved.
 
 | Request | Reply |
 | --- | --- |
-| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw |
+| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
 | `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
 | `click <x> <y>` | `ok`: a mouse move, 150 ms for the game to see it, then the left button held for 100 ms |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |

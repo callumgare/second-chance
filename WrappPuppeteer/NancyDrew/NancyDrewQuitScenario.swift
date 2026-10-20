@@ -34,6 +34,10 @@ struct NancyDrewQuitScenario {
         var quitTimeout: TimeInterval = 300
         /// How long to keep looking for the Exit button
         var findExitTimeout: TimeInterval = 300
+        /// How long the wrapp's cursor lock may take to finish before the
+        /// first click. It waits up to 100 s for the window to settle, then
+        /// spends up to ~35 s on middle clicks.
+        var cursorLockSettleTimeout: TimeInterval = 180
         /// Only logged — nothing enforces it yet.
         var maxRuntime: TimeInterval = 60
         /// Launch the wrapp with `--debug`
@@ -115,8 +119,8 @@ struct NancyDrewQuitScenario {
             return .failed("Game window did not go into a fullscreen Space within \(Int(options.fullScreenTimeout))s")
         }
 
-        guard clickExit(appName: appName, app: app, gamePid: gamePid, context: context) else {
-            return .failed("OCR could not find Exit button")
+        if let failure = clickExit(appName: appName, app: app, gamePid: gamePid, context: context) {
+            return .failed(failure)
         }
 
         logger.notice("⏳ Waiting for game to exit...")
@@ -272,12 +276,100 @@ struct NancyDrewQuitScenario {
         return false
     }
 
+    /// Whether the game held the cursor just before WrappPuppeteer's first
+    /// click, once the wrapp's cursor lock has finished: nil for a game that
+    /// doesn't say (one built before it could), or whose lock never finished
+    /// — the reason, then, in `failure`. A cursor lock that is `off` still
+    /// counts: unarmed in a cnc-ddraw game, the first click is swallowed, and
+    /// in a ScummVM game nothing ever holds the cursor.
+    private func cursorBeforeFirstClick(_ context: Context) -> (held: Bool?, failure: String?) {
+        let start = Date()
+        var lastLog = Date.distantPast
+        while true {
+            guard let state = context.game.state() else {
+                // A loaded Mac can miss one reply; a game that never answers
+                // has bigger problems, which the clicks will show.
+                if Date().timeIntervalSince(start) >= 30 {
+                    logger.warning("⚠️  The game didn't say whether it held the cursor; not checking the first click")
+                    return (nil, nil)
+                }
+                Thread.sleep(forTimeInterval: 0.5)
+                continue
+            }
+            switch state.cursorLock {
+            case nil:
+                return (nil, nil)
+            case "waiting":
+                if Date().timeIntervalSince(start) >= options.cursorLockSettleTimeout {
+                    return (nil, "The wrapp's cursor lock was still waiting \(Int(options.cursorLockSettleTimeout))s before the first click — see '[CursorLock]' in the wrapp's log")
+                }
+                if Date().timeIntervalSince(lastLog) >= 10 {
+                    logger.notice("  ⏳ Waiting for the wrapp's cursor lock to finish before clicking...")
+                    lastLog = Date()
+                }
+                Thread.sleep(forTimeInterval: 0.5)
+            default:
+                logger.notice("  ℹ️  Before the first click: cursor lock \(state.cursorLock ?? "?"), cursor \(state.cursorHeld ? "held" : "free")")
+                return (state.cursorHeld, nil)
+            }
+        }
+    }
+
+    /// Whether the first click is what got cnc-ddraw to take the cursor —
+    /// which it does on the first button release in its window, eating that
+    /// click. Only asked when the cursor was free before it. A Direct3D game
+    /// never takes it, and a game that quit has nothing to ask.
+    private func firstClickWasSwallowed(_ context: Context) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            guard let state = context.game.state() else { return false }
+            // The app was deactivated and the cursor lock has started over:
+            // a lock now may be its middle click's, not ours.
+            if state.cursorLock == "waiting" {
+                logger.warning("⚠️  The wrapp's cursor lock started again during the first click; can't tell whether it was swallowed")
+                return false
+            }
+            if state.cursorHeld { return true }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return false
+    }
+
     /// Look for the Exit button and click it, clicking the Her Interactive
-    /// logo first if the game is still on its splash screen. True once Exit
-    /// has been clicked and the game lost focus or exited.
-    private func clickExit(appName: String, app: NSRunningApplication, gamePid: Int32, context: Context) -> Bool {
+    /// logo first if the game is still on its splash screen. Nil once Exit
+    /// has been clicked and the game lost focus or exited; otherwise why not.
+    ///
+    /// The first click, whichever it is, must reach the game: a Wine game's
+    /// cnc-ddraw swallows it unless the wrapp's cursor lock took the cursor
+    /// first, and on the logo — which any click skips — nothing else would
+    /// show it.
+    private func clickExit(appName: String, app: NSRunningApplication, gamePid: Int32, context: Context) -> String? {
         logger.notice("🎮 Attempting to quit game...")
         let strategy = focusStrategy(context)
+        let notFound = "OCR could not find Exit button"
+
+        // Only cnc-ddraw swallows a first click, so only a Wine game has a
+        // first click to check.
+        var firstClickToCheck = wrapp.engine == .wine
+        /// Click a window point, checking the first click wasn't swallowed;
+        /// the failure if it was.
+        func click(at point: CGPoint) -> String? {
+            var heldBefore: Bool?
+            if firstClickToCheck {
+                firstClickToCheck = false
+                let before = cursorBeforeFirstClick(context)
+                if let failure = before.failure { return failure }
+                heldBefore = before.held
+            }
+            context.game.click(at: point)
+            showClick(at: point, gamePid: gamePid)
+            if heldBefore == false, firstClickWasSwallowed(context) {
+                logger.error("❌ The first click is what took the cursor: cnc-ddraw swallowed it, so the wrapp's cursor lock didn't take hold — see '[CursorLock]' in the wrapp's log")
+                diagnosticCapture(context, prefix: "first-click-swallowed")
+                return "The game's first click was swallowed: cnc-ddraw took the cursor on it rather than from the wrapp's cursor lock"
+            }
+            return nil
+        }
 
         var clickedInteractive = false
         var clickedExitButton = false
@@ -298,9 +390,9 @@ struct NancyDrewQuitScenario {
             // Losing focus after clicking Exit means the game is shutting down;
             // losing it before means something else took over the screen.
             guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
-                if clickedExitButton { return true }
+                if clickedExitButton { return nil }
                 forceQuit(app)
-                return false
+                return notFound
             }
 
             logger.notice("  → Attempt \(attempt) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s)")
@@ -334,9 +426,9 @@ struct NancyDrewQuitScenario {
 
             if let exitLocation = exitTarget {
                 guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
-                    if clickedExitButton { return true }
+                    if clickedExitButton { return nil }
                     forceQuit(app)
-                    return false
+                    return notFound
                 }
 
                 logger.notice(clickedExitButton ? "  ✓ Clicking 'Exit Game' button again..." : "  ✓ Found 'Exit Game' button, clicking...")
@@ -349,8 +441,10 @@ struct NancyDrewQuitScenario {
                     clickPoint.y -= exitLocation.height / 2
                 }
 
-                context.game.click(at: clickPoint)
-                showClick(at: clickPoint, gamePid: gamePid)
+                if let failure = click(at: clickPoint) {
+                    forceQuit(app)
+                    return failure
+                }
                 lastExitClick = Date()
                 Thread.sleep(forTimeInterval: 1)
 
@@ -363,7 +457,7 @@ struct NancyDrewQuitScenario {
 
                 if !ProcessControl.isRunning(app, helperPid: gamePid) {
                     logger.notice("✅ Game exited successfully")
-                    return true
+                    return nil
                 }
             }
 
@@ -371,8 +465,10 @@ struct NancyDrewQuitScenario {
                 logger.notice("  ✓ Found 'interactive' logo, clicking to enable menu...")
                 Thread.sleep(forTimeInterval: 1)
                 let logoPoint = CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY)
-                context.game.click(at: logoPoint)
-                showClick(at: logoPoint, gamePid: gamePid)
+                if let failure = click(at: logoPoint) {
+                    forceQuit(app)
+                    return failure
+                }
                 clickedInteractive = true
                 Thread.sleep(forTimeInterval: 2)
             }
@@ -388,6 +484,6 @@ struct NancyDrewQuitScenario {
         optionalScreenshot(prefix: "exit-not-found")
         WindowFinder.logAllWindows()
         forceQuit(app)
-        return false
+        return notFound
     }
 }

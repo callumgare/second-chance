@@ -151,7 +151,7 @@ copies — and asserts on the events the flow publishes:
   into a macOS fullscreen Space (native fullscreen for Wine, `-f` for
   ScummVM; a game left in a window fails, and so does a Direct3D game's
   borderless window that only covers the screen), it reaches its main menu,
-  and it quits cleanly
+  its first click isn't swallowed by cnc-ddraw, and it quits cleanly
 - For a Wine game, both in-process helpers armed in it: the wrapp's log has
   `[Helpers] Native fullscreen armed` and `[Helpers] Cursor lock armed`
   ([wine-in-process-helpers.md](wine-in-process-helpers.md))
@@ -227,7 +227,8 @@ The scenario's waits are sized for a machine with every core busy, where Wine
 runs many times slower; each ends as soon as what it waits for happens, so
 they only lengthen a failing run. It waits up to 900 s for the game's process
 to appear (the wrapp may first spend up to 600 s waiting for Wine's desktop),
-then 300 s for its window, 120 s for that window to come to the front, 300 s
+then 300 s for its window, 120 s for that window to come to the front, 180 s
+for the wrapp's cursor lock to finish before the first click, 300 s
 to find and click Exit and 300 s for the game to quit. The `--timeout` that
 `AppPuppetRunner.run(timeout:)` passes is only logged. The wrapp's "save
 regularly" warning counts as dismissed only once the wrapp says it has gone
@@ -304,10 +305,25 @@ mouse-move event — the game draws its own cursor, and left over the button it
 hides the label from the next OCR pass. If the game is still on the menu, it
 clicks Exit again — where OCR finds it, or, when it can't (a game too busy to
 act on the click may not have moved its drawn cursor either), every 3 s where
-it was last found. A Wine game should quit on the first click: a log showing
-"Clicking 'Exit Game' button again" on every run means the wrapp's cursor lock
-isn't taking, and cnc-ddraw is swallowing the first click — see
-[wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock).
+it was last found.
+
+**The first click must reach the game.** A Wine game may draw through
+cnc-ddraw, which swallows the first click in its window unless the wrapp's
+cursor lock has already got it to take the cursor
+([wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock)). Before
+its first click — on the Her Interactive logo or on Exit, whichever comes
+first — the scenario waits for the cursor lock to finish (up to 180 s) and asks
+the game whether it holds the cursor. If it didn't, and does within 3 s of the
+click, that click is what cnc-ddraw locked on, and the run fails with "The
+game's first click was swallowed" and a `first-click-swallowed-*.png` capture.
+The logo needs this check: any click skips it, so a swallowed click there would
+look like a working one, and would lock the cursor in time for Exit. The
+re-clicks on Exit are for a game too busy to see a click, not for this.
+To see the check catch it, switch the cursor lock off for the wrapps the test
+starts — they are launched through Launch Services, so it goes in the GUI
+session's launchd environment, `launchctl setenv SECOND_CHANCE_CURSOR_LOCK 0`
+(through `sc in-gui-session` over SSH), and `launchctl unsetenv` afterwards —
+and test a DirectDraw game.
 
 Each click shows a blue ring where it landed (the click itself is the game's;
 the ring is WrappPuppeteer's own window, at the point's position on screen).

@@ -113,4 +113,19 @@ static inline void helperReport(const char *helper, const char *level, const cha
     if (length > 0) write(STDERR_FILENO, line, (size_t)length);
 }
 
+// ## Cursor lock, for puppet control
+//
+// cursor_lock.m's outcome and Wine's cursor state, which puppet_control.m
+// reports in its `state` reply so WrappPuppeteer can tell whether its first
+// click was the one that locked the cursor -- that is, swallowed.
+
+/// What the cursor lock helper is doing: "off" (not armed in this process),
+/// "waiting" (for the window, or for a middle click to take), "locked", or
+/// "not-locked" (it gave up, as it does in a game that isn't cnc-ddraw's).
+const char *cursorLockStatus(void);
+
+/// Whether cnc-ddraw holds the cursor right now: Wine has it clipped and
+/// hidden. Main thread only.
+int cursorLockHeld(void);
+
 #endif

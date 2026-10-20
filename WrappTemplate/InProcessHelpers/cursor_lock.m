@@ -68,6 +68,12 @@ static os_log_t gLog;
 /// Bumped for each run of the locker, so a run started by re-activation
 /// supersedes one still in progress.
 static volatile int gGeneration = 0;
+/// See cursorLockStatus() in helper_common.h. Always a string literal.
+static const char *volatile gStatus = "off";
+
+const char *cursorLockStatus(void) {
+    return gStatus;
+}
 
 /// Appends to IN_PROCESS_HELPERS_LOG when set, alongside os_log, as
 /// native_fullscreen.m does: the dylib's one file log.
@@ -117,6 +123,10 @@ static BOOL cursorLocked(void) {
         debugLog("cannot read Wine's cursor state: %s", exception.reason.UTF8String);
         return NO;
     }
+}
+
+int cursorLockHeld(void) {
+    return cursorLocked();
 }
 
 /// The game window, if this app is active and it is key.
@@ -186,6 +196,7 @@ static void *lockerMain(void *arg) {
         if (nowSeconds() > deadline) {
             debugLog("no settled game window after %.0fs; not locking", kGiveUpWaitingSeconds);
             helperReport("CursorLock", "warning", "no settled game window after %.0fs; not locking", kGiveUpWaitingSeconds);
+            if (current()) gStatus = "not-locked";
             return NULL;
         }
         __block NSRect frame = NSZeroRect;
@@ -219,6 +230,7 @@ static void *lockerMain(void *arg) {
             if (nowSeconds() - lockedSince >= kLockedForSeconds) {
                 debugLog("cursor locked after %d middle click(s)", clicks);
                 helperReport("CursorLock", "notice", "cursor locked after %d middle click(s)", clicks);
+                if (current()) gStatus = "locked";
                 return NULL;
             }
         } else {
@@ -228,6 +240,7 @@ static void *lockerMain(void *arg) {
                 // Expected in a game that doesn't draw through cnc-ddraw, so
                 // not a warning: nothing there ever takes the cursor.
                 helperReport("CursorLock", "notice", "cursor not locked after %d middle clicks; leaving it", clicks);
+                if (current()) gStatus = "not-locked";
                 return NULL;
             }
             BOOL posted = onMainThread(^BOOL {
@@ -247,10 +260,12 @@ static void *lockerMain(void *arg) {
 
 static void startLocker(void) {
     int generation = __sync_add_and_fetch(&gGeneration, 1);
+    gStatus = "waiting";
     pthread_t thread;
     if (pthread_create(&thread, NULL, lockerMain, (void *)(intptr_t)generation) == 0) {
         pthread_detach(thread);
     } else {
+        gStatus = "not-locked";
         debugLog("could not start locker thread");
         helperReport("CursorLock", "error", "could not start locker thread");
     }
