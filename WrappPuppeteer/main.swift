@@ -2,6 +2,7 @@
 
 import Foundation
 import CoreGraphics
+import AppKit
 import Logging
 
 // Bootstrap logging before anything else can construct a Logger — top-level
@@ -114,6 +115,12 @@ case .relaunchRequired:
 logger.notice("PERMISSION_GATE: all_permissions_granted")
 
 StartupPermissions.warmupPrivilegedAPIs()
+
+// An accessory app (no Dock icon) — not a regular one, which the permission
+// gate may have made it to show its window — because macOS keeps a regular
+// app's windows out of another app's fullscreen Space, so the click animation
+// would never show over a fullscreen game.
+NSApplication.shared.setActivationPolicy(.accessory)
 
 let scenario = NancyDrewQuitScenario(wrapp: Wrapp(appPath: path), options: options)
 let result = scenario.run()

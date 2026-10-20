@@ -92,6 +92,14 @@ enum WindowFinder {
             let displays = displayBounds()
             let windows = onScreenWindows().filter { $0.ownerPid == pid && $0.isSubstantial }
             if let window = windows.first(where: { isFullScreen($0, displays: displays) }) { return window }
+            // On a display with a camera notch, macOS puts a native
+            // fullscreen window below the notch's strip, so its bounds never
+            // match the display's (and the strip's height is in no API).
+            // Ask the window instead.
+            if Accessibility.hasFullscreenWindow(pid: pid),
+               let window = windows.max(by: { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height }) {
+                return window
+            }
 
             if Date().timeIntervalSince(lastLog) >= 5 {
                 let sizes = windows.map { "\(Int($0.bounds.width))x\(Int($0.bounds.height)) at (\(Int($0.bounds.minX)),\(Int($0.bounds.minY)))" }

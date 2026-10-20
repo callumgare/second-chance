@@ -312,6 +312,17 @@ it was last found. A Wine game should quit on the first click: a log showing
 isn't taking, and cnc-ddraw is swallowing the first click — see
 [wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock).
 
+Each click shows a blue ring where it landed. Over a game in native
+fullscreen that needs two things: WrappPuppeteer switches itself to an
+accessory app once past the permission gate, since macOS keeps a regular
+app's windows out of another app's fullscreen Space, and `click(at:)` turns
+the main run loop for the ring's fade, since the scenario otherwise only
+sleeps and AppKit would never draw the ring. Before clicking, the scenario
+waits for the game's window to go fullscreen: it takes a window that covers a
+whole display, or failing that one Accessibility reports as fullscreen —
+on a display with a camera notch, macOS puts a fullscreen window below the
+notch's strip, so its bounds never match the display's.
+
 To check the vision code without launching anything, run it against a saved
 screenshot — this needs no permissions:
 

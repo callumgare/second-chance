@@ -14,6 +14,8 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 // MARK: - Mouse & Keyboard Control
 
 enum InputControl {
+    private static let clickAnimationDuration: TimeInterval = 0.5
+
     /// Show a visual click animation at the specified point
     static func showClickAnimation(at point: CGPoint) {
         guard let screen = NSScreen.main else { return }
@@ -39,18 +41,21 @@ enum InputControl {
         window.level = .statusBar
         window.ignoresMouseEvents = true
         window.hasShadow = false
-        
+        // A game in native fullscreen has a Space of its own, and our
+        // windows otherwise stay on the desktop's, behind it.
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+
         // Create a custom view for the animation
         let animationView = ClickAnimationView(frame: NSRect(x: 0, y: 0, width: size, height: size))
         window.contentView = animationView
         
         // Show the window
         window.orderFrontRegardless()
-        
+
         // Animate and close
         DispatchQueue.main.async {
             NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.5
+                context.duration = clickAnimationDuration
                 animationView.animator().alphaValue = 0.0
             }) {
                 window.close()
@@ -137,8 +142,16 @@ enum InputControl {
         
         // Show visual feedback after click (so it doesn't delay the click)
         showClickAnimation(at: point)
-        
-        Thread.sleep(forTimeInterval: 0.2)
+
+        // The scenario runs on the main thread and otherwise only ever
+        // sleeps, so the main run loop never turns: AppKit wouldn't put the
+        // animation's window on screen, or run its fade and close, until the
+        // process exited. Turn it for the length of the fade instead.
+        if Thread.isMainThread {
+            RunLoop.current.run(until: Date().addingTimeInterval(clickAnimationDuration + 0.1))
+        } else {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
     }
     
     /// Send Cmd+Q to quit
