@@ -86,15 +86,22 @@ chmod +x "${TEMP_DIR}/Resources/winetricks"
 # events, without the Accessibility permission. DYLD_INSERT_LIBRARIES does not
 # work here -- wine-preloader reaches its entry point before dyld runs
 # initializers -- so instead the driver gets a weak dependency on the dylib.
-# Both helpers share the one dylib: native_fullscreen.m (macOS fullscreen) and
-# cursor_lock.m (cnc-ddraw's cursor lock). See docs/wine-in-process-helpers.md.
-echo "🖥️  Building in-process helpers (native fullscreen, cursor lock)..."
+# The helpers share the one dylib: native_fullscreen.m (macOS fullscreen),
+# cursor_lock.m (cnc-ddraw's cursor lock) and puppet_control.m (lets the
+# integration tests' WrappPuppeteer see and click the game). ScummVM wrapps
+# load the same dylib into scummvm, for puppet_control.m alone. ScreenCaptureKit
+# is weak-linked: puppet_control.m needs macOS 14.4 and checks for it.
+# See docs/wine-in-process-helpers.md.
+echo "🖥️  Building in-process helpers (native fullscreen, cursor lock, puppet control)..."
 HELPERS_DIR="${SCRIPT_DIR}/InProcessHelpers"
 clang -dynamiclib \
     -o "${TEMP_DIR}/Frameworks/in_process_helpers.dylib" \
     "${HELPERS_DIR}/native_fullscreen.m" \
     "${HELPERS_DIR}/cursor_lock.m" \
+    "${HELPERS_DIR}/puppet_control.m" \
     -framework Cocoa \
+    -framework ImageIO \
+    -weak_framework ScreenCaptureKit \
     -arch arm64 -arch x86_64 \
     -mmacosx-version-min=11.0 \
     -fobjc-arc -O2 -Wall

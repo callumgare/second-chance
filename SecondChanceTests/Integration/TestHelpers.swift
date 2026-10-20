@@ -352,10 +352,10 @@ enum AppPuppetRunner {
         }
         let slug = game.id
 
-        // A Wine game has to arm both in-process helpers; nothing else would
-        // notice if they didn't (the game still plays, in a window).
+        // A Wine game has to arm native fullscreen and cursor lock; nothing
+        // else would notice if they didn't (the game still plays, in a window).
         let engine = WrappInfo.gameEngine(at: wrappURL) ?? ""
-        let requiredHelpers = engine == "wine" || engine.hasPrefix("wine-") ? InProcessHelperReport.Helper.allCases : []
+        let requiredHelpers: [InProcessHelperReport.Helper] = engine == "wine" || engine.hasPrefix("wine-") ? [.nativeFullscreen, .cursorLock] : []
 
         var firstAttempt = try await Self.launchAndCollect(
             appBundle: bundle,

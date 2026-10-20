@@ -35,6 +35,17 @@ struct InProcessHelperReportTests {
         #expect(report.check() == [])
     }
 
+    @Test("Puppet control is armed only when WrappPuppeteer gave the wrapp a directory")
+    func armsPuppetControlOnlyForWrappPuppeteer() {
+        let player = WineEnvironment.inProcessHelperVariables(gameExe: "Game.exe", environment: [:])
+        #expect(player["PUPPET_CONTROL_EXE"] == nil)
+        #expect(player["CURSOR_LOCK_EXE"] == "Game.exe")
+        let puppeteer = WineEnvironment.inProcessHelperVariables(
+            gameExe: "Game.exe", environment: ["SECOND_CHANCE_PUPPET_DIR": "/tmp/wrapp-puppeteer-1"])
+        #expect(puppeteer["PUPPET_CONTROL_EXE"] == "Game.exe")
+        #expect(InProcessHelperReport(armingVariables: puppeteer, logger: logger).check() == [.nativeFullscreen, .cursorLock, .puppetControl])
+    }
+
     @Test("A helper switched off isn't expected to arm")
     func ignoresHelpersNotArmed() {
         let report = InProcessHelperReport(armingVariables: ["CURSOR_LOCK_EXE": "Game.exe"], logger: logger)

@@ -354,6 +354,22 @@ alone — match on the test names, or on `Suite "X" passed`.
 A suite that was filtered out produces no output at all, which looks
 indistinguishable from a clean run unless you go looking for it.
 
+### Captures slow on a test Mac that has been up for weeks
+
+Every screen capture on a Mac — `screencapture`, ScreenCaptureKit, in or out
+of process — reports itself to `systemstatusd`, the daemon behind the
+menu-bar privacy indicators, and `replayd` waits for each report on a single
+queue. Each run of `/usr/sbin/screencapture` leaves state behind in
+`systemstatusd` that makes every later report dearer: on macOS 26.2, 500 runs
+nearly doubled its cost. After two weeks of integration tests, which ran
+`screencapture` for every attempt to find Exit, a test Mac's `systemstatusd`
+held 39 MB (fresh, about 10 MB) and took seconds per report, so every capture
+on that Mac stalled for 8–16 s. Captures made in-process leave nothing behind.
+
+If captures are slow, check it:
+`ps -o etime,time,rss -p $(pgrep -x systemstatusd)`. System Integrity
+Protection stops it being restarted any other way, so reboot the Mac.
+
 ## Reports
 
 `sc test` writes `test-results/<timestamp>-unit.xcresult` and

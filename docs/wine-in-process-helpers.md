@@ -1,17 +1,19 @@
 # Wine in-process helpers
 
-Two things a wrapp does to the game's window need to happen _inside_ the Wine
+Some things done to the game's window need to happen _inside_ the Wine
 process that owns it, because macOS only lets a process do them to its own
-windows without the Accessibility permission — which a wrapp does not have:
+windows without the Accessibility (or Screen Recording) permission — which a
+wrapp does not have:
 
 | Helper | Source | What it does | Armed by | Off switch |
 | --- | --- | --- | --- | --- |
 | Native fullscreen | `WrappTemplate/InProcessHelpers/native_fullscreen.m` | Puts the game window into a real macOS fullscreen Space | `NATIVE_MACOS_FULLSCREEN_EXE` | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE` | `SECOND_CHANCE_CURSOR_LOCK=0` |
+| Puppet control | `WrappTemplate/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 
 ## How they get into the game process
 
-Both are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
+All three are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
 by `WrappTemplate/setup-wine.sh` (an Xcode build phase of the WrappTemplate
 target — add any new source to that phase's input files too, or edits to it
 won't rebuild). `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
@@ -42,8 +44,8 @@ by the Steam client, which has the environment it was started with — not the
 `-applaunch` call's — so the wrapp's `SteamClient` sets them on every Steam
 process it runs. Steam's own processes have other names and never arm.
 
-Both log to os_log under subsystem `com.secondchance.gamewrapper` (categories
-`NativeFullscreen` and `CursorLock`), and additionally append to the file named
+They log to os_log under subsystem `com.secondchance.gamewrapper` (categories
+`NativeFullscreen`, `CursorLock` and `PuppetControl`), and additionally append to the file named
 by `IN_PROCESS_HELPERS_LOG` when it is set, which is the easier way to
 watch one launch:
 
@@ -58,8 +60,8 @@ or staying windowed; the cursor locked or left alone) also go to stderr, as
 passes stderr on to whatever started the game, so the lines reach the wrapp's
 log through its own pipe or, for a game Steam launches, Steam's.
 `InProcessHelperReport` (`Shared/Wine/`) watches them. The wrapp logs
-`[Helpers] Native fullscreen armed` and `[Helpers] Cursor lock armed` as each
-helper arms. If a helper it armed hasn't reported arming a minute after the
+`[Helpers] Native fullscreen armed`, `[Helpers] Cursor lock armed` and
+`[Helpers] Puppet control armed` as each helper arms. If a helper it armed hasn't reported arming a minute after the
 game's window appeared, it logs an error naming that helper. A helper that
 fails to arm is otherwise silent: the game plays in a window, or swallows its
 first click. The integration tests fail a Wine game whose log lacks either
@@ -160,3 +162,54 @@ click, and that click doesn't reach the game.
 If a future game reads the middle button, it would see these clicks; it would
 show up as that game reacting to something a few seconds after launch and on
 every return to the app.
+
+## Puppet control
+
+The integration tests drive a wrapp with WrappPuppeteer
+([testing.md](testing.md#wrapppuppeteer)): it finds the game's Exit button in
+a capture of the game window and clicks it. Doing that from outside the game
+needs Screen Recording and Accessibility. From inside it needs neither: a
+process may capture its own windows (ScreenCaptureKit's current-process
+content, macOS 14.4+) and post events to them (`-[NSApp postEvent:]`, as
+cursor lock does). So this helper does the capturing and clicking, and
+WrappPuppeteer asks it to over a Unix socket.
+
+It arms only when WrappPuppeteer started the wrapp. WrappPuppeteer passes
+`SECOND_CHANCE_PUPPET_DIR`, a private directory; when that is set,
+`WineEnvironment.inProcessHelperVariables` sets `PUPPET_CONTROL_EXE` to the
+game's `.exe`, and the helper in that process listens on
+`$SECOND_CHANCE_PUPPET_DIR/game.sock`. A player's launch sets neither, so
+nothing listens.
+
+One request per connection, one line each way, replies starting `ok` or
+`error`. Coordinates are points in the game window with a top-left origin — a
+capture's pixels divided by `scale` — so no screen geometry is involved.
+
+| Request | Reply |
+| --- | --- |
+| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 key=0\|1 active=0\|1` |
+| `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
+| `click <x> <y>` | `ok`: a mouse move, then the left button held for 100 ms |
+| `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
+
+The game window is the biggest visible window the process has. Two things
+learned building it:
+
+- **The click is held.** The Nancy Drew games poll the buttons
+  (`GetAsyncKeyState`) rather than read click events, so a press and release
+  posted together can fall between two polls and never be seen.
+- **Listing windows is kept to a minimum.** ScreenCaptureKit has to list the
+  process's windows before it can capture one, and that request queues in
+  `replayd` behind every other capture on the Mac — for 8–16 s on a test Mac
+  whose `systemstatusd` had been worn down ([testing.md](testing.md)). The
+  helper keeps the window it found and lists again only when the window
+  changes or a capture fails.
+
+To watch it, set `IN_PROCESS_HELPERS_LOG`: each request and its reply is
+logged as `pid=… puppet-control | <request> -> <reply>`. To drive it by hand,
+start the wrapp with the variable and talk to the socket:
+
+```bash
+mkdir -m 700 /tmp/wp && SECOND_CHANCE_PUPPET_DIR=/tmp/wp "<wrapp>.app/Contents/MacOS/WrappTemplate" &
+echo state | /usr/bin/nc -U /tmp/wp/game.sock
+```

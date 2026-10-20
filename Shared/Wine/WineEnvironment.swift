@@ -87,26 +87,42 @@ nonisolated public struct WineEnvironment: Sendable {
         ]
     }
     
+    /// The directory WrappPuppeteer gave the wrapp for its control sockets,
+    /// when it started the wrapp; nil for every player's launch.
+    public static func puppetDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
+        guard let directory = environment["SECOND_CHANCE_PUPPET_DIR"], !directory.isEmpty else { return nil }
+        return directory
+    }
+
     /// The variables that arm the in-process helpers bundled into Wine's Mac
     /// driver for the game `gameExe` (its file name, e.g. `Game.exe`): native
     /// fullscreen puts the game's window into a real macOS fullscreen Space,
-    /// and cursor lock gets cnc-ddraw to take the mouse without swallowing the
-    /// player's first click. Every Mac-driver process loads them, so each is
-    /// told which one is the game (by the .exe's name, which Wine puts in the
-    /// process's argv[0]), and a Wine program passes its environment on to the
-    /// programs it starts — so these work set on Steam as well as on the game.
+    /// cursor lock gets cnc-ddraw to take the mouse without swallowing the
+    /// player's first click, and puppet control (only when WrappPuppeteer
+    /// started the wrapp) lets it see and click the game. Every Mac-driver
+    /// process loads them, so each is told which one is the game (by the
+    /// .exe's name, which Wine puts in the process's argv[0]), and a Wine
+    /// program passes its environment on to the programs it starts — so these
+    /// work set on Steam as well as on the game.
     /// See docs/wine-in-process-helpers.md.
-    public static func inProcessHelperVariables(gameExe: String) -> [String: String] {
+    public static func inProcessHelperVariables(
+        gameExe: String, environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
         var env: [String: String] = [:]
         // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
         // debug switch for telling its main-thread polling apart from other causes.
-        if ProcessInfo.processInfo.environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
+        if environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
             env["NATIVE_MACOS_FULLSCREEN_EXE"] = gameExe
         }
         // SECOND_CHANCE_CURSOR_LOCK=0 leaves cursor lock unarmed, bringing back
         // cnc-ddraw's swallowed first click — for comparison.
-        if ProcessInfo.processInfo.environment["SECOND_CHANCE_CURSOR_LOCK"] != "0" {
+        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0" {
             env["CURSOR_LOCK_EXE"] = gameExe
+        }
+        // Puppet control arms only when WrappPuppeteer started the wrapp,
+        // which it marks by passing the directory for the helper's socket.
+        if puppetDirectory(in: environment) != nil {
+            env["PUPPET_CONTROL_EXE"] = gameExe
         }
         return env
     }

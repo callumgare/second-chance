@@ -2,7 +2,8 @@
 //  InProcessHelperReport.swift
 //  Shared
 //
-//  What the in-process helpers (native fullscreen, cursor lock) say about
+//  What the in-process helpers (native fullscreen, cursor lock, puppet
+//  control) say about
 //  themselves, gathered from the game's output, and a check that the ones the
 //  wrapp armed did arm. A helper that never arms is otherwise silent — the
 //  game just runs in a window, or swallows its first click — which is how
@@ -16,11 +17,13 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
     enum Helper: String, CaseIterable, Sendable {
         case nativeFullscreen = "NativeFullscreen"
         case cursorLock = "CursorLock"
+        case puppetControl = "PuppetControl"
 
         var name: String {
             switch self {
             case .nativeFullscreen: return "Native fullscreen"
             case .cursorLock: return "Cursor lock"
+            case .puppetControl: return "Puppet control"
             }
         }
 
@@ -29,6 +32,16 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
             switch self {
             case .nativeFullscreen: return "NATIVE_MACOS_FULLSCREEN_EXE"
             case .cursorLock: return "CURSOR_LOCK_EXE"
+            case .puppetControl: return "PUPPET_CONTROL_EXE"
+            }
+        }
+
+        /// What a player (or the test) sees when it never arms.
+        var consequence: String {
+            switch self {
+            case .nativeFullscreen: return "the game stays in a window"
+            case .cursorLock: return "the game's first click will be swallowed"
+            case .puppetControl: return "WrappPuppeteer can't see or click the game"
             }
         }
 
@@ -109,7 +122,7 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
             return expected.filter { !armed.contains($0) }
         }
         for helper in missing {
-            logger.error("[Helpers] \(helper.name) never armed in the game, \(Int(Self.armDeadline))s after its window appeared: \(helper == .nativeFullscreen ? "the game stays in a window" : "the game's first click will be swallowed"). The helper may not recognise the game's process; see docs/wine-in-process-helpers.md")
+            logger.error("[Helpers] \(helper.name) never armed in the game, \(Int(Self.armDeadline))s after its window appeared: \(helper.consequence). The helper may not recognise the game's process; see docs/wine-in-process-helpers.md")
         }
         return missing
     }
