@@ -38,6 +38,11 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     func queueInstall(appID: Int, installDir: String) throws { record("queueInstall \(appID)"); queued = (appID, installDir) }
     func start(silent: Bool) async throws { record("start") }
     func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState { login }
+    /// The player signs in once the sign-in window is in front of them.
+    func bringSignInWindowForward() async {
+        record("bringSignInWindowForward")
+        lock.withLock { login = .signedIn }
+    }
     func ownedAppIDs(timeout: TimeInterval) async throws -> Set<Int> { owned }
     func installPhase(appID: Int) -> SteamLogs.InstallPhase {
         if install == .installed, let queued, let game = GameInfoProvider.shared.allGames().first(where: { $0.steamAppID == queued.appID }) {
@@ -253,6 +258,18 @@ struct SteamWrappBuilderTests {
         let run = await build(game: "thornton-hall")
         _ = try run.result.get()
         #expect(run.client?.calls == ["restoreLogin", "queueInstall 226820", "start", "shutdown", "saveLogin"])
+    }
+
+    @Test("From the app, Steam's sign-in window is brought to the front when Steam asks for a sign-in")
+    func signInWindowComesForward() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let picking = PickingInput(pick: "thornton-hall", environment: Self.appEnvironment(base: base))
+        let run = await build(game: "thornton-hall", picking: picking) {
+            $0.owned = [226820]
+            $0.login = .needsCredentials(reason: nil)
+        }
+        _ = try run.result.get()
+        #expect(run.client?.calls.filter { $0 == "bringSignInWindowForward" }.count == 1)
     }
 
     @Test("An account that owns none of the games fails without asking which to build")

@@ -52,8 +52,9 @@ them (the microphone can be refused).
    games.
 3. **Sign in**: restore the shared session and start Steam silently. With no
    session, or one Steam rejects, the GUI says to sign in in Steam's window
-   (QR or password) and waits up to 30 minutes; a headless build fails with
-   `steamSignInRequired` instead.
+   (QR or password), brings that window to the front (as a wrapp does; see
+   [Running](#running)) and waits up to 30 minutes; a headless build fails
+   with `steamSignInRequired` instead.
 4. **Pick the game from the ones the account owns** (`ownedAppIDs`), so
    nobody is offered a game Steam won't install. From the app,
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
@@ -82,7 +83,12 @@ them (the microphone can be refused).
 
 Steam is stopped on the failure path too, and the session saved if it signed
 in, so a failed build neither leaves Steam running nor loses a refreshed
-sign-in. `./sc wrapp build <slug> --from steam` runs the whole thing headless.
+sign-in. Quitting Second Chance mid-build stops it as well: each build
+registers its running Steam with `RunningSteam`, and the app waits for it to
+shut down (10 s, then by force) before deleting the temporary wrapp it runs
+from. Otherwise quitting with Steam's sign-in window open left that window,
+and Steam's whole Wine session, running. `./sc wrapp build <slug> --from
+steam` runs the whole thing headless.
 
 ## Which games, and how they launch
 
@@ -130,7 +136,16 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
    it would still be running in this prefix, signed in.
 3. **Restore the shared sign-in, start Steam silently, wait for it to sign
    in.** Without a sign-in, the loading window says to sign in in Steam's
-   window, and waits for up to 30 minutes.
+   window, and waits for up to 30 minutes. Steam's sign-in window is brought
+   to the front as soon as Steam asks (`SteamSignInWindow`): Steam may have
+   spent minutes installing and updating itself first, and the player has
+   likely gone to another app meanwhile. A build from the app does the same.
+   It finds the window as the largest on screen owned by `steam.exe` or
+   `steamwebhelper.exe`. Only one Steam runs at a time, so that window is
+   this Steam's. It activates that process the way the wrapp brings a game
+   forward. Since macOS 14 that is cooperative, so it can be refused when
+   neither the wrapp nor the app is the active one, which shows as a warning
+   in the log.
 4. **Start the game.** `wine-steam` asks Steam to (`-applaunch`): no launcher
    of the wrapp's own to watch, so the game is found, and watched, by its exe;
    `wine-steam-silent` starts the exe itself, as a Wine game does. Startup

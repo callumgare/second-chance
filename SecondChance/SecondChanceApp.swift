@@ -14,10 +14,25 @@ private var signalSources: [DispatchSourceSignal] = []
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         logger.notice("🛑 Application terminating, cleaning up...")
+        guard !RunningSteam.shared.isEmpty else {
+            finishTerminating()
+            return .terminateNow
+        }
+        // A Steam build has Steam running — perhaps its sign-in window, left
+        // open. Stop it before the temporary wrapp it runs from is deleted.
+        logger.notice("Stopping the build's Steam before quitting")
+        Task { @MainActor in
+            await RunningSteam.shared.stopAll()
+            self.finishTerminating()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    private func finishTerminating() {
         WrappBuildHelper.shared.cleanupTemporaryWrapps()
         // Drain anything still pending so the disk mirror / stderr don't lose the last lines.
         LogStore.shared.flush()
-        return .terminateNow
     }
 }
 

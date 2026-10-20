@@ -100,6 +100,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
                 asked = true
                 deadline = Date().addingTimeInterval(Self.signInTimeout)
                 status(.waitingForSignIn)
+                Self.wait { await client.bringSignInWindowForward() }
             case .pending, .needsCredentials:
                 break
             }

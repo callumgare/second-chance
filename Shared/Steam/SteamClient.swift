@@ -30,6 +30,9 @@ nonisolated protocol SteamClientDriving: Sendable {
     func start(silent: Bool) async throws
     /// Wait until Steam has signed in or is asking for credentials.
     func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState
+    /// Bring Steam's sign-in window to the front, once it's asking for one:
+    /// it may be minutes since the player last looked (`SteamSignInWindow`).
+    func bringSignInWindowForward() async
     /// The app IDs the signed-in account owns, once it has signed in. Steam
     /// writes the package cache a few seconds after signing in, so this
     /// waits up to `timeout` for it.
@@ -115,6 +118,10 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         }
         try run(silent ? ["-silent"] : [])
         logger.notice("Started Steam\(silent ? " (silent)" : "")")
+    }
+
+    func bringSignInWindowForward() async {
+        await SteamSignInWindow.bringForward()
     }
 
     func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState {

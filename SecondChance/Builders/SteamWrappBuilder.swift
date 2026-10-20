@@ -55,6 +55,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     static let startTimeout: TimeInterval = 20 * 60
     /// A whole download, for the slowest connection worth waiting on.
     static let installTimeout: TimeInterval = 4 * 60 * 60
+    /// How long a quit waits for Steam to shut down before ending its Wine
+    /// session by force: the user is waiting for the app to go.
+    static let quitShutdownTimeout: TimeInterval = 10
 
     init(
         helper: WrappBuildHelper = .shared,
@@ -112,8 +115,15 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         let prefix = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
         logger.notice("Temporary wrapp: \(wrappPath.path)")
         let client = makeClient(wrappPath)
-        var steamRunning = false
-        var signedIn = false
+        // Quitting the app stops this build's Steam: it would otherwise keep
+        // running, its window open, from a temporary wrapp the quit deletes.
+        let run = SteamRun()
+        let quitStop = RunningSteam.shared.register { [self] in
+            if run.claimStop() {
+                await stopSteam(client, prefix: prefix, signedIn: run.signedIn, timeout: Self.quitShutdownTimeout)
+            }
+        }
+        defer { RunningSteam.shared.unregister(quitStop) }
 
         do {
             try await preparer.prepare(wrappAt: wrappPath)
@@ -126,9 +136,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 try client.queueInstall(appID: steam.appID, installDir: steam.installDir)
             }
             try await client.start(silent: true)
-            steamRunning = true
+            run.started()
 
-            signedIn = try await signIn(client: client, input: input)
+            run.signedIn = try await signIn(client: client, input: input)
 
             // ── Pick the game ──────────────────────────────────────────
             await bus.publishWrappBuild(.progress(.installingGame(substep: "Checking which games your Steam account owns")))
@@ -160,18 +170,20 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if preselected == nil {
                 // Steam only installs a queued game when it starts.
                 await bus.publishWrappBuild(.progress(.installingGame(substep: "Restarting Steam to install \(gameInfo.title)")))
-                await stopSteam(client, prefix: prefix, signedIn: signedIn, keepSignIn: true)
-                steamRunning = false
+                if run.claimStop() {
+                    await stopSteam(client, prefix: prefix, signedIn: run.signedIn, keepSignIn: true)
+                }
                 try client.queueInstall(appID: appID, installDir: installDir)
                 try await client.start(silent: true)
-                steamRunning = true
-                signedIn = try await signIn(client: client, input: input)
+                run.started()
+                run.signedIn = try await signIn(client: client, input: input)
             }
 
             try await waitForInstall(client: client, appID: appID)
 
-            await stopSteam(client, prefix: prefix, signedIn: signedIn)
-            steamRunning = false
+            if run.claimStop() {
+                await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
+            }
             clientCache.save(from: prefix)
 
             // ── Locate and configure ───────────────────────────────────
@@ -222,8 +234,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             }
             return finalPath
         } catch {
-            if steamRunning {
-                await stopSteam(client, prefix: prefix, signedIn: signedIn)
+            if run.claimStop() {
+                await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
             }
             helper.removeTempWrapp(wrappPath)
 
@@ -254,6 +266,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             guard input.canSignInToSteam else { throw WrappBuildError.steamSignInRequired }
             await bus.publishWrappBuild(.progress(.installingGame(
                 substep: "Sign in to Steam in its window — you can scan the QR code with the Steam app")))
+            await client.bringSignInWindowForward()
             let deadline = Date().addingTimeInterval(Self.signInTimeout)
             while Date() < deadline {
                 if await client.waitForLogin(timeout: 2) == .signedIn { return true }
@@ -311,8 +324,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// the sign-in out of the wrapp: it would otherwise ship inside the app,
     /// and anyone given a copy could use the account. `keepSignIn` leaves it
     /// in for Steam to start again with, as the build itself does.
-    private func stopSteam(_ client: SteamClientDriving, prefix: URL, signedIn: Bool, keepSignIn: Bool = false) async {
-        await client.shutdown(timeout: 90)
+    private func stopSteam(_ client: SteamClientDriving, prefix: URL, signedIn: Bool, keepSignIn: Bool = false,
+                           timeout: TimeInterval = 90) async {
+        await client.shutdown(timeout: timeout)
         do {
             let result = try client.saveLogin(to: sessionStore, signedIn: signedIn)
             logger.notice("Steam session: \(String(describing: result))")
