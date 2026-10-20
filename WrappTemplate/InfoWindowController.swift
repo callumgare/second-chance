@@ -17,6 +17,12 @@ class InfoWindowController: NSWindowController {
     private var loadMonitor: SystemLoadMonitor?
     let appSupportPath: URL
     var onWarningConfirmed: (() -> Void)?
+    /// Offers to start the game without Steam when the launch fails, or may
+    /// have. Set before `show()`.
+    var onLaunchWithoutSteam: (() -> Void)? {
+        get { viewModel.onLaunchWithoutSteam }
+        set { viewModel.onLaunchWithoutSteam = newValue }
+    }
 
     /// Whether the save warning is currently visible.
     var isShowingWarning: Bool {

@@ -25,6 +25,10 @@ class InfoWindowViewModel: ObservableObject {
     let saveWarningEnabled: Bool
     let gameSlug: String
     var onConfirm: (() -> Void)?
+    /// Set when the game could be started without Steam instead (see
+    /// `GameConfig.canLaunchWithoutSteam`): offered when the launch fails, or
+    /// may have.
+    var onLaunchWithoutSteam: (() -> Void)?
 
     private(set) var gameHasLoaded = false
     private var slowLoadingTimer: Timer?
@@ -200,12 +204,34 @@ struct InfoWindowView: View {
 
             BugReportCallout()
 
+            failureActions
+        }
+        .accessibilityIdentifier("possible-launch-failure")
+    }
+
+    /// Quit, and for a game that can run without Steam, the offer to.
+    @ViewBuilder
+    private var failureActions: some View {
+        if let launchWithoutSteam = viewModel.onLaunchWithoutSteam {
+            Text("You can start the game without Steam instead. Your saves stay on this Mac either way, but this time they won't sync with Steam Cloud.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+
+            HStack {
+                Button("Quit") {
+                    NSApp.terminate(nil)
+                }
+                Button("Launch Without Steam", action: launchWithoutSteam)
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("launch-without-steam")
+            }
+        } else {
             Button("Quit") {
                 NSApp.terminate(nil)
             }
             .buttonStyle(.borderedProminent)
         }
-        .accessibilityIdentifier("possible-launch-failure")
     }
 
     private func heavyLoadNote(_ load: SystemLoadReading) -> some View {
@@ -252,10 +278,7 @@ struct InfoWindowView: View {
 
             BugReportCallout()
 
-            Button("Quit") {
-                NSApp.terminate(nil)
-            }
-            .buttonStyle(.borderedProminent)
+            failureActions
         }
     }
 }
@@ -280,6 +303,16 @@ struct InfoWindowView: View {
 #Preview("Possible launch failure, through Steam") {
     InfoWindowView(viewModel: {
         let vm = InfoWindowViewModel(stage: .steamStartingGame(title: "Curse of Blackmoor Manor"), saveWarningEnabled: false)
+        vm.showSuspectedHang = true
+        return vm
+    }())
+    .frame(width: 450)
+}
+
+#Preview("Possible launch failure, can launch without Steam") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(stage: .steamStartingGame(title: "Danger on Deception Island"), saveWarningEnabled: false)
+        vm.onLaunchWithoutSteam = {}
         vm.showSuspectedHang = true
         return vm
     }())

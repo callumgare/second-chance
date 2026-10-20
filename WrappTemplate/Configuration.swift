@@ -18,10 +18,31 @@ struct GameConfig {
     let gameInstallerDir: String
     let gameEngine: String
     let steamGameId: String?
+    /// The user's choice, at build time, of how a DRM-free Steam game starts
+    /// (`steam` or `direct`); nil for a game that offered no choice.
+    let steamLaunchMode: String?
     let gameTitle: String
     let gameSlug: String
     let bundleId: String
     let appSupportPath: URL
+
+    /// Whether this launch could start the game without Steam instead: only a
+    /// DRM-free game the user chose to launch through Steam. Its files are
+    /// still in Steam's library, where Wine runs them just as well.
+    var canLaunchWithoutSteam: Bool {
+        gameEngine == "wine-steam" && steamLaunchMode == "steam"
+    }
+
+    /// This configuration, launching the game's exe directly rather than
+    /// through Steam (`--launch-without-steam`).
+    func withoutSteam() -> GameConfig {
+        GameConfig(
+            appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
+            gameInstallerDir: gameInstallerDir, gameEngine: "wine", steamGameId: nil,
+            steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
+            bundleId: bundleId, appSupportPath: appSupportPath
+        )
+    }
 }
 
 // MARK: - Plist Reading
@@ -197,6 +218,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     }
     
     let steamGameId = readPlist(at: settingsPlistPath, key: "SteamGameId")
+    let steamLaunchMode = readPlist(at: settingsPlistPath, key: "SteamLaunchMode")
     let gameSlug = readPlist(at: settingsPlistPath, key: "GameSlug") ?? "unknown"
     
     let winePrefix = customWinePrefix ?? appPath.appendingPathComponent("Contents/SharedSupport/prefix")
@@ -214,6 +236,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         gameInstallerDir: gameInstallerDir,
         gameEngine: gameEngine,
         steamGameId: steamGameId,
+        steamLaunchMode: steamLaunchMode,
         gameTitle: gameTitle,
         gameSlug: gameSlug,
         bundleId: bundleId,

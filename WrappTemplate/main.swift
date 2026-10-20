@@ -266,6 +266,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var isCleaningUp = false
     /// Set when the game crashes during loading, so quitting propagates the game's exit code.
     var gameExitCode: Int32 = 0
+    /// Set when the player chose "Launch Without Steam": once this launch is
+    /// cleaned up, the wrapp opens again with `--launch-without-steam`.
+    var relaunchWithoutSteam = false
     
     init(config: GameConfig, gameLauncher: GameLauncher?) {
         self.config = config
@@ -300,6 +303,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 mainLogger.debug("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
                 mainLogger.notice("[Cleanup] All cleanup complete, terminating application")
                 // Drain pending entries so the disk mirror / stderr keep the last lines.
+                if self.relaunchWithoutSteam {
+                    self.openAgainWithoutSteam()
+                }
                 LogStore.shared.flush()
                 if self.gameExitCode != 0 {
                     exit(self.gameExitCode)
@@ -313,7 +319,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Return later - we'll call reply when cleanup is done
         return .terminateLater
     }
+
+    /// Open a new instance of this wrapp that starts the game without Steam.
+    /// Called once Steam and the Wine session have been stopped, so the new
+    /// instance finds the prefix free. Through `open`, so it outlives us.
+    private func openAgainWithoutSteam() {
+        var arguments = ["-n", config.appPath.path, "--args", launchWithoutSteamArgument]
+        if CommandLine.arguments.contains("--debug") { arguments.append("--debug") }
+        let open = Process()
+        open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        open.arguments = arguments
+        do {
+            try open.run()
+            open.waitUntilExit()
+            if open.terminationStatus == 0 {
+                mainLogger.notice("[Cleanup] Opened \(config.gameTitle) again, to start without Steam")
+            } else {
+                mainLogger.error("[Cleanup] Couldn't open \(config.gameTitle) again without Steam: open exited \(open.terminationStatus)")
+            }
+        } catch {
+            mainLogger.error("[Cleanup] Couldn't open \(config.gameTitle) again without Steam: \(error.localizedDescription)")
+        }
+    }
 }
+
+/// Starts a DRM-free game the user chose to launch through Steam directly
+/// instead, for this launch only. Passed by the wrapp to itself when the
+/// player picks "Launch Without Steam" after a launch through Steam failed.
+let launchWithoutSteamArgument = "--launch-without-steam"
 
 // MARK: - Termination signals
 
@@ -398,10 +431,13 @@ func main() {
     }
     
     // Load configuration
-    guard let config = loadConfig(customWinePrefix: winePrefix) else {
+    guard let loadedConfig = loadConfig(customWinePrefix: winePrefix) else {
         showAlert(message: "Configuration Error", informativeText: "Could not load game configuration. Please check the app bundle.")
         exit(1)
     }
+    let launchingWithoutSteam = CommandLine.arguments.contains(launchWithoutSteamArgument)
+        && loadedConfig.canLaunchWithoutSteam
+    let config = launchingWithoutSteam ? loadedConfig.withoutSteam() : loadedConfig
 
     // The game's files: the exe's folder for Wine, the data folder itself for
     // ScummVM. An install that was cut short shows up here as too small.
@@ -423,6 +459,9 @@ func main() {
         ("saves", config.appSupportPath.path),
     ])
     CrashMarker.install(in: gameLogs, logger: mainLogger)
+    if launchingWithoutSteam {
+        mainLogger.notice("Starting the game without Steam this time (\(launchWithoutSteamArgument)), after a launch through Steam failed")
+    }
     
     // Check if wineserver is already running for this prefix
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
@@ -573,12 +612,21 @@ func main() {
     }
     
     // Create info window with game title
-    // Only show save warning for Wine games (ScummVM games are more stable)
-    let saveWarningEnabled = config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-")
+    // Only show save warning for Wine games (ScummVM games are more stable),
+    // and not again to someone who saw it moments ago, on the launch through
+    // Steam they've given up on.
+    let saveWarningEnabled = (config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-")) && !launchingWithoutSteam
     let infoWindow = InfoWindowController(
         stage: config.gameEngine.hasPrefix("wine-steam") ? .startingSteam : .startingGame(title: config.gameTitle),
         appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled)
     globalInfoWindow = infoWindow
+    if config.canLaunchWithoutSteam {
+        infoWindow.onLaunchWithoutSteam = {
+            mainLogger.notice("Player chose to launch without Steam: stopping this launch, then opening the wrapp again")
+            appDelegate.relaunchWithoutSteam = true
+            NSApp.terminate(nil)
+        }
+    }
     
     if debugMode {
         // If log window exists in debug mode, reposition it relative to info window

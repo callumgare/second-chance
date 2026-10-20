@@ -164,6 +164,19 @@ Steam starting the game. Waiting for the player to sign in has no clock. The
 warning leaves the spinner up, since the launch may still succeed; a launch
 that has definitely failed shows the error instead.
 
+**A DRM-free game the user chose to launch via Steam can fall back to
+launching directly.** Both the possible-launch-failure warning and the error
+offer **Launch Without Steam** when `AppSettings.plist` has
+`SteamLaunchMode` = `steam` (`GameConfig.canLaunchWithoutSteam`); a game with
+DRM never had the choice, has no `SteamLaunchMode`, and isn't offered it.
+Picking it quits the wrapp the usual way — Steam stopped, the sign-in saved,
+the Wine session ended — and then opens a new instance with
+`--launch-without-steam`, which runs as engine `wine` on the exe still in
+Steam's library (`GameConfig.withoutSteam()`), without the save warning the
+player has just seen. It is for that launch only: the next one goes through
+Steam again. Saves are the same folder either way; only the Steam Cloud sync
+is skipped.
+
 A wrapp moved to a Mac without the store asks for the sign-in once and
 creates the store there. A wrapp that's killed outright (SIGKILL, a test
 harness timing out) can't stop Steam; the next launch cleans it up (step 2).
