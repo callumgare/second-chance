@@ -128,4 +128,31 @@ const char *cursorLockStatus(void);
 /// hidden. Main thread only.
 int cursorLockHeld(void);
 
+// ## Moving into a fullscreen Space
+//
+// native_fullscreen.m watches AppKit's fullscreen transition notifications
+// for every window in the process, whichever helper is armed. A window part
+// way into its fullscreen Space can't be relied on: a ScreenCaptureKit capture
+// taken then can fail as though Screen Recording were denied and leave the
+// window out of the process's capturable windows from then on, and the
+// window's frame is still changing.
+
+@class NSWindow;
+
+/// Start watching, if nothing has yet. Safe to call more than once and from
+/// any thread; the helpers that rely on the one below call it as they arm.
+void watchFullscreenTransitions(void);
+
+/// Whether `window` is moving into a fullscreen Space: AppKit said it will
+/// enter, hasn't yet said it did, and the window is still marked fullscreen
+/// (an entry that fails takes the mark away, with no notification). Main
+/// thread only.
+int windowIsEnteringFullscreen(NSWindow *window);
+
+/// Whether native fullscreen is done with this process's windows: it isn't
+/// armed here, or the window it moved has finished entering its Space (and no
+/// other is on its way), or it gave up. Before then a ScreenCaptureKit capture
+/// can wedge, even one finished just before the move begins. Main thread only.
+int nativeFullscreenSettled(void);
+
 #endif

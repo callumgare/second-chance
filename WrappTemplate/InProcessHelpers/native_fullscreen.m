@@ -57,6 +57,8 @@ static const double kWatchInterval = 0.25;
 
 static os_log_t gLog;
 static BOOL gEntered = NO;
+/// Set once this helper has given up on finding a window to put in a Space.
+static volatile BOOL gGaveUp = NO;
 static NSWindow *gCandidate = nil;
 static NSRect gCandidateFrame;
 static double gStableSince = 0.0;
@@ -383,6 +385,7 @@ static void *watcherMain(void *unused) {
 
         if (!gEntered && !reportedGivingUp && nowSeconds() > giveUpAt) {
             reportedGivingUp = YES;
+            gGaveUp = YES;
             os_log(gLog, "[NativeFS] no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
             debugLog("no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
             helperReport("NativeFullscreen", "warning", "no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
@@ -403,6 +406,7 @@ static void nativeFullscreenInit(void) {
 
     os_log(gLog, "[NativeFS] armed");
     debugLog("armed");
+    watchFullscreenTransitions();
     helperReport("NativeFullscreen", "notice", "armed in %s", getenv("NATIVE_MACOS_FULLSCREEN_EXE"));
 
     pthread_t thread;
@@ -413,4 +417,60 @@ static void nativeFullscreenInit(void) {
         debugLog("could not start watcher thread");
         helperReport("NativeFullscreen", "error", "could not start watcher thread");
     }
+}
+
+#pragma mark - Fullscreen transitions (helper_common.h)
+
+/// To os_log and IN_PROCESS_HELPERS_LOG both.
+#define transitionLog(format, ...) do { \
+    os_log(gLog, "[NativeFS] " format, ##__VA_ARGS__); \
+    debugLog(format, ##__VA_ARGS__); \
+} while (0)
+
+/// Windows AppKit said will enter fullscreen and hasn't yet said did, and
+/// whether one ever finished entering. Main thread only.
+static NSHashTable<NSWindow *> *gEnteringWindows;
+static BOOL gAWindowEntered = NO;
+
+void watchFullscreenTransitions(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+            gEnteringWindows = [NSHashTable weakObjectsHashTable];
+            NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+            [center addObserverForName:NSWindowWillEnterFullScreenNotification object:nil queue:nil
+                            usingBlock:^(NSNotification *notification) {
+                [gEnteringWindows addObject:notification.object];
+                transitionLog("window %ld will enter fullscreen", (long)[notification.object windowNumber]);
+            }];
+            [center addObserverForName:NSWindowDidEnterFullScreenNotification object:nil queue:nil
+                            usingBlock:^(NSNotification *notification) {
+                [gEnteringWindows removeObject:notification.object];
+                gAWindowEntered = YES;
+                transitionLog("window %ld did enter fullscreen", (long)[notification.object windowNumber]);
+            }];
+            [center addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:nil
+                            usingBlock:^(NSNotification *notification) {
+                [gEnteringWindows removeObject:notification.object];
+            }];
+        });
+        CFRunLoopWakeUp(CFRunLoopGetMain());
+    });
+}
+
+int windowIsEnteringFullscreen(NSWindow *window) {
+    return window && [gEnteringWindows containsObject:window] && (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+}
+
+int nativeFullscreenSettled(void) {
+    static int armed = -1;
+    if (armed < 0) armed = shouldActivate();
+    if (!armed || gGaveUp) return 1;
+    // gEntered is set just before -toggleFullScreen:, which posts the will-enter
+    // notification before it returns, all on this thread: no gap between them.
+    if (!gEntered || !gAWindowEntered) return 0;
+    for (NSWindow *window in gEnteringWindows) {
+        if (windowIsEnteringFullscreen(window)) return 0;
+    }
+    return 1;
 }

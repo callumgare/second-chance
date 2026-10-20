@@ -43,24 +43,26 @@
 #include "helper_common.h"
 
 static const double kPollInterval = 0.25;
-/// The window must hold one frame this long before clicking, so a lock is not
-/// taken mid-resize and confined to the old frame.
+/// Without native fullscreen, the window must hold one frame this long before
+/// clicking, so a lock is not taken mid-resize and confined to the old frame.
+/// With it, AppKit says when the window has finished moving into its Space,
+/// which is when its frame is final, and nothing is waited for after that.
 static const double kSettleSeconds = 1.0;
-/// When native fullscreen is armed, wait for the window to actually be
-/// fullscreen first. A frame holding still is not enough on its own: on a slow
-/// machine the window can sit at its initial size for well over kSettleSeconds
-/// before native fullscreen toggles it. Past this, carry on regardless, in case
-/// native fullscreen never happens (it can give up and stay windowed).
+/// When native fullscreen is armed, wait for the window to be in its
+/// fullscreen Space first. A frame holding still is not enough on its own: on
+/// a slow machine the window can sit at its initial size for well over
+/// kSettleSeconds before native fullscreen toggles it. Past this, fall back on
+/// the frame holding still, in case native fullscreen never happens (it can
+/// give up and stay windowed).
 static const double kFullscreenWaitSeconds = 20.0;
 static const double kGiveUpWaitingSeconds = 100.0;
 /// Both lock flags are briefly true at startup before cnc-ddraw first releases
 /// the cursor -- the game hides it and Wine clips fullscreen windows itself --
 /// so a lock found without a click of ours only counts once it has held this
-/// long.
+/// long. One that appears after our click needn't: clicks are only posted
+/// while the cursor is free, so cnc-ddraw had already let go, and the lock is
+/// the click's.
 static const double kLockedForSeconds = 2.0;
-/// A lock that appears after our click, once the cursor was seen free, is the
-/// click's: that is not the startup flicker, so it only has to hold this long.
-static const double kLockedAfterClickSeconds = 0.5;
 /// Time for cnc-ddraw to act on a click before clicking again. Generous, since
 /// a slow machine can take a while to settle after the fullscreen transition;
 /// the lock is looked for throughout, so a quick one is seen at once.
@@ -191,8 +193,9 @@ static void *lockerMain(void *arg) {
     int generation = (int)(intptr_t)arg;
     BOOL (^current)(void) = ^BOOL { return generation == gGeneration; };
 
-    // Wait for an active game window whose frame has settled -- and, if native
-    // fullscreen is armed, that is fullscreen (or has had long enough to be).
+    // Wait for an active game window whose frame is final: in its fullscreen
+    // Space when native fullscreen is armed, else (or if it never gets there)
+    // once its frame has held still.
     NSRect lastFrame = NSZeroRect;
     double stableSince = 0;
     double firstSeen = 0;
@@ -205,20 +208,23 @@ static void *lockerMain(void *arg) {
             return NULL;
         }
         __block NSRect frame = NSZeroRect;
-        __block BOOL fullscreen = NO;
+        __block BOOL inSpace = NO;
         BOOL found = onMainThread(^BOOL {
             NSWindow *window = activeGameWindow();
             frame = window.frame;
-            fullscreen = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+            inSpace = (window.styleMask & NSWindowStyleMaskFullScreen) != 0 && !windowIsEnteringFullscreen(window);
             return window != nil;
         });
         if (found && firstSeen == 0) firstSeen = nowSeconds();
-        BOOL fullscreenSettled = !nativeFullscreenArmed() || fullscreen ||
-                                 (firstSeen > 0 && nowSeconds() - firstSeen >= kFullscreenWaitSeconds);
+        if (found && nativeFullscreenArmed() && inSpace) {
+            debugLog("window is in its fullscreen Space");
+            break;
+        }
+        BOOL gaveUpOnFullscreen = firstSeen > 0 && nowSeconds() - firstSeen >= kFullscreenWaitSeconds;
         if (!found || !NSEqualRects(frame, lastFrame)) {
             stableSince = nowSeconds();
-        } else if (fullscreenSettled && nowSeconds() - stableSince >= kSettleSeconds) {
-            if (nativeFullscreenArmed() && !fullscreen) {
+        } else if ((!nativeFullscreenArmed() || gaveUpOnFullscreen) && nowSeconds() - stableSince >= kSettleSeconds) {
+            if (nativeFullscreenArmed()) {
                 debugLog("window not fullscreen after %.0fs; locking anyway", kFullscreenWaitSeconds);
             }
             break;
@@ -233,10 +239,7 @@ static void *lockerMain(void *arg) {
     while (current()) {
         if (onMainThread(^BOOL { return cursorLocked(); })) {
             if (lockedSince == 0) lockedSince = nowSeconds();
-            // Clicks are only posted while the cursor is free, so a lock seen
-            // after one followed a free cursor.
-            double needed = clicks > 0 ? kLockedAfterClickSeconds : kLockedForSeconds;
-            if (nowSeconds() - lockedSince >= needed) {
+            if (clicks > 0 || nowSeconds() - lockedSince >= kLockedForSeconds) {
                 if (clicks > 0) {
                     debugLog("cursor locked after %d middle click(s), %.2fs after the last", clicks, lockedSince - lastClick);
                 } else {
@@ -278,6 +281,7 @@ static void *lockerMain(void *arg) {
 static void startLocker(void) {
     int generation = __sync_add_and_fetch(&gGeneration, 1);
     gStatus = "waiting";
+    watchFullscreenTransitions();
     pthread_t thread;
     if (pthread_create(&thread, NULL, lockerMain, (void *)(intptr_t)generation) == 0) {
         pthread_detach(thread);

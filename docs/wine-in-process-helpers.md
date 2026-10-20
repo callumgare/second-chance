@@ -205,13 +205,16 @@ lock isn't needed`.
 
 ### What it does
 
-It waits until the game window is key, the app is active, the window's frame has
-held still for a second and — when native fullscreen is armed — the window is
-actually fullscreen. A lock taken before native fullscreen resizes the window
-would confine the cursor to the old frame, and on a slow machine the window can
-sit at its initial size for several seconds first, so a still frame alone isn't
-enough. (If the window still isn't fullscreen after 20 seconds, it carries on
-anyway: native fullscreen can give up and leave the window as it is.) Then it:
+It waits until the game window is key, the app is active and its frame is
+final. With native fullscreen armed, that's once the window has finished
+moving into its fullscreen Space, which AppKit announces
+(`NSWindowDidEnterFullScreenNotification`, watched by `native_fullscreen.m`).
+A lock taken before then would confine the cursor to the old frame, and on a
+slow machine the window can sit at its initial size for several seconds before
+native fullscreen moves it, so a frame that has stopped changing isn't enough.
+Without native fullscreen, or if the window still isn't in a Space after 20
+seconds (native fullscreen can give up and leave the window as it is), the
+sign is the frame holding still for a second. Then it:
 
 1. Checks whether the cursor is locked. Wine's Mac driver records both halves
    of cnc-ddraw's lock on `WineApplicationController` — `clippingCursor` and
@@ -220,16 +223,17 @@ anyway: native fullscreen can give up and leave the window as it is.) Then it:
    seconds to count: both flags are briefly true at startup, before cnc-ddraw
    first releases the cursor.
 2. If not, posts a **middle** click to the game window and keeps checking.
-   A lock that appears after the click, the cursor having been free before
-   it, is the click's rather than that startup flicker, so it only has to
-   hold for half a second. With no lock two seconds after a click it clicks
-   again, up to 15 clicks.
+   Clicks are only posted while the cursor is free, so cnc-ddraw had already
+   let go of it, and a lock that appears after the click is the click's: it
+   counts at once. With no lock two seconds after a click, it clicks again,
+   up to 15 clicks.
 
-cnc-ddraw normally locks within a fraction of a second of the click, so
-the lock is done about two seconds after the window goes fullscreen. (Before
-it was looked for during those two seconds after a click, and the full two
-seconds' hold asked of every lock, it took over five, and a DirectDraw game's
-first click — a player's or the integration test's — had to wait for that.)
+cnc-ddraw normally locks within a quarter of a second of the click, so the
+lock is done moments after the window reaches its Space. (It used to wait a
+second for the frame to hold still even in a Space, sleep two seconds after
+each click, and ask every lock to hold for two more: over five seconds after
+fullscreen, which a DirectDraw game's first click — a player's or the
+integration test's — had to wait for.)
 
 It runs again each time the app becomes active.
 
@@ -262,6 +266,7 @@ The helper log should show the lock taking hold, normally on the first click:
 
 ```
 pid=… cursor-lock | armed
+pid=… cursor-lock | window is in its fullscreen Space
 pid=… cursor-lock | posted middle click 1
 pid=… cursor-lock | cursor locked after 1 middle click(s), 0.25s after the last
 ```
