@@ -141,6 +141,15 @@ enum Changelog {
         return before + section + after
     }
 
+    /// The notes under `<version>`'s heading, up to the next release's
+    /// heading or the end, trimmed. Nil when there's no such section.
+    static func section(for version: String, in text: String) -> String? {
+        let lines = text.components(separatedBy: "\n")
+        guard let start = lines.firstIndex(where: { $0.hasPrefix("## \(version) ") }) else { return nil }
+        let end = lines[(start + 1)...].firstIndex(where: { $0.hasPrefix("## ") }) ?? lines.endIndex
+        return lines[(start + 1)..<end].joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Drop leading blank lines from cog's output.
     static func trimLeadingBlankLines(_ text: String) -> String {
         // Like `sed '/./,$!d'` then `$(...)`: only empty lines go from the

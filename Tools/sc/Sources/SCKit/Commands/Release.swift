@@ -186,8 +186,6 @@ private struct Release {
         // 4. Changelog and notes
         try FileManager.default.createDirectory(at: repo.releaseDir, withIntermediateDirectories: true)
         if !buildOnly {
-            try await rollback.write(notes + "\n", to: notesFile)
-            notes = try reviewNotes()
             let existing = try? String(contentsOf: repo.changelog, encoding: .utf8)
             let date = { let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
             if let existing, Changelog.hasSection(for: version, in: existing) {
@@ -206,6 +204,10 @@ private struct Release {
                                          to: repo.changelog)
                 ui.line(ui.format("\(.success("✔︎ CHANGELOG.md"))"))
             }
+            // CHANGELOG.md is where the notes are edited, as it's the copy
+            // that's committed; everything else is made from its section.
+            notes = try reviewNotes(version: version)
+            try await rollback.write(notes + "\n", to: notesFile)
             ui.line(ui.format("\(.success("✔︎ \(repo.display(notesFile))"))"))
         }
 
@@ -300,19 +302,23 @@ private struct Release {
         return rewritten
     }
 
-    /// Pause so the notes can be edited before anything else uses them, then
-    /// read back whatever the file now says. With no terminal to ask, the
-    /// notes are used as written.
-    private func reviewNotes() throws -> String {
-        ui.line(ui.format("\(.accent("📝 Release notes are in \(repo.display(notesFile)) — edit them now if you want to."))"))
-        ui.line(String((try? String(contentsOf: notesFile, encoding: .utf8)) ?? "")
-            .split(separator: "\n", omittingEmptySubsequences: false).map { "   " + $0 }.joined(separator: "\n"))
-        if try ui.confirm("Continue the release with the notes as they are in that file now?", default: true) == false {
+    /// Pause so the version's CHANGELOG.md section can be edited before
+    /// anything else uses it, then read back whatever it now says. With no
+    /// terminal to ask, the notes are used as written.
+    private func reviewNotes(version: String) throws -> String {
+        let section = { () throws -> String in
+            let text = try String(contentsOf: repo.changelog, encoding: .utf8)
+            guard let notes = Changelog.section(for: version, in: text), !notes.isEmpty else {
+                throw SCError("CHANGELOG.md has no notes under its \(version) heading.")
+            }
+            return notes
+        }
+        ui.line(ui.format("\(.accent("📝 The release notes are the \(version) section of CHANGELOG.md. Edit them there now if you want to — the GitHub release and the update window use that section once you continue."))"))
+        ui.line(try section().split(separator: "\n", omittingEmptySubsequences: false).map { "   " + $0 }.joined(separator: "\n"))
+        if try ui.confirm("Done with the notes? Continue the release with CHANGELOG.md's \(version) section as it is now?", default: true) == false {
             throw SCError("Stopped at the release notes.", hints: ["Run sc release again when you're ready."])
         }
-        let edited = try String(contentsOf: notesFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !edited.isEmpty else { throw SCError("\(repo.display(notesFile)) is empty.") }
-        return edited
+        return try section()
     }
 
     /// Sign the zip with the Sparkle key in the login keychain and write

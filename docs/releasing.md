@@ -53,10 +53,11 @@ To change how the notes read, edit the prompt. Without Claude Code, with
 they are; a release never stops for want of nicer notes. `--dry-run` runs the
 rewrite too and prints the result.
 
-Then `sc release` writes the notes to `build/release/RELEASE_NOTES.md`, prints
-them and pauses so you can edit the file. When you continue, it reads the file
-back, and what it says then goes into `CHANGELOG.md`, the GitHub release and
-the appcast. Answering no stops the release. Run with no terminal to ask, it
+Then `sc release` writes the notes into the version's section of
+`CHANGELOG.md`, prints them and pauses so you can edit them there. That is the
+committed copy, so it's the one to edit. When you continue, it reads the
+section back, and what it says then goes into `build/release/RELEASE_NOTES.md`
+(the GitHub release's notes) and the appcast. Answering no stops the release. Run with no terminal to ask, it
 doesn't pause. The appcast gets the notes without their `<details>` sections,
 since Sparkle's update window renders Markdown but not HTML.
 

@@ -126,6 +126,16 @@ struct ChangelogTests {
         #expect(updated == "# Changelog\n\nIntro.\n\n## 0.4.0 — 2026-10-20\n\n- Fresh\n\n## 0.3.0 — 2026-09-01\n\nOld notes.\n")
     }
 
+    @Test("A section reads back as the notes it was written with")
+    func readsSection() {
+        let notes = "### New\n\n- Updates\n\n<details>\n<summary>Behind the scenes</summary>\n\n- Tooling\n\n</details>"
+        let text = Changelog.adding(version: "0.4.0", date: "2026-10-20", notes: notes,
+                                    to: "# Changelog\n\n## 0.3.0 — 2026-09-01\n\nOld notes.\n")
+        #expect(Changelog.section(for: "0.4.0", in: text) == notes)
+        #expect(Changelog.section(for: "0.3.0", in: text) == "Old notes.")
+        #expect(Changelog.section(for: "0.5.0", in: text) == nil)
+    }
+
     @Test("Replacing the oldest release runs to the end of the file")
     func replacesLast() {
         let existing = "# Changelog\n\n## 0.1.0 — 2026-01-01\n\nStale.\n"
