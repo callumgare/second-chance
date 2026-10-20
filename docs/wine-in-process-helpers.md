@@ -216,10 +216,20 @@ anyway: native fullscreen can give up and leave the window as it is.) Then it:
 1. Checks whether the cursor is locked. Wine's Mac driver records both halves
    of cnc-ddraw's lock on `WineApplicationController` — `clippingCursor` and
    `clientWantsCursorHidden` — and runs in this same process, so they are read
-   directly. The lock has to hold for two seconds to count: both flags are
-   briefly true at startup, before cnc-ddraw first releases the cursor.
-2. If not, posts a **middle** click to the game window, gives cnc-ddraw two
-   seconds, and checks again — up to 15 clicks.
+   directly. Found this way, before any click, the lock has to hold for two
+   seconds to count: both flags are briefly true at startup, before cnc-ddraw
+   first releases the cursor.
+2. If not, posts a **middle** click to the game window and keeps checking.
+   A lock that appears after the click, the cursor having been free before
+   it, is the click's rather than that startup flicker, so it only has to
+   hold for half a second. With no lock two seconds after a click it clicks
+   again, up to 15 clicks.
+
+cnc-ddraw normally locks within a fraction of a second of the click, so
+the lock is done about two seconds after the window goes fullscreen. (Before
+it was looked for during those two seconds after a click, and the full two
+seconds' hold asked of every lock, it took over five, and a DirectDraw game's
+first click — a player's or the integration test's — had to wait for that.)
 
 It runs again each time the app becomes active.
 
@@ -253,7 +263,7 @@ The helper log should show the lock taking hold, normally on the first click:
 ```
 pid=… cursor-lock | armed
 pid=… cursor-lock | posted middle click 1
-pid=… cursor-lock | cursor locked after 1 middle click(s)
+pid=… cursor-lock | cursor locked after 1 middle click(s), 0.25s after the last
 ```
 
 To see cnc-ddraw's side, trace Wine's cursor calls with

@@ -55,10 +55,15 @@ static const double kFullscreenWaitSeconds = 20.0;
 static const double kGiveUpWaitingSeconds = 100.0;
 /// Both lock flags are briefly true at startup before cnc-ddraw first releases
 /// the cursor -- the game hides it and Wine clips fullscreen windows itself --
-/// so a lock only counts once it has held this long.
+/// so a lock found without a click of ours only counts once it has held this
+/// long.
 static const double kLockedForSeconds = 2.0;
-/// Time for cnc-ddraw to act on a click before checking again. Generous, since
-/// a slow machine can take a while to settle after the fullscreen transition.
+/// A lock that appears after our click, once the cursor was seen free, is the
+/// click's: that is not the startup flicker, so it only has to hold this long.
+static const double kLockedAfterClickSeconds = 0.5;
+/// Time for cnc-ddraw to act on a click before clicking again. Generous, since
+/// a slow machine can take a while to settle after the fullscreen transition;
+/// the lock is looked for throughout, so a quick one is seen at once.
 static const double kAfterClickSeconds = 2.0;
 static const int kMaxClicks = 15;
 
@@ -224,15 +229,27 @@ static void *lockerMain(void *arg) {
 
     int clicks = 0;
     double lockedSince = 0;
+    double lastClick = 0;
     while (current()) {
         if (onMainThread(^BOOL { return cursorLocked(); })) {
             if (lockedSince == 0) lockedSince = nowSeconds();
-            if (nowSeconds() - lockedSince >= kLockedForSeconds) {
-                debugLog("cursor locked after %d middle click(s)", clicks);
+            // Clicks are only posted while the cursor is free, so a lock seen
+            // after one followed a free cursor.
+            double needed = clicks > 0 ? kLockedAfterClickSeconds : kLockedForSeconds;
+            if (nowSeconds() - lockedSince >= needed) {
+                if (clicks > 0) {
+                    debugLog("cursor locked after %d middle click(s), %.2fs after the last", clicks, lockedSince - lastClick);
+                } else {
+                    debugLog("cursor locked after 0 middle clicks");
+                }
                 helperReport("CursorLock", "notice", "cursor locked after %d middle click(s)", clicks);
                 if (current()) gStatus = "locked";
                 return NULL;
             }
+        } else if (clicks > 0 && nowSeconds() - lastClick < kAfterClickSeconds) {
+            // Not yet: cnc-ddraw gets kAfterClickSeconds to act on a click
+            // before there's another.
+            lockedSince = 0;
         } else {
             lockedSince = 0;
             if (clicks >= kMaxClicks) {
@@ -249,8 +266,8 @@ static void *lockerMain(void *arg) {
             });
             if (posted) {
                 clicks++;
+                lastClick = nowSeconds();
                 debugLog("posted middle click %d", clicks);
-                usleep((useconds_t)(kAfterClickSeconds * USEC_PER_SEC));
             }
         }
         usleep((useconds_t)(kPollInterval * USEC_PER_SEC));
