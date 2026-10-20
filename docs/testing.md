@@ -255,7 +255,13 @@ comes to the front, or no Exit button or logo turns up in time, the
 scenario logs the windows on screen and saves a full-screen screenshot to
 `/tmp` (`game-not-focused-*.png`, `exit-not-found-*.png`,
 `info-window-still-open-*.png`), naming it in its log; the per-attempt
-screenshots are deleted as they are analysed. A failed run logs
+screenshots are deleted as they are analysed. Those per-attempt screenshots
+are of the game's window alone (`screencapture -l`), found afresh by the game's
+PID each time since Wine replaces its window as the game goes fullscreen: a
+notification or another app in front of the game can't reach the OCR, and
+once the game has closed its window the capture fails, rather than finding
+"Exit" in whatever app was behind it. The failure screenshots stay
+full-screen, since what else was on screen is the point of them. A failed run logs
 `WRAPP_PUPPETEER: run_failed: <reason>`, and the integration test quotes that
 reason in its failure.
 

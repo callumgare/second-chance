@@ -28,7 +28,8 @@ enum MainMenuScreen {
     /// Games whose Exit is a graphic rather than text are matched against
     /// assets/quit-button.png. Across the series that button is red and sits
     /// in the bottom-right corner, at roughly the same size relative to the
-    /// screen, so the search is narrowed to match.
+    /// game's screen, so the search is narrowed to match. (The scenario's
+    /// screenshots are of the game's window alone.)
     static let quitButtonMatchOptions = TemplateMatchOptions(
         searchRegion: CGRect(x: 2.0 / 3.0, y: 5.0 / 6.0, width: 1.0 / 3.0, height: 1.0 / 6.0),
         templateHeightFraction: 0.0662,

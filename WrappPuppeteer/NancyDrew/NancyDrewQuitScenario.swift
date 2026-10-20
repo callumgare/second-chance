@@ -127,12 +127,40 @@ struct NancyDrewQuitScenario {
 
     private var focusStrategy: FocusStrategy { wrapp.engine.focusStrategy }
 
-    private var backingScaleFactor: CGFloat { NSScreen.main?.backingScaleFactor ?? 1.0 }
+    /// A screenshot of the game's window alone, and where that window was.
+    private struct GameWindowShot {
+        let path: String
+        let window: WindowInfo
+        /// Screenshot pixels per screen point.
+        let scale: CGFloat
 
-    /// The centre of a rect found in a screenshot, which is in pixels, as the
-    /// screen point a click needs.
-    private func screenPoint(atCentreOf rect: CGRect) -> CGPoint {
-        CGPoint(x: rect.midX / backingScaleFactor, y: rect.midY / backingScaleFactor)
+        /// A rect found in the screenshot (pixels, top-left origin) in screen points.
+        func screenRect(_ rect: CGRect) -> CGRect {
+            CGRect(
+                x: window.bounds.minX + rect.minX / scale,
+                y: window.bounds.minY + rect.minY / scale,
+                width: rect.width / scale,
+                height: rect.height / scale
+            )
+        }
+    }
+
+    /// Capture the game's main window, not the screen: whatever is in front
+    /// of it can't reach the OCR, and once the game has closed its window
+    /// there is nothing to capture, rather than another app's text to find.
+    private func captureGameWindow(pid: Int32) -> GameWindowShot? {
+        guard let window = WindowFinder.mainWindow(ofPid: pid) else {
+            logger.notice("    No game window on screen to capture")
+            return nil
+        }
+        // Wine can replace its window between finding and capturing it, and
+        // the capture then fails; the next attempt finds the new one.
+        guard let path = ScreenCapture.captureWindow(number: window.number, prefix: "game-test") else { return nil }
+        guard let size = ScreenCapture.pixelSize(ofImageAt: path), window.bounds.width > 0 else {
+            try? FileManager.default.removeItem(atPath: path)
+            return nil
+        }
+        return GameWindowShot(path: path, window: window, scale: size.width / window.bounds.width)
     }
 
     private func forceQuit(_ app: NSRunningApplication) {
@@ -216,9 +244,9 @@ struct NancyDrewQuitScenario {
 
         var clickedInteractive = false
         var clickedExitButton = false
-        // Where Exit was last found, and when it was last clicked: on a
-        // loaded machine the game can miss the click, and with its own
-        // cursor then drawn over the label OCR may never find it again.
+        // Where Exit was last found (in screen points), and when it was last
+        // clicked: on a loaded machine the game can miss the click, and with
+        // its own cursor then drawn over the label OCR may never find it again.
         var lastExitLocation: CGRect?
         var lastExitClick = Date.distantPast
         let startTime = Date()
@@ -240,14 +268,17 @@ struct NancyDrewQuitScenario {
 
             logger.notice("  → Attempt \(attempt) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s)")
 
-            guard let screenshotPath = ScreenCapture.captureScreen(prefix: "game-test") else { continue }
+            guard let shot = captureGameWindow(pid: gamePid) else {
+                Thread.sleep(forTimeInterval: 0.2)
+                continue
+            }
 
             let searchStartTime = Date()
-            let analysis = MainMenuScreen.analyze(screenshotPath: screenshotPath, app: app)
+            let analysis = MainMenuScreen.analyze(screenshotPath: shot.path, app: app)
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
-            try? FileManager.default.removeItem(atPath: screenshotPath)
+            try? FileManager.default.removeItem(atPath: shot.path)
 
-            var exitTarget = analysis.quitButton
+            var exitTarget = analysis.quitButton.map(shot.screenRect)
             if let found = exitTarget {
                 lastExitLocation = found
             } else if let remembered = lastExitLocation, Date().timeIntervalSince(lastExitClick) >= 3 {
@@ -265,11 +296,11 @@ struct NancyDrewQuitScenario {
                 logger.notice(clickedExitButton ? "  ✓ Clicking 'Exit Game' button again..." : "  ✓ Found 'Exit Game' button, clicking...")
                 clickedExitButton = true
 
-                var clickPoint = screenPoint(atCentreOf: exitLocation)
+                var clickPoint = CGPoint(x: exitLocation.midX, y: exitLocation.midY)
 
                 // The Scarlet Hand's Exit hotspot sits above its label
                 if appName.contains("Scarlet Hand") {
-                    clickPoint.y -= exitLocation.height / (2.0 * backingScaleFactor)
+                    clickPoint.y -= exitLocation.height / 2
                 }
 
                 InputControl.click(at: clickPoint)
@@ -291,10 +322,10 @@ struct NancyDrewQuitScenario {
                 }
             }
 
-            if let interactiveLocation = analysis.interactiveLogo, !clickedInteractive {
+            if let interactiveLocation = analysis.interactiveLogo.map(shot.screenRect), !clickedInteractive {
                 logger.notice("  ✓ Found 'interactive' logo, clicking to enable menu...")
                 Thread.sleep(forTimeInterval: 1)
-                InputControl.click(at: screenPoint(atCentreOf: interactiveLocation))
+                InputControl.click(at: CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY))
                 clickedInteractive = true
                 Thread.sleep(forTimeInterval: 2)
             }

@@ -32,6 +32,8 @@ struct WindowInfo {
 
     /// Ignores menu-bar extras, cursors and other tiny helper windows.
     var isSubstantial: Bool { bounds.width > 50 && bounds.height > 50 }
+
+    var area: CGFloat { bounds.width * bounds.height }
 }
 
 enum WindowFinder {
@@ -40,6 +42,13 @@ enum WindowFinder {
         if excludingDesktop { options.insert(.excludeDesktopElements) }
         let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
         return list.compactMap { WindowInfo($0) }
+    }
+
+    /// `pid`'s biggest on-screen window: an app's own, rather than the
+    /// helper windows beside it. Look it up each time it's needed, since an
+    /// app can replace its window (Wine does as a game goes fullscreen).
+    static func mainWindow(ofPid pid: Int32) -> WindowInfo? {
+        onScreenWindows().filter { $0.ownerPid == pid && $0.isSubstantial }.max { $0.area < $1.area }
     }
 
     /// Poll until at least one on-screen window matches, returning all matches.
@@ -97,7 +106,7 @@ enum WindowFinder {
             // match the display's (and the strip's height is in no API).
             // Ask the window instead.
             if Accessibility.hasFullscreenWindow(pid: pid),
-               let window = windows.max(by: { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height }) {
+               let window = windows.max(by: { $0.area < $1.area }) {
                 return window
             }
 
