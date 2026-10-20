@@ -24,14 +24,18 @@ it.
   after running the unit tests and a Release build (`--notes-only` stops before
   those, `--skip-tests` skips the tests).
 
-If it fails or is interrupted partway, it puts back the project file,
-`CHANGELOG.md` and the release notes it changed, so the tree is clean for the
-next attempt.
+If it fails or is interrupted partway, it takes its own changes back out of
+the project file, `CHANGELOG.md` and the release notes, so the tree is clean for
+the next attempt. Only its own changes: anything else in those files — edited
+before the run or while it was building — is kept. A file that changed after
+the release wrote it is put back with a three-way merge (`git merge-file`), and
+when the other change touched the same lines the file is left alone and named,
+for you to sort out by hand.
 
 `--build-only` builds what the next release would be without changing the
 repo: it writes the version into the project file for the build, builds and
-zips the app without running the tests (it implies `--skip-tests`), then puts
-the project file back. It writes no changelog or notes and doesn't commit, tag or push,
+zips the app without running the tests (it implies `--skip-tests`), then takes
+its version change back out of the project file, as above. It writes no changelog or notes and doesn't commit, tag or push,
 so it works on a dirty tree, building whatever is uncommitted.
 
 ## Publishing

@@ -72,21 +72,22 @@ private struct Release {
         // A release that stops partway — a failed test or build, or Ctrl-C —
         // would leave the version bump and changelog behind, and the next
         // attempt then refuses to start on the dirty tree. So everything it
-        // writes is put back as it was before the error is reported. The zip
-        // is only removed: packaging deletes the previous one before writing.
-        let restorable = [repo.pbxproj, repo.changelog, notesFile]
-        let originals = restorable.map { (url: $0, data: try? Data(contentsOf: $0)) }
+        // writes is taken back out before the error is reported — only what
+        // it wrote: anything else changed in those files, before or during
+        // the run, stays. The zip is only removed: packaging deletes the
+        // previous one before writing.
+        let rollback = FileRollback([repo.pbxproj, repo.changelog, notesFile])
         let zipExisted = FileManager.default.fileExists(atPath: zip.path)
         let committed: (version: String, branch: String)?
         do {
-            committed = try await perform(versionOverride: versionOverride, build: build, test: test)
+            committed = try await perform(versionOverride: versionOverride, build: build, test: test, rollback: rollback)
         } catch {
-            restore(originals, removingZip: !zipExisted, reason: "Release stopped")
+            await restore(rollback, removingZip: !zipExisted, reason: "Release stopped")
             throw error
         }
         if buildOnly {
             // The build has the version baked in; the repo goes back as it was.
-            restore(originals, removingZip: false, reason: "Build only")
+            await restore(rollback, removingZip: false, reason: "Build only")
             if let committed {
                 ui.success("Built v\(committed.version) — not committed or tagged.", takeaways: [TerminalText(stringLiteral: repo.display(zip))])
             }
@@ -99,25 +100,12 @@ private struct Release {
         }
     }
 
-    /// Put the files back as they were before the release touched them, and
-    /// remove a zip it created when `removingZip`.
-    private func restore(_ originals: [(url: URL, data: Data?)], removingZip: Bool, reason: String) {
-        var undone: [String] = []
-        var failed: [String] = []
-        for original in originals {
-            let current = try? Data(contentsOf: original.url)
-            guard current != original.data else { continue }
-            do {
-                if let data = original.data {
-                    try data.write(to: original.url, options: .atomic)
-                } else {
-                    try FileManager.default.removeItem(at: original.url)
-                }
-                undone.append(repo.display(original.url))
-            } catch {
-                failed.append("\(repo.display(original.url)): \(error.localizedDescription)")
-            }
-        }
+    /// Take the release's writes back out of the files, and remove a zip it
+    /// created when `removingZip`.
+    private func restore(_ rollback: FileRollback, removingZip: Bool, reason: String) async {
+        let outcome = await rollback.restore()
+        var undone = outcome.undone.map(repo.display)
+        var failed = outcome.failed.map { "\(repo.display($0.url)): \($0.reason)" }
         if removingZip, FileManager.default.fileExists(atPath: zip.path) {
             do {
                 try FileManager.default.removeItem(at: zip)
@@ -138,7 +126,7 @@ private struct Release {
     /// Returns the release's version and branch once it's committed and
     /// tagged (for --build-only, once it's packaged), or nil when it stopped
     /// short of that (a dry run, --notes-only).
-    private func perform(versionOverride: String?, build: Bool, test: Bool) async throws -> (version: String, branch: String)? {
+    private func perform(versionOverride: String?, build: Bool, test: Bool, rollback: FileRollback) async throws -> (version: String, branch: String)? {
         try Proc.require("cog", brew: "cocogitto")
         if build { try Proc.require("xcbeautify", brew: "xcbeautify") }
 
@@ -181,13 +169,13 @@ private struct Release {
             ui.line(ui.format("\(.accent("Skipped the build."))"))
             return nil
         }
-        try rewritten.write(to: repo.pbxproj, atomically: true, encoding: .utf8)
+        try await rollback.write(rewritten, to: repo.pbxproj)
         ui.line(ui.format("\(.success("✔︎ MARKETING_VERSION \(oldVersion) → \(version), CURRENT_PROJECT_VERSION → \(buildNumber)"))"))
 
         // 4. Changelog and notes
         try FileManager.default.createDirectory(at: repo.releaseDir, withIntermediateDirectories: true)
         if !buildOnly {
-            try (notes + "\n").write(to: notesFile, atomically: true, encoding: .utf8)
+            try await rollback.write(notes + "\n", to: notesFile)
             let existing = try? String(contentsOf: repo.changelog, encoding: .utf8)
             let date = { let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
             if let existing, Changelog.hasSection(for: version, in: existing) {
@@ -195,15 +183,15 @@ private struct Release {
                 // missing whatever has been committed since. Without a terminal
                 // to ask, keep it: replacing it would drop any hand edits.
                 if ui.confirm("CHANGELOG.md already has a \(version) section. Replace it with the notes generated now?") == true {
-                    try Changelog.replacing(version: version, date: date, notes: notes, in: existing)
-                        .write(to: repo.changelog, atomically: true, encoding: .utf8)
+                    try await rollback.write(Changelog.replacing(version: version, date: date, notes: notes, in: existing),
+                                             to: repo.changelog)
                     ui.line(ui.format("\(.success("✔︎ CHANGELOG.md (replaced the \(version) section)"))"))
                 } else {
                     ui.warning("CHANGELOG.md already has a \(version) section — leaving it alone.")
                 }
             } else {
-                try Changelog.adding(version: version, date: date, notes: notes, to: existing)
-                    .write(to: repo.changelog, atomically: true, encoding: .utf8)
+                try await rollback.write(Changelog.adding(version: version, date: date, notes: notes, to: existing),
+                                         to: repo.changelog)
                 ui.line(ui.format("\(.success("✔︎ CHANGELOG.md"))"))
             }
             ui.line(ui.format("\(.success("✔︎ \(repo.display(notesFile))"))"))

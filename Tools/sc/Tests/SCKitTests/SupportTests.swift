@@ -424,3 +424,83 @@ struct XcodeActivityTests {
         #expect(ActivityLine.duration(125) == "2m 05s")
     }
 }
+
+@Suite("Taking a run's writes back out")
+struct FileRollbackTests {
+    let dir: URL
+
+    init() throws {
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc rollback \(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    func file(_ name: String, _ contents: String?) throws -> URL {
+        let url = dir.appendingPathComponent(name)
+        if let contents { try contents.write(to: url, atomically: true, encoding: .utf8) }
+        return url
+    }
+
+    func read(_ url: URL) -> String? { try? String(contentsOf: url, encoding: .utf8) }
+
+    static let original = (1...12).map { "line \($0);" }.joined(separator: "\n") + "\n"
+
+    @Test("A file left as it was written goes back to the original")
+    func untouched() async throws {
+        let url = try file("project.pbxproj", Self.original)
+        let rollback = FileRollback([url])
+        try await rollback.write(Self.original.replacingOccurrences(of: "line 2;", with: "VERSION;"), to: url)
+        let outcome = await rollback.restore()
+        #expect(read(url) == Self.original)
+        #expect(outcome.undone == [url])
+        #expect(outcome.failed.isEmpty)
+    }
+
+    @Test("Other changes made after the write are kept")
+    func keepsOtherChanges() async throws {
+        let url = try file("project.pbxproj", Self.original)
+        let rollback = FileRollback([url])
+        try await rollback.write(Self.original.replacingOccurrences(of: "line 2;", with: "VERSION;"), to: url)
+        // Someone edits elsewhere in the file while the build runs.
+        let edited = try #require(read(url)).replacingOccurrences(of: "line 10;", with: "added file;")
+        try edited.write(to: url, atomically: true, encoding: .utf8)
+        let outcome = await rollback.restore()
+        #expect(read(url) == Self.original.replacingOccurrences(of: "line 10;", with: "added file;"))
+        #expect(outcome.failed.isEmpty)
+    }
+
+    @Test("A change to the same lines leaves the file alone and says so")
+    func conflict() async throws {
+        let url = try file("project.pbxproj", Self.original)
+        let rollback = FileRollback([url])
+        try await rollback.write(Self.original.replacingOccurrences(of: "line 2;", with: "VERSION;"), to: url)
+        let edited = Self.original.replacingOccurrences(of: "line 2;", with: "OTHER;")
+        try edited.write(to: url, atomically: true, encoding: .utf8)
+        let outcome = await rollback.restore()
+        #expect(read(url) == edited)
+        #expect(outcome.failed.map(\.url) == [url])
+    }
+
+    @Test("A file the run created is removed, unless changed since")
+    func created() async throws {
+        let plain = try file("RELEASE_NOTES.md", nil)
+        let edited = try file("CHANGELOG.md", nil)
+        let rollback = FileRollback([plain, edited])
+        try await rollback.write("notes\n", to: plain)
+        try await rollback.write("notes\n", to: edited)
+        try "notes\nmore\n".write(to: edited, atomically: true, encoding: .utf8)
+        let outcome = await rollback.restore()
+        #expect(!FileManager.default.fileExists(atPath: plain.path))
+        #expect(read(edited) == "notes\nmore\n")
+        #expect(outcome.failed.map(\.url) == [edited])
+    }
+
+    @Test("A file the run never wrote isn't touched")
+    func neverWritten() async throws {
+        let url = try file("CHANGELOG.md", Self.original)
+        let rollback = FileRollback([url])
+        try "changed by someone else\n".write(to: url, atomically: true, encoding: .utf8)
+        let outcome = await rollback.restore()
+        #expect(read(url) == "changed by someone else\n")
+        #expect(outcome.undone.isEmpty && outcome.failed.isEmpty)
+    }
+}
