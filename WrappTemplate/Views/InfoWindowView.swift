@@ -178,6 +178,12 @@ struct InfoWindowView: View {
             // launch failed: say why instead.
             if let load = viewModel.heavyLoad {
                 heavyLoadNote(load)
+                // Past the possible-failure point, a game that can run
+                // without Steam still gets the offer: the busy Mac may be
+                // why Steam is stuck, and the game alone needs far less.
+                if viewModel.showSuspectedHang, viewModel.onLaunchWithoutSteam != nil {
+                    failureActions
+                }
             } else if viewModel.showSuspectedHang {
                 possibleFailureNote
             } else if viewModel.showSlowLoadingNote {
@@ -314,6 +320,20 @@ struct InfoWindowView: View {
         let vm = InfoWindowViewModel(stage: .steamStartingGame(title: "Danger on Deception Island"), saveWarningEnabled: false)
         vm.onLaunchWithoutSteam = {}
         vm.showSuspectedHang = true
+        return vm
+    }())
+    .frame(width: 450)
+}
+
+#Preview("Heavy load past the possible-failure point, can launch without Steam") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(stage: .steamStartingGame(title: "Danger on Deception Island"), saveWarningEnabled: false)
+        vm.onLaunchWithoutSteam = {}
+        vm.showSuspectedHang = true
+        vm.heavyLoad = SystemLoadReading(
+            otherCores: 7.4, fastCores: 8,
+            topPrograms: [.init(name: "Google Chrome", cores: 4), .init(name: "node", cores: 2)]
+        )
         return vm
     }())
     .frame(width: 450)

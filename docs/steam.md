@@ -167,7 +167,9 @@ that has definitely failed shows the error instead.
 **A DRM-free game the user chose to launch via Steam can fall back to
 launching directly.** Both the possible-launch-failure warning and the error
 offer **Launch Without Steam** when `AppSettings.plist` has
-`SteamLaunchMode` = `steam` (`GameConfig.canLaunchWithoutSteam`); a game with
+`SteamLaunchMode` = `steam` (`GameConfig.canLaunchWithoutSteam`). On a
+heavily loaded Mac the busy-Mac note replaces the warning, but the offer
+still appears under it once the warning would have; a game with
 DRM never had the choice, has no `SteamLaunchMode`, and isn't offered it.
 Picking it quits the wrapp the usual way — Steam stopped, the sign-in saved,
 the Wine session ended — and then opens a new instance with
