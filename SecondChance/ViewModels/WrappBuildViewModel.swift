@@ -181,6 +181,9 @@ class WrappBuildViewModel: ObservableObject {
     /// the same early-cancel rule for throws that bypassed it.
     private func runBuild(_ builder: WrappBuildStrategy) async {
         let input = makeInput(self)
+        let loadMonitor = SystemLoadMonitor(context: "the build")
+        loadMonitor.start()
+        defer { loadMonitor.stop() }
         do {
             _ = try await builder.build(input: input)
             currentState = .completed

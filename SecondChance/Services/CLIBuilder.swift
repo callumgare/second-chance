@@ -97,6 +97,9 @@ enum CLIBuilder {
             await progress.subscribe(to: EventBus.app)
         }
 
+        // Runs until the process exits below.
+        SystemLoadMonitor(context: "the build").start()
+
         do {
             _ = try await builder.build(input: input)
 

@@ -459,6 +459,10 @@ func main() {
         ("saves", config.appSupportPath.path),
     ])
     CrashMarker.install(in: gameLogs, logger: mainLogger)
+    // For the whole run: a game that crashes an hour in may have been
+    // starved of CPU, too. The loading window observes it.
+    let loadMonitor = SystemLoadMonitor(context: "the launch")
+    loadMonitor.start()
     if launchingWithoutSteam {
         mainLogger.notice("Starting the game without Steam this time (\(launchWithoutSteamArgument)), after a launch through Steam failed")
     }
@@ -618,7 +622,8 @@ func main() {
     let saveWarningEnabled = (config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-")) && !launchingWithoutSteam
     let infoWindow = InfoWindowController(
         stage: config.gameEngine.hasPrefix("wine-steam") ? .startingSteam : .startingGame(title: config.gameTitle),
-        appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled)
+        appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled,
+        loadMonitor: loadMonitor)
     globalInfoWindow = infoWindow
     if config.canLaunchWithoutSteam {
         infoWindow.onLaunchWithoutSteam = {

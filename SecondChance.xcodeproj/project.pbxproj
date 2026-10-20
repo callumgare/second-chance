@@ -82,7 +82,6 @@
 				Resources/wine-files,
 				StartupDiagnostics.swift,
 				Subcommands.swift,
-				SystemLoadMonitor.swift,
 				WrappSteam.swift,
 				Views/InfoWindowView.swift,
 			);

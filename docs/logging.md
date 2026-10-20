@@ -56,9 +56,17 @@ block from `RunContext.logHeader`:
 The `load` line (`SystemLoad`) is the CPU every process but Wine's and the
 logging one is using, in cores, against the performance-core count; when it
 reaches all but one of them a warning follows, since Wine then takes minutes
-to start a program, or never does. A wrapp also samples it every 5 s while the
-game loads and logs `[Load]` lines when the Mac becomes, or stops being,
-heavily loaded.
+to start a program, or never does.
+
+The header is only the start, and a build can begin hours after the app
+opened, so load is also sampled while Wine work runs: for the whole of each
+build, and for a wrapp's whole run (`SystemLoadMonitor`). It samples every
+5 s and logs `[Load]` lines: the first reading as a notice ("At the start of
+the build: …"), one reading a minute at `.debug`, so they're in every saved
+log but off the terminal, a warning when the Mac becomes heavily loaded, and a
+notice when it stops being. A wrapp's loading window watches the same monitor
+to say why the wait is long. The readings of the last ten minutes go into the
+failure summary.
 
 A wrapp's header adds the game, its engine, and the size and file count of
 its installed files, which is where an install that was cut short shows up.
@@ -169,6 +177,8 @@ Error: Wine execution failed with exit code 1 [SecondChance.WineError.executionF
 First error in this stage: 17:28:07.695  error  Wine  00d8:err:winediag:nodrv_CreateWindow Application tried to create a window, but no driver could be loaded.
 Last Wine/ScummVM output:
   …the last ten lines…
+Load now: other programs are keeping 0.8 cores busy, and this Mac has 8 performance cores
+Load recently: 0.8–7.9 cores busy over the last 6 min (busiest at 17:27:41: other programs are keeping 7.9 cores busy, …); heavily loaded at times
 Full log: …/sc-logs/20261016-172710-wrapp-build-secrets-can-kill-remastered.full.log
 Run: 3f9a2c1e
 === END FAILURE SUMMARY ===
@@ -179,7 +189,10 @@ error in this stage" line is there because the last errors are usually
 consequences. Stages are what the build's progress shows (`LogContext.enterStage`,
 called next to each `━━━ Stage ━━━` divider); a wrapp has "Starting the game"
 and "Playing". The error line keeps the error's type and case and its chain of
-underlying errors, which `localizedDescription` drops. A wrapp's summary also
+underlying errors, which `localizedDescription` drops. The load lines are
+there for the same reason: by the time a starved Wine program is noticed
+failing, the load that starved it may have gone, so the summary gives the
+range the monitor saw as well as the load now. A wrapp's summary also
 names its diagnostics bundle when it captured one. `grep -A20 'FAILURE SUMMARY'`
 finds it. Cancelling a build produces no summary.
 

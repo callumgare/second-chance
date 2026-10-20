@@ -58,6 +58,19 @@ struct SystemLoadTests {
         #expect(SystemLoad.isWine(command: command) == isWine)
     }
 
+    @Test("Sums up the recent readings for a failure summary")
+    func history() throws {
+        let now = Date()
+        let light = SystemLoadReading(otherCores: 1.2, fastCores: 8, topPrograms: [])
+        let heavy = SystemLoadReading(otherCores: 7.9, fastCores: 8, topPrograms: [.init(name: "yes", cores: 7)])
+        let text = try #require(SystemLoadHistory.summary(
+            of: [(now.addingTimeInterval(-150), light), (now.addingTimeInterval(-60), heavy), (now, light)], now: now))
+        #expect(text.hasPrefix("1.2–7.9 cores busy over the last 3 min (busiest at "))
+        #expect(text.contains(heavy.summary))
+        #expect(text.hasSuffix("; heavily loaded at times"))
+        #expect(SystemLoadHistory.summary(of: [], now: now) == nil)
+    }
+
     @Test("A live reading parses")
     func liveReading() throws {
         let reading = try #require(SystemLoad.read())

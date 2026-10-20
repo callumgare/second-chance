@@ -37,6 +37,7 @@ struct FailureSummaryTests {
         #expect(!text.contains("second \(marker)"))
         #expect(text.contains("wine said \(marker)"))
         #expect(text.contains("Diagnostics: /tmp/x"))
+        #expect(text.contains("Load now: "))
         #expect(text.contains("Run: \(RunContext.runID)"))
     }
 

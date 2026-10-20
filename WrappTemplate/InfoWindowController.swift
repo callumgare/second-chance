@@ -12,9 +12,10 @@ var globalInfoWindow: InfoWindowController?
 
 class InfoWindowController: NSWindowController {
     private let viewModel: InfoWindowViewModel
-    /// Watches for a heavily loaded Mac while the game loads; stopped once it
-    /// has loaded, failed, or the window closes.
-    private var loadMonitor: SystemLoadMonitor?
+    /// The wrapp's load monitor, observed while the game loads; the window
+    /// stops listening once the game has loaded, failed, or the window
+    /// closes. The monitor itself runs on for the rest of the wrapp's run.
+    private let loadMonitor: SystemLoadMonitor?
     let appSupportPath: URL
     var onWarningConfirmed: (() -> Void)?
     /// Offers to start the game without Steam when the launch fails, or may
@@ -37,8 +38,10 @@ class InfoWindowController: NSWindowController {
 
     /// `stage` is what the launch waits on first: Steam, for a game that
     /// needs it, or else the game.
-    init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", saveWarningEnabled: Bool = true) {
+    init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", saveWarningEnabled: Bool = true,
+         loadMonitor: SystemLoadMonitor? = nil) {
         self.appSupportPath = appSupportPath
+        self.loadMonitor = loadMonitor
 
         let shouldShow = saveWarningEnabled && !Self.hasUserDismissedSaveWarning(appSupportPath: appSupportPath)
         self.viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: shouldShow, gameSlug: gameSlug)
@@ -75,17 +78,10 @@ class InfoWindowController: NSWindowController {
 
     func show() {
         window?.makeKeyAndOrderFront(nil)
-        startLoadMonitor()
-    }
-
-    private func startLoadMonitor() {
-        guard loadMonitor == nil else { return }
-        let monitor = SystemLoadMonitor { [weak self] reading in
+        loadMonitor?.observe { [weak self] reading in
             guard let self, !self.viewModel.gameHasLoaded else { return }
             self.viewModel.heavyLoad = reading
         }
-        loadMonitor = monitor
-        monitor.start()
     }
 
     /// Show that the launch has moved on to `stage`. Safe from any thread.
@@ -97,7 +93,7 @@ class InfoWindowController: NSWindowController {
 
     func notifyGameLoaded() {
         DispatchQueue.main.async {
-            self.loadMonitor?.stop()
+            self.loadMonitor?.observe(nil)
             self.viewModel.markGameLoaded()
             self.close()
         }
@@ -110,7 +106,7 @@ class InfoWindowController: NSWindowController {
 
     func showError(exitCode: Int32) {
         DispatchQueue.main.async {
-            self.loadMonitor?.stop()
+            self.loadMonitor?.observe(nil)
             self.viewModel.heavyLoad = nil
             self.viewModel.showError(exitCode: exitCode)
             self.window?.makeKeyAndOrderFront(nil)
@@ -129,7 +125,7 @@ class InfoWindowController: NSWindowController {
             return
         }
         viewModel.stopTimer()
-        loadMonitor?.stop()
+        loadMonitor?.observe(nil)
         window?.close()
     }
 

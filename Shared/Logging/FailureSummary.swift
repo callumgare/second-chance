@@ -97,6 +97,13 @@ nonisolated enum FailureSummary {
             lines += engine.map { "  \(oneLine($0))" }
         }
 
+        // A busy Mac is the likeliest cause of a Wine program failing to
+        // start, and the load may have passed by the time it is noticed.
+        lines.append("Load now: \(SystemLoad.read().map(\.summary) ?? "unknown (ps failed)")")
+        if let recent = SystemLoadHistory.shared.summary() {
+            lines.append("Load recently: \(recent)")
+        }
+
         var evidence = files
         if let mirror = LogStore.shared.diskMirrorPath {
             evidence.insert(("Full log", mirror.path), at: 0)

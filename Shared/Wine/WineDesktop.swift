@@ -86,7 +86,8 @@ nonisolated public final class WineDesktop {
             // between a quarter of a second and ten seconds.
             Thread.sleep(forTimeInterval: min(10, max(0.25, Date().timeIntervalSince(start) / 10)))
         }
-        logger.error("[Desktop] Display devices still not registered after \(Int(timeout))s — running the program anyway")
+        let load = SystemLoad.read().map(\.summary) ?? "unknown (ps failed)"
+        logger.error("[Desktop] Display devices still not registered after \(Int(timeout))s — running the program anyway (load: \(load))")
         return desktop
     }
 
