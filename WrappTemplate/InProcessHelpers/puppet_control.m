@@ -30,11 +30,11 @@
 //  `cursor` either side of its first click: a click that took the cursor was
 //  one cnc-ddraw swallowed (docs/wine-in-process-helpers.md#cursor-lock).
 //
-//  The game window is the biggest visible window the process has. Listing the
-//  process's windows for ScreenCaptureKit goes through replayd, which can queue
-//  for seconds on a loaded Mac (see docs/testing.md), so the window found is
-//  kept between captures and listed again only when it changes or a capture
-//  fails.
+//  The game window is the biggest visible window the process has. Each capture
+//  lists the process's windows for ScreenCaptureKit afresh: a window kept from
+//  an earlier listing can stop capturing with nothing to say so -- after the
+//  window moves into its fullscreen Space, or once a Direct3D game skips its
+//  intro -- and a capture with it then hangs until it times out.
 //
 //  Built into in_process_helpers.dylib by WrappTemplate/setup-wine.sh.
 //
@@ -123,7 +123,9 @@ static NSString *stateCommand(void) {
         // (native fullscreen, ScummVM's -f), or a borderless window exactly
         // covering the screen, as Direct3D games draw (Ghost of Thornton
         // Hall's native fullscreen finds no eligible window and leaves it).
-        BOOL native = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+        // In its Space once it has finished moving there: AppKit marks the
+        // window fullscreen as the move begins.
+        BOOL native = (window.styleMask & NSWindowStyleMaskFullScreen) != 0 && !windowIsEnteringFullscreen(window);
         BOOL coversScreen = window.screen && NSEqualRects(window.frame, window.screen.frame);
         reply = [NSString stringWithFormat:@"ok window=%ld size=%.0fx%.0f scale=%.2f fullscreen=%d native=%d key=%d active=%d cursor=%s cursorlock=%s",
                  (long)window.windowNumber, window.frame.size.width, window.frame.size.height,
@@ -135,10 +137,6 @@ static NSString *stateCommand(void) {
 }
 
 #pragma mark - Capture
-
-/// The ScreenCaptureKit window last found for the game window, kept between
-/// captures. Only touched from the serving thread.
-static SCWindow *gCachedWindow API_AVAILABLE(macos(14.4));
 
 /// Find the game window among this process's ScreenCaptureKit content.
 static SCWindow *listGameWindow(CGWindowID windowID, NSString **error) API_AVAILABLE(macos(14.4)) {
@@ -161,34 +159,65 @@ static SCWindow *listGameWindow(CGWindowID windowID, NSString **error) API_AVAIL
     return found;
 }
 
-/// Capture `window` to a PNG at `path`. Returns the reply.
-static NSString *captureWindow(SCWindow *window, NSSize size, CGFloat scale, NSString *path) API_AVAILABLE(macos(14.4)) {
+/// How long a capture may go unanswered before a second is asked for
+/// alongside it. Nothing about the window says a request will be lost --
+/// ScreenCaptureKit now and then never answers one, at the same point in a game
+/// where it otherwise answers in a fraction of a second, and answers the next
+/// at once -- so the only sign is that it hasn't answered. The first request
+/// isn't given up: on a slow Mac it can still win, so this only decides when a
+/// spare request starts, not whether a capture fails.
+static const double kSecondCaptureAfterSeconds = 2.0;
+
+/// One `capture` request's outcome, shared by the screenshots taken for it:
+/// the first to bring a picture back writes it; an error only stands once no
+/// screenshot is outstanding.
+@interface CaptureRequest : NSObject {
+@public
+    NSString *path;
+    NSString *reply;
+    NSString *lastError;
+    BOOL finished;
+    int outstanding;
+    dispatch_semaphore_t done;
+}
+@end
+@implementation CaptureRequest
+@end
+
+/// Take a screenshot of `window` for `request`.
+static void startCapture(SCWindow *window, NSSize size, CGFloat scale, CaptureRequest *request) API_AVAILABLE(macos(14.4)) {
     SCContentFilter *filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:window];
     SCStreamConfiguration *config = [SCStreamConfiguration new];
     config.width = (size_t)(size.width * scale);
     config.height = (size_t)(size.height * scale);
     config.showsCursor = NO;
-    __block NSString *reply = @"error timed out capturing the game window";
-    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    @synchronized (request) {
+        request->outstanding++;
+    }
     [SCScreenshotManager captureImageWithFilter:filter configuration:config completionHandler:^(CGImageRef image, NSError *captureError) {
-        if (!image) {
-            reply = [NSString stringWithFormat:@"error capture failed: %@", captureError.localizedDescription];
-        } else {
-            CGImageDestinationRef destination = CGImageDestinationCreateWithURL(
-                (__bridge CFURLRef)[NSURL fileURLWithPath:path], CFSTR("public.png"), 1, NULL);
-            BOOL written = NO;
-            if (destination) {
-                CGImageDestinationAddImage(destination, image, NULL);
-                written = CGImageDestinationFinalize(destination);
-                CFRelease(destination);
+        @synchronized (request) {
+            request->outstanding--;
+            if (request->finished) return;
+            if (!image) {
+                request->lastError = [NSString stringWithFormat:@"error capture failed: %@", captureError.localizedDescription];
+                if (request->outstanding > 0) return;
+                request->reply = request->lastError;
+            } else {
+                CGImageDestinationRef destination = CGImageDestinationCreateWithURL(
+                    (__bridge CFURLRef)[NSURL fileURLWithPath:request->path], CFSTR("public.png"), 1, NULL);
+                BOOL written = NO;
+                if (destination) {
+                    CGImageDestinationAddImage(destination, image, NULL);
+                    written = CGImageDestinationFinalize(destination);
+                    CFRelease(destination);
+                }
+                request->reply = written ? [NSString stringWithFormat:@"ok %zux%zu", CGImageGetWidth(image), CGImageGetHeight(image)]
+                                         : [NSString stringWithFormat:@"error could not write %@", request->path];
             }
-            reply = written ? [NSString stringWithFormat:@"ok %zux%zu", CGImageGetWidth(image), CGImageGetHeight(image)]
-                            : [NSString stringWithFormat:@"error could not write %@", path];
+            request->finished = YES;
+            dispatch_semaphore_signal(request->done);
         }
-        dispatch_semaphore_signal(done);
     }];
-    dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, kRequestTimeoutSeconds * NSEC_PER_SEC));
-    return reply;
 }
 
 static NSString *captureCommand(NSString *path) {
@@ -196,28 +225,42 @@ static NSString *captureCommand(NSString *path) {
         __block CGWindowID windowID = 0;
         __block NSSize size = NSZeroSize;
         __block CGFloat scale = 1;
+        __block BOOL settled = NO;
         onMainThread(^BOOL {
             NSWindow *window = gameWindow();
             windowID = (CGWindowID)window.windowNumber;
             size = window.frame.size;
             scale = window.backingScaleFactor;
+            settled = nativeFullscreenSettled();
             return window != nil;
         });
         if (!windowID) return @"error no game window";
+        // Captured around its move into a fullscreen Space -- even just before
+        // the move begins -- a window can be refused as though Screen
+        // Recording were denied, and then left out of this process's windows
+        // for good. So nothing is captured until native fullscreen is done
+        // with it.
+        if (!settled) return @"error the game window isn't in its fullscreen Space yet";
 
-        // Two tries: the kept window first (or a fresh listing), then a fresh
-        // listing if the kept one was stale.
-        for (int attempt = 0; attempt < 2; attempt++) {
-            if (!gCachedWindow || gCachedWindow.windowID != windowID) {
-                NSString *error = nil;
-                gCachedWindow = listGameWindow(windowID, &error);
-                if (!gCachedWindow) return [@"error " stringByAppendingString:error];
-            }
-            NSString *reply = captureWindow(gCachedWindow, size, scale, path);
-            if ([reply hasPrefix:@"ok"]) return reply;
-            debugLog("capture with the kept window failed (%s); listing again", reply.UTF8String);
-            gCachedWindow = nil;
-            if (attempt == 1) return reply;
+        NSString *error = nil;
+        SCWindow *found = listGameWindow(windowID, &error);
+        if (!found) return [@"error " stringByAppendingString:error];
+
+        CaptureRequest *request = [CaptureRequest new];
+        request->path = path;
+        request->reply = @"error timed out capturing the game window";
+        request->done = dispatch_semaphore_create(0);
+        dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, kRequestTimeoutSeconds * NSEC_PER_SEC);
+        startCapture(found, size, scale, request);
+        if (dispatch_semaphore_wait(request->done, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kSecondCaptureAfterSeconds * NSEC_PER_SEC))) != 0) {
+            debugLog("no answer to a capture after %.0fs; asking again alongside it", kSecondCaptureAfterSeconds);
+            SCWindow *again = listGameWindow(windowID, &error);
+            if (again) startCapture(again, size, scale, request);
+            dispatch_semaphore_wait(request->done, deadline);
+        }
+        @synchronized (request) {
+            request->finished = YES;
+            return request->reply;
         }
     }
     return @"error capturing needs macOS 14.4";
@@ -332,6 +375,7 @@ static void puppetControlInit(void) {
     }
     debugLog("armed");
     helperReport("PuppetControl", "notice", "armed in %s, listening on %s", getenv("PUPPET_CONTROL_EXE"), path);
+    watchFullscreenTransitions();
     pthread_t thread;
     if (pthread_create(&thread, NULL, serve, strdup(path)) == 0) {
         pthread_detach(thread);

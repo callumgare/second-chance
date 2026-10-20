@@ -343,12 +343,37 @@ learned building it:
   polls and never be seen, and a press arriving with the cursor, before the
   game has highlighted the button under it, is ignored: the Exit click took
   four tries until the cursor was given 150 ms to arrive first.
-- **Listing windows is kept to a minimum.** ScreenCaptureKit has to list the
-  process's windows before it can capture one, and that request queues in
-  `replayd` behind every other capture on the Mac — for 8–16 s on a test Mac
-  whose `systemstatusd` had been worn down ([testing.md](testing.md)). The
-  helper keeps the window it found and lists again only when the window
-  changes or a capture fails.
+- **Each capture lists the process's windows afresh.** ScreenCaptureKit has
+  to list them before it can capture one. A window kept from an earlier
+  listing can stop capturing with nothing to say so — once the window has
+  moved into its fullscreen Space, or after a Direct3D game skips its intro
+  (Crystal Skull's) — where one listed again captures at once. On a Mac whose
+  `systemstatusd` has been worn down, listing queues in `replayd` for 8–16 s
+  ([testing.md](testing.md)); so does every capture there, and a reboot is
+  the fix.
+- **A capture that goes unanswered gets a second one alongside it.** Now and
+  then ScreenCaptureKit never answers a screenshot request, though it
+  answers the same request a moment earlier or later in a fraction of a
+  second. Nothing announces it: logging AppKit's window, Space and screen
+  notifications around captures, the run whose capture was lost saw the same
+  events in the same order as the eight that weren't. So after 2 s without an
+  answer the helper lists the windows again and asks for a second
+  screenshot, without giving up the first; whichever brings a picture back
+  first is the reply, and an error only counts once neither is outstanding.
+  On a slow Mac the first can still win, so the 2 s only decides when the
+  spare request starts. A request gives up after 30 s.
+- **Nothing is captured until the window is in its fullscreen Space.** A
+  capture around the move — during it, or even one finished just before it
+  begins — can come back refused as though Screen Recording were denied, and
+  leave the window out of the process's capturable windows for good (Castle
+  Malloy's and Crystal Skull's tests each failed so, every capture for five
+  minutes). So `capture` replies `error the game window isn't in its
+  fullscreen Space yet` until native fullscreen is done with the window: it
+  has moved it, and AppKit has said the move finished
+  (`NSWindowDidEnterFullScreenNotification`, which `native_fullscreen.m`
+  watches for every helper — `helper_common.h`), or it gave up, or it isn't
+  armed. `state` likewise says `native=0` until the move has finished, so
+  WrappPuppeteer starts on the game once it's there.
 
 To watch it, set `IN_PROCESS_HELPERS_LOG`: each request and its reply is
 logged as `pid=… puppet-control | <request> -> <reply>`. To drive it by hand,
