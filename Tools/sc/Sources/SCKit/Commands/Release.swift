@@ -36,6 +36,12 @@ struct ReleaseCommand: AsyncParsableCommand {
     @Flag(help: "Don't run the unit tests before building.")
     var skipTests = false
 
+    @Flag(help: ArgumentHelp(
+        "Use the notes generated from the commit messages as they are.",
+        discussion: "Otherwise Claude Code, when it's installed, rewrites them for players."
+    ))
+    var plainNotes = false
+
     func validate() throws {
         if dryRun && notesOnly { throw ValidationError("--dry-run and --notes-only can't be combined.") }
         if buildOnly && (dryRun || notesOnly) { throw ValidationError("--build-only can't be combined with --dry-run or --notes-only.") }
@@ -46,7 +52,7 @@ struct ReleaseCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly)
+        let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly, plainNotes: plainNotes)
         try await release.run(versionOverride: version.map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 },
                               build: !dryRun && !notesOnly, test: !dryRun && !notesOnly && !buildOnly && !skipTests)
     }
@@ -58,6 +64,8 @@ private struct Release {
     /// Build the next version and leave the repo as it was: no changelog,
     /// notes, commit or tag, and the project file put back afterwards.
     let buildOnly: Bool
+    /// Skip Claude Code's rewrite of the notes.
+    let plainNotes: Bool
     var repo: Repo { session.repo }
     var ui: UI { session.ui }
 
@@ -147,7 +155,7 @@ private struct Release {
         let buildNumber = try await git(["rev-list", "--count", "HEAD"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
         ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(versionOverride != nil ? "from --version" : "up from \(previous ?? "no tag")")"))"))
 
-        let notes: String
+        var notes: String
         if buildOnly {
             notes = ""
         } else {
@@ -157,6 +165,7 @@ private struct Release {
             guard !notes.isEmpty else {
                 throw SCError("cog produced empty release notes for \(range).")
             }
+            notes = await readableNotes(notes, range: range)
         }
 
         // 3. Project version
@@ -178,6 +187,7 @@ private struct Release {
         try FileManager.default.createDirectory(at: repo.releaseDir, withIntermediateDirectories: true)
         if !buildOnly {
             try await rollback.write(notes + "\n", to: notesFile)
+            notes = try reviewNotes()
             let existing = try? String(contentsOf: repo.changelog, encoding: .utf8)
             let date = { let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }()
             if let existing, Changelog.hasSection(for: version, in: existing) {
@@ -254,12 +264,55 @@ private struct Release {
 
         // 7. The update feed. Sparkle in the installed apps reads it from the
         // latest GitHub release and only installs what this key signed.
-        try await writeAppcast(app: app, version: version, notes: notes)
+        try await writeAppcast(app: app, version: version, notes: ReleaseNotes.forUpdateWindow(notes))
 
         // 8. Commit and tag locally — still undoable, so the rollback covers
         // them too. Pushing is what other people see, so `run` asks first.
         try await commitAndTag(version: version)
         return (version, branch)
+    }
+
+    /// The notes rewritten by Claude Code for players, or cog's notes as they
+    /// are with `--plain-notes`, without Claude Code, or when the rewrite
+    /// fails — a release never stops for want of nicer notes.
+    private func readableNotes(_ notes: String, range: String) async -> String {
+        if plainNotes { return notes }
+        guard Proc.which("claude") != nil else {
+            ui.detail("Claude Code isn't installed, so the notes are the commit messages as they are.")
+            return notes
+        }
+        let rewritten: String? = try? await ui.progressStep(
+            "Rewrite the notes with Claude Code", success: "Rewrote the notes for players"
+        ) { _ in
+            let prompt = try String(contentsOf: repo.notesPrompt, encoding: .utf8)
+            // Whole messages: the bodies say what each change was for, which
+            // the summaries in the notes leave out.
+            let log = try await git(["log", "--no-merges", "--format=commit %h%n%B", range])
+            guard log.succeeded else { throw SCError("git log failed: \(log.error)") }
+            let rewrite = try await ReleaseNotes.rewrite(notes: notes, commits: log.output, prompt: prompt, cwd: repo.root)
+            return ReleaseNotes.markdown(rewrite)
+        }
+        guard let rewritten else {
+            ui.warning("Using the notes from the commit messages as they are.",
+                       next: "Check Claude Code works with `claude -p hello`, or pass --plain-notes.")
+            return notes
+        }
+        return rewritten
+    }
+
+    /// Pause so the notes can be edited before anything else uses them, then
+    /// read back whatever the file now says. With no terminal to ask, the
+    /// notes are used as written.
+    private func reviewNotes() throws -> String {
+        ui.line(ui.format("\(.accent("📝 Release notes are in \(repo.display(notesFile)) — edit them now if you want to."))"))
+        ui.line(String((try? String(contentsOf: notesFile, encoding: .utf8)) ?? "")
+            .split(separator: "\n", omittingEmptySubsequences: false).map { "   " + $0 }.joined(separator: "\n"))
+        if ui.confirm("Continue the release with the notes as they are in that file now?", default: true) == false {
+            throw SCError("Stopped at the release notes.", hints: ["Run sc release again when you're ready."])
+        }
+        let edited = try String(contentsOf: notesFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !edited.isEmpty else { throw SCError("\(repo.display(notesFile)) is empty.") }
+        return edited
     }
 
     /// Sign the zip with the Sparkle key in the login keychain and write

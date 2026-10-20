@@ -504,3 +504,49 @@ struct FileRollbackTests {
         #expect(outcome.undone.isEmpty && outcome.failed.isEmpty)
     }
 }
+
+@Suite("Release notes")
+struct ReleaseNotesTests {
+    @Test("Sections come out in a fixed order, internal changes collapsed")
+    func layout() {
+        let rewrite = ReleaseNotes.Rewrite(
+            sections: [
+                .init(heading: "Fixed", items: ["- Games no longer freeze"]),
+                .init(heading: "New", items: ["Steam games", " "]),
+                .init(heading: "Fixed", items: ["Sound works again"]),
+            ],
+            internalChanges: ["sc release signs updates"]
+        )
+        #expect(ReleaseNotes.markdown(rewrite) == """
+        ### New
+
+        - Steam games
+
+        ### Fixed
+
+        - Games no longer freeze
+        - Sound works again
+
+        <details>
+        <summary>Behind the scenes</summary>
+
+        - sc release signs updates
+
+        </details>
+        """)
+    }
+
+    @Test("No internal changes means no details block")
+    func noInternal() {
+        let notes = ReleaseNotes.markdown(.init(sections: [.init(heading: "Improved", items: ["Faster"])], internalChanges: []))
+        #expect(notes == "### Improved\n\n- Faster")
+    }
+
+    @Test("The update window gets everything but the details")
+    func updateWindow() {
+        let notes = "### Fixed\n\n- A fix\n\n<details>\n<summary>Behind the scenes</summary>\n\n- Tooling\n\n</details>\n"
+        #expect(ReleaseNotes.forUpdateWindow(notes) == "### Fixed\n\n- A fix")
+        #expect(ReleaseNotes.forUpdateWindow("<details>\n\n- Only tooling\n\n</details>").hasPrefix("Behind-the-scenes"))
+        #expect(ReleaseNotes.forUpdateWindow("### Features\n\n- Plain cog notes") == "### Features\n\n- Plain cog notes")
+    }
+}

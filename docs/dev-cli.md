@@ -20,6 +20,7 @@ nearest command's help.
 ./sc test integration stay-tuned       # Install, launch and quit one game for real
 ./sc test                              # Everything — hours
 ./sc release --dry-run                 # What the next release would contain
+./sc release --plain-notes             # Release with the commit-message notes as they are
 ./sc release --build-only              # Build and zip the next version, changing nothing
 ./sc setup                             # Once per clone: tools, commit hook, completions
 ./sc clean wine-prefixes               # Start the next build from a fresh Wine prefix

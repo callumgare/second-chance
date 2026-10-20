@@ -14,10 +14,10 @@ it.
   count, which matters beyond bookkeeping: `WineManager` keys its prefix cache
   on the bundle version, so a release that didn't change it would hand users a
   stale Wine prefix.
-- **`CHANGELOG.md`.** Generated from the commit history by
-  [cocogitto](https://docs.cocogitto.io), with each release's section added
-  above the previous one. Don't edit it by hand: fix the commit messages, or
-  let `sc release` regenerate it. When a section for the version already exists
+- **`CHANGELOG.md`.** Each release's section holds its release notes
+  ([below](#release-notes)) and goes above the previous one. Don't edit it by
+  hand: edit the notes when `sc release` pauses for them, or let it regenerate
+  them. When a section for the version already exists
   — usually left by an earlier attempt — it asks whether to replace it, and
   keeps it when there's no terminal to ask.
 - **`build/release/RELEASE_NOTES.md`** and **`build/release/SecondChance.zip`**,
@@ -27,6 +27,38 @@ it.
   It is signed with the Sparkle key in the login keychain, and the release
   stops if that key isn't the one the app trusts. A release can't be made
   without the key. [updates.md](updates.md) covers the feed and the key.
+
+## Release notes
+
+[cocogitto](https://docs.cocogitto.io) generates the notes from the commit
+messages since the last tag, with `.cog/release-notes.tera`. Those are written
+for developers, so when Claude Code is installed (`claude` on the `PATH`),
+`sc release` has it rewrite them for players. It runs `claude -p` with the
+instructions in `.cog/release-notes-prompt.md`, the generated notes and the
+full commit messages since the last tag. Where a message doesn't make a change
+clear, the prompt has it look at the change itself. It may only read: `git
+show`, `git log` and `git diff`, and the repo's files, with no MCP servers, and
+`--permission-mode dontAsk` refuses anything else rather than asking. It answers in a fixed JSON
+shape and `sc` lays out the Markdown (`ReleaseNotes` in `Tools/sc`):
+
+- Changes a player would notice, in plain language under **New**,
+  **Improved** and **Fixed**.
+- Everything else — `sc`, tests, docs, refactors, diagnostics — in a
+  collapsed `<details>` section headed **Behind the scenes**. Since it costs
+  the reader nothing until opened, these say what changed and why rather than
+  only naming the change.
+
+To change how the notes read, edit the prompt. Without Claude Code, with
+`--plain-notes`, or when the rewrite fails, the generated notes are used as
+they are; a release never stops for want of nicer notes. `--dry-run` runs the
+rewrite too and prints the result.
+
+Then `sc release` writes the notes to `build/release/RELEASE_NOTES.md`, prints
+them and pauses so you can edit the file. When you continue, it reads the file
+back, and what it says then goes into `CHANGELOG.md`, the GitHub release and
+the appcast. Answering no stops the release. Run with no terminal to ask, it
+doesn't pause. The appcast gets the notes without their `<details>` sections,
+since Sparkle's update window renders Markdown but not HTML.
 
 If it fails or is interrupted partway, it takes its own changes back out of
 the project file, `CHANGELOG.md` and the release notes, so the tree is clean for
