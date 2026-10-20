@@ -112,7 +112,7 @@ struct NancyDrewQuitScenario {
         // else here would notice.
         guard waitForFullScreen(context: context) else {
             forceQuit(app)
-            return .failed("Game window did not go fullscreen within \(Int(options.fullScreenTimeout))s")
+            return .failed("Game window did not go into a fullscreen Space within \(Int(options.fullScreenTimeout))s")
         }
 
         guard clickExit(appName: appName, app: app, gamePid: gamePid, context: context) else {
@@ -238,11 +238,12 @@ struct NancyDrewQuitScenario {
         return true
     }
 
-    /// Wait for the game to report its window fullscreen: in a macOS
-    /// fullscreen Space, or a borderless window covering the screen, as
-    /// Direct3D games draw. Asked of the game itself, so the display's shape
-    /// doesn't come into it (on a display with a notch, a fullscreen Space's
-    /// window sits below its strip).
+    /// Wait for the game to report its window in a macOS fullscreen Space.
+    /// Every engine's game should get one; a Direct3D game's borderless window
+    /// merely covering the screen means the wrapp's native fullscreen didn't
+    /// take it over, which is a failure. Asked of the game itself, so the
+    /// display's shape doesn't come into it (on a display with a notch, a
+    /// fullscreen Space's window sits below its strip).
     private func waitForFullScreen(context: Context) -> Bool {
         logger.notice("[Step 4] Waiting for the game's window to go fullscreen...")
         let start = Date()
@@ -251,18 +252,18 @@ struct NancyDrewQuitScenario {
         while Date().timeIntervalSince(start) < options.fullScreenTimeout {
             let state = context.game.state()
             if state != nil { everAnswered = true }
-            if let state, state.fullscreen {
-                logger.notice("✅ Game window is fullscreen (\(state.native ? "in its own Space" : "covering the screen"), \(Int(state.size.width))x\(Int(state.size.height)) points, scale \(state.scale))")
+            if let state, state.native {
+                logger.notice("✅ Game window is in its own fullscreen Space (\(Int(state.size.width))x\(Int(state.size.height)) points, scale \(state.scale))")
                 return true
             }
             if Date().timeIntervalSince(lastLog) >= 5 {
-                logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] Not fullscreen yet (game says: \(state.map { "\(Int($0.size.width))x\(Int($0.size.height)), fullscreen=\($0.fullscreen)" } ?? "nothing"))")
+                logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] Not in a fullscreen Space yet (game says: \(state.map { "\(Int($0.size.width))x\(Int($0.size.height)), native=\($0.native), covering the screen=\($0.fullscreen && !$0.native)" } ?? "nothing"))")
                 lastLog = Date()
             }
             Thread.sleep(forTimeInterval: 0.5)
         }
         if everAnswered {
-            logger.error("❌ The game's window never went fullscreen")
+            logger.error("❌ The game's window never went into a fullscreen Space — look for '[Helpers] Native fullscreen' in the wrapp's log")
         } else {
             logger.error("❌ The game never answered on \(context.game.socket.path): its puppet control didn't arm — look for '[Helpers] Puppet control' in the wrapp's log")
         }

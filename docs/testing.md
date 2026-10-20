@@ -148,9 +148,10 @@ copies — and asserts on the events the flow publishes:
   a failed patch doesn't fail the build, so it has to fail the test
 - The full event sequence in order, ending in `signed` then `completed`
 - If `WrappPuppeteer.app` is present: the game launches, its window goes
-  fullscreen (covers a whole display — native fullscreen for Wine, `-f` for
-  ScummVM; a game left in a window fails), it reaches its main menu, and it
-  quits cleanly
+  into a macOS fullscreen Space (native fullscreen for Wine, `-f` for
+  ScummVM; a game left in a window fails, and so does a Direct3D game's
+  borderless window that only covers the screen), it reaches its main menu,
+  and it quits cleanly
 - For a Wine game, both in-process helpers armed in it: the wrapp's log has
   `[Helpers] Native fullscreen armed` and `[Helpers] Cursor lock armed`
   ([wine-in-process-helpers.md](wine-in-process-helpers.md))
