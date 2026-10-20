@@ -29,13 +29,13 @@ final class UI: @unchecked Sendable {
         let pipeline = RegionAwarePipeline(region: region)
         noora = Noora(
             content: Self.content,
-            terminal: Terminal(
+            terminal: CancellableTerminal(inner: Terminal(
                 isInteractive: live,
                 isColored: environment.isColored,
                 // Noora's default exits(0) on SIGINT, which would skip
                 // stopping children and report success. sc handles signals.
                 signalBehavior: .none
-            ),
+            )),
             standardPipelines: StandardPipelines(output: pipeline, error: pipeline)
         )
     }
@@ -218,32 +218,40 @@ final class UI: @unchecked Sendable {
 
     // MARK: - Prompts (interactive only)
 
+    // Each prompt throws CancellationError when Ctrl-C ends it: the answer
+    // Noora returns then is just whatever was highlighted (CancellableTerminal).
+
     /// Ask the user to pick one option, or nil when there's no one to ask.
-    func choose<T: Equatable & CustomStringConvertible>(_ question: String, from options: [T]) -> T? {
+    func choose<T: Equatable & CustomStringConvertible>(_ question: String, from options: [T]) throws -> T? {
         guard canPrompt, !options.isEmpty else { return nil }
-        return noora.singleChoicePrompt(
+        return try answered(noora.singleChoicePrompt(
             title: nil, question: TerminalText(stringLiteral: question), options: options,
             description: nil, collapseOnSelection: true, filterMode: options.count > 8 ? .enabled : .disabled,
             autoselectSingleChoice: false, renderer: Renderer()
-        )
+        ))
     }
 
-    func chooseSeveral<T: Equatable & CustomStringConvertible>(_ question: String, from options: [T]) -> [T]? {
+    func chooseSeveral<T: Equatable & CustomStringConvertible>(_ question: String, from options: [T]) throws -> [T]? {
         guard canPrompt, !options.isEmpty else { return nil }
-        return noora.multipleChoicePrompt(
+        return try answered(noora.multipleChoicePrompt(
             title: nil, question: TerminalText(stringLiteral: question), options: options,
             description: nil, collapseOnSelection: true, filterMode: .disabled,
             maxLimit: .unlimited, minLimit: .limited(count: 1, errorMessage: "Pick at least one."),
             renderer: Renderer()
-        )
+        ))
     }
 
-    func confirm(_ question: String, default answer: Bool = false) -> Bool? {
+    func confirm(_ question: String, default answer: Bool = false) throws -> Bool? {
         guard canPrompt else { return nil }
-        return noora.yesOrNoChoicePrompt(
+        return try answered(noora.yesOrNoChoicePrompt(
             title: nil, question: TerminalText(stringLiteral: question), defaultAnswer: answer,
             description: nil, collapseOnSelection: true, renderer: Renderer()
-        )
+        ))
+    }
+
+    private func answered<T>(_ answer: T) throws -> T {
+        try Task.checkCancellation()
+        return answer
     }
 }
 

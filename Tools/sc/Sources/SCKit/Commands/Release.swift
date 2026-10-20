@@ -194,7 +194,7 @@ private struct Release {
                 // Usually left over from an earlier attempt at this release, so
                 // missing whatever has been committed since. Without a terminal
                 // to ask, keep it: replacing it would drop any hand edits.
-                if ui.confirm("CHANGELOG.md already has a \(version) section. Replace it with the notes generated now?") == true {
+                if try ui.confirm("CHANGELOG.md already has a \(version) section. Replace it with the notes generated now?") == true {
                     try await rollback.write(Changelog.replacing(version: version, date: date, notes: notes, in: existing),
                                              to: repo.changelog)
                     ui.line(ui.format("\(.success("✔︎ CHANGELOG.md (replaced the \(version) section)"))"))
@@ -307,7 +307,7 @@ private struct Release {
         ui.line(ui.format("\(.accent("📝 Release notes are in \(repo.display(notesFile)) — edit them now if you want to."))"))
         ui.line(String((try? String(contentsOf: notesFile, encoding: .utf8)) ?? "")
             .split(separator: "\n", omittingEmptySubsequences: false).map { "   " + $0 }.joined(separator: "\n"))
-        if ui.confirm("Continue the release with the notes as they are in that file now?", default: true) == false {
+        if try ui.confirm("Continue the release with the notes as they are in that file now?", default: true) == false {
             throw SCError("Stopped at the release notes.", hints: ["Run sc release again when you're ready."])
         }
         let edited = try String(contentsOf: notesFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -407,7 +407,7 @@ private struct Release {
         let pushLine = push.map(Self.shellQuoted).joined(separator: " ")
         let releaseLine = release.map(Self.shellQuoted).joined(separator: " ")
 
-        guard ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub release?") == true else {
+        guard try ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub release?") == true else {
             ui.success("\(tag) is committed and tagged locally. To publish:", takeaways: [TerminalText(stringLiteral: pushLine), TerminalText(stringLiteral: releaseLine)])
             return
         }

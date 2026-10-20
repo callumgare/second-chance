@@ -30,7 +30,7 @@ enum Games {
         ui: UI
     ) throws -> CatalogGame {
         guard let slug else {
-            if let choice = ui.choose("Which game?", from: candidates.map(GameChoice.init)) {
+            if let choice = try ui.choose("Which game?", from: candidates.map(GameChoice.init)) {
                 return choice.game
             }
             throw SCError(

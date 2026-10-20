@@ -114,13 +114,13 @@ struct CleanCommand: AsyncParsableCommand {
                 let size: Int64
                 var description: String { "\(target.rawValue)  (\(ByteCountFormatter.string(fromByteCount: size, countStyle: .file)))" }
             }
-            guard let picked = ui.chooseSeveral("What should be deleted?", from: Target.allCases.map { Choice(target: $0, size: sizes[$0] ?? 0) }) else {
+            guard let picked = try ui.chooseSeveral("What should be deleted?", from: Target.allCases.map { Choice(target: $0, size: sizes[$0] ?? 0) }) else {
                 throw SCError("Say what to delete: sc clean <target>…", hints: ["Targets: \(Target.allCases.map(\.rawValue).joined(separator: ", "))"])
             }
             chosen = picked.map(\.target)
         }
 
-        if !yes, let confirmed = ui.confirm("Delete \(chosen.map(\.rawValue).joined(separator: ", "))?"), !confirmed {
+        if !yes, let confirmed = try ui.confirm("Delete \(chosen.map(\.rawValue).joined(separator: ", "))?"), !confirmed {
             ui.line("Nothing deleted.")
             return
         }
