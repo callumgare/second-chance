@@ -242,7 +242,8 @@ struct SteamWrappBuilderTests {
         let run = await build(game: "thornton-hall", picking: picking) { $0.owned = [thornton, shadowRanch, 999_999_999] }
         let wrapp = try run.result.get()
 
-        #expect(picking.offered.map(Set.init) == ["thornton-hall", "shadow-ranch"])
+        // In the order the games came out, not by title.
+        #expect(picking.offered == ["shadow-ranch", "thornton-hall"])
         #expect(try settings(wrapp)["SteamGameId"] as? String == "226820")
         // Nothing is queued until the game is known, and Steam installs it on its next start.
         #expect(run.client?.calls == ["restoreLogin", "start", "shutdown", "saveLogin", "queueInstall 226820", "start", "shutdown", "saveLogin"])

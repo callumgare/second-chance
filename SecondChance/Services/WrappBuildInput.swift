@@ -129,10 +129,12 @@ class WrappBuildInput {
     @MainActor
     func chooseSteamGame(from owned: [GameInfo]) async throws -> GameInfo {
         if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("STEAM_GAME_SLUG") }
-        let games = owned.sorted { $0.title < $1.title }
+        // In the order the games came out, as GameInfoProvider lists them
+        // (and so `owned` arrives): how the series is known.
+        let games = owned
 
         let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
-        menu.addItems(withTitles: games.map { "Nancy Drew: \($0.title)" })
+        menu.addItems(withTitles: games.map(\.title))
         let alert = NSAlert()
         alert.messageText = "Which game do you want from Steam?"
         alert.informativeText = "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."
