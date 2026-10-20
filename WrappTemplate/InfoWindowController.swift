@@ -32,6 +32,24 @@ class InfoWindowController: NSWindowController {
         return false
     }
 
+    /// The middle of the save warning's I Understand button, in window
+    /// coordinates; nil unless the warning is showing.
+    var confirmButtonLocation: NSPoint? {
+        guard isShowingWarning, let hostingView = window?.contentView, viewModel.confirmButtonFrame != .zero else { return nil }
+        let frame = viewModel.confirmButtonFrame
+        return hostingView.convert(NSPoint(x: frame.midX, y: frame.midY), to: nil)
+    }
+
+    /// For logs: where the button was measured, and the hosting view's size.
+    var confirmButtonGeometry: String {
+        "button \(viewModel.confirmButtonFrame) in a \(window?.contentView?.frame.size ?? .zero) view"
+    }
+
+    /// What I Understand does, without clicking it.
+    func pressConfirm() {
+        viewModel.confirm()
+    }
+
     /// Whether the game has successfully loaded (info window was dismissed).
     var hasGameLoaded: Bool {
         viewModel.gameHasLoaded

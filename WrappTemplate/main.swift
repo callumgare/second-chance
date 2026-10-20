@@ -626,6 +626,7 @@ func main() {
         appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor)
     globalInfoWindow = infoWindow
+    PuppetServer.startIfRequested()
     if config.canLaunchWithoutSteam {
         infoWindow.onLaunchWithoutSteam = {
             mainLogger.notice("Player chose to launch without Steam: stopping this launch, then opening the wrapp again")

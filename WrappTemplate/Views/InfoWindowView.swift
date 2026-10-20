@@ -25,6 +25,10 @@ class InfoWindowViewModel: ObservableObject {
     let saveWarningEnabled: Bool
     let gameSlug: String
     var onConfirm: (() -> Void)?
+    /// Where I Understand is drawn, in the hosting view's coordinates (top-left
+    /// origin, as the hosting view is flipped), so
+    /// WrappPuppeteer can click it through the wrapp (PuppetServer).
+    var confirmButtonFrame: CGRect = .zero
     /// Set when the game could be started without Steam instead (see
     /// `GameConfig.canLaunchWithoutSteam`): offered when the launch fails, or
     /// may have.
@@ -112,12 +116,17 @@ struct InfoWindowView: View {
         .padding(20)
         .frame(width: 450)
         .fixedSize(horizontal: true, vertical: true)
+        .coordinateSpace(name: Self.rootSpace)
         .onAppear {
             if case .loading = viewModel.phase {
                 viewModel.startStageTimers()
             }
         }
     }
+
+    /// The whole view, which fills the window's hosting view: what
+    /// `confirmButtonFrame` is measured in.
+    static let rootSpace = "info-window"
 
     // MARK: - Warning
 
@@ -147,6 +156,11 @@ struct InfoWindowView: View {
                 }
                 .accessibilityIdentifier("save-regularly-warning-confirm")
                 .keyboardShortcut(.defaultAction)
+                .background(GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { viewModel.confirmButtonFrame = proxy.frame(in: .named(Self.rootSpace)) }
+                        .onChange(of: proxy.frame(in: .named(Self.rootSpace))) { _, frame in viewModel.confirmButtonFrame = frame }
+                })
             }
         }
     }

@@ -76,6 +76,7 @@
 				InfoWindowController.swift,
 				main.swift,
 				MainLogger.swift,
+				PuppetServer.swift,
 				Resources/Assets.xcassets,
 				Resources/scummvm-files,
 				Resources/WrappTemplateIcon.icon,

@@ -205,6 +205,15 @@ capture's pixels divided by `scale` — so no screen geometry is involved.
 | `click <x> <y>` | `ok`: a mouse move, then the left button held for 100 ms |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
 
+The wrapp answers for its own window the same way, on
+`$SECOND_CHANCE_PUPPET_DIR/wrapp.sock` (`WrappTemplate/PuppetServer.swift`):
+`info` replies `ok open=0|1 warning=0|1` for the info window and its save
+warning, and `confirm` clicks **I Understand** where `InfoWindowView` reports
+drawing it — `ok clicked` — or, if the warning is still up two seconds later,
+does what the button does — `ok pressed`. (SwiftUI's accessibility tree,
+which WrappPuppeteer used from outside, doesn't expose the button when read
+in-process, so the view records the button's frame instead.)
+
 The game window is the biggest visible window the process has. Two things
 learned building it:
 
