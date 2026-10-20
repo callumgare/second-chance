@@ -259,7 +259,10 @@ class GameLauncher {
         gameStarted = false
         LogContext.enterStage("Starting the game")
         if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-"),
-           let gameExe = getGameLaunchInfo(config).gameExeName {
+           let gameExePath = getGameLaunchInfo(config).gameExePath {
+            let gameExe = URL(fileURLWithPath: gameExePath)
+            let graphics = GameGraphicsAPI(exeAt: gameExe)
+            logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
             helperReport = InProcessHelperReport(
                 armingVariables: WineEnvironment.inProcessHelperVariables(gameExe: gameExe), logger: logger)
         } else if config.gameEngine == "scummvm", !scummvmPuppetVariables.isEmpty {

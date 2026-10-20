@@ -348,9 +348,12 @@ struct NancyDrewQuitScenario {
         let strategy = focusStrategy(context)
         let notFound = "OCR could not find Exit button"
 
-        // Only cnc-ddraw swallows a first click, so only a Wine game has a
-        // first click to check.
-        var firstClickToCheck = wrapp.engine == .wine
+        // Only cnc-ddraw swallows a first click, so only a Wine game that may
+        // draw through it has a first click to check.
+        var firstClickToCheck = wrapp.engine == .wine && wrapp.graphics.mayUseCncDdraw
+        if wrapp.engine == .wine && !firstClickToCheck {
+            logger.notice("  ℹ️  \(wrapp.gameExeName) draws with \(wrapp.graphics.logDescription): no cnc-ddraw to swallow its first click")
+        }
         /// Click a window point, checking the first click wasn't swallowed;
         /// the failure if it was.
         func click(at point: CGPoint) -> String? {

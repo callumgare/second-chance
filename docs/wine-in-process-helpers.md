@@ -9,7 +9,7 @@ wrapp does not have:
 | --- | --- | --- | --- | --- |
 | Native fullscreen | `WrappTemplate/InProcessHelpers/native_fullscreen.m` | Puts the game window into a real macOS fullscreen Space | `NATIVE_MACOS_FULLSCREEN_EXE` | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Display below the notch | `WrappTemplate/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
-| Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE` | `SECOND_CHANCE_CURSOR_LOCK=0` |
+| Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, unless the game draws with Direct3D ([below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Puppet control | `WrappTemplate/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 
 ## How they get into the game process
@@ -69,7 +69,8 @@ first click. The integration tests fail a Wine game whose log lacks either
 `armed` line ([testing.md](testing.md)).
 
 A cursor lock that gives up is reported but isn't an error. Only games that
-draw through cnc-ddraw ever take the cursor; in a Direct3D game the helper
+draw through cnc-ddraw ever take the cursor, and the wrapp doesn't arm it in a
+game it knows draws with Direct3D; in one it couldn't tell about, the helper
 posts its middle clicks, sees no lock and leaves it.
 
 ## Native fullscreen
@@ -182,6 +183,26 @@ own borderless one, which native fullscreen then can't adopt, and `devmode=true`
 never locks, leaving the cursor free to drift into the letterbox bars, reveal
 the menu bar or Dock, or leave for another display.
 
+### Which games get it
+
+Only the DirectDraw games draw through cnc-ddraw. The Direct3D ones (the later
+games — Crystal Skull, Thornton Hall, Castle Malloy and Alibi in Ashes among
+them — and Secrets Can Kill Remastered) never go near it, and in those
+the helper's middle clicks did harm: one arriving while the player has a menu
+open from the menu bar closes it, and with nothing ever locking the cursor the
+helper kept clicking for its full 15 tries — again on every return to the app.
+
+So the wrapp arms it only where cnc-ddraw may be drawing. `GameGraphicsAPI`
+(`Shared/Wine/`) reads the DLLs the game's `.exe` imports, from its PE import
+directory: `ddraw.dll` means DirectDraw; `d3d8.dll` or `d3d9.dll` without it
+means Direct3D, and cursor lock stays unarmed. Anything else — an `.exe` that
+can't be read, or one importing neither, as a game that loads its graphics DLL
+at run time would — arms it as before. Every game checked fell cleanly on one
+side, the Steam copies too: Steam's DRM wrapper leaves the imports readable
+(Ghost of Thornton Hall's adds `steam_api.dll` beside `d3d9.dll`). The wrapp's
+log says which it found: `[Helpers] Thornton.exe draws with Direct3D, so cursor
+lock isn't needed`.
+
 ### What it does
 
 It waits until the game window is key, the app is active, the window's frame has
@@ -219,12 +240,13 @@ refuses to post anything that doesn't come out as button 2 on the game window.
 
 ### Checking it
 
-The integration test checks it on every Wine game: WrappPuppeteer waits for the
-cursor lock to finish, notes whether the game holds the cursor, and makes its
-first click. If the cursor was free before that click and held after it, the
-click is what cnc-ddraw locked on — so it swallowed it — and the run fails with
-"The game's first click was swallowed". A Direct3D game's cursor stays free
-either way, and passes ([testing.md](testing.md#wrapppuppeteer)).
+The integration test checks it on every game that may draw through cnc-ddraw:
+WrappPuppeteer waits for the cursor lock to finish, notes whether the game
+holds the cursor, and makes its first click. If the cursor was free before that
+click and held after it, the click is what cnc-ddraw locked on — so it
+swallowed it — and the run fails with "The game's first click was swallowed".
+A Direct3D game has no cnc-ddraw to swallow anything, and isn't checked
+([testing.md](testing.md#wrapppuppeteer)).
 
 The helper log should show the lock taking hold, normally on the first click:
 

@@ -152,9 +152,10 @@ copies — and asserts on the events the flow publishes:
   ScummVM; a game left in a window fails, and so does a Direct3D game's
   borderless window that only covers the screen), it reaches its main menu,
   its first click isn't swallowed by cnc-ddraw, and it quits cleanly
-- For a Wine game, both in-process helpers armed in it: the wrapp's log has
-  `[Helpers] Native fullscreen armed` and `[Helpers] Cursor lock armed`
-  ([wine-in-process-helpers.md](wine-in-process-helpers.md))
+- For a Wine game, its in-process helpers armed in it: the wrapp's log has
+  `[Helpers] Native fullscreen armed`, and `[Helpers] Cursor lock armed`
+  unless the game draws with Direct3D, which doesn't get it
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#which-games-get-it))
 
 `RecordingEventSubscriber` captures the bus events; the assertions read it.
 **The bus events are the integration contract** — when moving orchestration
@@ -307,10 +308,12 @@ clicks Exit again — where OCR finds it, or, when it can't (a game too busy to
 act on the click may not have moved its drawn cursor either), every 3 s where
 it was last found.
 
-**The first click must reach the game.** A Wine game may draw through
+**The first click must reach the game.** A DirectDraw game draws through
 cnc-ddraw, which swallows the first click in its window unless the wrapp's
 cursor lock has already got it to take the cursor
-([wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock)). Before
+([wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock)). A
+Direct3D game, which never goes through cnc-ddraw, isn't checked; WrappPuppeteer
+reads which a game is from its `.exe`, as the wrapp does. Before
 its first click — on the Her Interactive logo or on Exit, whichever comes
 first — the scenario waits for the cursor lock to finish (up to 180 s) and asks
 the game whether it holds the cursor. If it didn't, and does within 3 s of the

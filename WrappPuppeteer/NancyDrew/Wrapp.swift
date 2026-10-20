@@ -48,6 +48,9 @@ struct Wrapp {
     let engine: WrappEngine
     let gameExeName: String
     let winePrefix: URL
+    /// What a Wine game draws with, from its .exe; only a DirectDraw game
+    /// goes through cnc-ddraw, which can swallow its first click.
+    let graphics: GameGraphicsAPI
 
     init(appPath: String) {
         self.appPath = appPath
@@ -57,6 +60,9 @@ struct Wrapp {
         let exePath = settings["GameExePath"] as? String ?? "/Game.exe"
         gameExeName = (exePath as NSString).lastPathComponent
         winePrefix = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/SharedSupport/prefix")
+        graphics = engine == .wine
+            ? GameGraphicsAPI(exeAt: winePrefix.appendingPathComponent("drive_c").appendingPathComponent(exePath))
+            : .unknown
     }
 
     private static func readSettings(appPath: String) -> [String: Any] {

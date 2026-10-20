@@ -112,10 +112,11 @@ nonisolated public struct WineEnvironment: Sendable {
     }
 
     /// The variables that arm the in-process helpers bundled into Wine's Mac
-    /// driver for the game `gameExe` (its file name, e.g. `Game.exe`): native
-    /// fullscreen puts the game's window into a real macOS fullscreen Space,
-    /// cursor lock gets cnc-ddraw to take the mouse without swallowing the
-    /// player's first click, and puppet control (only when WrappPuppeteer
+    /// driver for the game whose .exe is at `gameExe`: native fullscreen puts
+    /// the game's window into a real macOS fullscreen Space, cursor lock gets
+    /// cnc-ddraw to take the mouse without swallowing the player's first click
+    /// (only in a game that may draw through cnc-ddraw: `GameGraphicsAPI`),
+    /// and puppet control (only when WrappPuppeteer
     /// started the wrapp) lets it see and click the game. Every Mac-driver
     /// process loads them, so each is told which one is the game (by the
     /// .exe's name, which Wine puts in the process's argv[0]), and a Wine
@@ -123,8 +124,9 @@ nonisolated public struct WineEnvironment: Sendable {
     /// work set on Steam as well as on the game.
     /// See docs/wine-in-process-helpers.md.
     public static func inProcessHelperVariables(
-        gameExe: String, environment: [String: String] = ProcessInfo.processInfo.environment
+        gameExe exeURL: URL, environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
+        let gameExe = exeURL.lastPathComponent
         var env: [String: String] = [:]
         // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
         // debug switch for telling its main-thread polling apart from other causes.
@@ -132,8 +134,10 @@ nonisolated public struct WineEnvironment: Sendable {
             env["NATIVE_MACOS_FULLSCREEN_EXE"] = gameExe
         }
         // SECOND_CHANCE_CURSOR_LOCK=0 leaves cursor lock unarmed, bringing back
-        // cnc-ddraw's swallowed first click — for comparison.
-        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0" {
+        // cnc-ddraw's swallowed first click — for comparison. A Direct3D game
+        // never goes through cnc-ddraw, and the lock's middle clicks would
+        // only close the menus a player opens from the menu bar.
+        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", GameGraphicsAPI(exeAt: exeURL).mayUseCncDdraw {
             env["CURSOR_LOCK_EXE"] = gameExe
         }
         // Puppet control arms only when WrappPuppeteer started the wrapp,
@@ -414,7 +418,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.executableURL = wineExecutable
         process.arguments = args
 
-        process.environment = environmentVariables().merging(Self.inProcessHelperVariables(gameExe: exeFileName)) { $1 }
+        process.environment = environmentVariables().merging(Self.inProcessHelperVariables(gameExe: exeURL)) { $1 }
         process.currentDirectoryURL = URL(fileURLWithPath: exeDir)
         
         if let outputPipe = outputPipe {

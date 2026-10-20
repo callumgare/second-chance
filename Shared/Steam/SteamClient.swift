@@ -64,15 +64,16 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     /// The exe of the game Steam will launch, whose in-process helpers
     /// (native fullscreen, cursor lock) are armed through Steam's environment:
     /// a game Steam starts gets Steam's, not the `-applaunch` call's.
-    private let gameExe: String?
+    private let gameExe: URL?
     /// Sees each line Steam's processes print — the game's among them, when
     /// Steam launches it.
     private let onOutputLine: (@Sendable (String) -> Void)?
 
     /// `prefixDir` when the wrapp runs from a prefix outside its bundle
-    /// (a read-only wrapp's copy; see the wrapp's `getWinePrefix`). `gameExe`
-    /// when Steam will launch a game — not while a build installs one.
-    init(wrappPath: URL, prefixDir: URL? = nil, gameExe: String? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
+    /// (a read-only wrapp's copy; see the wrapp's `getWinePrefix`). `gameExe`,
+    /// the game's .exe, when Steam will launch a game — not while a build
+    /// installs one.
+    init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
         wine = WineEnvironment(appPath: wrappPath, customPrefixDir: prefixDir)
         self.gameExe = gameExe
         self.onOutputLine = onOutputLine

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import Logging
 @testable import SecondChance
@@ -5,6 +6,8 @@ import Logging
 @Suite("In-process helper report")
 struct InProcessHelperReportTests {
     private let logger = Logger(label: "au.gare.callum.second-chance.SecondChanceTests.InProcessHelperReport")
+    /// An .exe that isn't there: its graphics are unknown, so every helper arms.
+    private let unreadableExe = URL(fileURLWithPath: "/nonexistent/Game.exe")
 
     @Test("A helper's status line parses into helper, level and message")
     func parsesLine() throws {
@@ -27,7 +30,7 @@ struct InProcessHelperReportTests {
     @Test("Every helper armed by its variable has to report arming")
     func reportsUnarmedHelpers() {
         let report = InProcessHelperReport(
-            armingVariables: WineEnvironment.inProcessHelperVariables(gameExe: "Game.exe"), logger: logger)
+            armingVariables: WineEnvironment.inProcessHelperVariables(gameExe: unreadableExe), logger: logger)
         report.observe(line: "second-chance-helper[CursorLock] notice: armed in Game.exe")
         report.observe(line: "second-chance-helper[NativeFullscreen] notice: entering native fullscreen: 'x' 640x480")
         #expect(report.check() == [.nativeFullscreen])
@@ -37,11 +40,11 @@ struct InProcessHelperReportTests {
 
     @Test("Puppet control is armed only when WrappPuppeteer gave the wrapp a directory")
     func armsPuppetControlOnlyForWrappPuppeteer() {
-        let player = WineEnvironment.inProcessHelperVariables(gameExe: "Game.exe", environment: [:])
+        let player = WineEnvironment.inProcessHelperVariables(gameExe: unreadableExe, environment: [:])
         #expect(player["PUPPET_CONTROL_EXE"] == nil)
         #expect(player["CURSOR_LOCK_EXE"] == "Game.exe")
         let puppeteer = WineEnvironment.inProcessHelperVariables(
-            gameExe: "Game.exe", environment: ["SECOND_CHANCE_PUPPET_DIR": "/tmp/wrapp-puppeteer-1"])
+            gameExe: unreadableExe, environment: ["SECOND_CHANCE_PUPPET_DIR": "/tmp/wrapp-puppeteer-1"])
         #expect(puppeteer["PUPPET_CONTROL_EXE"] == "Game.exe")
         #expect(InProcessHelperReport(armingVariables: puppeteer, logger: logger).check() == [.nativeFullscreen, .cursorLock, .puppetControl])
     }

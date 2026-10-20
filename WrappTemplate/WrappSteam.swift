@@ -59,7 +59,8 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         }
         prefix = config.winePrefix
         client = SteamClient(wrappPath: config.appPath, prefixDir: config.winePrefix,
-                             gameExe: getGameLaunchInfo(config).gameExeName, onOutputLine: onOutputLine)
+                             gameExe: getGameLaunchInfo(config).gameExePath.map(URL.init(fileURLWithPath:)),
+                             onOutputLine: onOutputLine)
 
         // A wrapp that was force-quit or crashed never stopped its Steam, which
         // is still running here, signed in. This wrapp holds the Steam lock, so

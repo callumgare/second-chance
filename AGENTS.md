@@ -263,7 +263,9 @@ direct assignment.
   deactivated. A helper running inside the game process posts a middle click
   (which the games ignore, so the publisher logo isn't skipped) until Wine's
   cursor state shows the lock, and again on every return to the app.
-  `WineEnvironment` arms it alongside native fullscreen; both live in
+  `WineEnvironment` arms it alongside native fullscreen — but not for a game
+  whose `.exe` imports Direct3D rather than `ddraw.dll` (`GameGraphicsAPI`),
+  since those never use cnc-ddraw and its clicks close their menus; both live in
   `WrappTemplate/InProcessHelpers/`. Read
   [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before
   touching either, or cnc-ddraw's `ddraw.ini` settings in `WineManager`.

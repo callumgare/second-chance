@@ -350,14 +350,20 @@ enum AppPuppetRunner {
         }
         let slug = game.id
 
-        // A Wine game has to arm native fullscreen and cursor lock; nothing
-        // else would notice if they didn't (the game still plays, in a
-        // window). Every game arms puppet control, which WrappPuppeteer drives
-        // it through; naming it here says so when it didn't, rather than
-        // leaving WrappPuppeteer's failure to explain it.
+        // A Wine game has to arm native fullscreen, and cursor lock unless it
+        // draws with Direct3D (so never through cnc-ddraw); nothing else would
+        // notice if they didn't (the game still plays, in a window). Every
+        // game arms puppet control, which WrappPuppeteer drives it through;
+        // naming it here says so when it didn't, rather than leaving
+        // WrappPuppeteer's failure to explain it.
         let engine = WrappInfo.gameEngine(at: wrappURL) ?? ""
-        let requiredHelpers: [InProcessHelperReport.Helper] = engine == "wine" || engine.hasPrefix("wine-")
-            ? [.nativeFullscreen, .cursorLock, .puppetControl] : [.puppetControl]
+        let requiredHelpers: [InProcessHelperReport.Helper]
+        if engine == "wine" || engine.hasPrefix("wine-") {
+            let usesCncDdraw = WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0).mayUseCncDdraw } ?? true
+            requiredHelpers = usesCncDdraw ? [.nativeFullscreen, .cursorLock, .puppetControl] : [.nativeFullscreen, .puppetControl]
+        } else {
+            requiredHelpers = [.puppetControl]
+        }
 
         let attempt = try await Self.launchAndCollect(
             appBundle: bundle,
@@ -631,6 +637,14 @@ extension WrappInfo {
     /// The `GameSlug` value from the wrapp's AppSettings.plist.
     static func gameSlug(at wrappPath: URL) throws -> String? {
         appSetting("GameSlug", at: wrappPath)
+    }
+
+    /// The game's .exe inside the wrapp's own prefix, from the `GameExePath`
+    /// in its AppSettings.plist; nil for a wrapp without one (ScummVM).
+    static func gameExe(at wrappPath: URL) -> URL? {
+        guard let path = appSetting("GameExePath", at: wrappPath) else { return nil }
+        return wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+            .appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path)
     }
 
     /// The `GameEngine` value from the wrapp's AppSettings.plist
