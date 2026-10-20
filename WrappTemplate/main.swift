@@ -336,12 +336,21 @@ private func installTerminationHandlers() {
         let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
         source.setEventHandler {
             mainLogger.notice("Received \(SubprocessWatch.signalName(sig)): quitting the game")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            // Off the main queue, so it fires even if the main thread is stuck.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
                 mainLogger.error("Cleanup didn't finish within 15 s of \(SubprocessWatch.signalName(sig)); exiting anyway")
                 LogStore.shared.flush()
                 exit(code)
             }
-            NSApplication.shared.terminate(nil)
+            // Not called here: this handler is a block on the main queue, and
+            // terminate (via .terminateLater) waits in a nested event loop for
+            // the cleanup's reply, which is itself queued on the main queue —
+            // behind this block. A wrapp quit while Steam waited for a
+            // sign-in hung there for good. From the run loop, the main queue
+            // keeps draining while terminate waits.
+            RunLoop.main.perform(inModes: [.common]) {
+                NSApplication.shared.terminate(nil)
+            }
         }
         source.resume()
         terminationSignalSources.append(source)
