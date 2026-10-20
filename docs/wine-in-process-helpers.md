@@ -200,7 +200,7 @@ capture's pixels divided by `scale` — so no screen geometry is involved.
 
 | Request | Reply |
 | --- | --- |
-| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 key=0\|1 active=0\|1` |
+| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw |
 | `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
 | `click <x> <y>` | `ok`: a mouse move, 150 ms for the game to see it, then the left button held for 100 ms |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |

@@ -84,7 +84,10 @@ struct ControlledWindowState {
     let size: CGSize
     /// Pixels per point.
     let scale: CGFloat
+    /// In a macOS fullscreen Space, or exactly covering its screen.
     let fullscreen: Bool
+    /// In a macOS fullscreen Space.
+    let native: Bool
     let key: Bool
     let active: Bool
 }
@@ -103,7 +106,8 @@ struct WindowControl {
               let scale = fields["scale"].flatMap(Double.init) else { return nil }
         return ControlledWindowState(
             windowNumber: window, size: CGSize(width: width, height: height), scale: CGFloat(scale),
-            fullscreen: fields["fullscreen"] == "1", key: fields["key"] == "1", active: fields["active"] == "1")
+            fullscreen: fields["fullscreen"] == "1", native: fields["native"] == "1",
+            key: fields["key"] == "1", active: fields["active"] == "1")
     }
 
     /// Capture the window to a PNG at `path`; its size in pixels, or nil.

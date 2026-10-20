@@ -238,9 +238,11 @@ struct NancyDrewQuitScenario {
         return true
     }
 
-    /// Wait for the game to report its window fullscreen. Asked of the game
-    /// itself, so it's a real macOS fullscreen Space whatever the display's
-    /// shape (on a display with a notch, the window sits below its strip).
+    /// Wait for the game to report its window fullscreen: in a macOS
+    /// fullscreen Space, or a borderless window covering the screen, as
+    /// Direct3D games draw. Asked of the game itself, so the display's shape
+    /// doesn't come into it (on a display with a notch, a fullscreen Space's
+    /// window sits below its strip).
     private func waitForFullScreen(context: Context) -> Bool {
         logger.notice("[Step 4] Waiting for the game's window to go fullscreen...")
         let start = Date()
@@ -250,7 +252,7 @@ struct NancyDrewQuitScenario {
             let state = context.game.state()
             if state != nil { everAnswered = true }
             if let state, state.fullscreen {
-                logger.notice("✅ Game window is fullscreen (\(Int(state.size.width))x\(Int(state.size.height)) points, scale \(state.scale))")
+                logger.notice("✅ Game window is fullscreen (\(state.native ? "in its own Space" : "covering the screen"), \(Int(state.size.width))x\(Int(state.size.height)) points, scale \(state.scale))")
                 return true
             }
             if Date().timeIntervalSince(lastLog) >= 5 {

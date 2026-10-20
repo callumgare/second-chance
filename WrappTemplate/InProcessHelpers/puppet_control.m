@@ -19,7 +19,7 @@
 //  each way; replies start `ok` or `error`. Coordinates are points in the game
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //
-//    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 key=0|1 active=0|1
+//    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1
 //    capture <path>   -> ok <w>x<h>     PNG of the game window
 //    click <x> <y>    -> ok             mouse moved, a pause, then left button down and up
 //    move <x> <y>     -> ok             mouse moved only
@@ -113,10 +113,15 @@ static NSString *stateCommand(void) {
     onMainThread(^BOOL {
         NSWindow *window = gameWindow();
         if (!window) return NO;
-        reply = [NSString stringWithFormat:@"ok window=%ld size=%.0fx%.0f scale=%.2f fullscreen=%d key=%d active=%d",
+        // Fullscreen either way a game gets there: a macOS fullscreen Space
+        // (native fullscreen, ScummVM's -f), or a borderless window exactly
+        // covering the screen, as Direct3D games draw (Ghost of Thornton
+        // Hall's native fullscreen finds no eligible window and leaves it).
+        BOOL native = (window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+        BOOL coversScreen = window.screen && NSEqualRects(window.frame, window.screen.frame);
+        reply = [NSString stringWithFormat:@"ok window=%ld size=%.0fx%.0f scale=%.2f fullscreen=%d native=%d key=%d active=%d",
                  (long)window.windowNumber, window.frame.size.width, window.frame.size.height,
-                 window.backingScaleFactor, (window.styleMask & NSWindowStyleMaskFullScreen) != 0,
-                 window.isKeyWindow, NSApp.isActive];
+                 window.backingScaleFactor, native || coversScreen, native, window.isKeyWindow, NSApp.isActive];
         return YES;
     });
     return reply;
