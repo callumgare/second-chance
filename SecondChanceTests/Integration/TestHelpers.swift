@@ -339,8 +339,6 @@ actor IntegrationSerial {
 /// Invokes WrappPuppeteer as a subprocess to launch a wrapp and verify the
 /// game quits cleanly. Returns the exit code from WrappPuppeteer.
 enum AppPuppetRunner {
-    private static let screenRecordingRelaunchExitCode: Int32 = 5
-
     @discardableResult
     static func run(
         wrappURL: URL,
@@ -353,11 +351,15 @@ enum AppPuppetRunner {
         let slug = game.id
 
         // A Wine game has to arm native fullscreen and cursor lock; nothing
-        // else would notice if they didn't (the game still plays, in a window).
+        // else would notice if they didn't (the game still plays, in a
+        // window). Every game arms puppet control, which WrappPuppeteer drives
+        // it through; naming it here says so when it didn't, rather than
+        // leaving WrappPuppeteer's failure to explain it.
         let engine = WrappInfo.gameEngine(at: wrappURL) ?? ""
-        let requiredHelpers: [InProcessHelperReport.Helper] = engine == "wine" || engine.hasPrefix("wine-") ? [.nativeFullscreen, .cursorLock] : []
+        let requiredHelpers: [InProcessHelperReport.Helper] = engine == "wine" || engine.hasPrefix("wine-")
+            ? [.nativeFullscreen, .cursorLock, .puppetControl] : [.puppetControl]
 
-        var firstAttempt = try await Self.launchAndCollect(
+        let attempt = try await Self.launchAndCollect(
             appBundle: bundle,
             wrappURL: wrappURL,
             timeout: timeout,
@@ -366,23 +368,7 @@ enum AppPuppetRunner {
             requiredHelpers: requiredHelpers
         )
 
-        if firstAttempt.exitCode == screenRecordingRelaunchExitCode {
-            Attachment.record(
-                Data("WrappPuppeteer requested relaunch after manual Screen Recording confirmation.\n".utf8),
-                named: "wrapp-puppeteer-relaunch-\(slug).txt"
-            )
-
-            firstAttempt = try await Self.launchAndCollect(
-                appBundle: bundle,
-                wrappURL: wrappURL,
-                timeout: timeout,
-                gameSlug: slug,
-                attemptLabel: "relaunch",
-                requiredHelpers: requiredHelpers
-            )
-        }
-
-        return firstAttempt.exitCode
+        return attempt.exitCode
     }
 
     private static func launchAndCollect(
@@ -401,15 +387,13 @@ enum AppPuppetRunner {
             arguments: [wrappURL.path, "--timeout", String(Int(timeout)), "--parent-pid", String(getpid())]
         )
 
-        var effectiveExitCode = observedExitCode
-
         let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
         guard !logData.isEmpty else {
             throw NSError(
                 domain: "AppPuppetRunner",
-                code: Int(effectiveExitCode),
+                code: Int(observedExitCode),
                 userInfo: [
-                    NSLocalizedDescriptionKey: "WrappPuppeteer produced no logs (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                    NSLocalizedDescriptionKey: "WrappPuppeteer produced no logs (exit code: \(observedExitCode), attempt: \(attemptLabel))"
                 ]
             )
         }
@@ -426,45 +410,27 @@ enum AppPuppetRunner {
         }
 
         if let logText = String(data: logData, encoding: .utf8) {
-            let requestedPermission = logText.contains("PERMISSION_GATE: permission_requested")
-            let allPermissionsGranted = logText.contains("PERMISSION_GATE: all_permissions_granted")
             let runSucceeded = logText.contains("WRAPP_PUPPETEER: run_succeeded")
 
-            if logText.contains("Timed out waiting") {
-                throw NSError(
-                    domain: "AppPuppetRunner",
-                    code: Int(effectiveExitCode),
-                    userInfo: [
-                        NSLocalizedDescriptionKey: "WrappPuppeteer timed out waiting for permission grant (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
-                    ]
-                )
-            }
-
-            if requestedPermission && !allPermissionsGranted {
-                effectiveExitCode = screenRecordingRelaunchExitCode
-                Attachment.record(
-                    Data("Permission request detected without all-permissions-granted marker. Treating as relaunch-required.\n".utf8),
-                    named: "wrapp-puppeteer-exit-code-correction-\(attemptLabel)-\(gameSlug).txt"
-                )
-            } else if !runSucceeded {
+            if !runSucceeded {
                 let failureMarker = "WRAPP_PUPPETEER: run_failed: "
                 let reason = logText.components(separatedBy: "\n")
                     .last(where: { $0.contains(failureMarker) })?
                     .components(separatedBy: failureMarker).last
-                let description = reason.map { "WrappPuppeteer failed: \($0) (exit code: \(effectiveExitCode), attempt: \(attemptLabel))" }
-                    ?? "WrappPuppeteer did not emit success marker (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                let description = reason.map { "WrappPuppeteer failed: \($0) (exit code: \(observedExitCode), attempt: \(attemptLabel))" }
+                    ?? "WrappPuppeteer did not emit success marker (exit code: \(observedExitCode), attempt: \(attemptLabel))"
                 throw NSError(
                     domain: "AppPuppetRunner",
-                    code: Int(effectiveExitCode),
+                    code: Int(observedExitCode),
                     userInfo: [NSLocalizedDescriptionKey: description]
                 )
             }
         } else {
             throw NSError(
                 domain: "AppPuppetRunner",
-                code: Int(effectiveExitCode),
+                code: Int(observedExitCode),
                 userInfo: [
-                    NSLocalizedDescriptionKey: "WrappPuppeteer logs were not UTF-8 decodable (exit code: \(effectiveExitCode), attempt: \(attemptLabel))"
+                    NSLocalizedDescriptionKey: "WrappPuppeteer logs were not UTF-8 decodable (exit code: \(observedExitCode), attempt: \(attemptLabel))"
                 ]
             )
         }
@@ -476,18 +442,18 @@ enum AppPuppetRunner {
         if !unarmed.isEmpty {
             throw NSError(
                 domain: "AppPuppetRunner",
-                code: Int(effectiveExitCode),
+                code: Int(observedExitCode),
                 userInfo: [NSLocalizedDescriptionKey: "\(unarmed.map(\.name).joined(separator: " and ")) never armed in the game (no \"\(unarmed[0].armedMarker)\" in the wrapp's log, attempt: \(attemptLabel))"]
             )
         }
 
-        let exitCodeSummary = "WrappPuppeteer exit code (\(attemptLabel)) for \(gameSlug): observed=\(observedExitCode), effective=\(effectiveExitCode)\n"
+        let exitCodeSummary = "WrappPuppeteer exit code (\(attemptLabel)) for \(gameSlug): \(observedExitCode)\n"
         Attachment.record(
             Data(exitCodeSummary.utf8),
             named: "wrapp-puppeteer-exit-code-\(attemptLabel)-\(gameSlug).txt"
         )
 
-        return (exitCode: effectiveExitCode, pid: pid)
+        return (exitCode: observedExitCode, pid: pid)
     }
 
     private static func decodeExitCode(fromKqueueStatus status: Int32) -> Int32 {
@@ -543,9 +509,10 @@ enum AppPuppetRunner {
         }
     }
 
-    /// Launch WrappPuppeteer through LaunchServices so TCC attributes Accessibility
-    /// and Screen Recording prompts to WrappPuppeteer (its own bundle ID), not to
-    /// the Second Chance test host.
+    /// Launch WrappPuppeteer through LaunchServices, as an app of its own. It
+    /// needs no permissions (the wrapp and the game capture and click their
+    /// own windows), so this is only how it has always run: its own process,
+    /// found by pid for its log, and stopped with the test by `--parent-pid`.
     private static func launchViaLaunchServices(appBundle: URL, arguments: [String]) async throws -> (exitCode: Int32, pid: Int32) {
         let launchRequestTime = Date()
         let config = NSWorkspace.OpenConfiguration()

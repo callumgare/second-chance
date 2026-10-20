@@ -153,10 +153,6 @@ struct TestRunner {
             ui.warning("Some games weren't tested: the Mac was heavily loaded, so Wine would have taken minutes to start, or never started.",
                        next: "Quit the busy programs and run those games again, or pass --ignore-load to test them anyway.")
         }
-        if board.hasPermissionProblems {
-            ui.warning("WrappPuppeteer was missing a permission (exit 3–5) — that's a TCC grant, not a regression.",
-                       next: "See the WrappPuppeteer section of docs/testing.md.")
-        }
         return TestRun(name: "Integration", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle))
     }
 
@@ -172,7 +168,6 @@ struct TestRunner {
         switch status {
         case "passed": .success(status)
         case "failed": .danger(status)
-        case "permission": .warning(status)
         case "overloaded": .warning(status)
         case "running": .accent(status)
         default: .muted(status)
@@ -358,9 +353,5 @@ final class GameBoard: @unchecked Sendable {
 
     var hasOverloadedGames: Bool {
         lock.withLock { rowsByKey.values.contains { $0.status == "overloaded" } }
-    }
-
-    var hasPermissionProblems: Bool {
-        lock.withLock { rowsByKey.values.contains { $0.status == "permission" } }
     }
 }

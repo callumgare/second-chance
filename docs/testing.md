@@ -188,15 +188,21 @@ JSON lines, which is how `sc` draws the live game table.
 
 ## WrappPuppeteer
 
-`WrappPuppeteer` (a CLI tool wrapped as an `.app` so it can hold TCC grants)
-drives the launch-and-quit phase. It is a **build dependency of the
-SecondChanceTests target**, so `sc test` builds it for you — no separate
-build step. If the bundle is missing, the launch phase is skipped and the build
-assertions still run.
+`WrappPuppeteer` (a CLI tool wrapped as an `.app`) drives the launch-and-quit
+phase. It is a **build dependency of the SecondChanceTests target**, so
+`sc test` builds it for you — no separate build step. If the bundle is
+missing, the launch phase is skipped and the build assertions still run.
 
-It needs `DerivedData/Build/Products/Debug/WrappPuppeteer.app` granted
-**System Settings → Privacy & Security → Accessibility** *and* **Screen
-Recording**.
+**It needs no permissions.** It never captures or clicks another app's
+windows itself: it starts the wrapp with `SECOND_CHANCE_PUPPET_DIR` naming a
+private directory, and the wrapp and the game then serve their own windows on
+sockets there — the wrapp its info window on `wrapp.sock`, a helper inside
+the game process the game window on `game.sock` — since a process may
+capture and click its own windows without Screen Recording or Accessibility.
+[wine-in-process-helpers.md](wine-in-process-helpers.md#puppet-control) has
+how the helper gets into each engine and what the sockets accept. If
+WrappPuppeteer happens to have Screen Recording, a failed run also saves a
+full-screen screenshot; nothing else changes.
 
 Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
 
@@ -205,9 +211,6 @@ Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
 | 0 | passed — game launched and quit cleanly |
 | 1 | failed |
 | 2 | forced quit |
-| 3 | Accessibility permission denied |
-| 4 | Screen Recording permission denied |
-| 5 | Screen Recording granted but a relaunch is required |
 
 **A game the Mac was too busy to test is `overloaded`, not failed.** Before
 each game the test checks `SystemLoad`; while other programs keep all but one
@@ -219,22 +222,6 @@ rerun them. `--ignore-load` tests them anyway, for deliberate stress runs; the
 run then only notes the load. The run itself still fails, since those games
 went untested.
 
-**Codes 3–5 are permission problems, not regressions.** `sc test integration`
-shows them as `permission` in its game table. Re-grant the permission rather
-than looking for a bug in the build code; stale entries can be cleared with
-`tccutil reset Accessibility au.gare.callum.SecondChance.WrappPuppeteer` and
-`tccutil reset ScreenCapture au.gare.callum.SecondChance.WrappPuppeteer`. The tell-tale: the run reports a single issue, and every wrapp-build event
-assertion passed before it.
-
-WrappPuppeteer is signed with an Apple Development certificate, so TCC ties its
-grants to the bundle ID and the certificate's name rather than to the binary's
-hash — an ordinary rebuild keeps them. A fresh grant is needed when either of
-those changes: a new bundle ID (the target was renamed), or a build signed by a
-different Apple account, such as on another machine. (Before the project signed
-with a certificate, it was ad-hoc signed and every rebuild dropped the grants.)
-`codesign -dr- DerivedData/Build/Products/Debug/WrappPuppeteer.app` shows the
-requirement TCC checks against.
-
 The scenario's waits are sized for a machine with every core busy, where Wine
 runs many times slower; each ends as soon as what it waits for happens, so
 they only lengthen a failing run. It waits up to 900 s for the game's process
@@ -242,26 +229,28 @@ to appear (the wrapp may first spend up to 600 s waiting for Wine's desktop),
 then 300 s for its window, 120 s for that window to come to the front, 300 s
 to find and click Exit and 300 s for the game to quit. The `--timeout` that
 `AppPuppetRunner.run(timeout:)` passes is only logged. The wrapp's "save
-regularly" warning counts as dismissed only once its confirm button has gone
+regularly" warning counts as dismissed only once the wrapp says it has gone
 (the window itself stays up, showing a loading message, until the game has
-loaded): a click lost on a loaded machine is followed by pressing the button
-through Accessibility. Once the game's window is up, the window itself must
+loaded); if the wrapp's click on the button doesn't take, it confirms the
+warning directly, and WrappPuppeteer logs that. Once the game's window is up, the window itself must
 close within 30 s, or the run fails: the wrapp closes it when it sees the game
 start, so one still open means the wrapp missed the game, and players would
 have "Loading…" over the game until they quit. This is checked before the
 focus wait, since a wrapp that missed the game never brings it to the front
 either, and the focus failure would hide the cause. When the game never
 comes to the front, or no Exit button or logo turns up in time, the
-scenario logs the windows on screen and saves a full-screen screenshot to
-`/tmp` (`game-not-focused-*.png`, `exit-not-found-*.png`,
-`info-window-still-open-*.png`), naming it in its log; the per-attempt
-screenshots are deleted as they are analysed. Those per-attempt screenshots
-are of the game's window alone (`screencapture -l`), found afresh by the game's
-PID each time since Wine replaces its window as the game goes fullscreen: a
-notification or another app in front of the game can't reach the OCR, and
-once the game has closed its window the capture fails, rather than finding
-"Exit" in whatever app was behind it. The failure screenshots stay
-full-screen, since what else was on screen is the point of them. A failed run logs
+scenario logs the windows on screen and saves a capture of the game window to
+`/tmp` (`game-window-detected-*.png` once the game is up,
+`exit-not-found-*.png`), naming it in its log — plus a full-screen screenshot
+(`game-not-focused-*.png`, `info-window-still-open-*.png`, …) if it happens to
+have Screen Recording. The per-attempt captures, deleted as they are
+analysed, are of the game window alone, captured by the game: a notification
+or another app in front of the game can't reach the OCR, and once the game
+has closed its window there is nothing to capture, rather than "Exit" in
+whatever app was behind it. Positions found in a capture are window points
+(its pixels over its scale), clicked by the game in its own window, so the
+display's shape — a notch, the window's position — never comes into it. The
+game's fullscreen state comes from the game too. A failed run logs
 `WRAPP_PUPPETEER: run_failed: <reason>`, and the integration test quotes that
 reason in its failure.
 
@@ -287,11 +276,12 @@ and template matching and clicks by coordinates. It is split in two, and the
 dependency only runs one way:
 
 - **`WrappPuppeteer/Core/`** — reusable automation with no knowledge of Nancy
-  Drew, wrapps or engines: screenshots (`ScreenCapture`), OCR
-  (`TextRecognizer`), template matching (`TemplateMatcher`), window listing
-  (`WindowFinder`), Accessibility (`Accessibility`), focus (`FocusDetector`),
-  processes (`ProcessControl`, `ProcessFinder`, `ProcessCleanup`), input,
-  permissions and exit codes.
+  Drew, wrapps or engines: the control-socket client (`InProcessControl`),
+  OCR (`TextRecognizer`), template matching (`TemplateMatcher`), window
+  listing (`WindowFinder`), focus (`FocusDetector`), processes
+  (`ProcessControl`, `ProcessFinder`, `ProcessCleanup`), the click ring
+  (`InputAutomation`), the optional full-screen screenshot (`ScreenCapture`)
+  and exit codes.
 - **`WrappPuppeteer/NancyDrew/`** — everything specific to driving a game: reading
   the wrapp's `AppSettings.plist` and mapping its engine to process names, kill
   commands and a focus strategy (`Wrapp`); the wrapp's "save regularly" window
@@ -318,16 +308,13 @@ it was last found. A Wine game should quit on the first click: a log showing
 isn't taking, and cnc-ddraw is swallowing the first click — see
 [wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock).
 
-Each click shows a blue ring where it landed. Over a game in native
-fullscreen that needs two things: WrappPuppeteer switches itself to an
-accessory app once past the permission gate, since macOS keeps a regular
-app's windows out of another app's fullscreen Space, and `click(at:)` turns
-the main run loop for the ring's fade, since the scenario otherwise only
-sleeps and AppKit would never draw the ring. Before clicking, the scenario
-waits for the game's window to go fullscreen: it takes a window that covers a
-whole display, or failing that one Accessibility reports as fullscreen —
-on a display with a camera notch, macOS puts a fullscreen window below the
-notch's strip, so its bounds never match the display's.
+Each click shows a blue ring where it landed (the click itself is the game's;
+the ring is WrappPuppeteer's own window, at the point's position on screen).
+Over a game in native fullscreen that needs two things: WrappPuppeteer runs
+as an accessory app, since macOS keeps a regular app's windows out of another
+app's fullscreen Space, and `InputControl.showClick(at:)` turns the main run
+loop for the ring's fade, since the scenario otherwise only sleeps and AppKit
+would never draw the ring.
 
 To check the vision code without launching anything, run it against a saved
 screenshot — this needs no permissions:
@@ -341,8 +328,6 @@ DerivedData/Build/Products/Debug/WrappPuppeteer.app/Contents/MacOS/WrappPuppetee
 and search-region/match overlays next to the screenshot. Add
 `FIND_IMAGE_DEBUG_PROBE=x,y` (screenshot pixels) to also score the template at
 one position and save the images compared there.
-`WRAPP_PUPPETEER_PERMISSION_WAIT_SECONDS` overrides how long the permission gate
-waits for a grant.
 
 ## Reading the output
 

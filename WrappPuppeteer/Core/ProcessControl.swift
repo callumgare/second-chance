@@ -149,7 +149,7 @@ enum ProcessControl {
     /// earlier run, say, sitting on an error window — and the run then tests
     /// that instead, which never starts the game. Any such leftover is killed
     /// first.
-    static func launch(appPath: String, arguments: [String] = []) -> NSRunningApplication? {
+    static func launch(appPath: String, arguments: [String] = [], environment: [String: String] = [:]) -> NSRunningApplication? {
         logger.notice("🚀 Launching \(appPath)...")
         if !arguments.isEmpty {
             logger.notice("   Arguments: \(arguments.joined(separator: " "))")
@@ -167,6 +167,7 @@ enum ProcessControl {
         configuration.activates = true
         configuration.arguments = arguments
         configuration.createsNewApplicationInstance = true
+        configuration.environment = environment
 
         var app: NSRunningApplication?
         let semaphore = DispatchSemaphore(value: 0)

@@ -2,7 +2,8 @@
 //  InputAutomation.swift
 //  WrappPuppeteer
 //
-//  Mouse and keyboard control automation
+//  The ring drawn where WrappPuppeteer clicks. The clicks themselves are
+//  posted by the app under test, into its own window (InProcessControl).
 
 import Foundation
 import AppKit
@@ -11,7 +12,7 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.InputAutomation")
 
-// MARK: - Mouse & Keyboard Control
+// MARK: - Click feedback
 
 enum InputControl {
     private static let clickAnimationDuration: TimeInterval = 0.5
@@ -63,111 +64,15 @@ enum InputControl {
         }
     }
     
-    /// Send ESC key press
-    static func pressEscape() {
-        logger.notice("  → Pressing ESC key...")
-        
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false)
-        
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
-        
-        Thread.sleep(forTimeInterval: 0.1)
-    }
-    
-    /// Send Return key press
-    static func pressReturn() {
-        logger.notice("  → Pressing Return key...")
-        
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true)
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: false)
-        
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
-        
-        Thread.sleep(forTimeInterval: 0.1)
-    }
-    
-    /// Move the cursor without clicking. Posts a move event as well as warping:
-    /// a warp alone moves the macOS pointer but sends the app nothing, so a
-    /// game that draws its own cursor keeps drawing it where it was.
-    static func moveMouse(to point: CGPoint) {
-        CGWarpMouseCursorPosition(point)
-        let moveEvent = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)
-        moveEvent?.post(tap: .cghidEventTap)
-    }
-
-    /// Click at screen coordinates
-    static func click(at point: CGPoint) {
-        logger.notice("  → Clicking at (\(Int(point.x)), \(Int(point.y)))...")
-        
-        // Get current mouse position
-        let currentEvent = CGEvent(source: nil)
-        let currentPosition = currentEvent?.location ?? CGPoint(x: 0, y: 0)
-        
-        // Smoothly move cursor to target location
-        let steps = 15
-        let stepDelay: TimeInterval = 0.01  // 10ms between steps
-        
-        for i in 1...steps {
-            let progress = Double(i) / Double(steps)
-            // Use ease-out curve for more natural movement
-            let easedProgress = 1 - pow(1 - progress, 3)
-            
-            let interpolatedX = currentPosition.x + (point.x - currentPosition.x) * easedProgress
-            let interpolatedY = currentPosition.y + (point.y - currentPosition.y) * easedProgress
-            let interpolatedPoint = CGPoint(x: interpolatedX, y: interpolatedY)
-            
-            CGWarpMouseCursorPosition(interpolatedPoint)
-            
-            // Create a mouse move event to ensure applications see the movement
-            let moveEvent = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: interpolatedPoint, mouseButton: .left)
-            moveEvent?.post(tap: .cghidEventTap)
-            
-            Thread.sleep(forTimeInterval: stepDelay)
-        }
-        
-        // Small pause at target location
-        Thread.sleep(forTimeInterval: 0.1)
-        
-        // Create mouse events at the target position
-        let mouseDown = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
-        let mouseUp = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
-        
-        // Post events
-        mouseDown?.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 0.05)
-        mouseUp?.post(tap: .cghidEventTap)
-        
-        // Show visual feedback after click (so it doesn't delay the click)
+    /// Show the click ring at a screen point, and turn the main run loop for
+    /// the length of its fade. The scenario runs on the main thread and
+    /// otherwise only ever sleeps, so without that AppKit wouldn't put the
+    /// ring's window on screen, or fade and close it, until the process exited.
+    static func showClick(at point: CGPoint) {
         showClickAnimation(at: point)
-
-        // The scenario runs on the main thread and otherwise only ever
-        // sleeps, so the main run loop never turns: AppKit wouldn't put the
-        // animation's window on screen, or run its fade and close, until the
-        // process exited. Turn it for the length of the fade instead.
         if Thread.isMainThread {
             RunLoop.current.run(until: Date().addingTimeInterval(clickAnimationDuration + 0.1))
-        } else {
-            Thread.sleep(forTimeInterval: 0.2)
         }
-    }
-    
-    /// Send Cmd+Q to quit
-    static func sendQuitCommand() {
-        logger.notice("  → Sending Cmd+Q...")
-        
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x0C, keyDown: true) // Q key
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x0C, keyDown: false)
-        
-        keyDown?.flags = .maskCommand
-        keyUp?.flags = .maskCommand
-        
-        keyDown?.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 0.05)
-        keyUp?.post(tap: .cghidEventTap)
-        Thread.sleep(forTimeInterval: 0.5)
     }
 }
 

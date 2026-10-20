@@ -34,11 +34,9 @@ enum WrappEngine {
 
 
     /// ScummVM goes full screen without reliably becoming the active app, so
-    /// it's judged by its window, and activating it would fight its own
-    /// full-screen handling.
-    var focusStrategy: FocusStrategy {
-        self == .scummvm ? .fullscreenWindow : .frontmost
-    }
+    /// it's judged by its window being fullscreen, and activating it would
+    /// fight its own full-screen handling.
+    var judgesFocusByFullscreen: Bool { self == .scummvm }
 
     var activatesForFocus: Bool { self != .scummvm }
 }

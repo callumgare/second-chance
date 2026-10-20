@@ -12,9 +12,6 @@ enum PuppetExitCode: Int32 {
     case passed = 0
     case failed = 1
     case forcedQuit = 2
-    case permissionDeniedAccessibility = 3
-    case permissionDeniedScreenRecording = 4
-    case permissionRelaunchRequiredScreenRecording = 5
 }
 
 /// Typed result of running a scenario.

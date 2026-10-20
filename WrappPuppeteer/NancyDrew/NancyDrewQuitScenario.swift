@@ -56,7 +56,18 @@ struct NancyDrewQuitScenario {
 
         ProcessCleanup.install(cleanupCommands: wrapp.cleanupCommands)
 
-        guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : []) else {
+        // The wrapp and the game serve their windows on sockets here
+        // (docs/wine-in-process-helpers.md#puppet-control).
+        guard let directory = makeControlDirectory() else {
+            return .failed("Couldn't create a directory for the wrapp's control sockets")
+        }
+        defer { try? FileManager.default.removeItem(atPath: directory) }
+        let wrappSocket = ControlSocket(path: directory + "/wrapp.sock")
+        let game = WindowControl(socket: ControlSocket(path: directory + "/game.sock"))
+        let context = Context(directory: directory, wrapp: wrappSocket, game: game)
+
+        guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : [],
+                                              environment: ["SECOND_CHANCE_PUPPET_DIR": directory]) else {
             return .failed("Failed to launch game")
         }
         ProcessCleanup.track(appPid: app.processIdentifier, helperPid: nil)
@@ -67,13 +78,13 @@ struct NancyDrewQuitScenario {
         if wrapp.engine == .wine {
             logger.notice("ℹ️  Wine game - checking for info window...")
             Thread.sleep(forTimeInterval: 1)
-            guard InfoWindow.dismiss(wrapperPid: app.processIdentifier, timeout: options.infoWindowTimeout) else {
+            guard InfoWindow.dismiss(wrapp: wrappSocket, timeout: options.infoWindowTimeout) else {
                 forceQuit(app)
                 return .failed("Failed to dismiss info window")
             }
         }
 
-        guard let (gamePid, gameWindows) = waitForGameWindow() else {
+        guard let (gamePid, _) = waitForGameWindow() else {
             forceQuit(app)
             return .failed("Game process or window did not appear in time")
         }
@@ -85,12 +96,13 @@ struct NancyDrewQuitScenario {
         // starting leaves "Loading…" over the game until it exits, and never
         // brings the game to the front either, so the focus wait would fail
         // first and hide the cause.
-        guard InfoWindow.waitForClose(wrapperPid: app.processIdentifier, timeout: options.infoWindowCloseTimeout) else {
+        guard InfoWindow.waitForClose(wrapp: wrappSocket, timeout: options.infoWindowCloseTimeout) else {
+            optionalScreenshot(prefix: "info-window-still-open")
             forceQuit(app)
             return .failed("The wrapp's info window was still open \(Int(options.infoWindowCloseTimeout))s after the game's window appeared")
         }
 
-        guard waitForGameFocus(pid: gamePid, windows: gameWindows) else {
+        guard waitForGameFocus(pid: gamePid, context: context) else {
             forceQuit(app)
             return .failed("Game window did not become active in time")
         }
@@ -98,12 +110,12 @@ struct NancyDrewQuitScenario {
         // Every wrapp opens its game fullscreen: native fullscreen for Wine,
         // `-f` for ScummVM. A game left in a window still plays, so nothing
         // else here would notice.
-        guard waitForFullScreen(pid: gamePid) else {
+        guard waitForFullScreen(context: context) else {
             forceQuit(app)
             return .failed("Game window did not go fullscreen within \(Int(options.fullScreenTimeout))s")
         }
 
-        guard clickExit(appName: appName, app: app, gamePid: gamePid) else {
+        guard clickExit(appName: appName, app: app, gamePid: gamePid, context: context) else {
             return .failed("OCR could not find Exit button")
         }
 
@@ -125,42 +137,56 @@ struct NancyDrewQuitScenario {
 
     // MARK: - Private
 
-    private var focusStrategy: FocusStrategy { wrapp.engine.focusStrategy }
+    /// The control sockets for this run.
+    private struct Context {
+        let directory: String
+        let wrapp: ControlSocket
+        let game: WindowControl
+    }
 
-    /// A screenshot of the game's window alone, and where that window was.
-    private struct GameWindowShot {
-        let path: String
-        let window: WindowInfo
-        /// Screenshot pixels per screen point.
-        let scale: CGFloat
-
-        /// A rect found in the screenshot (pixels, top-left origin) in screen points.
-        func screenRect(_ rect: CGRect) -> CGRect {
-            CGRect(
-                x: window.bounds.minX + rect.minX / scale,
-                y: window.bounds.minY + rect.minY / scale,
-                width: rect.width / scale,
-                height: rect.height / scale
-            )
+    /// A private directory for the sockets, short enough for a socket's path.
+    private func makeControlDirectory() -> String? {
+        let directory = "/tmp/wrapp-puppeteer-\(getpid())"
+        try? FileManager.default.removeItem(atPath: directory)
+        do {
+            try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: false,
+                                                    attributes: [.posixPermissions: 0o700])
+            return directory
+        } catch {
+            logger.critical("❌ Couldn't create \(directory): \(error.localizedDescription)")
+            return nil
         }
     }
 
-    /// Capture the game's main window, not the screen: whatever is in front
-    /// of it can't reach the OCR, and once the game has closed its window
-    /// there is nothing to capture, rather than another app's text to find.
-    private func captureGameWindow(pid: Int32) -> GameWindowShot? {
-        guard let window = WindowFinder.mainWindow(ofPid: pid) else {
-            logger.notice("    No game window on screen to capture")
-            return nil
+    private func focusStrategy(_ context: Context) -> FocusStrategy {
+        wrapp.engine.judgesFocusByFullscreen ? .reportsFullscreen({ context.game.state()?.fullscreen == true }) : .frontmost
+    }
+
+    /// Capture the game window, through the game, into /tmp for diagnosing a
+    /// failure later, and log where.
+    private func diagnosticCapture(_ context: Context, prefix: String) {
+        let path = "/tmp/\(prefix)-\(Int(Date().timeIntervalSince1970)).png"
+        if context.game.capture(to: path) != nil {
+            logger.notice("📸 Game window: \(path)")
         }
-        // Wine can replace its window between finding and capturing it, and
-        // the capture then fails; the next attempt finds the new one.
-        guard let path = ScreenCapture.captureWindow(number: window.number, prefix: "game-test") else { return nil }
-        guard let size = ScreenCapture.pixelSize(ofImageAt: path), window.bounds.width > 0 else {
-            try? FileManager.default.removeItem(atPath: path)
-            return nil
+    }
+
+    /// A screenshot of the whole screen, which shows what else was in front —
+    /// but only if WrappPuppeteer happens to have Screen Recording, which it
+    /// doesn't need.
+    private func optionalScreenshot(prefix: String) {
+        guard CGPreflightScreenCaptureAccess() else { return }
+        if let path = ScreenCapture.captureScreen(prefix: prefix) {
+            logger.notice("📸 Full screen screenshot: \(path)")
         }
-        return GameWindowShot(path: path, window: window, scale: size.width / window.bounds.width)
+    }
+
+    /// Show the click ring where a window point is on screen. The game's
+    /// window position comes from the on-screen window list, which needs no
+    /// permission.
+    private func showClick(at point: CGPoint, gamePid: Int32) {
+        guard let window = WindowFinder.mainWindow(ofPid: gamePid) else { return }
+        InputControl.showClick(at: CGPoint(x: window.bounds.minX + point.x, y: window.bounds.minY + point.y))
     }
 
     private func forceQuit(_ app: NSRunningApplication) {
@@ -195,56 +221,64 @@ struct NancyDrewQuitScenario {
     }
 
     /// Wait for the game's window to take focus.
-    private func waitForGameFocus(pid: Int32, windows: [WindowInfo]) -> Bool {
+    private func waitForGameFocus(pid: Int32, context: Context) -> Bool {
         logger.notice("[Step 3] Waiting for game to become active...")
         // 120s, not the default 10: on a loaded machine a game's first window
         // can take a while before macOS will bring it in front (Ghost of
         // Thornton Hall's has stayed behind the wrapp for over 10s).
-        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy, activate: wrapp.engine.activatesForFocus, timeout: 120) else {
+        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy(context), activate: wrapp.engine.activatesForFocus, timeout: 120) else {
             WindowFinder.logAllWindows()
-            if let path = ScreenCapture.captureScreen(prefix: "game-not-focused") {
-                logger.notice("📸 Full screen screenshot: \(path)")
-            }
+            optionalScreenshot(prefix: "game-not-focused")
             return false
         }
 
         NSSound.beep()
-
-        // Screenshots of what was detected, for diagnosing later failures
-        if let path = ScreenCapture.captureWindow(number: windows[0].number, prefix: "game-window-detected") {
-            logger.notice("📸 Window screenshot: \(path)")
-        }
-        if let path = ScreenCapture.captureScreen(prefix: "game-fullscreen-detected") {
-            logger.notice("📸 Full screen screenshot: \(path)")
-        }
-
+        // What was on screen, for diagnosing later failures
+        diagnosticCapture(context, prefix: "game-window-detected")
         return true
     }
 
-    /// Wait for one of the game's windows to cover a whole display.
-    private func waitForFullScreen(pid: Int32) -> Bool {
+    /// Wait for the game to report its window fullscreen. Asked of the game
+    /// itself, so it's a real macOS fullscreen Space whatever the display's
+    /// shape (on a display with a notch, the window sits below its strip).
+    private func waitForFullScreen(context: Context) -> Bool {
         logger.notice("[Step 4] Waiting for the game's window to go fullscreen...")
-        guard let window = WindowFinder.waitForFullScreenWindow(pid: pid, timeout: options.fullScreenTimeout) else {
-            logger.error("❌ The game's window never covered a whole display")
-            WindowFinder.logAllWindows()
-            if let path = ScreenCapture.captureScreen(prefix: "game-not-fullscreen") {
-                logger.notice("📸 Full screen screenshot: \(path)")
+        let start = Date()
+        var lastLog = Date.distantPast
+        var everAnswered = false
+        while Date().timeIntervalSince(start) < options.fullScreenTimeout {
+            let state = context.game.state()
+            if state != nil { everAnswered = true }
+            if let state, state.fullscreen {
+                logger.notice("✅ Game window is fullscreen (\(Int(state.size.width))x\(Int(state.size.height)) points, scale \(state.scale))")
+                return true
             }
-            return false
+            if Date().timeIntervalSince(lastLog) >= 5 {
+                logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] Not fullscreen yet (game says: \(state.map { "\(Int($0.size.width))x\(Int($0.size.height)), fullscreen=\($0.fullscreen)" } ?? "nothing"))")
+                lastLog = Date()
+            }
+            Thread.sleep(forTimeInterval: 0.5)
         }
-        logger.notice("✅ Game window is fullscreen (\(Int(window.bounds.width))x\(Int(window.bounds.height)))")
-        return true
+        if everAnswered {
+            logger.error("❌ The game's window never went fullscreen")
+        } else {
+            logger.error("❌ The game never answered on \(context.game.socket.path): its puppet control didn't arm — look for '[Helpers] Puppet control' in the wrapp's log")
+        }
+        WindowFinder.logAllWindows()
+        optionalScreenshot(prefix: "game-not-fullscreen")
+        return false
     }
 
     /// Look for the Exit button and click it, clicking the Her Interactive
     /// logo first if the game is still on its splash screen. True once Exit
     /// has been clicked and the game lost focus or exited.
-    private func clickExit(appName: String, app: NSRunningApplication, gamePid: Int32) -> Bool {
+    private func clickExit(appName: String, app: NSRunningApplication, gamePid: Int32, context: Context) -> Bool {
         logger.notice("🎮 Attempting to quit game...")
+        let strategy = focusStrategy(context)
 
         var clickedInteractive = false
         var clickedExitButton = false
-        // Where Exit was last found (in screen points), and when it was last
+        // Where Exit was last found (in window points), and when it was last
         // clicked: on a loaded machine the game can miss the click, and with
         // its own cursor then drawn over the label OCR may never find it again.
         var lastExitLocation: CGRect?
@@ -260,7 +294,7 @@ struct NancyDrewQuitScenario {
 
             // Losing focus after clicking Exit means the game is shutting down;
             // losing it before means something else took over the screen.
-            guard FocusDetector.isFocused(pid: gamePid, strategy: focusStrategy) else {
+            guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
                 if clickedExitButton { return true }
                 forceQuit(app)
                 return false
@@ -268,17 +302,26 @@ struct NancyDrewQuitScenario {
 
             logger.notice("  → Attempt \(attempt) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s)")
 
-            guard let shot = captureGameWindow(pid: gamePid) else {
+            // The game window alone, captured by the game: nothing in front
+            // of it reaches the OCR, and once the game has closed its window
+            // there is nothing to capture, rather than another app's text.
+            let shotPath = "\(context.directory)/attempt.png"
+            guard let state = context.game.state(), state.size.width > 0,
+                  let pixels = context.game.capture(to: shotPath) else {
                 Thread.sleep(forTimeInterval: 0.2)
                 continue
             }
+            let scale = pixels.width / state.size.width
+            let toPoints = { (rect: CGRect) in
+                CGRect(x: rect.minX / scale, y: rect.minY / scale, width: rect.width / scale, height: rect.height / scale)
+            }
 
             let searchStartTime = Date()
-            let analysis = MainMenuScreen.analyze(screenshotPath: shot.path, app: app)
+            let analysis = MainMenuScreen.analyze(screenshotPath: shotPath, app: app)
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
-            try? FileManager.default.removeItem(atPath: shot.path)
+            try? FileManager.default.removeItem(atPath: shotPath)
 
-            var exitTarget = analysis.quitButton.map(shot.screenRect)
+            var exitTarget = analysis.quitButton.map(toPoints)
             if let found = exitTarget {
                 lastExitLocation = found
             } else if let remembered = lastExitLocation, Date().timeIntervalSince(lastExitClick) >= 3 {
@@ -287,7 +330,7 @@ struct NancyDrewQuitScenario {
             }
 
             if let exitLocation = exitTarget {
-                guard FocusDetector.isFocused(pid: gamePid, strategy: focusStrategy) else {
+                guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
                     if clickedExitButton { return true }
                     forceQuit(app)
                     return false
@@ -303,7 +346,8 @@ struct NancyDrewQuitScenario {
                     clickPoint.y -= exitLocation.height / 2
                 }
 
-                InputControl.click(at: clickPoint)
+                context.game.click(at: clickPoint)
+                showClick(at: clickPoint, gamePid: gamePid)
                 lastExitClick = Date()
                 Thread.sleep(forTimeInterval: 1)
 
@@ -312,9 +356,7 @@ struct NancyDrewQuitScenario {
                 // highlights it) and a retry can't find it. Park it against the
                 // left edge, clear of the centred menu text and of the
                 // bottom-right corner the quit-button template is searched in.
-                // Not on the edge itself, which would reveal a left-hand Dock.
-                let screenFrame = NSScreen.main?.frame ?? .zero
-                InputControl.moveMouse(to: CGPoint(x: screenFrame.minX + 20, y: screenFrame.midY))
+                context.game.move(to: CGPoint(x: 20, y: state.size.height / 2))
 
                 if !ProcessControl.isRunning(app, helperPid: gamePid) {
                     logger.notice("✅ Game exited successfully")
@@ -322,10 +364,12 @@ struct NancyDrewQuitScenario {
                 }
             }
 
-            if let interactiveLocation = analysis.interactiveLogo.map(shot.screenRect), !clickedInteractive {
+            if let interactiveLocation = analysis.interactiveLogo.map(toPoints), !clickedInteractive {
                 logger.notice("  ✓ Found 'interactive' logo, clicking to enable menu...")
                 Thread.sleep(forTimeInterval: 1)
-                InputControl.click(at: CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY))
+                let logoPoint = CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY)
+                context.game.click(at: logoPoint)
+                showClick(at: logoPoint, gamePid: gamePid)
                 clickedInteractive = true
                 Thread.sleep(forTimeInterval: 2)
             }
@@ -337,9 +381,8 @@ struct NancyDrewQuitScenario {
         // Each attempt's screenshot is deleted once analysed, so without this
         // a menu that never appeared leaves no trace of what was on screen.
         logger.error("❌ No Exit button or logo found within \(Int(options.findExitTimeout))s")
-        if let path = ScreenCapture.captureScreen(prefix: "exit-not-found") {
-            logger.notice("📸 Full screen screenshot: \(path)")
-        }
+        diagnosticCapture(context, prefix: "exit-not-found")
+        optionalScreenshot(prefix: "exit-not-found")
         WindowFinder.logAllWindows()
         forceQuit(app)
         return false

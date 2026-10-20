@@ -325,9 +325,6 @@ final class GameOutcome: @unchecked Sendable {
             result = "overloaded"
         } else if skipped != nil {
             result = "skipped"
-        } else if let code = puppeteerExit, (3...5).contains(code) {
-            // WrappPuppeteer is missing a TCC grant — not a regression.
-            result = "permission"
         } else {
             result = completed && failedExpectations == 0 ? "passed" : "failed"
         }

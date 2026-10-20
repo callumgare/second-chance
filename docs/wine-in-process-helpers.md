@@ -202,7 +202,7 @@ capture's pixels divided by `scale` — so no screen geometry is involved.
 | --- | --- |
 | `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 key=0\|1 active=0\|1` |
 | `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
-| `click <x> <y>` | `ok`: a mouse move, then the left button held for 100 ms |
+| `click <x> <y>` | `ok`: a mouse move, 150 ms for the game to see it, then the left button held for 100 ms |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
 
 The wrapp answers for its own window the same way, on
@@ -217,9 +217,12 @@ in-process, so the view records the button's frame instead.)
 The game window is the biggest visible window the process has. Two things
 learned building it:
 
-- **The click is held.** The Nancy Drew games poll the buttons
-  (`GetAsyncKeyState`) rather than read click events, so a press and release
-  posted together can fall between two polls and never be seen.
+- **The click is slow, like a hand's.** The Nancy Drew games poll the mouse
+  (`GetAsyncKeyState`, `GetCursorPos`) a frame at a time rather than read
+  click events. A press and release posted together can fall between two
+  polls and never be seen, and a press arriving with the cursor, before the
+  game has highlighted the button under it, is ignored: the Exit click took
+  four tries until the cursor was given 150 ms to arrive first.
 - **Listing windows is kept to a minimum.** ScreenCaptureKit has to list the
   process's windows before it can capture one, and that request queues in
   `replayd` behind every other capture on the Mac — for 8–16 s on a test Mac

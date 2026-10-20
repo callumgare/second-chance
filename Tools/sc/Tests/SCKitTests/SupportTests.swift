@@ -383,9 +383,9 @@ struct GameTests {
 
     @Test("Progress records decode, and junk is skipped")
     func progressRecords() {
-        let record = ProgressRecord.decode(#"{"event":"game","slug":"stay-tuned","phase":"finished","result":"permission","seconds":3.5,"puppeteerExit":4}"#)
-        #expect(record?.result == "permission")
-        #expect(record?.puppeteerExit == 4)
+        let record = ProgressRecord.decode(#"{"event":"game","slug":"stay-tuned","phase":"finished","result":"failed","seconds":3.5,"puppeteerExit":1}"#)
+        #expect(record?.result == "failed")
+        #expect(record?.puppeteerExit == 1)
         #expect(ProgressRecord.decode("not json") == nil)
 
         let board = GameBoard(games: [Catalog.game(slug: "stay-tuned"), Catalog.game(slug: "blue-moon")].compactMap { $0 })
@@ -393,7 +393,7 @@ struct GameTests {
         board.apply(ProgressRecord(event: "stage", text: "Game installing"))
         #expect(board.statusLine == "0/2 games · stay-tuned: Game installing")
         if let record { board.apply(record) }
-        #expect(board.hasPermissionProblems)
+        #expect(board.rows.first?.status == "failed")
         // Rows stay in catalogue order whatever their status.
         #expect(board.rows.map(\.slug) == ["stay-tuned", "blue-moon"])
         #expect(board.fraction == 0.5)

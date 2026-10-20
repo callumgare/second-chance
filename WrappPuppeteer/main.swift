@@ -32,9 +32,6 @@ func printUsage() {
         0   App exited cleanly
         2   App required force-quit (acceptable — some Wine games need this)
         1   Test failed (launch failure, OCR failure, etc.)
-        3   Accessibility permission not granted
-        4   Screen Recording permission not granted
-        5   Screen Recording was manually confirmed; relaunch required
     """)
 }
 
@@ -99,27 +96,11 @@ guard let path = appPath else {
     exit(1)
 }
 
-if !StartupPermissions.ensureAccessibilityPermission() {
-    exit(PuppetExitCode.permissionDeniedAccessibility.rawValue)
-}
-
-switch StartupPermissions.ensureScreenRecordingPermission() {
-case .granted:
-    break
-case .denied:
-    exit(PuppetExitCode.permissionDeniedScreenRecording.rawValue)
-case .relaunchRequired:
-    exit(PuppetExitCode.permissionRelaunchRequiredScreenRecording.rawValue)
-}
-
-logger.notice("PERMISSION_GATE: all_permissions_granted")
-
-StartupPermissions.warmupPrivilegedAPIs()
-
-// An accessory app (no Dock icon) — not a regular one, which the permission
-// gate may have made it to show its window — because macOS keeps a regular
-// app's windows out of another app's fullscreen Space, so the click animation
-// would never show over a fullscreen game.
+// No permissions to ask for: the wrapp and the game capture and click their
+// own windows for us (InProcessControl). An accessory app (no Dock icon),
+// because macOS keeps a regular app's windows out of another app's
+// fullscreen Space, so the click animation would never show over a
+// fullscreen game.
 NSApplication.shared.setActivationPolicy(.accessory)
 
 let scenario = NancyDrewQuitScenario(wrapp: Wrapp(appPath: path), options: options)

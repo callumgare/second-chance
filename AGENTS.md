@@ -66,7 +66,7 @@ touching — the rows say _when_ to read, not what is in them:
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
-| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, WrappPuppeteer's permissions and exit codes, or reading a run's output |
+| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions) and its exit codes, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with |
@@ -370,7 +370,7 @@ more self-explanatory.
 ## Testing
 
 **[docs/testing.md](docs/testing.md) is the detailed guide** — suites,
-filtering, WrappPuppeteer permissions and its exit codes, reports. In short:
+filtering, how WrappPuppeteer drives a game and its exit codes, reports. In short:
 
 - **Unit tests** live in `SecondChanceTests/`, using Swift Testing.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new
@@ -383,6 +383,12 @@ filtering, WrappPuppeteer permissions and its exit codes, reports. In short:
 - **Only the integration test can catch a dropped bus event.** A build with a
   missing `bus.publish` still produces a correct `.app`, so it passes the build
   and the unit tests. Run it after touching orchestration.
+- **WrappPuppeteer needs no permissions.** The wrapp and a helper inside the
+  game process capture and click their own windows for it, over sockets in
+  the directory it passes as `SECOND_CHANCE_PUPPET_DIR`
+  ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#puppet-control)).
+  Don't give it Screen Recording or Accessibility to fix a failure: look for
+  `[Helpers] Puppet control armed` in the wrapp's log instead.
 - **WrappPuppeteer keeps its utilities generic.** `WrappPuppeteer/Core/` must not
   know about Nancy Drew, wrapps or engines; what is specific to driving a game
   lives in `WrappPuppeteer/NancyDrew/` and configures Core through parameters.

@@ -15,15 +15,17 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 enum FocusStrategy {
     /// `isActive`, or the frontmost application's PID matches.
     case frontmost
-    /// One of the app's windows is in native full screen.
-    case fullscreenWindow
+    /// The app says its window is fullscreen — for apps that take over the
+    /// screen without becoming active. The check is the caller's (it asks
+    /// the app's control socket).
+    case reportsFullscreen(() -> Bool)
 }
 
 enum FocusDetector {
     static func isFocused(pid: Int32, strategy: FocusStrategy) -> Bool {
         switch strategy {
-        case .fullscreenWindow:
-            return Accessibility.hasFullscreenWindow(pid: pid)
+        case .reportsFullscreen(let isFullscreen):
+            return isFullscreen()
         case .frontmost:
             guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }) else {
                 return false

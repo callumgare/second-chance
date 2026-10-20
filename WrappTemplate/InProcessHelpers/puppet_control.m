@@ -21,7 +21,7 @@
 //
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 key=0|1 active=0|1
 //    capture <path>   -> ok <w>x<h>     PNG of the game window
-//    click <x> <y>    -> ok             mouse moved, then left button down and up
+//    click <x> <y>    -> ok             mouse moved, a pause, then left button down and up
 //    move <x> <y>     -> ok             mouse moved only
 //
 //  The game window is the biggest visible window the process has. Listing the
@@ -48,9 +48,12 @@
 /// a request up. Generous: a loaded Mac's replayd can take seconds.
 static const int64_t kRequestTimeoutSeconds = 30;
 
-/// How long a click holds the button down. The Nancy Drew games poll the
-/// buttons (GetAsyncKeyState) rather than read click events, so a press and
-/// release handled between two polls is never seen.
+/// The Nancy Drew games poll the mouse (GetAsyncKeyState, GetCursorPos)
+/// rather than read click events, a frame at a time. So a click moves the
+/// cursor there and waits for the game to see it arrive -- a menu button only
+/// takes a press once it's highlighted under the cursor -- then holds the
+/// button long enough that a poll sees it down.
+static const useconds_t kHoverBeforeClickMicroseconds = 150 * 1000;
 static const useconds_t kClickHoldMicroseconds = 100 * 1000;
 
 static os_log_t gLog;
@@ -247,11 +250,14 @@ static NSString *postMouseEvents(NSArray<NSNumber *> *types, double x, double y)
     return error;
 }
 
-/// A mouse move, and if `click`, a left click held for kClickHoldMicroseconds.
+/// A mouse move, and if `click`, then a pause for the game to see it and a
+/// left click held for kClickHoldMicroseconds.
 static NSString *mouseCommand(double x, double y, BOOL click) {
-    NSArray<NSNumber *> *first = click ? @[@(NSEventTypeMouseMoved), @(NSEventTypeLeftMouseDown)] : @[@(NSEventTypeMouseMoved)];
-    NSString *error = postMouseEvents(first, x, y);
+    NSString *error = postMouseEvents(@[@(NSEventTypeMouseMoved)], x, y);
     if (error || !click) return error ?: @"ok";
+    usleep(kHoverBeforeClickMicroseconds);
+    error = postMouseEvents(@[@(NSEventTypeLeftMouseDown)], x, y);
+    if (error) return error;
     usleep(kClickHoldMicroseconds);
     return postMouseEvents(@[@(NSEventTypeLeftMouseUp)], x, y) ?: @"ok";
 }
