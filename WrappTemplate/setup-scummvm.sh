@@ -90,6 +90,10 @@ echo "📋 Copying to app bundle..."
 mkdir -p "${WRAPPER_CONTENTS_DIR}"
 ditto --rsrc "${TEMP_DIR}/" "${WRAPPER_CONTENTS_DIR}/"
 rm -rf "${TEMP_DIR}"
+# The Resources build phase has already copied Resources/ into the bundle,
+# before this script regenerated the list, so copy the fresh list in too.
+mkdir -p "${WRAPPER_CONTENTS_DIR}/Resources"
+cp "${OUTPUT_LIST}" "${WRAPPER_CONTENTS_DIR}/Resources/"
 
 echo "✅ ScummVM embedded successfully in ${PRODUCT_NAME}.app"
 echo "✅ Output files list created at ${OUTPUT_LIST}"

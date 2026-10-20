@@ -181,6 +181,19 @@ game's `.exe`, and the helper in that process listens on
 `$SECOND_CHANCE_PUPPET_DIR/game.sock`. A player's launch sets neither, so
 nothing listens.
 
+ScummVM games use it too, though nothing else here applies to them.
+`scummvm` is an ordinary binary — ad-hoc signed, without hardened runtime — so
+when the directory is set, `GameLauncher` starts it with
+`DYLD_INSERT_LIBRARIES` naming the wrapp's own `in_process_helpers.dylib` and
+`PUPPET_CONTROL_EXE=scummvm`; the other two helpers stay unarmed in it, their
+variables unset. dyld kills a process whose inserted dylib is missing, so the
+wrapp checks the file first and runs the game without puppet control if it
+isn't there. ScummVM wrapps keep the dylib for this: `setup-wine.sh` leaves it
+off `wine-files`, the list of what a ScummVM wrapp removes. If wrapps are ever
+signed with hardened runtime, `scummvm` will need the
+`com.apple.security.cs.allow-dyld-environment-variables` entitlement for this
+to keep working.
+
 One request per connection, one line each way, replies starting `ok` or
 `error`. Coordinates are points in the game window with a top-left origin — a
 capture's pixels divided by `scale` — so no screen geometry is involved.

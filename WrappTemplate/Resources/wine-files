@@ -5391,7 +5391,6 @@ Frameworks/liblzma.5.dylib
 Frameworks/libicui18n.76.1.dylib
 Frameworks/libunistring.5.dylib
 Frameworks/libbrotlienc.1.1.0.dylib
-Frameworks/in_process_helpers.dylib
 Frameworks/libgmp.10.dylib
 Frameworks/libinotify.0.dylib
 Frameworks/libhogweed.6.9.dylib

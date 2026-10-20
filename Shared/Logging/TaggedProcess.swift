@@ -54,6 +54,9 @@ nonisolated final class TaggedProcess: @unchecked Sendable {
     var isRunning: Bool { process.isRunning }
     var processIdentifier: Int32 { process.processIdentifier }
 
+    /// Called with each line of output too, after it is logged.
+    var onLine: (@Sendable (String) -> Void)?
+
     init(logger: Logging.Logger) {
         self.logger = logger
     }
@@ -71,8 +74,8 @@ nonisolated final class TaggedProcess: @unchecked Sendable {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
 
-        ProcessLineLogger.attach(to: stdoutPipe, logger: logger, level: .notice)
-        ProcessLineLogger.attach(to: stderrPipe, logger: logger, level: .warning)
+        ProcessLineLogger.attach(to: stdoutPipe, logger: logger, level: .notice, onLine: onLine)
+        ProcessLineLogger.attach(to: stderrPipe, logger: logger, level: .warning, onLine: onLine)
 
         try process.run()
     }

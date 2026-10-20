@@ -155,20 +155,26 @@ done < <(find "${TEMP_DIR}/Frameworks" -type f \( -perm +111 -o -name "*.dll" \)
 
 echo "✅ Code signing complete: Signed: $signed_count, Already signed: $already_signed_count"
 
-# Generate output file list from temp directory
+# Generate output file list from temp directory: what a ScummVM wrapp removes.
+# Not the in-process helpers' dylib, which ScummVM wrapps load into scummvm for
+# puppet control (GameLauncher).
 OUTPUT_LIST="${SCRIPT_DIR}/Resources/wine-files"
 echo "📝 Creating output files list..."
 {
     find "${TEMP_DIR}" -type f | while read -r file; do
         echo "${file#${TEMP_DIR}/}"
     done
-} > "${OUTPUT_LIST}"
+} | grep -v -x "Frameworks/in_process_helpers.dylib" > "${OUTPUT_LIST}"
 
 # Copy from temp to wrapper
 echo "📋 Copying to app bundle..."
 mkdir -p "$WRAPPER_CONTENTS_DIR"
 ditto --rsrc "${TEMP_DIR}/" "$WRAPPER_CONTENTS_DIR/"
 rm -rf "${TEMP_DIR}"
+# The Resources build phase has already copied Resources/ into the bundle,
+# before this script regenerated the list, so copy the fresh list in too.
+mkdir -p "$WRAPPER_CONTENTS_DIR/Resources"
+cp "${OUTPUT_LIST}" "$WRAPPER_CONTENTS_DIR/Resources/"
 
 echo "✅ Wine, frameworks, and winetricks embedded in ${PRODUCT_NAME}.app"
 echo "✅ Output files list created at ${OUTPUT_LIST}"
