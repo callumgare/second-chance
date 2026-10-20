@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Sparkle (docs/updates.md). Everything else in the Info.plist is generated from the INFOPLIST_KEY_ build settings. -->
+	<key>SUFeedURL</key>
+	<string>https://github.com/callumgare/second-chance/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>k+ixrc/bdv9dwC2WxKTh0aAEnQXt3/KaaC2SmQ7/Tbk=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+</dict>
+</plist>

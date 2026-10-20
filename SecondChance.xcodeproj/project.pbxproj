@@ -11,6 +11,7 @@
 		E2B000002F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
 		E2B000022F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
 		E2B000042F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
+		E2C5A0002F01000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E2C5A0012F01000000000001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +59,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E2C5A0062F01000000000001 /* Exceptions for "SecondChance" folder in "SecondChance" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E21733902F04AA580058E8E9 /* SecondChance */;
+		};
 		E2C65E122F15FA4700FAFF50 /* Exceptions for "WrappTemplate" folder in "WrappTemplate" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -90,6 +98,9 @@
 		};
 		E21733932F04AA580058E8E9 /* SecondChance */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E2C5A0062F01000000000001 /* Exceptions for "SecondChance" folder in "SecondChance" target */,
+			);
 			explicitFolders = (
 				"Resources/installer-answer-files",
 				"Resources/patch-automation",
@@ -131,6 +142,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E2B000002F01000000000001 /* Logging in Frameworks */,
+				E2C5A0002F01000000000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -224,6 +236,7 @@
 			name = SecondChance;
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
+				E2C5A0012F01000000000001 /* Sparkle */,
 			);
 			productName = SecondChance;
 			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
@@ -315,6 +328,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */,
+				E2C5A0052F01000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
@@ -735,6 +749,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SecondChance/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Second Chance";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -781,6 +796,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SecondChance/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Second Chance";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -1007,6 +1023,14 @@
 				minimumVersion = 1.15.0;
 			};
 		};
+		E2C5A0052F01000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.10.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1014,6 +1038,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */;
 			productName = Logging;
+		};
+		E2C5A0012F01000000000001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E2C5A0052F01000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

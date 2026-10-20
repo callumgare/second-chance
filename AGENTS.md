@@ -69,6 +69,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, WrappPuppeteer's permissions and exit codes, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` is generated and why not to edit it by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
+| [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing |
@@ -251,6 +252,8 @@ direct assignment.
   skips the wrapp hiding itself from the Dock once the game starts,
   `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves native fullscreen unarmed, and
   `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet).
+  For Second Chance itself, `SECOND_CHANCE_UPDATES=1` turns on the update
+  checks a Debug build leaves off ([docs/updates.md](docs/updates.md)).
 - **cnc-ddraw swallows the first click unless the wrapp locks the cursor.**
   Wine games draw through cnc-ddraw in windowed mode, which only takes hold of
   the mouse on the first button release inside the window — eating it, while
@@ -344,6 +347,11 @@ direct assignment.
   `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's executable is
   `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't depend on that name: it
   finds the wrapp by the PID it launched and the game by its own process name.
+- **Second Chance has an Info.plist file; the other targets don't.**
+  `SecondChance/Info.plist` holds only Sparkle's keys, which `INFOPLIST_KEY_`
+  build settings can't express, and Xcode merges it with the generated keys.
+  Other keys still go in build settings. The file is excluded from the
+  target's synchronized folder, so it isn't copied in as a resource.
 - **Bundled resources**: `WrappTemplate.app` template, Wine engine, `winetricks`, AutoIt, and ScummVM are bundled. Test
   that features work with bundled paths, not just system-installed equivalents.
 
@@ -405,6 +413,12 @@ rather than inventing a version. Pass `--version X.Y.Z` to force one.
 
 What `sc release` writes, how it treats `CHANGELOG.md`, and how it commits,
 tags and publishes is in [docs/releasing.md](docs/releasing.md).
+
+**A release needs the Sparkle signing key in the login keychain** of the Mac
+running it. `sc release` refuses to sign without it. The key can't be kept in
+iCloud Keychain, because Sparkle's tools only read the login keychain. It is
+backed up as a Passwords entry and imported once on each releasing Mac.
+[docs/updates.md](docs/updates.md#the-signing-key) has why and how.
 
 ## Things Currently In Flux
 

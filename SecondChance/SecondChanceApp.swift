@@ -86,6 +86,9 @@ struct SecondChanceApp: App {
 
         Task { await AutomationBridge.shared.startIfConfigured() }
 
+        // Starts the scheduled update checks (off in headless runs).
+        _ = AppUpdater.shared
+
         if debugMode {
             LogWindow.shared.showLogWindow(title: "SecondChance - Installation Log")
         }
@@ -130,6 +133,9 @@ struct SecondChanceApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesButton(updater: .shared)
+            }
             CommandGroup(after: .appSettings) {
                 Button("Sign Out of Steam") { Self.signOutOfSteam() }
             }
