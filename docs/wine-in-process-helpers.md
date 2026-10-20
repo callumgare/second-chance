@@ -73,9 +73,44 @@ posts its middle clicks, sees no lock and leaves it.
 
 ## Native fullscreen
 
-See the header comment of `native_fullscreen.m`: it waits for the window Wine
-itself marks as fullscreen-capable to stop resizing, then calls
-`-toggleFullScreen:` on it, as the green title-bar button would.
+It waits for the game's window to stop resizing, then calls
+`-toggleFullScreen:` on it, as the green title-bar button would. The game's
+window is one of two kinds:
+
+- **A window Wine lets go fullscreen.** Wine's `adjustFullScreenBehavior:`
+  marks resizable, parentless windows as fullscreen-capable. cnc-ddraw's
+  window is one.
+- **A borderless window covering the screen.** This is how a Direct3D game
+  draws in fullscreen mode (Ghost of Thornton Hall, for one). Left to Wine,
+  such a window gets no Space: Wine raises it above the menu bar and the
+  Dock instead. The helper takes one over only once Direct3D draws into it,
+  which it detects by Wine having given the window an OpenGL or Metal view.
+  A cnc-ddraw game's window can start out the size of the screen for a
+  second or two before cnc-ddraw shrinks it, and cnc-ddraw attaches its
+  OpenGL view only after that.
+
+Wine decides which windows may go fullscreen from the game's Win32 window
+style, and it decides again whenever the window's style or state changes,
+which happens when the game loses and regains focus. A Space given to a
+borderless window would last only until the player first switched away. So
+for the window it takes over, the helper replaces three of Wine's own
+`WineWindow` methods at run time (`method_setImplementation`):
+
+| Wine method | What it does for that window instead |
+| --- | --- |
+| `adjustFullScreenBehavior:` | Always grants fullscreen. Never takes the window out of its Space. |
+| `minimumLevelForActive:` | Keeps the normal window level, not the raised level Wine gives a window covering the screen. |
+| `doOrderOut` | Leaves the window, and its Space, in place while the app is inactive. Wine hides a fullscreen window by closing it, which would end the Space. |
+
+Every other window keeps Wine's behaviour. The helper checks these methods
+exist before replacing them. If Wine has changed and they don't, it reports
+a warning and gives fullscreen only to the windows Wine already allows.
+
+The helper keeps watching after the first entry. A window whose Space Wine
+closed while the app was active goes back into one when it is shown again.
+A window the player took out of fullscreen themselves is left windowed.
+
+The header comment of `native_fullscreen.m` has the details.
 
 ## Cursor lock
 

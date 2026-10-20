@@ -7,7 +7,9 @@
 //  process means the Accessibility API or synthetic keystrokes, both of which
 //  need the Accessibility TCC grant. So this code runs *inside* the Wine process
 //  that owns the window and calls -toggleFullScreen: directly, which is exactly
-//  what the green title-bar button does.
+//  what the green title-bar button does. Wine only lets a resizable window go
+//  fullscreen, so for a Direct3D game's borderless window this file also
+//  overrides a few of Wine's own methods (see "Overriding Wine" below).
 //
 //  Getting loaded is the hard part, and it is why this is not a
 //  DYLD_INSERT_LIBRARIES bundle. Wine launches each Windows process through
@@ -30,6 +32,7 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 #import <os/log.h>
 #include <fcntl.h>
 #include <mach-o/dyld.h>
@@ -50,9 +53,10 @@
 static const double kSettleSeconds = 0.2;
 static const double kPollInterval = 0.1;
 static const double kGiveUpSeconds = 90.0;
+static const double kWatchInterval = 0.25;
 
 static os_log_t gLog;
-static BOOL gFinished = NO;
+static BOOL gEntered = NO;
 static NSWindow *gCandidate = nil;
 static NSRect gCandidateFrame;
 static double gStableSince = 0.0;
@@ -93,17 +97,186 @@ static void debugLog(const char *format, ...) {
     }
 }
 
-/// The window winemac.drv itself considers eligible for native fullscreen.
+// Wine's own WineWindow and WineApplicationController methods this file calls
+// or replaces (dlls/winemac.drv/cocoa_window.m). Declared here so the compiler
+// knows their types; they are looked up at run time.
+@interface NSView (WineContentViewMethods)
+- (BOOL)hasGLDescendant;
+@end
+
+@interface NSWindow (WineWindowMethods)
+- (BOOL)isFullscreen;
+- (BOOL)closing;
+- (void)adjustFeaturesForState;
+- (void)adjustFullScreenBehavior:(NSWindowCollectionBehavior)behavior;
+@end
+
+@interface NSObject (WineApplicationControllerMethods)
++ (id)sharedController;
+- (void)adjustWindowLevels;
+@end
+
+// Per-window state, kept on the window itself so nothing outlives it.
+static char kAdoptedKey;   // this file has taken charge of the window's fullscreen
+static char kEnteredKey;   // the window has been put into a Space once
+static char kReenterKey;   // Wine closed the window's Space; put it back when shown
+
+static BOOL windowFlag(NSWindow *window, const void *key) {
+    return [objc_getAssociatedObject(window, key) boolValue];
+}
+
+static void setWindowFlag(NSWindow *window, const void *key, BOOL value) {
+    objc_setAssociatedObject(window, key, value ? @YES : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+/// Whether Wine counts the window as covering a screen: how a Direct3D game
+/// in fullscreen mode presents itself -- a borderless window the size of the
+/// display, which Wine raises above the menu bar and the Dock.
+static BOOL wineCoversScreen(NSWindow *window) {
+    return [window respondsToSelector:@selector(isFullscreen)] && [window isFullscreen];
+}
+
+/// Whether Direct3D is drawing into the window: Wine has given its content
+/// an OpenGL view (wined3d) or a Metal view (Vulkan).
 ///
-/// Rather than guessing from window size, this defers to the driver's own
-/// decision: adjustFullScreenBehavior: grants FullScreenPrimary only to
-/// resizable, non-utility, parentless windows -- precisely the ones that get a
-/// working green title-bar button -- and downgrades everything else to
-/// FullScreenAuxiliary, which ignores -toggleFullScreen:. cnc-ddraw's transient
-/// helper windows and Wine's hidden IME/message windows never qualify.
+/// This is what tells a Direct3D game's window from a window that is only
+/// passing through the size of the screen. Last Train to Blue Moon Canyon's
+/// window first appears the size of the screen and only becomes cnc-ddraw's
+/// 640x512 window 0.5-2.5s later; Wine paints it in between, so it has
+/// content, but cnc-ddraw attaches its OpenGL view only after the resize.
+/// Ghost of Thornton Hall's window has its OpenGL view within half a second.
+static BOOL direct3DDrawsInto(NSWindow *window) {
+    NSView *content = window.contentView;
+    if ([content respondsToSelector:@selector(hasGLDescendant)] && [(id)content hasGLDescendant]) return YES;
+    NSMutableArray<NSView *> *views = [content.subviews mutableCopy];
+    while (views.count) {
+        NSView *view = views.lastObject;
+        [views removeLastObject];
+        if ([NSStringFromClass(view.class) isEqualToString:@"WineMetalView"]) return YES;
+        [views addObjectsFromArray:view.subviews];
+    }
+    return NO;
+}
+
+// MARK: - Overriding Wine for the adopted window
+//
+// Wine decides from the game's Win32 window style whether a window may go
+// fullscreen: adjustFullScreenBehavior: grants FullScreenPrimary only to
+// resizable, parentless windows, and takes a window that no longer qualifies
+// out of its Space. A Direct3D game's borderless window never qualifies, and
+// Wine checks again whenever the window's style or state changes -- which it
+// does when the game loses and regains focus -- so a Space given to it lasts
+// only until the player first switches away. For the one
+// window this file adopts, three of Wine's methods are replaced:
+//
+// - adjustFullScreenBehavior: always grants FullScreenPrimary, and never
+//   takes the window out of its Space.
+// - minimumLevelForActive: is the normal level. Wine raises a window covering
+//   the screen to just above the status bar so it hides the menu bar and the
+//   Dock; in a Space they are hidden anyway, and a raised window would sit in
+//   front of every other app's windows.
+// - doOrderOut leaves the window, and its Space, alone while the app is
+//   inactive. Direct3D may hide a fullscreen game's window when the game
+//   loses focus (Ghost of Thornton Hall's windowed mode does), and Wine
+//   hides a fullscreen window by closing it, which ends its Space; kept, the
+//   Space shows the last frame until the player comes back and the game
+//   shows its window again. Hidden while the app is active, the window goes
+//   as usual and comes back into a Space when shown again (kReenterKey).
+//
+// Every other window keeps Wine's behaviour.
+
+static IMP gWineAdjustFullScreenBehavior;
+static IMP gWineMinimumLevelForActive;
+static IMP gWineDoOrderOut;
+
+static void adoptedAdjustFullScreenBehavior(NSWindow *self, SEL _cmd, NSWindowCollectionBehavior behavior) {
+    if (!windowFlag(self, &kAdoptedKey)) {
+        ((void (*)(id, SEL, NSWindowCollectionBehavior))gWineAdjustFullScreenBehavior)(self, _cmd, behavior);
+        return;
+    }
+    behavior |= NSWindowCollectionBehaviorFullScreenPrimary;
+    behavior &= ~NSWindowCollectionBehaviorFullScreenAuxiliary;
+    if (behavior != self.collectionBehavior) {
+        self.collectionBehavior = behavior;
+        [self adjustFeaturesForState];
+    }
+}
+
+static NSInteger adoptedMinimumLevelForActive(NSWindow *self, SEL _cmd, BOOL active) {
+    if (windowFlag(self, &kAdoptedKey)) return NSNormalWindowLevel;
+    return ((NSInteger (*)(id, SEL, BOOL))gWineMinimumLevelForActive)(self, _cmd, active);
+}
+
+static void adoptedDoOrderOut(NSWindow *self, SEL _cmd) {
+    if (windowFlag(self, &kAdoptedKey) && (self.styleMask & NSWindowStyleMaskFullScreen) && ![self closing]) {
+        if (!NSApp.isActive) {
+            debugLog("keeping the fullscreen window while the app is inactive");
+            return;
+        }
+        debugLog("the fullscreen window is being hidden; it goes back into a Space when shown");
+        setWindowFlag(self, &kReenterKey, YES);
+    }
+    ((void (*)(id, SEL))gWineDoOrderOut)(self, _cmd);
+}
+
+static IMP replaceMethod(Class cls, SEL selector, IMP replacement) {
+    Method method = class_getInstanceMethod(cls, selector);
+    return method ? method_setImplementation(method, replacement) : NULL;
+}
+
+/// Install the overrides; NO if Wine's classes aren't what this file expects,
+/// in which case only windows Wine already lets go fullscreen are adopted.
+static BOOL installOverrides(void) {
+    static BOOL attempted = NO, installed = NO;
+    if (attempted) return installed;
+    attempted = YES;
+
+    Class wineWindow = NSClassFromString(@"WineWindow");
+    SEL selectors[] = { @selector(adjustFullScreenBehavior:), @selector(minimumLevelForActive:),
+                        @selector(doOrderOut), @selector(closing), @selector(isFullscreen),
+                        @selector(adjustFeaturesForState) };
+    for (size_t i = 0; wineWindow && i < sizeof(selectors) / sizeof(*selectors); i++) {
+        if (!class_getInstanceMethod(wineWindow, selectors[i])) {
+            helperReport("NativeFullscreen", "warning", "WineWindow has no -%s; windows covering the screen stay out of a Space",
+                         sel_getName(selectors[i]));
+            return NO;
+        }
+    }
+    if (!wineWindow) {
+        helperReport("NativeFullscreen", "warning", "no WineWindow class; windows covering the screen stay out of a Space");
+        return NO;
+    }
+
+    gWineAdjustFullScreenBehavior = replaceMethod(wineWindow, @selector(adjustFullScreenBehavior:), (IMP)adoptedAdjustFullScreenBehavior);
+    gWineMinimumLevelForActive = replaceMethod(wineWindow, @selector(minimumLevelForActive:), (IMP)adoptedMinimumLevelForActive);
+    gWineDoOrderOut = replaceMethod(wineWindow, @selector(doOrderOut), (IMP)adoptedDoOrderOut);
+    installed = YES;
+    return YES;
+}
+
+static void adjustWineWindowLevels(void) {
+    Class controllerClass = NSClassFromString(@"WineApplicationController");
+    if ([controllerClass respondsToSelector:@selector(sharedController)]) {
+        id controller = [controllerClass sharedController];
+        if ([controller respondsToSelector:@selector(adjustWindowLevels)]) [controller adjustWindowLevels];
+    }
+}
+
+// MARK: - Choosing and entering
+
+/// The game's window: one Wine lets go fullscreen, or one covering the
+/// screen.
+///
+/// The first are what Wine's adjustFullScreenBehavior: grants
+/// FullScreenPrimary -- resizable, non-utility, parentless windows, precisely
+/// the ones with a working green title-bar button -- which is how cnc-ddraw's
+/// window arrives. cnc-ddraw's transient helper windows and Wine's hidden
+/// IME/message windows never qualify. The second are Direct3D games' windows,
+/// which only the overrides above let into a Space, taken once Direct3D draws
+/// into them (direct3DDrawsInto).
 ///
 /// Main thread only: AppKit state is not safe to read from the watcher thread.
-static NSWindow *findGameWindow(void) {
+static NSWindow *findGameWindow(BOOL overridesInstalled) {
     NSWindow *best = nil;
     CGFloat bestArea = 0.0;
 
@@ -113,8 +286,11 @@ static NSWindow *findGameWindow(void) {
         // Something is already fullscreen, so leave this process alone.
         if (window.styleMask & NSWindowStyleMaskFullScreen) return nil;
 
-        if (!(window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary)) continue;
         if (window.parentWindow) continue;
+        BOOL eligible = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) ||
+                        (overridesInstalled && (windowFlag(window, &kAdoptedKey) ||
+                                                (wineCoversScreen(window) && direct3DDrawsInto(window))));
+        if (!eligible) continue;
 
         // Normally exactly one window qualifies; prefer the largest just to keep
         // the choice deterministic if a game ever shows two.
@@ -129,10 +305,19 @@ static NSWindow *findGameWindow(void) {
 }
 
 static void attemptFullscreen(void) {
-    if (gFinished) return;
+    BOOL overridesInstalled = installOverrides();
 
-    NSWindow *window = findGameWindow();
+    NSWindow *window = findGameWindow(overridesInstalled);
     if (!window) {
+        gCandidate = nil;
+        return;
+    }
+
+    // A window put into a Space before goes back only if Wine closed the
+    // Space -- not if the player left it -- and only once they're back in
+    // the game.
+    BOOL reentering = windowFlag(window, &kEnteredKey);
+    if (reentering && !(windowFlag(window, &kReenterKey) && NSApp.isActive)) {
         gCandidate = nil;
         return;
     }
@@ -147,15 +332,26 @@ static void attemptFullscreen(void) {
     }
     if (nowSeconds() - gStableSince < kSettleSeconds) return;
 
-    gFinished = YES;
+    gCandidate = nil;
+    gEntered = YES;
+    setWindowFlag(window, &kEnteredKey, YES);
+    setWindowFlag(window, &kReenterKey, NO);
+
+    BOOL wineEligible = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) != 0;
+    if (overridesInstalled) {
+        setWindowFlag(window, &kAdoptedKey, YES);
+        [window adjustFullScreenBehavior:window.collectionBehavior];
+        adjustWineWindowLevels();
+    }
 
     const char *title = window.title.length ? window.title.UTF8String : "(untitled)";
-    os_log(gLog, "[NativeFS] entering native fullscreen: %{public}s %dx%d",
-           title, (int)frame.size.width, (int)frame.size.height);
-    debugLog("entering native fullscreen: '%s' %dx%d",
-             title, (int)frame.size.width, (int)frame.size.height);
-    helperReport("NativeFullscreen", "notice", "entering native fullscreen: '%s' %dx%d",
-                 title, (int)frame.size.width, (int)frame.size.height);
+    const char *kind = reentering ? "re-entering" : "entering";
+    const char *how = wineEligible ? "" : " (a window covering the screen)";
+    os_log(gLog, "[NativeFS] %{public}s native fullscreen: %{public}s %dx%d%{public}s",
+           kind, title, (int)frame.size.width, (int)frame.size.height, how);
+    debugLog("%s native fullscreen: '%s' %dx%d%s", kind, title, (int)frame.size.width, (int)frame.size.height, how);
+    helperReport("NativeFullscreen", "notice", "%s native fullscreen: '%s' %dx%d%s",
+                 kind, title, (int)frame.size.width, (int)frame.size.height, how);
 
     [window toggleFullScreen:nil];
 }
@@ -164,6 +360,9 @@ static void attemptFullscreen(void) {
 /// ntdll) and runs the Windows code on other threads, so blocks queued onto the
 /// main run loop do get drained. This thread only schedules; every AppKit call
 /// happens on the main thread.
+///
+/// It keeps watching after the first entry, for a window Wine closed the Space
+/// of, and for a new game window -- slower once the game is in its Space.
 static void *watcherMain(void *unused) {
     (void)unused;
 
@@ -175,18 +374,19 @@ static void *watcherMain(void *unused) {
         return NULL;
     }
 
-    double deadline = nowSeconds() + kGiveUpSeconds;
-    while (!gFinished && nowSeconds() < deadline) {
+    double giveUpAt = nowSeconds() + kGiveUpSeconds;
+    BOOL reportedGivingUp = NO;
+    while (true) {
         CFRunLoopPerformBlock(mainLoop, kCFRunLoopCommonModes, ^{ attemptFullscreen(); });
         CFRunLoopWakeUp(mainLoop);
-        usleep((useconds_t)(kPollInterval * USEC_PER_SEC));
-    }
+        usleep((useconds_t)((gEntered ? kWatchInterval : kPollInterval) * USEC_PER_SEC));
 
-    if (!gFinished) {
-        os_log(gLog, "[NativeFS] no eligible window after %.0fs; staying windowed",
-               kGiveUpSeconds);
-        debugLog("no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
-        helperReport("NativeFullscreen", "warning", "no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
+        if (!gEntered && !reportedGivingUp && nowSeconds() > giveUpAt) {
+            reportedGivingUp = YES;
+            os_log(gLog, "[NativeFS] no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
+            debugLog("no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
+            helperReport("NativeFullscreen", "warning", "no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
+        }
     }
     return NULL;
 }
