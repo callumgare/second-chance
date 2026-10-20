@@ -2,6 +2,21 @@
 
 All notable changes to Second Chance.
 
+## 0.4.0 — 2026-10-20
+
+### New
+
+- Second Chance now updates itself when a new version comes out.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- `sc release` now signs the packaged app with the Sparkle key from the login keychain and publishes an `appcast.xml` alongside the zip on the GitHub release, so the app can find the update. It checks up front that the key in the keychain matches the one the app trusts, and stops before packaging if it doesn't.
+- `sc release` now turns the changelog generated from commit messages into notes aimed at players: when Claude Code is installed it rewrites them into New / Improved / Fixed with the developer-only changes tucked into a collapsed "Behind the scenes" section, reading the git history where a commit message doesn't explain itself. Those notes go into the version's section of `CHANGELOG.md` — the copy that gets committed — and the release pauses there so they can be edited by hand. When it continues, it reads that section back and uses it for both the GitHub release and the app's update window. `--plain-notes`, a missing Claude Code, or a failed rewrite all fall back to the generated notes as they are.
+- Ctrl-C at one of `sc`'s prompts now actually stops it. The prompt library's key reads blocked on stdin and ignored the cancelled task, so the first Ctrl-C printed "stopping" and hung until a second one killed the process outright, skipping cleanup — which is how `sc release` managed to leave a half-applied version bump behind. Key reads now poll and give up once the task is cancelled, and the prompt throws instead of acting on whatever option happened to be highlighted.
+
+</details>
+
 ## 0.3.0 — 2026-10-20
 
 ### Bug Fixes
