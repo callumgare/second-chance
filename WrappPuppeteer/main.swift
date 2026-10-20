@@ -3,6 +3,7 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import ImageIO
 import Logging
 
 // Bootstrap logging before anything else can construct a Logger — top-level
@@ -20,12 +21,22 @@ func printUsage() {
     Usage:
         WrappPuppeteer <app-path> [options]
         WrappPuppeteer --analyze <screenshot-path>
+        WrappPuppeteer --classify <game-slug> <frame.png|dir>...
+        WrappPuppeteer --make-splash-reference <frame.png> <out.png>
 
     Options:
         --timeout <seconds>    Maximum runtime (default: 60)
         --debug                Launch the wrapp in debug mode
         --parent-pid <pid>     Stop, killing the wrapp, once this process exits
         --analyze <path>       Analyze a screenshot for quit buttons (no launch)
+        --record <dir>         Save the game window to <dir> from when it appears
+                               until the run ends
+        --record-seconds <s>   Click nothing: record for <s> seconds, then quit
+        --classify             Print each frame's nearest splash screen of the game
+                               and how near it is (no launch)
+        --make-splash-reference
+                               Save a frame's picture, bars trimmed, as a splash
+                               reference image (no launch)
         --help                 Show this help
 
     Exit codes:
@@ -38,6 +49,8 @@ func printUsage() {
 var appPath: String?
 var options = NancyDrewQuitScenario.Options()
 var analyzePath: String?
+var classifyArguments: [String]?
+var splashReferenceArguments: [String]?
 
 var i = 1
 while i < CommandLine.arguments.count {
@@ -59,6 +72,22 @@ while i < CommandLine.arguments.count {
         if i < CommandLine.arguments.count, let pid = Int32(CommandLine.arguments[i]) {
             ProcessCleanup.watchParent(pid)
         }
+    case "--record":
+        i += 1
+        if i < CommandLine.arguments.count {
+            options.recordDirectory = URL(fileURLWithPath: CommandLine.arguments[i])
+        }
+    case "--record-seconds":
+        i += 1
+        if i < CommandLine.arguments.count, let seconds = TimeInterval(CommandLine.arguments[i]) {
+            options.watchOnlySeconds = seconds
+        }
+    case "--classify":
+        classifyArguments = Array(CommandLine.arguments.dropFirst(i + 1))
+        i = CommandLine.arguments.count
+    case "--make-splash-reference":
+        splashReferenceArguments = Array(CommandLine.arguments.dropFirst(i + 1))
+        i = CommandLine.arguments.count
     case "--analyze":
         i += 1
         if i < CommandLine.arguments.count {
@@ -71,6 +100,58 @@ while i < CommandLine.arguments.count {
     }
 
     i += 1
+}
+
+// --classify mode: which of a game's splash screens each frame is closest to
+if let arguments = classifyArguments {
+    guard arguments.count >= 2 else {
+        fputs("Usage: --classify <game-slug> <frame.png|dir>...\n", stderr)
+        exit(1)
+    }
+    let screens = SplashScreen.screens(forGame: arguments[0])
+    if screens.isEmpty { fputs("No splash references for \(arguments[0])\n", stderr) }
+    var frames: [String] = []
+    for argument in arguments.dropFirst() {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: argument, isDirectory: &isDirectory), isDirectory.boolValue {
+            let files = (try? FileManager.default.contentsOfDirectory(atPath: argument)) ?? []
+            frames += files.filter { $0.hasSuffix(".png") || $0.hasSuffix(".jpg") }.sorted()
+                .map { (argument as NSString).appendingPathComponent($0) }
+        } else {
+            frames.append(argument)
+        }
+    }
+    for frame in frames {
+        let name = (frame as NSString).lastPathComponent
+        guard let fingerprint = ImageFingerprint(imageAt: frame) else {
+            print("\(name)\tblank")
+            continue
+        }
+        guard let nearest = SplashScreen.closest(fingerprint, among: screens) else {
+            print("\(name)\t-")
+            continue
+        }
+        let verdict = nearest.distance <= SplashScreen.matchDistance ? "SPLASH" : "-"
+        print("\(name)\t\(verdict)\t\(nearest.screen.name)\t\(String(format: "%.3f", nearest.distance))")
+    }
+    exit(0)
+}
+
+// --make-splash-reference mode: a frame's picture as a splash reference
+if let arguments = splashReferenceArguments {
+    guard arguments.count == 2,
+          let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: arguments[0]) as CFURL, nil),
+          let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+        fputs("Usage: --make-splash-reference <frame.png> <out.png>\n", stderr)
+        exit(1)
+    }
+    guard let content = ImageFingerprint.content(of: image, width: 160),
+          let destination = CGImageDestinationCreateWithURL(URL(fileURLWithPath: arguments[1]) as CFURL, "public.png" as CFString, 1, nil) else {
+        fputs("\(arguments[0]) is blank\n", stderr)
+        exit(1)
+    }
+    CGImageDestinationAddImage(destination, content, nil)
+    exit(CGImageDestinationFinalize(destination) ? 0 : 1)
 }
 
 // --analyze mode: run screen analysis against a saved screenshot and exit

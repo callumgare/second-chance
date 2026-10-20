@@ -280,8 +280,9 @@ dependency only runs one way:
 
 - **`WrappPuppeteer/Core/`** — reusable automation with no knowledge of Nancy
   Drew, wrapps or engines: the control-socket client (`InProcessControl`),
-  OCR (`TextRecognizer`), template matching (`TemplateMatcher`), window
-  listing (`WindowFinder`), focus (`FocusDetector`), processes
+  OCR (`TextRecognizer`), template matching (`TemplateMatcher`), screen
+  fingerprints (`ImageFingerprint`), recording a window (`WindowRecorder`),
+  window listing (`WindowFinder`), focus (`FocusDetector`), processes
   (`ProcessControl`, `ProcessFinder`, `ProcessCleanup`), the click ring
   (`InputAutomation`), the optional full-screen screenshot (`ScreenCapture`)
   and exit codes.
@@ -289,8 +290,9 @@ dependency only runs one way:
   the wrapp's `AppSettings.plist` and mapping its engine to process names, kill
   commands and a focus strategy (`Wrapp`); the wrapp's "save regularly" window
   (`InfoWindow`); where the Exit button and Her Interactive logo are and how to
-  recognise them (`MainMenuScreen`); and the launch → menu → Exit flow itself
-  (`NancyDrewQuitScenario`).
+  recognise them (`MainMenuScreen`); each game's splash screens
+  (`SplashScreen`, with its reference images in `NancyDrew/assets/splash/`); and
+  the launch → menu → Exit flow itself (`NancyDrewQuitScenario`).
 
 Core never names a game. When a game-specific fact would make a utility work
 better, Core takes it as a parameter and the scenario supplies it — for
@@ -314,12 +316,12 @@ cursor lock has already got it to take the cursor
 ([wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock)). A
 Direct3D game, which never goes through cnc-ddraw, isn't checked; WrappPuppeteer
 reads which a game is from its `.exe`, as the wrapp does. Before
-its first click — on the Her Interactive logo or on Exit, whichever comes
+its first click — on a splash screen or on Exit, whichever comes
 first — the scenario waits for the cursor lock to finish (up to 180 s) and asks
 the game whether it holds the cursor. If it didn't, and does within 3 s of the
 click, that click is what cnc-ddraw locked on, and the run fails with "The
 game's first click was swallowed" and a `first-click-swallowed-*.png` capture.
-The logo needs this check: any click skips it, so a swallowed click there would
+A splash screen needs this check: any click skips it, so a swallowed click there would
 look like a working one, and would lock the cursor in time for Exit. The
 re-clicks on Exit are for a game too busy to see a click, not for this.
 To see the check catch it, switch the cursor lock off for the wrapps the test
@@ -348,6 +350,99 @@ DerivedData/Build/Products/Debug/WrappPuppeteer.app/Contents/MacOS/WrappPuppetee
 and search-region/match overlays next to the screenshot. Add
 `FIND_IMAGE_DEBUG_PROBE=x,y` (screenshot pixels) to also score the template at
 one position and save the images compared there.
+
+### Splash screens
+
+Before its main menu a game shows a few screens a click skips: a black
+screen while it starts, the Her Interactive logo (still, or the animated
+magnifying-glass intro of the later games), the game's title card, and in
+some games an intro animation (Ghost of Thornton Hall's runs 28 s). Waiting
+them out cost tens of seconds a game, so the scenario clicks past them.
+
+It looks for them from the moment the game says its window is in its
+fullscreen Space (which it says once the move there has finished), with no
+settling time once the window is focused. Each attempt's capture is first
+compared with the game's splash screens (`SplashScreen`), which takes
+milliseconds; only a capture that isn't one goes on to the OCR for Exit, which
+takes most of a second. A splash screen is clicked near the top-left corner of
+the game's picture, where no game's menu has a button, so a menu wrongly
+taken for one comes to no harm.
+
+A splash screen is clicked as soon as it's seen. The screen moving on is the
+sign the click took, so one still up — the same picture as the one clicked —
+is only clicked again 2 s later, as a retry: some take a click only once
+they've finished appearing. None is clicked once Exit has been, and a capture
+that isn't clicked still goes to the OCR, so a menu wrongly taken for a splash
+screen still has its Exit found. The Her Interactive logo is also still
+clicked where OCR reads "interactive", which catches it in a game with no
+references.
+
+**In a DirectDraw game the cursor lock decides how soon that is.** The first
+click must not come before the wrapp's cursor lock has finished (see above),
+a quarter of a second after the window reaches its fullscreen Space — about
+2 s after it appears, while the Her Interactive logo is still up. While the
+lock is still working the scenario doesn't click at all, and captures again
+instead, so a click never lands on the screen that replaced the one it was
+meant for. The Direct3D and ScummVM games have no lock to wait for.
+
+From the game's window appearing to the Exit click took 3.3–13 s across all
+33 games, 4.1 s for half of them, where waiting out the screens took up to a
+minute (Labyrinth of Lies' and Sea of Darkness's intros run 50 s). The slowest
+is Secrets Can Kill Remastered, black for its first six seconds with nothing
+there to click.
+
+A screen is recognised by its **fingerprint** (`ImageFingerprint`): the dark
+bars around the picture are trimmed off, so the display's shape doesn't
+matter, and what's left is shrunk to a 24×18 grid of colours; two
+fingerprints' distance is the mean difference per channel. A row or column of
+the capture only counts as picture when 15% of it is bright: a game's own
+cursor, or a line along the window's edge, can be out in a bar, and shouldn't
+stretch the picture to the window's edge. A capture within
+`SplashScreen.matchDistance` (0.08) of one of the game's references is that
+splash screen. Across recordings of 31 games, no menu came nearer than 0.134
+to any reference its game is matched against, and every game had a splash
+screen recognised within its first six seconds.
+
+The references are files in `WrappPuppeteer/NancyDrew/assets/splash/`:
+`splash-any-<what it shows>.png` for the screens many games share — the Her
+Interactive logos and intro, the glowing "Nancy Drew" — and
+`splash-<game slug>-<what it shows>.png` for one game's own, mostly title
+cards. A game is matched against its own and every `any` one. They're copied
+flat into the app's resources, so the names must be unique; WrappPuppeteer
+reads them from the source tree when it runs from a build inside it, so one
+just made is used without rebuilding. Each is a recorded frame with its bars
+trimmed, 160 pixels wide. An animated screen needs a reference for each look
+it has long enough to be caught in.
+
+The later games' intros end on the game's title over a background, which the
+menu then adds a thin bar of text to; those frames are too close to the menu
+to tell apart, and have no reference. The earlier screens each last several
+seconds, so a click lands on one of them. To add or redo a game's:
+
+```bash
+WP=DerivedData/Build/Products/Debug/WrappPuppeteer.app/Contents/MacOS/WrappPuppeteer
+
+# Record the game starting: its window from when it's fullscreen, four frames
+# a second, named by milliseconds since the window appeared. Nothing is
+# clicked, so the game plays through to its menu. Run it where a wrapp may
+# take over the screen.
+$WP "built-apps/Nancy Drew - <game>.app" --record /tmp/rec --record-seconds 60
+
+# Make a reference from a frame partway through each splash screen
+$WP --make-splash-reference /tmp/rec/004960.png \
+  WrappPuppeteer/NancyDrew/assets/splash/splash-<slug>-her-logo.png
+
+# Check every frame: SPLASH, the nearest reference and its distance
+$WP --classify <slug> /tmp/rec
+```
+
+Some of the splash frames should say `SPLASH`, early on, and every frame from
+the menu on should not, with room to spare. A new `any` reference needs
+checking against every game's recording, since every game is matched against
+it. `--record` also works on a normal run
+(without `--record-seconds`), to see afterwards what each click did. The
+record directory's path must not contain spaces: the game's control socket
+takes the path a capture is saved to as one word.
 
 ## Reading the output
 

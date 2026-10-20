@@ -46,6 +46,9 @@ struct Wrapp {
     /// The raw `GameEngine` setting, for logging.
     let engineSetting: String
     let engine: WrappEngine
+    /// The game's slug (`GameInfoProvider`'s id), which names its splash
+    /// screens' reference images.
+    let gameSlug: String
     let gameExeName: String
     let winePrefix: URL
     /// What a Wine game draws with, from its .exe; only a DirectDraw game
@@ -57,6 +60,7 @@ struct Wrapp {
         let settings = Wrapp.readSettings(appPath: appPath)
         engineSetting = settings["GameEngine"] as? String ?? "unknown"
         engine = WrappEngine(settingValue: engineSetting)
+        gameSlug = settings["GameSlug"] as? String ?? "unknown"
         let exePath = settings["GameExePath"] as? String ?? "/Game.exe"
         gameExeName = (exePath as NSString).lastPathComponent
         winePrefix = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/SharedSupport/prefix")
