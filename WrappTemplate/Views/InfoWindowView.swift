@@ -102,22 +102,30 @@ class InfoWindowViewModel: ObservableObject {
     }
 }
 
+/// Laid out as an NSAlert is: the wrapp's icon on the left, then a bold
+/// message, smaller informative text, and the buttons along the bottom
+/// right (a checkbox, or the log buttons, bottom left).
 struct InfoWindowView: View {
     @ObservedObject var viewModel: InfoWindowViewModel
 
     var body: some View {
-        VStack(spacing: 15) {
-            switch viewModel.phase {
-            case .warning:
-                warningContent
-            case .loading:
-                loadingContent
-            case .error(let exitCode, let explanation):
-                errorContent(exitCode: exitCode, explanation: explanation)
+        HStack(alignment: .top, spacing: 16) {
+            icon
+
+            VStack(alignment: .leading, spacing: 10) {
+                switch viewModel.phase {
+                case .warning:
+                    warningContent
+                case .loading:
+                    loadingContent
+                case .error(let exitCode, let explanation):
+                    errorContent(exitCode: exitCode, explanation: explanation)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(20)
-        .frame(width: 450)
+        .frame(width: 480)
         .fixedSize(horizontal: true, vertical: true)
         .coordinateSpace(name: Self.rootSpace)
         .onAppear {
@@ -131,26 +139,48 @@ struct InfoWindowView: View {
     /// `confirmButtonFrame` is measured in.
     static let rootSpace = "info-window"
 
+    /// The wrapp's icon, with a caution badge once the game has failed, as
+    /// a critical alert's is.
+    private var icon: some View {
+        Image(nsImage: NSApplication.shared.applicationIconImage)
+            .resizable()
+            .frame(width: 64, height: 64)
+            .overlay(alignment: .bottomTrailing) {
+                if case .error = viewModel.phase {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.black, .yellow)
+                        .font(.system(size: 26))
+                        .offset(x: 4, y: 4)
+                }
+            }
+    }
+
+    private func message(_ text: String) -> some View {
+        Text(text)
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func informative(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     // MARK: - Warning
 
     private var warningContent: some View {
-        VStack(spacing: 15) {
-            Text("⚠️ Important: Save Your Progress Regularly!")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.orange)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+        Group {
+            message("Save your progress often")
 
-            Text("This game was not designed to run on modern systems so saving regularly is recommended to avoid losing progress in the event of a crash.")
-                .font(.system(size: NSFont.systemFontSize))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            informative("This game was not designed to run on modern systems, so saving regularly is recommended to avoid losing progress if it crashes.")
 
             HStack {
-                Toggle("Don't show this warning again", isOn: $viewModel.dontShowAgain)
+                Toggle("Don't show this again", isOn: $viewModel.dontShowAgain)
                     .toggleStyle(.checkbox)
-                    .foregroundStyle(.secondary)
+                    .font(.callout)
 
                 Spacer()
 
@@ -165,6 +195,7 @@ struct InfoWindowView: View {
                         .onChange(of: proxy.frame(in: .named(Self.rootSpace))) { _, frame in viewModel.confirmButtonFrame = frame }
                 })
             }
+            .padding(.top, 6)
         }
     }
 
@@ -175,20 +206,16 @@ struct InfoWindowView: View {
     /// shows the error content instead, so while this shows, the game may
     /// yet start.
     private var loadingContent: some View {
-        VStack(spacing: 15) {
-            ProgressView()
-                .controlSize(.regular)
-
-            Text(viewModel.stage.message)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .accessibilityIdentifier("loading-message")
+        Group {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                message(viewModel.stage.message)
+                    .accessibilityIdentifier("loading-message")
+            }
 
             if let detail = viewModel.stage.detail {
-                Text(detail)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                informative(detail)
             }
 
             // On a heavily loaded Mac a long wait is expected, not a sign the
@@ -199,71 +226,80 @@ struct InfoWindowView: View {
                 // without Steam still gets the offer: the busy Mac may be
                 // why Steam is stuck, and the game alone needs far less.
                 if viewModel.showSuspectedHang, viewModel.onLaunchWithoutSteam != nil {
-                    failureActions
+                    launchWithoutSteamNote
+                    HStack {
+                        Spacer()
+                        failureButtons
+                    }
+                    .padding(.top, 6)
                 }
             } else if viewModel.showSuspectedHang {
                 possibleFailureNote
             } else if viewModel.showSlowLoadingNote {
-                Text("This is taking longer than usual. Please be patient…")
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                informative("This is taking longer than usual. Please be patient…")
             }
         }
     }
 
+    private func caution(_ title: String) -> some View {
+        Label {
+            Text(title).fontWeight(.semibold)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.yellow)
+        }
+        .font(.callout)
+    }
+
     private var possibleFailureNote: some View {
-        VStack(spacing: 12) {
-            Label("Possible Launch Failure", systemImage: "questionmark.circle")
-                .font(.system(size: NSFont.systemFontSize, weight: .semibold))
-                .foregroundStyle(.orange)
+        VStack(alignment: .leading, spacing: 8) {
+            caution("Possible launch failure")
 
-            Text("\(viewModel.stage.subject) is taking much longer than usual to start, and may have failed. It's still trying, so you can keep waiting — or look at the log, or quit.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+            informative("\(viewModel.stage.subject) is taking much longer than usual to start, and may have failed. It's still trying, so you can keep waiting — or look at the log, or quit.")
 
-            LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
+            launchWithoutSteamNote
 
-            failureActions
+            HStack {
+                LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
+                Spacer()
+                failureButtons
+            }
+            .padding(.top, 6)
         }
         .accessibilityIdentifier("possible-launch-failure")
     }
 
-    /// Quit, and for a game that can run without Steam, the offer to.
+    /// For a game that can run without Steam, the offer to.
     @ViewBuilder
-    private var failureActions: some View {
-        if let launchWithoutSteam = viewModel.onLaunchWithoutSteam {
-            Text("You can start the game without Steam instead. Your saves stay on this Mac either way, but this time they won't sync with Steam Cloud.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+    private var launchWithoutSteamNote: some View {
+        if viewModel.onLaunchWithoutSteam != nil {
+            informative("You can start the game without Steam instead. Your saves stay on this Mac either way, but this time they won't sync with Steam Cloud.")
+        }
+    }
 
-            HStack {
-                Button("Quit") {
-                    NSApp.terminate(nil)
-                }
-                Button("Launch Without Steam", action: launchWithoutSteam)
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("launch-without-steam")
+    /// Quit, and for a game that can run without Steam, Launch Without Steam
+    /// as the default.
+    @ViewBuilder
+    private var failureButtons: some View {
+        if let launchWithoutSteam = viewModel.onLaunchWithoutSteam {
+            Button("Quit") {
+                NSApp.terminate(nil)
             }
+            Button("Launch Without Steam", action: launchWithoutSteam)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("launch-without-steam")
         } else {
             Button("Quit") {
                 NSApp.terminate(nil)
             }
-            .buttonStyle(.borderedProminent)
+            .keyboardShortcut(.defaultAction)
         }
     }
 
     private func heavyLoadNote(_ load: SystemLoadReading) -> some View {
-        VStack(spacing: 6) {
-            Label("Your Mac is very busy", systemImage: "gauge.with.dots.needle.100percent")
-                .font(.system(size: NSFont.systemFontSize, weight: .semibold))
-                .foregroundStyle(.orange)
-            Text(Self.heavyLoadMessage(load))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 4) {
+            caution("Your Mac is very busy")
+            informative(Self.heavyLoadMessage(load))
         }
         .accessibilityIdentifier("heavy-load-warning")
     }
@@ -281,34 +317,32 @@ struct InfoWindowView: View {
     // MARK: - Error
 
     private func errorContent(exitCode: Int32, explanation: String?) -> some View {
-        VStack(spacing: 15) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 50))
-                .foregroundStyle(.red)
+        Group {
+            message(explanation == nil ? "The game crashed" : "The game quit unexpectedly")
 
-            Text(explanation == nil ? "Game Crashed" : "The Game Quit Unexpectedly")
-                .font(.title2)
-                .fontWeight(.bold)
-
-            Text(explanation ?? "The game exited unexpectedly (exit code \(exitCode)).")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-
-            LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
+            informative(explanation ?? "The game exited unexpectedly (exit code \(exitCode)).")
 
             FailureReportCallout(model: viewModel.failureReport)
 
             HiddenUntilReportAnswered(model: viewModel.failureReport) {
-                failureActions
+                launchWithoutSteamNote
             }
+
+            HStack {
+                LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
+                Spacer()
+                HiddenUntilReportAnswered(model: viewModel.failureReport) {
+                    failureButtons
+                }
+            }
+            .padding(.top, 6)
         }
     }
 }
 
 #Preview("Warning") {
     InfoWindowView(viewModel: InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: true))
-        .frame(width: 450)
+        .frame(width: 480)
 }
 
 #Preview("Heavy load") {
@@ -320,7 +354,7 @@ struct InfoWindowView: View {
         )
         return vm
     }())
-    .frame(width: 450)
+    .frame(width: 480)
 }
 
 #Preview("Possible launch failure, through Steam") {
@@ -329,7 +363,7 @@ struct InfoWindowView: View {
         vm.showSuspectedHang = true
         return vm
     }())
-    .frame(width: 450)
+    .frame(width: 480)
 }
 
 #Preview("Possible launch failure, can launch without Steam") {
@@ -339,7 +373,7 @@ struct InfoWindowView: View {
         vm.showSuspectedHang = true
         return vm
     }())
-    .frame(width: 450)
+    .frame(width: 480)
 }
 
 #Preview("Heavy load past the possible-failure point, can launch without Steam") {
@@ -353,7 +387,7 @@ struct InfoWindowView: View {
         )
         return vm
     }())
-    .frame(width: 450)
+    .frame(width: 480)
 }
 
 #Preview("Error") {
@@ -362,7 +396,7 @@ struct InfoWindowView: View {
         vm.phase = .error(exitCode: 1, explanation: nil)
         return vm
     }())
-    .frame(width: 450)
+    .frame(width: 480)
 }
 
 #Preview("Quit unexpectedly") {
@@ -371,5 +405,5 @@ struct InfoWindowView: View {
         vm.phase = .error(exitCode: 0, explanation: "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.")
         return vm
     }())
-    .frame(width: 450)
+    .frame(width: 480)
 }

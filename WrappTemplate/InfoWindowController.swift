@@ -57,8 +57,8 @@ class InfoWindowController: NSWindowController {
 
     /// `stage` is what the launch waits on first: Steam, for a game that
     /// needs it, or else the game.
-    init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", saveWarningEnabled: Bool = true,
-         loadMonitor: SystemLoadMonitor? = nil) {
+    init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", gameTitle: String = "Nancy Drew",
+         saveWarningEnabled: Bool = true, loadMonitor: SystemLoadMonitor? = nil) {
         self.appSupportPath = appSupportPath
         self.loadMonitor = loadMonitor
 
@@ -66,12 +66,12 @@ class InfoWindowController: NSWindowController {
         self.viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: shouldShow, gameSlug: gameSlug)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 100),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 100),
             styleMask: [.titled],
             backing: .buffered,
             defer: false
         )
-        window.title = "Nancy Drew"
+        window.title = gameTitle
         window.center()
         window.level = .floating
         window.isReleasedWhenClosed = false

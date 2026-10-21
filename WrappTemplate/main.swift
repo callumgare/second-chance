@@ -674,7 +674,8 @@ func main() {
     let saveWarningEnabled = (config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-")) && !launchingWithoutSteam
     let infoWindow = InfoWindowController(
         stage: config.gameEngine.hasPrefix("wine-steam") ? .startingSteam : .startingGame(title: config.gameTitle),
-        appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, saveWarningEnabled: saveWarningEnabled,
+        appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
+        saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor)
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
