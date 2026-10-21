@@ -285,7 +285,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var isCleaningUp = false
     /// Set when the game crashes during loading, so quitting propagates the game's exit code.
     var gameExitCode: Int32 = 0
-    /// Set when the player chose "Launch Without Steam": once this launch is
+    /// Set when the player chose "Launch Directly": once this launch is
     /// cleaned up, the wrapp opens again with `--launch-without-steam`.
     var relaunchWithoutSteam = false
     
@@ -374,7 +374,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Starts a DRM-free game the user chose to launch through Steam directly
 /// instead, for this launch only. Passed by the wrapp to itself when the
-/// player picks "Launch Without Steam" after a launch through Steam failed.
+/// player picks "Launch Directly" after a launch through Steam failed.
 let launchWithoutSteamArgument = "--launch-without-steam"
 
 // MARK: - Termination signals

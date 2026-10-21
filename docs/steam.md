@@ -166,7 +166,7 @@ that has definitely failed shows the error instead.
 
 **A DRM-free game the user chose to launch via Steam can fall back to
 launching directly.** Both the possible-launch-failure warning and the error
-offer **Launch Without Steam** when `AppSettings.plist` has
+offer **Launch Directly** (starting the game without Steam) when `AppSettings.plist` has
 `SteamLaunchMode` = `steam` (`GameConfig.canLaunchWithoutSteam`). On a
 heavily loaded Mac the busy-Mac note replaces the warning, but the offer
 still appears under it once the warning would have; a game with

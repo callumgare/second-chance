@@ -29,7 +29,7 @@ are already running.
 a basic or a detailed report. The question makes the case that a detailed
 report is usually what it takes to fix the problem. The answer sends this
 report and becomes the setting, Basic or Detailed. The screen's way out (Quit,
-Launch Without Steam, Start Over) stays hidden until then
+Launch Directly, Start Over) stays hidden until then
 (`HiddenUntilReportAnswered`). Leaving anyway sends the report basic on the
 way out: `FailureReporter.wait`, which every exit path calls, sends any
 unanswered first failure as basic before it waits. That covers Cmd-Q, a run

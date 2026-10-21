@@ -298,7 +298,7 @@ struct InfoWindowView: View {
         }
     }
 
-    /// Quit, and for a game that can run without Steam, Launch Without Steam
+    /// Quit, and for a game that can run without Steam, Launch Directly
     /// as the default.
     @ViewBuilder
     private var failureButtons: some View {
@@ -306,7 +306,7 @@ struct InfoWindowView: View {
             Button("Quit") {
                 NSApp.terminate(nil)
             }
-            Button("Launch Without Steam", action: launchWithoutSteam)
+            Button("Launch Directly", action: launchWithoutSteam)
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("launch-without-steam")
         } else {
