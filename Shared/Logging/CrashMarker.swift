@@ -10,8 +10,9 @@
 //
 //  The signal handler may only use async-signal-safe calls, so it never
 //  touches LogStore or swift-log: it writes a prepared line to stderr and to
-//  a marker file opened in advance, then re-raises the signal so the crash
-//  report is still written.
+//  a marker file opened in advance, then puts back the handler that was
+//  there before it — Sentry's, when failure reports are on — and re-raises,
+//  so that handler still runs and the crash report is still written.
 
 import Foundation
 import Logging
@@ -27,9 +28,12 @@ nonisolated enum CrashMarker {
     nonisolated(unsafe) private static var markerFD: Int32 = -1
     nonisolated(unsafe) private static let messageTexts = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: slots)
     nonisolated(unsafe) private static let messageLengths = UnsafeMutablePointer<Int>.allocate(capacity: slots)
+    /// The action each signal had before ours, to hand the crash on to.
+    nonisolated(unsafe) private static let previousActions = UnsafeMutablePointer<sigaction>.allocate(capacity: slots)
 
     /// Report a crash the previous run left in `directory`, then arm the
-    /// handler for this run. Call once, early, after logging is bootstrapped.
+    /// handler for this run. Call once, early, after logging is bootstrapped
+    /// and after `FailureReporter.start`, whose crash handler this hands on to.
     static func install(in directory: URL, logger: Logging.Logger) {
         let marker = directory.appendingPathComponent("crash-marker")
         reportPrevious(marker: marker, logger: logger)
@@ -49,6 +53,7 @@ nonisolated enum CrashMarker {
         let process = ProcessInfo.processInfo.processName
         messageTexts.initialize(repeating: nil, count: slots)
         messageLengths.initialize(repeating: 0, count: slots)
+        previousActions.initialize(repeating: sigaction(), count: slots)
         for sig in fatalSignals {
             let text = "\n💥 \(process) (pid \(getpid())) crashed: \(SubprocessWatch.signalName(sig)), run \(RunContext.runID), at unix time \(Int(Date().timeIntervalSince1970)) or later\n"
             guard sig < slots, let pointer = strdup(text) else { continue }
@@ -59,19 +64,23 @@ nonisolated enum CrashMarker {
             action.__sigaction_u.__sa_handler = CrashMarker.handle
             action.sa_flags = SA_RESETHAND
             sigemptyset(&action.sa_mask)
-            sigaction(sig, &action, nil)
+            sigaction(sig, &action, previousActions + Int(sig))
         }
     }
 
     /// The handler: async-signal-safe calls only.
     private static let handle: @convention(c) (Int32) -> Void = { sig in
-        // Put the default action back by hand: macOS ignores SA_RESETHAND for
-        // SIGILL and SIGTRAP, and a handler that re-raises those without
-        // this runs again, for ever.
-        var defaultAction = sigaction()
-        defaultAction.__sigaction_u.__sa_handler = SIG_DFL
-        sigemptyset(&defaultAction.sa_mask)
-        sigaction(sig, &defaultAction, nil)
+        // Put the previous action back by hand — the default, or another
+        // crash handler: macOS ignores SA_RESETHAND for SIGILL and SIGTRAP,
+        // and a handler that re-raises those without this runs again, for ever.
+        if sig >= 0, sig < CrashMarker.slots {
+            sigaction(sig, CrashMarker.previousActions + Int(sig), nil)
+        } else {
+            var defaultAction = sigaction()
+            defaultAction.__sigaction_u.__sa_handler = SIG_DFL
+            sigemptyset(&defaultAction.sa_mask)
+            sigaction(sig, &defaultAction, nil)
+        }
 
         if sig >= 0, sig < CrashMarker.slots, let pointer = CrashMarker.messageTexts[Int(sig)] {
             let length = CrashMarker.messageLengths[Int(sig)]
@@ -80,7 +89,8 @@ nonisolated enum CrashMarker {
                 _ = write(CrashMarker.markerFD, pointer, length)
             }
         }
-        // Die as we would have, so macOS still writes its crash report.
+        // Die as we would have: the previous handler (Sentry's) records the
+        // crash and re-raises in turn, and macOS still writes its report.
         raise(sig)
     }
 

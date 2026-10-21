@@ -56,6 +56,14 @@ struct DebugSettingsView: View {
                     .help("Show or hide the floating log window.")
                     Toggle("Mirror Logs to Disk", isOn: $settings.mirrorLogsToDisk)
                         .help("Write every log entry to a file in Downloads (backfills the current log history, then appends live). The in-memory log used for Save Logs keeps only the last 50,000 entries; the mirror keeps everything.")
+                    HStack {
+                        Text("Test crash reporting")
+                        Spacer()
+                        Button("Crash Now", role: .destructive) {
+                            FailureReporter.crashForTesting()
+                        }
+                    }
+                    .help("Crash Second Chance on purpose. The next launch should log \"The previous run crashed\" and, with failure reports on, send the crash.")
                 } header: {
                     Text("Debugging")
                         .font(.headline)
@@ -75,7 +83,7 @@ struct DebugSettingsView: View {
             
             Spacer()
         }
-        .frame(width: 500, height: 420)
+        .frame(width: 500, height: 460)
     }
 }
 

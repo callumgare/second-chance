@@ -56,6 +56,37 @@ nonisolated enum ErrorChain {
         }
         return parts.joined(separator: "\n  ")
     }
+
+    /// The error's type and case and nothing else — `WrappBuildError.installIncomplete`,
+    /// `NSCocoaErrorDomain 513` — safe to send where a message is not, since
+    /// messages and associated values can hold paths.
+    static func identifier(_ error: Error) -> String {
+        if type(of: error) is NSError.Type {
+            let ns = error as NSError
+            return "\(ns.domain) \(ns.code)"
+        }
+        let typeName = String(describing: type(of: error))
+        let mirror = Mirror(reflecting: error)
+        guard mirror.displayStyle == .enum else { return typeName }
+        // A case with associated values reflects as one child labelled with
+        // the case; a case without them describes as its name.
+        if let label = mirror.children.first?.label {
+            return "\(typeName).\(label)"
+        }
+        let name = String(describing: error)
+        return name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) ? "\(typeName).\(name)" : typeName
+    }
+
+    /// `identifier` for each error the chain names as an underlying cause.
+    static func underlyingIdentifiers(_ error: Error) -> [String] {
+        var result: [String] = []
+        var next = (error as NSError).userInfo[NSUnderlyingErrorKey] as? Error
+        while let underlying = next, result.count < 5 {
+            result.append(identifier(underlying))
+            next = (underlying as NSError).userInfo[NSUnderlyingErrorKey] as? Error
+        }
+        return result
+    }
 }
 
 nonisolated enum FailureSummary {

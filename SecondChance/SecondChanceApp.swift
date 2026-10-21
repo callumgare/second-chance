@@ -51,6 +51,8 @@ struct SecondChanceApp: App {
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
         RunContext.logHeader(logger)
+        // Before CrashMarker, which hands crashes on to it.
+        FailureReporter.start(process: .app)
         CrashMarker.install(
             in: FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Logs/SecondChance/app", isDirectory: true),

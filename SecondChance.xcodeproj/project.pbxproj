@@ -12,6 +12,8 @@
 		E2B000022F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
 		E2B000042F01000000000001 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = E2B000012F01000000000001 /* Logging */; };
 		E2C5A0002F01000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E2C5A0012F01000000000001 /* Sparkle */; };
+		E2D5E0002F01000000000001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = E2D5E0012F01000000000001 /* Sentry */; };
+		E2D5E0022F01000000000001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = E2D5E0012F01000000000001 /* Sentry */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -143,6 +145,7 @@
 			files = (
 				E2B000002F01000000000001 /* Logging in Frameworks */,
 				E2C5A0002F01000000000001 /* Sparkle in Frameworks */,
+				E2D5E0002F01000000000001 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -158,6 +161,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E2B000022F01000000000001 /* Logging in Frameworks */,
+				E2D5E0022F01000000000001 /* Sentry in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -237,6 +241,7 @@
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
 				E2C5A0012F01000000000001 /* Sparkle */,
+				E2D5E0012F01000000000001 /* Sentry */,
 			);
 			productName = SecondChance;
 			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
@@ -263,6 +268,7 @@
 			name = WrappTemplate;
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
+				E2D5E0012F01000000000001 /* Sentry */,
 			);
 			productName = WrappTemplate;
 			productReference = E24D78DE2F063E1E00B38683 /* WrappTemplate.app */;
@@ -329,6 +335,7 @@
 			packageReferences = (
 				E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */,
 				E2C5A0052F01000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+				E2D5E0052F01000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
@@ -773,6 +780,7 @@
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -820,6 +828,7 @@
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -868,6 +877,7 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -916,6 +926,7 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1035,6 +1046,14 @@
 				minimumVersion = 2.10.0;
 			};
 		};
+		E2D5E0052F01000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.30.2;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -1047,6 +1066,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E2C5A0052F01000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */;
 			productName = Sparkle;
+		};
+		E2D5E0012F01000000000001 /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E2D5E0052F01000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
+			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

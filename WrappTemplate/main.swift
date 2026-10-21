@@ -42,6 +42,7 @@ func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldC
         alert.addButton(withTitle: "Wine Control Panel")
         alert.addButton(withTitle: "Wine Config")
         alert.addButton(withTitle: "Show Wine Prefix in Finder")
+        alert.addButton(withTitle: "Crash Now (test crash reporting)")
         alert.addButton(withTitle: "Cancel")
         
         let response = alert.runModal()
@@ -58,6 +59,8 @@ func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldC
             launchWineConfig(config)
         case NSApplication.ModalResponse(rawValue: 1004):  // Show Wine Prefix in Finder
             showWinePrefixInFinder(config)
+        case NSApplication.ModalResponse(rawValue: 1005):  // Crash Now
+            FailureReporter.crashForTesting()
         default:  // Cancel
             return (false, debugModeEnabled)
         }
@@ -395,6 +398,8 @@ private func installTerminationHandlers() {
 func main() {
     // Bootstrap logging before anything else can construct a Logger.
     AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappTemplate")
+    // Before anything can fail, and before CrashMarker, which hands crashes on to it.
+    FailureReporter.start(process: .wrapp)
     installTerminationHandlers()
     // Before any Wine process starts, so that every one inherits them.
     for (name, value) in WineEnvironment.wrappSessionVariables() {
@@ -462,6 +467,7 @@ func main() {
         ("prefix", config.winePrefix.path),
         ("saves", config.appSupportPath.path),
     ])
+    FailureReporter.setGame(config.gameSlug, engine: config.gameEngine)
     CrashMarker.install(in: gameLogs, logger: mainLogger)
     // For the whole run: a game that crashes an hour in may have been
     // starved of CPU, too. The loading window observes it, and slows it down

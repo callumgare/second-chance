@@ -1,0 +1,230 @@
+import Foundation
+import Testing
+@testable import SecondChance
+
+@Suite("Report redactor")
+struct ReportRedactorTests {
+    private let redactor = ReportRedactor(identity: .init(
+        homePath: "/Users/nancy",
+        userName: "nancy",
+        fullName: "Nancy Drew",
+        computerNames: ["Nancy's MacBook Pro", "Nancys-MacBook-Pro", "Nancys-MacBook-Pro.local"],
+        steamNames: ["sleuth1930", "River Heights Detective"]
+    ))
+
+    @Test("The home folder becomes ~, as a path, a file URL and percent-encoded")
+    func homeFolder() {
+        #expect(redactor.redact("prefix: /Users/nancy/Library/Caches/x") == "prefix: ~/Library/Caches/x")
+        #expect(redactor.redact("file:///Users/nancy/Games/a.iso") == "file://~/Games/a.iso")
+        let spaced = ReportRedactor(identity: .init(homePath: "/Users/Nancy Drew", userName: "x", fullName: "",
+                                                    computerNames: [], steamNames: []))
+        #expect(spaced.redact("/Users/Nancy%20Drew/a and /Users/Nancy Drew/b") == "~/a and ~/b")
+    }
+
+    @Test("Another account's home keeps that it was a home, not whose; /Users/Shared stays")
+    func otherHomes() {
+        #expect(redactor.redact("/Users/george/Desktop") == "/Users/<user>/Desktop")
+        #expect(redactor.redact("/Users/Shared/Games") == "/Users/Shared/Games")
+    }
+
+    @Test("Names go as whole words, whatever their case, and not from inside other words")
+    func names() {
+        #expect(redactor.redact("Signed in as Nancy Drew (NANCY)") == "Signed in as <user> (<user>)")
+        #expect(redactor.redact("Steam account sleuth1930, persona River Heights Detective") ==
+                "Steam account <user>, persona <user>")
+        #expect(redactor.redact("financy") == "financy")
+    }
+
+    @Test("A name too short to be distinctive is left alone")
+    func shortNames() {
+        let short = ReportRedactor(identity: .init(homePath: "/Users/al", userName: "al", fullName: "",
+                                                   computerNames: [], steamNames: []))
+        #expect(short.redact("total: al") == "total: al")
+        #expect(short.redact("/Users/al/x") == "~/x")
+    }
+
+    @Test("The computer's names and Steam IDs are replaced")
+    func computerAndSteamID() {
+        #expect(redactor.redact("host Nancys-MacBook-Pro.local up") == "host <computer> up")
+        #expect(redactor.redact("Nancy's MacBook Pro") == "<computer>")
+        #expect(redactor.redact("steamid 76561198012345678.") == "steamid <steam-id>.")
+    }
+
+    @Test("Redacting a JSON-like value reaches nested strings")
+    func nested() throws {
+        let value = redactor.redact(value: ["a": ["/Users/nancy/x", 3], "b": ["c": "nancy"]] as [String: Any])
+        let dictionary = try #require(value as? [String: Any])
+        let a = try #require(dictionary["a"] as? [Any])
+        #expect(a.first as? String == "~/x")
+        #expect(a.last as? Int == 3)
+        #expect((dictionary["b"] as? [String: Any])?["c"] as? String == "<user>")
+    }
+
+    @Test("Steam names are read from loginusers.vdf and the .reg fragment")
+    func steamNameParsing() {
+        let vdf = """
+        "users"
+        {
+            "76561198012345678"
+            {
+                "AccountName"        "sleuth1930"
+                "PersonaName"        "River Heights Detective"
+            }
+        }
+        """
+        #expect(ReportRedactor.values(of: ["AccountName", "PersonaName"], in: vdf) == ["sleuth1930", "River Heights Detective"])
+        #expect(ReportRedactor.values(of: ["AutoLoginUser"], in: #""AutoLoginUser"="sleuth1930""#) == ["sleuth1930"])
+    }
+}
+
+@Suite("Error identifiers")
+struct ErrorIdentifierTests {
+    enum Sample: Error {
+        case plain
+        case withPath(String)
+    }
+
+    struct Structured: Error {
+        let path: String
+    }
+
+    @Test("An enum case keeps its name and drops its associated values")
+    func enumCases() {
+        #expect(ErrorChain.identifier(Sample.plain) == "Sample.plain")
+        #expect(ErrorChain.identifier(Sample.withPath("/Users/nancy")) == "Sample.withPath")
+    }
+
+    @Test("A struct is its type")
+    func structs() {
+        #expect(ErrorChain.identifier(Structured(path: "/Users/nancy")) == "Structured")
+    }
+
+    @Test("An NSError is its domain and code, and its underlying errors are listed")
+    func nsErrors() {
+        let underlying = NSError(domain: NSPOSIXErrorDomain, code: 13)
+        let error = NSError(domain: NSCocoaErrorDomain, code: 513, userInfo: [
+            NSUnderlyingErrorKey: underlying,
+            NSFilePathErrorKey: "/Users/nancy/x",
+        ])
+        #expect(ErrorChain.identifier(error) == "NSCocoaErrorDomain 513")
+        #expect(ErrorChain.underlyingIdentifiers(error) == ["NSPOSIXErrorDomain 13"])
+    }
+}
+
+@Suite("Reporting preferences")
+struct ReportingPreferencesTests {
+    private func temporaryDirectory() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("reporting-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    @Test("With no file, reports are basic and nobody has been asked")
+    func defaults() {
+        #expect(ReportingPreferences.load(from: temporaryDirectory()) == ReportingPreferences(level: .basic, promptShown: false))
+    }
+
+    @Test("What's saved is what's loaded")
+    func roundTrip() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        ReportingPreferences.update(in: directory) {
+            $0.level = .manual
+            $0.promptShown = true
+        }
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .manual, promptShown: true))
+    }
+
+    @Test("A file that can't be read gives the defaults")
+    func corrupt() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("{ not json".utf8).write(to: directory.appendingPathComponent(ReportingPreferences.fileName))
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences())
+    }
+}
+
+@Suite("Failure reports")
+struct FailureReportTests {
+    private let redactor = ReportRedactor(identity: .init(homePath: "/Users/nancy", userName: "nancy",
+                                                          fullName: "", computerNames: [], steamNames: []))
+
+    @Test("A basic report keeps only the allow-listed context keys, redacted")
+    func basicContexts() {
+        let contexts: [String: [String: Any]] = [
+            "os": ["name": "macOS", "version": "15.6", "locale": "en_AU"],
+            "device": ["arch": "arm64", "model": "Mac15,3", "free_storage": 123, "boot_time": "x"],
+            "app": ["app_version": "0.4.0", "app_start_time": "x", "device_app_hash": "abc"],
+            "culture": ["timezone": "Australia/Melbourne"],
+            "failure": ["kind": "X.y", "stage": "/Users/nancy/odd"],
+        ]
+        let scrubbed = ReportScrubber.contexts(contexts, detail: .basic, redactor: redactor)
+        #expect(Set(scrubbed.keys) == ["os", "device", "app", "failure"])
+        #expect(Set(scrubbed["os"]?.keys.map { $0 } ?? []) == ["name", "version"])
+        #expect(Set(scrubbed["device"]?.keys.map { $0 } ?? []) == ["arch", "model"])
+        #expect(Set(scrubbed["app"]?.keys.map { $0 } ?? []) == ["app_version"])
+        #expect(scrubbed["failure"]?["stage"] as? String == "~/odd")
+    }
+
+    @Test("A detailed report keeps every context, redacted")
+    func detailedContexts() {
+        let scrubbed = ReportScrubber.contexts(["culture": ["path": "/Users/nancy/x"]], detail: .detailed, redactor: redactor)
+        #expect(scrubbed["culture"]?["path"] as? String == "~/x")
+    }
+
+    @Test("The fingerprint groups by process, what failed, how and when — not by game")
+    func fingerprint() {
+        let report = FailureReport(what: "Building the wrapp", kind: "WrappBuildError.installIncomplete",
+                                   stage: "Detecting game title...", game: "royal-tower")
+        #expect(report.fingerprint(process: "app") ==
+                ["app", "Building the wrapp", "WrappBuildError.installIncomplete", "Detecting game title"])
+    }
+
+    @Test("A report for an error carries its identifier and its causes, not its message")
+    func fromError() {
+        let error = NSError(domain: NSCocoaErrorDomain, code: 4, userInfo: [
+            NSLocalizedDescriptionKey: "No file at /Users/nancy/x",
+            NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: 2),
+        ])
+        let report = FailureReport(what: "Building the wrapp", error: error)
+        #expect(report.kind == "NSCocoaErrorDomain 4")
+        #expect(report.tags["caused_by"] == "NSPOSIXErrorDomain 2")
+        #expect(!report.title.contains("/Users"))
+    }
+}
+
+@Suite("Failure reporter")
+struct FailureReporterGatingTests {
+    private let dsn = "https://key@example.invalid/1"
+
+    @Test("A Release build of the app reports")
+    func release() {
+        #expect(FailureReporter.disabledReason(environment: [:], isDebugBuild: false, dsn: dsn) == nil)
+    }
+
+    @Test("Debug, headless, test and WrappPuppeteer runs don't, nor does a build with no DSN",
+          arguments: [
+              ([:], true, "https://key@example.invalid/1"),
+              (["NON_INTERACTIVE": "true"], false, "https://key@example.invalid/1"),
+              (["SECOND_CHANCE_PUPPET_DIR": "/tmp/p"], false, "https://key@example.invalid/1"),
+              (["XCTestConfigurationFilePath": "/x"], false, "https://key@example.invalid/1"),
+              (["SECOND_CHANCE_REPORTING": "0"], false, "https://key@example.invalid/1"),
+              ([:], false, ""),
+          ] as [([String: String], Bool, String)])
+    func disabled(environment: [String: String], debug: Bool, dsn: String) {
+        #expect(FailureReporter.disabledReason(environment: environment, isDebugBuild: debug, dsn: dsn) != nil)
+    }
+
+    @Test("SECOND_CHANCE_REPORTING=1 turns it on anyway, but not without a DSN")
+    func forced() {
+        let env = ["SECOND_CHANCE_REPORTING": "1", "NON_INTERACTIVE": "true"]
+        #expect(FailureReporter.disabledReason(environment: env, isDebugBuild: true, dsn: dsn) == nil)
+        #expect(FailureReporter.disabledReason(environment: env, isDebugBuild: true, dsn: "") != nil)
+    }
+
+    @Test("Without asking, a previous crash goes at the setting's detail; Manual drops it")
+    func crashDetail() {
+        #expect(FailureReporter.defaultCrashDetail(for: .detailed) == .detailed)
+        #expect(FailureReporter.defaultCrashDetail(for: .basic) == .basic)
+        #expect(FailureReporter.defaultCrashDetail(for: .manual) == nil)
+    }
+}

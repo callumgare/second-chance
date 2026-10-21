@@ -74,3 +74,35 @@ fi
 echo "✅ swift-log is statically linked"
 
 touch "${DERIVED_FILE_DIR}/check-output-collisions-last-run"
+echo "🔍 Verifying Sentry static linking (no dynamic framework)..."
+
+# Same reason as swift-log: a wrapp's Contents/Frameworks is replaced by the
+# engine's, so a dynamic Sentry.framework would be gone by launch time.
+if otool -L "${GAMEWRAPPER_BINARY}" | grep -i "sentry.framework"; then
+    echo "❌ ERROR: Sentry.framework is dynamically linked!"
+    echo ""
+    echo "Link the static 'Sentry' product, not 'Sentry-Dynamic'"
+    echo "(docs/failure-reports.md)."
+    exit 1
+fi
+
+# Xcode still embeds an empty Sentry.framework, only to carry Sentry's
+# privacy manifest. Nothing links it, so losing it with Contents/Frameworks
+# is harmless. The code is in the binary — or, in a Debug build, in the
+# debug dylib beside it.
+SENTRY_CODE="${GAMEWRAPPER_BINARY}"
+if [ -f "${GAMEWRAPPER_BINARY}.debug.dylib" ]; then
+    SENTRY_CODE="${GAMEWRAPPER_BINARY}.debug.dylib"
+fi
+if otool -L "${SENTRY_CODE}" | grep -i "sentry.framework"; then
+    echo "❌ ERROR: Sentry.framework is dynamically linked!"
+    exit 1
+fi
+# grep -c reads to the end: grep -q would stop early, nm would die of
+# SIGPIPE, and pipefail would make that look like no match.
+if [ "$(nm "${SENTRY_CODE}" | grep -c "SentrySDK")" = "0" ]; then
+    echo "⚠️  Warning: No Sentry symbols found in WrappTemplate binary"
+    echo "This may indicate Sentry is not linked properly"
+fi
+
+echo "✅ Sentry is statically linked"
