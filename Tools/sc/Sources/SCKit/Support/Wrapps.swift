@@ -237,13 +237,14 @@ struct WrappBuilder {
         return wrapp
     }
 
-    /// Copy the app build's WrappTemplate executable, its debug dylib and the
+    /// Copy the app build's WrappTemplate executable, its debug dylib, the
     /// in-process helpers (which both engines load from the wrapp's
-    /// Frameworks) into an existing wrapp and re-sign it — the fast loop for
+    /// Frameworks) and its asset catalog (the accent colour and icon, nothing
+    /// per game) into an existing wrapp and re-sign it — the fast loop for
     /// WrappTemplate changes, without reinstalling the game.
     func updateTemplate(of wrapp: URL) async throws {
         let files = ["Contents/MacOS/WrappTemplate", "Contents/MacOS/WrappTemplate.debug.dylib",
-                     "Contents/Frameworks/in_process_helpers.dylib"]
+                     "Contents/Frameworks/in_process_helpers.dylib", "Contents/Resources/Assets.car"]
         try await ui.progressStep("Update template in \(wrapp.lastPathComponent)", success: "Updated template in \(wrapp.lastPathComponent)") { update in
             for file in files {
                 let source = repo.builtTemplate.appendingPathComponent(file)
