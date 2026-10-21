@@ -153,9 +153,11 @@ copies — and asserts on the events the flow publishes:
   borderless window that only covers the screen), it reaches its main menu,
   its first click isn't swallowed by cnc-ddraw, and it quits cleanly
 - For a Wine game, its in-process helpers armed in it: the wrapp's log has
-  `[Helpers] Native fullscreen armed`, and `[Helpers] Cursor lock armed`
+  `[Helpers] Native fullscreen armed`, `[Helpers] Cursor lock armed`
   unless the game draws with Direct3D, which doesn't get it
-  ([wine-in-process-helpers.md](wine-in-process-helpers.md#which-games-get-it))
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#which-games-get-it)),
+  and `[Helpers] Mode scaling armed` unless it draws through cnc-ddraw
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#mode-scaling))
 
 `RecordingEventSubscriber` captures the bus events; the assertions read it.
 **The bus events are the integration contract** — when moving orchestration
@@ -301,7 +303,11 @@ example the quit-button search is narrowed by
 the search to the bottom-right corner, sizes the template relative to the
 screen, and uses red-emphasis greyscale because the button is red. Called
 without options, `TemplateMatcher` searches the whole screen at the template's
-own size.
+own size. Its coarse pass steps across the screen in strides that grow with
+the capture's width, over copies of the screen and the template blurred by
+half a stride. Unblurred, a button drawn with thin lines, such as White Wolf's
+quit button scaled up from 800×600, matches only within a few pixels of its
+place, and the stride steps over it; the fine pass compares the originals.
 
 The scenario clicks Exit, then parks the cursor at the left edge with a real
 mouse-move event — the game draws its own cursor, and left over the button it

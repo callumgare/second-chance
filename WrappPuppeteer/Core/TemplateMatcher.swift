@@ -168,6 +168,26 @@ enum TemplateMatcher {
             stepStartTime = Date()
         }
 
+        // The coarse pass's stride and sampling scale with the screenshot
+        // width (reference: 2500px uses stride=10, sampleStep=3). It searches
+        // blurred copies of the region and the template: a target drawn with
+        // thin lines has a correlation peak only a few pixels wide, which a
+        // stride of 10 or more steps right over (an 800x600 game's quit button
+        // scaled up to a 3024-pixel-wide window, say). Blurring over half the
+        // stride widens the peak to match. The fine pass uses the originals.
+        let referenceWidth: CGFloat = 2500.0
+        let scaleFactor = CGFloat(fullWidth) / referenceWidth
+        let coarseStride = max(1, Int(10.0 * scaleFactor))
+        let coarseSampleStep = max(1, Int(3.0 * scaleFactor))
+        let coarseBlurRadius = coarseStride / 2
+        guard let coarseScreenshotGray = boxBlurred(screenshotGray, radius: coarseBlurRadius) else {
+            logger.error("⚠️  Failed to blur the search region for the coarse pass")
+            free(screenshotGray.data)
+            return nil
+        }
+        defer { free(coarseScreenshotGray.data) }
+        let coarseScreenshotData = coarseScreenshotGray.data.assumingMemoryBound(to: UInt8.self)
+
         var globalBestMatch: (x: Int, y: Int, correlation: Float, scaleIndex: Int, templateWidth: Int, templateHeight: Int)? = nil
         var bestTemplateGray: vImage_Buffer? = nil
         var allScaleMatches: [(scaleIndex: Int, scale: CGFloat, matches: [(x: Int, y: Int, correlation: Float)])] = []
@@ -193,24 +213,25 @@ enum TemplateMatcher {
             logger.debug("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Template grayscale conversion")
             stepStartTime = Date()
 
-            // STAGE 1: Coarse search. Stride and sampling scale with the
-            // screenshot width (reference: 2500px uses stride=10, sampleStep=3).
-            let referenceWidth: CGFloat = 2500.0
-            let scaleFactor = CGFloat(fullWidth) / referenceWidth
-            let coarseStride = max(1, Int(10.0 * scaleFactor))
-            let coarseSampleStep = max(1, Int(3.0 * scaleFactor))
+            // STAGE 1: Coarse search, over the blurred copies (above).
+            logger.debug("    → Resolution-scaled search: stride=\(coarseStride), sampleStep=\(coarseSampleStep), blur=\(coarseBlurRadius) (width=\(fullWidth), scale=\(String(format: "%.2f", scaleFactor)))")
 
-            logger.debug("    → Resolution-scaled search: stride=\(coarseStride), sampleStep=\(coarseSampleStep) (width=\(fullWidth), scale=\(String(format: "%.2f", scaleFactor)))")
+            guard let coarseTemplateGray = boxBlurred(templateGray, radius: coarseBlurRadius) else {
+                logger.debug("    → Failed to blur the template for the coarse pass, skipping")
+                free(templateGray.data)
+                continue
+            }
+            let coarseTemplateData = coarseTemplateGray.data.assumingMemoryBound(to: UInt8.self)
 
             var coarseMatches: [(x: Int, y: Int, correlation: Float)] = []
 
             for y in Swift.stride(from: 0, to: screenshotHeight - templateHeight, by: coarseStride) {
                 for x in Swift.stride(from: 0, to: screenshotWidth - templateWidth, by: coarseStride) {
                     let correlation = calculateNormalizedCorrelation(
-                        screenshot: screenshotData,
+                        screenshot: coarseScreenshotData,
                         screenshotWidth: screenshotWidth,
                         screenshotHeight: screenshotHeight,
-                        template: templateData,
+                        template: coarseTemplateData,
                         templateWidth: templateWidth,
                         templateHeight: templateHeight,
                         offsetX: x,
@@ -224,6 +245,7 @@ enum TemplateMatcher {
                 }
             }
 
+            free(coarseTemplateGray.data)
             logger.debug("    ⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Coarse search completed")
             stepStartTime = Date()
 
@@ -581,6 +603,27 @@ enum TemplateMatcher {
 
     /// Normalized cross-correlation between the template and the screenshot
     /// region at an offset, sampling every `sampleStep` pixels.
+    /// A copy of a grayscale buffer box-blurred over `radius` pixels each
+    /// way (an unblurred copy for 0); the caller frees its data.
+    private static func boxBlurred(_ source: vImage_Buffer, radius: Int) -> vImage_Buffer? {
+        let height = Int(source.height), rowBytes = source.rowBytes
+        guard let data = malloc(rowBytes * height) else { return nil }
+        var destination = vImage_Buffer(data: data, height: source.height, width: source.width, rowBytes: rowBytes)
+        guard radius > 0 else {
+            memcpy(data, source.data, rowBytes * height)
+            return destination
+        }
+        var input = source
+        let kernel = UInt32(2 * radius + 1)
+        let error = vImageBoxConvolve_Planar8(&input, &destination, nil, 0, 0, kernel, kernel, 0, vImage_Flags(kvImageEdgeExtend))
+        guard error == kvImageNoError else {
+            logger.debug("vImageBoxConvolve_Planar8 failed: \(error)")
+            free(data)
+            return nil
+        }
+        return destination
+    }
+
     private static func calculateNormalizedCorrelation(
         screenshot: UnsafePointer<UInt8>,
         screenshotWidth: Int,
