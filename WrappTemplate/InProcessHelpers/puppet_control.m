@@ -220,8 +220,21 @@ static void startCapture(SCWindow *window, NSSize size, CGFloat scale, CaptureRe
     }];
 }
 
+/// Whether ScreenCaptureKit can list this process's own windows (macOS 14.4),
+/// which capturing starts from. Asked of ScreenCaptureKit itself rather than
+/// with @available: ScummVM is linked against the macOS 10.14 SDK, so macOS
+/// runs it in compatibility mode and tells it an older version than its own,
+/// and on macOS 15 @available there said no on a Mac that has the API.
+static BOOL canListOwnWindows(void) {
+    Class content = NSClassFromString(@"SCShareableContent");
+    return [content respondsToSelector:@selector(getCurrentProcessShareableContentWithCompletionHandler:)];
+}
+
 static NSString *captureCommand(NSString *path) {
-    if (@available(macOS 14.4, *)) {
+    if (!canListOwnWindows()) return @"error capturing needs macOS 14.4";
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+    {
         __block CGWindowID windowID = 0;
         __block NSSize size = NSZeroSize;
         __block CGFloat scale = 1;
@@ -263,7 +276,7 @@ static NSString *captureCommand(NSString *path) {
             return request->reply;
         }
     }
-    return @"error capturing needs macOS 14.4";
+#pragma clang diagnostic pop
 }
 
 #pragma mark - Mouse

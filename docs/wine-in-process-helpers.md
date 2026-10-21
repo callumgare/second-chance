@@ -390,7 +390,11 @@ needs Screen Recording and Accessibility. From inside it needs neither: a
 process may capture its own windows (ScreenCaptureKit's current-process
 content, macOS 14.4+) and post events to them (`-[NSApp postEvent:]`, as
 cursor lock does). So this helper does the capturing and clicking, and
-WrappPuppeteer asks it to over a Unix socket.
+WrappPuppeteer asks it to over a Unix socket. It checks for the 14.4 API by
+asking ScreenCaptureKit for it, not with `@available`. ScummVM is linked
+against the macOS 10.14 SDK, so macOS runs it in compatibility mode and tells
+it an older version than its own, and on macOS 15 `@available` refused to
+capture in every ScummVM wrapp.
 
 It arms only when WrappPuppeteer started the wrapp. WrappPuppeteer passes
 `SECOND_CHANCE_PUPPET_DIR`, a private directory; when that is set,
