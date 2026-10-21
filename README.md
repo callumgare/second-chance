@@ -19,11 +19,20 @@ or copies directly downloaded from the Her Interactive website.
 
 ## Using Second Chance
 
-To get started download **SecondChance.zip** [from the releases page](https://github.com/callumgare/second-chance/releases/latest).
+To get started download **SecondChance.zip** [from the releases page](https://github.com/callumgare/second-chance/releases/latest), or with this button:
+
+<p align="center">
+    <a href="https://github.com/callumgare/second-chance/releases/latest/download/SecondChance.zip">
+        <img
+            alt="Download Second Chance"
+            src="https://img.shields.io/github/v/release/callumgare/second-chance?label=Download&logo=apple&style=for-the-badge&color=8b5a2b"
+        />
+    </a>
+</p>
 
 > [!IMPORTANT]
-> I'm too cheep to pay for an Apple developer membership ($99 USD a year). This means macOS will give some some scary
-> warnings when you try to open it for the first time. I pinky promise there's nothing sneaky happening (and if you're technical you
+> macOS will give you some scary warnings when you try to open it for the first time. That's because I'm too cheep to
+> pay for an Apple developer membership ($99 USD a year) so the app is not officially attributed to a known developer. I pinky promise there's nothing sneaky happening (and if you're technical you
 > can inspect the source code for the app in this repo).
 
 In the most recent versions of macOS you'll likely see a warning like this on first run. Select **Done**.
