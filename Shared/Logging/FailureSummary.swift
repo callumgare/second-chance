@@ -65,7 +65,7 @@ nonisolated enum ErrorChain {
             let ns = error as NSError
             return "\(ns.domain) \(ns.code)"
         }
-        let typeName = String(describing: type(of: error))
+        let typeName = qualifiedName(of: type(of: error))
         let mirror = Mirror(reflecting: error)
         guard mirror.displayStyle == .enum else { return typeName }
         // A case with associated values reflects as one child labelled with
@@ -75,6 +75,16 @@ nonisolated enum ErrorChain {
         }
         let name = String(describing: error)
         return name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) ? "\(typeName).\(name)" : typeName
+    }
+
+    /// The type's name with what it is nested in (`WrappSteam.Failure`, not
+    /// `Failure`), but not its module, which differs between the app and the
+    /// wrapp for the same Shared type.
+    private static func qualifiedName(of type: Any.Type) -> String {
+        let parts = String(reflecting: type).split(separator: ".").dropFirst()
+            // A private type's context reads "(unknown context at $…)".
+            .filter { !$0.contains("(") && !$0.contains(" ") && !$0.contains("$") }
+        return parts.isEmpty ? String(describing: type) : parts.joined(separator: ".")
     }
 
     /// `identifier` for each error the chain names as an underlying cause.
@@ -100,9 +110,13 @@ nonisolated enum FailureSummary {
     ///   - what: What failed, e.g. "Building Secrets Can Kill".
     ///   - error: The error it failed with, if there is one.
     ///   - files: Other evidence worth naming: a diagnostics bundle, a crash report.
-    static func log(_ logger: Logging.Logger, what: String, error: Error? = nil, files: [(String, String)] = []) {
-        logger.critical("\(render(what: what, error: error, files: files))")
+    /// - Returns: The summary, for a detailed failure report.
+    @discardableResult
+    static func log(_ logger: Logging.Logger, what: String, error: Error? = nil, files: [(String, String)] = []) -> String {
+        let summary = render(what: what, error: error, files: files)
+        logger.critical("\(summary)")
         LogStore.shared.flush()
+        return summary
     }
 
     static func render(what: String, error: Error?, files: [(String, String)] = []) -> String {

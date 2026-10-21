@@ -226,6 +226,30 @@ nonisolated enum FailureReporter {
         fatalError("Crash requested to test crash reporting")
     }
 
+    /// Report, and wait for it to be queued and sent, for a process about to
+    /// exit. Detached, so it can't wait on the thread that's blocked here.
+    static func reportAndWait(_ report: FailureReport, timeout: TimeInterval = 15) {
+        guard isEnabled else { return }
+        wait(for: Task.detached { await FailureReporter.report(report) }, timeout: timeout)
+    }
+
+    /// Wait for a report already under way, then for it to be sent. Not on
+    /// the main thread if the task needs it.
+    static func wait(for task: Task<ReportOutcome, Never>?, timeout: TimeInterval = 15) {
+        guard isEnabled else { return }
+        if let task {
+            let done = DispatchSemaphore(value: 0)
+            Task.detached {
+                _ = await task.value
+                done.signal()
+            }
+            if done.wait(timeout: .now() + timeout) == .timedOut {
+                logger.warning("Gave up waiting \(Int(timeout))s for a failure report to be ready")
+            }
+        }
+        flush()
+    }
+
     /// Wait for queued reports to go, before a process exits on purpose.
     static func flush(timeout: TimeInterval = 3) {
         #if FAILURE_REPORTING

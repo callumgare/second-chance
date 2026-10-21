@@ -35,6 +35,8 @@ nonisolated enum ReportOutcome: Equatable, Sendable {
 }
 
 nonisolated struct FailureReport: Sendable {
+    /// Tells this failure from the next, for a screen still showing it.
+    let id = UUID()
     /// What failed, in our own fixed words: "Building the wrapp", "Running the game".
     var what: String
     /// The error's identifier (`ErrorChain.identifier`) or the way the game

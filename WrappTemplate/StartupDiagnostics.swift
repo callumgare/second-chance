@@ -66,6 +66,9 @@ final class StartupDiagnostics: @unchecked Sendable {
     private var recentLines: [String] = []
     private var timers: [DispatchWorkItem] = []
     private var latestBundle: URL?
+    private var latestReason: Reason?
+    /// Entered while a bundle's slow part (samples, top, the system log) runs.
+    private let capturing = DispatchGroup()
 
     init(gameSlug: String, gameTitle: String) {
         self.gameSlug = gameSlug
@@ -131,6 +134,26 @@ final class StartupDiagnostics: @unchecked Sendable {
         queue.sync { latestBundle }
     }
 
+    /// Why the most recent bundle was captured, if one was.
+    var lastReason: Reason? {
+        queue.sync { latestReason }
+    }
+
+    /// The most recent bundle, once every capture under way has finished —
+    /// for a detailed failure report, which should carry the samples too.
+    /// Bounded by the capture's own command timeouts.
+    func bundleWhenComplete() async -> URL? {
+        await withCheckedContinuation { continuation in
+            // Through `queue` first, so a capture already queued (by
+            // `gameExited`) has entered the group before we wait on it.
+            queue.async {
+                self.capturing.notify(queue: self.queue) {
+                    continuation.resume(returning: self.latestBundle)
+                }
+            }
+        }
+    }
+
     /// Whether the game's first window was seen.
     var hasSeenWindow: Bool {
         queue.sync { windowAppeared }
@@ -172,6 +195,7 @@ final class StartupDiagnostics: @unchecked Sendable {
             return
         }
         latestBundle = dir
+        latestReason = reason
         let sinceStart = gameStartTime.map { String(format: "%.1fs", now.timeIntervalSince($0)) } ?? "n/a"
         logger.error("[Diagnostics] \(reason.rawValue) (\(sinceStart) after game start) — capturing to \(dir.path)")
 
@@ -204,7 +228,9 @@ final class StartupDiagnostics: @unchecked Sendable {
         write(wrappLog.joined(separator: "\n") + "\n", to: dir.appendingPathComponent("wrapp-log.txt"))
 
         // The slow part runs off `queue` so later lines and triggers still get in.
+        capturing.enter()
         DispatchQueue.global(qos: .utility).async {
+            defer { self.capturing.leave() }
             // The process list first: sampling takes seconds once symbolication
             // is counted, long enough for a crashing game to be gone by the end.
             let processList = self.runToString("/bin/ps", ["-A", "-o", "pid,ppid,pcpu,pmem,etime,comm"], timeout: 10)

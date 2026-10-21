@@ -90,13 +90,14 @@ struct ErrorIdentifierTests {
 
     @Test("An enum case keeps its name and drops its associated values")
     func enumCases() {
-        #expect(ErrorChain.identifier(Sample.plain) == "Sample.plain")
-        #expect(ErrorChain.identifier(Sample.withPath("/Users/nancy")) == "Sample.withPath")
+        #expect(ErrorChain.identifier(Sample.plain) == "ErrorIdentifierTests.Sample.plain")
+        #expect(ErrorChain.identifier(Sample.withPath("/Users/nancy")) == "ErrorIdentifierTests.Sample.withPath")
     }
 
-    @Test("A struct is its type")
+    @Test("A struct is its type, with what it's nested in but not its module")
     func structs() {
-        #expect(ErrorChain.identifier(Structured(path: "/Users/nancy")) == "Structured")
+        #expect(ErrorChain.identifier(Structured(path: "/Users/nancy")) == "ErrorIdentifierTests.Structured")
+        #expect(ErrorChain.identifier(WrappBuildError.installIncomplete(reason: "/Users/nancy")) == "WrappBuildError.installIncomplete")
     }
 
     @Test("An NSError is its domain and code, and its underlying errors are listed")

@@ -25,6 +25,13 @@ class WrappBuildViewModel: ObservableObject {
 
     @Published var progress: Double = 0.0
 
+    /// What became of the failure report for the build that just failed —
+    /// nil while it is being sent, and when nothing has failed.
+    @Published var reportOutcome: ReportOutcome?
+    /// The failure the error screen is showing, kept so the person can send
+    /// it when reports are set to ask (`ReportOutcome.awaitingChoice`).
+    private(set) var failureReport: FailureReport?
+
     private let diskBuilder = DiskWrappBuilder()
     private let herDownloadBuilder = HerDownloadWrappBuilder()
     private let steamBuilder = SteamWrappBuilder()
@@ -79,6 +86,7 @@ class WrappBuildViewModel: ObservableObject {
                 applyProgress(state)
             case .gameDetected(let info):
                 detectedGame = info
+                FailureReporter.setGame(info.id, source: selectedWrappSource?.rawValue, engine: info.gameEngine.rawValue)
             case .failed(let error):
                 handleBuildFailure(error)
                 stopStepTimer()
@@ -189,9 +197,40 @@ class WrappBuildViewModel: ObservableObject {
             currentState = .completed
         } catch {
             if !Self.isCancellation(error) {
-                FailureSummary.log(logger, what: "Building the wrapp", error: error)
+                let summary = FailureSummary.log(logger, what: "Building the wrapp", error: error)
+                report(FailureReport(
+                    what: "Building the wrapp", error: error, game: detectedGame?.id,
+                    source: selectedWrappSource?.rawValue, engine: detectedGame?.gameEngine.rawValue,
+                    summary: summary
+                ))
             }
             handleBuildFailure(error)
+        }
+    }
+
+    /// Report the failure at the detail the setting asks for, and keep it
+    /// for the error screen.
+    private func report(_ report: FailureReport) {
+        failureReport = report
+        reportOutcome = nil
+        Task {
+            let outcome = await FailureReporter.report(report)
+            // A new build may have started since; leave its state alone.
+            if self.failureReport?.id == report.id { self.reportOutcome = outcome }
+        }
+    }
+
+    /// Send the failure on screen when the setting is to ask, or decline to.
+    func sendFailureReport(_ detail: ReportDetail?) {
+        guard let report = failureReport else { return }
+        guard let detail else {
+            reportOutcome = .declined
+            return
+        }
+        reportOutcome = nil
+        Task {
+            let outcome = await FailureReporter.send(report, detail: detail)
+            if self.failureReport?.id == report.id { self.reportOutcome = outcome }
         }
     }
     
@@ -226,5 +265,8 @@ class WrappBuildViewModel: ObservableObject {
         selectedWrappSource = nil
         detectedGame = nil
         progress = 0.0
+        failureReport = nil
+        reportOutcome = nil
+        FailureReporter.setGame(nil)
     }
 }

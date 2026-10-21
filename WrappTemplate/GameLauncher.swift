@@ -124,6 +124,10 @@ class GameLauncher {
     /// Set when the game's exit was no quit, but the game failing: it quit
     /// before it had started, or just after Wine reported an error.
     private(set) var unexpectedQuit: GameQuitCheck.Failure?
+    /// The failure report for a run that ended badly, and its sending — for
+    /// the error window to show, and for the wrapp to wait on before it exits.
+    private(set) var failureReport: FailureReport?
+    private(set) var reportTask: Task<ReportOutcome, Never>?
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     /// What Wine and the game print, and what ScummVM prints: categories of
@@ -254,7 +258,13 @@ class GameLauncher {
             if let bundle = diagnostics?.lastBundle {
                 files.append(("Diagnostics", bundle.path))
             }
-            FailureSummary.log(logger, what: "Running \(config.gameTitle)", files: files)
+            let summary = FailureSummary.log(logger, what: "Running \(config.gameTitle)", files: files)
+            report(FailureReport(
+                what: "Running the game", kind: failureKind(exitCode: exitCode, signal: signal),
+                game: config.gameSlug, engine: config.gameEngine,
+                tags: failureTags(exitCode: exitCode, signal: signal), summary: summary,
+                diagnostics: diagnostics.map { diagnostics in { await diagnostics.bundleWhenComplete() } }
+            ))
         }
         
         // Close info window if it's still open
@@ -263,6 +273,31 @@ class GameLauncher {
         logger.notice("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
     }
     
+    /// How a run that ended badly ended, as a report's kind: the first of
+    /// the checks above that it failed.
+    private func failureKind(exitCode: Int32?, signal: Int32?) -> String {
+        if unexpectedQuit != nil { return "quit-unexpectedly" }
+        if !gameStarted { return "never-started" }
+        if signal != nil { return "killed-by-signal" }
+        if let exitCode, exitCode != 0 { return "exit-code" }
+        return "no-window"
+    }
+
+    private func failureTags(exitCode: Int32?, signal: Int32?) -> [String: String] {
+        var tags: [String: String] = [:]
+        if let exitCode { tags["exit_code"] = String(exitCode) }
+        if let signal { tags["signal"] = SubprocessWatch.signalName(signal) }
+        if let reason = diagnostics?.lastReason { tags["diagnostics"] = reason.rawValue }
+        return tags
+    }
+
+    /// Report at the detail the setting asks for, without holding up the
+    /// caller: the error window shows the outcome when it comes.
+    private func report(_ report: FailureReport) {
+        failureReport = report
+        reportTask = Task.detached { await FailureReporter.report(report) }
+    }
+
     // MARK: - Game Launching
     
     func launchGame(infoWindow: InfoWindowController? = nil, debugMode: Bool = false) -> Int32 {
@@ -524,7 +559,9 @@ class GameLauncher {
             (title, detail) = ("Couldn't start Steam", error.localizedDescription)
         }
         logger.critical("[Steam] \(title): \(detail)")
-        FailureSummary.log(logger, what: "Starting Steam for \(config.gameTitle)", files: [])
+        let summary = FailureSummary.log(logger, what: "Starting Steam for \(config.gameTitle)", files: [])
+        report(FailureReport(what: "Starting Steam", error: error, game: config.gameSlug,
+                             engine: config.gameEngine, summary: summary))
         DispatchQueue.main.sync { showAlert(message: title, informativeText: detail) }
     }
 

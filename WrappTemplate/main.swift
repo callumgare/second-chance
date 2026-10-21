@@ -302,6 +302,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mainLogger.debug("[Cleanup/AppDelegate] About to call gameLauncher.performCleanup...")
         gameLauncher.performCleanup {
             mainLogger.debug("[Cleanup/AppDelegate] Inside performCleanup completion handler")
+            // Quitting from the error window: let its report finish going.
+            FailureReporter.wait(for: gameLauncher.reportTask, timeout: 10)
             DispatchQueue.main.async {
                 mainLogger.debug("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
                 mainLogger.notice("[Cleanup] All cleanup complete, terminating application")
@@ -409,6 +411,7 @@ func main() {
     // Get app path for prefix determination
     guard let executablePath = ProcessInfo.processInfo.arguments.first else {
         showAlert(message: "Configuration Error", informativeText: "Could not determine executable path.")
+        FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "no-executable-path"))
         exit(1)
     }
     
@@ -419,6 +422,7 @@ func main() {
     // Get bundle ID for prefix path
     guard let bundleId = readPlist(at: infoPlistPath, key: "CFBundleIdentifier") else {
         showAlert(message: "Configuration Error", informativeText: "Could not read bundle identifier.")
+        FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "no-bundle-identifier"))
         exit(1)
     }
     
@@ -442,6 +446,7 @@ func main() {
     // Load configuration
     guard let loadedConfig = loadConfig(customWinePrefix: winePrefix) else {
         showAlert(message: "Configuration Error", informativeText: "Could not load game configuration. Please check the app bundle.")
+        FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "unreadable-configuration"))
         exit(1)
     }
     let launchingWithoutSteam = CommandLine.arguments.contains(launchWithoutSteamArgument)
@@ -672,6 +677,8 @@ func main() {
         } catch {
             mainLogger.critical("ERROR: Failed to mount directory into Wine: \(error)")
             showAlert(message: "Configuration Error", informativeText: "Failed to mount directory into Wine: \(error.localizedDescription)")
+            FailureReporter.reportAndWait(FailureReport(what: "Mounting the saves folder", error: error,
+                                                        game: config.gameSlug, engine: config.gameEngine))
             exit(1)
         }
         
@@ -736,6 +743,8 @@ func main() {
         } catch {
             mainLogger.critical("ERROR: Failed to create symbolic link for Documents directory: \(error)")
             showAlert(message: "Configuration Error", informativeText: "Failed to create symbolic link for save directory: \(error.localizedDescription)")
+            FailureReporter.reportAndWait(FailureReport(what: "Linking the saves folder", error: error,
+                                                        game: config.gameSlug, engine: config.gameEngine))
             exit(1)
         }
     }
@@ -770,6 +779,9 @@ func main() {
 
             if !debugMode {
                 mainLogger.notice("[App Lifecycle] Game ended, exiting cleanly...")
+                // A run can end badly after the game loaded, with no error
+                // window: its report still has to go before the wrapp does.
+                FailureReporter.wait(for: gameLauncher.reportTask, timeout: 120)
                 // Or the launch log loses its last lines, the game's exit among them.
                 LogStore.shared.flush()
                 exit(0)
@@ -802,6 +814,8 @@ func main() {
 
     default:
         mainLogger.critical("ERROR: Unknown game engine: \(config.gameEngine)")
+        FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "unknown-engine",
+                                                    game: config.gameSlug, engine: config.gameEngine))
         exit(1)
     }
 
