@@ -60,14 +60,20 @@ app at all — launching a wrapp as it is doesn't need it.
 is the only place xcodebuild is run from; see AGENTS.md for why the flag is
 load-bearing.
 
-**Sources.** `wrapp build --from disk` (the default) or `--from steam`. Each
-source is a case of `WrappSourceKind` with its own options type conforming to
-`WrappSourceInput` (`Support/Wrapps.swift`), which turns the options into the
-app's `INSTALLATION_SOURCE` and inputs. Adding the Her installer is a new case
-and a new type — the same shape as the app's `WrappBuildStrategy`.
+**Sources.** `wrapp build --from disk` (the default), `--from steam` or
+`--from her-download`. Each source is a case of `WrappSourceKind` with its own
+options type conforming to `WrappSourceInput` (`Support/Wrapps.swift`), which
+turns the options into the app's `INSTALLATION_SOURCE` and inputs. Adding a
+source is a new case and a new type — the same shape as the app's
+`WrappBuildStrategy`.
 
-`sc test integration --source disk|steam|all` (comma-separated) picks which
-build sources' suites run; [testing.md](testing.md) has what the Steam one
+`--from her-download` builds from `installers/<slug>/her-download*.exe` or
+`her-download*.dmg`, or from the file `--her-download` names. A game with more
+than one download needs `--her-download` to pick which
+([her-download.md](her-download.md)).
+
+`sc test integration --source disk|steam|her-download|all` (comma-separated)
+picks which build sources' suites run; [testing.md](testing.md) has what each
 needs.
 
 `wrapp build` starts the app as its own responsible process, so macOS

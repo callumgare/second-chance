@@ -13,8 +13,8 @@ An app for running the pre-unity Nancy Drew video games on modern Macs. It (shou
 
 Want to play the Nancy Drew adventure games but you own a Mac and can't get them to run?  That's where Second Chance
 comes in. You tell it where to find your copy of one of the Nancy Drew games and it will create a playable version of
-the game as a new app. Currently it only works with the CD versions of the games but in the near future I hope to support running via Steam
-or copies directly downloaded from the Her Interactive website.
+the game as a new app. It works with the CD versions of the games, the versions on Steam, and copies downloaded directly
+from the Her Interactive website (the Windows download, or the Mac one for games whose Mac version was made with Cider).
 
 
 ## Using Second Chance

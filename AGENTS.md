@@ -77,9 +77,11 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
+| [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Shared/Reporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, or adding a failure that should be reported |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
+| [docs/historical-plans/2026-10-22-her-store-downloads.md](docs/historical-plans/2026-10-22-her-store-downloads.md) | You want to know why Her downloads work as they do — what the Windows and Mac downloads turned out to contain, why a download needs its own answer file, and why some of a Cider app's DLLs are kept |
 | [docs/historical-plans/2026-10-21-failure-reporting.md](docs/historical-plans/2026-10-21-failure-reporting.md) | You want to know why failure reports work as they do — the levels the person picks between, why a basic report carries no message text, why Sentry is static in wrapps, and how a crash from the previous run is held back and asked about |
 | [docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md](docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md) | You want to know why WrappPuppeteer needs no permissions — what the prototypes showed a process can do to its own windows, why captures stalled on a long-running test Mac (systemstatusd), and what each phase found |
 | [docs/historical-plans/2026-10-20-steam-support.md](docs/historical-plans/2026-10-20-steam-support.md) | You want to know why Steam works as it does — what a Steam sign-in turned out to be made of, why each wrapp has its own Steam but shares one sign-in, and which plan decisions testing overturned |
@@ -218,7 +220,8 @@ direct assignment.
   (`disk` | `her-download` | `steam`) and `OUTPUT_PATH`; `disk` also needs
   `DISK_1_PATH` (and optionally `DISK_2_PATH`), and `steam` needs
   `STEAM_GAME_SLUG` (`STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game) and
-  a saved Steam sign-in ([docs/steam.md](docs/steam.md)). `HER_INSTALLER_PATH`,
+  a saved Steam sign-in ([docs/steam.md](docs/steam.md)); `her-download` needs
+  `HER_INSTALLER_PATH`, the `.exe` or `.dmg` ([docs/her-download.md](docs/her-download.md)).
   `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`, `PATCH_FAILURE_POLICY` and
   `EXPECTED_GAME_SLUG` (fail if the disc is another game) are read by
   `WrappBuildInput` when the corresponding prompt would appear. **`CLIBuilder`
@@ -480,9 +483,13 @@ backed up as a Passwords entry and imported once on each releasing Mac.
   macOS prompt that raises: an app bundle gets none, a bare CLI like `sc`
   does, so `sc wrapp build` starts the app as its own responsible process
   ([docs/steam.md](docs/steam.md)).
-- **Her download works end-to-end** through the same helpers as disk (it signs
-  and publishes the same events), but has far less real-world mileage than the
-  disk path.
+- **Her downloads work** from both formats Her Interactive sells: a Windows
+  installer is unpacked and installed as a disc is, and a Mac download's
+  Cider app gives up the installed Windows game
+  ([docs/her-download.md](docs/her-download.md)). Only Scarlet Hand's Windows
+  download has an answer file so far (others install with their wizard), and
+  Mac downloads that aren't Cider builds are refused until a sample shows
+  what they are.
 - The produced game app's process is named `WrappTemplate` in Activity Monitor.
   Renaming the executable per-game during configuration would read better.
 

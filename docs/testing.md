@@ -47,6 +47,9 @@ build failure. See the README's *Building* section for the full story.
 
 # Build from Steam instead (or as well: --source disk,steam, or all)
 ./sc test integration thornton-hall --source steam
+
+# Build from each Her Interactive download in installers/<slug>/
+./sc test integration scarlet-hand --source her-download
 ```
 
 Other options: `--logs collapsed|full|raw` for how output is shown,
@@ -108,11 +111,21 @@ is missing fails its `#require` with the path it looked at. A skipped suite
 there would report a pass having tested nothing.
 
 **Each build source has its own suite**, picked with `--source`:
-`DiskInstallIntegrationTests` (`disk`, the default) and
-`SteamInstallIntegrationTests` (`steam`). A game tested both ways is two rows
-in the table, with a Source column. Swift Testing would run the two suites side
-by side, so each per-game test runs inside `IntegrationSerial`, which lets one
-game build and launch at a time across both. The Steam suite:
+`DiskInstallIntegrationTests` (`disk`, the default),
+`SteamInstallIntegrationTests` (`steam`) and
+`HerDownloadInstallIntegrationTests` (`her-download`). A game tested more than
+one way is a row per source in the table, with a Source column. Swift Testing
+would run the suites side by side, so each per-game test runs inside
+`IntegrationSerial`, which lets one game build and launch at a time across
+them all.
+
+The Her suite tests each download in `installers/<slug>/` named
+`her-download*.exe` or `her-download*.dmg`, once per file (a Mac download's
+row is `<slug> mac`), and disables itself when there are none. It always
+builds, and is in `TestRunner.unitExclusions`.
+[her-download.md](her-download.md#testing) has more.
+
+The Steam suite:
 
 - builds each requested game that's on Steam from Steam, headless, and
   launches it with WrappPuppeteer, like the disk suite (a DRM-free game is

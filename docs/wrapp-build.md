@@ -57,6 +57,12 @@ step; nothing downstream re-detects. (An earlier design detected twice.)
 Step 9 is skipped when `DebugSettings.shared.skipInstaller` is set — Wine may
 still be needed to run the installer later.
 
+A Her Interactive Windows download takes the same steps, with the installer
+unpacked into `disk-1` in place of steps 2–7. Both engines install under
+Wine, so step 8 always runs `installGameWithWine`, and ScummVM then plays the
+installed folder. A Mac download replaces steps 7–8 with taking the game out
+of its Cider app. [her-download.md](her-download.md) has both.
+
 ## Who owns what
 
 The division that keeps this from re-tangling:
@@ -76,6 +82,10 @@ The division that keeps this from re-tangling:
 - **The helper never calls a builder.** One direction only.
 - **Source-specific work stays out of the helper.** Disk layout and CD-ROM
   mounting live in `DiskWrappBuilder` because no other source has disks.
+  Taking a game out of a Her Interactive Mac download lives in `CiderPackage`,
+  used only by `HerDownloadWrappBuilder` ([her-download.md](her-download.md)).
+  The helper's part in a Her build is a primitive both builders use:
+  `installAnswerFile` copies the answer file for the build's source.
   Driving Steam lives in `Shared/Steam/` and `SteamWrappBuilder`
   ([steam.md](steam.md)); the helper only installs the Steam client
   (`installSteamClient`), as it installs Wine's other pieces.
@@ -92,7 +102,7 @@ user is prompted.
 | --- | --- | --- |
 | `getDisk1Path()` | `DISK_1_PATH` | NSOpenPanel (disk/ISO) |
 | `getDisk2Path(gameInfo:)` | `DISK_2_PATH` | NSOpenPanel (disk/ISO) |
-| `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe) |
+| `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe or .dmg) |
 | `requestVolumeAccess()` | — (skipped when paths came from env) | NSOpenPanel grant-access |
 | `getOutputPath(gameName:)` | `OUTPUT_PATH` | NSOpenPanel save dialog |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
@@ -173,7 +183,8 @@ terminates the process, which is what makes the ViewModel safe to instantiate in
 a unit test.
 
 Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
-`OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`, and `steam` needs
+`OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`, `her-download` needs
+`HER_INSTALLER_PATH` (the `.exe` or `.dmg`), and `steam` needs
 `STEAM_GAME_SLUG` (plus `STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game,
 default `direct`) and a saved Steam sign-in, since a headless build can't sign
 in — it fails with `steamSignInRequired` rather than wait.
