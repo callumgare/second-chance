@@ -489,6 +489,7 @@ func main() {
         ("saves", config.appSupportPath.path),
     ])
     FailureReporter.setGame(config.gameSlug, engine: config.gameEngine)
+    FailureReporter.setRunLogs(in: gameLogs, prefix: "launch")
     CrashMarker.install(in: gameLogs, logger: mainLogger)
     // For the whole run: a game that crashes an hour in may have been
     // starved of CPU, too. The loading window observes it, and slows it down

@@ -32,9 +32,9 @@ nonisolated enum FailureReporter {
     private struct State {
         var process: Process?
         var started = false
-        /// What to do with a crash the SDK finds from the previous run:
-        /// send it at this detail, or drop it (nil).
-        var crashDetail: ReportDetail?
+        /// Where this process keeps a log per run, for a detailed report of
+        /// the previous run's crash.
+        var runLogs: (directory: URL, prefix: String)?
     }
     private static let state = OSAllocatedUnfairLock(initialState: State())
     /// Entered while a report is being put together and handed to the SDK,
@@ -79,13 +79,7 @@ nonisolated enum FailureReporter {
     /// Start the SDK, unless this run mustn't report. Call straight after
     /// `AppLogging.bootstrap` and before `CrashMarker.install`, so the crash
     /// marker's signal handler runs first and hands on to Sentry's.
-    ///
-    /// - Parameters:
-    ///   - crashDetail: What to do with a crash from the previous run; by
-    ///     default, what the setting says (Manual drops it — the caller asks
-    ///     first and passes the answer).
-    static func start(process: Process, game: String? = nil, engine: String? = nil,
-                      crashDetail: ReportDetail?? = nil) {
+    static func start(process: Process, game: String? = nil, engine: String? = nil) {
         state.withLock { $0.process = process }
         if let reason = disabledReason(environment: ProcessInfo.processInfo.environment,
                                        isDebugBuild: isDebugBuild, dsn: dsn) {
@@ -93,8 +87,6 @@ nonisolated enum FailureReporter {
             return
         }
         #if FAILURE_REPORTING
-        let resolvedCrashDetail = crashDetail ?? defaultCrashDetail(for: ReportingPreferences.load().level)
-        state.withLock { $0.crashDetail = resolvedCrashDetail }
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = info?["CFBundleVersion"] as? String ?? "unknown"
@@ -139,7 +131,14 @@ nonisolated enum FailureReporter {
         #endif
     }
 
-    /// What a crash from the previous run is sent as when nobody was asked.
+    /// Where this process keeps a log per run (`RotatingLogFile`), so a
+    /// detailed report of a crash can carry the log of the run that crashed.
+    static func setRunLogs(in directory: URL, prefix: String) {
+        state.withLock { $0.runLogs = (directory, prefix) }
+    }
+
+    /// What a crash from the previous run is sent as without asking: the
+    /// setting's detail, or nil when the setting is to ask.
     static func defaultCrashDetail(for level: ReportLevel) -> ReportDetail? {
         switch level {
         case .detailed: return .detailed
@@ -290,21 +289,90 @@ nonisolated enum FailureReporter {
     }
 
     #if FAILURE_REPORTING
+    // MARK: The previous run's crash
+
+    /// A crash the SDK found from the previous run (or an uncaught
+    /// exception it saved): held back from `beforeSend`, then — on the main
+    /// queue, once the process can show an alert and knows where its logs
+    /// are — sent again at the detail the setting says, after asking if it
+    /// says to ask, or if this is the first failure.
+    @MainActor
+    private static func previousRunCrashed(_ event: Event) {
+        let process = state.withLock { $0.process } ?? .app
+        let preferences = ReportingPreferences.load()
+        let detail: ReportDetail?
+        if !preferences.promptShown {
+            let level = CrashReportPrompt.askHowDetailed(process: process)
+            ReportingPreferences.update {
+                $0.level = level
+                $0.promptShown = true
+            }
+            // Basic was the default; asking each time starts with the next.
+            detail = level == .detailed ? .detailed : .basic
+        } else if let fixed = defaultCrashDetail(for: preferences.level) {
+            detail = fixed
+        } else {
+            detail = CrashReportPrompt.askWhatToSend(process: process)
+        }
+        guard let detail else {
+            logger.notice("Not sending the report of the previous run's crash, as asked")
+            return
+        }
+        let log = detail == .detailed ? previousRunLog(crashedAt: event.timestamp) : nil
+        sending.enter()
+        DispatchQueue.global(qos: .utility).async {
+            defer { sending.leave() }
+            resend(event, detail: detail, log: log)
+        }
+    }
+
+    private static func resend(_ event: Event, detail: ReportDetail, log: URL?) {
+        var attachment: Attachment?
+        let workDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("second-chance-crash-\(event.eventId.sentryIdString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: workDirectory) }
+        if let log {
+            do {
+                try FileManager.default.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+                let zip = try ReportBundle.make(log: String(decoding: Data(contentsOf: log), as: UTF8.self),
+                                                diagnostics: nil, redactor: .current, in: workDirectory)
+                attachment = Attachment(path: zip.path, filename: "failure-report.zip", contentType: "application/zip")
+            } catch {
+                logger.error("Couldn't attach the crashed run's log: \(ErrorChain.describe(error))")
+            }
+        }
+        SentrySDK.capture(event: event) { scope in
+            scope.setTag(value: detail.rawValue, key: "report_detail")
+            scope.setTag(value: "previous-run", key: "crash")
+            if let attachment { scope.addAttachment(attachment) }
+        }
+        logger.notice("Sent a \(detail.rawValue) report of the previous run's crash: \(event.eventId.sentryIdString)")
+    }
+
+    /// The log of the run that crashed: the newest run log begun before the
+    /// crash (this run's began after it).
+    private static func previousRunLog(crashedAt: Date?) -> URL? {
+        guard let (directory, prefix) = state.withLock({ $0.runLogs }) else { return nil }
+        let keys: [URLResourceKey] = [.creationDateKey]
+        let logs = ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)) ?? [])
+            .filter { $0.lastPathComponent.hasPrefix(prefix + "-") && $0.pathExtension == "log" }
+            .compactMap { url -> (URL, Date)? in
+                guard let created = (try? url.resourceValues(forKeys: Set(keys)))?.creationDate else { return nil }
+                return (url, created)
+            }
+        let crash = crashedAt ?? Date()
+        return logs.filter { $0.1 < crash }.max { $0.1 < $1.1 }?.0
+    }
+
     // MARK: Scrubbing
 
     /// The last word on what leaves the Mac. Our own reports say their
-    /// detail in `report_detail`; anything without it the SDK made itself —
-    /// a crash from the previous run, an uncaught exception — and goes at
-    /// `crashDetail`, or not at all.
+    /// detail in `report_detail`. Anything without it the SDK made itself —
+    /// a crash from the previous run, an uncaught exception — and is held
+    /// back for `previousRunCrashed` to send again, tagged.
     private static func scrub(_ event: Event) -> Event? {
-        let detail: ReportDetail
-        if let tagged = event.tags?["report_detail"].flatMap(ReportDetail.init(rawValue:)) {
-            detail = tagged
-        } else if let crash = state.withLock({ $0.crashDetail }) {
-            detail = crash
-            event.tags = (event.tags ?? [:]).merging(["report_detail": crash.rawValue]) { $1 }
-        } else {
-            logger.notice("Not sending the SDK's \(event.level == .fatal ? "crash" : "event") report: reports are set to ask first")
+        guard let detail = event.tags?["report_detail"].flatMap(ReportDetail.init(rawValue:)) else {
+            DispatchQueue.main.async { previousRunCrashed(event) }
             return nil
         }
         let redactor = ReportRedactor.current
