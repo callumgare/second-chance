@@ -386,9 +386,12 @@ direct assignment.
   without it. WrappTemplate must link the static `Sentry` product: a
   dynamic one would be deleted along with the rest of `Contents/Frameworks`.
   `FailureReporter.start` comes before `CrashMarker.arm()`, which stands
-  aside when Sentry handles crashes: with both handlers installed a crashed
-  wrapp has been seen to wedge beyond even `kill -9`
-  ([docs/failure-reports.md](docs/failure-reports.md#crash-handlers)).
+  aside when Sentry handles crashes, since Sentry would take every real
+  crash before it ([docs/failure-reports.md](docs/failure-reports.md#crash-handlers)).
+  Don't crash-test from a VS Code terminal: a process started there inherits
+  VS Code's crash handler, and once that has crashed, every crash beneath VS
+  Code hangs beyond `kill -9` until VS Code quits
+  ([docs/failure-reports.md](docs/failure-reports.md#testing-a-crash-from-a-terminal-in-vs-code)).
 - **Second Chance has an Info.plist file; the other targets don't.**
   `SecondChance/Info.plist` holds only Sparkle's keys, which `INFOPLIST_KEY_`
   build settings can't express, and Xcode merges it with the generated keys.

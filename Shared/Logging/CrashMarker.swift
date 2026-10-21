@@ -33,12 +33,11 @@ nonisolated enum CrashMarker {
     private static var armed = false
 
     /// Install the handler — unless Sentry is handling crashes in this run
-    /// (`FailureReporter.handlesCrashes`). Any signal handler of ours running
-    /// after Sentry's wedges a crashing process: in one order Sentry's is
-    /// handed the crash back while still busy with it, and under Rosetta,
-    /// after a bad memory access, ours never gets to run at all, beyond even
-    /// `kill -9` (docs/failure-reports.md#crash-handlers). Sentry records the
-    /// crash then, and says so at the next start. Call after
+    /// (`FailureReporter.handlesCrashes`). Sentry takes a real crash first,
+    /// through a Mach exception handler, then puts back the signal handlers
+    /// that were there before it, so ours would only ever see a fatal signal
+    /// sent with `kill` (docs/failure-reports.md#crash-handlers). Sentry
+    /// records the crash then, and says so at the next start. Call after
     /// `FailureReporter.start`. Until `install(in:)` names the marker file, a
     /// crash is written to stderr only.
     static func arm() {

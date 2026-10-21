@@ -132,15 +132,30 @@ the crash, and at the next start `previousRunCrashed` logs the line
 macOS's `.ips`. When reporting is off (Debug, headless, test and
 WrappPuppeteer runs, or no DSN), `CrashMarker` works as before.
 
-Why: with both handlers installed, `CrashMarker`'s after Sentry's, a test
-wrapp crashed with `kill -SEGV` on macOS 15 under Rosetta never exited. It sat
-in the kernel (`ps` state `UE`) and survived `kill -9`. With Sentry's handler
-alone, every crash in the crash tests ended normally: segfaults, traps and
-`kill -SEGV`, under Rosetta. The tests ran on macOS 26. A first round seemed
-to show both handlers together wedging every real crash, but it was flawed:
-the processes were waiting on the "how detailed?" alert, which nobody was
-there to answer. Running both handlers together hasn't been proven safe, so
-they aren't.
+Why: `CrashMarker`'s handler would almost never run. Sentry takes a real
+crash (a bad memory access, a Swift trap) first, through a Mach exception
+handler, and once it has recorded it puts back the signal handlers that were
+there before Sentry started. So the signal that follows goes straight to the
+default action, past `CrashMarker`. In crash tests with both installed,
+`CrashMarker` wrote its line for none of the segfaults and traps, only for a
+`kill -SEGV`, which raises no Mach exception. Every crash still ended
+normally, with either arrangement.
+
+### Testing a crash from a terminal in VS Code
+
+A crashing process can sit in the kernel for hours, in `ps` state `UE`, and
+survive `kill -9`. That isn't the crash handlers. A process started from a
+VS Code terminal, or by an agent running inside VS Code, inherits VS Code's
+Mach exception port, which belongs to VS Code's Crashpad handler. The kernel
+sends the crash there and waits for an answer before the process can exit. A
+crash from a translated process has been seen to crash that handler. Every
+handler VS Code started after that crashed within a second of starting, and
+from then on every crash in VS Code's process tree waited, a one-line C
+segfault included, until VS Code was quit. A steady stream of
+`chrome_crashpad_handler` reports in `~/Library/Logs/DiagnosticReports` is the
+sign. Run crash tests from Terminal, or with `launchctl submit` or
+`./sc in-gui-session`, which start the process outside VS Code. Players start
+wrapps from the Finder, so they never inherit VS Code's handler.
 
 `CrashMarker.install(in:)` comes later, once the process knows its log folder.
 It reports the previous run's crash when `CrashMarker` caught it, and opens
