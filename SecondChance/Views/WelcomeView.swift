@@ -23,6 +23,9 @@ struct WelcomeView: View {
 
             List(sources, selection: $selection) { source in
                 WrappSourceRow(source: source)
+                    // No vertical insets, so a row is exactly `height` tall
+                    // and the list can be sized to fit them.
+                    .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                     .tag(source)
                     .accessibilityIdentifier(source.accessibilityIdentifier)
             }
@@ -56,14 +59,17 @@ struct WelcomeView: View {
 
 struct WrappSourceRow: View {
     let source: WrappSource
-    /// Each row's height in the list, its insets included.
-    static let height: CGFloat = 56
+    /// Each row's height in the list.
+    static let height: CGFloat = 52
 
     var body: some View {
+        // The icon sits as far from the text as from the list's edge.
         HStack(spacing: 12) {
             source.icon
+                .resizable()
+                .scaledToFit()
+                .frame(width: 21, height: 21)
                 .foregroundStyle(.secondary)
-                .frame(width: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.displayName)
                 Text(source.description)
@@ -71,18 +77,18 @@ struct WrappSourceRow: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(height: Self.height - 12)
+        .frame(height: Self.height)
     }
 }
 
 private extension WrappSource {
     /// An SF Symbol, or for Steam its logo (a template image in the asset
-    /// catalog, from Simple Icons) sized to match one.
-    @ViewBuilder var icon: some View {
+    /// catalog, from Simple Icons), drawn at the same size.
+    var icon: Image {
         switch self {
-        case .disk: Image(systemName: "opticaldisc").font(.title2)
-        case .steam: Image("SteamLogo").resizable().scaledToFit().frame(width: 21, height: 21)
-        case .herDownload: Image(systemName: "arrow.down.circle").font(.title2)
+        case .disk: return Image(systemName: "opticaldisc")
+        case .steam: return Image("SteamLogo")
+        case .herDownload: return Image(systemName: "arrow.down.circle")
         }
     }
 
