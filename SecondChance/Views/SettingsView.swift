@@ -66,6 +66,9 @@ struct SettingsView: View {
                 Text("Failure Reports")
             } footer: {
                 Text("Reports go to the developer through Sentry, and nothing is sent until something fails.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .formStyle(.grouped)
