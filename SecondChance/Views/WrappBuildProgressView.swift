@@ -193,7 +193,7 @@ struct ErrorView: View {
 
             LogActionButtons(logWindowTitle: "SecondChance - Installation Log")
 
-            BugReportCallout()
+            FailureReportCallout(model: viewModel.failureReport)
 
             Spacer().frame(height: 8)
 

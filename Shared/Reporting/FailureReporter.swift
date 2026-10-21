@@ -37,6 +37,9 @@ nonisolated enum FailureReporter {
         var crashDetail: ReportDetail?
     }
     private static let state = OSAllocatedUnfairLock(initialState: State())
+    /// Entered while a report is being put together and handed to the SDK,
+    /// so a process on its way out can wait for it.
+    private static let sending = DispatchGroup()
 
     static var isEnabled: Bool { state.withLock { $0.started } }
 
@@ -174,6 +177,8 @@ nonisolated enum FailureReporter {
     static func send(_ report: FailureReport, detail: ReportDetail) async -> ReportOutcome {
         #if FAILURE_REPORTING
         guard isEnabled, let process = state.withLock({ $0.process }) else { return .disabled }
+        sending.enter()
+        defer { sending.leave() }
         let redactor = ReportRedactor.current
 
         let event = Event(level: .error)
@@ -255,19 +260,23 @@ nonisolated enum FailureReporter {
         wait(for: Task.detached { await FailureReporter.report(report) }, timeout: timeout)
     }
 
-    /// Wait for a report already under way, then for it to be sent. Not on
-    /// the main thread if the task needs it.
-    static func wait(for task: Task<ReportOutcome, Never>?, timeout: TimeInterval = 15) {
+    /// Wait for a report already under way, and any other being sent, then
+    /// for them to go. Not on the main thread if the task needs it.
+    static func wait(for task: Task<ReportOutcome, Never>? = nil, timeout: TimeInterval = 15) {
         guard isEnabled else { return }
+        let deadline = DispatchTime.now() + timeout
         if let task {
             let done = DispatchSemaphore(value: 0)
             Task.detached {
                 _ = await task.value
                 done.signal()
             }
-            if done.wait(timeout: .now() + timeout) == .timedOut {
+            if done.wait(timeout: deadline) == .timedOut {
                 logger.warning("Gave up waiting \(Int(timeout))s for a failure report to be ready")
             }
+        }
+        if sending.wait(timeout: deadline) == .timedOut {
+            logger.warning("Gave up waiting \(Int(timeout))s for a failure report to be ready")
         }
         flush()
     }

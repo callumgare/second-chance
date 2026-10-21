@@ -25,6 +25,8 @@ class InfoWindowViewModel: ObservableObject {
 
     let saveWarningEnabled: Bool
     let gameSlug: String
+    /// The failed launch's report, for the error screen.
+    let failureReport = FailureReportModel()
     var onConfirm: (() -> Void)?
     /// Where I Understand is drawn, in the hosting view's coordinates (top-left
     /// origin, as the hosting view is flipped), so
@@ -223,7 +225,7 @@ struct InfoWindowView: View {
 
             LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
 
-            BugReportCallout()
+            FailureReportCallout(model: viewModel.failureReport)
 
             failureActions
         }
@@ -297,7 +299,7 @@ struct InfoWindowView: View {
 
             LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
 
-            BugReportCallout()
+            FailureReportCallout(model: viewModel.failureReport)
 
             failureActions
         }

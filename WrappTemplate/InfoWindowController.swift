@@ -125,11 +125,16 @@ class InfoWindowController: NSWindowController {
     }
 
     /// `explanation` says what went wrong, when the wrapp knows: for a game
-    /// that quit unexpectedly rather than crashing.
-    func showError(exitCode: Int32, explanation: String? = nil) {
+    /// that quit unexpectedly rather than crashing. `report` is its failure
+    /// report, already being sent by `sending`.
+    func showError(exitCode: Int32, explanation: String? = nil,
+                   report: FailureReport? = nil, sending: Task<ReportOutcome, Never>? = nil) {
         DispatchQueue.main.async {
             self.loadMonitor?.observe(nil)
             self.viewModel.heavyLoad = nil
+            if let report, let sending {
+                self.viewModel.failureReport.track(report, sending: sending)
+            }
             self.viewModel.showError(exitCode: exitCode, explanation: explanation)
             self.window?.makeKeyAndOrderFront(nil)
             NSApp.setActivationPolicy(.regular)

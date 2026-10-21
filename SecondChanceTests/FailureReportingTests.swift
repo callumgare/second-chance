@@ -301,3 +301,69 @@ struct ReportBundleTests {
         #expect(kept.hasSuffix("THE LAST LINE\n"))
     }
 }
+
+@Suite("Failure report model")
+@MainActor
+struct FailureReportModelTests {
+    private func temporaryDirectory() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("model-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    private let report = FailureReport(what: "Running the game", kind: "exit-code", stage: "Starting the game",
+                                       game: "royal-tower")
+
+    /// Let the model's own task deliver the outcome.
+    private func settle(_ model: FailureReportModel) async {
+        for _ in 0..<100 where model.outcome == nil {
+            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+
+    @Test("The first report sent asks whether reports should be detailed from now on")
+    func firstFailureAsks() async {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = FailureReportModel(preferencesDirectory: directory)
+        model.track(report, sending: Task { .sent(eventID: "0123456789abcdef", detail: .basic) })
+        await settle(model)
+        #expect(model.outcome == .sent(eventID: "0123456789abcdef", detail: .basic))
+        #expect(model.asksAboutDetail)
+
+        model.choose(.manual)
+        #expect(!model.asksAboutDetail)
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .manual, promptShown: true))
+    }
+
+    @Test("Once asked, it doesn't ask again")
+    func asksOnce() async {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        ReportingPreferences.update(in: directory) { $0.promptShown = true }
+        let model = FailureReportModel(preferencesDirectory: directory)
+        model.track(report, sending: Task { .sent(eventID: "0123456789abcdef", detail: .basic) })
+        await settle(model)
+        #expect(!model.asksAboutDetail)
+    }
+
+    @Test("Declining the Manual choice sends nothing")
+    func declines() async {
+        let model = FailureReportModel(preferencesDirectory: temporaryDirectory())
+        model.track(report, sending: Task { .awaitingChoice })
+        await settle(model)
+        #expect(model.outcome == .awaitingChoice)
+        model.send(nil)
+        #expect(model.outcome == .declined)
+    }
+
+    @Test("The GitHub issue is filled in with the failure and the report ID")
+    func issueURL() throws {
+        let url = try #require(FailureReportModel.issueURL(report: report, reportID: "01234567"))
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.first { $0.name == "title" }?.value == "Running the game failed: exit-code")
+        let body = try #require(items.first { $0.name == "body" }?.value)
+        #expect(body.contains("- Game: royal-tower"))
+        #expect(body.contains("- Failure report: 01234567"))
+        #expect(body.contains("while \"Starting the game\""))
+    }
+}

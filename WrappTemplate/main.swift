@@ -264,6 +264,22 @@ class DebugMenuHandler: NSObject {
 // MARK: - Application Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    /// The app menu's Failure Reports…: what the shared setting is, and that
+    /// Second Chance is where it changes.
+    @objc func showFailureReportSettings() {
+        let level = ReportingPreferences.load().level
+        let alert = NSAlert()
+        alert.messageText = "Failure Reports"
+        let current: String
+        switch level {
+        case .detailed: current = "When the game fails to start, a detailed report is sent, with the log (your name and folders taken out)."
+        case .basic: current = "When the game fails to start, a basic report is sent: which game, and what failed."
+        case .manual: current = "When the game fails to start, you're asked what to send."
+        }
+        alert.informativeText = "\(current)\n\nYou can change this in Second Chance → Settings. It applies to all your games."
+        alert.runModal()
+    }
+
     let config: GameConfig
     let gameLauncher: GameLauncher?
     var isCleaningUp = false
@@ -580,6 +596,15 @@ func main() {
     let appMenu = NSMenu(title: "Nancy Drew")
     appMenuItem.submenu = appMenu
     
+    let reportsItem = NSMenuItem(
+        title: "Failure Reports…",
+        action: #selector(AppDelegate.showFailureReportSettings),
+        keyEquivalent: ""
+    )
+    reportsItem.target = appDelegate
+    appMenu.addItem(reportsItem)
+    appMenu.addItem(.separator())
+
     let quitItem = NSMenuItem(
         title: "Quit",
         action: #selector(NSApplication.terminate(_:)),
@@ -638,7 +663,7 @@ func main() {
     let saveWarningEnabled = (config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-")) && !launchingWithoutSteam
     let infoWindow = InfoWindowController(
         stage: config.gameEngine.hasPrefix("wine-steam") ? .startingSteam : .startingGame(title: config.gameTitle),
-        appSupportPath: config.appSupportPath, saveWarningEnabled: saveWarningEnabled,
+        appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor)
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
@@ -764,7 +789,8 @@ func main() {
             // reported an error, failed whatever its exit code says.
             if let failure = gameLauncher.unexpectedQuit {
                 appDelegate.gameExitCode = exitCode != 0 ? exitCode : 1
-                infoWindow.showError(exitCode: exitCode, explanation: failure.explanation)
+                infoWindow.showError(exitCode: exitCode, explanation: failure.explanation,
+                                     report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
                 return
             }
 
@@ -773,7 +799,8 @@ func main() {
             if exitCode != 0 && !infoWindow.hasGameLoaded {
                 mainLogger.error("Game exited with non-zero status: \(exitCode)")
                 appDelegate.gameExitCode = exitCode
-                infoWindow.showError(exitCode: exitCode)
+                infoWindow.showError(exitCode: exitCode,
+                                     report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
                 return
             }
 

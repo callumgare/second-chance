@@ -31,6 +31,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func finishTerminating() {
         WrappBuildHelper.shared.cleanupTemporaryWrapps()
+        // A failure report sent from the error screen moments ago.
+        FailureReporter.wait(timeout: 10)
         // Drain anything still pending so the disk mirror / stderr don't lose the last lines.
         LogStore.shared.flush()
     }
@@ -141,6 +143,10 @@ struct SecondChanceApp: App {
             CommandGroup(after: .appSettings) {
                 Button("Sign Out of Steam") { Self.signOutOfSteam() }
             }
+        }
+
+        Settings {
+            SettingsView()
         }
     }
 
