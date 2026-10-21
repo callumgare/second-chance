@@ -66,7 +66,7 @@ class InfoWindowController: NSWindowController {
         self.viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: shouldShow, gameSlug: gameSlug)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 100),
+            contentRect: NSRect(x: 0, y: 0, width: InfoWindowView.width, height: 100),
             styleMask: [.titled],
             backing: .buffered,
             defer: false

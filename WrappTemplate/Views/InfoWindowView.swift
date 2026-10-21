@@ -125,7 +125,7 @@ struct InfoWindowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(20)
-        .frame(width: 480)
+        .frame(width: Self.width)
         .fixedSize(horizontal: true, vertical: true)
         .coordinateSpace(name: Self.rootSpace)
         .onAppear {
@@ -134,6 +134,10 @@ struct InfoWindowView: View {
             }
         }
     }
+
+    /// Room for four buttons on one row (Show Log, Save Log…, Quit, Launch
+    /// Directly), which newer versions of macOS draw wider.
+    static let width: CGFloat = 520
 
     /// The whole view, which fills the window's hosting view: what
     /// `confirmButtonFrame` is measured in.
@@ -360,7 +364,7 @@ struct InfoWindowView: View {
 
 #Preview("Warning") {
     InfoWindowView(viewModel: InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: true))
-        .frame(width: 480)
+        .frame(width: InfoWindowView.width)
 }
 
 #Preview("Heavy load") {
@@ -372,7 +376,7 @@ struct InfoWindowView: View {
         )
         return vm
     }())
-    .frame(width: 480)
+    .frame(width: InfoWindowView.width)
 }
 
 #Preview("Possible launch failure, through Steam") {
@@ -381,7 +385,7 @@ struct InfoWindowView: View {
         vm.showSuspectedHang = true
         return vm
     }())
-    .frame(width: 480)
+    .frame(width: InfoWindowView.width)
 }
 
 #Preview("Possible launch failure, can launch without Steam") {
@@ -391,7 +395,7 @@ struct InfoWindowView: View {
         vm.showSuspectedHang = true
         return vm
     }())
-    .frame(width: 480)
+    .frame(width: InfoWindowView.width)
 }
 
 #Preview("Heavy load past the possible-failure point, can launch without Steam") {
@@ -405,7 +409,7 @@ struct InfoWindowView: View {
         )
         return vm
     }())
-    .frame(width: 480)
+    .frame(width: InfoWindowView.width)
 }
 
 #Preview("Error") {
@@ -414,7 +418,7 @@ struct InfoWindowView: View {
         vm.phase = .error(exitCode: 1, explanation: nil)
         return vm
     }())
-    .frame(width: 480)
+    .frame(width: InfoWindowView.width)
 }
 
 #Preview("Quit unexpectedly") {
@@ -423,5 +427,5 @@ struct InfoWindowView: View {
         vm.phase = .error(exitCode: 0, explanation: "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.")
         return vm
     }())
-    .frame(width: 480)
+    .frame(width: InfoWindowView.width)
 }
