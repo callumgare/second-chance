@@ -336,5 +336,7 @@ above:
 - **Detailed reports carry no breadcrumbs.** The zipped log covers it.
 - **The org and project slugs live in `.sentryclirc`**, and the DSN in
   `FailureReporter.releaseDSN`. Both are left for whoever creates the Sentry
-  project to fill in.
+  project to fill in. *(Post-implementation, 2026-10-21, Claude at Callum's
+  request: both moved into a gitignored `.env`, whose DSN a build phase writes
+  into the built Info.plist — docs/failure-reports.md#the-dsn.)*
 - **`sc` gained `--debug reporting`** for trying it from a Debug build.

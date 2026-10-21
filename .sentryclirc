@@ -1,8 +1,0 @@
-# sentry-cli's settings for `sc release`, which uploads each release's
-# debug symbols so crash reports show function names. Not secret: the auth
-# token lives in the login keychain (docs/releasing.md). `org` is the Sentry
-# organisation's slug, `project` the slug of the project FailureReporter's
-# DSN belongs to (docs/failure-reports.md).
-[defaults]
-org =
-project = second-chance

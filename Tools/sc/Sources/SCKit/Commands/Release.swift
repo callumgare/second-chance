@@ -234,6 +234,7 @@ private struct Release {
         guard FileManager.default.fileExists(atPath: app.path) else {
             throw SCError("The build reported success but \(repo.display(app)) is missing.")
         }
+        try checkSentryDSN(in: app)
         try await ui.progressStep("Package", success: "Packaged \(repo.display(zip))") { _ in
             try? FileManager.default.removeItem(at: zip)
             // ditto, not zip: the Wine and ScummVM payloads inside
@@ -324,6 +325,28 @@ private struct Release {
         return try section()
     }
 
+    /// A release built without `SENTRY_DSN` in `.env` would send no failure
+    /// reports, and nothing would say so. Stops the release; a `--build-only`
+    /// build, for trying out, only warns.
+    private func checkSentryDSN(in app: URL) throws {
+        let plists = [
+            app.appendingPathComponent("Contents/Info.plist"),
+            app.appendingPathComponent("Contents/Resources/WrappTemplate.app/Contents/Info.plist"),
+        ]
+        let missing = plists.filter { plist in
+            let dsn = NSDictionary(contentsOf: plist)?["SentryDSN"] as? String ?? ""
+            return dsn.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        guard !missing.isEmpty else { return }
+        let message = "The build has no Sentry DSN, so it would send no failure reports."
+        let hint = "Set SENTRY_DSN in .env (see .env.example) and build again."
+        if buildOnly {
+            ui.warning("\(message) \(hint)")
+        } else {
+            throw SCError(message, hints: [hint] + missing.map { "No SentryDSN in \(repo.display($0))" })
+        }
+    }
+
     /// Upload the Release build's debug symbols to Sentry, and keep a zip of
     /// them beside the release. A crash report from this version is
     /// unreadable without them, and the next build overwrites them, so a
@@ -337,12 +360,11 @@ private struct Release {
             throw SCError("sentry-cli isn't installed, and the release's debug symbols need uploading.",
                           hints: ["brew install getsentry/tools/sentry-cli"])
         }
-        let config = (try? String(contentsOf: repo.root.appendingPathComponent(".sentryclirc"), encoding: .utf8)) ?? ""
-        guard config.split(separator: "\n").contains(where: { line in
-            let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            return parts.count == 2 && parts[0] == "org" && !parts[1].isEmpty
-        }) else {
-            throw SCError(".sentryclirc names no Sentry organisation.", hints: ["Set `org` in .sentryclirc (docs/releasing.md)."])
+        let settings = DotEnv.load(repo)
+        guard let org = settings["SENTRY_ORG"], !org.isEmpty,
+              let project = settings["SENTRY_PROJECT"], !project.isEmpty else {
+            throw SCError(".env doesn't name the Sentry organisation and project to upload debug symbols to.",
+                          hints: ["Set SENTRY_ORG and SENTRY_PROJECT in .env (see .env.example)."])
         }
         let lookup = try await Proc.collect("/usr/bin/security", ["find-generic-password", "-s", "sentry-auth-token", "-w"])
         let token = lookup.output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -364,8 +386,11 @@ private struct Release {
             let zipped = try await Proc.collect("/usr/bin/ditto", ["-c", "-k", "--keepParent", staging.path, archive.path])
             guard zipped.succeeded else { throw SCError("ditto failed: \(zipped.error)") }
 
-            let upload = try await Proc.collect(sentryCLI, ["debug-files", "upload", "--wait", staging.path],
-                                                env: ["SENTRY_AUTH_TOKEN": token], cwd: repo.root)
+            // Everything sentry-cli needs is passed in, so it reads no .env
+            // or .sentryclirc of its own.
+            let upload = try await Proc.collect(sentryCLI, ["debug-files", "upload", "--wait", staging.path], env: [
+                "SENTRY_AUTH_TOKEN": token, "SENTRY_ORG": org, "SENTRY_PROJECT": project, "SENTRY_LOAD_DOTENV": "0",
+            ], cwd: repo.root)
             guard upload.succeeded else {
                 throw SCError("sentry-cli couldn't upload the debug symbols.", hints: [upload.output + upload.error])
             }

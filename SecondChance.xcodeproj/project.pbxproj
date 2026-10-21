@@ -227,6 +227,7 @@
 				E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */,
 				E25DDA6952206C43D18B125E /* Download And Copy AutoIt Files */,
 				E280B72C30319B6700501790 /* Download And Copy Game Patches */,
+				E2D5E0102F01000000000001 /* Stamp Sentry DSN */,
 			);
 			buildRules = (
 			);
@@ -257,6 +258,7 @@
 				E2A159062F064DDD00292958 /* Download And Copy Wine Files */,
 				E2FA29BF2F089B2B00638A54 /* Download And Copy ScummVM Files */,
 				E2467E6E2F24D0A800D4773B /* Check for collisions */,
+				E2D5E0112F01000000000001 /* Stamp Sentry DSN */,
 			);
 			buildRules = (
 			);
@@ -382,6 +384,48 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		E2D5E0102F01000000000001 /* Stamp Sentry DSN */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/stamp-sentry-dsn.sh",
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Stamp Sentry DSN";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/stamp-sentry-dsn.sh\"\n";
+		};
+		E2D5E0112F01000000000001 /* Stamp Sentry DSN */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/stamp-sentry-dsn.sh",
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Stamp Sentry DSN";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/stamp-sentry-dsn.sh\"\n";
+		};
 		E2467E6E2F24D0A800D4773B /* Check for collisions */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;

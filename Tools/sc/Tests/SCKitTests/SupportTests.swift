@@ -560,3 +560,25 @@ struct ReleaseNotesTests {
         #expect(ReleaseNotes.forUpdateWindow("### Features\n\n- Plain cog notes") == "### Features\n\n- Plain cog notes")
     }
 }
+
+@Suite("Local settings (.env)")
+struct DotEnvTests {
+    @Test("Lines read as a shell would: comments, export, quotes, last one wins")
+    func parses() {
+        let values = DotEnv.parse("""
+            # The DSN
+            SENTRY_DSN="https://key@o1.ingest.sentry.io/2"
+            export SENTRY_ORG = 'nancy'
+            SENTRY_PROJECT=first
+            SENTRY_PROJECT=second-chance
+
+            EMPTY=
+            not a setting
+            """)
+        #expect(values["SENTRY_DSN"] == "https://key@o1.ingest.sentry.io/2")
+        #expect(values["SENTRY_ORG"] == "nancy")
+        #expect(values["SENTRY_PROJECT"] == "second-chance")
+        #expect(values["EMPTY"] == "")
+        #expect(values.count == 4)
+    }
+}

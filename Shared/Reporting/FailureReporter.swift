@@ -24,10 +24,14 @@ nonisolated enum FailureReporter {
         case wrapp
     }
 
-    /// Where reports go. Not a secret: a DSN can only send events, and every
-    /// copy of the app carries it. Empty sends nothing; set
-    /// `SECOND_CHANCE_SENTRY_DSN` to try a build against another project.
-    static let releaseDSN = ""
+    /// Where reports go: `SentryDSN` in the Info.plist, written at build
+    /// time from `SENTRY_DSN` in the repo's `.env` (stamp-sentry-dsn.sh). A
+    /// build without one — a fork's, a contributor's — sends nothing. Not a
+    /// secret: a DSN can only send events, and every copy carries it.
+    static var bundledDSN: String {
+        (Bundle.main.object(forInfoDictionaryKey: "SentryDSN") as? String)?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+    }
 
     private struct State {
         var process: Process?
@@ -52,7 +56,7 @@ nonisolated enum FailureReporter {
     /// drives with `SECOND_CHANCE_PUPPET_DIR`. `SECOND_CHANCE_REPORTING=1`
     /// or `0` overrides all of these.
     static func disabledReason(environment env: [String: String], isDebugBuild: Bool, dsn: String) -> String? {
-        if dsn.isEmpty { return "no Sentry DSN set" }
+        if dsn.isEmpty { return "built without a Sentry DSN" }
         if let forced = env["SECOND_CHANCE_REPORTING"] {
             return forced == "1" ? nil : "SECOND_CHANCE_REPORTING=\(forced)"
         }
@@ -63,9 +67,11 @@ nonisolated enum FailureReporter {
         return nil
     }
 
+    /// `SECOND_CHANCE_SENTRY_DSN` overrides the built-in one, to try a
+    /// build against another project.
     static var dsn: String {
         let override = ProcessInfo.processInfo.environment["SECOND_CHANCE_SENTRY_DSN"] ?? ""
-        return override.isEmpty ? releaseDSN : override
+        return override.isEmpty ? bundledDSN : override
     }
 
     static var isDebugBuild: Bool {

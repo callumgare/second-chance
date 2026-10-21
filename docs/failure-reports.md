@@ -142,7 +142,7 @@ SecondChance and WrappTemplate targets define
 
 `FailureReporter.disabledReason` keeps reporting off:
 
-- with no DSN (`FailureReporter.releaseDSN`, or `SECOND_CHANCE_SENTRY_DSN`);
+- with no DSN (see [The DSN](#the-dsn));
 - in a Debug build;
 - in a headless build (`NON_INTERACTIVE`), which covers the integration tests;
 - in a wrapp WrappPuppeteer drives (`SECOND_CHANCE_PUPPET_DIR`);
@@ -160,6 +160,29 @@ SECOND_CHANCE_SENTRY_DSN=<a test project's DSN> ./sc app run --debug reporting
 Debug builds report to the `development` environment, so they don't mix
 with players' reports.
 
+## The DSN
+
+The DSN isn't in the source. The `Stamp Sentry DSN` build phase in both
+targets (`WrappTemplate/stamp-sentry-dsn.sh`) reads `SENTRY_DSN` from the
+repo's `.env`, which git ignores (`.env.example` lists what goes in it). It
+writes the value into the built Info.plist as `SentryDSN`, where
+`FailureReporter.bundledDSN` reads it. A build without one — a fork's, a
+contributor's, CI's — sends nothing, rather than reporting into the project's
+Sentry. A DSN isn't a secret: it can only send events, and every copy of the
+app carries it. `.env` is kept out of git so that forks don't share it.
+
+It is a script rather than an `.xcconfig` for two reasons: xcconfig reads the
+`//` in a DSN as the start of a comment, and WrappTemplate's Info.plist is
+generated, which takes no custom keys. The phase runs on every build, so
+editing `.env` takes effect at the next build. `sc release` refuses to publish
+a build whose app or WrappTemplate has no `SentryDSN`, and `--build-only` only
+warns. `SECOND_CHANCE_SENTRY_DSN` overrides the built-in DSN at run time.
+
+`SENTRY_ORG` and `SENTRY_PROJECT` in the same file tell `sc release` where to
+upload debug symbols. It passes them to `sentry-cli` itself, with
+`SENTRY_LOAD_DOTENV=0`, so the upload doesn't depend on `sentry-cli` finding
+a config file of its own.
+
 ## Symbolication
 
 A crash's stack is only addresses until Sentry has the build's dSYMs.
@@ -173,8 +196,8 @@ symbols by the binaries' UUIDs, not by release name.
 
 Set up once, by hand, in Sentry:
 
-- **Platform:** `apple-macos`. Its DSN goes in `FailureReporter.releaseDSN`.
-  Its organisation and project slugs go in `.sentryclirc`.
+- **Platform:** `apple-macos`. Its DSN and the organisation and project slugs
+  go in `.env` ([below](#the-dsn)).
 - **Security & Privacy:** turn on *Prevent Storing of IP Addresses*, and keep
   the default data scrubbing.
 - **Rate limits:** turn on spike protection, and set an alert for new issues.

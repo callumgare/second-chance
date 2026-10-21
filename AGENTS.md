@@ -56,6 +56,11 @@ Build output lands in `DerivedData/Build/Products/Debug/Second Chance.app`. Game
 wrapps are built into `built-apps/`. See [docs/testing.md](docs/testing.md) for
 the full test story.
 
+A gitignored `.env` at the repo root (`.env.example` lists its keys) holds the
+Sentry DSN, which a build phase writes into the app, and the Sentry slugs
+`sc release` uploads debug symbols to. A clone without one builds fine and
+sends no failure reports ([docs/failure-reports.md](docs/failure-reports.md#the-dsn)).
+
 
 ## Documentation
 
