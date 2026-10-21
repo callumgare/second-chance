@@ -232,7 +232,7 @@ direct assignment.
   must be logged in at that Mac's console. That run is a LaunchAgent, so it
   outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
   picks it up again.
-- **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG) plus the bundled Wine engine's version (`Contents/SharedSupport/wine/version`), so a Wine upgrade starts a fresh prefix by itself. Caching a prefix removes every other key's. Other changes to how the prefix is set up (winetricks verbs, `ddraw.ini`) don't change the key: run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after those, or if Wine setup misbehaves after code changes.
+- **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG) plus the bundled Wine engine's version (`Contents/SharedSupport/wine/version`), so a Wine upgrade starts a fresh prefix by itself. Caching a prefix removes every other key's. Other changes to how the prefix is set up (winetricks verbs, `ddraw.ini`, registry settings such as `EmulateModeset`) don't change the key: run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after those, or if Wine setup misbehaves after code changes.
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
   never take it either, since the interactive installer is a wizard nobody is
@@ -252,8 +252,10 @@ direct assignment.
   More debug switches read the same way: `SECOND_CHANCE_KEEP_IN_DOCK=1`
   skips the wrapp hiding itself from the Dock once the game starts,
   `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves native fullscreen unarmed (and
-  stops Wine seeing a notched display without its notch strip), and
-  `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet).
+  stops Wine seeing a notched display without its notch strip),
+  `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet), and
+  `SECOND_CHANCE_MODE_SCALING=0` leaves a Direct3D game's picture unscaled
+  when Wine emulates the display mode it switched to.
   For Second Chance itself, `SECOND_CHANCE_UPDATES=1` turns on the update
   checks a Debug build leaves off ([docs/updates.md](docs/updates.md)).
 - **cnc-ddraw swallows the first click unless the wrapp locks the cursor.**
@@ -269,6 +271,14 @@ direct assignment.
   `WrappTemplate/InProcessHelpers/`. Read
   [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before
   touching either, or cnc-ddraw's `ddraw.ini` settings in `WineManager`.
+- **Wine fakes a game's display mode switch.** Old games switch the display
+  to the mode they were made for and quit (exit 0, a few seconds in) when
+  Wine says `NtUserChangeDisplaySettings … returned -2`, which it does for a
+  mode the Mac display lacks — every 4:3 mode on a MacBook's built-in one.
+  So the prefix has `EmulateModeset` on (`WineManager`): Wine says yes, leaves
+  the display alone, and scales the game's windows up. Wine 10's Mac driver
+  doesn't scale what Direct3D draws, so the wrapp's mode scaling helper does
+  ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#mode-scaling)).
 - **Wrapps start Wine's desktop before the game.** Left to Wine, a game's
   first desktop access starts `explorer.exe /desktop` and waits only 10 s for
   it; on a loaded machine under Rosetta that runs out, and the game carries on

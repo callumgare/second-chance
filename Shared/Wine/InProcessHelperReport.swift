@@ -2,8 +2,8 @@
 //  InProcessHelperReport.swift
 //  Shared
 //
-//  What the in-process helpers (native fullscreen, cursor lock, puppet
-//  control) say about
+//  What the in-process helpers (native fullscreen, cursor lock, mode
+//  scaling, puppet control) say about
 //  themselves, gathered from the game's output, and a check that the ones the
 //  wrapp armed did arm. A helper that never arms is otherwise silent — the
 //  game just runs in a window, or swallows its first click — which is how
@@ -17,12 +17,14 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
     enum Helper: String, CaseIterable, Sendable {
         case nativeFullscreen = "NativeFullscreen"
         case cursorLock = "CursorLock"
+        case modeScaling = "EmulatedMode"
         case puppetControl = "PuppetControl"
 
         var name: String {
             switch self {
             case .nativeFullscreen: return "Native fullscreen"
             case .cursorLock: return "Cursor lock"
+            case .modeScaling: return "Mode scaling"
             case .puppetControl: return "Puppet control"
             }
         }
@@ -32,6 +34,7 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
             switch self {
             case .nativeFullscreen: return "NATIVE_MACOS_FULLSCREEN_EXE"
             case .cursorLock: return "CURSOR_LOCK_EXE"
+            case .modeScaling: return "EMULATED_MODE_SCALING_EXE"
             case .puppetControl: return "PUPPET_CONTROL_EXE"
             }
         }
@@ -41,6 +44,7 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
             switch self {
             case .nativeFullscreen: return "the game stays in a window"
             case .cursorLock: return "the game's first click will be swallowed"
+            case .modeScaling: return "a game that switches the display mode will draw into a corner of the screen"
             case .puppetControl: return "WrappPuppeteer can't see or click the game"
             }
         }

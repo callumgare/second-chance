@@ -116,7 +116,9 @@ nonisolated public struct WineEnvironment: Sendable {
     /// the game's window into a real macOS fullscreen Space, cursor lock gets
     /// cnc-ddraw to take the mouse without swallowing the player's first click
     /// (only in a game that may draw through cnc-ddraw: `GameGraphicsAPI`),
-    /// and puppet control (only when WrappPuppeteer
+    /// mode scaling scales a Direct3D game's picture up to the display when
+    /// Wine is emulating the display mode the game switched to (only in a game
+    /// that may draw with Direct3D), and puppet control (only when WrappPuppeteer
     /// started the wrapp) lets it see and click the game. Every Mac-driver
     /// process loads them, so each is told which one is the game (by the
     /// .exe's name, which Wine puts in the process's argv[0]), and a Wine
@@ -137,8 +139,15 @@ nonisolated public struct WineEnvironment: Sendable {
         // cnc-ddraw's swallowed first click — for comparison. A Direct3D game
         // never goes through cnc-ddraw, and the lock's middle clicks would
         // only close the menus a player opens from the menu bar.
-        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", GameGraphicsAPI(exeAt: exeURL).mayUseCncDdraw {
+        let graphicsAPI = GameGraphicsAPI(exeAt: exeURL)
+        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", graphicsAPI.mayUseCncDdraw {
             env["CURSOR_LOCK_EXE"] = gameExe
+        }
+        // SECOND_CHANCE_MODE_SCALING=0 leaves mode scaling unarmed, so a game
+        // that switches the display mode draws into a corner of its window —
+        // for comparison. The prefix's EmulateModeset (WineManager) stays on.
+        if environment["SECOND_CHANCE_MODE_SCALING"] != "0", graphicsAPI.mayUseDirect3D {
+            env["EMULATED_MODE_SCALING_EXE"] = gameExe
         }
         // Puppet control arms only when WrappPuppeteer started the wrapp,
         // which it marks by passing the directory for the helper's socket.

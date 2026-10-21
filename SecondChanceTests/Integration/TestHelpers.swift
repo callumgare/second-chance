@@ -350,17 +350,21 @@ enum AppPuppetRunner {
         }
         let slug = game.id
 
-        // A Wine game has to arm native fullscreen, and cursor lock unless it
-        // draws with Direct3D (so never through cnc-ddraw); nothing else would
-        // notice if they didn't (the game still plays, in a window). Every
-        // game arms puppet control, which WrappPuppeteer drives it through;
-        // naming it here says so when it didn't, rather than leaving
-        // WrappPuppeteer's failure to explain it.
+        // A Wine game has to arm native fullscreen, cursor lock unless it
+        // draws with Direct3D (so never through cnc-ddraw), and mode scaling
+        // unless it draws through cnc-ddraw; nothing else would notice if they
+        // didn't (the game still plays, in a window, or in a corner of the
+        // screen). Every game arms puppet control, which WrappPuppeteer drives
+        // it through; naming it here says so when it didn't, rather than
+        // leaving WrappPuppeteer's failure to explain it.
         let engine = WrappInfo.gameEngine(at: wrappURL) ?? ""
         let requiredHelpers: [InProcessHelperReport.Helper]
         if engine == "wine" || engine.hasPrefix("wine-") {
-            let usesCncDdraw = WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0).mayUseCncDdraw } ?? true
-            requiredHelpers = usesCncDdraw ? [.nativeFullscreen, .cursorLock, .puppetControl] : [.nativeFullscreen, .puppetControl]
+            let graphicsAPI = WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0) } ?? .unknown
+            requiredHelpers = [.nativeFullscreen]
+                + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
+                + (graphicsAPI.mayUseDirect3D ? [.modeScaling] : [])
+                + [.puppetControl]
         } else {
             requiredHelpers = [.puppetControl]
         }

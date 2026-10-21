@@ -104,4 +104,25 @@ struct GameGraphicsAPITests {
         // The other helpers don't depend on it.
         #expect(d3dVariables["NATIVE_MACOS_FULLSCREEN_EXE"] == "Secrets.exe")
     }
+
+    @Test("Mode scaling arms unless the game draws through cnc-ddraw")
+    func armsModeScalingWhereDirect3DMayDraw() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GameGraphicsAPITests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let directDraw = directory.appendingPathComponent("Game.exe")
+        try Self.peImage(importing: ["kernel32.dll", "ddraw.dll"]).write(to: directDraw)
+        let direct3D = directory.appendingPathComponent("Wolf.exe")
+        try Self.peImage(importing: ["kernel32.dll", "d3d9.dll"]).write(to: direct3D)
+        let missing = directory.appendingPathComponent("Missing.exe")
+
+        #expect(WineEnvironment.inProcessHelperVariables(gameExe: directDraw, environment: [:])["EMULATED_MODE_SCALING_EXE"] == nil)
+        #expect(WineEnvironment.inProcessHelperVariables(gameExe: direct3D, environment: [:])["EMULATED_MODE_SCALING_EXE"] == "Wolf.exe")
+        #expect(WineEnvironment.inProcessHelperVariables(gameExe: missing, environment: [:])["EMULATED_MODE_SCALING_EXE"] == "Missing.exe")
+        // Its off switch.
+        #expect(WineEnvironment.inProcessHelperVariables(
+            gameExe: direct3D, environment: ["SECOND_CHANCE_MODE_SCALING": "0"])["EMULATED_MODE_SCALING_EXE"] == nil)
+    }
 }

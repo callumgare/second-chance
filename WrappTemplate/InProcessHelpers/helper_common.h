@@ -155,4 +155,15 @@ int windowIsEnteringFullscreen(NSWindow *window);
 /// can wedge, even one finished just before the move begins. Main thread only.
 int nativeFullscreenSettled(void);
 
+// ## The display Wine sees
+//
+// display_below_notch.m may show Wine less of the main display than there
+// is; emulated_mode_scaling.m needs the size Wine scales the game up to.
+
+#include <CoreGraphics/CoreGraphics.h>
+
+/// The main display's size in points as Wine's Mac driver sees it: below the
+/// notch when display_below_notch.m is showing it that, else the whole display.
+CGSize wineMainDisplaySize(void);
+
 #endif

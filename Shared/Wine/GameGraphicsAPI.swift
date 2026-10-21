@@ -44,6 +44,12 @@ nonisolated public enum GameGraphicsAPI: Equatable, Sendable {
     /// Only a game known to draw with Direct3D goes without.
     public var mayUseCncDdraw: Bool { self != .direct3D }
 
+    /// Whether the game may draw with Direct3D, so its picture needs scaling
+    /// up when Wine emulates the display mode it switches to. Only a game known
+    /// to draw through cnc-ddraw, which never switches the real display, goes
+    /// without.
+    public var mayUseDirect3D: Bool { self != .directDraw }
+
     /// For a log line: "… draws with <this>".
     public var logDescription: String {
         switch self {

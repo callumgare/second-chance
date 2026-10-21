@@ -234,3 +234,11 @@ static void displayBelowNotchInit(void) {
     }
     os_log(gLog, "[BelowNotch] armed, strip %.0f", (double)gStrip);
 }
+
+CGSize wineMainDisplaySize(void) {
+    // gScreenFrame is set only once the replacements are in.
+    if (gScreenFrame && belowNotchActive()) {
+        return CGSizeMake(CGDisplayModeGetWidth(gBelowNotchMode), CGDisplayModeGetHeight(gBelowNotchMode));
+    }
+    return CGDisplayBounds(CGMainDisplayID()).size;
+}

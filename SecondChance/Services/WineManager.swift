@@ -155,7 +155,26 @@ class WineManager {
             
         // Wait for wineserver to finish
         try await waitForWineToExit(at: wrappPath)
-        
+
+        // Have Wine say yes to a game's display mode switch without making it,
+        // and scale the game up to the real display instead. Old games quit
+        // when the switch fails, as it does on a display with no mode of the
+        // size they ask for (a MacBook's built-in display has no 4:3 modes).
+        // Wine 10 reads this from the X11 Driver key whatever the driver. The
+        // wrapp's mode scaling helper scales what Direct3D draws to match.
+        // See docs/wine-in-process-helpers.md#mode-scaling.
+        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Configuring display modes"))) }
+        try await runWine(
+            at: wrappPath,
+            executable: "wine",
+            arguments: [
+                "reg", "add", "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver",
+                "/v", "EmulateModeset", "/t", "REG_SZ", "/d", "Y", "/f",
+            ],
+            // As for the drive registry writes in mountDirectory.
+            timeout: 600
+        )
+
         // Install cnc-ddraw for better DirectDraw compatibility
         Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Installing cnc-ddraw"))) }
         try await installWinetrick("cnc_ddraw", at: wrappPath)
