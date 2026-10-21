@@ -42,9 +42,26 @@ struct ReleaseCommand: AsyncParsableCommand {
     ))
     var plainNotes = false
 
+    @Option(help: ArgumentHelp(
+        "The model Claude Code rewrites the notes with.",
+        discussion: "An alias such as sonnet or opus, or a full model name. Pass default for Claude Code's own default.",
+        valueName: "model"
+    ))
+    var notesModel = "sonnet"
+
+    @Option(help: ArgumentHelp(
+        "How hard Claude Code thinks over the notes: low, medium, high, xhigh or max.",
+        discussion: "Most of the rewrite's time is thinking, so this sets how long it takes. Pass default for Claude Code's own.",
+        valueName: "level"
+    ))
+    var notesEffort = "low"
+
     func validate() throws {
         if dryRun && notesOnly { throw ValidationError("--dry-run and --notes-only can't be combined.") }
         if buildOnly && (dryRun || notesOnly) { throw ValidationError("--build-only can't be combined with --dry-run or --notes-only.") }
+        if !["default", "low", "medium", "high", "xhigh", "max"].contains(notesEffort) {
+            throw ValidationError("--notes-effort is low, medium, high, xhigh, max or default.")
+        }
         if let version, !ProjectVersion.isSemanticVersion(version.hasPrefix("v") ? String(version.dropFirst()) : version) {
             throw ValidationError("'\(version)' isn't a three-part semantic version.")
         }
@@ -52,7 +69,9 @@ struct ReleaseCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly, plainNotes: plainNotes)
+        let release = Release(session: session, dryRun: dryRun, buildOnly: buildOnly, plainNotes: plainNotes,
+                              notesModel: notesModel == "default" ? nil : notesModel,
+                              notesEffort: notesEffort == "default" ? nil : notesEffort)
         try await release.run(versionOverride: version.map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 },
                               build: !dryRun && !notesOnly, test: !dryRun && !notesOnly && !buildOnly && !skipTests)
     }
@@ -66,6 +85,10 @@ private struct Release {
     let buildOnly: Bool
     /// Skip Claude Code's rewrite of the notes.
     let plainNotes: Bool
+    /// `--model` for the rewrite, or nil for Claude Code's default.
+    let notesModel: String?
+    /// `--effort` for the rewrite, or nil for Claude Code's default.
+    let notesEffort: String?
     var repo: Repo { session.repo }
     var ui: UI { session.ui }
 
@@ -287,17 +310,33 @@ private struct Release {
             ui.detail("Claude Code isn't installed, so the notes are the commit messages as they are.")
             return notes
         }
-        let rewritten: String? = try? await ui.progressStep(
-            "Rewrite the notes with Claude Code", success: "Rewrote the notes for players"
-        ) { _ in
+        let title = "Rewrite the notes with Claude Code"
+        let logFile = try? ui.makeLogFile("release-notes")
+        let handle = logFile.flatMap { try? FileHandle(forWritingTo: $0) }
+        defer { try? handle?.close() }
+        let rewritten: String? = try? await ui.progressStep(title, success: "Rewrote the notes for players") { update in
             let prompt = try String(contentsOf: repo.notesPrompt, encoding: .utf8)
             // Whole messages: the bodies say what each change was for, which
             // the summaries in the notes leave out.
             let log = try await git(["log", "--no-merges", "--format=commit %h%n%B", range])
             guard log.succeeded else { throw SCError("git log failed: \(log.error)") }
-            let rewrite = try await ReleaseNotes.rewrite(notes: notes, commits: log.output, prompt: prompt, cwd: repo.root)
+            // The spinner says what Claude Code is doing and for how long,
+            // redrawn each second so the time moves between its steps.
+            let status = StepStatus(title: title, update: update)
+            let ticking = Task {
+                while !Task.isCancelled {
+                    status.redraw()
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+            defer { ticking.cancel() }
+            let rewrite = try await ReleaseNotes.rewrite(
+                notes: notes, commits: log.output, prompt: prompt, model: notesModel, effort: notesEffort, cwd: repo.root,
+                log: LogSink(file: handle), activity: { status.set($0) }
+            )
             return ReleaseNotes.markdown(rewrite)
         }
+        if let logFile { ui.detail("Claude Code's session: \(repo.display(logFile))") }
         guard let rewritten else {
             ui.warning("Using the notes from the commit messages as they are.",
                        next: "Check Claude Code works with `claude -p hello`, or pass --plain-notes.")
@@ -591,5 +630,31 @@ private struct Release {
         let result = try await Proc.collect("/usr/bin/diff", ["-u", a.path, b.path])
         // Drop the two file-name header lines.
         return result.output.split(separator: "\n", omittingEmptySubsequences: false).dropFirst(2).joined(separator: "\n")
+    }
+}
+
+/// A progress step's message while Claude Code works: the step, what it's
+/// doing now, and how long the step has taken.
+private final class StepStatus: @unchecked Sendable {
+    private let lock = NSLock()
+    private let title: String
+    private let update: @Sendable (String) -> Void
+    private let started = Date()
+    private var doing = "Starting"
+
+    init(title: String, update: @escaping @Sendable (String) -> Void) {
+        self.title = title
+        self.update = update
+    }
+
+    func set(_ activity: String) {
+        lock.withLock { doing = activity }
+        redraw()
+    }
+
+    func redraw() {
+        let seconds = Int(Date().timeIntervalSince(started))
+        let elapsed = seconds < 60 ? "\(seconds)s" : "\(seconds / 60)m\(String(format: "%02d", seconds % 60))s"
+        update("\(title) — \(lock.withLock { doing }) (\(elapsed))")
     }
 }

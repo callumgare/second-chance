@@ -75,7 +75,13 @@ enum ReleaseNotes {
     /// them for context. When a message isn't enough it can look at the
     /// change itself, but only read: git's read commands and the repo's files
     /// are allowed, and `dontAsk` refuses everything else instead of asking.
-    static func rewrite(notes: String, commits: String, prompt: String, cwd: URL) async throws -> Rewrite {
+    ///
+    /// Its output is streamed, so `activity` hears each thing it does as it
+    /// does it, and `log` keeps every line of the stream.
+    static func rewrite(
+        notes: String, commits: String, prompt: String, model: String?, effort: String?, cwd: URL,
+        log: LogSink, activity: @escaping @Sendable (String) -> Void
+    ) async throws -> Rewrite {
         let input = """
         \(prompt)
 
@@ -87,27 +93,108 @@ enum ReleaseNotes {
 
         \(commits)
         """
-        let result = try await Proc.collect("claude", [
-            "-p", "--output-format", "json", "--json-schema", schema,
+        var args = [
+            "-p", "--output-format", "stream-json", "--verbose", "--json-schema", schema,
             "--tools", "Bash,Read,Grep,Glob",
             "--allowedTools", "Bash(git show:*)", "Bash(git log:*)", "Bash(git diff:*)", "Read(./**)", "Grep", "Glob",
             "--permission-mode", "dontAsk",
             "--strict-mcp-config", "--no-session-persistence",
-        ], cwd: cwd, input: input)
-        struct Reply: Decodable {
-            let is_error: Bool?
-            let result: String?
-            let structured_output: Rewrite?
+        ]
+        if let model { args += ["--model", model] }
+        if let effort { args += ["--effort", effort] }
+        let final = FinalReply()
+        let status = try await Proc.stream("claude", args, cwd: cwd, input: input) { line in
+            await log.line(line)
+            switch StreamEvent(line: line) {
+            case .activity(let text): activity(text)
+            case .result(let reply): final.set(reply)
+            case nil: final.other(line)
+            }
         }
-        let reply = try? JSONDecoder().decode(Reply.self, from: Data(result.output.utf8))
-        guard result.succeeded, let reply, reply.is_error != true, let rewrite = reply.structured_output else {
-            let detail = reply?.result ?? (result.error.isEmpty ? result.output : result.error)
-            throw SCError("Claude Code couldn't rewrite the notes (exit \(result.status)).",
+        let reply = final.reply
+        guard status == 0, let reply, reply.is_error != true, let rewrite = reply.structured_output else {
+            let detail = reply?.result ?? final.otherLines.joined(separator: "\n")
+            throw SCError("Claude Code couldn't rewrite the notes (exit \(status)).",
                           hints: [detail.trimmingCharacters(in: .whitespacesAndNewlines)])
         }
         guard !rewrite.sections.isEmpty || !rewrite.internalChanges.isEmpty else {
             throw SCError("Claude Code returned no notes.")
         }
         return rewrite
+    }
+
+    /// The `result` line that ends Claude Code's stream.
+    struct Reply: Decodable {
+        let is_error: Bool?
+        let result: String?
+        let structured_output: Rewrite?
+    }
+
+    /// One line of `claude -p --output-format stream-json`, as far as sc
+    /// cares: what it's doing, or how it ended. Everything else (its set-up,
+    /// tool results, rate limits) is nil.
+    enum StreamEvent {
+        case activity(String)
+        case result(Reply)
+
+        init?(line: String) {
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let type = object["type"] as? String else { return nil }
+            switch type {
+            case "result":
+                guard let reply = try? JSONDecoder().decode(Reply.self, from: data) else { return nil }
+                self = .result(reply)
+            case "assistant":
+                let content = (object["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
+                // A turn can make several calls at once; the last says what it's waiting on.
+                guard let text = content.compactMap(Self.describe).last else { return nil }
+                self = .activity(text)
+            default:
+                return nil
+            }
+        }
+
+        private static func describe(_ block: [String: Any]) -> String? {
+            switch block["type"] as? String {
+            case "thinking", "text": return "Thinking"
+            case "tool_use":
+                let input = block["input"] as? [String: Any] ?? [:]
+                switch block["name"] as? String {
+                case "Bash": return (input["command"] as? String).map { "Running \(oneLine($0))" }
+                case "Read": return (input["file_path"] as? String).map { "Reading \(URL(fileURLWithPath: $0).lastPathComponent)" }
+                case "Grep": return (input["pattern"] as? String).map { "Searching for \(oneLine($0))" }
+                case "Glob": return (input["pattern"] as? String).map { "Looking for \(oneLine($0))" }
+                case "StructuredOutput": return "Writing the notes"
+                case let name?: return "Using \(name)"
+                case nil: return nil
+                }
+            default: return nil
+            }
+        }
+
+        /// A command or pattern short enough for a spinner line.
+        private static func oneLine(_ text: String) -> String {
+            let flat = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+            return flat.count > 60 ? String(flat.prefix(59)) + "…" : flat
+        }
+    }
+
+    /// The stream's result, and the lines that weren't events (stderr), for
+    /// saying why it failed when there's no result.
+    private final class FinalReply: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _reply: Reply?
+        private var _other: [String] = []
+
+        func set(_ reply: Reply) { lock.withLock { _reply = reply } }
+        func other(_ line: String) {
+            lock.withLock {
+                _other.append(line)
+                if _other.count > 20 { _other.removeFirst() }
+            }
+        }
+        var reply: Reply? { lock.withLock { _reply } }
+        var otherLines: [String] { lock.withLock { _other } }
     }
 }

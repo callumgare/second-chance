@@ -559,6 +559,34 @@ struct ReleaseNotesTests {
         #expect(ReleaseNotes.forUpdateWindow("<details>\n\n- Only tooling\n\n</details>").hasPrefix("Behind-the-scenes"))
         #expect(ReleaseNotes.forUpdateWindow("### Features\n\n- Plain cog notes") == "### Features\n\n- Plain cog notes")
     }
+
+    @Test("Claude Code's stream says what it's doing", arguments: [
+        (#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"git show 1a2b3c"}}]}}"#, "Running git show 1a2b3c"),
+        (#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/repo/docs/steam.md"}}]}}"#, "Reading steam.md"),
+        (#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"…"},{"type":"tool_use","name":"Grep","input":{"pattern":"Steam"}}]}}"#, "Searching for Steam"),
+        (#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"StructuredOutput","input":{}}]}}"#, "Writing the notes"),
+        (#"{"type":"assistant","message":{"content":[{"type":"text","text":"Let me look."}]}}"#, "Thinking"),
+    ])
+    func streamActivity(line: String, expected: String) {
+        guard case .activity(let text) = ReleaseNotes.StreamEvent(line: line) else {
+            Issue.record("No activity in \(line)")
+            return
+        }
+        #expect(text == expected)
+    }
+
+    @Test("The stream's result carries the notes; other lines are ignored")
+    func streamResult() throws {
+        let line = #"{"type":"result","is_error":false,"structured_output":{"sections":[{"heading":"Fixed","items":["Sound works"]}],"internalChanges":[]}}"#
+        guard case .result(let reply) = ReleaseNotes.StreamEvent(line: line) else {
+            Issue.record("No result")
+            return
+        }
+        #expect(reply.structured_output == .init(sections: [.init(heading: "Fixed", items: ["Sound works"])], internalChanges: []))
+        #expect(ReleaseNotes.StreamEvent(line: #"{"type":"system","subtype":"init"}"#) == nil)
+        #expect(ReleaseNotes.StreamEvent(line: #"{"type":"user","message":{"content":[]}}"#) == nil)
+        #expect(ReleaseNotes.StreamEvent(line: "Error: not logged in") == nil)
+    }
 }
 
 @Suite("Local settings (.env)")

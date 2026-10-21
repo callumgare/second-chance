@@ -95,27 +95,38 @@ enum Proc {
     }
 
     /// Run with stdout and stderr merged, handing over each line as it
-    /// arrives. stdin is /dev/null, so a child can never swallow keystrokes
-    /// meant for sc. Returns the exit status.
+    /// arrives. stdin is `input`, or /dev/null without one, so a child can
+    /// never swallow keystrokes meant for sc. Returns the exit status.
     static func stream(
         _ exe: String,
         _ args: [String],
         env: [String: String?] = [:],
         cwd: URL? = nil,
+        input: String? = nil,
         disclaimResponsibility: Bool = false,
         onLine: @escaping @Sendable (String) async -> Void
     ) async throws -> Int32 {
-        let result = try await run(
-            executable(exe), arguments: Arguments(args), environment: environment(env),
-            workingDirectory: cwd.map { FilePath($0.path) },
-            platformOptions: disclaimResponsibility ? disclaimingPlatformOptions : platformOptions,
-            input: .none, output: .sequence, error: .combinedWithOutput
-        ) { execution in
-            for try await line in execution.standardOutput.strings(bufferingPolicy: .unbounded) {
+        let options = disclaimResponsibility ? disclaimingPlatformOptions : platformOptions
+        let read = { (lines: SubprocessOutputSequence) async throws in
+            for try await line in lines.strings(bufferingPolicy: .unbounded) {
                 await onLine(line)
             }
         }
-        return code(result.terminationStatus)
+        let status: TerminationStatus
+        if let input {
+            status = try await run(
+                executable(exe), arguments: Arguments(args), environment: environment(env),
+                workingDirectory: cwd.map { FilePath($0.path) }, platformOptions: options,
+                input: .string(input), output: .sequence, error: .combinedWithOutput
+            ) { try await read($0.standardOutput) }.terminationStatus
+        } else {
+            status = try await run(
+                executable(exe), arguments: Arguments(args), environment: environment(env),
+                workingDirectory: cwd.map { FilePath($0.path) }, platformOptions: options,
+                input: .none, output: .sequence, error: .combinedWithOutput
+            ) { try await read($0.standardOutput) }.terminationStatus
+        }
+        return code(status)
     }
 
     /// Run with the terminal handed straight through (stdin, stdout and

@@ -63,6 +63,18 @@ shape and `sc` lays out the Markdown (`ReleaseNotes` in `Tools/sc`):
   the reader nothing until opened, these say what changed and why rather than
   only naming the change.
 
+Nearly all of its time goes on thinking before it writes, not on looking
+at commits, so it runs with `--model sonnet --effort low` unless
+`--notes-model` or `--notes-effort` says otherwise (`default` for either
+leaves it to Claude Code). Low took about 30 s on a 34-commit release where
+Claude Code's defaults took nearly three minutes, and medium about 90 s, with
+notes no better. Its output is
+streamed (`--output-format stream-json`), so the step's spinner says what it
+is doing — which commit it is reading, a file, writing the notes — and how
+long it has taken, and the whole session is kept in
+`DerivedData/sc-logs/<time>-release-notes.log`, which `sc release` names once
+the step ends.
+
 To change how the notes read, edit the prompt. Without Claude Code, with
 `--plain-notes`, or when the rewrite fails, the generated notes are used as
 they are; a release never stops for want of nicer notes. `--dry-run` runs the
