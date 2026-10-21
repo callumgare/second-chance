@@ -177,7 +177,7 @@ private struct Release {
             ui.line(try await diff(pbxproj, rewritten).split(separator: "\n").map { "   " + $0 }.joined(separator: "\n"))
             ui.line(ui.format("\(.accent("🔎 Dry run — release notes would read:"))"))
             ui.line(notes.split(separator: "\n", omittingEmptySubsequences: false).map { "   " + $0 }.joined(separator: "\n"))
-            ui.line(ui.format("\(.accent("Skipped the build."))"))
+            ui.line(ui.format("\(.accent("Skipped the build — a release would also upload its debug symbols to Sentry."))"))
             return nil
         }
         try await rollback.write(rewritten, to: repo.pbxproj)
@@ -264,11 +264,14 @@ private struct Release {
 
         if buildOnly { return (version, branch) }
 
-        // 7. The update feed. Sparkle in the installed apps reads it from the
+        // 7. Debug symbols, so crash reports from this version can be read.
+        try await uploadDebugSymbols()
+
+        // 8. The update feed. Sparkle in the installed apps reads it from the
         // latest GitHub release and only installs what this key signed.
         try await writeAppcast(app: app, version: version, notes: ReleaseNotes.forUpdateWindow(notes))
 
-        // 8. Commit and tag locally — still undoable, so the rollback covers
+        // 9. Commit and tag locally — still undoable, so the rollback covers
         // them too. Pushing is what other people see, so `run` asks first.
         try await commitAndTag(version: version)
         return (version, branch)
@@ -319,6 +322,54 @@ private struct Release {
             throw SCError("Stopped at the release notes.", hints: ["Run sc release again when you're ready."])
         }
         return try section()
+    }
+
+    /// Upload the Release build's debug symbols to Sentry, and keep a zip of
+    /// them beside the release. A crash report from this version is
+    /// unreadable without them, and the next build overwrites them, so a
+    /// failure stops the release here, before anything is published.
+    private func uploadDebugSymbols() async throws {
+        let symbols = ["Second Chance.app.dSYM", "WrappTemplate.app.dSYM"].map { repo.releaseProducts.appendingPathComponent($0) }
+        for dSYM in symbols where !FileManager.default.fileExists(atPath: dSYM.path) {
+            throw SCError("The Release build left no \(repo.display(dSYM)).")
+        }
+        guard let sentryCLI = Proc.which("sentry-cli") else {
+            throw SCError("sentry-cli isn't installed, and the release's debug symbols need uploading.",
+                          hints: ["brew install getsentry/tools/sentry-cli"])
+        }
+        let config = (try? String(contentsOf: repo.root.appendingPathComponent(".sentryclirc"), encoding: .utf8)) ?? ""
+        guard config.split(separator: "\n").contains(where: { line in
+            let parts = line.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            return parts.count == 2 && parts[0] == "org" && !parts[1].isEmpty
+        }) else {
+            throw SCError(".sentryclirc names no Sentry organisation.", hints: ["Set `org` in .sentryclirc (docs/releasing.md)."])
+        }
+        let lookup = try await Proc.collect("/usr/bin/security", ["find-generic-password", "-s", "sentry-auth-token", "-w"])
+        let token = lookup.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard lookup.succeeded, !token.isEmpty else {
+            throw SCError("There's no Sentry auth token in the login keychain.",
+                          hints: ["security add-generic-password -s sentry-auth-token -a \"$USER\" -w <token> (docs/releasing.md)"])
+        }
+
+        let archive = repo.releaseDir.appendingPathComponent("dSYMs.zip")
+        try await ui.progressStep("Debug symbols", success: "Uploaded the debug symbols to Sentry, and kept \(repo.display(archive))") { _ in
+            try? FileManager.default.removeItem(at: archive)
+            let staging = repo.releaseDir.appendingPathComponent("dSYMs")
+            try? FileManager.default.removeItem(at: staging)
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: staging) }
+            for dSYM in symbols {
+                try FileManager.default.copyItem(at: dSYM, to: staging.appendingPathComponent(dSYM.lastPathComponent))
+            }
+            let zipped = try await Proc.collect("/usr/bin/ditto", ["-c", "-k", "--keepParent", staging.path, archive.path])
+            guard zipped.succeeded else { throw SCError("ditto failed: \(zipped.error)") }
+
+            let upload = try await Proc.collect(sentryCLI, ["debug-files", "upload", "--wait", staging.path],
+                                                env: ["SENTRY_AUTH_TOKEN": token], cwd: repo.root)
+            guard upload.succeeded else {
+                throw SCError("sentry-cli couldn't upload the debug symbols.", hints: [upload.output + upload.error])
+            }
+        }
     }
 
     /// Sign the zip with the Sparkle key in the login keychain and write

@@ -20,6 +20,10 @@ struct SetupCommand: AsyncParsableCommand {
         ("xchtmlreport", "xctest-html-report", "HTML test reports"),
         ("cog", "cocogitto", "versions, changelog, commit lint"),
     ]
+    /// Needed only to cut a release, so their absence isn't a failure.
+    static let releaseTools: [(name: String, formula: String, purpose: String)] = [
+        ("sentry-cli", "getsentry/tools/sentry-cli", "uploads debug symbols (sc release only)"),
+    ]
 
     func run() async throws {
         let session = try Session.start(global)
@@ -29,6 +33,10 @@ struct SetupCommand: AsyncParsableCommand {
             let found = Proc.which(tool.name) != nil
             return [.plain(tool.name), found ? .success("installed") : .danger("missing"),
                     .muted(found ? tool.purpose : "brew install \(tool.formula)")]
+        } + Self.releaseTools.map { tool in
+            let found = Proc.which(tool.name) != nil
+            return [.plain(tool.name), found ? .success("installed") : .muted("not installed"),
+                    .muted(found ? tool.purpose : "brew install \(tool.formula) — \(tool.purpose)")]
         }
         await ui.table(headers: ["Tool", "Status", ""], rows: rows)
         let missing = Self.tools.filter { Proc.which($0.name) == nil }

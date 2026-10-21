@@ -73,7 +73,9 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
+| [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Shared/Reporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, or adding a failure that should be reported |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
+| [docs/historical-plans/2026-10-21-failure-reporting.md](docs/historical-plans/2026-10-21-failure-reporting.md) | You want to know why failure reports work as they do — the levels the person picks between, why a basic report carries no message text, why Sentry is static in wrapps, and how a crash from the previous run is held back and asked about |
 | [docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md](docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md) | You want to know why WrappPuppeteer needs no permissions — what the prototypes showed a process can do to its own windows, why captures stalled on a long-running test Mac (systemstatusd), and what each phase found |
 | [docs/historical-plans/2026-10-20-steam-support.md](docs/historical-plans/2026-10-20-steam-support.md) | You want to know why Steam works as it does — what a Steam sign-in turned out to be made of, why each wrapp has its own Steam but shares one sign-in, and which plan decisions testing overturned |
 | [docs/historical-plans/2026-10-16-logging-overhaul.md](docs/historical-plans/2026-10-16-logging-overhaul.md) | You want to know why the logs are structured as they are — how the failures that hid their causes were found, what was wrong, and which changes were chosen |
@@ -257,7 +259,9 @@ direct assignment.
   `SECOND_CHANCE_MODE_SCALING=0` leaves a Direct3D game's picture unscaled
   when Wine emulates the display mode it switched to.
   For Second Chance itself, `SECOND_CHANCE_UPDATES=1` turns on the update
-  checks a Debug build leaves off ([docs/updates.md](docs/updates.md)).
+  checks a Debug build leaves off ([docs/updates.md](docs/updates.md)), and
+  for both, `SECOND_CHANCE_REPORTING=1` the failure reports it leaves off
+  ([docs/failure-reports.md](docs/failure-reports.md)).
 - **cnc-ddraw swallows the first click unless the wrapp locks the cursor.**
   Wine games draw through cnc-ddraw in windowed mode, which only takes hold of
   the mouse on the first button release inside the window — eating it, while
@@ -368,6 +372,15 @@ direct assignment.
   `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's executable is
   `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't depend on that name: it
   finds the wrapp by the PID it launched and the game by its own process name.
+- **Failures are reported to Sentry, and Sentry stays static in wrapps.**
+  A failure someone sees goes through `FailureReporter.report` with a
+  `FailureReport` whose `what` and `kind` are fixed words or identifiers,
+  never a message, which can hold a path. Reporting is off in Debug,
+  headless, test and WrappPuppeteer runs, and anything touching the SDK sits
+  inside `#if FAILURE_REPORTING`, because WrappPuppeteer compiles `Shared/`
+  without it. WrappTemplate must link the static `Sentry` product: a
+  dynamic one would be deleted along with the rest of `Contents/Frameworks`
+  ([docs/failure-reports.md](docs/failure-reports.md)).
 - **Second Chance has an Info.plist file; the other targets don't.**
   `SecondChance/Info.plist` holds only Sparkle's keys, which `INFOPLIST_KEY_`
   build settings can't express, and Xcode merges it with the generated keys.

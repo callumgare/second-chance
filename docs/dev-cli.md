@@ -103,6 +103,7 @@ They map onto the app's and wrapp's own switches:
 | `no-prestart-desktop`  | `SECOND_CHANCE_PRESTART_DESKTOP=0`    |           |               | ✓           |
 | `no-diagnostics`       | `SECOND_CHANCE_DIAGNOSTICS=0`         |           |               | ✓           |
 | `slow-start=<seconds>` | `SECOND_CHANCE_DIAG_SLOW_SECONDS`     |           |               | ✓           |
+| `reporting`            | `SECOND_CHANCE_REPORTING=1`           | ✓         | ✓             | ✓           |
 
 The table lives in one place, `DebugOption.all` in
 `Tools/sc/Sources/SCKit/Support/DebugOptions.swift`: a new switch is a new row

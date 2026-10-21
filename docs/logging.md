@@ -194,15 +194,19 @@ there for the same reason: by the time a starved Wine program is noticed
 failing, the load that starved it may have gone, so the summary gives the
 range the monitor saw as well as the load now. A wrapp's summary also
 names its diagnostics bundle when it captured one. `grep -A20 'FAILURE SUMMARY'`
-finds it. Cancelling a build produces no summary.
+finds it. Cancelling a build produces no summary. A detailed failure report
+carries the summary, redacted ([failure-reports.md](failure-reports.md)).
+`FailureSummary.log` returns it for that.
 
 ## Crashes and signals
 
 A Swift trap, an AppKit assertion or a segfault ends a process before anything
 in its log says why. `CrashMarker.install` (the app and every wrapp) arms a
 handler for the fatal signals that writes one line to stderr and to a
-`crash-marker` file in the process's log folder, then lets the crash proceed
-so macOS still writes its report. At the next start the previous crash is
+`crash-marker` file in the process's log folder, then hands the crash on to
+the handler that was there before it — Sentry's, when failure reports are on
+([failure-reports.md](failure-reports.md#crash-handlers)) — so that still
+runs and macOS still writes its report. At the next start the previous crash is
 logged as an error with the path of that report in
 `~/Library/Logs/DiagnosticReports`. The handler only makes async-signal-safe
 calls, so it never touches the log itself.

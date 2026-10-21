@@ -61,6 +61,15 @@ Have fun!
 > Second Chance helpful and you'd like to help out with that too you can send me
 > [a small tip on ko-fi](https://ko-fi.com/callumgare) to allow me to buy an Apple Developer Membership. 
 
+### Failure reports
+
+When building a game, or one of the games Second Chance made, fails or crashes, it sends me a short report so I know
+it happened. By default that's a **basic** report: the Second Chance and macOS versions, which game it was, and which
+step failed. Nothing else, and nothing at all unless something goes wrong. The first time something fails it'll ask
+whether you'd rather send **detailed** reports, which add the log of what was happening (with your name and folders
+taken out), or be asked each time. You can change your mind under **Second Chance → Settings**. Reports go to
+[Sentry](https://sentry.io), and [docs/failure-reports.md](docs/failure-reports.md) has exactly what's in them.
+
 ---
 
 ## Architecture / Code History

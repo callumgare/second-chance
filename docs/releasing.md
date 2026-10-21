@@ -23,6 +23,18 @@ it.
 - **`build/release/RELEASE_NOTES.md`** and **`build/release/SecondChance.zip`**,
   after running the unit tests and a Release build (`--notes-only` stops before
   those, `--skip-tests` skips the tests).
+- **`build/release/dSYMs.zip`**, the Release build's debug symbols, which
+  are also uploaded to Sentry with `sentry-cli`, so that crash reports from
+  this version show function names
+  ([failure-reports.md](failure-reports.md#symbolication)). `--build-only`
+  skips this step. A failed upload stops the release before anything is
+  committed or published, because a release whose crashes can't be read is
+  worth fixing first. The upload needs:
+  - `sentry-cli` (`brew install getsentry/tools/sentry-cli`; `sc setup`
+    lists it);
+  - the Sentry organisation in `.sentryclirc`;
+  - an auth token with the `project:releases` scope in the login keychain:
+    `security add-generic-password -s sentry-auth-token -a "$USER" -w <token>`.
 - **`build/release/appcast.xml`**, the feed installed copies check for updates.
   It is signed with the Sparkle key in the login keychain, and the release
   stops if that key isn't the one the app trusts. A release can't be made
