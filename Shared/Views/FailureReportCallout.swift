@@ -22,17 +22,21 @@ struct FailureReportCallout: View {
     }
 
     private var callout: some View {
-        VStack(spacing: 10) {
-            reportStatus
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                reportStatus
 
-            if isCommenting {
-                commentForm
+                if isCommenting {
+                    commentForm
+                }
             }
         }
-        .padding()
-        .frame(maxWidth: 420)
-        .background(Color.orange.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quinary, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
         .accessibilityIdentifier("failure-report")
     }
 
@@ -46,8 +50,8 @@ struct FailureReportCallout: View {
                     .font(.callout)
             }
         case .sent(_, let detail):
-            VStack(spacing: 4) {
-                Label("A \(detail.rawValue) failure report was sent", systemImage: "checkmark.circle")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("A \(detail.rawValue) failure report was sent.")
                     .font(.callout)
                     .fontWeight(.medium)
                 if let id = model.outcome?.shortID {
@@ -68,15 +72,16 @@ struct FailureReportCallout: View {
         case .askingHowDetailed:
             detailQuestion
         case .awaitingChoice:
-            VStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Send a report about this, so it can be fixed?")
                     .font(.callout)
                     .fontWeight(.medium)
                 Text(Self.levelExplanation)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack {
+                    Spacer()
                     Button("Don't Send") { model.send(nil) }
                     Button("Send Basic") { model.send(.basic) }
                     Button("Send Detailed") { model.send(.detailed) }
@@ -96,25 +101,25 @@ struct FailureReportCallout: View {
     /// The first failure: how detailed a report to send. The error screen's
     /// way out stays hidden until it is answered (`HiddenUntilReportAnswered`).
     private var detailQuestion: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("How much should the failure report include?")
                 .font(.callout)
                 .fontWeight(.medium)
             Text(Self.detailedIsWhatHelps)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Later reports are sent the same way. You can change that in Second Chance's Settings.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
+                Spacer()
                 Button("Send Basic Report") { model.choose(.basic) }
                 Button("Send Detailed Report") { model.choose(.detailed) }
                     .buttonStyle(.borderedProminent)
             }
             .controlSize(.small)
-            Text("Later reports are sent the same way. You can change that in Second Chance's Settings.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
         }
         .accessibilityIdentifier("failure-report-detail-question")
     }

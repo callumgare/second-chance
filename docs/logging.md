@@ -21,7 +21,7 @@ what goes into the log and where it ends up.
 | `DerivedData/sc-logs/<time>-wrapp-build-<slug>.jsonl` | The same as JSON lines (`SECOND_CHANCE_LOG_JSONL`). |
 | `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` | Each wrapp launch's whole log, every level; the newest 10 are kept. The header names it. |
 | `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/` | A bundle from a launch that started badly (see AGENTS.md): stacks, process lists, Wine's output and the wrapp's log. |
-| Save Logs, `--mirror-logs` | The app's in-memory ring (the last 50,000 entries), or the whole session, to a file you choose or `~/Downloads`. |
+| Save Log…, `--mirror-logs` | The app's in-memory ring (the last 50,000 entries), or the whole session, to a file you choose or `~/Downloads`. |
 | OSLog (`log show`) | Every entry, crash-durable, under the `au.gare.callum.second-chance` subsystems. |
 
 ## Levels
@@ -37,7 +37,7 @@ what goes into the log and where it ends up.
 `.trace` and `.info` aren't used. A warning is not an error: if the run carries
 on as intended, it is a `.warning`, however alarming the message.
 
-Every level is kept in the in-memory ring, the log window, Save Logs and the
+Every level is kept in the in-memory ring, the log window, Save Log… and the
 disk mirror. Only the terminal copy is filtered, so moving chatter to `.debug`
 costs nothing when someone needs it later.
 

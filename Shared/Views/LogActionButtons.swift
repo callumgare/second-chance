@@ -2,7 +2,7 @@
 //  LogActionButtons.swift
 //  Shared
 //
-//  Reusable Show Logs / Save Logs button pair for error screens.
+//  Reusable Show Log / Save Log… button pair for error screens.
 
 import SwiftUI
 
@@ -20,11 +20,11 @@ public struct LogActionButtons: View {
     }
 
     public var body: some View {
-        HStack(spacing: 15) {
+        HStack(spacing: 8) {
             Button {
                 logWindow.showLogWindow(title: logWindowTitle)
             } label: {
-                Label("Show Logs", systemImage: "doc.text")
+                Text("Show Log")
             }
             .disabled(logWindow.isVisible)
 
@@ -40,11 +40,7 @@ public struct LogActionButtons: View {
                     if !ok { showSaveFailedAlert = true }
                 }
             } label: {
-                if isSavingLogs {
-                    Label("Saving…", systemImage: "hourglass")
-                } else {
-                    Label("Save Logs", systemImage: "square.and.arrow.down")
-                }
+                Text(isSavingLogs ? "Saving…" : "Save Log…")
             }
             .disabled(isSavingLogs)
         }
