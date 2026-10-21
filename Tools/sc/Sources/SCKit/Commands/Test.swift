@@ -30,8 +30,8 @@ struct IntegrationOptions: ParsableArguments {
     var ignoreLoad = false
 
     @Option(help: ArgumentHelp(
-        "Which builds to test: disk, steam, or all — comma-separated. Default: disk.",
-        discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own; it always builds, whatever --refresh-wrapp says.",
+        "Which builds to test: disk, steam, her-download, or all — comma-separated. Default: disk.",
+        discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own. her-download builds each game from every installers/<slug>/her-download*.exe or .dmg (docs/her-download.md). Both always build, whatever --refresh-wrapp says.",
         valueName: "sources"
     ))
     var source = "disk"
@@ -55,7 +55,7 @@ struct IntegrationOptions: ParsableArguments {
             }
             sources.insert(source)
         }
-        guard !sources.isEmpty else { throw ValidationError("Give at least one source: disk, steam or all.") }
+        guard !sources.isEmpty else { throw ValidationError("Give at least one source: disk, steam, her-download or all.") }
         return WrappSourceKind.allCases.filter(sources.contains)
     }
 }

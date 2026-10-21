@@ -16,6 +16,23 @@ enum Games {
         }
     }
 
+    /// Her Interactive downloads in a game's installers folder: files named
+    /// `her-download*.exe` (the Windows installer) or `her-download*.dmg`
+    /// (the Mac download), the Windows one first.
+    static func herDownloads(for slug: String, in installersDir: URL) -> [URL] {
+        let dir = installersDir.appendingPathComponent(slug)
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return ["exe", "dmg"].flatMap { ext in
+            files.filter { $0.lastPathComponent.lowercased().hasPrefix("her-download") && $0.pathExtension.lowercased() == ext }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+    }
+
+    /// Slugs with a Her Interactive download in the installers directory.
+    static func withHerDownloads(in installersDir: URL) -> [CatalogGame] {
+        Catalog.games.filter { !herDownloads(for: $0.slug, in: installersDir).isEmpty }
+    }
+
     static func withWrapps(in wrappsDir: URL, repo: Repo) -> [CatalogGame] {
         Catalog.games.filter { FileManager.default.fileExists(atPath: repo.wrapp(for: $0, in: wrappsDir).path) }
     }

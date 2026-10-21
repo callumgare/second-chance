@@ -346,8 +346,35 @@ struct GameTests {
         #expect(throws: SCError.self) { try viaSteam.environment(for: drm, repo: repo) }
     }
 
+    @Test("The Her download source finds the game's download, and asks which when there are two")
+    func herDownloadSource() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("sc-her-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repo = Repo(root: root)
+        let windows = try #require(Catalog.game(slug: "scarlet-hand"))
+        let both = try #require(Catalog.game(slug: "trail-of-the-twister"))
+        let none = try #require(Catalog.game(slug: "stay-tuned"))
+        let installers = repo.defaultInstallersDir
+        for (slug, files) in [(windows.slug, ["her-download-Setup.exe", "disk-1.iso"]),
+                              (both.slug, ["her-download-mac.dmg", "her-download-windows.exe"])] {
+            let dir = installers.appendingPathComponent(slug)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            for file in files { try Data().write(to: dir.appendingPathComponent(file)) }
+        }
+
+        let source = try HerDownloadSourceOptions.parse([])
+        let env = try source.environment(for: windows, repo: repo)
+        #expect(env["INSTALLATION_SOURCE"] == "her-download")
+        #expect(env["HER_INSTALLER_PATH"]?.hasSuffix("scarlet-hand/her-download-Setup.exe") == true)
+        #expect(throws: SCError.self) { try source.environment(for: both, repo: repo) }
+        #expect(throws: SCError.self) { try source.environment(for: none, repo: repo) }
+        #expect(Games.herDownloads(for: both.slug, in: installers).map(\.pathExtension) == ["exe", "dmg"])
+        #expect(Set(source.availableGames(repo: repo).map(\.slug)) == [windows.slug, both.slug])
+    }
+
     @Test("--source takes a list, all, and suggests a fix for a typo")
     func integrationSources() throws {
+        #expect(try IntegrationOptions.parseSources("her-download,disk") == [.disk, .herDownload])
         #expect(try IntegrationOptions.parseSources("disk") == [.disk])
         #expect(try IntegrationOptions.parseSources("steam,disk") == [.disk, .steam])
         #expect(try IntegrationOptions.parseSources("all") == WrappSourceKind.allCases)

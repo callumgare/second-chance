@@ -6,11 +6,11 @@ import GameCatalog
 
 /// Where a wrapp is built from. Each source has its own options type
 /// conforming to `WrappSourceInput` — the same shape as the app's
-/// `WrappBuildStrategy`, where a new source is a new builder. Her Interactive
-/// downloads would be the next case.
+/// `WrappBuildStrategy`, where a new source is a new builder.
 enum WrappSourceKind: String, CaseIterable, ExpressibleByArgument, Sendable {
     case disk
     case steam
+    case herDownload = "her-download"
 }
 
 /// What a source contributes to a headless build: the app's
@@ -115,6 +115,48 @@ struct SteamSourceOptions: ParsableArguments, WrappSourceInput {
     }
 }
 
+/// `--from her-download`: a game bought from Her Interactive, its Windows
+/// installer (.exe) or Mac download (.dmg) (docs/her-download.md).
+struct HerDownloadSourceOptions: ParsableArguments, WrappSourceInput {
+    @Option(name: .customLong("her-download"), help: ArgumentHelp(
+        "The download to build from. Default: the one in <installers>/<slug>/ named her-download*.exe or her-download*.dmg.",
+        valueName: "file"
+    ))
+    var download: String?
+
+    func availableGames(repo: Repo) -> [CatalogGame] {
+        Games.withHerDownloads(in: repo.defaultInstallersDir)
+    }
+
+    var availabilityDescription: String { "Her Interactive downloads" }
+
+    func environment(for game: CatalogGame, repo: Repo) throws -> [String: String] {
+        let file: URL
+        if let download {
+            file = URL(fileURLWithPath: (download as NSString).expandingTildeInPath)
+            guard FileManager.default.fileExists(atPath: file.path) else {
+                throw SCError("Her download not found: \(file.path)")
+            }
+        } else {
+            let found = Games.herDownloads(for: game.slug, in: repo.defaultInstallersDir)
+            guard let first = found.first else {
+                let available = availableGames(repo: repo).map(\.slug)
+                throw SCError(
+                    "No Her Interactive download for \(game.slug) in \(repo.display(repo.defaultInstallersDir.appendingPathComponent(game.slug))).",
+                    hints: ["Name it her-download-<anything>.exe or .dmg, or pass --her-download."]
+                        + (available.isEmpty ? [] : ["Games with Her downloads: \(available.joined(separator: ", "))"])
+                )
+            }
+            guard found.count == 1 else {
+                throw SCError("\(game.slug) has more than one Her download: \(found.map(\.lastPathComponent).joined(separator: ", ")).",
+                              hints: ["Pick one with --her-download."])
+            }
+            file = first
+        }
+        return ["INSTALLATION_SOURCE": "her-download", "HER_INSTALLER_PATH": file.path]
+    }
+}
+
 enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
     case `continue`
     case cancel
@@ -122,7 +164,7 @@ enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
 
 /// Everything about what a wrapp is built from.
 struct WrappSourceOptions: ParsableArguments {
-    @Option(help: "What to build the wrapp from: disk or steam.")
+    @Option(help: "What to build the wrapp from: disk, steam or her-download.")
     var from: WrappSourceKind = .disk
 
     @OptionGroup(title: "Disk source")
@@ -131,6 +173,9 @@ struct WrappSourceOptions: ParsableArguments {
     @OptionGroup(title: "Steam source")
     var steam: SteamSourceOptions
 
+    @OptionGroup(title: "Her Interactive download source")
+    var herDownload: HerDownloadSourceOptions
+
     @Option(help: "What to do when an official game patch fails to apply: continue or cancel. Default: continue.")
     var patchFailure: PatchFailurePolicy?
 
@@ -138,6 +183,7 @@ struct WrappSourceOptions: ParsableArguments {
         switch from {
         case .disk: disk
         case .steam: steam
+        case .herDownload: herDownload
         }
     }
 }

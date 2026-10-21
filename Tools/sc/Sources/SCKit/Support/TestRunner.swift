@@ -27,6 +27,8 @@ struct TestRunner {
         "DiskInstallIntegrationTests",
         // Real Steam downloads: `sc test integration --source steam`.
         "SteamInstallIntegrationTests",
+        // Real installs from Her downloads: `sc test integration --source her-download`.
+        "HerDownloadInstallIntegrationTests",
         // Shell out to the bundled exiftool.
         "ExiftoolServiceTests",
         "ExiftoolServiceIntegrationTests",
@@ -41,6 +43,7 @@ struct TestRunner {
         switch source {
         case .disk: "DiskInstallIntegrationTests"
         case .steam: "SteamInstallIntegrationTests"
+        case .herDownload: "HerDownloadInstallIntegrationTests"
         }
     }
 
@@ -86,16 +89,25 @@ struct TestRunner {
 
     func integration(games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL, ignoreLoad: Bool = false, stamp: String) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
-        // Each source tests the games it can build: the Steam suite, those on Steam.
+        // Each source tests the games it can build: the Steam suite, those on
+        // Steam; the Her suite, those with a Her download in installers/.
+        let withHerDownloads = Set(Games.withHerDownloads(in: repo.defaultInstallersDir).map(\.slug))
         let entries = sources.flatMap { source in
-            games.filter { source != .steam || $0.isOnSteam }.map { (source: source.rawValue, game: $0) }
+            games.filter { game in
+                switch source {
+                case .disk: true
+                case .steam: game.isOnSteam
+                case .herDownload: withHerDownloads.contains(game.slug)
+                }
+            }.map { (source: source.rawValue, game: $0) }
         }
         if entries.isEmpty {
-            throw SCError("None of those games is on Steam.",
-                          hints: ["Games on Steam: \(Catalog.games.filter(\.isOnSteam).map(\.slug).joined(separator: ", "))"])
+            throw SCError("None of those games can be built from \(sources.map(\.rawValue).joined(separator: " or ")).",
+                          hints: ["Games on Steam: \(Catalog.games.filter(\.isOnSteam).map(\.slug).joined(separator: ", "))",
+                                  "Games with Her downloads: \(withHerDownloads.sorted().joined(separator: ", "))"])
         }
         // The prebuilt wrapps --refresh-wrapp reuses are disk builds; the Steam
-        // suite always builds its own.
+        // and Her suites always build their own.
         if refresh != .full && sources.contains(.disk) {
             let builder = WrappBuilder(session: session)
             let wrapps = try games.map { try builder.existingWrapp($0, in: wrappsDir) }
