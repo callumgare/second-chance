@@ -196,6 +196,7 @@ struct InfoWindowView: View {
     private var icon: some View {
         Image(nsImage: NSApplication.shared.applicationIconImage)
             .resizable()
+            .accessibilityHidden(true)
             .frame(width: 64, height: 64)
             .overlay(alignment: .bottomTrailing) {
                 if viewModel.phase.isFailure {
@@ -279,16 +280,14 @@ struct InfoWindowView: View {
                 // why Steam is stuck, and the game alone needs far less.
                 if viewModel.showSuspectedHang, viewModel.onLaunchWithoutSteam != nil {
                     launchWithoutSteamNote
-                    HStack {
-                        Spacer()
-                        failureButtons
+                    buttonBar {
+                        failureButtons(stillTrying: true)
                     }
-                    .padding(.top, 6)
                 }
             } else if viewModel.showSuspectedHang {
                 possibleFailureNote
             } else if viewModel.showSlowLoadingNote {
-                informative("This is taking longer than usual. Please be patient…")
+                informative("This is taking longer than usual.")
             }
         }
     }
@@ -312,7 +311,7 @@ struct InfoWindowView: View {
             launchWithoutSteamNote
 
             buttonBar {
-                failureButtons
+                failureButtons(stillTrying: true)
             }
         }
         .accessibilityIdentifier("possible-launch-failure")
@@ -351,21 +350,19 @@ struct InfoWindowView: View {
     }
 
     /// Quit, and for a game that can run without Steam, Launch Directly
-    /// as the default.
+    /// as the default. While the launch is `stillTrying` it may yet work, so
+    /// Return doesn't quit it: Quit takes Escape instead.
     @ViewBuilder
-    private var failureButtons: some View {
+    private func failureButtons(stillTrying: Bool) -> some View {
+        Button("Quit") {
+            NSApp.terminate(nil)
+        }
+        // The default only as the one way on from a launch that has failed.
+        .keyboardShortcut(!stillTrying && viewModel.onLaunchWithoutSteam == nil ? .defaultAction : .cancelAction)
         if let launchWithoutSteam = viewModel.onLaunchWithoutSteam {
-            Button("Quit") {
-                NSApp.terminate(nil)
-            }
             Button("Launch Directly", action: launchWithoutSteam)
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("launch-without-steam")
-        } else {
-            Button("Quit") {
-                NSApp.terminate(nil)
-            }
-            .keyboardShortcut(.defaultAction)
         }
     }
 
@@ -403,7 +400,7 @@ struct InfoWindowView: View {
         Group {
             message(explanation == nil ? "The game crashed" : "The game quit unexpectedly")
 
-            informative(explanation ?? "The game exited unexpectedly (exit code \(exitCode)).")
+            informative(explanation ?? "It quit with exit code \(exitCode) while it was running.")
 
             FailureReportCallout(model: viewModel.failureReport)
 
@@ -413,7 +410,7 @@ struct InfoWindowView: View {
 
             buttonBar {
                 HiddenUntilReportAnswered(model: viewModel.failureReport) {
-                    failureButtons
+                    failureButtons(stillTrying: false)
                 }
             }
         }

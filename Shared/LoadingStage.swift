@@ -26,7 +26,7 @@ enum LoadingStage: Equatable {
         switch self {
         case .startingGame(let title): return "Starting \(title)…"
         case .startingSteam: return "Starting Steam…"
-        case .signingInToSteam: return "Sign in to Steam in its window — you can scan the QR code with the Steam app."
+        case .signingInToSteam: return "Sign in to Steam"
         case .steamStartingGame(let title): return "Steam is starting \(title)…"
         }
     }
@@ -36,7 +36,9 @@ enum LoadingStage: Equatable {
         switch self {
         case .startingSteam:
             return "This game needs Steam running. The first time, Steam updates itself, which can take several minutes."
-        case .startingGame, .signingInToSteam, .steamStartingGame:
+        case .signingInToSteam:
+            return "Use Steam's window, or scan its QR code with the Steam app on your phone."
+        case .startingGame, .steamStartingGame:
             return nil
         }
     }
