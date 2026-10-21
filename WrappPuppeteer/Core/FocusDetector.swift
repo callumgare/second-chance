@@ -21,6 +21,15 @@ enum FocusStrategy {
     case reportsFullscreen(() -> Bool)
 }
 
+/// How a wait for focus ended.
+enum FocusWaitResult: Equatable {
+    case focused
+    case timedOut
+    /// Nothing can come to the front: the screen is locked or the display
+    /// asleep (`ScreenState`), said at once rather than after the timeout.
+    case blocked(String)
+}
+
 enum FocusDetector {
     static func isFocused(pid: Int32, strategy: FocusStrategy) -> Bool {
         switch strategy {
@@ -36,19 +45,25 @@ enum FocusDetector {
 
     /// Wait for the app to be focused, re-activating it on each attempt when
     /// `activate` is set. Once focused, waits `settleDelay` more so the window
-    /// has finished drawing before anything inspects it.
+    /// has finished drawing before anything inspects it. Gives up at once if
+    /// nothing can come to the front.
     static func waitForFocus(
         pid: Int32,
         strategy: FocusStrategy,
         activate: Bool,
         timeout: TimeInterval = 10,
         settleDelay: TimeInterval = 10
-    ) -> Bool {
+    ) -> FocusWaitResult {
         logger.notice("⏳ Waiting for PID \(pid) to become focused...")
         let start = Date()
         var lastLog = Date()
 
         while Date().timeIntervalSince(start) < timeout {
+            if let reason = ScreenState.blockedReason() {
+                logger.critical("❌ PID \(pid) can't become focused: \(reason)")
+                return .blocked(reason)
+            }
+
             guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.processIdentifier == pid }) else {
                 logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] PID \(pid) not found in running applications...")
                 Thread.sleep(forTimeInterval: 0.3)
@@ -63,7 +78,7 @@ enum FocusDetector {
             if isFocused(pid: pid, strategy: strategy) {
                 Thread.sleep(forTimeInterval: settleDelay)
                 logger.notice("✅ Focused after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
-                return true
+                return .focused
             }
 
             if Date().timeIntervalSince(lastLog) >= 2 {
@@ -77,6 +92,6 @@ enum FocusDetector {
         }
 
         logger.critical("❌ Timeout: PID \(pid) did not become focused within \(Int(timeout))s")
-        return false
+        return .timedOut
     }
 }

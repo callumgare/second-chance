@@ -136,6 +136,17 @@ struct DiskInstallIntegrationTests {
             return
         }
 
+        // A game launched while the screen is locked or the display asleep can
+        // never come to the front, so WrappPuppeteer would only time out
+        // waiting for it, minutes after the build. Checked again as it waits.
+        if let reason = ScreenState.blockedReason() {
+            let message = "Not testing \(game.id): \(reason), so the game couldn't come to the front. Keep the Mac awake and unlocked for the run (caffeinate -d)."
+            Self.progress?.write(["event": "screen", "message": message])
+            outcome.locked = true
+            Issue.record(Comment(rawValue: message))
+            return
+        }
+
         // SKIP_BUILD=1 (`sc test integration --refresh-wrapp template|skip`):
         // skip the install and use a pre-existing wrapp from the wrapps dir if
         // present. Useful for iterating on the WrappPuppeteer test without
@@ -298,6 +309,9 @@ final class GameOutcome: @unchecked Sendable {
     var puppeteerExit: Int32?
     /// Held back because the Mac was too busy to test the game fairly.
     var overloaded = false
+    /// Held back because nothing could come to the front (`ScreenState`):
+    /// the screen was locked or the display asleep.
+    var locked = false
     /// Not tested, for a reason that isn't a failure (e.g. the Steam account
     /// doesn't own the game).
     var skipped: String?
@@ -323,6 +337,8 @@ final class GameOutcome: @unchecked Sendable {
         let result: String
         if overloaded {
             result = "overloaded"
+        } else if locked {
+            result = "locked"
         } else if skipped != nil {
             result = "skipped"
         } else {

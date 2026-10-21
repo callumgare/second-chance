@@ -226,6 +226,17 @@ rerun them. `--ignore-load` tests them anyway, for deliberate stress runs; the
 run then only notes the load. The run itself still fails, since those games
 went untested.
 
+**A game the screen kept from the front is `locked`, not failed.** No app can
+come to the front while the screen is locked (the frontmost app is then
+`loginwindow`) or the display asleep, so a game launched then only times out
+waiting for focus. Before each game the test asks `ScreenState`
+(`Shared/ScreenState.swift`), and if nothing can come to the front, records
+why and moves on without building it. The table shows those games as `locked`,
+and `sc` says to keep the Mac awake and unlocked (`caffeinate -d`) and rerun
+them. If the screen locks during a game, WrappPuppeteer's wait for focus stops
+at once with "Game window couldn't become active: the screen is locked". As
+with `overloaded`, the run itself still fails.
+
 The scenario's waits are sized for a machine with every core busy, where Wine
 runs many times slower; each ends as soon as what it waits for happens, so
 they only lengthen a failing run. It waits up to 900 s for the game's process

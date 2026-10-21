@@ -119,9 +119,15 @@ struct NancyDrewQuitScenario {
             return .failed("The wrapp's info window was still open \(Int(options.infoWindowCloseTimeout))s after the game's window appeared")
         }
 
-        guard waitForGameFocus(pid: gamePid, context: context) else {
+        switch waitForGameFocus(pid: gamePid, context: context) {
+        case .focused:
+            break
+        case .timedOut:
             forceQuit(app)
             return .failed("Game window did not become active in time")
+        case .blocked(let reason):
+            forceQuit(app)
+            return .failed("Game window couldn't become active: \(reason)")
         }
 
         // Every wrapp opens its game fullscreen: native fullscreen for Wine,
@@ -246,24 +252,28 @@ struct NancyDrewQuitScenario {
     }
 
     /// Wait for the game's window to take focus.
-    private func waitForGameFocus(pid: Int32, context: Context) -> Bool {
+    private func waitForGameFocus(pid: Int32, context: Context) -> FocusWaitResult {
         logger.notice("[Step 3] Waiting for game to become active...")
         // 120s, not the default 10: on a loaded machine a game's first window
         // can take a while before macOS will bring it in front (Ghost of
         // Thornton Hall's has stayed behind the wrapp for over 10s). No
         // settling once it's focused: everything after polls the screen, and
         // a game's splash screens are only skipped if they're still up.
-        guard FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy(context), activate: wrapp.engine.activatesForFocus,
-                                         timeout: 120, settleDelay: 0) else {
+        let result = FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy(context), activate: wrapp.engine.activatesForFocus,
+                                                timeout: 120, settleDelay: 0)
+        switch result {
+        case .focused:
+            NSSound.beep()
+            // What was on screen, for diagnosing later failures
+            diagnosticCapture(context, prefix: "game-window-detected")
+        case .timedOut:
             WindowFinder.logAllWindows()
             optionalScreenshot(prefix: "game-not-focused")
-            return false
+        case .blocked:
+            // Nothing on screen but loginwindow, or nothing at all.
+            break
         }
-
-        NSSound.beep()
-        // What was on screen, for diagnosing later failures
-        diagnosticCapture(context, prefix: "game-window-detected")
-        return true
+        return result
     }
 
     /// Wait for the game to report its window in a macOS fullscreen Space.

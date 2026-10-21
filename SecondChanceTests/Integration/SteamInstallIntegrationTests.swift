@@ -60,6 +60,13 @@ struct SteamInstallIntegrationTests {
             return
         }
 
+        // As in the disk suite: nothing can come to the front, so don't build.
+        if let reason = ScreenState.blockedReason() {
+            outcome.locked = true
+            Issue.record("Not testing \(game.id): \(reason), so the game couldn't come to the front")
+            return
+        }
+
         if let owned = Self.ownedSlugs.withLock({ $0 }), !owned.contains(game.id) {
             outcome.skipped = "The Steam account doesn't own \(game.title) (checked by an earlier build in this run)"
             return

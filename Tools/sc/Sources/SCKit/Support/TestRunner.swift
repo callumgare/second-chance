@@ -126,7 +126,8 @@ struct TestRunner {
         let showSource = sources != [.disk]
         let live = ui.isLive
         let following = follower.follow { record in
-            if record.event == "load", let message = record.message {
+            // Why a game was held back: the Mac's load, or its screen.
+            if record.event == "load" || record.event == "screen", let message = record.message {
                 ui.warning("\(message)")
                 return
             }
@@ -153,6 +154,10 @@ struct TestRunner {
             ui.warning("Some games weren't tested: the Mac was heavily loaded, so Wine would have taken minutes to start, or never started.",
                        next: "Quit the busy programs and run those games again, or pass --ignore-load to test them anyway.")
         }
+        if board.hasLockedGames {
+            ui.warning("Some games weren't tested: the screen was locked or the display asleep, so they couldn't come to the front.",
+                       next: "Keep the Mac awake and unlocked for the run (caffeinate -d), and run those games again.")
+        }
         return TestRun(name: "Integration", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle))
     }
 
@@ -168,7 +173,7 @@ struct TestRunner {
         switch status {
         case "passed": .success(status)
         case "failed": .danger(status)
-        case "overloaded": .warning(status)
+        case "overloaded", "locked": .warning(status)
         case "running": .accent(status)
         default: .muted(status)
         }
@@ -353,5 +358,9 @@ final class GameBoard: @unchecked Sendable {
 
     var hasOverloadedGames: Bool {
         lock.withLock { rowsByKey.values.contains { $0.status == "overloaded" } }
+    }
+
+    var hasLockedGames: Bool {
+        lock.withLock { rowsByKey.values.contains { $0.status == "locked" } }
     }
 }
