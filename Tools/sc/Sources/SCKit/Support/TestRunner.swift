@@ -134,7 +134,17 @@ struct TestRunner {
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
         let environment = env
 
-        let board = GameBoard(entries: entries)
+        // The Her suite reports a game once per download, as the slug for the
+        // Windows one and "<slug> mac" for the Mac one (HerDownloadCase.label).
+        let board = GameBoard(rows: entries.flatMap { entry -> [(source: String, slug: String, engine: String)] in
+            guard entry.source == WrappSourceKind.herDownload.rawValue else {
+                return [(source: entry.source, slug: entry.game.slug, engine: entry.game.engine)]
+            }
+            return Games.herDownloads(for: entry.game.slug, in: repo.defaultInstallersDir).map { file in
+                let label = file.pathExtension.lowercased() == "dmg" ? "\(entry.game.slug) mac" : entry.game.slug
+                return (source: entry.source, slug: label, engine: entry.game.engine)
+            }
+        })
         let showSource = sources != [.disk]
         let live = ui.isLive
         let following = follower.follow { record in
@@ -297,11 +307,17 @@ final class GameBoard: @unchecked Sendable {
         self.init(entries: games.map { (source: "disk", game: $0) })
     }
 
-    init(entries: [(source: String, game: CatalogGame)]) {
-        order = entries.map { Self.key($0.source, $0.game.slug) }
-        rowsByKey = Dictionary(uniqueKeysWithValues: entries.map {
-            (Self.key($0.source, $0.game.slug), Row(source: $0.source, slug: $0.game.slug, engine: $0.game.engine, status: "pending"))
-        })
+    convenience init(entries: [(source: String, game: CatalogGame)]) {
+        self.init(rows: entries.map { (source: $0.source, slug: $0.game.slug, engine: $0.game.engine) })
+    }
+
+    /// Rows named other than by the game's slug, such as a Her download's
+    /// `<slug> mac`, which must match what the suite reports.
+    init(rows: [(source: String, slug: String, engine: String)]) {
+        order = rows.map { Self.key($0.source, $0.slug) }
+        rowsByKey = Dictionary(rows.map {
+            (Self.key($0.source, $0.slug), Row(source: $0.source, slug: $0.slug, engine: $0.engine, status: "pending"))
+        }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Apply a record; returns a plain line describing it, for non-live output.
