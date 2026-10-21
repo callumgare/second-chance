@@ -85,28 +85,91 @@ class GameDetector {
         return result
     }
     
-    /// Detect game from Her Interactive installer
-    func detectGame(fromInstaller installerPath: URL) async throws -> String {
-        logger.notice("🔍 GameDetector: Starting detection from installer: \(installerPath.lastPathComponent)")
-        
-        // Use filename as fingerprint, replacing underscores with spaces
-        let filename = installerPath.deletingPathExtension().lastPathComponent
-        let fingerprint = filename.replacingOccurrences(of: "_", with: " ")
-        
-        logger.notice("🔍 GameDetector: Installer fingerprint: '\(fingerprint)'")
-        let result = getGameSlugFromFingerprint(fingerprint)
-        
-        if result == "unknown" {
-            logger.critical("❌ GameDetector: DETECTION FAILED")
-            logger.critical("   Installer path: \(installerPath.path)")
-            logger.critical("   Filename: \(installerPath.lastPathComponent)")
-            logger.critical("   Fingerprint: \(fingerprint)")
-            logger.critical("   No matching patterns found")
-        } else {
-            logger.notice("✅ GameDetector: Detected game from installer: \(result)")
+    /// Detect the game from a Windows installer bought from Her Interactive.
+    ///
+    /// The filename alone isn't enough: a download can be renamed, and some
+    /// carry only a code. InstallShield launchers report themselves as
+    /// "InstallShield" in their version info, but they carry the game's
+    /// `setup.ini` (`Product=…`) and its registry key in plain text, the same
+    /// signals a disc gives `detectGame(fromDisk:)`.
+    func detectGame(fromHerInstaller installerPath: URL) async throws -> String {
+        logger.notice("Analyzing: \(installerPath.lastPathComponent)")
+
+        var fingerprint = installerPath.deletingPathExtension().lastPathComponent
+            .replacingOccurrences(of: "_", with: " ")
+
+        if let productName = try? getFileInfo(installerPath, property: "Product Name") {
+            logger.notice("Product Name: \(productName)")
+            fingerprint += " \(productName)"
         }
-        
+
+        do {
+            for signal in try Self.embeddedInstallerSignals(in: installerPath) {
+                logger.notice("Embedded: \(signal)")
+                fingerprint += " \(signal)"
+            }
+        } catch {
+            logger.warning("Couldn't read \(installerPath.lastPathComponent) for embedded game names: \(error)")
+        }
+
+        return detect(fingerprint: fingerprint, from: installerPath.lastPathComponent)
+    }
+
+    /// Detect the game from a Her Interactive Mac download, by the names its
+    /// Cider installer gives it.
+    func detectGame(fromCiderPackage package: CiderPackage) -> String {
+        logger.notice("Analyzing: \(package.volumeName)")
+        let fingerprint = [package.volumeName, package.gameName, package.bundleIdentifier]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        return detect(fingerprint: fingerprint, from: package.volumeName)
+    }
+
+    private func detect(fingerprint: String, from source: String) -> String {
+        logger.notice("Fingerprint: '\(fingerprint)'")
+        let result = getGameSlugFromFingerprint(fingerprint)
+        if result == "unknown" {
+            logger.critical("Detection failed for '\(source)' fingerprint='\(fingerprint)'")
+        } else {
+            logger.notice("Detected: \(result)")
+        }
         return result
+    }
+
+    /// The game names an installer carries as plain text: the values of
+    /// `Product=` lines (from an embedded `setup.ini`) and the names under
+    /// `SOFTWARE\Her Interactive\`. Read in chunks, since a download is
+    /// hundreds of megabytes. The end of each chunk is carried into the next,
+    /// so a match split between them is read whole the second time; one that
+    /// runs off the end of a chunk is left for then.
+    nonisolated static func embeddedInstallerSignals(in url: URL, limit: Int = 8) throws -> [String] {
+        let markers = ["Product=", "SOFTWARE\\Her Interactive\\"].map { Data($0.utf8) }
+        let longestValue = 128
+        let overlap = (markers.map(\.count).max() ?? 0) + longestValue
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+
+        var signals: [String] = []
+        var window = Data()
+        while signals.count < limit, let chunk = try handle.read(upToCount: 4 << 20), !chunk.isEmpty {
+            window = window.suffix(overlap) + chunk
+            for marker in markers {
+                var searchStart = window.startIndex
+                while let found = window.range(of: marker, in: searchStart..<window.endIndex) {
+                    searchStart = found.upperBound
+                    let rest = window[found.upperBound...].prefix(longestValue)
+                    // The value ends at the first byte that isn't printable
+                    // ASCII: a line ending in setup.ini, a NUL in the binary.
+                    guard let valueEnd = rest.firstIndex(where: { $0 < 0x20 || $0 > 0x7E }) else { continue }
+                    let value = String(decoding: window[found.upperBound..<valueEnd], as: UTF8.self)
+                        .trimmingCharacters(in: .whitespaces)
+                    if value.count >= 4, !signals.contains(value) {
+                        signals.append(value)
+                    }
+                }
+            }
+        }
+        return Array(signals.prefix(limit))
     }
     
     /// Detect game from Steam installation

@@ -175,6 +175,39 @@ class WrappBuildHelper {
         }
     }
 
+    // MARK: - Installer Answer Files
+
+    /// Copy the InstallShield answer file for `gameSlug` to `setup.iss` in
+    /// `installerBaseDir` (the wrapp's `drive_c/nancy-drew-installer`), where
+    /// `GameInstallerRunner` looks for one to run the installer silently.
+    ///
+    /// Answer files live in the bundle's `installer-answer-files`, the discs'
+    /// at its top level and other sources' in a subdirectory named after the
+    /// source (`her-download/`), since a download's installer asks different
+    /// questions from the disc's. Returns whether there was one to copy; a
+    /// game without one installs interactively.
+    @discardableResult
+    func installAnswerFile(forGame gameSlug: String, source: WrappSource, into installerBaseDir: URL) -> Bool {
+        let directory = source == .disk ? "installer-answer-files" : "installer-answer-files/\(source.rawValue)"
+        guard let issPath = Bundle.main.path(forResource: gameSlug, ofType: "iss", inDirectory: directory) else {
+            logger.notice("ℹ️ No setup.iss in \(directory) for \(gameSlug)")
+            return false
+        }
+        let destination = installerBaseDir.appendingPathComponent("setup.iss")
+        do {
+            try fileManager.createDirectory(at: installerBaseDir, withIntermediateDirectories: true)
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.copyItem(atPath: issPath, toPath: destination.path)
+            logger.notice("✅ Copied \(directory)/\(gameSlug).iss to setup.iss")
+            return true
+        } catch {
+            logger.warning("⚠️ Failed to copy setup.iss: \(error)")
+            return false
+        }
+    }
+
     // MARK: - Wrapp Configuration
 
     /// Configure the wrapp for its game: rewrite Info.plist, write

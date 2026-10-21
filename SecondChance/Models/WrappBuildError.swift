@@ -40,6 +40,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     case saveFailed(destination: String, reason: String)
     /// The disc is a different game from the one asked for.
     case wrongGame(expected: String, detected: String)
+    /// A Her Interactive Mac download Second Chance can't take the game
+    /// from: not a Cider installer, or one that isn't laid out as expected.
+    case unsupportedMacDownload(reason: String)
 
     var errorDescription: String? {
         switch self {
@@ -83,6 +86,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "This disc is \(detected), not \(expected)"
         case .installIncomplete(let reason):
             return "The game didn't install completely: \(reason)"
+        case .unsupportedMacDownload(let reason):
+            return "Second Chance can't use this Mac download: \(reason). Download the Windows version from Her Interactive instead."
 
         }
     }

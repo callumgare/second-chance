@@ -30,7 +30,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// |-------------------------------|-----------------------------------------|--------------------------------|
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
 /// | `getDisk2Path(gameInfo:)`     | `DISK_2_PATH`                           | NSOpenPanel (disk/ISO)         |
-/// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe)             |
+/// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe or .dmg)     |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
@@ -84,7 +84,12 @@ class WrappBuildInput {
         return url
     }
 
-    /// Her Interactive Windows installer (.exe).
+    /// The extensions a Her Interactive download comes as: a Windows
+    /// installer or a Mac disk image.
+    static let herDownloadExtensions = ["exe", "dmg"]
+
+    /// A game downloaded from Her Interactive: its Windows installer (.exe)
+    /// or its Mac disk image (.dmg).
     @MainActor
     func getHerInstallerPath() async throws -> URL {
         if let path = environment["HER_INSTALLER_PATH"] {
@@ -92,17 +97,17 @@ class WrappBuildInput {
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
                   !isDirectory.boolValue,
-                  url.pathExtension.lowercased() == "exe" else {
-                throw WrappBuildError.invalidPath("Her installer path must be an existing .exe file: \(path)")
+                  Self.herDownloadExtensions.contains(url.pathExtension.lowercased()) else {
+                throw WrappBuildError.invalidPath("Her download path must be an existing .exe or .dmg file: \(path)")
             }
             return url
         }
 
         let panel = NSOpenPanel()
-        panel.message = "Select the Windows game installer:"
+        panel.message = "Select the game you downloaded from Her Interactive:"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [UTType(filenameExtension: "exe")].compactMap { $0 }
+        panel.allowedContentTypes = Self.herDownloadExtensions.compactMap { UTType(filenameExtension: $0) }
 
         guard let url = await runOpenPanel(panel) else {
             throw WrappBuildError.userCancelled
@@ -309,7 +314,8 @@ class WrappBuildInput {
     /// True when running headless (any build input env var set or the
     /// NON_INTERACTIVE flag present).
     private var isHeadlessRun: Bool {
-        anyDiskPathFromEnv || environment["STEAM_GAME_SLUG"] != nil || environment["NON_INTERACTIVE"] == "true"
+        anyDiskPathFromEnv || environment["HER_INSTALLER_PATH"] != nil
+            || environment["STEAM_GAME_SLUG"] != nil || environment["NON_INTERACTIVE"] == "true"
     }
 
     /// Resolve a disk path (directory or ISO) from an env var with validation.

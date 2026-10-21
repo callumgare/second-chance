@@ -273,18 +273,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             }
         }
 
-        // Copy setup.iss file if it exists for this game
-        if let issPath = Bundle.main.path(forResource: gameSlug, ofType: "iss", inDirectory: "installer-answer-files") {
-            let setupIssDestPath = installerPath.appendingPathComponent("setup.iss")
-            do {
-                try fileManager.copyItem(atPath: issPath, toPath: setupIssDestPath.path)
-                logger.notice("✅ Copied setup.iss for \(gameSlug)")
-            } catch {
-                logger.warning("⚠️ Failed to copy setup.iss: \(error)")
-            }
-        } else {
-            logger.notice("ℹ️ No setup.iss file found for \(gameSlug)")
-        }
+        helper.installAnswerFile(forGame: gameSlug, source: .disk, into: installerPath)
 
         // Mount the disk directories as CD-ROM drives
         // (Don't report progress again - would cause duplicate print)

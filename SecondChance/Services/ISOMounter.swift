@@ -2,8 +2,8 @@
 //  ISOMounter.swift
 //  SecondChance
 //
-//  Mounts and unmounts ISO disk images, tracking what it mounted so it can
-//  clean up later.
+//  Mounts and unmounts disk images (game ISOs, Her Interactive's Mac
+//  downloads), tracking what it mounted so it can clean up later.
 //
 
 import Foundation
@@ -37,10 +37,16 @@ class ISOMounter {
 
     init() {}
 
-    /// Mount an ISO if it isn't already mounted, returning the mount point.
+    /// Mount an ISO or DMG if it isn't already mounted, returning the mount
+    /// point.
+    ///
+    /// A DMG is mounted without hdiutil's checksum pass, which takes more
+    /// than half a minute for a 1 GB download; what is then read from it
+    /// (a gzipped archive, for the Her Interactive Mac downloads) is checked
+    /// as it is read.
     ///
     /// - Parameters:
-    ///   - isoPath: the `.iso` file to mount.
+    ///   - isoPath: the `.iso` or `.dmg` file to mount.
     ///   - requestAccess: closure the mounter invokes with the raw mount point
     ///     so sandboxed callers can prompt for volume access (or skip straight
     ///     through when access was granted some other way). Returning the URL
@@ -59,7 +65,11 @@ class ISOMounter {
         logger.notice("Mounting ISO: \(isoPath.lastPathComponent)")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        process.arguments = ["attach", "-nobrowse", "-readonly", isoPath.path]
+        let isDMG = isoPath.pathExtension.lowercased() == "dmg"
+        process.arguments = ["attach", "-nobrowse", "-readonly"] + (isDMG ? ["-noverify"] : []) + [isoPath.path]
+        // A DMG with a licence agreement asks for it on stdin: answer no
+        // rather than wait for ever. Her Interactive's have none.
+        process.standardInput = FileHandle.nullDevice
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -74,10 +84,10 @@ class ISOMounter {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             // hdiutil says "image not recognised" for a truncated ISO and for a
             // file that was never one; the image itself can tell them apart.
-            let diagnosis = Self.diagnoseImage(at: isoPath)
+            let diagnosis = isDMG ? Self.describeSize(of: isoPath) : Self.diagnoseImage(at: isoPath)
             logger.error("hdiutil couldn't attach \(isoPath.path): \(errorOutput) — \(diagnosis)")
             throw NSError(domain: "ISOMount", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to mount ISO: \(errorOutput). \(diagnosis)"
+                NSLocalizedDescriptionKey: "Failed to mount \(isoPath.lastPathComponent): \(errorOutput). \(diagnosis)"
             ])
         }
 
@@ -109,6 +119,12 @@ class ISOMounter {
         throw NSError(domain: "ISOMount", code: 3, userInfo: [
             NSLocalizedDescriptionKey: "Failed to find mount point in hdiutil output"
         ])
+    }
+
+    /// A DMG has no header to check its size against, so only its size.
+    nonisolated static func describeSize(of url: URL) -> String {
+        let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+        return "it is \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))"
     }
 
     /// What an ISO 9660 image's own header says about it: its size against

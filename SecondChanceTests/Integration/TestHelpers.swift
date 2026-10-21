@@ -189,6 +189,18 @@ enum InstallerPaths {
         return FileManager.default.fileExists(atPath: isoURL.path) ? isoURL : nil
     }
 
+    /// The game's Her Interactive downloads: `installers/<slug>/her-download*`
+    /// with a `.exe` (Windows installer) or `.dmg` (Mac download) extension,
+    /// the Windows one first.
+    static func herDownloads(for game: GameInfo) -> [URL] {
+        let dir = TestPaths.installersDir.appendingPathComponent(game.id)
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return ["exe", "dmg"].flatMap { ext in
+            files.filter { $0.lastPathComponent.lowercased().hasPrefix("her-download") && $0.pathExtension.lowercased() == ext }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
+    }
+
     /// The path to a directory containing the disk contents (as an alternative
     /// to an ISO). Returns `nil` if no such directory exists.
     static func diskDirectory(for game: GameInfo) -> URL? {

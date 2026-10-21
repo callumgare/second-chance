@@ -39,6 +39,19 @@ extension WrappBuildInput {
         self.init(environment: environment, viewModel: viewModel)
     }
 
+    /// A headless input for a build from a Her Interactive download (`.exe`
+    /// or `.dmg`).
+    convenience init(
+        herDownload: URL,
+        outputDir: URL,
+        viewModel: WrappBuildViewModel? = nil
+    ) {
+        self.init(environment: [
+            "HER_INSTALLER_PATH": herDownload.path,
+            "OUTPUT_PATH": outputDir.path,
+        ], viewModel: viewModel)
+    }
+
     /// A headless input for a Steam build of `slug`. Headless, so Steam can't
     /// ask anyone to sign in: the build needs a saved sign-in.
     convenience init(

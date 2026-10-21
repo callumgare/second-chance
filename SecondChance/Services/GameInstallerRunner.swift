@@ -232,6 +232,53 @@ class GameInstallerRunner {
         return ("/" + relativePath, installerDir)
     }
 
+    // MARK: - InstallShield Launchers
+
+    /// Unpack an InstallShield "Setup Launcher" — one `setup.exe` with a
+    /// disc's `Disk1` inside it, which is how Her Interactive sells its
+    /// Windows downloads — into `drive_c/nancy-drew-installer/disk-1`. From
+    /// there the installer runs as it would from a disc: silently with an
+    /// answer file, then through the same completion check.
+    ///
+    /// Returns false, having changed nothing, for an installer that isn't an
+    /// InstallShield launcher or that doesn't unpack; it is then run as it is.
+    func unpackInstallShieldLauncher(_ launcher: URL, at wrappPath: URL) async throws -> Bool {
+        guard detectInstallerType(launcher.path) == .installShield else {
+            logger.notice("\(launcher.lastPathComponent) isn't an InstallShield launcher — running it as it is")
+            return false
+        }
+        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let disk1 = driveCPath.appendingPathComponent("nancy-drew-installer/disk-1")
+        try fileManager.createDirectory(at: disk1, withIntermediateDirectories: true)
+
+        logger.notice("Unpacking \(launcher.lastPathComponent) into C:\\nancy-drew-installer\\disk-1")
+        let exitCode = try await retryingIfNoDisplay(at: wrappPath, "The installer launcher") {
+            let desktop = await self.startDesktop(at: wrappPath)
+            defer { desktop?.release() }
+            let exitCode = try await self.wineManager.runWindowsExecutable(
+                at: wrappPath,
+                exePath: launcher.path,
+                arguments: ["/extract_all:C:\\nancy-drew-installer\\disk-1"],
+                timeout: Self.unpackTimeout
+            )
+            try await self.waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.unpackTimeout)
+            return exitCode
+        }
+
+        guard exitCode == 0,
+              fileManager.fileExists(atPath: disk1.appendingPathComponent("setup.exe").path) else {
+            logger.warning("\(launcher.lastPathComponent) didn't unpack (exit \(exitCode)) — running it as it is")
+            try? fileManager.removeItem(at: disk1)
+            return false
+        }
+        logger.notice("Unpacked \(launcher.lastPathComponent)")
+        return true
+    }
+
+    /// Unpacking copies the download once, so a few minutes even for the
+    /// largest; it takes seconds on an idle Mac.
+    private static let unpackTimeout: TimeInterval = 600
+
     /// Install game using ScummVM (no actual installer needed - just returns disk path)
     func installGameWithScummVM(
         wrappPath: URL,
