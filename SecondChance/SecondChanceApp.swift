@@ -145,6 +145,9 @@ struct SecondChanceApp: App {
         .windowResizability(.contentSize)
         .commands {
             InstallCommands(viewModel: wrappBuildViewModel)
+            if DebugCommands.isEnabled {
+                DebugCommands()
+            }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesButton(updater: .shared)
             }

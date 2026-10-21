@@ -12,6 +12,16 @@ struct SettingsView: View {
     @State private var level = ReportingPreferences.load().level
 
     var body: some View {
+        TabView {
+            Tab("General", systemImage: "gearshape") {
+                general
+            }
+        }
+        .frame(width: 520)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var general: some View {
         Form {
             Section {
                 Picker("When a build or a game fails", selection: $level) {
@@ -56,13 +66,9 @@ struct SettingsView: View {
                 Text("Failure Reports")
             } footer: {
                 Text("Reports go to the developer through Sentry, and nothing is sent until something fails.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
         .onChange(of: level) { _, level in
             ReportingPreferences.update {
                 $0.level = level

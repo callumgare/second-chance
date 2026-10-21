@@ -345,7 +345,7 @@ nonisolated enum FailureReporter {
     }
 
     /// Crash on purpose, to check that a crash reaches the crash marker,
-    /// macOS's crash report and Sentry (Debug Settings → Crash Now).
+    /// macOS's crash report and Sentry (Debug → Crash Now…).
     static func crashForTesting() -> Never {
         logger.critical("Crashing on purpose to test crash reporting")
         LogStore.shared.flush()
