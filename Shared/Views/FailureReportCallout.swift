@@ -23,8 +23,12 @@ struct FailureReportCallout: View {
 
     private var callout: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "info.circle")
-                .foregroundStyle(.secondary)
+            // Not beside the spinner while it is sending: one symbol at a time.
+            if model.outcome != nil {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: 10) {
                 reportStatus
 
@@ -62,11 +66,14 @@ struct FailureReportCallout: View {
                 }
                 if model.commentSent {
                     Text("Thanks — your comment was sent with it.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 } else if !isCommenting {
-                    Button("Add a Comment…") { isCommenting = true }
-                        .controlSize(.small)
+                    HStack {
+                        Spacer()
+                        Button("Add a Comment…") { isCommenting = true }
+                            .controlSize(.small)
+                    }
                 }
             }
         case .askingHowDetailed:
@@ -77,15 +84,15 @@ struct FailureReportCallout: View {
                     .font(.callout)
                     .fontWeight(.medium)
                 Text(Self.levelExplanation)
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Spacer()
+                    // None filled: the screen's own way on is its default.
                     Button("Don't Send") { model.send(nil) }
-                    Button("Send Basic") { model.send(.basic) }
-                    Button("Send Detailed") { model.send(.detailed) }
-                        .buttonStyle(.borderedProminent)
+                    Button("Send Basic Report") { model.send(.basic) }
+                    Button("Send Detailed Report") { model.send(.detailed) }
                 }
                 .controlSize(.small)
             }
@@ -106,18 +113,19 @@ struct FailureReportCallout: View {
                 .font(.callout)
                 .fontWeight(.medium)
             Text(Self.detailedIsWhatHelps)
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Text("Later reports are sent the same way. You can change that in Second Chance's Settings.")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
                 Button("Send Basic Report") { model.choose(.basic) }
+                // The default while the question holds the screen's way out back.
                 Button("Send Detailed Report") { model.choose(.detailed) }
-                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
             }
             .controlSize(.small)
         }
@@ -127,7 +135,7 @@ struct FailureReportCallout: View {
     private var commentForm: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("What were you doing when it went wrong?")
-                .font(.caption)
+                .font(.callout)
             TextEditor(text: $comment)
                 .font(.callout)
                 .frame(minHeight: 60, maxHeight: 100)

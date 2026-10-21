@@ -51,18 +51,29 @@ struct InstallerSidebar: View {
             Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
                 .frame(width: 64, height: 64)
+                // The artwork sits 100/1024 in from the icon's edge: line it,
+                // not the transparent margin, up with the bullets.
+                .padding(.leading, -6)
                 .padding(.bottom, 14)
+                .accessibilityHidden(true)
 
-            ForEach(InstallerStep.allCases, id: \.self) { step in
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(bulletColor(step))
-                        .frame(width: 7, height: 7)
-                    Text(step.title)
-                        .fontWeight(step == current ? .semibold : .regular)
-                        .foregroundStyle(step == current ? .primary : .secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(InstallerStep.allCases, id: \.self) { step in
+                    HStack(spacing: 6) {
+                        bullet(step)
+                            .frame(width: 11, height: 11)
+                        Text(step.title)
+                            .fontWeight(step == current ? .semibold : .regular)
+                            .foregroundStyle(step == current || step == failed ? .primary : .secondary)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(step.title)
+                    .accessibilityValue(step == failed ? "Failed" : step == current ? "Current step" : "")
+                    .accessibilityAddTraits(step == current ? .isSelected : [])
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Installation steps")
 
             Spacer()
         }
@@ -73,9 +84,19 @@ struct InstallerSidebar: View {
         .background(VisualEffectBackground(material: .sidebar))
     }
 
-    private func bulletColor(_ step: InstallerStep) -> Color {
-        if step == failed { return .red }
-        return step == current ? .accentColor : Color(nsColor: .tertiaryLabelColor)
+    /// A dot, accent-coloured for the current step; for a failed one a
+    /// cross, so that it isn't told apart by its colour alone.
+    @ViewBuilder
+    private func bullet(_ step: InstallerStep) -> some View {
+        if step == failed {
+            Image(systemName: "xmark.circle.fill")
+                .resizable()
+                .foregroundStyle(.red)
+        } else {
+            Circle()
+                .fill(step == current ? Color.accentColor : Color.secondary)
+                .frame(width: 7, height: 7)
+        }
     }
 }
 
@@ -108,7 +129,8 @@ struct InstallerPage<Content: View, Leading: View, Trailing: View>: View {
                 Spacer()
                 trailing()
             }
-            .padding(.horizontal, 20)
+            // The content's inset, so the buttons line up with its edges.
+            .padding(.horizontal, 24)
             .padding(.vertical, 14)
         }
         .background(Color(nsColor: .windowBackgroundColor))

@@ -12,16 +12,6 @@ struct SettingsView: View {
     @State private var level = ReportingPreferences.load().level
 
     var body: some View {
-        TabView {
-            Tab("General", systemImage: "gearshape") {
-                general
-            }
-        }
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var general: some View {
         Form {
             Section {
                 Picker("When a build or a game fails", selection: $level) {
@@ -39,7 +29,8 @@ struct SettingsView: View {
                 DisclosureGroup("What's in a report?") {
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
                         GridRow {
-                            Text("").gridColumnAlignment(.leading)
+                            Color.clear.frame(width: 0, height: 0).gridColumnAlignment(.leading)
+                                .accessibilityHidden(true)
                             Text("Basic").fontWeight(.medium)
                             Text("Detailed").fontWeight(.medium)
                         }
@@ -72,6 +63,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .frame(width: 520)
+        .fixedSize(horizontal: false, vertical: true)
         .onChange(of: level) { _, level in
             ReportingPreferences.update {
                 $0.level = level
@@ -85,7 +78,9 @@ struct SettingsView: View {
         GridRow {
             Text(label)
             Image(systemName: basic ? "checkmark" : "minus").foregroundStyle(basic ? .primary : .tertiary)
+                .accessibilityLabel(basic ? "In a basic report" : "Not in a basic report")
             Image(systemName: "checkmark")
+                .accessibilityLabel("In a detailed report")
         }
     }
 

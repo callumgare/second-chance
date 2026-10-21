@@ -33,12 +33,18 @@ struct WrappBuildProgressView: View {
                         .progressViewStyle(.linear)
                 }
 
-                Text(viewModel.currentState.displayText)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .lineLimit(2)
-                    .textSelection(.enabled)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(Self.status(of: viewModel.currentState))
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                    Spacer()
+                    if let elapsed = viewModel.currentState.elapsedSeconds, elapsed > 0 {
+                        Text(Duration.seconds(elapsed).formatted(.units(allowed: [.minutes, .seconds], width: .abbreviated)))
+                            .monospacedDigit()
+                    }
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -50,6 +56,24 @@ struct WrappBuildProgressView: View {
         }
     }
 
+    /// What the build is doing, for the person watching: the step's
+    /// current substep once it has taken a while, else the step itself.
+    /// (`displayText` names the stage in logs and reports, and stays put.)
+    static func status(of state: WrappBuildState) -> String {
+        if let substep = state.substep, state.elapsedSeconds != nil {
+            return substep.hasSuffix("…") ? substep : substep + "…"
+        }
+        switch state {
+        case .detectingGame: return "Finding out which game it is…"
+        case .settingUpWrapp: return "Setting up…"
+        case .copyingInstaller: return "Copying the installer…"
+        case .installingGame: return "Installing the game…"
+        case .configuringWrapp: return "Configuring the game…"
+        case .savingApp: return "Saving the game…"
+        default: return ""
+        }
+    }
+
     private var completed: some View {
         InstallerPage(title: "Installation complete") {
             VStack(spacing: 10) {
@@ -58,9 +82,10 @@ struct WrappBuildProgressView: View {
                     .font(.system(size: 56))
                     .foregroundStyle(.green)
                     .padding(.bottom, 6)
-                Text("The game was installed.")
-                    .font(.headline)
+                    .accessibilityHidden(true)
                 Text("\(gameName ?? "The game") is ready to play.")
+                    .font(.headline)
+                Text("Open it from the folder you saved it in, like any other app.")
                     .foregroundStyle(.secondary)
                 Spacer()
             }

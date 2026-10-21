@@ -16,7 +16,7 @@ struct WelcomeView: View {
     }
 
     var body: some View {
-        InstallerPage(title: "Welcome back, Detective") {
+        InstallerPage(title: "Welcome, Detective") {
             Text("Second Chance makes a Nancy Drew game playable on this Mac. Choose where to install it from.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

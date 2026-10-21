@@ -103,7 +103,7 @@ struct SecondChanceApp: App {
         _ = AppUpdater.shared
 
         if debugMode {
-            LogWindow.shared.showLogWindow(title: "SecondChance - Installation Log")
+            LogWindow.shared.showLogWindow(title: "Installation Log")
         }
 
         setupSignalHandlers()

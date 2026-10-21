@@ -33,7 +33,7 @@ struct DebugCommands: Commands {
                 get: { logWindow.isVisible },
                 set: { show in
                     if show {
-                        logWindow.showLogWindow(title: "SecondChance - Installation Log")
+                        logWindow.showLogWindow(title: "Installation Log")
                     } else {
                         logWindow.hideLogWindow()
                     }
