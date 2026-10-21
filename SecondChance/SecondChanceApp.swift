@@ -97,6 +97,7 @@ struct SecondChanceApp: App {
         }
 
         Task { await AutomationBridge.shared.startIfConfigured() }
+        ReadmeScreenshot.startIfConfigured()
 
         // Starts the scheduled update checks (off in headless runs).
         _ = AppUpdater.shared

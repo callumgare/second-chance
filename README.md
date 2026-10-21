@@ -56,7 +56,11 @@ Click **Open Anyway**. You'll probably then see a final warning that looks like 
 Click **Open Anyway** again to continue. macOS may then ask for your password to confirm.
 
 Finally after all that you should see a screen like this:
-![main second chance screen](./docs/main-screen.png)
+
+<picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/main-screen-dark.png">
+    <img alt="Second Chance's main screen" src="./docs/main-screen-light.png">
+</picture>
 
 Once you've loaded your CD copy of any of the classic games you can select "Game Disk(s)" and point to the CD. From
 there Second Chance will create a new app for that game. When done it'll ask you where you want to save it. From that

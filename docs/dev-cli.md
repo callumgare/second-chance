@@ -12,6 +12,7 @@ nearest command's help.
 ```bash
 ./sc app build                         # Build Second Chance.app (Debug)
 ./sc app run                           # …and run it, logs in this terminal
+./sc app screenshot                    # Retake the README's screenshots of the app, light and dark
 ./sc wrapp build stay-tuned            # Build a wrapp headlessly from installers/stay-tuned/
 ./sc wrapp run stay-tuned              # Launch it (building it first if there's none)
 ./sc wrapp update stay-tuned           # Put the latest WrappTemplate into it
@@ -82,6 +83,19 @@ the app. [steam.md](steam.md) has the details.
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`
 works.
+
+## README screenshots
+
+`sc app screenshot` retakes `docs/main-screen-light.png` and
+`docs/main-screen-dark.png`, the README's pictures of the main window, so they
+can follow the app's design. It runs the app once per appearance with
+`SECOND_CHANCE_SCREENSHOT=<path>` and `SECOND_CHANCE_SCREENSHOT_APPEARANCE`
+(`light` or `dark`). The app (`ReadmeScreenshot`) sets that appearance before
+any window draws, resizes its window to the default 700×650, waits for it to
+come on screen, and captures it with ScreenCaptureKit, shadow included. Then it
+writes the PNG and quits. A process may capture its own windows, so this needs
+no Screen Recording permission. The README shows whichever picture matches the
+reader's GitHub theme.
 
 ## Debug options
 
