@@ -156,8 +156,10 @@ copies — and asserts on the events the flow publishes:
   `[Helpers] Native fullscreen armed`, `[Helpers] Cursor lock armed`
   unless the game draws with Direct3D, which doesn't get it
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#which-games-get-it)),
-  and `[Helpers] Mode scaling armed` unless it draws through cnc-ddraw
-  ([wine-in-process-helpers.md](wine-in-process-helpers.md#mode-scaling))
+  `[Helpers] Mode scaling armed` unless it draws through cnc-ddraw
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#mode-scaling)),
+  and `[Helpers] Quit watch armed`
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#quit-watch))
 
 `RecordingEventSubscriber` captures the bus events; the assertions read it.
 **The bus events are the integration contract** — when moving orchestration

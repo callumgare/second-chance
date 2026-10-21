@@ -332,30 +332,35 @@ class GameMonitor {
         logger.notice("[Process Monitor] Waiting for Wine game to stop (PID \(winePid))")
         
         var lastProcessList: Set<String> = []
-        
-        // Give Wine a moment to spawn child processes before first check
-        Thread.sleep(forTimeInterval: 2)
-        
-        while true {
-            if let process {
-                if !process.isRunning {
-                    setExit(from: process)
-                    break
-                }
-            } else if !isProcessRunning(pid: winePid) {
-                // No Process to ask, so no exit status to report.
-                setExitCode(nil)
-                break
-            }
 
+        // Told the moment it exits, so the exit's time is exact: the quit check
+        // (GameQuitCheck) measures how soon after a Wine error it came. A
+        // process that has already gone can't be watched, so the check below
+        // covers one that exited before the source was armed.
+        let ended = DispatchSemaphore(value: 0)
+        let exitSource = DispatchSource.makeProcessSource(
+            identifier: process?.processIdentifier ?? winePid, eventMask: .exit, queue: .global())
+        exitSource.setEventHandler { ended.signal() }
+        exitSource.resume()
+        defer { exitSource.cancel() }
+
+        while process?.isRunning ?? isProcessRunning(pid: winePid) {
+            if ended.wait(timeout: .now() + 3) == .success { break }
             // Log the session's process tree when it changes.
             let wineProcesses = self.getAllWineProcessesDetailed()
             lastProcessList = self.logWineProcesses(wineProcesses, mainWinePid: winePid, lastProcessList: lastProcessList)
-            
-            // Check every 3 seconds
-            Thread.sleep(forTimeInterval: 3)
         }
-        
+
+        if let process {
+            // Foundation may not have reaped it yet, and asking a Process it
+            // thinks is still running for its exit status throws.
+            process.waitUntilExit()
+            setExit(from: process)
+        } else {
+            // No Process to ask, so no exit status to report.
+            setExitCode(nil)
+        }
+
         logger.notice("[Process Monitor] Wine process \(winePid) has ended")
         self.isMonitoring = false
         self.delegate?.gameMonitorGameDidTerminate(exitCode: self.exitCode)

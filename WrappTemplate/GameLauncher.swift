@@ -119,6 +119,11 @@ class GameLauncher {
     private var steam: WrappSteam?
     /// What the in-process helpers report from inside the game; Wine games only.
     private var helperReport: InProcessHelperReport?
+    /// Judges whether a Wine game's exit was a quit; nil for ScummVM.
+    private var quitCheck: GameQuitCheck?
+    /// Set when the game's exit was no quit, but the game failing: it quit
+    /// before it had started, or just after Wine reported an error.
+    private(set) var unexpectedQuit: GameQuitCheck.Failure?
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     /// What Wine and the game print, and what ScummVM prints: categories of
@@ -235,9 +240,15 @@ class GameLauncher {
         } else {
             logger.notice("■ Game ended after \(ran) (exit status unknown)")
         }
+        if let unexpectedQuit {
+            logger.error("\(GameQuitCheck.failureMarker): nothing asked the game to quit, and \(unexpectedQuit.summary). \(unexpectedQuit.explanation)")
+            for line in unexpectedQuit.wineErrors.suffix(10) {
+                logger.error("    Wine: \(line)")
+            }
+        }
 
         let endedBadly = !gameStarted || signal != nil || ((exitCode ?? 0) != 0 && cleanExitLog == nil)
-            || diagnostics?.hasSeenWindow == false
+            || diagnostics?.hasSeenWindow == false || unexpectedQuit != nil
         if endedBadly {
             var files: [(String, String)] = []
             if let bundle = diagnostics?.lastBundle {
@@ -265,6 +276,7 @@ class GameLauncher {
             logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
             helperReport = InProcessHelperReport(
                 armingVariables: WineEnvironment.inProcessHelperVariables(gameExe: gameExe), logger: logger)
+            quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.gameEngine.hasPrefix("wine-steam"))
         } else if config.gameEngine == "scummvm", !scummvmPuppetVariables.isEmpty {
             helperReport = InProcessHelperReport(armingVariables: scummvmPuppetVariables, logger: logger)
         }
@@ -272,9 +284,13 @@ class GameLauncher {
             LogContext.enterStage("Starting Steam")
             do {
                 let helperReport = helperReport
+                let quitCheck = quitCheck
                 let status = steamStatusHandler(infoWindow)
                 let started = try WrappSteam(config: config, status: status,
-                                             onOutputLine: { helperReport?.observe(line: $0) })
+                                             onOutputLine: {
+                                                 helperReport?.observe(line: $0)
+                                                 quitCheck?.observe(line: $0)
+                                             })
                 steam = started  // from here a quit can stop it
                 try started.waitUntilSignedIn(status: status)
             } catch WrappSteam.Failure.cancelled {
@@ -330,6 +346,7 @@ class GameLauncher {
                     logger.notice("[Game Launch] Activating game window...")
                     if gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) {
                         diagnostics?.gameWindowAppeared()
+                        quitCheck?.windowDidAppear()
                         helperReport?.gameWindowAppeared()
                     }
                 }
@@ -365,10 +382,23 @@ class GameLauncher {
         }
         
         
+        // A logout or shutdown quits the game before the wrapp hears of it.
+        let quitCheck = quitCheck
+        let powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification, object: nil, queue: nil
+        ) { _ in quitCheck?.quitRequested("the Mac is logging out or shutting down") }
+        defer { NSWorkspace.shared.notificationCenter.removeObserver(powerOffObserver) }
+
         // Wait for game to stop
         logger.notice("[Game Launch] Waiting for game to stop...")
         gameMonitor.waitForGameToStop(gamePid: gamePid, process: launchResult.process)
-        
+        // Judged straight away: how soon after a Wine error it came matters.
+        // A wrapp that is quitting stopped the game itself, and a game killed
+        // by a signal is already reported as one.
+        if !cleanupQueue.sync(execute: { cleanupCompleted }), gameMonitor.exitSignal == nil {
+            unexpectedQuit = quitCheck?.failure()
+        }
+
         // Get exit code from GameMonitor which captured it safely
         let exitCode = gameMonitor.exitCode ?? 0
         diagnostics?.gameExited(exitCode: exitCode)
@@ -444,9 +474,11 @@ class GameLauncher {
         diagnostics.wineLaunched()
         self.diagnostics = diagnostics
         let helperReport = helperReport
+        let quitCheck = quitCheck
         let observe: @Sendable (String) -> Void = { line in
             diagnostics.observe(line: line)
             helperReport?.observe(line: line)
+            quitCheck?.observe(line: line)
         }
         ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, onLine: observe)
         ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, onLine: observe)

@@ -90,13 +90,15 @@ chmod +x "${TEMP_DIR}/Resources/winetricks"
 # display_below_notch.m (shows Wine a notched display without the notch's
 # strip, so a game in a fullscreen Space gets matching mouse positions),
 # cursor_lock.m (cnc-ddraw's cursor lock), emulated_mode_scaling.m (scales a
-# Direct3D game's picture up when Wine emulates the display mode it asked for)
-# and puppet_control.m (lets the integration tests' WrappPuppeteer see and
-# click the game). ScummVM wrapps load the same dylib into scummvm, for
+# Direct3D game's picture up when Wine emulates the display mode it asked for),
+# quit_watch.m (tells the wrapp when the game first drew and whether it was
+# asked to quit, so an exit before then reads as a failure) and
+# puppet_control.m (lets the integration tests' WrappPuppeteer see and click
+# the game). ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.
 # See docs/wine-in-process-helpers.md.
-echo "🖥️  Building in-process helpers (native fullscreen, cursor lock, mode scaling, puppet control)..."
+echo "🖥️  Building in-process helpers (native fullscreen, cursor lock, mode scaling, quit watch, puppet control)..."
 HELPERS_DIR="${SCRIPT_DIR}/InProcessHelpers"
 clang -dynamiclib \
     -o "${TEMP_DIR}/Frameworks/in_process_helpers.dylib" \
@@ -105,6 +107,7 @@ clang -dynamiclib \
     "${HELPERS_DIR}/cursor_lock.m" \
     "${HELPERS_DIR}/emulated_mode_scaling.m" \
     "${HELPERS_DIR}/puppet_control.m" \
+    "${HELPERS_DIR}/quit_watch.m" \
     -framework Cocoa \
     -framework OpenGL \
     -framework ImageIO \

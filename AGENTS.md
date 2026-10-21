@@ -72,7 +72,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
-| [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing |
+| [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
 | [docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md](docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md) | You want to know why WrappPuppeteer needs no permissions — what the prototypes showed a process can do to its own windows, why captures stalled on a long-running test Mac (systemstatusd), and what each phase found |
 | [docs/historical-plans/2026-10-20-steam-support.md](docs/historical-plans/2026-10-20-steam-support.md) | You want to know why Steam works as it does — what a Steam sign-in turned out to be made of, why each wrapp has its own Steam but shares one sign-in, and which plan decisions testing overturned |
@@ -279,6 +279,11 @@ direct assignment.
   the display alone, and scales the game's windows up. Wine 10's Mac driver
   doesn't scale what Direct3D draws, so the wrapp's mode scaling helper does
   ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#mode-scaling)).
+  A game that quits like that again, before it has drawn anything or just
+  after a Wine error, with nothing asking it to, is reported as a failure
+  rather than a clean quit (`GameQuitCheck`,
+  [quit watch](docs/wine-in-process-helpers.md#quit-watch)); a new routine
+  Wine error that trips it belongs in `GameQuitCheck.routineErrors`.
 - **Wrapps start Wine's desktop before the game.** Left to Wine, a game's
   first desktop access starts `explorer.exe /desktop` and waits only 10 s for
   it; on a loaded machine under Rosetta that runs out, and the game carries on

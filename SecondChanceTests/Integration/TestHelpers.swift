@@ -364,7 +364,7 @@ enum AppPuppetRunner {
             requiredHelpers = [.nativeFullscreen]
                 + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
                 + (graphicsAPI.mayUseDirect3D ? [.modeScaling] : [])
-                + [.puppetControl]
+                + [.quitWatch, .puppetControl]
         } else {
             requiredHelpers = [.puppetControl]
         }
@@ -419,6 +419,18 @@ enum AppPuppetRunner {
             TestConsole.echo(gameLogData, title: "Game log (\(attemptLabel)) — \(gameSlug)")
         }
 
+        // The wrapp's own verdict on the game's exit says more than the
+        // puppeteer's, which only sees the game gone or the wrapp still open.
+        let gameLog = String(decoding: gameLogData, as: UTF8.self)
+        if let verdict = gameLog.components(separatedBy: "\n").first(where: { $0.contains(GameQuitCheck.failureMarker) }),
+           let range = verdict.range(of: GameQuitCheck.failureMarker) {
+            throw NSError(
+                domain: "AppPuppetRunner",
+                code: Int(observedExitCode),
+                userInfo: [NSLocalizedDescriptionKey: "The game quit unexpectedly\(verdict[range.upperBound...]) (attempt: \(attemptLabel))"]
+            )
+        }
+
         if let logText = String(data: logData, encoding: .utf8) {
             let runSucceeded = logText.contains("WRAPP_PUPPETEER: run_succeeded")
 
@@ -447,7 +459,6 @@ enum AppPuppetRunner {
 
         // Checked after the puppeteer's own verdict, which says more when the
         // game didn't get as far as its window at all.
-        let gameLog = String(decoding: gameLogData, as: UTF8.self)
         let unarmed = requiredHelpers.filter { !gameLog.contains($0.armedMarker) }
         if !unarmed.isEmpty {
             throw NSError(

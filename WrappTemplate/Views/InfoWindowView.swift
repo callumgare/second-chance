@@ -11,7 +11,8 @@ class InfoWindowViewModel: ObservableObject {
     enum Phase {
         case warning
         case loading
-        case error(exitCode: Int32)
+        /// `explanation` is set for a game that quit unexpectedly rather than crashing.
+        case error(exitCode: Int32, explanation: String?)
     }
 
     @Published var phase: Phase
@@ -81,9 +82,9 @@ class InfoWindowViewModel: ObservableObject {
         }
     }
 
-    func showError(exitCode: Int32) {
+    func showError(exitCode: Int32, explanation: String? = nil) {
         stopTimer()
-        phase = .error(exitCode: exitCode)
+        phase = .error(exitCode: exitCode, explanation: explanation)
     }
 
     func markGameLoaded() {
@@ -109,8 +110,8 @@ struct InfoWindowView: View {
                 warningContent
             case .loading:
                 loadingContent
-            case .error(let exitCode):
-                errorContent(exitCode: exitCode)
+            case .error(let exitCode, let explanation):
+                errorContent(exitCode: exitCode, explanation: explanation)
             }
         }
         .padding(20)
@@ -279,17 +280,17 @@ struct InfoWindowView: View {
 
     // MARK: - Error
 
-    private func errorContent(exitCode: Int32) -> some View {
+    private func errorContent(exitCode: Int32, explanation: String?) -> some View {
         VStack(spacing: 15) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 50))
                 .foregroundStyle(.red)
 
-            Text("Game Crashed")
+            Text(explanation == nil ? "Game Crashed" : "The Game Quit Unexpectedly")
                 .font(.title2)
                 .fontWeight(.bold)
 
-            Text("The game exited unexpectedly (exit code \(exitCode)).")
+            Text(explanation ?? "The game exited unexpectedly (exit code \(exitCode)).")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -356,7 +357,16 @@ struct InfoWindowView: View {
 #Preview("Error") {
     InfoWindowView(viewModel: {
         let vm = InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: false)
-        vm.phase = .error(exitCode: 1)
+        vm.phase = .error(exitCode: 1, explanation: nil)
+        return vm
+    }())
+    .frame(width: 450)
+}
+
+#Preview("Quit unexpectedly") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(stage: .startingGame(title: "The White Wolf of Icicle Creek"), saveWarningEnabled: false)
+        vm.phase = .error(exitCode: 0, explanation: "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.")
         return vm
     }())
     .frame(width: 450)

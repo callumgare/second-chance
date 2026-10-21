@@ -118,7 +118,8 @@ nonisolated public struct WineEnvironment: Sendable {
     /// (only in a game that may draw through cnc-ddraw: `GameGraphicsAPI`),
     /// mode scaling scales a Direct3D game's picture up to the display when
     /// Wine is emulating the display mode the game switched to (only in a game
-    /// that may draw with Direct3D), and puppet control (only when WrappPuppeteer
+    /// that may draw with Direct3D), quit watch tells the wrapp when the game
+    /// first drew and whether it was asked to quit, and puppet control (only when WrappPuppeteer
     /// started the wrapp) lets it see and click the game. Every Mac-driver
     /// process loads them, so each is told which one is the game (by the
     /// .exe's name, which Wine puts in the process's argv[0]), and a Wine
@@ -149,6 +150,10 @@ nonisolated public struct WineEnvironment: Sendable {
         if environment["SECOND_CHANCE_MODE_SCALING"] != "0", graphicsAPI.mayUseDirect3D {
             env["EMULATED_MODE_SCALING_EXE"] = gameExe
         }
+        // Quit watch only reports, so it has no off switch: what it says
+        // lets the wrapp tell a game that quit before it drew anything from
+        // a player quitting (GameQuitCheck).
+        env["QUIT_WATCH_EXE"] = gameExe
         // Puppet control arms only when WrappPuppeteer started the wrapp,
         // which it marks by passing the directory for the helper's socket.
         if puppetDirectory(in: environment) != nil {

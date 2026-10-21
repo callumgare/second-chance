@@ -11,6 +11,7 @@ wrapp does not have:
 | Display below the notch | `WrappTemplate/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, unless the game draws with Direct3D ([below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Mode scaling | `WrappTemplate/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
+| Quit watch | `WrappTemplate/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
 | Puppet control | `WrappTemplate/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 
 ## How they get into the game process
@@ -378,8 +379,84 @@ A build's Wine sessions on a 120 Hz display (a MacBook Pro's) log
 Failed to initialize registry display settings` once each time explorer.exe
 starts. That isn't a game failing: explorer asks to record the current mode,
 at 120 Hz, and every emulated mode is 60 Hz, so the request matches none of
-them. win32u has already recorded the mode itself, and the game's own session
-doesn't log it.
+them. win32u has already recorded the mode itself. A game's launch logs the
+same refusal as Wine's desktop starts, before the game's window appears, as
+`Changing (null) display settings returned -2`; a game refused its own mode
+names the display instead (`Changing L"\\.\DISPLAY1" …`), which is how
+[quit watch](#quit-watch)'s check tells the two apart.
+
+## Quit watch
+
+### The problem it solves
+
+A game that can't run often just quits: The White Wolf of Icicle Creek, refused
+its display mode, exited 0 two seconds after its window appeared, with nothing
+on screen and no message. Wine games return all sorts of exit codes when the
+player quits, so the code can't tell the two apart, and the wrapp logged
+`Game ended, exiting cleanly` and closed. The player saw the game vanish.
+
+### What it does
+
+In the game's process the helper prints one line (in [the report
+format](#how-they-get-into-the-game-process)) when each of these first happens:
+
+- `first frame on screen`, from `-[WineOpenGLContext flushBuffer]`. Wine's Mac
+  driver draws Direct3D through an OpenGL context, and a frame reaches the
+  screen only when the game presents one: `wglSwapBuffers` ends there. Wine's
+  own painting of a new window goes through the window's surface image
+  instead, so the first call is the game's.
+- `quit requested`, from `-[WineApplicationController applicationShouldTerminate:]`,
+  which ⌘Q in the game, Quit from its Dock menu and a logout all reach. These go
+  to the game's process, not the wrapp, so the wrapp can't see them itself.
+
+The wrapp (`GameQuitCheck`, in `Shared/Wine/`) reads those lines and Wine's
+`err:` lines from the game's output. When the game exits it judges the exit a
+failure if nothing asked the game to quit and the game:
+
+- quit before its window appeared, and before any frame (a frame means a
+  window the wrapp missed);
+- draws with Direct3D, and quit before its first frame;
+- quit within 5 s of a Wine error that isn't one of the routine ones every
+  launch logs (`GameQuitCheck.routineErrors`: Vulkan, wow64, HID devices,
+  NTLM and Kerberos, the desktop's `(null)` mode refusal, and for a game
+  started through Steam, the COM lookups and graphics probe Steam does as it
+  starts).
+
+Asked to quit means the wrapp quitting (⌘Q on its window, a `SIGTERM`, which is
+how the tests stop it), the helper's `quit requested`, or macOS announcing a
+logout or shutdown. A game killed by a signal is reported as that already.
+
+A failure is logged as an error, with the Wine errors behind it, and the
+wrapp shows its error window, saying why when the Wine error is one it knows
+(`GameQuitCheck.knownCause`: a refused display mode, an unhandled exception, a
+DLL that won't load). The wrapp then exits 1, or with the game's own code if
+that wasn't 0. The game's exit is noticed the moment it happens (a
+`DispatchSource` process source in `GameMonitor`), so the time since the last
+Wine error is exact.
+
+### Which games get it
+
+Every Wine game. Only a Direct3D game's first frame counts, though: cnc-ddraw
+presents on a timer whether the game has drawn anything or not, so a DirectDraw
+game, or one whose graphics `GameGraphicsAPI` can't tell, is judged by its
+window and Wine's errors alone. ScummVM games aren't checked.
+
+### Checking it
+
+```
+[Helpers] Quit watch armed (armed in Game.exe)
+[Helpers] Quit watch: first frame on screen
+```
+
+A game that quits unexpectedly logs, after the usual `■ Game exited …` line:
+
+```
+■ That was no quit: nothing asked the game to quit, and it quit before it drew anything. The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.
+    Wine: 0130:err:system:NtUserChangeDisplaySettings Changing L"\\.\DISPLAY1" display settings returned -2.
+```
+
+A healthy launch that gets reported this way has met a Wine error that's
+routine after all: the line it names belongs in `GameQuitCheck.routineErrors`.
 
 ## Puppet control
 

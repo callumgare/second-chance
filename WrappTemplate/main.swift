@@ -745,6 +745,14 @@ func main() {
         DispatchQueue.global(qos: .userInitiated).async {
             let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
 
+            // A game that quit before it had started, or just after Wine
+            // reported an error, failed whatever its exit code says.
+            if let failure = gameLauncher.unexpectedQuit {
+                appDelegate.gameExitCode = exitCode != 0 ? exitCode : 1
+                infoWindow.showError(exitCode: exitCode, explanation: failure.explanation)
+                return
+            }
+
             // Only treat non-zero exit as an error if the game never loaded.
             // Wine games often exit with non-zero codes during normal quit.
             if exitCode != 0 && !infoWindow.hasGameLoaded {
@@ -756,6 +764,8 @@ func main() {
 
             if !debugMode {
                 mainLogger.notice("[App Lifecycle] Game ended, exiting cleanly...")
+                // Or the launch log loses its last lines, the game's exit among them.
+                LogStore.shared.flush()
                 exit(0)
             } else {
                 mainLogger.notice("[Debug Mode] Game ended. Wrapper staying open. Press Cmd+Q to quit.")

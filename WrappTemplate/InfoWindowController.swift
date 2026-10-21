@@ -124,11 +124,13 @@ class InfoWindowController: NSWindowController {
         viewModel.startStageTimers()
     }
 
-    func showError(exitCode: Int32) {
+    /// `explanation` says what went wrong, when the wrapp knows: for a game
+    /// that quit unexpectedly rather than crashing.
+    func showError(exitCode: Int32, explanation: String? = nil) {
         DispatchQueue.main.async {
             self.loadMonitor?.observe(nil)
             self.viewModel.heavyLoad = nil
-            self.viewModel.showError(exitCode: exitCode)
+            self.viewModel.showError(exitCode: exitCode, explanation: explanation)
             self.window?.makeKeyAndOrderFront(nil)
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
