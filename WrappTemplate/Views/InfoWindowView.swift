@@ -259,14 +259,35 @@ struct InfoWindowView: View {
 
             launchWithoutSteamNote
 
-            HStack {
-                LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
-                Spacer()
+            buttonBar {
                 failureButtons
             }
-            .padding(.top, 6)
         }
         .accessibilityIdentifier("possible-launch-failure")
+    }
+
+    /// The log buttons at the leading edge and `actions` at the trailing
+    /// one, on one row when they fit, else with the log buttons on a row
+    /// of their own above, so that no button's title is cut short.
+    private func buttonBar(@ViewBuilder actions: () -> some View) -> some View {
+        let logButtons = LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
+            .fixedSize()
+        let actions = HStack { actions() }.fixedSize()
+        return ViewThatFits(in: .horizontal) {
+            HStack {
+                logButtons
+                Spacer()
+                actions
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                logButtons
+                HStack {
+                    Spacer()
+                    actions
+                }
+            }
+        }
+        .padding(.top, 6)
     }
 
     /// For a game that can run without Steam, the offer to.
@@ -328,14 +349,11 @@ struct InfoWindowView: View {
                 launchWithoutSteamNote
             }
 
-            HStack {
-                LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
-                Spacer()
+            buttonBar {
                 HiddenUntilReportAnswered(model: viewModel.failureReport) {
                     failureButtons
                 }
             }
-            .padding(.top, 6)
         }
     }
 }
