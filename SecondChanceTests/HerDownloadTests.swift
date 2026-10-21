@@ -80,6 +80,7 @@ struct HerDownloadTests {
         try Data("MZ".utf8).write(to: game.appendingPathComponent("Twister.exe"))
         try Data("[Nancy Data]".utf8).write(to: game.appendingPathComponent("Twister.INI"))
         try Data("MZ".utf8).write(to: system32.appendingPathComponent("ddraw.dll"))
+        try Data("MZ".utf8).write(to: system32.appendingPathComponent("mfc80.dll"))
         try (["CedegaGameDir": "C:\\Program Files\\Nancy Drew\\Trail of the Twister",
               "CedegaGameName": "C:\\Program Files\\Nancy Drew\\Trail of the Twister\\Twister.exe"] as NSDictionary)
             .write(to: app.appendingPathComponent("Info.plist"))
@@ -129,16 +130,22 @@ struct HerDownloadTests {
         let driveC = base.appendingPathComponent("drive_c")
         let staging = base.appendingPathComponent("staging")
         let percents = Percents()
+        // Wine has its own ddraw.dll, and no mfc80.dll.
+        let wineDLLs = base.appendingPathComponent("wine-dlls")
+        try FileManager.default.createDirectory(at: wineDLLs, withIntermediateDirectories: true)
+        try Data().write(to: wineDLLs.appendingPathComponent("ddraw.dll"))
 
-        let exe = try await package.extractGame(into: driveC, staging: staging) { await percents.add($0) }
+        let exe = try await package.extractGame(into: driveC, staging: staging, wineDLLs: wineDLLs) { await percents.add($0) }
 
         #expect(exe.path.hasSuffix("drive_c/Program Files (x86)/Nancy Drew/Trail of the Twister/Twister.exe"))
         #expect(FileManager.default.fileExists(atPath: exe.path))
         #expect(FileManager.default.fileExists(atPath: exe.deletingLastPathComponent().appendingPathComponent("Twister.INI").path))
-        // Cider's own DLLs would override cnc-ddraw and Wine's builtins.
+        // Cider's runtimes Wine lacks go beside the game; its other DLLs
+        // would override cnc-ddraw and Wine's builtins.
+        let gameDir = exe.deletingLastPathComponent()
+        #expect(FileManager.default.fileExists(atPath: gameDir.appendingPathComponent("mfc80.dll").path))
+        #expect(!FileManager.default.fileExists(atPath: gameDir.appendingPathComponent("ddraw.dll").path))
         #expect(!FileManager.default.fileExists(atPath: driveC.appendingPathComponent("windows").path))
-        #expect(!FileManager.default.fileExists(
-            atPath: staging.appendingPathComponent("output.app/Contents/Resources/transgaming/c_drive/windows").path))
     }
 
     @Test("Maps Cider's Windows paths into a wrapp's drive_c", arguments: [
@@ -161,8 +168,10 @@ struct HerDownloadTests {
         output.app/Contents/Resources/transgaming/c_drive/Program Files/Nancy Drew/
         output.app/Contents/Resources/transgaming/c_drive/Program Files/Nancy Drew/Game/Game.exe
         output.app/Contents/Resources/transgaming/c_drive/windows/system32/ddraw.dll
+        output.app/Contents/Resources/transgaming/c_drive/windows/system32/drivers/etc/hosts
+        output.app/Contents/Resources/transgaming/c_drive/windows/regapi.exe
         """
-        #expect(CiderPackage.entryCount(inManifest: manifest) == 3)
+        #expect(CiderPackage.entryCount(inManifest: manifest) == 4)
     }
 
     // MARK: - Input

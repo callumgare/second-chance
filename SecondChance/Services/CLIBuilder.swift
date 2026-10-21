@@ -64,6 +64,13 @@ enum CLIBuilder {
             }
         }
 
+        if source == "her-download" {
+            guard let download = environment["HER_INSTALLER_PATH"] else {
+                failValidation("HER_INSTALLER_PATH environment variable is required for a Her download (the .exe or .dmg)")
+            }
+            logger.notice("Her download: \(download)")
+        }
+
         guard let output = environment["OUTPUT_PATH"] else {
             failValidation("OUTPUT_PATH environment variable is required (directory where .app will be saved)")
         }

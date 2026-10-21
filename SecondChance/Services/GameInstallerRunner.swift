@@ -240,6 +240,10 @@ class GameInstallerRunner {
     /// there the installer runs as it would from a disc: silently with an
     /// answer file, then through the same completion check.
     ///
+    /// `/extract_all:<dir>` writes the files into a `Disk1` folder inside
+    /// `<dir>`, so they are unpacked beside `disk-1` and the folder holding
+    /// `setup.exe` is then moved into its place.
+    ///
     /// Returns false, having changed nothing, for an installer that isn't an
     /// InstallShield launcher or that doesn't unpack; it is then run as it is.
     func unpackInstallShieldLauncher(_ launcher: URL, at wrappPath: URL) async throws -> Bool {
@@ -247,32 +251,49 @@ class GameInstallerRunner {
             logger.notice("\(launcher.lastPathComponent) isn't an InstallShield launcher — running it as it is")
             return false
         }
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
-        let disk1 = driveCPath.appendingPathComponent("nancy-drew-installer/disk-1")
-        try fileManager.createDirectory(at: disk1, withIntermediateDirectories: true)
+        let installerBaseDir = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c/nancy-drew-installer")
+        let unpacked = installerBaseDir.appendingPathComponent("unpacked")
+        let disk1 = installerBaseDir.appendingPathComponent("disk-1")
+        try fileManager.createDirectory(at: unpacked, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: unpacked) }
 
-        logger.notice("Unpacking \(launcher.lastPathComponent) into C:\\nancy-drew-installer\\disk-1")
+        logger.notice("Unpacking \(launcher.lastPathComponent) into C:\\nancy-drew-installer\\unpacked")
         let exitCode = try await retryingIfNoDisplay(at: wrappPath, "The installer launcher") {
             let desktop = await self.startDesktop(at: wrappPath)
             defer { desktop?.release() }
             let exitCode = try await self.wineManager.runWindowsExecutable(
                 at: wrappPath,
                 exePath: launcher.path,
-                arguments: ["/extract_all:C:\\nancy-drew-installer\\disk-1"],
+                arguments: ["/extract_all:C:\\nancy-drew-installer\\unpacked"],
                 timeout: Self.unpackTimeout
             )
             try await self.waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.unpackTimeout)
             return exitCode
         }
 
-        guard exitCode == 0,
-              fileManager.fileExists(atPath: disk1.appendingPathComponent("setup.exe").path) else {
-            logger.warning("\(launcher.lastPathComponent) didn't unpack (exit \(exitCode)) — running it as it is")
-            try? fileManager.removeItem(at: disk1)
+        guard exitCode == 0, let setupDir = directoryContainingSetup(in: unpacked) else {
+            logger.warning("\(launcher.lastPathComponent) didn't unpack (exit \(exitCode), no setup.exe) — running it as it is")
             return false
         }
-        logger.notice("Unpacked \(launcher.lastPathComponent)")
+        if fileManager.fileExists(atPath: disk1.path) {
+            try fileManager.removeItem(at: disk1)
+        }
+        try fileManager.moveItem(at: setupDir, to: disk1)
+        logger.notice("Unpacked \(launcher.lastPathComponent) (\(setupDir.lastPathComponent)) into C:\\nancy-drew-installer\\disk-1")
         return true
+    }
+
+    /// `dir` itself, or the one folder directly in it, if it holds a `setup.exe`.
+    private func directoryContainingSetup(in dir: URL) -> URL? {
+        func hasSetup(_ candidate: URL) -> Bool {
+            let contents = (try? fileManager.contentsOfDirectory(atPath: candidate.path)) ?? []
+            return contents.contains { $0.lowercased() == "setup.exe" }
+        }
+        if hasSetup(dir) { return dir }
+        let children = (try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+        return children.first { child in
+            (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true && hasSetup(child)
+        }
     }
 
     /// Unpacking copies the download once, so a few minutes even for the

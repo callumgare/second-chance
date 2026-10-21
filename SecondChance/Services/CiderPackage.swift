@@ -19,8 +19,10 @@ private nonisolated let tarLogger = Logger(label: "au.gare.callum.second-chance.
 /// Windows installer left it, in `Contents/Resources/transgaming/c_drive`.
 /// The 32-bit Cider runtime no longer starts on macOS, but the game inside
 /// it is the Windows release, so a wrapp takes the game's folder and leaves
-/// the rest behind — Cider's own `system32` most of all, whose `ddraw.dll`
-/// and `d3d9.dll` would replace cnc-ddraw and Wine's builtins.
+/// the rest behind. From Cider's own `system32` it takes only the DLLs Wine
+/// doesn't provide itself (the MFC runtimes a disc's installer would have
+/// installed): the rest, `ddraw.dll` and `d3d9.dll` among them, would replace
+/// cnc-ddraw and Wine's builtins.
 ///
 /// The image's layout ([docs/her-download.md](../../docs/her-download.md)):
 ///
@@ -74,6 +76,9 @@ nonisolated struct CiderPackage {
     /// The Cider app's paths for the files a wrapp takes from it.
     private static let infoPlistPattern = "*/Contents/Info.plist"
     private static let programFilesPattern = "*/Contents/Resources/transgaming/c_drive/Program Files/*"
+    // Every --include must match something, or bsdtar fails ("Not found in
+    // archive"), so one pattern for both cases.
+    private static let system32Pattern = "*/Contents/Resources/transgaming/c_drive/windows/system32/*.[dD][lL][lL]"
 
     /// Extract the game into `driveC`, where the Windows installer would have
     /// put it, and return its exe.
@@ -85,11 +90,18 @@ nonisolated struct CiderPackage {
     /// Cider's `C:\Program Files` is a 32-bit Windows's, so the game moves to
     /// `Program Files (x86)`, where a 32-bit installer puts it in a wrapp.
     ///
+    /// The game needs the runtimes a disc's installer installs alongside it —
+    /// Trail of the Twister won't start without `MFC80.DLL` — and Cider
+    /// supplied them from its `system32`. The DLLs there that have no
+    /// builtin in `wineDLLs` (the wrapp's Wine's 32-bit DLL directory) are
+    /// copied into the game's folder, where Windows looks first.
+    ///
     /// `progress` gets the percentage of entries extracted, counted against
     /// the manifest, whenever it changes.
     func extractGame(
         into driveC: URL,
         staging: URL,
+        wineDLLs: URL,
         progress: @escaping @Sendable (Int) async -> Void
     ) async throws -> URL {
         let fileManager = FileManager.default
@@ -119,11 +131,37 @@ nonisolated struct CiderPackage {
         try fileManager.moveItem(at: source, to: destination)
         logger.notice("Moved the game from the Cider app's \(gameDir) to \(destination.path)")
 
+        try Self.copyRuntimesWineLacks(
+            from: ciderDriveC.appendingPathComponent("windows/system32"),
+            wineDLLs: wineDLLs,
+            into: destination
+        )
+
         let exe = driveC.appendingPathComponent(Self.wrappRelativePath(ofWindowsPath: gameExe))
         guard fileManager.fileExists(atPath: exe.path) else {
             throw WrappBuildError.unsupportedMacDownload(reason: "the game's exe (\(gameExe)) isn't in its folder")
         }
         return exe
+    }
+
+    /// Copy the DLLs in Cider's `system32` that Wine has no builtin for into
+    /// the game's folder, leaving any the game ships itself alone.
+    nonisolated static func copyRuntimesWineLacks(from system32: URL, wineDLLs: URL, into gameDir: URL) throws {
+        let fileManager = FileManager.default
+        let builtins = Set(((try? fileManager.contentsOfDirectory(atPath: wineDLLs.path)) ?? []).map { $0.lowercased() })
+        guard !builtins.isEmpty else {
+            throw WrappBuildError.internalError("No Wine DLLs at \(wineDLLs.path) to compare Cider's with")
+        }
+        let gameFiles = Set(((try? fileManager.contentsOfDirectory(atPath: gameDir.path)) ?? []).map { $0.lowercased() })
+        let ciderDLLs = ((try? fileManager.contentsOfDirectory(atPath: system32.path)) ?? [])
+            .filter { $0.lowercased().hasSuffix(".dll") }
+            .sorted()
+        var copied: [String] = []
+        for dll in ciderDLLs where !builtins.contains(dll.lowercased()) && !gameFiles.contains(dll.lowercased()) {
+            try fileManager.copyItem(at: system32.appendingPathComponent(dll), to: gameDir.appendingPathComponent(dll))
+            copied.append(dll)
+        }
+        logger.notice("Copied the runtimes Wine lacks from Cider's system32 into the game's folder: \(copied.isEmpty ? "none" : copied.joined(separator: ", "))")
     }
 
     /// `C:\Program Files\Nancy Drew\Game` → `Program Files/Nancy Drew/Game`.
@@ -147,8 +185,12 @@ nonisolated struct CiderPackage {
     /// The manifest's count of the entries `extractGame` keeps, for progress.
     nonisolated static func entryCount(inManifest manifest: String) -> Int {
         let programFiles = "/Contents/Resources/transgaming/c_drive/Program Files/"
+        let system32 = "/Contents/Resources/transgaming/c_drive/windows/system32/"
         return manifest.split(whereSeparator: \.isNewline).filter { line in
             if line.hasSuffix("/Contents/Info.plist") { return line.split(separator: "/").count == 3 }
+            if let range = line.range(of: system32) {
+                return !line[range.upperBound...].contains("/") && line.lowercased().hasSuffix(".dll")
+            }
             guard let range = line.range(of: programFiles) else { return false }
             return range.upperBound < line.endIndex
         }.count
@@ -167,6 +209,7 @@ nonisolated struct CiderPackage {
             "-xzvf", payload.path, "-C", staging.path,
             "--include", Self.infoPlistPattern,
             "--include", Self.programFilesPattern,
+            "--include", Self.system32Pattern,
         ]
         let stdout = Pipe()
         let stderr = Pipe()

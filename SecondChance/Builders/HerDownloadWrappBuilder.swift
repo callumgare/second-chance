@@ -170,7 +170,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             // drive_c is a rename rather than a copy.
             let staging = wrappPath.appendingPathComponent("Contents/SharedSupport/cider-staging")
             let bus = self.bus
-            let gameExe = try await package.extractGame(into: driveCPath, staging: staging) { percent in
+            let wineDLLs = wrappPath.appendingPathComponent("Contents/SharedSupport/wine/lib/wine/i386-windows")
+            let gameExe = try await package.extractGame(into: driveCPath, staging: staging, wineDLLs: wineDLLs) { percent in
                 await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game (\(percent)%)")))
             }
             removeQuietly(staging, what: "the rest of the Cider app")
