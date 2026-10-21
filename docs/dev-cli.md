@@ -91,7 +91,7 @@ works.
 can follow the app's design. It runs the app once per appearance with
 `SECOND_CHANCE_SCREENSHOT=<path>` and `SECOND_CHANCE_SCREENSHOT_APPEARANCE`
 (`light` or `dark`). The app (`ReadmeScreenshot`) sets that appearance before
-any window draws, resizes its window to the default 700×650, waits for it to
+any window draws, sets its window to its fixed 680×460, waits for it to
 come on screen, and captures it with ScreenCaptureKit, shadow included. Then it
 writes the PNG and quits. A process may capture its own windows, so this needs
 no Screen Recording permission. The README shows whichever picture matches the
