@@ -120,13 +120,14 @@ struct WrappSourceRow: View {
 }
 
 private extension WrappSource {
-    /// An SF Symbol, or for Steam its logo (a template image in the asset
-    /// catalog, from Simple Icons), drawn at the same size.
+    /// An SF Symbol, or the source's logo (a template image in the asset
+    /// catalog: Steam's from Simple Icons, Her Interactive's H), drawn at
+    /// the same size.
     var icon: Image {
         switch self {
         case .disk: return Image(systemName: "opticaldisc")
         case .steam: return Image("SteamLogo")
-        case .herDownload: return Image(systemName: "arrow.down.circle")
+        case .herDownload: return Image("HerLogo")
         }
     }
 
