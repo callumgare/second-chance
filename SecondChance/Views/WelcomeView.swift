@@ -67,6 +67,9 @@ struct WrappSourcePicker: View {
                     .accessibilityIdentifier(source.accessibilityIdentifier)
             }
         }
+        // Inside the border, which would otherwise cover the first row's top
+        // and the last row's bottom.
+        .padding(1)
         .background(Color(nsColor: .controlBackgroundColor))
         .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor)))
         .focusable()
@@ -111,6 +114,9 @@ struct WrappSourceRow: View {
                     .font(.callout)
                     .foregroundStyle(secondaryText)
             }
+            // Centres the glyphs rather than their line boxes, which leave
+            // more room above the capitals than below the descenders.
+            .padding(.bottom, 3)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
