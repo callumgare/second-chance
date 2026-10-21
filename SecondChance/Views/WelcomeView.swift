@@ -95,7 +95,9 @@ struct WrappSourceRow: View {
     let source: WrappSource
 
     var body: some View {
-        HStack(spacing: 12) {
+        // The icon as far from the list's edge as from the text: the list's
+        // own inset is 6pt, and the glyphs start half a point in.
+        HStack(spacing: 11.5) {
             source.icon
                 .resizable()
                 .scaledToFit()
@@ -112,6 +114,7 @@ struct WrappSourceRow: View {
             // more room above the capitals than below the descenders.
             .padding(.bottom, 3)
         }
+        .padding(.leading, 6)
         .frame(height: 44)
     }
 }
