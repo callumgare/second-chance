@@ -42,101 +42,77 @@ struct WelcomeView: View {
 }
 
 /// The sources as a single-selection list: click or arrow keys to select,
-/// double-click to choose. A plain stack rather than a `List`, which is a
-/// scroll view and nudges its rows up to reveal the one selected.
+/// double-click or Return to choose.
 struct WrappSourcePicker: View {
     let sources: [WrappSource]
     @Binding var selection: WrappSource?
     let onChoose: (WrappSource) -> Void
-    @FocusState private var isFocused: Bool
-    @Environment(\.controlActiveState) private var activeState
+    /// The list's height: grown or shrunk by however far its rows overflow
+    /// or underfill what it shows, which settles in one step whatever the
+    /// border and insets come to on this version of macOS.
+    @State private var height: CGFloat?
+    /// How far down the list moves to start on a whole pixel. Off the pixel
+    /// grid, the clip view snaps its rows to it one way at rest and the other
+    /// once a selection is scrolled to, nudging them by a fraction of a point.
+    @State private var pixelAlignment: CGFloat = 0
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(sources) { source in
-                WrappSourceRow(source: source, isSelected: source == selection, isEmphasized: isEmphasized)
-                    .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { onChoose(source) }
-                    .simultaneousGesture(TapGesture().onEnded {
-                        selection = source
-                        isFocused = true
-                    })
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(source == selection ? [.isButton, .isSelected] : .isButton)
-                    .accessibilityAction { onChoose(source) }
-                    .accessibilityIdentifier(source.accessibilityIdentifier)
-            }
+        List(sources, selection: $selection) { source in
+            WrappSourceRow(source: source)
+                // A separator would take its height from the row above.
+                .listRowSeparator(.hidden)
+                .tag(source)
+                .accessibilityIdentifier(source.accessibilityIdentifier)
         }
-        // Inside the border, which would otherwise cover the first row's top
-        // and the last row's bottom.
-        .padding(1)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .overlay(Rectangle().strokeBorder(Color(nsColor: .separatorColor)))
-        .focusable()
-        .focusEffectDisabled()
-        .focused($isFocused)
-        .onAppear { isFocused = true }
-        .onKeyPress(.upArrow) { move(by: -1) }
-        .onKeyPress(.downArrow) { move(by: 1) }
-    }
-
-    /// Selected rows are drawn in the accent colour while the picker has
-    /// focus in the key window, and grey otherwise, as a list's are.
-    private var isEmphasized: Bool {
-        isFocused && activeState == .key
-    }
-
-    private func move(by offset: Int) -> KeyPress.Result {
-        let index = selection.flatMap { sources.firstIndex(of: $0) } ?? -offset
-        let next = min(max(index + offset, 0), sources.count - 1)
-        selection = sources[next]
-        return .handled
+        .listStyle(.bordered)
+        .scrollDisabled(true)
+        // Exactly as tall as its rows. A list scrolls its selection into
+        // view, so one even a point shorter than its content nudges every
+        // row up when the last is selected; one taller leaves a gap under it.
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom
+                - geometry.containerSize.height
+        } action: { _, overflow in
+            guard abs(overflow) > 0.01 else { return }
+            height = max((height ?? 0) + overflow, 1)
+        }
+        .frame(height: height)
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { minY in
+            let aligned = (minY * displayScale).rounded(.up) / displayScale
+            if aligned - minY > 0.001 { pixelAlignment += aligned - minY }
+        }
+        .padding(.top, pixelAlignment)
+        .contextMenu(forSelectionType: WrappSource.self) { _ in
+        } primaryAction: { sources in
+            if let source = sources.first { onChoose(source) }
+        }
+        .accessibilityLabel("Install from")
     }
 }
 
 struct WrappSourceRow: View {
     let source: WrappSource
-    let isSelected: Bool
-    let isEmphasized: Bool
 
     var body: some View {
-        // The icon sits as far from the text as from the picker's edge.
         HStack(spacing: 12) {
             source.icon
                 .resizable()
                 .scaledToFit()
                 .frame(width: 21, height: 21)
-                .foregroundStyle(secondaryText)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(source.displayName)
-                    .foregroundStyle(primaryText)
                 Text(source.description)
                     .font(.callout)
-                    .foregroundStyle(secondaryText)
+                    .foregroundStyle(.secondary)
             }
             // Centres the glyphs rather than their line boxes, which leave
             // more room above the capitals than below the descenders.
             .padding(.bottom, 3)
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .frame(height: 52)
-        .background(background)
-    }
-
-    private var onAccent: Bool { isSelected && isEmphasized }
-
-    private var primaryText: Color {
-        onAccent ? Color(nsColor: .alternateSelectedControlTextColor) : .primary
-    }
-
-    private var secondaryText: Color {
-        onAccent ? Color(nsColor: .alternateSelectedControlTextColor).opacity(0.8) : .secondary
-    }
-
-    private var background: Color {
-        guard isSelected else { return .clear }
-        return Color(nsColor: isEmphasized ? .selectedContentBackgroundColor : .unemphasizedSelectedContentBackgroundColor)
+        .frame(height: 44)
     }
 }
 
