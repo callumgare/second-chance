@@ -297,6 +297,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         mainLogger.debug("[Cleanup/AppDelegate] applicationShouldTerminate called")
+
+        // Quitting a launch that seems stuck: report it, then quit again.
+        // Not on the way to relaunching without Steam, which isn't giving up.
+        if !isCleaningUp, !relaunchWithoutSteam, globalInfoWindow?.giveUpIfStuck() == true {
+            mainLogger.notice("Quitting while the launch seems stuck: reporting it before quitting")
+            return .terminateCancel
+        }
         
         // Quitting with the first-failure question unanswered: send the
         // report basic, the error window saying so, then quit again.
@@ -679,6 +686,7 @@ func main() {
         loadMonitor: loadMonitor)
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
+    infoWindow.reportStuckLaunch = { gameLauncher.reportStuckLaunch() }
     if config.canLaunchWithoutSteam {
         infoWindow.onLaunchWithoutSteam = {
             mainLogger.notice("Player chose to launch without Steam: stopping this launch, then opening the wrapp again")

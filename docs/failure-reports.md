@@ -103,6 +103,15 @@ that outcome for `FailureReportCallout`.
   ended badly, the same runs that log a failure summary. `reportSteamFailure`
   reports Steam failing to start. The error window tracks the report through
   `InfoWindowController.showError(…, report:sending:)`.
+- **Launches given up on.** A launch that seems stuck never exits to be
+  reported, so quitting while the info window shows its possible-failure
+  note (its Quit button, Cmd-Q, the Dock) reports it as `Starting the game`
+  / `stuck`, with the hang's diagnostics bundle in a detailed report.
+  `applicationShouldTerminate` asks `InfoWindowController.giveUpIfStuck`,
+  which sends it through `GameLauncher.reportStuckLaunch`, shows it being
+  sent or asks about it as the error window would, and quits again once
+  it has gone or been declined. Launch Directly is not a give-up and quits
+  without one.
 - **A wrapp's own start-up errors.** The `exit(1)` paths in `main.swift` use
   `reportAndWait`.
 - **Crashes.** The SDK records a crash and finds it at the next start.

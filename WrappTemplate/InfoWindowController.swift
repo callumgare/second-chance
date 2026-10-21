@@ -21,6 +21,23 @@ class InfoWindowController: NSWindowController {
     var onWarningConfirmed: (() -> Void)?
     /// Offers to start the game without Steam when the launch fails, or may
     /// have. Set before `show()`.
+    /// Reports the launch as stuck; see `giveUpIfStuck`.
+    var reportStuckLaunch: (() -> (FailureReport, Task<ReportOutcome, Never>))? {
+        get { viewModel.reportStuckLaunch }
+        set { viewModel.reportStuckLaunch = newValue }
+    }
+
+    /// For `applicationShouldTerminate`: quitting while the window says the
+    /// launch may have failed reports it as stuck first, and quits again
+    /// once that's done. Returns whether it did, in which case the quit
+    /// should be cancelled for now. Main thread only.
+    func giveUpIfStuck() -> Bool {
+        guard viewModel.giveUpIfStuck() else { return false }
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return true
+    }
+
     var onLaunchWithoutSteam: (() -> Void)? {
         get { viewModel.onLaunchWithoutSteam }
         set { viewModel.onLaunchWithoutSteam = newValue }

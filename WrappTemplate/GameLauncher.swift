@@ -273,6 +273,28 @@ class GameLauncher {
         logger.notice("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
     }
     
+    /// The person gave up on a launch that seemed stuck (the info window's
+    /// possible-failure note) and is quitting: report it as the failure it
+    /// probably is, since the game never exits to be reported on its own.
+    /// Returns the report and its sending, for the info window to show.
+    func reportStuckLaunch() -> (FailureReport, Task<ReportOutcome, Never>) {
+        let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
+        let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
+        logger.error("■ Gave up waiting for the launch after \(ran)\(window): the player quit while it seemed stuck")
+        var files: [(String, String)] = []
+        if let bundle = diagnostics?.lastBundle {
+            files.append(("Diagnostics", bundle.path))
+        }
+        let summary = FailureSummary.log(logger, what: "Starting \(config.gameTitle)", files: files)
+        let stuck = FailureReport(
+            what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.gameEngine,
+            tags: failureTags(exitCode: nil, signal: nil), summary: summary,
+            diagnostics: diagnostics.map { diagnostics in { await diagnostics.bundleWhenComplete() } }
+        )
+        report(stuck)
+        return (stuck, reportTask ?? Task { .disabled })
+    }
+
     /// How a run that ended badly ended, as a report's kind: the first of
     /// the checks above that it failed.
     private func failureKind(exitCode: Int32?, signal: Int32?) -> String {

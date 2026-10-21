@@ -13,6 +13,9 @@ class InfoWindowViewModel: ObservableObject {
         case loading
         /// `explanation` is set for a game that quit unexpectedly rather than crashing.
         case error(exitCode: Int32, explanation: String?)
+        /// The person quit a launch that seemed stuck, and its report is
+        /// being sent (or asked about) before the wrapp quits.
+        case gaveUp
     }
 
     @Published var phase: Phase
@@ -40,6 +43,11 @@ class InfoWindowViewModel: ObservableObject {
     private(set) var gameHasLoaded = false
     private var slowLoadingTimer: Timer?
     private var suspectedHangTimer: Timer?
+    private var quitWhenReported: AnyCancellable?
+
+    /// Reports the launch as stuck, for `giveUpIfStuck`: the report and its
+    /// sending.
+    var reportStuckLaunch: (() -> (FailureReport, Task<ReportOutcome, Never>))?
 
     init(stage: LoadingStage, saveWarningEnabled: Bool, gameSlug: String = "nancy-drew") {
         self.stage = stage
@@ -89,6 +97,34 @@ class InfoWindowViewModel: ObservableObject {
         phase = .error(exitCode: exitCode, explanation: explanation)
     }
 
+    /// Quitting while the possible-failure note is up: report the launch as
+    /// stuck, then quit once the report has gone or been declined. Returns
+    /// whether it did, in which case this quit should wait for that one.
+    func giveUpIfStuck() -> Bool {
+        guard case .loading = phase, showSuspectedHang, !gameHasLoaded,
+              FailureReporter.isEnabled, let reportStuckLaunch else { return false }
+        stopTimer()
+        let (report, sending) = reportStuckLaunch()
+        failureReport.track(report, sending: sending)
+        phase = .gaveUp
+        quitWhenReported = failureReport.$outcome
+            .receive(on: DispatchQueue.main)
+            .sink { outcome in
+                // Scheduled rather than called: this runs in a main-queue job,
+                // which a quit that waits for cleanup would wait on for ever.
+                switch outcome {
+                case .sent:
+                    // Long enough to read that it was sent, rather than flash.
+                    NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 1)
+                case .declined, .disabled:
+                    NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
+                case .askingHowDetailed, .awaitingChoice, nil:
+                    break
+                }
+            }
+        return true
+    }
+
     func markGameLoaded() {
         gameHasLoaded = true
         stopTimer()
@@ -105,6 +141,16 @@ class InfoWindowViewModel: ObservableObject {
 /// Laid out as an NSAlert is: the wrapp's icon on the left, then a bold
 /// message, smaller informative text, and the buttons along the bottom
 /// right (a checkbox, or the log buttons, bottom left).
+extension InfoWindowViewModel.Phase {
+    /// The error and gave-up phases, which badge the icon.
+    var isFailure: Bool {
+        switch self {
+        case .error, .gaveUp: return true
+        case .warning, .loading: return false
+        }
+    }
+}
+
 struct InfoWindowView: View {
     @ObservedObject var viewModel: InfoWindowViewModel
 
@@ -120,6 +166,8 @@ struct InfoWindowView: View {
                     loadingContent
                 case .error(let exitCode, let explanation):
                     errorContent(exitCode: exitCode, explanation: explanation)
+                case .gaveUp:
+                    gaveUpContent
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -150,7 +198,7 @@ struct InfoWindowView: View {
             .resizable()
             .frame(width: 64, height: 64)
             .overlay(alignment: .bottomTrailing) {
-                if case .error = viewModel.phase {
+                if viewModel.phase.isFailure {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(.black, .yellow)
@@ -337,6 +385,16 @@ struct InfoWindowView: View {
             ? "Other programs are using most of your Mac's processing power right now."
             : "Other programs (\(names.joined(separator: ", "))) are using most of your Mac's processing power right now."
         return "\(who) The game may take several minutes to start, and may not start at all. Quitting some of them will help."
+    }
+
+    // MARK: - Gave up
+
+    private var gaveUpContent: some View {
+        Group {
+            message("\(viewModel.stage.subject) didn't start")
+            informative("It was still trying to start when you quit.")
+            FailureReportCallout(model: viewModel.failureReport)
+        }
     }
 
     // MARK: - Error
