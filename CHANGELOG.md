@@ -2,6 +2,43 @@
 
 All notable changes to Second Chance.
 
+## 0.5.0 — 2026-10-21
+
+### New
+
+- Add crash and failure reporting. If a game fails to build, something goes wrong while you're playing, or Second Chance itself crashes, it can now send a report so the problem gets fixed. The first time this happens it asks how much detail you're comfortable including, and you can change your answer later in Settings.
+- Full screen games now behave like other full screen apps on your Mac, so you can switch away to another app or Mission Control and back without losing full screen.
+
+### Fixed
+
+- Fixed The White Wolf of Icicle Creek quitting a few seconds after it starts on some Macs.
+- Fixed Second Chance closing silently and without explanation when a game failed to start properly. It now tells you what went wrong.
+- Fixed menus closing by themselves a couple of seconds after you open them while playing some games in full screen.
+- Fixed your first click sometimes being ignored right after a game goes full screen.
+- Fixed the cursor landing slightly off from where you click while playing full screen games on Macs with a notch.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Rewrote the release notes generator's prompt so bullets lead with a short headline, stay to two sentences, drop technical details players don't care about, and avoid telltale AI writing habits (em dashes, "it's not X, it's Y", lists of three, words like "seamless" and "quietly").
+- Sped up the release notes rewrite step from 2-3 minutes to about 30 seconds by running it with a faster model and lower reasoning effort, and made it stream its progress (what file it's reading, what it's writing) instead of sitting silently.
+- Corrected the documented explanation for why crashed wrapps used to hang beyond kill -9: it wasn't two crash handlers conflicting, it was inherited Crashpad state from being launched inside VS Code. Clarified why the crash reporting SDK still has its own handler stand aside for Sentry.
+- Moved the Sentry crash-reporting DSN and project identifiers out of source code and into a gitignored .env file, so forks and other contributors' builds no longer report crashes into this project's Sentry account. The release process now refuses to publish a build with no DSN configured.
+- Documented how failure reports work: what each detail level includes, how data is redacted, and the chain of crash handlers involved. Release builds now upload debug symbols to Sentry automatically so crash reports can be matched back to source code.
+- Fixed a bug where a crash from the previous run could be resent repeatedly in a loop instead of once, and trimmed a detailed report's process list down to just Wine and Second Chance's own processes instead of every process running on the Mac.
+- Added the crash reporting SDK to the app and to each game's generated app, wired up so it stays off during development, testing and headless runs until a reporting key is configured.
+- Added a way for a game's wrapper app to detect when a game quit before it actually started (rather than a clean exit from the player quitting), by watching for its first rendered frame and for quit requests reaching the game process directly.
+- Fixed games that need a 4:3 display resolution quitting on Macs whose screen doesn't support one, by telling Wine to pretend the switch succeeded and scaling the game's picture to fit instead.
+- Fixed the cursor lock in DirectDraw games taking about 5.6 seconds to engage after going full screen; it now takes effect within about 2 seconds by watching for the actual lock instead of waiting on a fixed delay.
+- Reworked how the automated test suite captures and clicks through games: it now talks to lightweight in-process helpers built into each game's app over local sockets, instead of relying on screen recording and accessibility permissions, which previously had to be granted and made test runs flakier.
+- Fixed the automated tests failing to capture ScummVM-based games on macOS 15 due to how those games report their compatibility version to the OS.
+- Fixed the automated tests waiting out long timeouts instead of failing quickly and clearly when a game's window couldn't come to the front because the screen was locked.
+- Fixed the automated tests failing to recognize a fullscreen Direct3D game's window as fullscreen, and improved their ability to click through games' intro and splash screens so test runs finish faster.
+- Fixed `sc wrapp update` not copying one of the in-process test/diagnostic helpers into an existing game app, which meant test runs were sometimes exercising stale code.
+- Changed system load logging so it only logs during a build or game run (and only while load is heavy, rather than constantly), making logs more useful for diagnosing slow performance without spamming them.
+
+</details>
+
 ## 0.4.0 — 2026-10-20
 
 ### New
