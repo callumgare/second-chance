@@ -36,10 +36,15 @@ jobs:
           # because only Logging.swiftmodule/arm64-apple-macos.swiftmodule
           # exists. Building all archs gives Logging an x86_64 slice too, and
           # the tests still run natively (no Rosetta needed).
+          #
+          # The project signs automatically with the developer's team, whose
+          # certificate the runner doesn't have ("No signing certificate 'Mac
+          # Development' found"), so CI signs ad hoc instead.
           xcodebuild test \
             -scheme SecondChance \
             -destination 'platform=macOS' \
             ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
             -resultBundlePath TestResults.xcresult
       
       - name: sc's own tests
