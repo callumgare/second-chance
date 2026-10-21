@@ -19,9 +19,8 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 enum ReadmeScreenshot {
     static let pathEnvVar = "SECOND_CHANCE_SCREENSHOT"
     static let appearanceEnvVar = "SECOND_CHANCE_SCREENSHOT_APPEARANCE"
-    /// The window's ideal size (`SecondChanceApp`), whatever size it was
-    /// last left at, so every screenshot matches.
-    static let contentSize = NSSize(width: 700, height: 650)
+    /// The main window's size, so every screenshot matches.
+    static let contentSize = ContentView.size
     /// More than a window's shadow reaches past it on any side, in points.
     private static let shadowRoom: CGFloat = 120
 

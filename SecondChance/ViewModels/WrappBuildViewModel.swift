@@ -22,6 +22,8 @@ class WrappBuildViewModel: ObservableObject {
     @Published var currentState: WrappBuildState = .idle
     @Published var selectedWrappSource: WrappSource?
     @Published var detectedGame: GameInfo?
+    /// Where the finished wrapp was saved, for Show in Finder.
+    @Published var builtWrappURL: URL?
 
     @Published var progress: Double = 0.0
 
@@ -42,6 +44,7 @@ class WrappBuildViewModel: ObservableObject {
     private var lastProgressState: WrappBuildState?
     private var stepTimer: Timer?
     private var shouldShowElapsed = false
+    private var isBuilding = false
     
     // Development settings
     var enableCaching = false
@@ -165,6 +168,15 @@ class WrappBuildViewModel: ObservableObject {
 
     // MARK: - Build Flow
     
+    /// Start a build from `source`.
+    func build(from source: WrappSource) async {
+        switch source {
+        case .disk: await buildFromDisk()
+        case .herDownload: await buildFromHerDownload()
+        case .steam: await buildFromSteam()
+        }
+    }
+
     /// Start a build from disk (interactive mode)
     func buildFromDisk() async {
         await runBuild(diskBuilder)
@@ -184,12 +196,17 @@ class WrappBuildViewModel: ObservableObject {
     /// already routed `.failed` to `handleBusEvent`; the local catch mirrors
     /// the same early-cancel rule for throws that bypassed it.
     private func runBuild(_ builder: WrappBuildStrategy) async {
+        // The source's prompts are sheets, which leave the menu bar's
+        // Install commands free to start a second build.
+        guard !isBuilding else { return }
+        isBuilding = true
+        defer { isBuilding = false }
         let input = makeInput(self)
         let loadMonitor = SystemLoadMonitor()
         loadMonitor.start()
         defer { loadMonitor.stop() }
         do {
-            _ = try await builder.build(input: input)
+            builtWrappURL = try await builder.build(input: input)
             currentState = .completed
         } catch {
             if !Self.isCancellation(error) {
@@ -235,6 +252,7 @@ class WrappBuildViewModel: ObservableObject {
         currentState = .idle
         selectedWrappSource = nil
         detectedGame = nil
+        builtWrappURL = nil
         progress = 0.0
         failureReport.clear()
         FailureReporter.setGame(nil)

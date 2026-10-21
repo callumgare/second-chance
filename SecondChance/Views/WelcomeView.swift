@@ -2,171 +2,101 @@
 //  WelcomeView.swift
 //  SecondChance
 //
-//  Welcome screen with installation type selection
+//  Welcome screen: choosing where to install the game from
 
 import SwiftUI
 
 struct WelcomeView: View {
     @EnvironmentObject var viewModel: WrappBuildViewModel
     @ObservedObject var debugSettings = DebugSettings.shared
-    @State private var isHoveringDisk = false
-    @State private var isHoveringHer = false
-    @State private var isHoveringSteam = false
-    @State private var showingDebugSettings = false
-    
+    @State private var selection: WrappSource? = .disk
+
+    private var sources: [WrappSource] {
+        debugSettings.showUnsupportedInstallOptions ? [.disk, .steam, .herDownload] : [.disk, .steam]
+    }
+
     var body: some View {
-        VStack(spacing: 30) {
-            // Logo and title
-            VStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.blue)
-                
-                Text("Welcome Detective!")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Text("Second Chance")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.top, 40)
-            
-            // Description
-            Text("Play Nancy Drew games on your Mac by creating a wrapper app from your installation source.")
-                .font(.body)
+        InstallerPage(title: "Welcome back, Detective") {
+            Text("Second Chance makes a Nancy Drew game playable on this Mac. Choose where to install it from.")
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-            
-            Spacer()
-            
-            // Installation options
-            VStack(spacing: 20) {
-                Text("Choose Your Installation Source:")
-                    .font(.headline)
-                
-                HStack(spacing: 20) {
-                    // Disk option
-                    Button {
-                        Task { await viewModel.buildFromDisk() }
-                    } label: {
-                        WrappSourceOptionCard(
-                            icon: "opticaldiscdrive",
-                            title: "Game Disk(s)",
-                            description: "Install from original CDs",
-                            isHovering: isHoveringDisk
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("installSourceDisk")
-                    .onHover { hovering in isHoveringDisk = hovering }
+                .fixedSize(horizontal: false, vertical: true)
 
-                    // Steam option
-                    Button {
-                        Task { await viewModel.buildFromSteam() }
-                    } label: {
-                        WrappSourceOptionCard(
-                            icon: "cloud",
-                            title: "Steam",
-                            description: "Install from your Steam library",
-                            isHovering: isHoveringSteam
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("installSourceSteam")
-                    .onHover { hovering in isHoveringSteam = hovering }
+            List(sources, selection: $selection) { source in
+                WrappSourceRow(source: source)
+                    .tag(source)
+                    .accessibilityIdentifier(source.accessibilityIdentifier)
+            }
+            .listStyle(.bordered)
+            .scrollDisabled(true)
+            // Only as tall as its rows: a near-empty box looks unfinished.
+            .frame(height: CGFloat(sources.count) * WrappSourceRow.height + 1)
+            .contextMenu(forSelectionType: WrappSource.self) { _ in
+            } primaryAction: { sources in
+                // A double-click, or Return in the list.
+                if let source = sources.first { start(source) }
+            }
+        } leading: {
+            EmptyView()
+        } trailing: {
+            Button("Continue") {
+                if let selection { start(selection) }
+            }
+            .keyboardShortcut(.defaultAction)
+            .disabled(selection == nil)
+        }
+        .onChange(of: sources) { _, sources in
+            if let selection, !sources.contains(selection) { self.selection = .disk }
+        }
+    }
 
-                    if debugSettings.showUnsupportedInstallOptions {
-                        // Her Download option
-                        Button {
-                            Task { await viewModel.buildFromHerDownload() }
-                        } label: {
-                            WrappSourceOptionCard(
-                                icon: "arrow.down.circle",
-                                title: "Her Download",
-                                description: "Windows installer from Her Interactive",
-                                isHovering: isHoveringHer
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .onHover { hovering in isHoveringHer = hovering }
-                    }
-                }
-            }
-            
-            Spacer()
-            
-            // Footer
-            HStack {
-                Button(action: {
-                    showingDebugSettings = true
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "gearshape")
-                        Text("Debug")
-                    }
-                    .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tertiary)
-                .help("Open debug settings")
-                
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            
-            Text("Second Chance - Bringing Nancy Drew games to modern macOS")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.bottom, 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .sheet(isPresented: $showingDebugSettings) {
-            DebugSettingsView()
-        }
+    private func start(_ source: WrappSource) {
+        Task { await viewModel.build(from: source) }
     }
 }
 
-struct WrappSourceOptionCard: View {
-    let icon: String
-    let title: String
-    let description: String
-    let isHovering: Bool
-    
+struct WrappSourceRow: View {
+    let source: WrappSource
+    /// Each row's height in the list, its insets included.
+    static let height: CGFloat = 56
+
     var body: some View {
-        VStack(spacing: 15) {
-            Image(systemName: icon)
-                .font(.system(size: 50))
-                .foregroundStyle(isHovering ? .blue : .secondary)
-            
-            Text(title)
-                .font(.headline)
-            
-            Text(description)
-                .font(.caption)
+        HStack(spacing: 12) {
+            source.icon
                 .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(source.displayName)
+                Text(source.description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .frame(width: 180, height: 180)
-        .background(
-            RoundedRectangle(cornerRadius: 15)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(isHovering ? 0.2 : 0.1), radius: isHovering ? 10 : 5)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 15)
-                .stroke(isHovering ? Color.blue : Color.clear, lineWidth: 2)
-        )
-        .scaleEffect(isHovering ? 1.05 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: isHovering)
-        .cursor(isHovering ? .pointingHand : .arrow)
+        .frame(height: Self.height - 12)
+    }
+}
+
+private extension WrappSource {
+    /// An SF Symbol, or for Steam its logo (a template image in the asset
+    /// catalog, from Simple Icons) sized to match one.
+    @ViewBuilder var icon: some View {
+        switch self {
+        case .disk: Image(systemName: "opticaldisc").font(.title2)
+        case .steam: Image("SteamLogo").resizable().scaledToFit().frame(width: 21, height: 21)
+        case .herDownload: Image(systemName: "arrow.down.circle").font(.title2)
+        }
+    }
+
+    var accessibilityIdentifier: String {
+        switch self {
+        case .disk: return "installSourceDisk"
+        case .steam: return "installSourceSteam"
+        case .herDownload: return "installSourceHerDownload"
+        }
     }
 }
 
 #Preview {
     WelcomeView()
         .environmentObject(WrappBuildViewModel())
-        .frame(width: 700, height: 500)
+        .frame(width: 500, height: 460)
 }

@@ -17,7 +17,7 @@ enum WrappSource: String, CaseIterable, Identifiable, Codable {
     var displayName: String {
         switch self {
         case .disk:
-            return "Game Disk(s)"
+            return "Game Discs"
         case .herDownload:
             return "Her Download"
         case .steam:
@@ -28,11 +28,11 @@ enum WrappSource: String, CaseIterable, Identifiable, Codable {
     var description: String {
         switch self {
         case .disk:
-            return "Install from the original game CDs"
+            return "The original CDs"
         case .herDownload:
-            return "Install from a Windows game installer purchased from Her Interactive"
+            return "A Windows installer bought from Her Interactive"
         case .steam:
-            return "Install from Steam"
+            return "A game in your Steam library"
         }
     }
 }
