@@ -121,6 +121,8 @@ nonisolated enum FailureReporter {
             options.sendClientReports = false
             options.attachStacktrace = false
             options.maxBreadcrumbs = 0
+            // ReportBundle keeps its zip well under this.
+            options.maxAttachmentSize = 20 * 1024 * 1024
 
             options.beforeSend = { event in scrub(event) }
         }
@@ -182,6 +184,25 @@ nonisolated enum FailureReporter {
         if let stage = report.stage { failure["stage"] = stage }
         if let causedBy = report.tags["caused_by"] { failure["caused_by"] = causedBy }
 
+        // A detailed report carries the log and any diagnostics bundle,
+        // redacted and zipped in a folder of its own, removed once the SDK
+        // has stored the event (it reads the file as it does).
+        var attachment: Attachment?
+        let workDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("second-chance-report-\(report.id.uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: workDirectory) }
+        if detail == .detailed {
+            let diagnostics = await report.diagnostics?()
+            do {
+                try FileManager.default.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+                let zip = try ReportBundle.make(log: LogExporter.render(), diagnostics: diagnostics,
+                                                redactor: redactor, in: workDirectory)
+                attachment = Attachment(path: zip.path, filename: "failure-report.zip", contentType: "application/zip")
+            } catch {
+                logger.error("Couldn't attach the logs to the failure report: \(ErrorChain.describe(error))")
+            }
+        }
+
         let id = SentrySDK.capture(event: event) { scope in
             scope.setTag(value: detail.rawValue, key: "report_detail")
             if let game = report.game { scope.setTag(value: game, key: "game") }
@@ -193,6 +214,7 @@ nonisolated enum FailureReporter {
             if detail == .detailed, let summary = report.summary {
                 scope.setExtra(value: redactor.redact(summary), key: "summary")
             }
+            if let attachment { scope.addAttachment(attachment) }
         }
         logger.notice("Sent a \(detail.rawValue) failure report: \(id.sentryIdString)")
         return .sent(eventID: id.sentryIdString, detail: detail)

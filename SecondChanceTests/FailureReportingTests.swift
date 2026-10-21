@@ -229,3 +229,75 @@ struct FailureReporterGatingTests {
         #expect(FailureReporter.defaultCrashDetail(for: .manual) == nil)
     }
 }
+
+@Suite("Report bundle")
+struct ReportBundleTests {
+    private let redactor = ReportRedactor(identity: .init(homePath: "/Users/nancy", userName: "nancy",
+                                                          fullName: "", computerNames: [], steamNames: []))
+
+    private func temporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bundle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    /// Text that barely compresses, so sizes are predictable.
+    private func noise(bytes: Int) -> String {
+        var generator = SystemRandomNumberGenerator()
+        let data = Data((0..<(bytes * 3 / 4)).map { _ in UInt8.random(in: 0...255, using: &generator) })
+        return data.base64EncodedString()
+    }
+
+    @Test("The log and the diagnostics bundle go in redacted")
+    func redacts() throws {
+        let work = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let diagnostics = work.appendingPathComponent("diag", isDirectory: true)
+        try FileManager.default.createDirectory(at: diagnostics, withIntermediateDirectories: true)
+        try Data("game files in /Users/nancy/Applications\n".utf8).write(to: diagnostics.appendingPathComponent("summary.txt"))
+
+        let out = work.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let zip = try ReportBundle.make(log: "prefix /Users/nancy/Library\n", diagnostics: diagnostics, redactor: redactor, in: out)
+
+        #expect(ReportBundle.size(of: zip) > 0)
+        let staging = out.appendingPathComponent("failure-report")
+        #expect(try String(contentsOf: staging.appendingPathComponent("log.txt"), encoding: .utf8) == "prefix ~/Library\n")
+        #expect(try String(contentsOf: staging.appendingPathComponent("diagnostics/summary.txt"), encoding: .utf8)
+                == "game files in ~/Applications\n")
+    }
+
+    @Test("Over the cap, the thread samples go first")
+    func dropsSamplesFirst() throws {
+        let work = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let diagnostics = work.appendingPathComponent("diag", isDirectory: true)
+        try FileManager.default.createDirectory(at: diagnostics, withIntermediateDirectories: true)
+        try Data(noise(bytes: 400_000).utf8).write(to: diagnostics.appendingPathComponent("sample.txt"))
+        try Data("summary\n".utf8).write(to: diagnostics.appendingPathComponent("summary.txt"))
+
+        let out = work.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let zip = try ReportBundle.make(log: "short log\n", diagnostics: diagnostics, redactor: redactor,
+                                        in: out, sizeCap: 100_000)
+
+        #expect(ReportBundle.size(of: zip) <= 100_000)
+        let staging = out.appendingPathComponent("failure-report")
+        #expect(ReportBundle.samples(in: staging).isEmpty)
+        #expect(FileManager.default.fileExists(atPath: staging.appendingPathComponent("diagnostics/summary.txt").path))
+        #expect(try String(contentsOf: staging.appendingPathComponent("log.txt"), encoding: .utf8) == "short log\n")
+    }
+
+    @Test("Then the log loses its oldest lines, and says so")
+    func trimsLog() throws {
+        let work = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let log = noise(bytes: 1_000_000) + "\nTHE LAST LINE\n"
+        let zip = try ReportBundle.make(log: log, diagnostics: nil, redactor: redactor, in: work, sizeCap: 300_000)
+
+        #expect(ReportBundle.size(of: zip) <= 300_000)
+        let kept = try String(contentsOf: work.appendingPathComponent("failure-report/log.txt"), encoding: .utf8)
+        #expect(kept.hasPrefix("[earlier lines left out to fit the report]"))
+        #expect(kept.hasSuffix("THE LAST LINE\n"))
+    }
+}

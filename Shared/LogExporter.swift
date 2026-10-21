@@ -20,22 +20,26 @@ public enum LogExporter {
     /// explicit detached task.
     public static func export(to url: URL) async -> Bool {
         await Task.detached(priority: .userInitiated) {
-            let (entries, dropped) = LogStore.shared.snapshot()
-
-            var sections: [String] = []
-            if dropped > 0 {
-                sections.append("[\(dropped) earlier entries were evicted from the \(50_000)-entry in-memory ring — enable the disk mirror for full-session capture]")
-            }
-            sections.append(contentsOf: entries.map { LogFormatter.full(entry: $0) })
-
-            let text = sections.joined(separator: "\n") + "\n"
             do {
-                try text.data(using: .utf8)?.write(to: url, options: .atomic)
+                try Data(render().utf8).write(to: url, options: .atomic)
                 return true
             } catch {
                 return false
             }
         }.value
+    }
+
+    /// The current LogStore ring as the text `export` writes. Slow for a
+    /// full ring: call it off the main actor.
+    nonisolated static func render() -> String {
+        let (entries, dropped) = LogStore.shared.snapshot()
+
+        var sections: [String] = []
+        if dropped > 0 {
+            sections.append("[\(dropped) earlier entries were evicted from the \(50_000)-entry in-memory ring — enable the disk mirror for full-session capture]")
+        }
+        sections.append(contentsOf: entries.map { LogFormatter.full(entry: $0) })
+        return sections.joined(separator: "\n") + "\n"
     }
 
     /// Default file name for log exports and the disk mirror, e.g.
