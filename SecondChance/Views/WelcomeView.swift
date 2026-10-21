@@ -8,12 +8,9 @@ import SwiftUI
 
 struct WelcomeView: View {
     @EnvironmentObject var viewModel: WrappBuildViewModel
-    @ObservedObject var debugSettings = DebugSettings.shared
     @State private var selection: WrappSource? = .disk
 
-    private var sources: [WrappSource] {
-        debugSettings.showUnsupportedInstallOptions ? [.disk, .steam, .herDownload] : [.disk, .steam]
-    }
+    private let sources: [WrappSource] = [.disk, .steam, .herDownload]
 
     var body: some View {
         InstallerPage(title: "Welcome, Detective") {
@@ -30,9 +27,6 @@ struct WelcomeView: View {
             }
             .keyboardShortcut(.defaultAction)
             .disabled(selection == nil)
-        }
-        .onChange(of: sources) { _, sources in
-            if let selection, !sources.contains(selection) { self.selection = .disk }
         }
     }
 

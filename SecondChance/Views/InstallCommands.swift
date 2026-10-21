@@ -8,7 +8,6 @@ import SwiftUI
 
 struct InstallCommands: Commands {
     @ObservedObject var viewModel: WrappBuildViewModel
-    @ObservedObject var debugSettings = DebugSettings.shared
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -16,9 +15,7 @@ struct InstallCommands: Commands {
                 Button("Install from Game Discs…") { start(.disk) }
                     .keyboardShortcut("o")
                 Button("Install from Steam…") { start(.steam) }
-                if debugSettings.showUnsupportedInstallOptions {
-                    Button("Install from Her Download…") { start(.herDownload) }
-                }
+                Button("Install from Her Download…") { start(.herDownload) }
             }
             .disabled(InstallerStep(viewModel.currentState) != .source)
         }

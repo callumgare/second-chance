@@ -30,7 +30,7 @@ enum WrappSource: String, CaseIterable, Identifiable, Codable {
         case .disk:
             return "The original CDs"
         case .herDownload:
-            return "A Windows installer bought from Her Interactive"
+            return "A Windows or Mac download bought from Her Interactive"
         case .steam:
             return "A game in your Steam library"
         }

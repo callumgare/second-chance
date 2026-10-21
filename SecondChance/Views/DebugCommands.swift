@@ -24,8 +24,6 @@ struct DebugCommands: Commands {
         CommandMenu("Debug") {
             Toggle("Skip Installer", isOn: $settings.skipInstaller)
                 .help("Copy the game's files but don't run its installer, for testing a wrapp's set-up without waiting for an install.")
-            Toggle("Show Unsupported Install Sources", isOn: $settings.showUnsupportedInstallOptions)
-                .help("Offer the partly implemented sources (Her Download) on the welcome screen.")
 
             Divider()
 
