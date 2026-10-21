@@ -3,9 +3,9 @@
 //  Shared
 //
 //  The failure report an error screen is showing, for `FailureReportCallout`:
-//  whether it was sent and as what, the Manual choice, the first-failure
-//  question, and a comment to add. The build's error screen and a wrapp's
-//  error window each own one.
+//  whether it was sent and as what, the first-failure question of how
+//  detailed to send it, the Manual choice, and a comment to add. The build's
+//  error screen and a wrapp's error window each own one.
 
 import Foundation
 import Combine
@@ -16,17 +16,30 @@ final class FailureReportModel: ObservableObject {
     @Published private(set) var report: FailureReport?
     /// What became of it: nil while it is being sent.
     @Published private(set) var outcome: ReportOutcome?
-    /// Whether to ask, under the outcome, how detailed reports should be from
-    /// now on — the first failure anywhere asks, once.
-    @Published private(set) var asksAboutDetail = false
     /// Whether the person sent a comment about this failure.
     @Published private(set) var commentSent = false
+    /// Set while the report goes basic because the person quit without
+    /// answering how detailed to send it.
+    @Published private(set) var sendingBeforeQuit = false
 
     private let preferencesDirectory: URL
+    private var quitObserver: AnyCancellable?
 
     init(preferencesDirectory: URL = ReportingPreferences.defaultDirectory) {
         self.preferencesDirectory = preferencesDirectory
+        quitObserver = NotificationCenter.default.publisher(for: FailureReporter.sendingUnansweredOnQuit)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] note in
+                guard let self, let id = note.object as? UUID, self.report?.id == id else { return }
+                self.outcome = nil
+                self.sendingBeforeQuit = true
+            }
     }
+
+    /// Whether the error screen must keep its way out (Quit, Start Over)
+    /// back: until the first-failure question is answered, and while the
+    /// app is already quitting.
+    var holdsBackWayOut: Bool { outcome == .askingHowDetailed || sendingBeforeQuit }
 
     /// Report a failure at the detail the setting asks for.
     func report(_ report: FailureReport) {
@@ -37,12 +50,11 @@ final class FailureReportModel: ObservableObject {
     func track(_ report: FailureReport, sending task: Task<ReportOutcome, Never>) {
         self.report = report
         outcome = nil
-        asksAboutDetail = false
         commentSent = false
         Task {
             let outcome = await task.value
             guard self.report?.id == report.id else { return }
-            self.show(outcome)
+            self.outcome = outcome
         }
     }
 
@@ -50,28 +62,27 @@ final class FailureReportModel: ObservableObject {
     func send(_ detail: ReportDetail?) {
         guard let report else { return }
         guard let detail else {
+            FailureReporter.decline(report)
             outcome = .declined
             return
         }
         outcome = nil
+        let sending = FailureReporter.sendInBackground(report, detail: detail)
         Task {
-            let outcome = await Task.detached { await FailureReporter.send(report, detail: detail) }.value
+            let outcome = await sending.value
             guard self.report?.id == report.id else { return }
-            self.show(outcome)
+            self.outcome = outcome
         }
     }
 
-    /// The answer to the first-failure question. Detailed also sends a
-    /// detailed report of this failure, which so far went as basic.
-    func choose(_ level: ReportLevel) {
+    /// The answer to the first-failure question: send this report at
+    /// `detail`, and send later ones the same way.
+    func choose(_ detail: ReportDetail) {
         ReportingPreferences.update(in: preferencesDirectory) {
-            $0.level = level
+            $0.level = detail == .detailed ? .detailed : .basic
             $0.promptShown = true
         }
-        asksAboutDetail = false
-        if level == .detailed, case .sent(_, .basic) = outcome {
-            send(.detailed)
-        }
+        send(detail)
     }
 
     func sendComment(_ text: String, email: String) {
@@ -83,58 +94,7 @@ final class FailureReportModel: ObservableObject {
     func clear() {
         report = nil
         outcome = nil
-        asksAboutDetail = false
         commentSent = false
-    }
-
-    private func show(_ outcome: ReportOutcome) {
-        self.outcome = outcome
-        if case .sent = outcome, !ReportingPreferences.load(from: preferencesDirectory).promptShown {
-            asksAboutDetail = true
-        }
-    }
-
-    // MARK: GitHub
-
-    static let newIssueURL = URL(string: "https://github.com/callumgare/second-chance/issues/new")
-
-    /// A new GitHub issue, filled in with what the report says.
-    var issueURL: URL? {
-        Self.issueURL(report: report, reportID: outcome?.shortID)
-    }
-
-    nonisolated static func issueURL(report: FailureReport?, reportID: String?) -> URL? {
-        guard let base = newIssueURL, var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else {
-            return newIssueURL
-        }
-        let info = Bundle.main.infoDictionary
-        let os = ProcessInfo.processInfo.operatingSystemVersion
-        #if arch(x86_64)
-        let arch = RunContext.isTranslated ? "Apple silicon (wrapp under Rosetta)" : "Intel"
-        #else
-        let arch = "Apple silicon"
-        #endif
-        var details = [
-            "- Second Chance: \(info?["CFBundleShortVersionString"] as? String ?? "?") (build \(info?["CFBundleVersion"] as? String ?? "?"))",
-            "- macOS: \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(arch)",
-        ]
-        if let game = report?.game { details.append("- Game: \(game)") }
-        if let report { details.append("- What failed: \(report.title)\(report.stage.map { ", while \"\($0)\"" } ?? "")") }
-        if let reportID { details.append("- Failure report: \(reportID)") }
-        let body = """
-            **What happened?**
-            <!-- What were you doing when it went wrong? -->
-
-
-            **Details**
-            \(details.joined(separator: "\n"))
-
-            Please attach the log file saved with **Save Logs**.
-            """
-        components.queryItems = [
-            URLQueryItem(name: "title", value: report.map { "\($0.what) failed: \($0.kind)" } ?? ""),
-            URLQueryItem(name: "body", value: body),
-        ]
-        return components.url ?? newIssueURL
+        sendingBeforeQuit = false
     }
 }

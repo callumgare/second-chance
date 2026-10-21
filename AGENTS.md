@@ -384,8 +384,11 @@ direct assignment.
   headless, test and WrappPuppeteer runs, and anything touching the SDK sits
   inside `#if FAILURE_REPORTING`, because WrappPuppeteer compiles `Shared/`
   without it. WrappTemplate must link the static `Sentry` product: a
-  dynamic one would be deleted along with the rest of `Contents/Frameworks`
-  ([docs/failure-reports.md](docs/failure-reports.md)).
+  dynamic one would be deleted along with the rest of `Contents/Frameworks`.
+  `FailureReporter.start` comes before `CrashMarker.arm()`, which stands
+  aside when Sentry handles crashes: with both handlers installed a crashed
+  wrapp has been seen to wedge beyond even `kill -9`
+  ([docs/failure-reports.md](docs/failure-reports.md#crash-handlers)).
 - **Second Chance has an Info.plist file; the other targets don't.**
   `SecondChance/Info.plist` holds only Sparkle's keys, which `INFOPLIST_KEY_`
   build settings can't express, and Xcode merges it with the generated keys.

@@ -13,6 +13,13 @@ private var signalSources: [DispatchSourceSignal] = []
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Quitting with the first-failure question unanswered: send the
+        // report basic, the error screen saying so, then quit again.
+        if FailureReporter.sendUnansweredBeforeQuitting(then: {
+            NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
+        }) {
+            return .terminateCancel
+        }
         logger.notice("🛑 Application terminating, cleaning up...")
         guard !RunningSteam.shared.isEmpty else {
             finishTerminating()
@@ -53,7 +60,8 @@ struct SecondChanceApp: App {
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
         RunContext.logHeader(logger)
-        // Before CrashMarker, which hands crashes on to it.
+        // FailureReporter first: when Sentry handles crashes, CrashMarker
+        // installs no handler of its own (docs/failure-reports.md).
         FailureReporter.start(process: .app)
         CrashMarker.install(
             in: FileManager.default.homeDirectoryForCurrentUser

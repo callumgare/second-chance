@@ -2,10 +2,10 @@
 //  FailureReportCallout.swift
 //  Shared
 //
-//  Under an error: what became of its failure report (sent, or the choice
-//  of what to send when reports are set to ask), the first-failure question
-//  of how detailed reports should be, a comment to add, and a GitHub issue
-//  filled in with what the report says.
+//  Under an error: what became of its failure report — the first failure's
+//  question of how detailed to send it, the choice of what to send when
+//  reports are set to ask, or that it was sent — and a comment to add. When
+//  reports are off in this build it shows nothing.
 
 import SwiftUI
 
@@ -16,26 +16,17 @@ struct FailureReportCallout: View {
     @State private var email = ""
 
     var body: some View {
+        if model.report != nil, model.outcome != .disabled {
+            callout
+        }
+    }
+
+    private var callout: some View {
         VStack(spacing: 10) {
             reportStatus
 
-            if model.asksAboutDetail {
-                Divider()
-                detailQuestion
-            }
-
             if isCommenting {
                 commentForm
-            }
-
-            VStack(spacing: 4) {
-                if let url = model.issueURL {
-                    Link("Open an issue on GitHub →", destination: url)
-                        .font(.callout)
-                }
-                Text("Attach the saved log file to help diagnose the problem.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .padding()
@@ -51,7 +42,7 @@ struct FailureReportCallout: View {
         case nil where model.report != nil:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text("Sending a failure report…")
+                Text(model.sendingBeforeQuit ? "Sending a basic failure report before quitting…" : "Sending a failure report…")
                     .font(.callout)
             }
         case .sent(_, let detail):
@@ -74,6 +65,8 @@ struct FailureReportCallout: View {
                         .controlSize(.small)
                 }
             }
+        case .askingHowDetailed:
+            detailQuestion
         case .awaitingChoice:
             VStack(spacing: 6) {
                 Text("Send a report about this, so it can be fixed?")
@@ -96,28 +89,32 @@ struct FailureReportCallout: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         case .disabled, nil:
-            Text("Believe this is a bug in Second Chance?")
-                .font(.callout)
-                .fontWeight(.medium)
+            EmptyView()
         }
     }
 
+    /// The first failure: how detailed a report to send. The error screen's
+    /// way out stays hidden until it is answered (`HiddenUntilReportAnswered`).
     private var detailQuestion: some View {
-        VStack(spacing: 6) {
-            Text("Send detailed reports from now on?")
+        VStack(spacing: 8) {
+            Text("How much should the failure report include?")
                 .font(.callout)
                 .fontWeight(.medium)
-            Text("This report only said which game and what failed. \(Self.levelExplanation) You can change this later in Second Chance's Settings.")
+            Text(Self.detailedIsWhatHelps)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
-                Button("Ask Each Time") { model.choose(.manual) }
-                Button("Keep Basic") { model.choose(.basic) }
-                Button("Send Detailed") { model.choose(.detailed) }
+                Button("Send Basic Report") { model.choose(.basic) }
+                Button("Send Detailed Report") { model.choose(.detailed) }
                     .buttonStyle(.borderedProminent)
             }
             .controlSize(.small)
+            Text("Later reports are sent the same way. You can change that in Second Chance's Settings.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .accessibilityIdentifier("failure-report-detail-question")
     }
@@ -147,6 +144,23 @@ struct FailureReportCallout: View {
         }
     }
 
+    /// The first-failure question's case for a detailed report.
+    static let detailedIsWhatHelps = "A report about this is sent to the developer so it can be fixed. A detailed one includes the log of what was happening, which is usually what it takes to track the problem down and fix it. Your name and folders are taken out. A basic one says only which game it was and what failed."
+
     /// What a basic and a detailed report each say, in a sentence.
     static let levelExplanation = "A basic report says which game and what failed. A detailed one adds the log and diagnostics, with your name and folders taken out."
+}
+
+/// An error screen's way out — Quit, Start Over — kept back while the
+/// failure's report is asking how detailed to send it, so the question is
+/// answered rather than skipped. Leaving anyway (Cmd-Q) sends it basic.
+struct HiddenUntilReportAnswered<Content: View>: View {
+    @ObservedObject var model: FailureReportModel
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        if !model.holdsBackWayOut {
+            content()
+        }
+    }
 }

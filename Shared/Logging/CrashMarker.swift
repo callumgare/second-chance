@@ -11,8 +11,7 @@
 //  The signal handler may only use async-signal-safe calls, so it never
 //  touches LogStore or swift-log: it writes a prepared line to stderr and to
 //  a marker file opened in advance, then puts back the handler that was
-//  there before it — Sentry's, when failure reports are on — and re-raises,
-//  so that handler still runs and the crash report is still written.
+//  there before it and re-raises, so the crash report is still written.
 
 import Foundation
 import Logging
@@ -31,25 +30,21 @@ nonisolated enum CrashMarker {
     /// The action each signal had before ours, to hand the crash on to.
     nonisolated(unsafe) private static let previousActions = UnsafeMutablePointer<sigaction>.allocate(capacity: slots)
 
-    /// Report a crash the previous run left in `directory`, then arm the
-    /// handler for this run. Call once, early, after logging is bootstrapped
-    /// and after `FailureReporter.start`, whose crash handler this hands on to.
-    static func install(in directory: URL, logger: Logging.Logger) {
-        let marker = directory.appendingPathComponent("crash-marker")
-        reportPrevious(marker: marker, logger: logger)
+    private static var armed = false
 
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        } catch {
-            logger.warning("Can't create \(directory.path) for the crash marker: \(error.localizedDescription)")
-            return
-        }
-        markerFD = open(marker.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-        guard markerFD >= 0 else {
-            logger.warning("Can't open the crash marker \(marker.path)")
-            return
-        }
-
+    /// Install the handler — unless Sentry is handling crashes in this run
+    /// (`FailureReporter.handlesCrashes`). Any signal handler of ours running
+    /// after Sentry's wedges a crashing process: in one order Sentry's is
+    /// handed the crash back while still busy with it, and under Rosetta,
+    /// after a bad memory access, ours never gets to run at all, beyond even
+    /// `kill -9` (docs/failure-reports.md#crash-handlers). Sentry records the
+    /// crash then, and says so at the next start. Call after
+    /// `FailureReporter.start`. Until `install(in:)` names the marker file, a
+    /// crash is written to stderr only.
+    static func arm() {
+        guard !armed else { return }
+        armed = true
+        guard !FailureReporter.handlesCrashes else { return }
         let process = ProcessInfo.processInfo.processName
         messageTexts.initialize(repeating: nil, count: slots)
         messageLengths.initialize(repeating: 0, count: slots)
@@ -68,11 +63,30 @@ nonisolated enum CrashMarker {
         }
     }
 
+    /// Report a crash the previous run left in `directory`, and keep this
+    /// run's marker there. Arms the handler too, if `arm()` hasn't.
+    static func install(in directory: URL, logger: Logging.Logger) {
+        arm()
+        let marker = directory.appendingPathComponent("crash-marker")
+        reportPrevious(marker: marker, logger: logger)
+
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            logger.warning("Can't create \(directory.path) for the crash marker: \(error.localizedDescription)")
+            return
+        }
+        markerFD = open(marker.path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        if markerFD < 0 {
+            logger.warning("Can't open the crash marker \(marker.path)")
+        }
+    }
+
     /// The handler: async-signal-safe calls only.
     private static let handle: @convention(c) (Int32) -> Void = { sig in
-        // Put the previous action back by hand — the default, or another
-        // crash handler: macOS ignores SA_RESETHAND for SIGILL and SIGTRAP,
-        // and a handler that re-raises those without this runs again, for ever.
+        // Put the previous action back by hand: macOS ignores SA_RESETHAND
+        // for SIGILL and SIGTRAP, and a handler that re-raises those without
+        // this runs again, for ever.
         if sig >= 0, sig < CrashMarker.slots {
             sigaction(sig, CrashMarker.previousActions + Int(sig), nil)
         } else {
@@ -89,8 +103,7 @@ nonisolated enum CrashMarker {
                 _ = write(CrashMarker.markerFD, pointer, length)
             }
         }
-        // Die as we would have: the previous handler (Sentry's) records the
-        // crash and re-raises in turn, and macOS still writes its report.
+        // Die as we would have, so macOS still writes its crash report.
         raise(sig)
     }
 

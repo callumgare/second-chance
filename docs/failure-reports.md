@@ -23,12 +23,21 @@ are already running.
 | **Detailed** | Sent detailed | Sent detailed |
 | **Manual** | The error screen offers Send Detailed / Send Basic / Don't Send | An alert offers the same |
 
-The first failure anywhere also asks how detailed reports should be from now
-on, and sets `promptShown` so it is only asked once. After a failure the
-basic report has already gone, so the question sits under it on the error
-screen. Choosing Detailed sends this failure again as a detailed report. For a
-crash nothing has gone yet, so an alert asks first and the crash is sent at
-the answer. Choosing a level in Settings counts as having been asked.
+**The first failure anywhere sends nothing until it is asked.** Until
+`promptShown` is set, `FailureReporter.report` returns
+`ReportOutcome.askingHowDetailed`, and the error screen asks whether to send
+a basic or a detailed report. The question makes the case that a detailed
+report is usually what it takes to fix the problem. The answer sends this
+report and becomes the setting, Basic or Detailed. The screen's way out (Quit,
+Launch Without Steam, Start Over) stays hidden until then
+(`HiddenUntilReportAnswered`). Leaving anyway sends the report basic on the
+way out: `FailureReporter.wait`, which every exit path calls, sends any
+unanswered first failure as basic before it waits. That covers Cmd-Q, a run
+that ends with no error window, and the wrapp's start-up errors. Nothing is
+recorded as answered then, so the next failure asks again. A crash has no
+error screen, so an alert asks the same question at the next start, and the
+crash is sent at the answer. Choosing a level in Settings counts as having
+been asked.
 
 What each report contains:
 
@@ -115,12 +124,30 @@ capture's own command timeouts.
 
 ## Crash handlers
 
-`FailureReporter.start` runs straight after `AppLogging.bootstrap` and
-before `CrashMarker.install`. `CrashMarker`'s signal handler keeps the
-action that was installed before it, which is Sentry's, and restores it
-before re-raising. So the chain is CrashMarker → Sentry → default, and macOS
-still writes its `.ips`. Debug Settings in the app, and the wrapp's
-`--debug-options` dialog, have a **Crash Now** button for checking that chain.
+**When Sentry handles crashes, `CrashMarker` installs no signal handler of
+its own.** `FailureReporter.start` runs first, then `CrashMarker.arm()`,
+which sees `FailureReporter.handlesCrashes` and stands aside. Sentry records
+the crash, and at the next start `previousRunCrashed` logs the line
+`CrashMarker` would have ("The previous run crashed …"), with the path of
+macOS's `.ips`. When reporting is off (Debug, headless, test and
+WrappPuppeteer runs, or no DSN), `CrashMarker` works as before.
+
+Why: with both handlers installed, `CrashMarker`'s after Sentry's, a test
+wrapp crashed with `kill -SEGV` on macOS 15 under Rosetta never exited. It sat
+in the kernel (`ps` state `UE`) and survived `kill -9`. With Sentry's handler
+alone, every crash in the crash tests ended normally: segfaults, traps and
+`kill -SEGV`, under Rosetta. The tests ran on macOS 26. A first round seemed
+to show both handlers together wedging every real crash, but it was flawed:
+the processes were waiting on the "how detailed?" alert, which nobody was
+there to answer. Running both handlers together hasn't been proven safe, so
+they aren't.
+
+`CrashMarker.install(in:)` comes later, once the process knows its log folder.
+It reports the previous run's crash when `CrashMarker` caught it, and opens
+the marker file.
+
+Debug Settings in the app, and the wrapp's `--debug-options` dialog, have a
+**Crash Now** button for checking a crash end to end.
 
 ## Linking
 

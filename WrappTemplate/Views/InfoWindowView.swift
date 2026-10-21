@@ -225,8 +225,6 @@ struct InfoWindowView: View {
 
             LogActionButtons(logWindowTitle: "Game Log", saveFileNamePrefix: "nancy-drew-\(viewModel.gameSlug)")
 
-            FailureReportCallout(model: viewModel.failureReport)
-
             failureActions
         }
         .accessibilityIdentifier("possible-launch-failure")
@@ -301,7 +299,9 @@ struct InfoWindowView: View {
 
             FailureReportCallout(model: viewModel.failureReport)
 
-            failureActions
+            HiddenUntilReportAnswered(model: viewModel.failureReport) {
+                failureActions
+            }
         }
     }
 }

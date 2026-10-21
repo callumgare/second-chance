@@ -203,10 +203,11 @@ carries the summary, redacted ([failure-reports.md](failure-reports.md)).
 A Swift trap, an AppKit assertion or a segfault ends a process before anything
 in its log says why. `CrashMarker.install` (the app and every wrapp) arms a
 handler for the fatal signals that writes one line to stderr and to a
-`crash-marker` file in the process's log folder, then hands the crash on to
-the handler that was there before it — Sentry's, when failure reports are on
-([failure-reports.md](failure-reports.md#crash-handlers)) — so that still
-runs and macOS still writes its report. At the next start the previous crash is
+`crash-marker` file in the process's log folder, then lets the crash proceed
+so macOS still writes its report. When failure reports are on, Sentry
+handles crashes instead and `CrashMarker` installs nothing; the next start
+logs the same line from Sentry's report
+([failure-reports.md](failure-reports.md#crash-handlers)). At the next start the previous crash is
 logged as an error with the path of that report in
 `~/Library/Logs/DiagnosticReports`. The handler only makes async-signal-safe
 calls, so it never touches the log itself.

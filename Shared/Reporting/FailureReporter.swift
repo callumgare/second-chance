@@ -39,6 +39,13 @@ nonisolated enum FailureReporter {
         /// Where this process keeps a log per run, for a detailed report of
         /// the previous run's crash.
         var runLogs: (directory: URL, prefix: String)?
+        /// The SDK's own events already held back for `previousRunCrashed`.
+        /// Each is held back once: should one come round again untagged,
+        /// it is dropped rather than sent round for ever.
+        var heldBack: Set<String> = []
+        /// A first failure whose screen is asking how detailed to send it.
+        /// Sent basic if the process leaves before it is answered.
+        var unanswered: FailureReport?
     }
     private static let state = OSAllocatedUnfairLock(initialState: State())
     /// Entered while a report is being put together and handed to the SDK,
@@ -46,6 +53,10 @@ nonisolated enum FailureReporter {
     private static let sending = DispatchGroup()
 
     static var isEnabled: Bool { state.withLock { $0.started } }
+
+    /// Whether Sentry's crash handler is installed in this run, in which
+    /// case `CrashMarker` installs none (see `CrashMarker.arm`).
+    static var handlesCrashes: Bool { isEnabled }
 
     // MARK: Start
 
@@ -83,8 +94,8 @@ nonisolated enum FailureReporter {
     }
 
     /// Start the SDK, unless this run mustn't report. Call straight after
-    /// `AppLogging.bootstrap` and before `CrashMarker.install`, so the crash
-    /// marker's signal handler runs first and hands on to Sentry's.
+    /// `AppLogging.bootstrap`, and before `CrashMarker.arm()`, which leaves
+    /// crashes to Sentry when it is on.
     static func start(process: Process, game: String? = nil, engine: String? = nil) {
         state.withLock { $0.process = process }
         if let reason = disabledReason(environment: ProcessInfo.processInfo.environment,
@@ -167,11 +178,18 @@ nonisolated enum FailureReporter {
 
     // MARK: Report
 
-    /// Report a failure at the detail the setting asks for. With the setting
-    /// at Manual nothing is sent: the error screen asks, then calls `send`.
+    /// Report a failure at the detail the setting asks for. Nothing is sent
+    /// for the first failure (the error screen asks how detailed to send it)
+    /// or with the setting at Manual (it asks whether to): the screen calls
+    /// `send` with the answer.
     static func report(_ report: FailureReport) async -> ReportOutcome {
         guard isEnabled else { return .disabled }
-        switch ReportingPreferences.load().level {
+        let preferences = ReportingPreferences.load()
+        if !preferences.promptShown {
+            state.withLock { $0.unanswered = report }
+            return .askingHowDetailed
+        }
+        switch preferences.level {
         case .manual: return .awaitingChoice
         case .basic: return await send(report, detail: .basic)
         case .detailed: return await send(report, detail: .detailed)
@@ -181,9 +199,32 @@ nonisolated enum FailureReporter {
     /// Send `report` at `detail`, whatever the setting.
     static func send(_ report: FailureReport, detail: ReportDetail) async -> ReportOutcome {
         #if FAILURE_REPORTING
-        guard isEnabled, let process = state.withLock({ $0.process }) else { return .disabled }
+        guard isEnabled else { return .disabled }
+        answered(report)
         sending.enter()
         defer { sending.leave() }
+        return await sendNow(report, detail: detail)
+        #else
+        return .disabled
+        #endif
+    }
+
+    /// `send`, started before this returns: the report counts as answered
+    /// and as being sent at once, so a quit straight after neither sends it
+    /// a second time nor leaves before it has gone.
+    static func sendInBackground(_ report: FailureReport, detail: ReportDetail) -> Task<ReportOutcome, Never> {
+        guard isEnabled else { return Task { .disabled } }
+        answered(report)
+        sending.enter()
+        return Task.detached {
+            defer { sending.leave() }
+            return await sendNow(report, detail: detail)
+        }
+    }
+
+    private static func sendNow(_ report: FailureReport, detail: ReportDetail) async -> ReportOutcome {
+        #if FAILURE_REPORTING
+        guard let process = state.withLock({ $0.process }) else { return .disabled }
         let redactor = ReportRedactor.current
 
         let event = Event(level: .error)
@@ -233,6 +274,59 @@ nonisolated enum FailureReporter {
         #endif
     }
 
+    /// The person chose to send nothing.
+    static func decline(_ report: FailureReport) {
+        answered(report)
+    }
+
+    private static func answered(_ report: FailureReport) {
+        state.withLock { if $0.unanswered?.id == report.id { $0.unanswered = nil } }
+    }
+
+    /// Posted, on the main queue, when a report is sent basic because the
+    /// person quit without answering how detailed to send it; the object is
+    /// the report's `id`, for its error screen to show it being sent.
+    static let sendingUnansweredOnQuit = Notification.Name("FailureReporterSendingUnansweredOnQuit")
+
+    /// Leaving with the first-failure question unanswered: send it basic.
+    @discardableResult
+    private static func sendUnansweredAsBasic() -> Task<ReportOutcome, Never>? {
+        guard let report = state.withLock({ $0.unanswered }) else { return nil }
+        logger.notice("Leaving before choosing how detailed a report to send: sending it basic")
+        let task = sendInBackground(report, detail: .basic)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: sendingUnansweredOnQuit, object: report.id)
+        }
+        return task
+    }
+
+    /// For `applicationShouldTerminate`: when the first-failure question
+    /// is unanswered, send the report basic with the error screen saying
+    /// so, then quit again — `then` runs once it has gone. Returns whether
+    /// it did, in which case the quit should be cancelled for now.
+    ///
+    /// `then` runs inside a main-queue job, so it must schedule the quit
+    /// (`NSApp.perform(_:with:afterDelay:)`), not call `terminate` itself:
+    /// a quit that waits for cleanup (`.terminateLater`) is answered from
+    /// the main queue, which this job would be holding, and would wait for
+    /// itself for ever.
+    @MainActor
+    static func sendUnansweredBeforeQuitting(then quitAgain: @escaping @MainActor () -> Void) -> Bool {
+        guard let task = sendUnansweredAsBasic() else { return false }
+        let started = Date()
+        Task.detached {
+            _ = await task.value
+            flush()
+            // Not a wait for anything: a basic report usually goes in a
+            // fraction of a second, and the screen saying it is being sent
+            // should stay up long enough to read rather than flash.
+            let shown = Date().timeIntervalSince(started)
+            if shown < 1 { try? await Task.sleep(for: .seconds(1 - shown)) }
+            await MainActor.run { quitAgain() }
+        }
+        return true
+    }
+
     /// Send what the person wrote about a failure, tied to its report.
     static func sendComment(_ message: String, email: String?, about eventID: String) {
         #if FAILURE_REPORTING
@@ -266,7 +360,8 @@ nonisolated enum FailureReporter {
     }
 
     /// Wait for a report already under way, and any other being sent, then
-    /// for them to go. Not on the main thread if the task needs it.
+    /// for them to go — sending a first failure nobody answered the question
+    /// for as basic. Not on the main thread if the task needs it.
     static func wait(for task: Task<ReportOutcome, Never>? = nil, timeout: TimeInterval = 15) {
         guard isEnabled else { return }
         let deadline = DispatchTime.now() + timeout
@@ -280,6 +375,7 @@ nonisolated enum FailureReporter {
                 logger.warning("Gave up waiting \(Int(timeout))s for a failure report to be ready")
             }
         }
+        sendUnansweredAsBasic()
         if sending.wait(timeout: deadline) == .timedOut {
             logger.warning("Gave up waiting \(Int(timeout))s for a failure report to be ready")
         }
@@ -305,16 +401,22 @@ nonisolated enum FailureReporter {
     @MainActor
     private static func previousRunCrashed(_ event: Event) {
         let process = state.withLock { $0.process } ?? .app
+        // What CrashMarker logs when it, not Sentry, caught the crash.
+        let exception = event.exceptions?.first.map { "\($0.type): \($0.value ?? "")" } ?? "a crash"
+        var line = "The previous run crashed (\(exception))"
+        if let report = CrashMarker.crashReport(after: event.timestamp?.addingTimeInterval(-60)) {
+            line += "\n  Crash report: \(report.path)"
+        }
+        logger.error("\(line)")
         let preferences = ReportingPreferences.load()
         let detail: ReportDetail?
         if !preferences.promptShown {
-            let level = CrashReportPrompt.askHowDetailed(process: process)
+            let answer = CrashReportPrompt.askHowDetailed(process: process)
             ReportingPreferences.update {
-                $0.level = level
+                $0.level = answer == .detailed ? .detailed : .basic
                 $0.promptShown = true
             }
-            // Basic was the default; asking each time starts with the next.
-            detail = level == .detailed ? .detailed : .basic
+            detail = answer
         } else if let fixed = defaultCrashDetail(for: preferences.level) {
             detail = fixed
         } else {
@@ -347,9 +449,11 @@ nonisolated enum FailureReporter {
                 logger.error("Couldn't attach the crashed run's log: \(ErrorChain.describe(error))")
             }
         }
+        // On the event itself, not the scope: the SDK applies no scope to
+        // an event it read back from a crash (`isFatalEvent`), so a tag set
+        // there would never arrive. Scope attachments still go.
+        event.tags = (event.tags ?? [:]).merging(["report_detail": detail.rawValue, "crash": "previous-run"]) { $1 }
         SentrySDK.capture(event: event) { scope in
-            scope.setTag(value: detail.rawValue, key: "report_detail")
-            scope.setTag(value: "previous-run", key: "crash")
             if let attachment { scope.addAttachment(attachment) }
         }
         logger.notice("Sent a \(detail.rawValue) report of the previous run's crash: \(event.eventId.sentryIdString)")
@@ -378,7 +482,12 @@ nonisolated enum FailureReporter {
     /// back for `previousRunCrashed` to send again, tagged.
     private static func scrub(_ event: Event) -> Event? {
         guard let detail = event.tags?["report_detail"].flatMap(ReportDetail.init(rawValue:)) else {
-            DispatchQueue.main.async { previousRunCrashed(event) }
+            let id = event.eventId.sentryIdString
+            if state.withLock({ $0.heldBack.insert(id).inserted }) {
+                DispatchQueue.main.async { previousRunCrashed(event) }
+            } else {
+                logger.error("Dropped event \(id): it came back to be sent without its report_detail tag")
+            }
             return nil
         }
         let redactor = ReportRedactor.current

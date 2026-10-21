@@ -320,30 +320,40 @@ struct FailureReportModelTests {
         }
     }
 
-    @Test("The first report sent asks whether reports should be detailed from now on")
+    @Test("The first failure asks how detailed to send it, holding the way out back until answered")
     func firstFailureAsks() async {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = FailureReportModel(preferencesDirectory: directory)
-        model.track(report, sending: Task { .sent(eventID: "0123456789abcdef", detail: .basic) })
+        model.track(report, sending: Task { .askingHowDetailed })
         await settle(model)
-        #expect(model.outcome == .sent(eventID: "0123456789abcdef", detail: .basic))
-        #expect(model.asksAboutDetail)
+        #expect(model.outcome == .askingHowDetailed)
+        #expect(model.holdsBackWayOut)
 
-        model.choose(.manual)
-        #expect(!model.asksAboutDetail)
-        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .manual, promptShown: true))
+        model.choose(.detailed)
+        #expect(!model.holdsBackWayOut)
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .detailed, promptShown: true))
     }
 
-    @Test("Once asked, it doesn't ask again")
-    func asksOnce() async {
+    @Test("Answering basic makes later reports basic")
+    func answersBasic() async {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        ReportingPreferences.update(in: directory) { $0.promptShown = true }
         let model = FailureReportModel(preferencesDirectory: directory)
-        model.track(report, sending: Task { .sent(eventID: "0123456789abcdef", detail: .basic) })
+        model.track(report, sending: Task { .askingHowDetailed })
         await settle(model)
-        #expect(!model.asksAboutDetail)
+        model.choose(.basic)
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .basic, promptShown: true))
+    }
+
+    @Test("A report that was sent, or is asking whether to be, holds nothing back")
+    func otherOutcomesDontHoldBack() async {
+        for outcome in [ReportOutcome.sent(eventID: "0123456789abcdef", detail: .basic), .awaitingChoice] {
+            let model = FailureReportModel(preferencesDirectory: temporaryDirectory())
+            model.track(report, sending: Task { outcome })
+            await settle(model)
+            #expect(!model.holdsBackWayOut)
+        }
     }
 
     @Test("Declining the Manual choice sends nothing")
@@ -355,15 +365,25 @@ struct FailureReportModelTests {
         model.send(nil)
         #expect(model.outcome == .declined)
     }
+}
 
-    @Test("The GitHub issue is filled in with the failure and the report ID")
-    func issueURL() throws {
-        let url = try #require(FailureReportModel.issueURL(report: report, reportID: "01234567"))
-        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        #expect(items.first { $0.name == "title" }?.value == "Running the game failed: exit-code")
-        let body = try #require(items.first { $0.name == "body" }?.value)
-        #expect(body.contains("- Game: royal-tower"))
-        #expect(body.contains("- Failure report: 01234567"))
-        #expect(body.contains("while \"Starting the game\""))
+@Suite("Report bundle process list")
+struct ReportBundleProcessTests {
+    @Test("Only Wine's processes and ours stay in the process list, and the rest are counted")
+    func trimsProcesses() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("processes-\(UUID().uuidString).txt")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try Data("""
+              PID  PPID  %CPU %MEM     ELAPSED COMM
+              101     1   0.0  0.1    01:00:00 /Applications/Secret Diary.app/Contents/MacOS/Secret Diary
+              202     1   1.0  0.5       00:10 /Users/x/Games/Nancy.app/Contents/SharedSupport/wine/bin/wineserver
+              203   202   1.0  0.5       00:10 C:\\windows\\system32\\explorer.exe
+              204     1   0.0  0.1       00:10 /Users/x/Games/Nancy.app/Contents/MacOS/WrappTemplate
+            """.utf8).write(to: file)
+        try ReportBundle.onlyRelevantProcesses(in: file)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        #expect(!text.contains("Secret Diary"))
+        #expect(text.contains("wineserver") && text.contains("explorer.exe") && text.contains("WrappTemplate"))
+        #expect(text.contains("[1 other processes left out]"))
     }
 }

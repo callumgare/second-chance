@@ -197,10 +197,12 @@ struct ErrorView: View {
 
             Spacer().frame(height: 8)
 
-            Button("Start Over") {
-                viewModel.reset()
+            HiddenUntilReportAnswered(model: viewModel.failureReport) {
+                Button("Start Over") {
+                    viewModel.reset()
+                }
+                .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.borderedProminent)
         }
         .contentShape(Rectangle())
         .allowsHitTesting(true)

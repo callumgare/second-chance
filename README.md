@@ -63,12 +63,15 @@ Have fun!
 
 ### Failure reports
 
-When building a game, or one of the games Second Chance made, fails or crashes, it sends me a short report so I know
-it happened. By default that's a **basic** report: the Second Chance and macOS versions, which game it was, and which
-step failed. Nothing else, and nothing at all unless something goes wrong. The first time something fails it'll ask
-whether you'd rather send **detailed** reports, which add the log of what was happening (with your name and folders
-taken out), or be asked each time. You can change your mind under **Second Chance → Settings**. Reports go to
-[Sentry](https://sentry.io), and [docs/failure-reports.md](docs/failure-reports.md) has exactly what's in them.
+When building a game, or one of the games Second Chance made, fails or crashes, it sends me a report so I can fix
+it. Nothing is sent unless something goes wrong. The first time something fails, it asks which kind you'd like to send:
+- A **basic** report has only the Second Chance and macOS versions, which game it was, and which step failed.
+- A **detailed** report adds the log of what was happening, with your name and folders taken out. That log is usually
+  what it takes to track the problem down.
+
+Later reports are sent the same way. You can change that, or have it ask each time, under **Second Chance → Settings**.
+Reports go to [Sentry](https://sentry.io), and [docs/failure-reports.md](docs/failure-reports.md) has exactly what's in
+them.
 
 ---
 

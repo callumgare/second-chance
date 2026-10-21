@@ -12,18 +12,13 @@ import AppKit
 @MainActor
 enum CrashReportPrompt {
 
-    /// The first failure: how detailed reports should be from now on.
-    static func askHowDetailed(process: FailureReporter.Process) -> ReportLevel {
+    /// The first failure: how detailed a report to send, now and later.
+    static func askHowDetailed(process: FailureReporter.Process) -> ReportDetail {
         let alert = alert(process: process)
-        alert.informativeText = "A report helps get it fixed. \(FailureReportCallout.levelExplanation)\n\nWhich would you like to send, now and when anything fails from now on? You can change this later in Second Chance's Settings."
-        alert.addButton(withTitle: "Send Detailed Reports")
-        alert.addButton(withTitle: "Send Basic Reports")
-        alert.addButton(withTitle: "Ask Each Time")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .detailed
-        case .alertThirdButtonReturn: return .manual
-        default: return .basic
-        }
+        alert.informativeText = "How much should the report include? \(FailureReportCallout.detailedIsWhatHelps)\n\nLater reports are sent the same way. You can change that in Second Chance's Settings."
+        alert.addButton(withTitle: "Send Detailed Report")
+        alert.addButton(withTitle: "Send Basic Report")
+        return alert.runModal() == .alertFirstButtonReturn ? .detailed : .basic
     }
 
     /// Reports are set to ask: what to send of this crash, or nil for nothing.

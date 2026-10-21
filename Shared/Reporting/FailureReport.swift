@@ -20,6 +20,10 @@ nonisolated enum ReportDetail: String, Sendable {
 nonisolated enum ReportOutcome: Equatable, Sendable {
     /// Sent, as Sentry event `eventID`.
     case sent(eventID: String, detail: ReportDetail)
+    /// Nothing has failed before: the error screen asks how detailed a
+    /// report to send, and holds its way out back until it is answered.
+    /// Leaving without answering sends it basic (`FailureReporter.wait`).
+    case askingHowDetailed
     /// The setting is Manual: the error screen asks what to send.
     case awaitingChoice
     /// The person chose not to send it.

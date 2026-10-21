@@ -40,7 +40,11 @@ nonisolated enum ReportBundle {
             let files = (try? FileManager.default.contentsOfDirectory(at: diagnostics, includingPropertiesForKeys: nil)) ?? []
             for file in files {
                 do {
-                    try redactor.redactFile(at: file, to: copy.appendingPathComponent(file.lastPathComponent))
+                    let destination = copy.appendingPathComponent(file.lastPathComponent)
+                    try redactor.redactFile(at: file, to: destination)
+                    if file.lastPathComponent == "processes.txt" {
+                        try onlyRelevantProcesses(in: destination)
+                    }
                 } catch {
                     logger.warning("Left \(file.lastPathComponent) out of the failure report: \(error.localizedDescription)")
                 }
@@ -63,6 +67,24 @@ nonisolated enum ReportBundle {
         }
         logger.debug("Failure report bundle is \(size(of: zip)) bytes")
         return zip
+    }
+
+    /// The diagnostics bundle's `ps -A` names every program running on the
+    /// Mac, which a report has no business sending: keep the header, Wine's
+    /// processes and ours, and count the rest.
+    static func onlyRelevantProcesses(in file: URL) throws {
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n", omittingEmptySubsequences: false)
+        guard let header = lines.first else { return }
+        let rows = lines.dropFirst().filter { !$0.isEmpty }
+        let kept = rows.filter(isRelevantProcess)
+        let text = ([String(header)] + kept.map(String.init)
+                    + ["[\(rows.count - kept.count) other processes left out]"]).joined(separator: "\n") + "\n"
+        try Data(text.utf8).write(to: file, options: .atomic)
+    }
+
+    static func isRelevantProcess(_ line: Substring) -> Bool {
+        let lowered = line.lowercased()
+        return ["wine", ".exe", "wrapptemplate", "second chance", "scummvm", "steam"].contains { lowered.contains($0) }
     }
 
     /// The thread samples in a diagnostics bundle copy.

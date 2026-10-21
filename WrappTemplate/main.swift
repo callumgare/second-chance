@@ -298,6 +298,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         mainLogger.debug("[Cleanup/AppDelegate] applicationShouldTerminate called")
         
+        // Quitting with the first-failure question unanswered: send the
+        // report basic, the error window saying so, then quit again.
+        if !isCleaningUp, FailureReporter.sendUnansweredBeforeQuitting(then: {
+            NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
+        }) {
+            return .terminateCancel
+        }
+
         // Prevent multiple cleanup attempts
         guard !isCleaningUp else {
             mainLogger.debug("[Cleanup/AppDelegate] Already cleaning up, returning .terminateNow")
@@ -416,8 +424,10 @@ private func installTerminationHandlers() {
 func main() {
     // Bootstrap logging before anything else can construct a Logger.
     AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappTemplate")
-    // Before anything can fail, and before CrashMarker, which hands crashes on to it.
+    // Before anything can fail. CrashMarker after it: when Sentry handles
+    // crashes, CrashMarker installs no handler of its own.
     FailureReporter.start(process: .wrapp)
+    CrashMarker.arm()
     installTerminationHandlers()
     // Before any Wine process starts, so that every one inherits them.
     for (name, value) in WineEnvironment.wrappSessionVariables() {
