@@ -109,6 +109,16 @@ for the window it takes over, the helper replaces three of Wine's own
 | `adjustFullScreenBehavior:` | Always grants fullscreen. Never takes the window out of its Space. |
 | `minimumLevelForActive:` | Keeps the normal window level, not the raised level Wine gives a window covering the screen. |
 | `doOrderOut` | Leaves the window, and its Space, in place while the app is inactive. Wine hides a fullscreen window by closing it, which would end the Space. |
+| `windowWillStartLiveResize:`, `windowDidEndLiveResize:` | Do nothing while a window covering the screen moves into or out of its Space. A window Wine lets go fullscreen keeps Wine's: it really is resized, and cnc-ddraw rescales its picture and the mouse when told the resize has ended. |
+
+AppKit counts that move as a live resize, and Wine passes a live resize
+on to the game as `WM_ENTERSIZEMOVE` and `WM_EXITSIZEMOVE`, as though the
+player had started dragging the window's edge. On Windows a fullscreen
+Direct3D game never gets them. Warnings at Waverly Academy and Shadow at
+the Water's Edge, from Steam, stopped drawing for good more often than not
+when their frame timer's tick landed between the two, leaving the Space
+black. The window is the size of the screen before and after the move, so
+the game misses nothing.
 
 Every other window keeps Wine's behaviour. The helper checks these methods
 exist before replacing them. If Wine has changed and they don't, it reports

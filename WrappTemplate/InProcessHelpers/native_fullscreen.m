@@ -122,6 +122,7 @@ static void debugLog(const char *format, ...) {
 static char kAdoptedKey;   // this file has taken charge of the window's fullscreen
 static char kEnteredKey;   // the window has been put into a Space once
 static char kReenterKey;   // Wine closed the window's Space; put it back when shown
+static char kCoversScreenKey;  // adopted as a window covering the screen, not one Wine lets go fullscreen
 
 static BOOL windowFlag(NSWindow *window, const void *key) {
     return [objc_getAssociatedObject(window, key) boolValue];
@@ -184,12 +185,29 @@ static BOOL direct3DDrawsInto(NSWindow *window) {
 //   Space shows the last frame until the player comes back and the game
 //   shows its window again. Hidden while the app is active, the window goes
 //   as usual and comes back into a Space when shown again (kReenterKey).
+// - windowWillStartLiveResize: and windowDidEndLiveResize: do nothing while
+//   a window covering the screen moves into or out of its Space (a window
+//   Wine lets go fullscreen really is resized, and cnc-ddraw rescales its
+//   picture and the mouse when told the resize ended). AppKit calls them for the
+//   move, and Wine turns them into WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE,
+//   as though the player had started dragging an edge -- which nobody can
+//   do to a fullscreen Direct3D window on Windows, where the game never
+//   gets them. Warnings at Waverly Academy and Shadow at the Water's Edge,
+//   from Steam, stopped drawing for good more often than not when their
+//   frame timer's tick landed in between, and the Space stayed black. The
+//   window is the size of the screen before and after, so nothing is lost.
 //
 // Every other window keeps Wine's behaviour.
 
 static IMP gWineAdjustFullScreenBehavior;
 static IMP gWineMinimumLevelForActive;
 static IMP gWineDoOrderOut;
+static IMP gWineWillStartLiveResize;
+static IMP gWineDidEndLiveResize;
+
+static char kSkippedResizeKey;  // a live resize of the move into or out of a Space went unreported
+
+static BOOL windowIsMovingSpaces(NSWindow *window);
 
 static void adoptedAdjustFullScreenBehavior(NSWindow *self, SEL _cmd, NSWindowCollectionBehavior behavior) {
     if (!windowFlag(self, &kAdoptedKey)) {
@@ -221,6 +239,24 @@ static void adoptedDoOrderOut(NSWindow *self, SEL _cmd) {
     ((void (*)(id, SEL))gWineDoOrderOut)(self, _cmd);
 }
 
+static void adoptedWillStartLiveResize(NSWindow *self, SEL _cmd, NSNotification *notification) {
+    if (windowFlag(self, &kCoversScreenKey) && windowIsMovingSpaces(self)) {
+        os_log(gLog, "[NativeFS] not telling the game about the live resize of the move into or out of its Space");
+        debugLog("not telling the game about the live resize of the move into or out of its Space");
+        setWindowFlag(self, &kSkippedResizeKey, YES);
+        return;
+    }
+    ((void (*)(id, SEL, NSNotification *))gWineWillStartLiveResize)(self, _cmd, notification);
+}
+
+static void adoptedDidEndLiveResize(NSWindow *self, SEL _cmd, NSNotification *notification) {
+    if (windowFlag(self, &kSkippedResizeKey)) {
+        setWindowFlag(self, &kSkippedResizeKey, NO);
+        return;
+    }
+    ((void (*)(id, SEL, NSNotification *))gWineDidEndLiveResize)(self, _cmd, notification);
+}
+
 static IMP replaceMethod(Class cls, SEL selector, IMP replacement) {
     Method method = class_getInstanceMethod(cls, selector);
     return method ? method_setImplementation(method, replacement) : NULL;
@@ -236,7 +272,8 @@ static BOOL installOverrides(void) {
     Class wineWindow = NSClassFromString(@"WineWindow");
     SEL selectors[] = { @selector(adjustFullScreenBehavior:), @selector(minimumLevelForActive:),
                         @selector(doOrderOut), @selector(closing), @selector(isFullscreen),
-                        @selector(adjustFeaturesForState) };
+                        @selector(adjustFeaturesForState), @selector(windowWillStartLiveResize:),
+                        @selector(windowDidEndLiveResize:) };
     for (size_t i = 0; wineWindow && i < sizeof(selectors) / sizeof(*selectors); i++) {
         if (!class_getInstanceMethod(wineWindow, selectors[i])) {
             helperReport("NativeFullscreen", "warning", "WineWindow has no -%s; windows covering the screen stay out of a Space",
@@ -252,6 +289,8 @@ static BOOL installOverrides(void) {
     gWineAdjustFullScreenBehavior = replaceMethod(wineWindow, @selector(adjustFullScreenBehavior:), (IMP)adoptedAdjustFullScreenBehavior);
     gWineMinimumLevelForActive = replaceMethod(wineWindow, @selector(minimumLevelForActive:), (IMP)adoptedMinimumLevelForActive);
     gWineDoOrderOut = replaceMethod(wineWindow, @selector(doOrderOut), (IMP)adoptedDoOrderOut);
+    gWineWillStartLiveResize = replaceMethod(wineWindow, @selector(windowWillStartLiveResize:), (IMP)adoptedWillStartLiveResize);
+    gWineDidEndLiveResize = replaceMethod(wineWindow, @selector(windowDidEndLiveResize:), (IMP)adoptedDidEndLiveResize);
     installed = YES;
     return YES;
 }
@@ -342,6 +381,8 @@ static void attemptFullscreen(void) {
     BOOL wineEligible = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) != 0;
     if (overridesInstalled) {
         setWindowFlag(window, &kAdoptedKey, YES);
+        // Re-entering, the window has the behaviour the overrides gave it.
+        if (!wineEligible) setWindowFlag(window, &kCoversScreenKey, YES);
         [window adjustFullScreenBehavior:window.collectionBehavior];
         adjustWineWindowLevels();
     }
@@ -427,9 +468,11 @@ static void nativeFullscreenInit(void) {
     debugLog(format, ##__VA_ARGS__); \
 } while (0)
 
-/// Windows AppKit said will enter fullscreen and hasn't yet said did, and
-/// whether one ever finished entering. Main thread only.
+/// Windows AppKit said will enter fullscreen and hasn't yet said did, the
+/// same for leaving it, and whether one ever finished entering. Main thread
+/// only.
 static NSHashTable<NSWindow *> *gEnteringWindows;
+static NSHashTable<NSWindow *> *gExitingWindows;
 static BOOL gAWindowEntered = NO;
 
 void watchFullscreenTransitions(void) {
@@ -437,6 +480,7 @@ void watchFullscreenTransitions(void) {
     dispatch_once(&once, ^{
         CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
             gEnteringWindows = [NSHashTable weakObjectsHashTable];
+            gExitingWindows = [NSHashTable weakObjectsHashTable];
             NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
             [center addObserverForName:NSWindowWillEnterFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
@@ -449,13 +493,22 @@ void watchFullscreenTransitions(void) {
                 gAWindowEntered = YES;
                 transitionLog("window %ld did enter fullscreen", (long)[notification.object windowNumber]);
             }];
+            [center addObserverForName:NSWindowWillExitFullScreenNotification object:nil queue:nil
+                            usingBlock:^(NSNotification *notification) {
+                [gExitingWindows addObject:notification.object];
+            }];
             [center addObserverForName:NSWindowDidExitFullScreenNotification object:nil queue:nil
                             usingBlock:^(NSNotification *notification) {
                 [gEnteringWindows removeObject:notification.object];
+                [gExitingWindows removeObject:notification.object];
             }];
         });
         CFRunLoopWakeUp(CFRunLoopGetMain());
     });
+}
+
+static BOOL windowIsMovingSpaces(NSWindow *window) {
+    return [gEnteringWindows containsObject:window] || [gExitingWindows containsObject:window];
 }
 
 int windowIsEnteringFullscreen(NSWindow *window) {
