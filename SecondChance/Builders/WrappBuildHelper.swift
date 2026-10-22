@@ -284,6 +284,12 @@ class WrappBuildHelper {
         plist["CFBundleDisplayName"] = "Nancy Drew - \(gameInfo.title)"
         plist["GameExePath"] = gameExePath
         plist["Program Name and Path"] = gameExePath
+        // Where a failed launch looks for a newer Second Chance (NewerRelease).
+        if let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String {
+            plist[NewerRelease.feedURLKey] = feed
+        } else {
+            logger.warning("Second Chance has no SUFeedURL; the wrapp won't check for a newer version when it fails")
+        }
 
         // Save updated plist
         let updatedData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)

@@ -3,6 +3,8 @@
 Second Chance checks for new releases and offers to install them through
 [Sparkle](https://sparkle-project.org). Wrapps don't update: each is a finished
 game, and a newer Second Chance only changes the wrapps it builds from then on.
+A wrapp that fails to launch does say when a newer one is out, though
+([below](#a-wrapp-that-fails)).
 
 ## In the app
 
@@ -49,6 +51,26 @@ all an installed copy needs. Sparkle's tools come with the package, in
 Before it signs, `sc release` checks that the keychain's key is the one in the
 built app's Info.plist. If it isn't, the release stops. A release signed with
 another key would publish fine, and then every installed copy would refuse it.
+
+## A wrapp that fails
+
+A fix for a game that won't start may already be in a newer Second Chance,
+and the only way a wrapp gets it is by being built again. So when a launch
+fails — the error screen, the possible-failure note, or a launch the player
+gave up on — the wrapp reads the same appcast once (`NewerRelease`,
+`Shared/NewerRelease.swift`). If its newest item's `sparkle:version` is
+greater than the wrapp's own `CFBundleVersion`, the window says which
+version set the game up, which is out, and to update Second Chance and set
+the game up again. A launch that works makes no request.
+
+The wrapp's own version is the Second Chance that built it, since
+`sc release` versions WrappTemplate along with the app. The feed's address
+is copied from Second Chance's `SUFeedURL` into the wrapp's Info.plist as
+`SecondChanceFeedURL` when it is built; a wrapp built before then has no
+address and doesn't check. As with the updater, the check is off in a Debug
+build, whose version is the last release's whatever it contains, and
+`SECOND_CHANCE_UPDATES=1` or `0` overrides that. A failed or slow request
+(15 s) shows nothing and logs a warning.
 
 ## The signing key
 

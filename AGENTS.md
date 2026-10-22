@@ -76,7 +76,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
-| [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — or how it moves itself into Applications when macOS runs it translocated (`AppMover`) |
+| [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
@@ -288,8 +288,9 @@ direct assignment.
   `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet), and
   `SECOND_CHANCE_MODE_SCALING=0` leaves a Direct3D game's picture unscaled
   when Wine emulates the display mode it switched to.
-  For Second Chance itself, `SECOND_CHANCE_UPDATES=1` turns on the update
-  checks a Debug build leaves off ([docs/updates.md](docs/updates.md)), and
+  `SECOND_CHANCE_UPDATES=1` turns on the update checks a Debug build leaves
+  off — Second Chance's own, and a wrapp's look for a newer Second Chance
+  when its launch fails ([docs/updates.md](docs/updates.md)) — and
   for both, `SECOND_CHANCE_REPORTING=1` the failure reports it leaves off
   ([docs/failure-reports.md](docs/failure-reports.md)).
 - **cnc-ddraw swallows the first click unless the wrapp locks the cursor.**

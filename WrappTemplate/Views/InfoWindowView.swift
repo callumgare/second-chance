@@ -59,6 +59,13 @@ class InfoWindowViewModel: ObservableObject {
     /// sending.
     var reportStuckLaunch: (() -> (FailureReport, Task<ReportOutcome, Never>))?
 
+    /// A newer Second Chance than the one that built this wrapp, once a
+    /// failure has looked for one and found it.
+    @Published var newerRelease: ReleaseVersion?
+    /// The Second Chance that built this wrapp.
+    let builtWith = NewerRelease.runningVersion()
+    private var newerReleaseCheck: Task<Void, Never>?
+
     init(stage: LoadingStage, saveWarningEnabled: Bool, gameSlug: String = "nancy-drew") {
         self.stage = stage
         self.saveWarningEnabled = saveWarningEnabled
@@ -122,12 +129,27 @@ class InfoWindowViewModel: ObservableObject {
             let quiet = Int(Date().timeIntervalSince(clock.lastProgress))
             let load = clock.heavyLoad ? " (the Mac is heavily loaded)" : ""
             infoWindowLogger.warning("[Loading] Possible launch failure: \(ran)s into \(stage.logName), no sign of progress for \(quiet)s\(load)")
+            if stage != .lastSessionClosing {
+                checkForNewerRelease()
+            }
         }
     }
 
     func showError(exitCode: Int32, explanation: String? = nil) {
         stopTimer()
         phase = .error(exitCode: exitCode, explanation: explanation)
+        checkForNewerRelease()
+    }
+
+    /// Look for a newer Second Chance, once: a launch that fails may be fixed
+    /// in it. Only on a failure, so a launch that works asks nothing of the
+    /// network.
+    func checkForNewerRelease() {
+        guard newerReleaseCheck == nil else { return }
+        newerReleaseCheck = Task { @MainActor [weak self] in
+            let newer = await NewerRelease.check()
+            self?.newerRelease = newer
+        }
     }
 
     /// Quitting while the possible-failure note is up: report the launch as
@@ -140,6 +162,7 @@ class InfoWindowViewModel: ObservableObject {
         let (report, sending) = reportStuckLaunch()
         failureReport.track(report, sending: sending)
         phase = .gaveUp
+        checkForNewerRelease()
         quitWhenReported = failureReport.$outcome
             .receive(on: DispatchQueue.main)
             .sink { outcome in
@@ -354,6 +377,8 @@ struct InfoWindowView: View {
 
             informative(viewModel.stage.possibleFailureText)
 
+            newerReleaseNote
+
             launchWithoutSteamNote
 
             buttonBar {
@@ -469,12 +494,30 @@ struct InfoWindowView: View {
         return "\(who) The game may take several minutes to start, and may not start at all. Quitting some of them will help."
     }
 
+    /// When a newer Second Chance is out, the suggestion that it may fix
+    /// this: a wrapp never updates itself, so the game has to be set up again.
+    @ViewBuilder
+    private var newerReleaseNote: some View {
+        if let newer = viewModel.newerRelease {
+            informative(Self.newerReleaseMessage(newer, builtWith: viewModel.builtWith))
+                .accessibilityIdentifier("newer-release")
+        }
+    }
+
+    static func newerReleaseMessage(_ newer: ReleaseVersion, builtWith: ReleaseVersion?) -> String {
+        let versions = builtWith.map { "This game was set up with version \($0.shortVersion), and version \(newer.shortVersion) is now out." }
+            ?? "Version \(newer.shortVersion) is now out."
+        return "A newer Second Chance may fix this. \(versions) "
+            + "Update Second Chance, then use it to set up this game again."
+    }
+
     // MARK: - Gave up
 
     private var gaveUpContent: some View {
         Group {
             message("\(viewModel.stage.subject) didn't start")
             informative("It was still trying to start when you quit.")
+            newerReleaseNote
             FailureReportCallout(model: viewModel.failureReport)
         }
     }
@@ -486,6 +529,8 @@ struct InfoWindowView: View {
             message(explanation == nil ? "The game crashed" : "The game quit unexpectedly")
 
             informative(explanation ?? "It stopped suddenly while it was running (error code \(exitCode)).")
+
+            newerReleaseNote
 
             FailureReportCallout(model: viewModel.failureReport)
 
@@ -565,6 +610,16 @@ struct InfoWindowView: View {
     InfoWindowView(viewModel: {
         let vm = InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: false)
         vm.phase = .error(exitCode: 1, explanation: nil)
+        return vm
+    }())
+    .frame(width: InfoWindowView.width)
+}
+
+#Preview("Error, with a newer Second Chance out") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: false)
+        vm.phase = .error(exitCode: 1, explanation: nil)
+        vm.newerRelease = ReleaseVersion(shortVersion: "0.9.0", build: 400)
         return vm
     }())
     .frame(width: InfoWindowView.width)

@@ -61,6 +61,9 @@ save warning, when the warning is confirmed:
   question about the other computer, or any other question in Steam's
   window — have no clock, and drop the window from the floating level, so it
   doesn't cover Steam's window in the middle of the screen.
+- **A newer Second Chance** is looked for once the launch has failed, or
+  may have, and if one is out the window suggests updating and setting the
+  game up again ([updates.md](updates.md#a-wrapp-that-fails)).
 
 ### Signs of progress
 
