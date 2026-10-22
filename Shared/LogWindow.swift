@@ -24,6 +24,9 @@ import SwiftUI
 import Combine
 
 public class LogWindow: ObservableObject {
+    /// Marks the log window, which failure reports' screenshots leave out:
+    /// its lines name the person's folders, and a picture can't be redacted.
+    nonisolated static let windowIdentifier = NSUserInterfaceItemIdentifier("au.gare.callum.second-chance.LogWindow")
     public static let shared = LogWindow()
 
     @Published public var isVisible = false
@@ -259,6 +262,7 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.title = title
+        window.identifier = LogWindow.windowIdentifier
         window.level = .floating
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 400, height: 200)

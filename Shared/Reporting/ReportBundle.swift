@@ -2,11 +2,13 @@
 //  ReportBundle.swift
 //  Shared
 //
-//  The zip a detailed failure report carries: this run's log and, for a
-//  wrapp's failed start, its diagnostics bundle — every file redacted, and
-//  the whole kept under `sizeCap`, Sentry's per-request limit being 40 MB
-//  compressed. Over the cap, the thread samples go first (the biggest and
-//  least often needed), then the log loses its oldest lines.
+//  The zip a detailed failure report carries: the run's log; for a wrapp's
+//  failed start, its diagnostics bundle; for a crash, macOS's crash report;
+//  and screenshots of the process's windows. Every text file is redacted,
+//  and the whole kept under `sizeCap`, Sentry's per-request limit being
+//  40 MB compressed. Over the cap, the thread samples go first (the biggest
+//  and least often needed), then the screenshots, then the log loses its
+//  oldest lines.
 
 import Foundation
 import Logging
@@ -26,8 +28,10 @@ nonisolated enum ReportBundle {
     /// - Parameters:
     ///   - log: The run's log, unredacted.
     ///   - diagnostics: A diagnostics bundle to include, if there is one.
-    static func make(log: String, diagnostics: URL?, redactor: ReportRedactor,
-                     in directory: URL, sizeCap: Int = defaultSizeCap) throws -> URL {
+    ///   - crashReport: macOS's `.ips` for a crash, unredacted.
+    ///   - screenshots: PNGs of the windows, which go in as they are.
+    static func make(log: String, diagnostics: URL?, crashReport: URL? = nil, screenshots: [URL] = [],
+                     redactor: ReportRedactor, in directory: URL, sizeCap: Int = defaultSizeCap) throws -> URL {
         let staging = directory.appendingPathComponent("failure-report", isDirectory: true)
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
         let logFile = staging.appendingPathComponent("log.txt")
@@ -51,12 +55,36 @@ nonisolated enum ReportBundle {
             }
         }
 
+        if let crashReport {
+            do {
+                try redactor.redactFile(at: crashReport, to: staging.appendingPathComponent(crashReport.lastPathComponent))
+            } catch {
+                logger.warning("Left the crash report out of the failure report: \(error.localizedDescription)")
+            }
+        }
+
+        let pictures = staging.appendingPathComponent("screenshots", isDirectory: true)
+        if !screenshots.isEmpty {
+            try FileManager.default.createDirectory(at: pictures, withIntermediateDirectories: true)
+            for screenshot in screenshots {
+                do {
+                    try FileManager.default.copyItem(at: screenshot, to: pictures.appendingPathComponent(screenshot.lastPathComponent))
+                } catch {
+                    logger.warning("Left \(screenshot.lastPathComponent) out of the failure report: \(error.localizedDescription)")
+                }
+            }
+        }
+
         let zip = directory.appendingPathComponent("failure-report.zip")
         try compress(staging, to: zip)
         if size(of: zip) > sizeCap {
             for sample in samples(in: staging) {
                 try? FileManager.default.removeItem(at: sample)
             }
+            try compress(staging, to: zip)
+        }
+        if size(of: zip) > sizeCap, FileManager.default.fileExists(atPath: pictures.path) {
+            try? FileManager.default.removeItem(at: pictures)
             try compress(staging, to: zip)
         }
         // Then the log's oldest half, until it fits or there's little left.

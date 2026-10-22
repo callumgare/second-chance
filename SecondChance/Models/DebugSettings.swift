@@ -13,14 +13,6 @@ class DebugSettings: ObservableObject {
     
     @Published var skipInstaller: Bool
     @Published var debugMode: Bool
-    /// Mirror every log entry to a file in Downloads (opt-in). Backfills the
-    /// whole current ring when enabled, then appends live.
-    @Published var mirrorLogsToDisk: Bool = false {
-        didSet {
-            LogStore.shared.setDiskMirror(enabled: mirrorLogsToDisk)
-        }
-    }
-    
     private init() {
         // Check for command line flags
         let arguments = ProcessInfo.processInfo.arguments
@@ -32,6 +24,5 @@ class DebugSettings: ObservableObject {
     func resetToDefaults() {
         skipInstaller = false
         debugMode = false
-        mirrorLogsToDisk = false
     }
 }

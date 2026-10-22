@@ -142,11 +142,44 @@ nonisolated enum FailureReporter {
             scope.setTag(value: process.rawValue, key: "process")
             if let game { scope.setTag(value: game, key: "game") }
             if let engine { scope.setTag(value: engine, key: "engine") }
+            // What a crash nobody can explain yet might turn out to follow:
+            // running from a translocated copy, or a Mac short of memory.
+            scope.setTag(value: AppTranslocation.isTranslocated() ? "yes" : "no", key: "translocated")
+            scope.setTag(value: "\(ProcessInfo.processInfo.physicalMemory >> 30) GB", key: "memory")
+            scope.setTag(value: "normal", key: "memory_pressure")
         }
+        watchMemoryPressure()
         state.withLock { $0.started = true }
         logger.notice("Failure reports are on (\(ReportingPreferences.load().level.rawValue))")
         #endif
     }
+
+    #if FAILURE_REPORTING
+    /// The source, kept for the life of the process, and whether it has
+    /// seen the critical level yet.
+    private static let memoryPressure = OSAllocatedUnfairLock<(source: DispatchSourceMemoryPressure?, critical: Bool)>(
+        uncheckedState: (nil, false)
+    )
+
+    /// Keep the `memory_pressure` tag at the worst the Mac has been under
+    /// in this run, so a crash's report (the SDK stores the scope with it)
+    /// says whether memory ran short before it.
+    private static func watchMemoryPressure() {
+        let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .global(qos: .utility))
+        source.setEventHandler {
+            let critical = source.data.contains(.critical)
+            let level = critical ? "critical" : "warning"
+            logger.warning("The Mac is short of memory (pressure: \(level))")
+            let worse = memoryPressure.withLockUnchecked { state -> Bool in
+                defer { state.critical = state.critical || critical }
+                return !state.critical
+            }
+            if worse { SentrySDK.configureScope { $0.setTag(value: level, key: "memory_pressure") } }
+        }
+        source.resume()
+        memoryPressure.withLockUnchecked { $0.source = source }
+    }
+    #endif
 
     /// Where this process keeps a log per run (`RotatingLogFile`), so a
     /// detailed report of a crash can carry the log of the run that crashed.
@@ -246,8 +279,9 @@ nonisolated enum FailureReporter {
             let diagnostics = await report.diagnostics?()
             do {
                 try FileManager.default.createDirectory(at: workDirectory, withIntermediateDirectories: true)
+                let screenshots = await WindowScreenshots.capture(into: workDirectory)
                 let zip = try ReportBundle.make(log: LogExporter.render(), diagnostics: diagnostics,
-                                                redactor: redactor, in: workDirectory)
+                                                screenshots: screenshots, redactor: redactor, in: workDirectory)
                 attachment = Attachment(path: zip.path, filename: "failure-report.zip", contentType: "application/zip")
             } catch {
                 logger.error("Couldn't attach the logs to the failure report: \(ErrorChain.describe(error))")
@@ -404,8 +438,9 @@ nonisolated enum FailureReporter {
         // What CrashMarker logs when it, not Sentry, caught the crash.
         let exception = event.exceptions?.first.map { "\($0.type): \($0.value ?? "")" } ?? "a crash"
         var line = "The previous run crashed (\(exception))"
-        if let report = CrashMarker.crashReport(after: event.timestamp?.addingTimeInterval(-60)) {
-            line += "\n  Crash report: \(report.path)"
+        let crashReport = CrashMarker.crashReport(after: event.timestamp?.addingTimeInterval(-60))
+        if let crashReport {
+            line += "\n  Crash report: \(crashReport.path)"
         }
         logger.error("\(line)")
         let preferences = ReportingPreferences.load()
@@ -427,23 +462,28 @@ nonisolated enum FailureReporter {
             return
         }
         let log = detail == .detailed ? previousRunLog(crashedAt: event.timestamp) : nil
+        let ips = detail == .detailed ? crashReport : nil
         sending.enter()
         DispatchQueue.global(qos: .utility).async {
             defer { sending.leave() }
-            resend(event, detail: detail, log: log)
+            resend(event, detail: detail, log: log, crashReport: ips)
         }
     }
 
-    private static func resend(_ event: Event, detail: ReportDetail, log: URL?) {
+    /// `log` and `crashReport` (macOS's, which has the stack of every thread
+    /// when the SDK's own capture of the crash comes out short) go only in a
+    /// detailed report.
+    private static func resend(_ event: Event, detail: ReportDetail, log: URL?, crashReport: URL?) {
         var attachment: Attachment?
         let workDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("second-chance-crash-\(event.eventId.sentryIdString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: workDirectory) }
-        if let log {
+        if log != nil || crashReport != nil {
             do {
                 try FileManager.default.createDirectory(at: workDirectory, withIntermediateDirectories: true)
-                let zip = try ReportBundle.make(log: String(decoding: Data(contentsOf: log), as: UTF8.self),
-                                                diagnostics: nil, redactor: .current, in: workDirectory)
+                let text = try log.map { String(decoding: try Data(contentsOf: $0), as: UTF8.self) }
+                let zip = try ReportBundle.make(log: text ?? "[no log was kept for the run that crashed]\n",
+                                                diagnostics: nil, crashReport: crashReport, redactor: .current, in: workDirectory)
                 attachment = Attachment(path: zip.path, filename: "failure-report.zip", contentType: "application/zip")
             } catch {
                 logger.error("Couldn't attach the crashed run's log: \(ErrorChain.describe(error))")

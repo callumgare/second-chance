@@ -300,6 +300,45 @@ struct ReportBundleTests {
         #expect(kept.hasPrefix("[earlier lines left out to fit the report]"))
         #expect(kept.hasSuffix("THE LAST LINE\n"))
     }
+
+    @Test("A crash report goes in redacted, and screenshots as they are")
+    func crashReportAndScreenshots() throws {
+        let work = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let ips = work.appendingPathComponent("Second Chance-2026-10-22-010500.ips")
+        try Data(#"{"procPath":"/Users/nancy/Downloads/Second Chance.app"}"#.utf8).write(to: ips)
+        let picture = work.appendingPathComponent("window-1.png")
+        let pixels = Data([0x89, 0x50, 0x4E, 0x47, 0xFF, 0x00])
+        try pixels.write(to: picture)
+
+        let out = work.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        _ = try ReportBundle.make(log: "log\n", diagnostics: nil, crashReport: ips, screenshots: [picture],
+                                  redactor: redactor, in: out)
+
+        let staging = out.appendingPathComponent("failure-report")
+        #expect(try String(contentsOf: staging.appendingPathComponent(ips.lastPathComponent), encoding: .utf8)
+                == #"{"procPath":"~/Downloads/Second Chance.app"}"#)
+        #expect(try Data(contentsOf: staging.appendingPathComponent("screenshots/window-1.png")) == pixels)
+    }
+
+    @Test("Over the cap, the screenshots go before the log is cut")
+    func dropsScreenshotsBeforeLog() throws {
+        let work = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let picture = work.appendingPathComponent("window-1.png")
+        try Data(noise(bytes: 400_000).utf8).write(to: picture)
+
+        let out = work.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let zip = try ReportBundle.make(log: "short log\n", diagnostics: nil, screenshots: [picture],
+                                        redactor: redactor, in: out, sizeCap: 100_000)
+
+        #expect(ReportBundle.size(of: zip) <= 100_000)
+        let staging = out.appendingPathComponent("failure-report")
+        #expect(!FileManager.default.fileExists(atPath: staging.appendingPathComponent("screenshots").path))
+        #expect(try String(contentsOf: staging.appendingPathComponent("log.txt"), encoding: .utf8) == "short log\n")
+    }
 }
 
 @Suite("Failure report model")

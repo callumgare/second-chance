@@ -45,10 +45,13 @@ What each report contains:
 | --- | :---: | :---: |
 | Version and build, macOS version, CPU architecture, Mac model | ✓ | ✓ |
 | `process` (`app` / `wrapp`), game slug, source, engine (tags) | ✓ | ✓ |
+| `translocated`, `memory` and `memory_pressure` (tags, below) | ✓ | ✓ |
 | What failed, how (`kind`) and the stage: our own fixed words | ✓ | ✓ |
 | A crash's stack trace | ✓ | ✓ |
 | The `FailureSummary` block (as the event's `summary` extra) | | ✓ |
 | `failure-report.zip`: the log, and the diagnostics bundle if there is one | | ✓ |
+| In the zip, for a crash: macOS's crash report (the `.ips`) | | ✓ |
+| In the zip, for a failure: screenshots of the process's own windows | | ✓ |
 | A comment and an email address, if the person adds them | ✓ | ✓ |
 
 **A basic report never contains message text**, because messages and
@@ -58,6 +61,19 @@ associated values can hold paths. The kind of a thrown error is
 game run it is how the run ended: `quit-unexpectedly`, `never-started`,
 `killed-by-signal`, `exit-code` or `no-window`, with `exit_code`, `signal` and
 `diagnostics` tags.
+
+Every event says how detailed it is in the `report_detail` tag (`basic` or
+`detailed`), so `report_detail:detailed` in Sentry's search finds the ones
+with a zip. A crash sent at the next start also has `crash:previous-run`.
+
+Three tags are there for crashes nobody can explain yet, to see what they
+have in common. `translocated` is `yes` when macOS ran the app from a
+translocated copy (`AppTranslocation`, and [Moving to
+Applications](updates.md#moving-to-applications)). `memory` is the Mac's RAM.
+`memory_pressure` is the worst memory pressure the Mac has reported during
+the run: `normal`, `warning` or `critical`. Each is set on the scope, which
+the SDK stores with a crash, so a crash's report shows them as they were
+when it crashed.
 
 Grouping is `[process, what, kind, stage]`. The game is a tag rather than part
 of the fingerprint, so one Wine problem across many games is one Sentry issue,
@@ -82,8 +98,19 @@ Every event, ours or the SDK's, passes through `scrub` in `beforeSend`:
 - the computer's names with `<computer>`;
 - SteamID64s with `<steam-id>`.
 
-The zip's files go through the same redactor (`ReportBundle`), and a file
-that isn't UTF-8 is left out rather than sent unchecked.
+The zip's text files go through the same redactor (`ReportBundle`), and a
+text file that isn't UTF-8 is left out rather than sent unchecked.
+
+The screenshots are the one thing a redactor can't check, so
+`WindowScreenshots` decides what is in them. They are of the process's own
+windows only: ScreenCaptureKit's current-process content, which needs no
+Screen Recording permission. An open or save panel is left out, since it
+shows the person's folders and files, and so is the log window, whose lines
+name them. Nothing else Second Chance or a wrapp shows is personal. A wrapp's
+game draws in Wine's process, not the wrapp's, so a wrapp's screenshots show
+its loading and error windows, not the game. The windows are listed on the
+main thread, which a wrapp on its way out may be blocking while it waits for
+the report, so `capture` gives up after 5 s and the report goes without them.
 
 The SDK runs with everything but crash and failure capture off: no sessions,
 tracing, hang tracking, MetricKit, breadcrumbs or network capture
@@ -118,9 +145,12 @@ that outcome for `FailureReportCallout`.
   `beforeSend` holds back any event that isn't tagged `report_detail`, meaning
   the SDK made it itself. `previousRunCrashed` then sends it again, tagged, on
   the main queue, after asking if it has to.
-  A detailed crash report from a wrapp carries the log of the launch that
-  crashed (`setRunLogs`). The app keeps no per-run log, so its crash reports
-  carry none.
+  A detailed crash report carries the log of the run that crashed
+  (`setRunLogs`: a wrapp's launch logs, the app's run logs) and macOS's own
+  crash report, the `.ips` in `~/Library/Logs/DiagnosticReports`
+  (`CrashMarker.crashReport`), redacted. The `.ips` has the stack of every
+  thread, which matters when the SDK's own capture comes out short: one
+  crash came in with a single frame on the crashed thread.
 
 A new failure that someone sees should get a report too: build a
 `FailureReport` with fixed words for `what` and an identifier for `kind`.

@@ -59,15 +59,18 @@ struct SecondChanceApp: App {
         // (Stored-property initialisers that run before init()'s body — e.g.
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
-        RunContext.logHeader(logger)
+        // A log per run, for a crash report to carry the run that crashed.
+        // Not under test: every test run would push a real run's log out.
+        let appLogs = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Logs/SecondChance/app", isDirectory: true)
+        let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let runLog = isTestHost ? nil : RotatingLogFile.start(in: appLogs, prefix: "run", logger: logger)
+        RunContext.logHeader(logger, extra: [("log", runLog?.path ?? "none")])
         // FailureReporter first: when Sentry handles crashes, CrashMarker
         // installs no handler of its own (docs/failure-reports.md).
         FailureReporter.start(process: .app)
-        CrashMarker.install(
-            in: FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Logs/SecondChance/app", isDirectory: true),
-            logger: logger
-        )
+        FailureReporter.setRunLogs(in: appLogs, prefix: "run")
+        CrashMarker.install(in: appLogs, logger: logger)
         WrappBuildHelper.shared.sweepStaleTemporaryWrapps()
 
         // Clear the Wine prefix cache before anything else touches it. Works in

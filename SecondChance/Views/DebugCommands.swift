@@ -5,6 +5,7 @@
 //  The Debug menu: switches for testing and diagnosing builds. It is in
 //  every Debug build, and in a Release one launched with ⌥ held.
 
+import AppKit
 import SwiftUI
 
 struct DebugCommands: Commands {
@@ -38,8 +39,14 @@ struct DebugCommands: Commands {
                 }
             ))
             .keyboardShortcut("l", modifiers: [.command, .option])
-            Toggle("Mirror Logs to Disk", isOn: $settings.mirrorLogsToDisk)
-                .help("Write every log entry to a file in Downloads. The in-memory log Save Log reads keeps only the last 50,000 entries; the mirror keeps everything.")
+            // Every entry of this run, where the in-memory log Save Log reads
+            // keeps only the last 50,000.
+            Button("Show Run Log in Finder") {
+                if let log = LogStore.shared.diskMirrorPath {
+                    NSWorkspace.shared.activateFileViewerSelecting([log])
+                }
+            }
+            .disabled(LogStore.shared.diskMirrorPath == nil)
 
             Divider()
 
