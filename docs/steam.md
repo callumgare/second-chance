@@ -252,8 +252,11 @@ that bundle ID. `ask` shows the choice a build and a wrapp both offer:
 
 - **Try Again**, the default. The alert asks them to save their game and
   quit it themselves, then click this.
-- **Quit It for Me**, the fallback, last, for a game that won't quit; the
-  alert says that anything not saved in it will be lost. `quit` asks the
+- **Quit It Without Saving**, the fallback, last, for a game that won't
+  quit; the alert says that anything not saved in it will be lost, and on the
+  error screen the button's title is red. The alert's button is plain: on
+  macOS 26 an alert button's only warning style is `hasDestructiveAction`,
+  drawn red on red and hard to read, and it ignores a red title. `quit` asks the
   wrapp to quit as Cmd-Q would, which stops its Steam and saves the sign-in
   back. A wrapp still running 40 s later gets SIGTERM, which it treats as a
   quit, ending itself 15 s on. 20 s after that it gets SIGKILL. A wrapp that
@@ -270,7 +273,7 @@ A build that still fails with `steamInUse(SteamLockHolder)`, because the game
 didn't quit, ends on the error screen. That screen keeps the same order: the
 message asks them to save and quit the game themselves, **Try Again** is the
 default button (`retrySteamBuild`), and below the message the same fallback
-offers **Quit It for Me** with its warning (`SteamHolderFallback`,
+offers **Quit It Without Saving** with its warning (`SteamHolderFallback`,
 `quitSteamHolderAndRetry`), which tries again once the game has gone.
 
 Game names in these alerts and screens are in curly quotes

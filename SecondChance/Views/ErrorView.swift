@@ -74,8 +74,12 @@ private struct SteamHolderFallback: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                Button("Quit It for Me") {
+                // Red text marks it as losing work; `role: .destructive`
+                // alone draws no colour on a macOS push button.
+                Button(role: .destructive) {
                     viewModel.quitSteamHolderAndRetry()
+                } label: {
+                    Text("Quit It Without Saving").foregroundStyle(.red)
                 }
                 .disabled(viewModel.isQuittingSteamHolder)
                 if viewModel.isQuittingSteamHolder {

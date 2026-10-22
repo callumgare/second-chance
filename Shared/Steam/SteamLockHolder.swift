@@ -147,7 +147,11 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
             """
             alert.addButton(withTitle: "Try Again")
             alert.addButton(withTitle: "Cancel")
-            alert.addButton(withTitle: "Quit It for Me")
+            // Plain: on macOS 26 an alert button's only warning style is
+            // `hasDestructiveAction`, drawn red on red, and it ignores a
+            // red title (`contentTintColor`, `attributedTitle`). The text
+            // above says what quitting it costs.
+            alert.addButton(withTitle: "Quit It Without Saving")
             return (alert, [.tryAgain, .cancel, .quitHolder])
         }
         alert.informativeText += " Quit it, then click Try Again."
