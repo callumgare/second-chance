@@ -258,6 +258,16 @@ so the stderr mirror still fires) and pass back the output and exit code;
 copies it wholesale — both engines included — and `cleanupUnusedEngine` later
 strips whichever one this game doesn't need.
 
+Before that, `verifyTemplateSignatures` runs `codesign --verify` on the
+template (under a second). The template's files that aren't Mach-O, such as the
+Windows DLLs under `Frameworks/renderer/`, keep their code signatures in
+extended attributes, so a copy of Second Chance made with something that drops
+them (rsync without `-E`/`-X`, scp, a zip not made with `ditto`) leaves them
+unsigned, and the build would otherwise only fail at signing, minutes later,
+with "code object is not signed at all". That failure stops the build at once
+as `WrappError.templateSignaturesLost`; anything else `--verify` reports is only
+logged, since the finished wrapp is signed whole anyway.
+
 `configureWrapp` rewrites the copy's bundle identifier from
 `au.gare.callum.SecondChance.WrappTemplate` to
 `au.gare.callum.SecondChance.nancy-drew.<slug>`.

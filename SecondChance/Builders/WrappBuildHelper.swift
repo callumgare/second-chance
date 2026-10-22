@@ -71,6 +71,13 @@ class WrappBuildHelper {
 
     /// Create a base wrapp with both Wine and ScummVM support.
     func createBaseWrapp(at path: URL) async throws {
+        // Find the pre-built unified template
+        guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
+            throw WrappError.templateNotFound("WrappTemplate.app not found in Second Chance.app bundle")
+        }
+        // Before the cache too: a cached base wrapp came from this template.
+        try verifyTemplateSignatures(templatePath)
+
         // Check cache first
         if let _ = try cacheManager.restoreCache(stage: .base, to: path) {
             return
@@ -78,11 +85,6 @@ class WrappBuildHelper {
 
         logger.notice("Creating unified wrapp with both Wine and ScummVM support...")
         await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: nil)))
-
-        // Find the pre-built unified template
-        guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
-            throw WrappError.templateNotFound("WrappTemplate.app not found in Second Chance.app bundle")
-        }
 
         // Copy the entire template (includes both Wine and ScummVM)
         do {
@@ -103,6 +105,40 @@ class WrappBuildHelper {
 
         // Save to cache
         try cacheManager.saveCache(wrappPath: path, stage: .base)
+    }
+
+    /// Fail now, rather than at signing minutes later, if the template's
+    /// files have lost their code signatures. A file that isn't Mach-O (the
+    /// Windows DLLs under `Frameworks/renderer/`, say) keeps its signature in
+    /// extended attributes, so a copy of Second Chance made with something
+    /// that drops them (rsync without -E or -X, scp, a zip not made with
+    /// ditto) leaves those files unsigned, and `signWrapp` then fails with
+    /// "code object is not signed at all". `codesign --verify` on the
+    /// template says the same in under a second. Only that failure stops the
+    /// build: anything else it reports is logged, since a wrapp is re-signed
+    /// whole at the end anyway.
+    func verifyTemplateSignatures(_ templatePath: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.arguments = ["--verify", templatePath.path]
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        process.standardOutput = FileHandle.nullDevice
+        do {
+            try process.run()
+        } catch {
+            logger.warning("Couldn't run codesign to check the wrapp template: \(error.localizedDescription)")
+            return
+        }
+        let output = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        guard process.terminationStatus != 0 else { return }
+        let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        if detail.contains("code object is not signed at all") {
+            logger.critical("❌ The wrapp template has files without their code signatures: \(detail)")
+            throw WrappError.templateSignaturesLost(detail)
+        }
+        logger.warning("codesign --verify reports a problem with the wrapp template, carrying on: \(detail)")
     }
 
     /// Remove the engine this game doesn't use from the wrapp.
@@ -762,6 +798,9 @@ enum WrappError: LocalizedError {
     case templateNotFound(String)
     case copyFailed(message: String, command: String?, output: String?)
     case signingFailed(String)
+    /// Files in the template have lost the code signatures they keep in
+    /// extended attributes (`verifyTemplateSignatures`).
+    case templateSignaturesLost(String)
 
     var errorDescription: String? {
         switch self {
@@ -777,6 +816,8 @@ enum WrappError: LocalizedError {
             return message
         case .signingFailed(let message):
             return "Code signing failed: \(message)"
+        case .templateSignaturesLost:
+            return "Second Chance's copy of the game template is damaged: some of its files have lost their code signatures, so no game could be signed. This happens when Second Chance is copied with a tool that leaves out extended attributes. Download Second Chance again, or copy it with Finder."
         }
     }
 
