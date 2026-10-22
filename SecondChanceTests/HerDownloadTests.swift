@@ -187,6 +187,31 @@ struct HerDownloadTests {
         #expect(try await input.getHerInstallerPath() == download)
     }
 
+    @Test("HER_INSTALLER_PATH takes the installer app inside an opened Mac download")
+    @MainActor
+    func acceptsInstallerApp() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        try makeBase()
+        let app = base.appendingPathComponent("Nancy Drew Installer.app")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        let input = WrappBuildInput(environment: ["HER_INSTALLER_PATH": app.path], viewModel: nil)
+        // A folder's file URL ends in a slash: compare paths.
+        #expect(try await input.getHerInstallerPath().path == app.path)
+    }
+
+    @Test("HER_INSTALLER_PATH refuses a file named like an app")
+    @MainActor
+    func refusesFileNamedApp() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        try makeBase()
+        let notApp = base.appendingPathComponent("game.app")
+        try Data().write(to: notApp)
+        let input = WrappBuildInput(environment: ["HER_INSTALLER_PATH": notApp.path], viewModel: nil)
+        await #expect(throws: WrappBuildError.self) {
+            try await input.getHerInstallerPath()
+        }
+    }
+
     @Test("HER_INSTALLER_PATH refuses anything else")
     @MainActor
     func refusesOtherFiles() async throws {

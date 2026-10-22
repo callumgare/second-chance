@@ -48,8 +48,15 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
         let download = try await input.getHerInstallerPath()
         logger.notice("Her Interactive download: \(download.path)")
-        if download.pathExtension.lowercased() == "dmg" {
+        switch download.pathExtension.lowercased() {
+        case "dmg":
             return try await build(fromMacDownload: download, input: input)
+        case "app":
+            // The installer app inside an opened Mac download: its volume is
+            // the download, mounted already.
+            return try await build(fromMacDownload: download.deletingLastPathComponent(), input: input)
+        default:
+            break
         }
         return try await build(fromWindowsInstaller: download, input: input)
     }
@@ -127,14 +134,21 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
     // MARK: - Mac download
 
+    /// `image` is the download's `.dmg`, or the volume it's already mounted
+    /// at.
     private func build(fromMacDownload image: URL, input: WrappBuildInput) async throws -> URL {
         // ── Mount, recognise and detect ONCE ───────────────────────────
         let package: CiderPackage
         let gameInfo: GameInfo
         do {
-            // Second Chance isn't sandboxed, so the volume needs no grant.
-            let volume = try await isoMounter.mount(image)
-            await bus.publishWrappBuild(.isoMounted(volume))
+            let volume: URL
+            if image.pathExtension.lowercased() == "dmg" {
+                // Second Chance isn't sandboxed, so the volume needs no grant.
+                volume = try await isoMounter.mount(image)
+                await bus.publishWrappBuild(.isoMounted(volume))
+            } else {
+                volume = image
+            }
 
             await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
             do {

@@ -88,6 +88,12 @@ with TransGaming's Cider, a commercial Wine fork. The download is a DMG:
 - **The app's `Info.plist`** names the game's folder (`CedegaGameDir`) and exe
   (`CedegaGameName`) as Windows paths.
 
+The person can pick the `.dmg`, or open it and pick `<Game> Installer.app`
+inside it: that app sits at the volume's root, so its folder is the mounted
+download, and the build reads it from there without mounting anything.
+`HER_INSTALLER_PATH` takes either too. An installer app copied out of its
+volume has no `installer/` beside it, and fails as not being Cider.
+
 Cider's 32-bit runtime no longer starts on macOS, but the game inside is the
 Windows release. So `CiderPackage` extracts only the app's `Info.plist`, its
 `c_drive/Program Files` tree and the DLLs in its `system32` (below), in one pass of `/usr/bin/tar` into a staging
