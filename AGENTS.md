@@ -342,7 +342,9 @@ direct assignment.
   ended or the player quit — and kills Wine only if it won't end
   (`WineUtilities.waitTillWineserverStopped`); even its 15 s quit fallback
   kills Wine before exiting. A launch that still finds Wine running in the
-  prefix waits up to 20 s for it to finish before asking, and opening a
+  prefix waits for it in the loading window (`LoadingStage.lastSessionClosing`),
+  which after 3 s also offers to stop it, and drops that offer and carries on
+  if Wine finishes first; opening a
   wrapp while it is closing down (hidden from the Dock, so macOS reactivates
   it) starts it again once Wine has finished. `SECOND_CHANCE_PRESTART_DESKTOP=0`
   restores Wine's on-demand start, for comparison. Anything that runs `wine`

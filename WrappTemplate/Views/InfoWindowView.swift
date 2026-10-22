@@ -39,6 +39,13 @@ class InfoWindowViewModel: ObservableObject {
     /// `GameConfig.canLaunchWithoutSteam`): offered when the launch fails, or
     /// may have.
     var onLaunchWithoutSteam: (() -> Void)?
+    /// What to do about the last session's Wine, still running: offered once
+    /// `.lastSessionClosing` has taken longer than usual.
+    var onLastSessionChoice: ((LastSessionChoice) -> Void)?
+
+    enum LastSessionChoice {
+        case stopItAndContinue, continueAnyway, dontStart
+    }
 
     private(set) var gameHasLoaded = false
     private var slowLoadingTimer: Timer?
@@ -273,7 +280,11 @@ struct InfoWindowView: View {
 
             // On a heavily loaded Mac a long wait is expected, not a sign the
             // launch failed: say why instead.
-            if let load = viewModel.heavyLoad {
+            if viewModel.stage == .lastSessionClosing {
+                if viewModel.showSuspectedHang {
+                    lastSessionNote
+                }
+            } else if let load = viewModel.heavyLoad {
                 heavyLoadNote(load)
                 // Past the possible-failure point, a game that can run
                 // without Steam still gets the offer: the busy Mac may be
@@ -316,6 +327,30 @@ struct InfoWindowView: View {
             }
         }
         .accessibilityIdentifier("possible-launch-failure")
+    }
+
+    /// The last session's Wine is taking longer than usual to close: what the
+    /// launch's alert used to ask. It goes away by itself if Wine closes
+    /// before anyone answers.
+    private var lastSessionNote: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            caution("The game is still closing")
+
+            informative("Part of the game from last time is still running in the background, which can stop it starting properly. "
+                + "You can stop it and carry on, or keep waiting.")
+
+            HStack {
+                Spacer()
+                Button("Don't Start the Game") { viewModel.onLastSessionChoice?(.dontStart) }
+                    .keyboardShortcut(.cancelAction)
+                Button("Continue Anyway") { viewModel.onLastSessionChoice?(.continueAnyway) }
+                Button("Stop It and Continue") { viewModel.onLastSessionChoice?(.stopItAndContinue) }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .fixedSize()
+            .padding(.top, 6)
+        }
+        .accessibilityIdentifier("last-session-closing")
     }
 
     /// The log buttons at the leading edge and `actions` at the trailing
@@ -463,6 +498,15 @@ struct InfoWindowView: View {
             otherCores: 7.4, fastCores: 8,
             topPrograms: [.init(name: "Google Chrome", cores: 4), .init(name: "node", cores: 2)]
         )
+        return vm
+    }())
+    .frame(width: InfoWindowView.width)
+}
+
+#Preview("Last session still closing") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(stage: .lastSessionClosing, saveWarningEnabled: false)
+        vm.showSuspectedHang = true
         return vm
     }())
     .frame(width: InfoWindowView.width)

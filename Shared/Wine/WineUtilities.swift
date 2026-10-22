@@ -70,6 +70,18 @@ class WineUtilities {
         return false
     }
 
+    /// Call `onEnd` once the prefix's Wine session has ended (`wineserver
+    /// -w` returning). Returns the waiter, to `terminate()` when the wait is
+    /// no longer wanted, or nil when it couldn't be started.
+    static func onSessionEnd(_ wine: WineEnvironment, _ onEnd: @escaping @Sendable () -> Void) -> Process? {
+        guard hasWine(wine), let waiter = runWineserver(wine, ["-w"]) else { return nil }
+        waiter.terminationHandler = { process in
+            // Terminated by us: no longer wanted.
+            if process.terminationReason == .exit { onEnd() }
+        }
+        return waiter
+    }
+
     /// SIGKILL every Wine process in the prefix (`wineserver -k9`), for a
     /// wrapp that has to exit now and mustn't leave Wine behind.
     static func killSession(_ wine: WineEnvironment) {

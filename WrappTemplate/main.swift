@@ -456,6 +456,60 @@ private func installTerminationHandlers() {
     }
 }
 
+// MARK: - The last session
+
+/// Wine still running in the prefix is usually the game's last session, its
+/// wrapp still waiting for it to close down, which takes seconds. Wait for it
+/// in the loading window (`.lastSessionClosing`), which after a few seconds
+/// also offers to stop it; if it closes before anyone answers, the offer goes
+/// and the launch carries on to `nextStage`. Runs off the main thread, before
+/// the game starts; "Don't Start the Game" exits the wrapp, leaving it be.
+private func waitForLastSession(_ wine: WineEnvironment, infoWindow: InfoWindowController, then nextStage: LoadingStage) {
+    guard wine.isWineserverRunning() else { return }
+    mainLogger.notice("Wine is still running in this game's prefix, probably from the last time it was played: waiting for it to finish")
+    let started = Date()
+    infoWindow.setStage(.lastSessionClosing)
+
+    enum Outcome { case ended, choice(InfoWindowViewModel.LastSessionChoice) }
+    let decided = DispatchSemaphore(value: 0)
+    let outcome = OSAllocatedUnfairLock<Outcome?>(initialState: nil)
+    let decide: @Sendable (Outcome) -> Void = { value in
+        let first = outcome.withLock { current -> Bool in
+            guard current == nil else { return false }
+            current = value
+            return true
+        }
+        if first { decided.signal() }
+    }
+    let waiter = WineUtilities.onSessionEnd(wine) { decide(.ended) }
+    DispatchQueue.main.async {
+        infoWindow.onLastSessionChoice = { choice in decide(.choice(choice)) }
+    }
+    if waiter == nil, !wine.isWineserverRunning() { decide(.ended) }
+    decided.wait()
+    waiter?.terminate()
+    DispatchQueue.main.async { infoWindow.onLastSessionChoice = nil }
+
+    let waited = SubprocessWatch.duration(Date().timeIntervalSince(started))
+    switch outcome.withLock({ $0 }) {
+    case .ended, nil:
+        mainLogger.notice("The last session's Wine finished after \(waited)")
+    case .choice(.stopItAndContinue):
+        mainLogger.notice("Player chose to stop the last session's Wine after \(waited)")
+        wine.stopWineserver()
+        if !WineUtilities.waitForSessionEnd(wine, timeout: 10) {
+            mainLogger.warning("The last session's Wine was still running 10 s after it was stopped; starting anyway")
+        }
+    case .choice(.continueAnyway):
+        mainLogger.notice("Player chose to start with the last session's Wine still running, after \(waited)")
+    case .choice(.dontStart):
+        mainLogger.notice("Player chose not to start the game while the last session's Wine is running")
+        LogStore.shared.flush()
+        exit(0)
+    }
+    infoWindow.setStage(nextStage)
+}
+
 // MARK: - Main
 
 func main() {
@@ -547,54 +601,8 @@ func main() {
         mainLogger.notice("Starting the game without Steam this time (\(launchWithoutSteamArgument)), after a launch through Steam failed")
     }
 
-    // Wine still running in this prefix: usually the game's last session,
-    // whose wrapp is still waiting for it to close down. Wait for that (it
-    // takes seconds), and ask only if it doesn't.
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
     killWineBeforeForcedExit = { WineUtilities.killSession(wine) }
-    if wine.isWineserverRunning() {
-        mainLogger.notice("Wine is still running in this game's prefix, probably from the last time it was played: waiting for it to finish")
-        if WineUtilities.waitForSessionEnd(wine, timeout: 20) {
-            mainLogger.notice("The last session's Wine has finished")
-        }
-    }
-    if wine.isWineserverRunning() {
-        mainLogger.warning("WARNING ⚠️: Detected running wineserver process for this prefix")
-
-        // Initialize NSApplication if not already done
-        _ = NSApplication.shared
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
-
-        let alert = NSAlert()
-        alert.messageText = "The Game Is Still Closing"
-        alert.informativeText = "Part of the game from last time is still running in the background, which can stop it starting properly.\n\nStop it and carry on?"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Stop It and Continue")
-        alert.addButton(withTitle: "Continue Anyway")
-        alert.addButton(withTitle: "Don't Start the Game")
-
-        let response = alert.runModal()
-
-        switch response {
-        case .alertFirstButtonReturn:  // Quit Wine Server
-            mainLogger.notice("User chose to quit Wine server")
-            let exitStatus = wine.stopWineserver()
-            if exitStatus == 0 {
-                mainLogger.notice("✓ Wine server terminated successfully")
-                // Wait a moment for cleanup
-                Thread.sleep(forTimeInterval: 0.5)
-            } else {
-                mainLogger.warning("⚠️  Wine server termination returned exit code: \(exitStatus)")
-            }
-        case .alertSecondButtonReturn:  // Continue Anyway
-            mainLogger.notice("User chose to continue with Wine server running")
-        default:  // Cancel Launch
-            mainLogger.notice("Launch cancelled by user")
-            exit(0)
-        }
-    }
 
     // Check for debug mode
     var debugMode = false
@@ -844,6 +852,8 @@ func main() {
     // Launch based on engine type
     func launchGameAsync() {
         DispatchQueue.global(qos: .userInitiated).async {
+            waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.hasPrefix("wine-steam")
+                ? .startingSteam : .startingGame(title: config.gameTitle))
             let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
 
             // Quitting: the app delegate's cleanup stopped the game, waits for

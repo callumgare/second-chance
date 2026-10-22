@@ -25,6 +25,10 @@ enum LoadingStage: Equatable {
     /// the account is playing on another computer: no clock, since it's
     /// waiting on them.
     case steamPlayingElsewhere
+    /// The game's Wine from the last time it was played still closing down.
+    /// That takes seconds; past `possibleFailureAfter` the window offers to
+    /// stop it, while still waiting.
+    case lastSessionClosing
 
     var message: String {
         switch self {
@@ -33,6 +37,7 @@ enum LoadingStage: Equatable {
         case .signingInToSteam: return "Sign in to Steam"
         case .steamStartingGame(let title): return "Steam is starting \(title)…"
         case .steamPlayingElsewhere: return "Your Steam account is playing on another computer"
+        case .lastSessionClosing: return "Waiting for the game to finish closing…"
         }
     }
 
@@ -45,6 +50,8 @@ enum LoadingStage: Equatable {
             return "Use Steam's window, or scan its QR code with the Steam app on your phone."
         case .steamPlayingElsewhere:
             return "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here."
+        case .lastSessionClosing:
+            return "It's still closing from the last time it was played. That usually takes a few seconds."
         case .startingGame, .steamStartingGame:
             return nil
         }
@@ -54,7 +61,7 @@ enum LoadingStage: Equatable {
     var subject: String {
         switch self {
         case .startingSteam, .signingInToSteam, .steamPlayingElsewhere: return "Steam"
-        case .startingGame, .steamStartingGame: return "The game"
+        case .startingGame, .steamStartingGame, .lastSessionClosing: return "The game"
         }
     }
 
@@ -65,7 +72,7 @@ enum LoadingStage: Equatable {
         case .startingGame: return 20
         // Steam's own start includes its update on a first run.
         case .startingSteam: return 120
-        case .signingInToSteam, .steamPlayingElsewhere: return nil
+        case .signingInToSteam, .steamPlayingElsewhere, .lastSessionClosing: return nil
         // Steam takes a while to hand over, even on an idle Mac (about 90 s
         // from -applaunch to the game's window has been seen).
         case .steamStartingGame: return 90
@@ -79,6 +86,8 @@ enum LoadingStage: Equatable {
         case .startingSteam: return 600
         case .signingInToSteam, .steamPlayingElsewhere: return nil
         case .steamStartingGame: return 300
+        // It closes within seconds; past this, the window offers to stop it.
+        case .lastSessionClosing: return 3
         }
     }
 }

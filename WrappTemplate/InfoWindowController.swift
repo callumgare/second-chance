@@ -43,6 +43,11 @@ class InfoWindowController: NSWindowController {
         set { viewModel.onLaunchWithoutSteam = newValue }
     }
 
+    var onLastSessionChoice: ((InfoWindowViewModel.LastSessionChoice) -> Void)? {
+        get { viewModel.onLastSessionChoice }
+        set { viewModel.onLastSessionChoice = newValue }
+    }
+
     /// Whether the save warning is currently visible.
     var isShowingWarning: Bool {
         if case .warning = viewModel.phase { return true }
