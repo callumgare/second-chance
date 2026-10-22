@@ -154,7 +154,7 @@ nonisolated struct LogRow: Identifiable, Hashable, Sendable {
     }
 
     /// Single-line rendering (time, level, category, message) used by
-    /// Copy Row and test assertions.
+    /// copying lines and test assertions.
     var compactLine: String { "\(time)  \(level)  \(category)  \(message)" }
 
     init(id: UInt64, time: String, level: String, category: String, message: String) {
@@ -283,7 +283,9 @@ private struct LogCell: View {
 /// The log window's content: an options bar above a Console-style table.
 struct LogWindowView: View {
     @ObservedObject var model: LogDisplayModel
-    @State private var selection: LogRow.ID?
+    /// The selected rows: click, Shift-click for a range, Command-click to
+    /// add or remove one, as in any macOS list. Edit ▸ Copy (⌘C) copies them.
+    @State private var selection = Set<LogRow.ID>()
 
     private var filteredRows: [LogRow] {
         model.rows.filter { model.levelFilter.includes(level: $0.level) }
@@ -325,10 +327,16 @@ struct LogWindowView: View {
                     emptyState
                 }
             }
-            .contextMenu(forSelectionType: LogRow.self) { rows in
-                let ordered = rows.sorted { $0.id < $1.id }
+            .onCopyCommand {
+                let lines = rows(for: selection).map(\.compactLine)
+                guard !lines.isEmpty else { return [] }
+                return [NSItemProvider(object: lines.joined(separator: "\n") as NSString)]
+            }
+            .contextMenu(forSelectionType: LogRow.ID.self) { ids in
+                // Right-clicking a row outside the selection acts on it alone.
+                let ordered = rows(for: ids)
 
-                Button("Copy Row") {
+                Button(ordered.count > 1 ? "Copy \(ordered.count) Lines" : "Copy Line") {
                     copy(ordered.map(\.compactLine))
                 }
                 .disabled(ordered.isEmpty)
@@ -414,6 +422,12 @@ struct LogWindowView: View {
                 description: Text("Nothing at the selected level — switch back to All.")
             )
         }
+    }
+
+    /// The rows with these IDs that are shown, in log order.
+    private func rows(for ids: Set<LogRow.ID>) -> [LogRow] {
+        guard !ids.isEmpty else { return [] }
+        return filteredRows.filter { ids.contains($0.id) }
     }
 
     private func copy(_ lines: [String]) {
