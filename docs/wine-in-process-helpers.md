@@ -426,7 +426,7 @@ failure if nothing asked the game to quit and the game:
 - quit before its window appeared, and before any frame (a frame means a
   window the wrapp missed);
 - draws with Direct3D, and quit before its first frame;
-- quit within 5 s of a Wine error that isn't one of the routine ones every
+- quit within 1 s of a Wine error that isn't one of the routine ones every
   launch logs (`GameQuitCheck.routineErrors`: Vulkan, wow64, HID devices,
   NTLM and Kerberos, the desktop's `(null)` mode refusal, and for a game
   started through Steam, the COM lookups and graphics probe Steam does as it

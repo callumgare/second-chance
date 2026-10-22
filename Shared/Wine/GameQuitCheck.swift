@@ -42,10 +42,10 @@ nonisolated final class GameQuitCheck: @unchecked Sendable {
     static let failureMarker = "■ That was no quit"
 
     /// How soon after a Wine error an exit counts as caused by it. White Wolf
-    /// quit 0.8 s after Wine refused its display mode; once the routine lines
-    /// are left out, healthy launches log no Wine errors at all near their
-    /// exit, so this leaves room for a slower Mac.
-    static let errorWindow: TimeInterval = 5
+    /// quit 0.8 s after Wine refused its display mode. Five seconds caught a
+    /// healthy launch that quit 4.8 s after an unrelated error, so the window
+    /// stays just above the quickest real one.
+    static let errorWindow: TimeInterval = 1
 
     /// Wine errors that healthy launches log, and that say nothing about why a
     /// game quit. Matched anywhere in the line.

@@ -64,8 +64,8 @@ struct GameQuitCheckTests {
         let error = "0124:err:module:import_dll Library Ndui.dll (which is needed by L\"Game.exe\") not found"
         let check = started(.directDraw)
         check.observe(line: error, at: start + 10)
-        let failure = try #require(check.failure(exitedAt: start + 12))
-        #expect(failure.summary == "it quit 2.0 s after Wine reported an error")
+        let failure = try #require(check.failure(exitedAt: start + 10.5))
+        #expect(failure.summary == "it quit 0.5 s after Wine reported an error")
         #expect(failure.explanation == "The game couldn't load a file it needs.")
         #expect(check.failure(exitedAt: start + 10 + GameQuitCheck.errorWindow + 1) == nil)
     }
