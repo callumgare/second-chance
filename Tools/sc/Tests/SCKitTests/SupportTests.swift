@@ -637,3 +637,28 @@ struct DotEnvTests {
         #expect(values.count == 4)
     }
 }
+
+@Suite("Test VMs")
+struct TestVMTests {
+    @Test("tart's VM list maps names to states")
+    func parseList() {
+        let json = """
+        [
+          { "Name" : "sc-sequoia", "Running" : false, "State" : "stopped", "Source" : "local" },
+          { "Name" : "sc-tahoe", "Running" : true, "State" : "running", "Source" : "local" },
+          { "Name" : "no-state", "Running" : true, "Source" : "local" }
+        ]
+        """
+        #expect(TestVM.parseList(json) == ["sc-sequoia": "stopped", "sc-tahoe": "running", "no-state": "running"])
+        #expect(TestVM.parseList("not json").isEmpty)
+    }
+
+    @Test("A prepared VM reaches the tests as TEST_RUNNER_ variables")
+    func testEnvironment() {
+        let withKey = TestVM.Prepared(name: "sc-sequoia", target: "admin@192.168.64.2", sshKey: "/keys/vm", startedHere: true)
+        #expect(withKey.testEnvironment == ["TEST_RUNNER_VM_NAME": "sc-sequoia", "TEST_RUNNER_VM_SSH_TARGET": "admin@192.168.64.2",
+                                            "TEST_RUNNER_VM_SSH_KEY": "/keys/vm"])
+        let without = TestVM.Prepared(name: "sc-sequoia", target: "admin@192.168.64.2", sshKey: nil, startedHere: false)
+        #expect(without.testEnvironment["TEST_RUNNER_VM_SSH_KEY"] == nil)
+    }
+}

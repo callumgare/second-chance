@@ -19,6 +19,7 @@ nearest command's help.
 ./sc wrapp wine stay-tuned -- regedit  # Run Wine inside its prefix
 ./sc test unit                         # Unit tests (seconds) + sc's own tests
 ./sc test integration stay-tuned       # Install, launch and quit one game for real
+./sc test integration ghost-dogs --vm sc-sequoia  # …launching it in a tart VM
 ./sc test                              # Everything — hours
 ./sc release --dry-run                 # What the next release would contain
 ./sc release --plain-notes             # Release with the commit-message notes as they are
@@ -199,6 +200,12 @@ suite with one worker; `sc test` runs both, as two separate xcodebuild runs.
 Each run writes `test-results/<time>-<suite>.xcresult`, and an HTML report goes
 in `test-results/<time>/`. `--open-report` opens it on `failures` (the default),
 `always` or `never` — the terminal table covers a passing run.
+
+`--vm <name>` launches each game in a tart VM instead of here (`TestVM` gets
+the VM ready, starting and stopping it as needed); this Mac's screen then only
+needs to allow windows, for the builds, and may be locked.
+[testing.md](testing.md#testing-in-a-vm) has the setup and what a VM can't
+test.
 
 [testing.md](testing.md) covers the suites themselves.
 

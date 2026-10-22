@@ -381,6 +381,12 @@ enum AppPuppetRunner {
             requiredHelpers = [.puppetControl]
         }
 
+        // `sc test integration --vm`: launch it in the VM instead.
+        if let vm = VMTarget.current {
+            return try await VMPuppetRunner.run(in: vm, puppeteer: bundle, wrappURL: wrappURL, gameSlug: slug,
+                                                timeout: timeout, requiredHelpers: requiredHelpers)
+        }
+
         let attempt = try await Self.launchAndCollect(
             appBundle: bundle,
             wrappURL: wrappURL,
@@ -410,6 +416,26 @@ enum AppPuppetRunner {
         )
 
         let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
+        // The game runs in its own process inside the wrapp, so it is not covered
+        // by the pid-scoped fetch above and needs its own subsystem query.
+        let gameLogData = SystemLogReader.fetchGame(since: launchTime)
+        try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
+                  attemptLabel: attemptLabel, requiredHelpers: requiredHelpers)
+        return (exitCode: observedExitCode, pid: pid)
+    }
+
+    /// Judge a run from WrappPuppeteer's log and the game's (compact lines,
+    /// as `SystemLogReader` gives them), attaching and echoing both. Throws
+    /// the reason a run failed; a local run and one in a VM
+    /// (`VMPuppetRunner`) are judged alike.
+    static func judge(
+        puppeteerLog logData: Data,
+        gameLog gameLogData: Data,
+        exitCode observedExitCode: Int32,
+        gameSlug: String,
+        attemptLabel: String,
+        requiredHelpers: [InProcessHelperReport.Helper]
+    ) throws {
         guard !logData.isEmpty else {
             throw NSError(
                 domain: "AppPuppetRunner",
@@ -423,9 +449,6 @@ enum AppPuppetRunner {
         Attachment.record(logData, named: "wrapp-puppeteer-\(attemptLabel)-\(gameSlug).txt")
         TestConsole.echo(logData, title: "WrappPuppeteer log (\(attemptLabel)) — \(gameSlug)")
 
-        // The game runs in its own process inside the wrapp, so it is not covered
-        // by the pid-scoped fetch above and needs its own subsystem query.
-        let gameLogData = SystemLogReader.fetchGame(since: launchTime)
         if !gameLogData.isEmpty {
             Attachment.record(gameLogData, named: "game-\(attemptLabel)-\(gameSlug).txt")
             TestConsole.echo(gameLogData, title: "Game log (\(attemptLabel)) — \(gameSlug)")
@@ -495,8 +518,6 @@ enum AppPuppetRunner {
             Data(exitCodeSummary.utf8),
             named: "wrapp-puppeteer-exit-code-\(attemptLabel)-\(gameSlug).txt"
         )
-
-        return (exitCode: observedExitCode, pid: pid)
     }
 
     private static func decodeExitCode(fromKqueueStatus status: Int32) -> Int32 {

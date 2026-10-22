@@ -55,7 +55,7 @@ struct HerDownloadInstallIntegrationTests {
             Issue.record(Comment(rawValue: message))
             return
         }
-        if let reason = ScreenState.blockedReason() {
+        if let reason = VMTarget.screenBlockedReason() {
             let message = "Not testing \(download.label): \(reason), so the game couldn't come to the front."
             Self.progress?.write(["event": "screen", "message": message])
             outcome.locked = true
@@ -128,6 +128,12 @@ struct HerDownloadInstallIntegrationTests {
 
         guard WrappInfo.wrappPuppeteerBundle() != nil else {
             Attachment.record("WrappPuppeteer not built — skipped the launch", named: "launch-skipped-\(download.label).txt")
+            outcome.completed = true
+            return
+        }
+        // A VM can't render Direct3D; the build above was still tested.
+        if let reason = VMTarget.launchSkipReason(wrappURL: wrapp) {
+            outcome.skipped = "\(game.title) \(reason)"
             outcome.completed = true
             return
         }

@@ -73,7 +73,7 @@ touching — the rows say _when_ to read, not what is in them:
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, retaking the README screenshots, `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
-| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, and its exit codes, or reading a run's output |
+| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — or how it moves itself into Applications when macOS runs it translocated (`AppMover`) |
@@ -434,6 +434,13 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
 - **Only the integration test can catch a dropped bus event.** A build with a
   missing `bus.publish` still produces a correct `.app`, so it passes the build
   and the unit tests. Run it after touching orchestration.
+- **A VM can't test Direct3D games.** `sc test integration --vm <name>`
+  launches games in a tart VM (another macOS version, or to keep this Mac's
+  screen free), but a VM's GPU has no hardware OpenGL, so Wine's Direct3D
+  can't render there: those launches are `skipped`, and DirectDraw games fall
+  back to software rendering. Copy app bundles into a VM with `tar`, not
+  rsync, so their code signatures survive
+  ([docs/testing.md](docs/testing.md#testing-in-a-vm)).
 - **WrappPuppeteer needs no permissions.** The wrapp and a helper inside the
   game process capture and click their own windows for it, over sockets in
   the directory it passes as `SECOND_CHANCE_PUPPET_DIR`

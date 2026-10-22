@@ -36,10 +36,38 @@ struct IntegrationOptions: ParsableArguments {
     ))
     var source = "disk"
 
+    @Option(help: ArgumentHelp(
+        "Launch each game in this tart VM instead of on this Mac.",
+        discussion: "The wrapp is still built here; the test copies it and WrappPuppeteer into the VM and runs the launch-and-quit there. A stopped VM is started headless and stopped afterwards. Games that draw with Direct3D can't render in a VM, so their launch is skipped (docs/testing.md#testing-in-a-vm).",
+        valueName: "name"
+    ))
+    var vm: String?
+
     @OptionGroup var wrapps: WrappsDirOptions
 
     /// The sources `--source` names, in their canonical order.
     var sources: [WrappSourceKind] { (try? Self.parseSources(source)) ?? [.disk] }
+
+    /// What this Mac's GUI session must allow. Builds open windows here
+    /// either way; only a game launched here needs to see and click the
+    /// screen, so with --vm a locked screen is fine.
+    var screenNeed: GUISession.Need { vm == nil ? .screen : .windows }
+
+    /// Run `body` with the VM `--vm` names prepared (nil without one), then
+    /// stop the VM if sc started it, whether `body` succeeds or throws.
+    func withVM<T>(_ session: Session, _ body: (TestVM.Prepared?) async throws -> T) async throws -> T {
+        guard let vm else { return try await body(nil) }
+        let testVM = TestVM(name: vm, session: session)
+        let prepared = try await testVM.prepare()
+        do {
+            let result = try await body(prepared)
+            await testVM.finish(prepared)
+            return result
+        } catch {
+            await testVM.finish(prepared)
+            throw error
+        }
+    }
 
     func validate() throws { _ = try Self.parseSources(source) }
 
@@ -82,16 +110,18 @@ struct TestAllCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         let games = try TestCommandSupport.resolve(self.games, ui: session.ui)
-        try await GUISession.ensure(session, need: .screen)
+        try await GUISession.ensure(session, need: integration.screenNeed)
         try TestCommandSupport.requireTools()
         let stamp = UI.timestamp()
         let runner = TestRunner(session: session)
         try await runner.xcode.ensureTestBuild(appBuild)
         let unit = try await runner.unit(stamp: stamp)
-        let integrationRun = try await runner.integration(
-            games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-            ignoreLoad: integration.ignoreLoad, stamp: stamp
-        )
+        let integrationRun = try await integration.withVM(session) { vm in
+            try await runner.integration(
+                games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
+                ignoreLoad: integration.ignoreLoad, vm: vm, stamp: stamp
+            )
+        }
         try await TestCommandSupport.finish([unit, integrationRun], stamp: stamp, policy: report.openReport, session: session)
     }
 }
@@ -137,15 +167,17 @@ struct TestIntegrationCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         let games = try TestCommandSupport.resolve(self.games, ui: session.ui)
-        try await GUISession.ensure(session, need: .screen)
+        try await GUISession.ensure(session, need: integration.screenNeed)
         try TestCommandSupport.requireTools()
         let stamp = UI.timestamp()
         let runner = TestRunner(session: session)
         try await runner.xcode.ensureTestBuild(appBuild)
-        let run = try await runner.integration(
-            games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-            ignoreLoad: integration.ignoreLoad, stamp: stamp
-        )
+        let run = try await integration.withVM(session) { vm in
+            try await runner.integration(
+                games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
+                ignoreLoad: integration.ignoreLoad, vm: vm, stamp: stamp
+            )
+        }
         try await TestCommandSupport.finish([run], stamp: stamp, policy: report.openReport, session: session)
     }
 }

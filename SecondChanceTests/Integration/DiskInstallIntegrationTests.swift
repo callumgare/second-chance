@@ -139,7 +139,7 @@ struct DiskInstallIntegrationTests {
         // A game launched while the screen is locked or the display asleep can
         // never come to the front, so WrappPuppeteer would only time out
         // waiting for it, minutes after the build. Checked again as it waits.
-        if let reason = ScreenState.blockedReason() {
+        if let reason = VMTarget.screenBlockedReason() {
             let message = "Not testing \(game.id): \(reason), so the game couldn't come to the front. Keep the Mac awake and unlocked for the run (caffeinate -d)."
             Self.progress?.write(["event": "screen", "message": message])
             outcome.locked = true
@@ -283,6 +283,12 @@ struct DiskInstallIntegrationTests {
             return
         }
 
+        // A VM can't render Direct3D; the build above was still tested.
+        if let reason = VMTarget.launchSkipReason(wrappURL: wrappPath) {
+            outcome.skipped = "\(game.title) \(reason)"
+            outcome.completed = true
+            return
+        }
         outcome.phase("launching")
         let exitCode = try await AppPuppetRunner.run(wrappURL: wrappPath, game: game)
         outcome.puppeteerExit = exitCode
@@ -339,7 +345,9 @@ final class GameOutcome: @unchecked Sendable {
             result = "overloaded"
         } else if locked {
             result = "locked"
-        } else if skipped != nil {
+        } else if skipped != nil && failedExpectations == 0 {
+            // Never over a failed expectation: a build that failed its
+            // checks is a failure even if its launch was then skipped.
             result = "skipped"
         } else {
             result = completed && failedExpectations == 0 ? "passed" : "failed"

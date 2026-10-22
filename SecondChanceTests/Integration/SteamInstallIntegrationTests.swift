@@ -61,7 +61,7 @@ struct SteamInstallIntegrationTests {
         }
 
         // As in the disk suite: nothing can come to the front, so don't build.
-        if let reason = ScreenState.blockedReason() {
+        if let reason = VMTarget.screenBlockedReason() {
             outcome.locked = true
             Issue.record("Not testing \(game.id): \(reason), so the game couldn't come to the front")
             return
@@ -131,6 +131,12 @@ struct SteamInstallIntegrationTests {
 
         guard WrappInfo.wrappPuppeteerBundle() != nil else {
             Attachment.record("WrappPuppeteer not built — skipped the launch", named: "launch-skipped-\(game.id).txt")
+            outcome.completed = true
+            return
+        }
+        // A VM can't render Direct3D; the build above was still tested.
+        if let reason = VMTarget.launchSkipReason(wrappURL: wrapp) {
+            outcome.skipped = "\(game.title) \(reason)"
             outcome.completed = true
             return
         }

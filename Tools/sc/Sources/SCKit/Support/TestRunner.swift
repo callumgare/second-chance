@@ -87,7 +87,7 @@ struct TestRunner {
 
     // MARK: - Integration
 
-    func integration(games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL, ignoreLoad: Bool = false, stamp: String) async throws -> TestRun {
+    func integration(games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL, ignoreLoad: Bool = false, vm: TestVM.Prepared? = nil, stamp: String) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
         // Steam; the Her suite, those with a Her download in installers/.
@@ -132,6 +132,11 @@ struct TestRunner {
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
+        // The test launches each game in the VM instead (VMPuppetRunner).
+        if let vm {
+            env.merge(vm.testEnvironment) { _, new in new }
+            ui.info("Games launch in VM \(vm.name) (\(vm.target)); they're still built on this Mac.")
+        }
         let environment = env
 
         // The Her suite reports a game once per download, as the slug for the

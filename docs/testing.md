@@ -50,6 +50,9 @@ build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 
 # Build from each Her Interactive download in installers/<slug>/
 ./sc test integration scarlet-hand --source her-download
+
+# Build here, launch in a tart VM (another macOS version, say)
+./sc test integration ghost-dogs --vm sc-sequoia
 ```
 
 Other options: `--logs collapsed|full|raw` for how output is shown,
@@ -490,6 +493,81 @@ it. `--record` also works on a normal run
 (without `--record-seconds`), to see afterwards what each click did. The
 record directory's path must not contain spaces: the game's control socket
 takes the path a capture is saved to as one word.
+
+## Testing in a VM
+
+`sc test integration --vm <name>` launches each game in a
+[tart](https://tart.run/) macOS VM instead of on this Mac: the way to try a
+macOS version this Mac doesn't run, and a run that doesn't take over this
+Mac's screen (which may even be locked). The build still happens here, and is
+tested here as usual; only the launch-and-quit moves.
+
+**Setting one up.** Cirrus Labs' images are ready-made macOS installs with
+SSH on, automatic login, and a passwordless-sudo `admin` user:
+
+```bash
+export TART_HOME=<a disk with ~60 GB free per macOS version>   # optional
+tart clone ghcr.io/cirruslabs/macos-sequoia-vanilla:latest sc-sequoia
+tart set sc-sequoia --cpu 4 --memory 8192
+tart run sc-sequoia --no-graphics &                # first boot only, for the key
+ssh-copy-id admin@$(tart ip sc-sequoia)            # password: admin
+tart stop sc-sequoia
+```
+
+The tests sign in with a key only: `SC_VM_SSH_KEY` names one other than
+ssh's defaults, `SC_VM_USER` another account. A Tahoe guest
+(`macos-tahoe-vanilla`) runs on a Sequoia host too.
+
+**What sc does** (`TestVM` in `Tools/sc`): starts the VM headless if it's
+stopped (and stops it again at the end), waits for its address and for SSH,
+checks someone is logged in at its console with the screen unlocked, and
+installs Rosetta if it's missing — the wrapps' Wine is x86_64, and Rosetta
+installs and runs in a macOS guest as on a Mac. It hands the test
+`TEST_RUNNER_VM_NAME`, `TEST_RUNNER_VM_SSH_TARGET` and `TEST_RUNNER_VM_SSH_KEY`.
+
+**What the test does** (`VMPuppetRunner`): `AppPuppetRunner.run` hands off to
+it when those are set. It copies WrappPuppeteer and the wrapp into
+`/tmp/sc-vm-test-<id>/` in the VM with `tar` over SSH — `tar`, because the
+template's non-Mach-O files keep their code signatures in extended attributes
+(a 3.5 GB wrapp takes about five minutes) — and runs a job script there as a
+one-off LaunchAgent in the GUI session, since WrappPuppeteer needs a
+WindowServer. The script first opens the wrapp once through LaunchServices and
+quits it as soon as its launch log appears: macOS checks the whole bundle of a
+freshly copied app the first time it's opened, which on a VM's disk can take
+minutes — longer than WrappPuppeteer waits for the save warning (seen as
+"Failed to dismiss info window" with no wrapp log at all). Running the binary
+directly doesn't count; only an open through LaunchServices does. Then it runs WrappPuppeteer and
+saves its and the game's OSLog with `log show`, plus any startup diagnostics
+bundle. The test reads those back and judges them with `AppPuppetRunner.judge`,
+exactly as a local run is judged. The job, and anything it left running, is
+removed afterwards, and at the start of the next run if the test host was
+stopped partway.
+
+**What a VM can't test.** Apple's virtualisation gives a guest a GPU with
+Metal but no hardware OpenGL: OpenGL there is only the Apple Software
+Renderer (legacy GL 2.1). So:
+
+- **Direct3D games can't render.** Wine's Direct3D runs on OpenGL, gets no
+  context (`wined3d_caps_gl_ctx_create Failed to find a suitable pixel
+  format`), and the game quits before drawing. Their launch is reported
+  `skipped` (`VMTarget.launchSkipReason`); their build was still tested. A
+  failed build check is never hidden behind `skipped`.
+- **DirectDraw games run, but not as on a Mac.** cnc-ddraw's `renderer=auto`
+  falls back from Direct3D to a software renderer, which puts "Using slow
+  software rendering" on screen and sometimes draws the picture at half size in
+  the corner of a Retina window, so a click on what OCR found misses. Their
+  results show the helpers, input and quit path work, not the rendering.
+- **ScummVM games** run as on a Mac.
+
+**Steam.** A Steam wrapp that launches through Steam needs the shared sign-in
+(docs/steam.md), which lives on this Mac. The test copies the store into the
+VM's `~/Library/Application Support/SecondChance/Steam/` for the run and
+deletes it after, pass or fail. Steam has been seen to sign in from a VM with
+it and leave the token as it was; if it ever replaces the token, the test
+brings the VM's session back through `SteamSessionStore.capture`, with its
+lock and newer-wins rule. A first sign-in in a fresh VM takes a couple of
+minutes, while Steam updates itself. Steam plays one game per account at a
+time, so don't play a Steam game elsewhere while one is tested.
 
 ## Reading the output
 
