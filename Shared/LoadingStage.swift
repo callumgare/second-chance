@@ -72,8 +72,6 @@ enum LoadingStage: Equatable {
     /// A line under the message, saying why this step is there.
     var detail: String? {
         switch self {
-        case .startingSteam:
-            return "This game plays through Steam, so it's starting Steam for you first."
         case .updatingSteam:
             return "Steam is updating itself, as it does now and then. The game starts once it's done."
         case .connectingToSteam:
@@ -86,7 +84,7 @@ enum LoadingStage: Equatable {
             return "Answer the question in Steam's window, and the game will carry on starting."
         case .lastSessionClosing:
             return "It's still closing from the last time it was played. That usually takes a few seconds."
-        case .startingGame, .steamStartingGame:
+        case .startingGame, .startingSteam, .steamStartingGame:
             return nil
         }
     }

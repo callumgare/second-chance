@@ -633,3 +633,58 @@ struct InfoWindowView: View {
     }())
     .frame(width: InfoWindowView.width)
 }
+
+// TEMPORARY: offscreen renders of the failure screens for review.
+func renderInfoWindowShots(to dir: String) {
+    _ = NSApplication.shared
+    let newer = ReleaseVersion(shortVersion: "0.7.0", build: 300)
+    func vm(_ stage: LoadingStage, _ setup: (InfoWindowViewModel) -> Void) -> InfoWindowViewModel {
+        let vm = InfoWindowViewModel(stage: stage, saveWarningEnabled: false)
+        setup(vm)
+        vm.newerRelease = newer
+        return vm
+    }
+    let shots: [(String, InfoWindowViewModel)] = [
+        ("error-crashed", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .error(exitCode: 1, explanation: nil) }),
+        ("error-quit-unexpectedly", vm(.startingGame(title: "The White Wolf of Icicle Creek")) {
+            $0.phase = .error(exitCode: 0, explanation: "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.")
+        }),
+        ("possible-launch-failure", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.showSuspectedHang = true }),
+        ("possible-launch-failure-steam", vm(.steamStartingGame(title: "Danger on Deception Island")) {
+            $0.onLaunchWithoutSteam = {}
+            $0.showSuspectedHang = true
+        }),
+        ("gave-up", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .gaveUp }),
+    ]
+    for appearance in ["light", "dark"] {
+        for (name, model) in shots {
+            let hang = model.showSuspectedHang
+            let host = NSHostingView(rootView: InfoWindowView(viewModel: model).background(Color(nsColor: .windowBackgroundColor)))
+            host.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+            let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 520, height: 300),
+                                  styleMask: [.titled], backing: .buffered, defer: false)
+            window.appearance = host.appearance
+            window.contentView = host
+            host.layoutSubtreeIfNeeded()
+            let size = host.fittingSize
+            window.setContentSize(size)
+            host.frame = NSRect(origin: .zero, size: size)
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            if hang {
+                model.stopTimer()
+                model.showSuspectedHang = true
+                RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+                let size = host.fittingSize
+                window.setContentSize(size)
+                host.frame = NSRect(origin: .zero, size: size)
+                host.layoutSubtreeIfNeeded()
+                RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            }
+            guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { continue }
+            host.cacheDisplay(in: host.bounds, to: rep)
+            let url = URL(fileURLWithPath: dir).appendingPathComponent("\(name)-\(appearance).png")
+            try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        }
+    }
+}
