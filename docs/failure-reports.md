@@ -330,7 +330,10 @@ Set up once, by hand, in Sentry:
 - **Platform:** `apple-macos`. Its DSN and the organisation and project slugs
   go in `.env` ([below](#the-dsn)).
 - **Security & Privacy:** turn on *Prevent Storing of IP Addresses*, and keep
-  the default data scrubbing.
+  the default data scrubbing. Add `game` to *Safe Fields*. The default
+  scrubbing hides any value containing "secret", so without that the
+  Secrets Can Kill games' slugs reach a [success report](#success-reports)
+  as `[Filtered]`. A slug is one of ours, never anything personal.
 - **Rate limits:** turn on spike protection, and set an alert for new issues.
 - **Plan:** the free plan's error and attachment quotas are enough to start
   with. Detailed reports' zips count against the attachment quota.
