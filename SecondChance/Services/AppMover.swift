@@ -64,9 +64,7 @@ enum AppMover {
         let alert = NSAlert()
         alert.messageText = "Move Second Chance to your Applications folder"
         alert.informativeText = """
-        Second Chance is still where it was downloaded, so macOS doesn't run it from there. \
-        It runs a hidden, read-only copy instead, and makes a new one each time you open it. \
-        From that copy, Second Chance can't install its own updates.
+        Second Chance was launched from its download location and macOS won't run it from there.
 
         Moving Second Chance to your Applications folder fixes this. \
         It will reopen from there, and you won't be asked again.
