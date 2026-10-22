@@ -25,7 +25,7 @@ import Foundation
 import Logging
 
 /// `@unchecked Sendable`: every piece of mutable state is confined to `queue`.
-final class StartupDiagnostics: @unchecked Sendable {
+nonisolated final class StartupDiagnostics: @unchecked Sendable {
 
     enum Reason: String {
         /// The game process is up but has no window after `slowSeconds`.

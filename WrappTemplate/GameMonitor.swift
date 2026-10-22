@@ -81,7 +81,7 @@ class GameMonitor {
     func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil, timeout: TimeInterval = 600,
                             whileWaiting: (() -> Void)? = nil) -> Int32? {
         switch gameEngine {
-        case "wine", _ where gameEngine.hasPrefix("wine-"):
+        case _ where gameEngine == "wine" || gameEngine.hasPrefix("wine-"):
             return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, timeout: timeout, whileWaiting: whileWaiting)
         case "scummvm":
             return waitForScummVMGameToStart(gamePid: gamePid)
@@ -101,7 +101,7 @@ class GameMonitor {
         isMonitoring = true
         
         switch gameEngine {
-        case "wine", _ where gameEngine.hasPrefix("wine-"):
+        case _ where gameEngine == "wine" || gameEngine.hasPrefix("wine-"):
             waitForWineGameToStop(winePid: gamePid, process: process)
         case "scummvm":
             waitForScummVMGameToStop(gamePid: gamePid, process: process)

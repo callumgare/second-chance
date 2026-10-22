@@ -39,7 +39,9 @@
 static IMP gWineFlushBuffer;
 static atomic_bool gFrameReported;
 
-static void reportingFlushBuffer(NSOpenGLContext *self, SEL _cmd) {
+// `id`, not `NSOpenGLContext *`: the class is deprecated, and only its
+// method is called, through the original IMP.
+static void reportingFlushBuffer(id self, SEL _cmd) {
     ((void (*)(id, SEL))gWineFlushBuffer)(self, _cmd);
     if (!atomic_exchange(&gFrameReported, true)) {
         helperReport("QuitWatch", "notice", "first frame on screen");

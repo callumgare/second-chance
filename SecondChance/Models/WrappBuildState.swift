@@ -7,7 +7,7 @@
 import Foundation
 
 /// Represents the current state of a wrapp build
-enum WrappBuildState: Equatable {
+nonisolated enum WrappBuildState: Equatable {
     case idle
     case selectingWrappSource
     case selectingSource

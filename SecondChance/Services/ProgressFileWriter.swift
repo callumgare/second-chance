@@ -21,7 +21,7 @@
 import Foundation
 import Logging
 
-final class ProgressFileWriter: @unchecked Sendable {
+nonisolated final class ProgressFileWriter: @unchecked Sendable {
     private nonisolated static let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.ProgressFileWriter")
 
     private let handle: FileHandle

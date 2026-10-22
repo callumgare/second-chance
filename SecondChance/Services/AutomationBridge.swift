@@ -24,11 +24,11 @@ import Foundation
 import Darwin
 
 /// Env var that enables the automation bridge. Value: absolute Unix socket path.
-let automationSocketEnvVar = "SC_AUTOMATION_SOCKET"
+nonisolated let automationSocketEnvVar = "SC_AUTOMATION_SOCKET"
 
 /// Server-side IPC bridge. Serialises EventBus events to connected clients as NDJSON.
 /// Thread-safe via NSLock; safe to call broadcast() from any thread/actor.
-final class AutomationBridge: @unchecked Sendable {
+nonisolated final class AutomationBridge: @unchecked Sendable {
     static let shared = AutomationBridge()
     private init() {}
 

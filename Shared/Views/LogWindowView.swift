@@ -21,7 +21,7 @@ import UniformTypeIdentifiers
 // MARK: - Source
 
 /// What the log window is currently showing.
-enum LogSource: Equatable {
+nonisolated enum LogSource: Equatable {
     /// The in-memory LogStore of the current process (live streaming).
     case live
     /// A previously exported log file opened via Import.

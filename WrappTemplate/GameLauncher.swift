@@ -41,7 +41,7 @@ struct GameLaunchInfo {
     }
 }
 
-func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
+nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
     // Wine game launch info
     let gameExePathClean = config.gameExePath.hasPrefix("/")
         ? String(config.gameExePath.dropFirst())
@@ -274,7 +274,7 @@ class GameLauncher {
                 what: "Running the game", kind: failureKind(exitCode: exitCode, signal: signal),
                 game: config.gameSlug, engine: config.gameEngine,
                 tags: failureTags(exitCode: exitCode, signal: signal), summary: summary,
-                diagnostics: diagnostics.map { diagnostics in { await diagnostics.bundleWhenComplete() } }
+                diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
             ))
         }
         
@@ -300,7 +300,7 @@ class GameLauncher {
         let stuck = FailureReport(
             what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.gameEngine,
             tags: failureTags(exitCode: nil, signal: nil), summary: summary,
-            diagnostics: diagnostics.map { diagnostics in { await diagnostics.bundleWhenComplete() } }
+            diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
         )
         report(stuck)
         return (stuck, reportTask ?? Task { .disabled })

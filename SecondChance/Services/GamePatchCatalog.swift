@@ -15,7 +15,7 @@ import Logging
 /// to download and stage the archives at build time, and this type reads the
 /// copy staged inside the bundle to decide what to apply. See
 /// `docs/game-patches.md`.
-struct GamePatch: Codable, Identifiable, Hashable {
+nonisolated struct GamePatch: Codable, Identifiable, Hashable, Sendable {
     /// How the patch payload gets into the installed game.
     enum Action: String, Codable {
         /// A Windows installer to run under Wine.

@@ -114,9 +114,12 @@ class InfoWindowController: NSWindowController {
 
     func show() {
         window?.makeKeyAndOrderFront(nil)
+        // The monitor calls its observer on the main queue.
         loadMonitor?.observe { [weak self] reading in
-            guard let self, !self.viewModel.gameHasLoaded else { return }
-            self.viewModel.heavyLoad = reading
+            MainActor.assumeIsolated {
+                guard let self, !self.viewModel.gameHasLoaded else { return }
+                self.viewModel.heavyLoad = reading
+            }
         }
     }
 

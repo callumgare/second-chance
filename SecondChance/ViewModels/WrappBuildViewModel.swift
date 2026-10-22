@@ -14,7 +14,7 @@ import Logging
 /// Production passes the standard env-var-first `WrappBuildInput`. Integration
 /// tests substitute one carrying fixed paths, which is what lets a test drive
 /// the real `buildFrom*` entry points without any global state.
-typealias WrappBuildInputFactory = (WrappBuildViewModel) -> WrappBuildInput
+typealias WrappBuildInputFactory = @MainActor (WrappBuildViewModel) -> WrappBuildInput
 
 /// Main ViewModel for coordinating the wrapp build process
 @MainActor
@@ -150,8 +150,9 @@ class WrappBuildViewModel: ObservableObject {
         switch state {
         case .idle, .completed, .error: break
         default:
+            // Scheduled on the main run loop, so it fires on the main thread.
             stepTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-                self?.tickStepTimer()
+                MainActor.assumeIsolated { self?.tickStepTimer() }
             }
         }
     }

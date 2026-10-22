@@ -7,7 +7,7 @@
 import Foundation
 
 /// Represents a Nancy Drew game with all its metadata and installation requirements
-struct GameInfo: Codable, Identifiable, Hashable {
+nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     let id: String  // Game slug
     let title: String
     let diskCount: Int
@@ -103,7 +103,7 @@ struct GameInfo: Codable, Identifiable, Hashable {
         self.failedInstallInfo = failedInstallInfo
     }
 }
-extension GameInfo {
+nonisolated extension GameInfo {
     /// What to tell someone clicking through a game's installer themselves,
     /// for a game with no instructions of its own.
     static let defaultInstallInstructions = """

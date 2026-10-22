@@ -12,7 +12,9 @@ import Foundation
 import Logging
 import os
 #if FAILURE_REPORTING
-import Sentry
+// Sentry's Objective-C types (`Event`, …) aren't annotated for concurrency;
+// they are handed between queues only where the SDK itself allows it.
+@preconcurrency import Sentry
 #endif
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.Reporting")
@@ -436,7 +438,7 @@ nonisolated enum FailureReporter {
     private static func previousRunCrashed(_ event: Event) {
         let process = state.withLock { $0.process } ?? .app
         // What CrashMarker logs when it, not Sentry, caught the crash.
-        let exception = event.exceptions?.first.map { "\($0.type): \($0.value ?? "")" } ?? "a crash"
+        let exception = event.exceptions?.first.map { "\($0.type ?? ""): \($0.value ?? "")" } ?? "a crash"
         var line = "The previous run crashed (\(exception))"
         let crashReport = CrashMarker.crashReport(after: event.timestamp?.addingTimeInterval(-60))
         if let crashReport {
@@ -562,7 +564,9 @@ nonisolated enum FailureReporter {
             event.extra = event.extra.map { redactor.redact(value: $0) as? [String: Any] ?? [:] }
             for crumb in event.breadcrumbs ?? [] {
                 crumb.message = crumb.message.map { redactor.redact($0) }
-                crumb.data = crumb.data.map { redactor.redact(value: $0) as? [String: Any] ?? [:] }
+                for (key, value) in crumb.data ?? [:] {
+                    crumb.setData(value: redactor.redact(value: value), key: key)
+                }
             }
         }
         return event

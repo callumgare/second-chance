@@ -123,7 +123,9 @@ nonisolated struct LogFormatter {
     /// `.withInternetDateTime` carries the dash/colon separators the raw
     /// option list omits (without `.withColonSeparatorInTime` the time
     /// renders as `034259.167Z`).
-    nonisolated private static let fullFormatter: ISO8601DateFormatter = {
+    /// `nonisolated(unsafe)`: `ISO8601DateFormatter` isn't marked `Sendable`,
+    /// but it is documented as thread-safe, and it is never mutated after this.
+    nonisolated(unsafe) private static let fullFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter

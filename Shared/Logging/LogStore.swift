@@ -113,7 +113,7 @@ nonisolated final class LogStore: @unchecked Sendable {
             guard let entry = createEntry(level: level, label: label, message: message, error: error, metadata: metadata, stage: stage) else {
                 return
             }
-            _ = lock.withLock { state in
+            lock.withLock { state in
                 appendInternal(state: &state, entry: entry)
             }
             return
@@ -140,14 +140,14 @@ nonisolated final class LogStore: @unchecked Sendable {
     /// - Returns: A tuple containing the snapshot and a cancellation function.
     nonisolated func subscribe(handler: @escaping @Sendable ([Entry]) -> Void) -> ([Entry], @Sendable () -> Void) {
         let subscriberId = UUID()
-        let (snapshot, cursor) = lock.withLock { state -> ([Entry], UInt64) in
+        let snapshot = lock.withLock { state -> [Entry] in
             let snapshot = getSnapshot(state: state)
             state.subscribers.append(Subscriber(
                 id: subscriberId,
                 cursor: state.nextSeq,
                 handler: handler
             ))
-            return (snapshot, state.nextSeq)
+            return snapshot
         }
         return (snapshot, { [weak self] in self?.unsubscribe(id: subscriberId) })
     }

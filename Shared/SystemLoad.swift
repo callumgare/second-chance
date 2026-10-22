@@ -13,7 +13,7 @@ import Foundation
 /// caller's own, in cores, against the Mac's performance-core count. The load
 /// average is no use for this — Wine's own threads, starved, push it past 100
 /// on a ten-core Mac.
-public struct SystemLoadReading: Sendable, Equatable {
+nonisolated public struct SystemLoadReading: Sendable, Equatable {
     /// Cores' worth of CPU other programs are using (`ps`'s decaying average).
     public let otherCores: Double
     /// Performance cores (all cores on a Mac without performance levels).
@@ -44,7 +44,7 @@ public struct SystemLoadReading: Sendable, Equatable {
     }
 }
 
-public enum SystemLoad {
+nonisolated public enum SystemLoad {
     /// Performance cores, or all physical cores where there are no levels
     /// (Intel Macs).
     public static let fastCoreCount: Int = {
