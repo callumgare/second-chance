@@ -29,6 +29,17 @@ nonisolated enum LogContext {
         }
     }
 
+    /// Leave the stage, at the start of a new run of work in the same
+    /// process (another build), so a failure before its first stage isn't
+    /// put in the last stage of the one before.
+    static func clearStage() {
+        let start = LogStore.shared.nextSequence
+        lock.withLock {
+            _stage = nil
+            _stageStart = start
+        }
+    }
+
     static var stage: (name: String?, start: UInt64) {
         lock.withLock { (_stage, _stageStart) }
     }

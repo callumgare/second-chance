@@ -201,6 +201,9 @@ class WrappBuildViewModel: ObservableObject {
         guard !isBuilding else { return }
         isBuilding = true
         defer { isBuilding = false }
+        // A new build: none of the last one's stage carries over to it.
+        LogContext.clearStage()
+        lastProgressState = nil
         let input = makeInput(self)
         let loadMonitor = SystemLoadMonitor()
         loadMonitor.start()
