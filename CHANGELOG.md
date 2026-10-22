@@ -2,6 +2,60 @@
 
 All notable changes to Second Chance.
 
+## 0.6.0 — 2026-10-23
+
+### New
+
+- Add support for games downloaded from the Her Interactive digital store, for both Windows and Mac downloads.
+- Add crash reporting. If a game fails to build, something goes wrong while you play, or Second Chance itself crashes, it can now send a report so the problem can be fixed.
+- Ask whether to send a report each time a game builds and launches successfully, so working games get noticed too, not just broken ones. You're only asked once, and can change your mind later in Settings.
+
+### Improved
+
+- Redesign the main window to walk you through building a game step by step, like a typical installer, with a sidebar showing your progress.
+- Tell a slow launch from a stuck one more accurately, so you're less likely to be told a launch may have failed when it's actually still working, and more likely to be told when it really has gotten stuck.
+- Show progress while Steam updates itself, and bring Steam's window forward when it needs your attention, such as signing in or asking you to quit a game playing elsewhere.
+- Wait for a game's previous session to fully close before starting a new one, instead of showing a confusing warning after a silent wait.
+- Give the launch and crash windows a more native look and feel, and make sure all the buttons fit properly on newer versions of macOS.
+- Lighten the app's accent colours in dark mode so they're easier to read.
+- Fix various accessibility issues, including for VoiceOver users, across both the main window and the game launch window.
+- Ask you to quit a game yourself before offering to quit it for you, so you don't lose unsaved progress by accident.
+
+### Fixed
+
+- Offer to move Second Chance into your Applications folder if it's run from somewhere else to fix app translocation issues.
+- Ask for disc 2 only once disc 1 has finished copying, with a button to eject disc 1 first, so a Mac with only one disc drive can be used for two-disc games.
+- Fix some games not quitting their background processes properly, which could leave things running after you closed the game.
+- Fix some Direct3D games going black when moving into or out of full screen on a separate desktop Space.
+- Fix a game sometimes being reported as having failed when it actually quit normally.
+- Fix the loading window's buttons being pushed off screen on newer versions of macOS.
+- Fix a game's window sometimes being waited for even after the game had already quit, which could cause a long, pointless delay.
+- Fix the "move to Applications" message being needlessly long.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Added `sc lint` (SwiftLint plus markdownlint for the docs), run in CI and before every release, with `sc setup` checking the tools are installed.
+- Fixed Swift 6 concurrency warnings across the app, Shared and the wrapp targets by marking pure value types and already-thread-safe classes `nonisolated`, and cleaned up several other compiler warnings (unused results, deprecated APIs, an Optional printed literally in a log line).
+- Removed stale framework/library search paths left over from a deleted Wine engine cache, and skipped App Intents metadata extraction since no target uses it.
+- Fixed `sc wrapp build`/`run` and `sc app run` running under `sc`'s own responsible process (causing spurious macOS permission prompts) by spawning with `POSIX_SPAWN_SETEXEC` instead of exec'ing.
+- Added `sc test integration --vm <name>` to run integration tests inside a tart VM, for testing another macOS version without taking over the local screen; VM GPUs lack hardware OpenGL so Direct3D launches are reported as skipped rather than failed.
+- Fixed `sc --on` using whichever `rsync` came first on each machine's PATH, which could silently drop the template's code signatures depending on the remote's rsync flavor; now pins `/usr/bin/rsync -aE` on both ends.
+- Fixed `sc wrapp update` not copying the template's asset catalog, so an accent colour or icon change never reached an already-built wrapp.
+- Fixed the test table showing a stuck "pending" row for Her downloads that only have a Mac installer.
+- Fixed Her Interactive Windows installers unpacking into a `Disk1` subfolder that the build didn't look in, and made Cider-based Mac downloads keep the few DLLs Wine has no builtin for.
+- Added `her-download` as a build source and test suite (`HerDownloadInstallIntegrationTests`) for testing Her Interactive downloads.
+- Fixed a build failure before the first progress step inheriting the previous successful build's last-known stage in reports.
+- Fixed integration test launches waiting for a game's window after the game process had already exited, and made the wrapp quit only after confirming Wine itself had actually stopped.
+- Fixed a Wine error more than 1 second before a quit being wrongly blamed for that quit.
+- Made each test launch use its own empty data folder instead of the player's real save/settings folder, so test runs can't pick up a player's local `Waverly.INI` window-mode setting.
+- Added `sc app screenshot`, used to retake the README screenshots automatically by sizing the app's window, waiting for it to appear, and capturing it with its shadow.
+- Rewrote the README for players, moving build/test/architecture documentation to a new CONTRIBUTING.md, and documented the Her Interactive download formats in docs/her-download.md.
+- Fixed a build run from a corrupted copy of the app template failing slowly and confusingly; now checks the template's code signatures up front and fails immediately with a clear error.
+- Made the source picker in the main window a real `List` again (for proper VoiceOver/keyboard support) while fixing the pixel-rounding bug that previously caused it to visually "nudge" rows on selection.
+
+</details>
+
 ## 0.5.0 — 2026-10-21
 
 ### New
