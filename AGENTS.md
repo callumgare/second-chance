@@ -24,6 +24,7 @@ package in `Tools/sc/` — [docs/dev-cli.md](docs/dev-cli.md)). The project uses
 ./sc clean wine-prefixes           # Clear the cached Wine prefix
 
 ./sc test unit                     # Unit tests (~6s) — fast feedback loop
+./sc lint                          # SwiftLint (strict) and markdownlint, as CI runs them
 ./sc test integration <game-slug>  # Integration test for one game
 ./sc test integration              # All games (hours, needs real installers)
 
@@ -223,6 +224,13 @@ direct assignment.
   extra that is never offered in text. Internal names are fine in code and
   in logs, which are for us. Keep a step's progress text short; what the
   person must _do_ goes in an `.instructions` event, shown at once.
+- **Lint passes.** `./sc lint` runs SwiftLint (`--strict`, `.swiftlint.yml`)
+  and markdownlint (`.markdownlint.jsonc`), CI fails on either, and
+  `sc release` asks before releasing with failures. Fix what they find
+  rather than loosening a rule; where a line genuinely must break one, a
+  `swiftlint:disable:next` with the reason. `.swiftlint.yml`'s custom rules
+  enforce this file's logging conventions (no `print()`, `os.Logger` or
+  `privacy:`) ([docs/dev-cli.md](docs/dev-cli.md#lint)).
 - **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
 
 ## Gotchas

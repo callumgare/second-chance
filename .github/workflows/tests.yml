@@ -5,6 +5,22 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: macos-26
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        # markdownlint runs through npx, and the runner has Node already.
+        run: brew install swiftlint
+
+      - name: Lint
+        # SwiftLint (strict) over the Swift code and markdownlint over the
+        # docs, exactly as `./sc lint` runs them on a Mac.
+        run: ./sc lint --logs raw
+
   unit-tests:
     name: Swift Unit Tests
     runs-on: macos-26

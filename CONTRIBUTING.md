@@ -93,6 +93,7 @@ In Xcode, set **Build Settings → Build Active Architecture Only → Debug → 
 ```bash
 ./sc test unit                        # Unit tests (seconds) — run these often
 ./sc test integration scarlet-hand    # Install, launch and quit one game for real
+./sc lint                             # SwiftLint and markdownlint, as CI runs them
 ```
 
 Integration tests need the game's installer in `installers/<game-slug>/`. Running them for every game takes hours and

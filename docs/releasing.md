@@ -6,6 +6,14 @@ conventional commits since the last tag — see
 [AGENTS.md](../AGENTS.md#releasing) for the commit-message rules that decide
 it.
 
+## Lint first
+
+Straight after its preflight checks, before it works out the version or has
+Claude Code rewrite the notes, `sc release` runs the linters, as `sc lint`
+does ([dev-cli.md](dev-cli.md#lint)). If they find anything it shows what, and
+asks whether to release anyway, defaulting to no; a run that can't ask stops.
+A dry run only reports what they found.
+
 ## What it writes
 
 - **The version.** `MARKETING_VERSION` goes into the `SecondChance` and

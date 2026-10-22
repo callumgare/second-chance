@@ -25,6 +25,7 @@ nearest command's help.
 ./sc release --plain-notes             # Release with the commit-message notes as they are
 ./sc release --notes-model opus        # Rewrite the notes with a model other than Sonnet
 ./sc release --build-only              # Build and zip the next version, changing nothing
+./sc lint                              # SwiftLint and markdownlint, as CI runs them
 ./sc setup                             # Once per clone: tools, commit hook, completions
 ./sc clean wine-prefixes               # Start the next build from a fresh Wine prefix
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
@@ -208,6 +209,20 @@ needs to allow windows, for the builds, and may be locked.
 test.
 
 [testing.md](testing.md) covers the suites themselves.
+
+## Lint
+
+`sc lint` (`Lint` in `Support/`) runs SwiftLint with `--strict` over the
+Swift code — rules in `.swiftlint.yml` — and markdownlint-cli2, pinned to
+`Lint.markdownlintVersion` and run through `npx`, over `README.md`,
+`CONTRIBUTING.md`, `AGENTS.md` and `docs/*.md` — rules in
+`.markdownlint.jsonc`, ignores in `.markdownlint-cli2.jsonc`. The files are
+listed rather than globbed, since a glob from the root walks the installers
+and build output before any ignore applies. Each linter is a step whose output
+shows when it fails, and the command exits 1 if either does. CI's Lint job runs
+it, and `sc release` runs the same check
+([releasing.md](releasing.md#lint-first)). `sc setup` checks `swiftlint` and
+`npx` are installed. `swiftlint --fix` fixes much of what SwiftLint finds.
 
 ## GUI session and remote Macs
 

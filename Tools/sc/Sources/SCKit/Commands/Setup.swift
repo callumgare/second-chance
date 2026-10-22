@@ -19,6 +19,8 @@ struct SetupCommand: AsyncParsableCommand {
         ("xcbeautify", "xcbeautify", "formats xcodebuild output"),
         ("xchtmlreport", "xctest-html-report", "HTML test reports"),
         ("cog", "cocogitto", "versions, changelog, commit lint"),
+        ("swiftlint", "swiftlint", "lints the Swift code (sc lint)"),
+        ("npx", "node", "runs markdownlint on the docs (sc lint)"),
     ]
     /// Needed only to cut a release, so their absence isn't a failure.
     static let releaseTools: [(name: String, formula: String, purpose: String)] = [

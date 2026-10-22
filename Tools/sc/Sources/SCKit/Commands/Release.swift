@@ -133,6 +133,19 @@ private struct Release {
         }
     }
 
+    /// Run the linters. On a failure, ask whether to release anyway, defaulting
+    /// to no; a dry run only reports it, and a run that can't ask stops.
+    private func checkLint() async throws {
+        let failed = await Lint.run(session: session)
+        guard !failed.isEmpty else { return }
+        ui.warning("Lint failed: \(failed.joined(separator: ", ")).", next: "Fix it and run ./sc lint, or release anyway.")
+        if dryRun { return }
+        guard try ui.confirm("Continue the release with lint failures?", default: false) == true else {
+            throw SCError("Release stopped: lint failed (\(failed.joined(separator: ", "))).",
+                          hints: ["./sc lint shows the problems; swiftlint --fix fixes many Swift ones."])
+        }
+    }
+
     /// Take the release's writes back out of the files, and remove the
     /// packaged files in `removing` — the ones it created.
     private func restore(_ rollback: FileRollback, removing: [URL], reason: String) async {
@@ -168,6 +181,10 @@ private struct Release {
             try await preflight()
         }
 
+        // Lint, before anything is generated: a release can go out with lint
+        // failures, but only when someone says so.
+        try await checkLint()
+
         // 2. Version
         let lastTag = try await git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
         let previous = lastTag.succeeded ? lastTag.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
@@ -176,7 +193,8 @@ private struct Release {
         // means it changes every release — WineManager keys its prefix cache
         // on it, so a stale cache can't survive an upgrade.
         let buildNumber = try await git(["rev-list", "--count", "HEAD"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
-        ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(versionOverride != nil ? "from --version" : "up from \(previous ?? "no tag")")"))"))
+        let origin = versionOverride != nil ? "from --version" : "up from \(previous ?? "no tag")"
+        ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(origin)"))"))
 
         var notes: String
         if buildOnly {
@@ -356,7 +374,9 @@ private struct Release {
             }
             return notes
         }
-        ui.line(ui.format("\(.accent("📝 The release notes are the \(version) section of CHANGELOG.md. Edit them there now if you want to — the GitHub release and the update window use that section once you continue."))"))
+        let editHint = "📝 The release notes are the \(version) section of CHANGELOG.md. Edit them there now if you want to"
+            + " — the GitHub release and the update window use that section once you continue."
+        ui.line(ui.format("\(.accent(editHint))"))
         ui.line(try section().split(separator: "\n", omittingEmptySubsequences: false).map { "   " + $0 }.joined(separator: "\n"))
         if try ui.confirm("Done with the notes? Continue the release with CHANGELOG.md's \(version) section as it is now?", default: true) == false {
             throw SCError("Stopped at the release notes.", hints: ["Run sc release again when you're ready."])

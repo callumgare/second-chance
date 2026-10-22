@@ -33,9 +33,7 @@ enum TestEvent: Equatable, Sendable {
         }
 
         let kind: Kind
-        if line.hasPrefix("Test ") { kind = .test; line = line.dropFirst(5) }
-        else if line.hasPrefix("Suite ") { kind = .suite; line = line.dropFirst(6) }
-        else { return nil }
+        if line.hasPrefix("Test ") { kind = .test; line = line.dropFirst(5) } else if line.hasPrefix("Suite ") { kind = .suite; line = line.dropFirst(6) } else { return nil }
 
         guard let (name, rest) = splitName(line) else { return nil }
         var tail = rest.drop { $0 == " " }

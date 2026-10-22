@@ -1,0 +1,71 @@
+# SwiftLint settings. `./sc lint` runs it (with --strict, so a warning
+# fails), and so do CI and `./sc release`. See AGENTS.md ("Linting").
+
+included:
+  - SecondChance
+  - Shared
+  - WrappTemplate
+  - WrappPuppeteer
+  - SecondChanceTests
+  - Tools/sc/Sources
+  - Tools/sc/Tests
+
+disabled_rules:
+  # Size and complexity metrics: much of the existing code is over them, and
+  # bringing it under is refactoring, not something a linter should block.
+  - cyclomatic_complexity
+  - file_length
+  - function_body_length
+  - function_parameter_count
+  - large_tuple
+  - nesting
+  - type_body_length
+  # Trailing commas are used or not as reads best; either is fine.
+  - trailing_comma
+  # Subprocess output and logs are decoded lossily on purpose
+  # (String(decoding:as:)): a stray invalid byte must not lose the line.
+  - optional_data_string_conversion
+  # TODOs are allowed; they are how known gaps are marked.
+  - todo
+
+line_length:
+  warning: 180
+  ignores_urls: true
+
+identifier_name:
+  # Short names (i, x, d, vm) are fine in a small scope.
+  min_length: 1
+  max_length: 60
+  allowed_symbols: ["_"]
+
+type_name:
+  min_length: 2
+  max_length: 60
+
+custom_rules:
+  no_print:
+    name: "No print()"
+    regex: '^\s*print\('
+    message: "Log through swift-log instead (AGENTS.md, Code Conventions). sc's own output goes through its terminal UI."
+    excluded:
+      - "Tools/sc/"
+      - "WrappTemplate/InProcessHelpers/patch-winemac.swift"
+      - "WrappPuppeteer/main.swift"
+      # Tests print their own console output on purpose.
+      - "SecondChanceTests/"
+    severity: error
+  no_os_logger:
+    name: "No os.Logger"
+    regex: '\bos\.Logger\b|\bLogger\(subsystem:'
+    message: "Use swift-log's Logger(label:) (AGENTS.md, Code Conventions)."
+    excluded:
+      # The one place OSLog is written, behind swift-log.
+      - "Shared/Logging/OSLogHandler.swift"
+    severity: error
+  no_privacy_annotation:
+    name: "No privacy: annotations"
+    regex: 'privacy:\s*\.(public|private)'
+    message: "swift-log has no privacy annotations; OSLogHandler handles OSLog's (AGENTS.md, Code Conventions)."
+    excluded:
+      - "Shared/Logging/OSLogHandler.swift"
+    severity: error

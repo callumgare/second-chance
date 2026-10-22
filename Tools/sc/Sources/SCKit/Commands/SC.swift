@@ -15,6 +15,7 @@ public struct SC: AsyncParsableCommand {
             AppCommand.self,
             WrappCommand.self,
             TestCommand.self,
+            LintCommand.self,
             ReleaseCommand.self,
             SetupCommand.self,
             CleanCommand.self,
