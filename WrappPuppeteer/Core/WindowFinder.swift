@@ -54,16 +54,20 @@ enum WindowFinder {
     }
 
     /// Poll until at least one on-screen window matches, returning all matches.
+    /// Gives up early, returning nil, once `giveUp` says there's no point
+    /// waiting on (the process that would own the window has exited, say).
     static func waitForWindows(
         timeout: TimeInterval,
         pollInterval: TimeInterval = 0.2,
-        where matches: (WindowInfo) -> Bool
+        where matches: (WindowInfo) -> Bool,
+        giveUp: () -> Bool = { false }
     ) -> [WindowInfo]? {
         let start = Date()
         var lastLog = Date.distantPast
         while Date().timeIntervalSince(start) < timeout {
             let found = onScreenWindows().filter(matches)
             if !found.isEmpty { return found }
+            if giveUp() { return nil }
 
             if Date().timeIntervalSince(lastLog) >= 5 {
                 logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] No matching windows yet, still waiting...")

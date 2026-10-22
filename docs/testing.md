@@ -268,7 +268,12 @@ they only lengthen a failing run. It waits up to 900 s for the game's process
 to appear (the wrapp may first spend up to 600 s waiting for Wine's desktop),
 then 300 s for its window, 120 s for that window to come to the front, 180 s
 for the wrapp's cursor lock to finish before the first click, 300 s
-to find and click Exit and 300 s for the game to quit. The `--timeout` that
+to find and click Exit and 300 s for the game to quit. The wait for the
+window ends early if the game's process exits first: after 10 s more to see
+whether the same exe starts again (a launcher stub, such as Steam's DRM, can
+re-launch it), the run fails with `<exe> exited before showing a window`
+rather than waiting out the 300 s. A zombie (exited, not yet reaped) counts as
+exited (`ProcessControl.isAlive`). The `--timeout` that
 `AppPuppetRunner.run(timeout:)` passes is only logged. The wrapp's "save
 regularly" warning counts as dismissed only once the wrapp says it has gone
 (the window itself stays up, showing a loading message, until the game has

@@ -99,9 +99,13 @@ struct NancyDrewQuitScenario {
             }
         }
 
-        guard let (gamePid, _) = waitForGameWindow() else {
+        let gamePid: Int32
+        switch waitForGameWindow() {
+        case .found(let pid, _):
+            gamePid = pid
+        case .failed(let reason):
             forceQuit(app)
-            return .failed("Game process or window did not appear in time")
+            return .failed(reason)
         }
 
         logger.notice("ℹ️  Game process PID: \(gamePid)")
@@ -229,31 +233,72 @@ struct NancyDrewQuitScenario {
         ProcessControl.forceQuit(app, cleanupCommands: wrapp.cleanupCommands)
     }
 
-    /// Wait for the game's process, then its window. Returns the game
+    private enum GameWindowWait {
+        case found(pid: Int32, windows: [WindowInfo])
+        case failed(String)
+    }
+
+    /// Wait for the game's process, then its window. Found: the game
     /// process's PID and its windows.
-    private func waitForGameWindow() -> (pid: Int32, windows: [WindowInfo])? {
+    private func waitForGameWindow() -> GameWindowWait {
         let processName = wrapp.engine.gameProcessName(gameExeName: wrapp.gameExeName)
         logger.notice("⏳ Waiting for game process (timeout: \(Int(options.processDetectTimeout))s), then its window...")
         let start = Date()
+        let timedOut = "Game process or window did not appear in time"
 
         logger.notice("[Step 1] Monitoring for \(processName) process...")
         guard let process = ProcessFinder.waitForProcess(named: processName, timeout: options.processDetectTimeout) else {
-            return nil
+            return .failed(timedOut)
         }
-        let pid = process.pid
+        var pid = process.pid
 
         logger.notice("[Step 2] Monitoring for windows from \(processName) (PID: \(pid))...")
-        guard let windows = WindowFinder.waitForWindows(timeout: options.windowDetectTimeout, where: { $0.ownerPid == pid }) else {
-            logger.critical("❌ Timeout: \(processName) process found but no windows appeared")
-            WindowFinder.logAllWindows()
-            return nil
+        let windowDeadline = Date().addingTimeInterval(options.windowDetectTimeout)
+        while true {
+            let watched = pid
+            if let windows = WindowFinder.waitForWindows(timeout: windowDeadline.timeIntervalSinceNow,
+                                                         where: { $0.ownerPid == watched },
+                                                         giveUp: { !ProcessControl.isAlive(watched) }) {
+                logger.notice("✅ Game window detected after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
+                for (index, window) in windows.enumerated() {
+                    logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
+                }
+                return .found(pid: pid, windows: windows)
+            }
+            if ProcessControl.isAlive(watched) {
+                logger.critical("❌ Timeout: \(processName) process found but no windows appeared")
+                WindowFinder.logAllWindows()
+                return .failed(timedOut)
+            }
+            // Gone without a window. A launcher stub (Steam's DRM wrapper,
+            // say) can start the exe again, so look briefly for its successor
+            // before calling it: waiting out the full window timeout for a
+            // process that has already died only delays the failure by minutes.
+            logger.warning("⚠️  \(processName) (PID: \(watched)) exited before showing a window; checking whether it started again...")
+            if let successor = successor(named: processName, replacing: watched, within: 10),
+               windowDeadline.timeIntervalSinceNow > 0 {
+                pid = successor.pid
+                logger.notice("[Step 2] Monitoring for windows from \(processName) (PID: \(pid))...")
+                continue
+            }
+            logger.critical("❌ \(processName) exited before showing a window")
+            return .failed("\(processName) exited before showing a window")
         }
+    }
 
-        logger.notice("✅ Game window detected after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
-        for (index, window) in windows.enumerated() {
-            logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
+    /// A live process named `name` other than `pid`, if one starts within
+    /// `timeout`. `pid` itself can linger in the process list as a zombie.
+    private func successor(named name: String, replacing pid: Int32, within timeout: TimeInterval) -> RunningProcess? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let match = ProcessFinder.allProcesses().first(where: {
+                $0.pid != pid && $0.name.lowercased() == name.lowercased() && ProcessControl.isAlive($0.pid)
+            }) {
+                return match
+            }
+            Thread.sleep(forTimeInterval: 0.5)
         }
-        return (pid, windows)
+        return nil
     }
 
     /// Wait for the game's window to take focus.

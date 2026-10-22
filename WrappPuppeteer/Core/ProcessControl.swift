@@ -195,9 +195,16 @@ enum ProcessControl {
     }
 
     /// Whether a PID is alive. `kill(pid, 0)` is used because it is the only
-    /// check that's reliable for processes LaunchServices doesn't track.
+    /// check that's reliable for processes LaunchServices doesn't track. It
+    /// also succeeds for a zombie — a process that has exited and is only
+    /// waiting for its parent to collect it — which counts as dead here.
     static func isAlive(_ pid: Int32) -> Bool {
-        kill(pid, 0) == 0
+        guard kill(pid, 0) == 0 else { return false }
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return true }
+        return info.kp_proc.p_stat != SZOMB
     }
 
     /// True while either the app or the helper process is alive.
