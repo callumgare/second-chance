@@ -13,10 +13,10 @@ extension URL {
         // Use standardized paths to handle /private symlinks
         let baseURL = base.standardizedFileURL
         let selfURL = self.standardizedFileURL
-        
+
         let baseComponents = baseURL.pathComponents
         let selfComponents = selfURL.pathComponents
-        
+
         // Find common prefix
         var commonCount = 0
         for (baseComp, selfComp) in zip(baseComponents, selfComponents) {
@@ -26,7 +26,7 @@ extension URL {
                 break
             }
         }
-        
+
         // Get the unique part
         let uniqueComponents = Array(selfComponents[commonCount...])
         return uniqueComponents.joined(separator: "/")

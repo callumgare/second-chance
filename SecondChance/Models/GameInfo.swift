@@ -23,14 +23,14 @@ nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     let doesNotExitInNonInteractiveMode: Bool
     let installInstructions: String?
     let failedInstallInfo: String?
-    
+
     enum GameEngine: String, Codable {
         case wine
         case scummvm
         case wineSteam = "wine-steam"
         case wineSteamSilent = "wine-steam-silent"
     }
-    
+
     enum SteamDRM: String, Codable {
         case no
         case yesLaunchWhenSteamRunning = "yes-launch-when-steam-running"
@@ -76,7 +76,7 @@ nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         if steamDRM == .no && launchMode == .direct { return gameEngine }
         return .wineSteam
     }
-    
+
     init(
         id: String,
         title: String,

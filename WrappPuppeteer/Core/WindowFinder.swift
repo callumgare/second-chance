@@ -82,7 +82,8 @@ enum WindowFinder {
     static func logAllWindows() {
         logger.notice("📋 Current windows on screen:")
         for (index, window) in onScreenWindows().enumerated() where window.isSubstantial {
-            logger.notice("   [\(index)] Owner: '\(window.ownerName)' (PID \(window.ownerPid)) | Title: '\(window.title)' | Size: \(Int(window.bounds.width))x\(Int(window.bounds.height))")
+            let size = "\(Int(window.bounds.width))x\(Int(window.bounds.height))"
+            logger.notice("   [\(index)] Owner: '\(window.ownerName)' (PID \(window.ownerPid)) | Title: '\(window.title)' | Size: \(size)")
         }
     }
 }

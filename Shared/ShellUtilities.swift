@@ -11,13 +11,13 @@ import Foundation
 func shellQuote(_ string: String) -> String {
     // If string contains spaces, special chars, or is empty, quote it
     let needsQuoting = string.isEmpty || string.contains(" ") || string.rangeOfCharacter(from: CharacterSet(charactersIn: "$`\"\\!*?[]{}()<>|;&~")) != nil
-    
+
     if needsQuoting {
         // Escape single quotes by replacing ' with '\''
         let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
         return "'\(escaped)'"
     }
-    
+
     return string
 }
 

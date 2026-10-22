@@ -29,14 +29,14 @@ enum InputControl {
             width: size,
             height: size
         )
-        
+
         let window = NSWindow(
             contentRect: windowRect,
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
-        
+
         window.backgroundColor = .clear
         window.isOpaque = false
         window.level = .statusBar
@@ -49,7 +49,7 @@ enum InputControl {
         // Create a custom view for the animation
         let animationView = ClickAnimationView(frame: NSRect(x: 0, y: 0, width: size, height: size))
         window.contentView = animationView
-        
+
         // Show the window
         window.orderFrontRegardless()
 
@@ -58,12 +58,12 @@ enum InputControl {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = clickAnimationDuration
                 animationView.animator().alphaValue = 0.0
-            }) {
+            }, completionHandler: {
                 window.close()
-            }
+            })
         }
     }
-    
+
     /// Show the click ring at a screen point, and turn the main run loop for
     /// the length of its fade. The scenario runs on the main thread and
     /// otherwise only ever sleeps, so without that AppKit wouldn't put the
@@ -81,17 +81,17 @@ enum InputControl {
 class ClickAnimationView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        
+
         guard let context = NSGraphicsContext.current?.cgContext else { return }
-        
+
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
-        
+
         // Draw outer ring
         context.setStrokeColor(NSColor.systemBlue.withAlphaComponent(0.8).cgColor)
         context.setLineWidth(4.0)
         context.addArc(center: center, radius: bounds.width/2 - 2, startAngle: 0, endAngle: .pi * 2, clockwise: true)
         context.strokePath()
-        
+
         // Draw inner dot
         context.setFillColor(NSColor.systemBlue.withAlphaComponent(0.6).cgColor)
         context.addArc(center: center, radius: 6, startAngle: 0, endAngle: .pi * 2, clockwise: true)

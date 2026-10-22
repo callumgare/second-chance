@@ -306,7 +306,8 @@ struct InfoWindowView: View {
         VStack(alignment: .leading, spacing: 8) {
             caution("Possible launch failure")
 
-            informative("\(viewModel.stage.subject) is taking much longer than usual to start, and may have failed. It's still trying, so you can keep waiting — or look at the log, or quit.")
+            informative("\(viewModel.stage.subject) is taking much longer than usual to start, and may have failed. "
+                + "It's still trying, so you can keep waiting — or look at the log, or quit.")
 
             launchWithoutSteamNote
 

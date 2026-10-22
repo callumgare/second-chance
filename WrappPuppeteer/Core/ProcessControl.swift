@@ -157,7 +157,8 @@ enum ProcessControl {
 
         if let bundleID = Bundle(path: appPath)?.bundleIdentifier {
             for leftover in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
-                logger.warning("⚠️  \(bundleID) is already running (PID \(leftover.processIdentifier), launched \(leftover.launchDate.map { "\($0)" } ?? "at an unknown time")) — killing it first")
+                let launched = leftover.launchDate.map { "\($0)" } ?? "at an unknown time"
+                logger.warning("⚠️  \(bundleID) is already running (PID \(leftover.processIdentifier), launched \(launched)) — killing it first")
                 kill(leftover.processIdentifier, SIGKILL)
                 _ = waitForExit(leftover.processIdentifier, timeout: 5)
             }

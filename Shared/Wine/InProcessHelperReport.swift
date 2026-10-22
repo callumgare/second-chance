@@ -130,7 +130,9 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
             return expected.filter { !armed.contains($0) }
         }
         for helper in missing {
-            logger.error("[Helpers] \(helper.name) never armed in the game, \(Int(Self.armDeadline))s after its window appeared: \(helper.consequence). The helper may not recognise the game's process; see docs/wine-in-process-helpers.md")
+            let message = "[Helpers] \(helper.name) never armed in the game, \(Int(Self.armDeadline))s after its window appeared: "
+                + "\(helper.consequence). The helper may not recognise the game's process; see docs/wine-in-process-helpers.md"
+            logger.error("\(message)")
         }
         return missing
     }

@@ -158,7 +158,9 @@ struct FailureReportCallout: View {
     }
 
     /// The first-failure question's case for a detailed report.
-    static let detailedIsWhatHelps = "A report about this is sent to the developer so it can be fixed. A detailed one includes the log of what was happening, which is usually what it takes to track the problem down and fix it. Your name and folders are taken out. A basic one says only which game it was and what failed."
+    static let detailedIsWhatHelps = "A report about this is sent to the developer so it can be fixed. "
+        + "A detailed one includes the log of what was happening, which is usually what it takes to track the problem down and fix it. "
+        + "Your name and folders are taken out. A basic one says only which game it was and what failed."
 
     /// What a basic and a detailed report each say, in a sentence.
     static let levelExplanation = "A basic report says which game and what failed. A detailed one adds the log and diagnostics, with your name and folders taken out."

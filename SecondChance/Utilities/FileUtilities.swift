@@ -11,7 +11,7 @@ extension URL {
     var isDirectory: Bool {
         (try? resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
     }
-    
+
     /// Get file size
     var fileSize: Int64? {
         try? resourceValues(forKeys: [.fileSizeKey]).fileSize.map { Int64($0) }
@@ -28,9 +28,9 @@ extension FileManager {
         ) else {
             return 0
         }
-        
+
         var totalSize: Int64 = 0
-        
+
         for case let fileURL as URL in enumerator {
             guard let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey]),
                   let isDirectory = resourceValues.isDirectory,
@@ -40,7 +40,7 @@ extension FileManager {
             }
             totalSize += Int64(fileSize)
         }
-        
+
         return totalSize
     }
 }

@@ -68,7 +68,8 @@ nonisolated enum InstallCompletion {
             let names = (try? fileManager.contentsOfDirectory(atPath: folder.path)) ?? []
             if names.contains(where: isInstallShieldUninstallLog) { return nil }
         }
-        return "InstallShield wrote no setup.ilg uninstall log, which it does once an install finishes, in \(gameDir.lastPathComponent), the folders above it or InstallShield Installation Information"
+        return "InstallShield wrote no setup.ilg uninstall log, which it does once an install finishes, "
+            + "in \(gameDir.lastPathComponent), the folders above it or InstallShield Installation Information"
     }
 
     /// `setup.ilg` (InstallShield 6 and later) or `DeIsL1.isu` (InstallShield 5).

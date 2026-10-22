@@ -92,7 +92,7 @@ enum AppMover {
     /// there, and take the quarantine attribute off. A read-only original —
     /// one on a disk image — is copied instead.
     nonisolated static func move(_ original: URL, to applications: URL = applicationsFolder(),
-                     bundleName: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Second Chance") throws -> URL {
+                                 bundleName: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Second Chance") throws -> URL {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: applications, withIntermediateDirectories: true)
         let destination = destination(in: applications, bundleName: bundleName)

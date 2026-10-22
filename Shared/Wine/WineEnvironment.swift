@@ -21,20 +21,20 @@ nonisolated public struct WineEnvironment: Sendable {
     let wineBinDir: URL
     let prefixDir: URL
     let frameworksDir: URL
-    
+
     static let wineUsername = "crossover"
 
     /// `WINEDEBUG` when `SECOND_CHANCE_WINEDEBUG` is unset: every channel
     /// off except the err class. See docs/logging.md.
     static let defaultWineDebug = "-all,err+all"
-    
+
     public init(appPath: URL, customPrefixDir: URL? = nil) {
         self.wineDir = appPath.appendingPathComponent("Contents/SharedSupport/wine")
         self.wineBinDir = wineDir.appendingPathComponent("bin")
         self.prefixDir = customPrefixDir ?? appPath.appendingPathComponent("Contents/SharedSupport/prefix")
         self.frameworksDir = appPath.appendingPathComponent("Contents/Frameworks")
     }
-    
+
     /// Get only the Wine-specific environment variables (not all system vars)
     public func wineSpecificEnvironmentVariables() -> [String: String] {
         let dyldFallbackLibraryPath = [
@@ -51,7 +51,7 @@ nonisolated public struct WineEnvironment: Sendable {
             "/usr/lib/system",
             "/opt/X11/lib"
         ].joined(separator: ":")
-        
+
         let originalPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
 
         // Only Wine's err class by default: it costs a line or two on a
@@ -86,7 +86,7 @@ nonisolated public struct WineEnvironment: Sendable {
             "DOTNET_EnableWriteXorExecute": "0"
         ]
     }
-    
+
     /// The directory WrappPuppeteer gave the wrapp for its control sockets,
     /// when it started the wrapp; nil for every player's launch.
     public static func puppetDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
@@ -165,20 +165,20 @@ nonisolated public struct WineEnvironment: Sendable {
     /// Generate Wine environment variables (includes system vars + Wine-specific vars)
     public func environmentVariables() -> [String: String] {
         var env = ProcessInfo.processInfo.environment
-        
+
         // Merge in Wine-specific variables
         for (key, value) in wineSpecificEnvironmentVariables() {
             env[key] = value
         }
-        
+
         return env
     }
-    
+
     /// Run a Wine executable
     @discardableResult
     public func runExecutable(_ executable: String, arguments: [String] = []) -> Int32 {
         let executablePath = wineBinDir.appendingPathComponent(executable)
-        
+
         let process = Process()
         process.executableURL = executablePath
         process.arguments = arguments
@@ -191,7 +191,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.standardInput = FileHandle.standardInput
         process.standardOutput = FileHandle.standardOutput
         process.standardError = FileHandle.standardError
-        
+
         do {
             try process.run()
             process.waitUntilExit()
@@ -201,7 +201,7 @@ nonisolated public struct WineEnvironment: Sendable {
             return -1
         }
     }
-    
+
     /// Run a Wine program and wait for it, streaming its output into the
     /// log line by line as it arrives.
     ///
@@ -420,7 +420,7 @@ nonisolated public struct WineEnvironment: Sendable {
         let args = ["start", "/wait", "/unix", exePath] + arguments
         try await runWine(executable: "wine", arguments: args, timeout: timeout)
     }
-    
+
     /// Run a Windows executable with wine start /wait (synchronous version for WrappTemplate)
     /// Returns the Process object for async monitoring
     public func runWindowsExecutableWithStart(
@@ -433,24 +433,24 @@ nonisolated public struct WineEnvironment: Sendable {
         let exeURL = URL(fileURLWithPath: exePath)
         let exeDir = exeURL.deletingLastPathComponent().path
         let exeFileName = exeURL.lastPathComponent
-        
+
         // Use just the filename, not /unix path
         let args = ["start", "/wait", exeFileName] + arguments
-        
+
         let process = Process()
         process.executableURL = wineExecutable
         process.arguments = args
 
         process.environment = environmentVariables().merging(Self.inProcessHelperVariables(gameExe: exeURL)) { $1 }
         process.currentDirectoryURL = URL(fileURLWithPath: exeDir)
-        
+
         if let outputPipe = outputPipe {
             process.standardOutput = outputPipe
         }
         if let errorPipe = errorPipe {
             process.standardError = errorPipe
         }
-        
+
         try process.run()
         return process
     }
@@ -543,12 +543,12 @@ nonisolated public struct WineEnvironment: Sendable {
         let wineserverPath = wineBinDir.appendingPathComponent("wineserver")
         // A ScummVM wrapp has no Wine at all, so no wineserver to be running.
         guard FileManager.default.fileExists(atPath: wineserverPath.path) else { return false }
-        
+
         let process = Process()
         process.executableURL = wineserverPath
         process.arguments = ["-k0"]  // Send null signal to check if server is running
         process.environment = environmentVariables()
-        
+
         do {
             try process.run()
             process.waitUntilExit()
@@ -559,17 +559,17 @@ nonisolated public struct WineEnvironment: Sendable {
             return false
         }
     }
-    
+
     /// Stop wineserver for this prefix
     @discardableResult
     public func stopWineserver() -> Int32 {
         let wineserverPath = wineBinDir.appendingPathComponent("wineserver")
-        
+
         let process = Process()
         process.executableURL = wineserverPath
         process.arguments = ["-k"]  // Kill all Wine processes for this prefix
         process.environment = environmentVariables()
-        
+
         do {
             try process.run()
             process.waitUntilExit()
@@ -592,7 +592,7 @@ public enum WineError: LocalizedError {
     /// The program printed Wine's `nodrv_CreateWindow` error: it found no
     /// usable desktop, so it ran without a display.
     case noDisplay
-    
+
     public var errorDescription: String? {
         switch self {
         case .executionFailed(let code):

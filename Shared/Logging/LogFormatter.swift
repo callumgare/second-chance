@@ -18,7 +18,7 @@ nonisolated struct LogLineFields: Equatable, Sendable {
 
 /// Log formatting styles.
 nonisolated struct LogFormatter {
-    
+
     /// Compact format for terminal and window display.
     /// Format: `HH:mm:ss.SSS  notice  GameDetector  <message>`
     /// Short category because messages carry their own structure.
@@ -30,7 +30,7 @@ nonisolated struct LogFormatter {
     nonisolated static func time(entry: Entry) -> String {
         timeFormatter.string(from: entry.timestamp)
     }
-    
+
     /// Full format for export and disk mirror.
     /// One line per entry: `<ISO8601 timestamp>  <level>  <full label>  <message>`
     /// with an attached error appended as ` — Error: <error>` and any
@@ -110,7 +110,7 @@ nonisolated struct LogFormatter {
 
     /// `HH:mm:ss.SSS  <level>  <category>  <message>`.
     nonisolated private static let compactLineRegex = /^(\d{2}:\d{2}:\d{2}\.\d{3})\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/
-    
+
     /// Time formatter for compact display (HH:mm:ss.SSS).
     nonisolated private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -118,7 +118,7 @@ nonisolated struct LogFormatter {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         return formatter
     }()
-    
+
     /// Full ISO8601 formatter for exports (`2026-08-16T03:42:59.167Z`).
     /// `.withInternetDateTime` carries the dash/colon separators the raw
     /// option list omits (without `.withColonSeparatorInTime` the time
@@ -130,7 +130,7 @@ nonisolated struct LogFormatter {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
-    
+
     // MARK: - Category
 
     /// Extract the category (last component) from a label like "au.gare.callum.second-chance.SecondChance.GameDetector".
@@ -140,7 +140,7 @@ nonisolated struct LogFormatter {
         }
         return label
     }
-    
+
     /// Format level with consistent width.
     nonisolated static func formatLevel(_ level: String) -> String {
         // swift-log level names are lowercase, but we may get mixed case

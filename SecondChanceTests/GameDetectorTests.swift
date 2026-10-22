@@ -4,7 +4,7 @@ import Foundation
 
 @Suite("Game Detection")
 struct GameDetectorTests {
-    
+
     // Test fingerprint to game slug mapping
     @Test("Detect game from fingerprint", arguments: [
         ("Nancy Drew Secrets Can Kill", "secrets-can-kill"),
@@ -47,7 +47,7 @@ struct GameDetectorTests {
         let slug = detector.getGameSlugFromFingerprint(fingerprint)
         #expect(slug == expectedSlug, "Expected '\(fingerprint)' to match '\(expectedSlug)' but got '\(slug)'")
     }
-    
+
     // Test alternate game codes
     @Test("Detect game from alternate codes", arguments: [
         ("STFD", "stay-tuned"),
@@ -63,7 +63,7 @@ struct GameDetectorTests {
         let slug = detector.getGameSlugFromFingerprint(code)
         #expect(slug == expectedSlug, "Expected code '\(code)' to match '\(expectedSlug)' but got '\(slug)'")
     }
-    
+
     // Test that unknown fingerprints return "unknown"
     @Test("Unknown fingerprints return unknown", arguments: [
         "Random Game Title",
@@ -76,38 +76,38 @@ struct GameDetectorTests {
         let slug = detector.getGameSlugFromFingerprint(fingerprint)
         #expect(slug == "unknown", "Expected unknown fingerprint '\(fingerprint)' to return 'unknown' but got '\(slug)'")
     }
-    
+
     // Test case insensitivity
     @Test("Fingerprint matching is case insensitive")
     func caseInsensitivity() {
         let detector = GameDetector.shared
-        
+
         let variations = [
             "SECRET OF THE SCARLET HAND",
             "secret of the scarlet hand",
             "Secret Of The Scarlet Hand",
             "sEcReT oF tHe ScArLeT hAnD"
         ]
-        
+
         for variation in variations {
             let slug = detector.getGameSlugFromFingerprint(variation)
             #expect(slug == "scarlet-hand", "Case insensitive match failed for '\(variation)'")
         }
     }
-    
+
     // Test partial matching (with extra text)
     @Test("Fingerprint with extra text still matches")
     func partialMatching() {
         let detector = GameDetector.shared
-        
+
         let fingerprints = [
             "Nancy Drew: Secret of the Scarlet Hand (Disc 1)",
             "Last Train to Blue Moon Canyon - Her Interactive",
             "The Curse of Blackmoor Manor Game",
         ]
-        
+
         let expected = ["scarlet-hand", "blue-moon", "blackmoor-manor"]
-        
+
         for (fingerprint, expectedSlug) in zip(fingerprints, expected) {
             let slug = detector.getGameSlugFromFingerprint(fingerprint)
             #expect(slug == expectedSlug, "Partial match failed for '\(fingerprint)'")
@@ -117,23 +117,23 @@ struct GameDetectorTests {
 
 @Suite("Game Detection - Integration Tests")
 struct GameDetectorIntegrationTests {
-    
+
     // These tests require mock disk structures
     // They will be skipped if the test fixtures don't exist
-    
+
     @Test("Detect game from mock disk with setup.exe")
     func detectFromMockDiskWithSetupExe() async throws {
         let testFixturesPath = URL(fileURLWithPath: "/Users/callumgare/repos/second-chance/SecondChance/TestFixtures")
         let mockDiskPath = testFixturesPath.appendingPathComponent("scarlet-hand-disk")
-        
+
         guard FileManager.default.fileExists(atPath: mockDiskPath.path) else {
             // Skip test if fixture not found
             return
         }
-        
+
         let detector = await GameDetector.shared
         let gameSlug = try await detector.detectGame(fromDisk: mockDiskPath)
-        
+
         #expect(gameSlug == "scarlet-hand")
     }
 }

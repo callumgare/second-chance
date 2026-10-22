@@ -101,7 +101,8 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
             (Date().timeIntervalSince(startTime), Date().timeIntervalSince(lastOutput), lineCount, self.pid)
         }
         guard quiet >= heartbeat - 0.5 else { return }
-        logger.notice("… \(name) (pid \(pid)) still running after \(Self.duration(elapsed)); no output for \(Self.duration(quiet)) (\(lines) lines so far)", metadata: metadata(pid))
+        logger.notice("… \(name) (pid \(pid)) still running after \(Self.duration(elapsed)); no output for \(Self.duration(quiet)) (\(lines) lines so far)",
+                      metadata: metadata(pid))
     }
 
     private func metadata(_ pid: Int32) -> Logging.Logger.Metadata {

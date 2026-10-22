@@ -7,7 +7,7 @@
 //  for structured (typed) events across the app.
 //
 //  Note: this is deliberately NOT used for log text. Text logging goes directly
-//  to os.Logger. The bus carries typed events that tests and UI can assert on.
+//  through swift-log. The bus carries typed events that tests and UI can assert on.
 
 import Foundation
 

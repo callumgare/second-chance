@@ -14,11 +14,11 @@ class GameDetector {
 
     private let exiftool: ExiftoolService
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameDetector")
-    
+
     init(exiftool: ExiftoolService = .shared) {
         self.exiftool = exiftool
     }
-    
+
     /// Detect game from disk path
     func detectGame(fromDisk diskPath: URL) async throws -> String {
         // Note: Progress should already be reported by caller before this method
@@ -34,21 +34,21 @@ class GameDetector {
         )
 
         stepLogger.notice("Found \(contents.count) items in disk")
-        
+
         if let setupExe = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.exe" }) {
             if let productName = try? getFileInfo(setupExe, property: "Product Name") {
                 stepLogger.notice("Product Name: \(productName)")
                 fingerprint += " \(productName)"
             }
         }
-        
+
         if let msiFile = contents.first(where: { $0.pathExtension.lowercased() == "msi" }) {
             if let subject = try? getFileInfo(msiFile, property: "Subject") {
                 stepLogger.notice("MSI Subject: \(subject)")
                 fingerprint += " \(subject)"
             }
         }
-        
+
         if let setupIni = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.ini" }) {
             if let iniContent = try? String(contentsOf: setupIni, encoding: .utf8) {
                 if let appName = getPropertyFromIni(iniContent, property: "AppName") {
@@ -61,7 +61,7 @@ class GameDetector {
                 }
             }
         }
-        
+
         if let autorunInf = contents.first(where: { $0.lastPathComponent.lowercased() == "autorun.inf" }) {
             if let autorunContent = try? String(contentsOf: autorunInf, encoding: .utf8) {
                 if let label = getAutorunLabel(autorunContent) {
@@ -70,7 +70,7 @@ class GameDetector {
                 }
             }
         }
-        
+
         fingerprint += " \(diskPath.lastPathComponent)"
 
         stepLogger.notice("Fingerprint: '\(fingerprint)'")
@@ -81,10 +81,10 @@ class GameDetector {
         } else {
             stepLogger.notice("Detected: \(result)")
         }
-        
+
         return result
     }
-    
+
     /// Detect the game from a Windows installer bought from Her Interactive.
     ///
     /// The filename alone isn't enough: a download can be renamed, and some
@@ -171,18 +171,18 @@ class GameDetector {
         }
         return Array(signals.prefix(limit))
     }
-    
+
     /// Detect game from Steam installation
     func detectGame(fromSteamExe exePath: URL) async throws -> String {
         logger.notice("🔍 GameDetector: Starting detection from Steam exe: \(exePath.path)")
-        
+
         // Use parent directory name as fingerprint
         let parentDir = exePath.deletingLastPathComponent().lastPathComponent
         let fingerprint = " \(parentDir) "
-        
+
         logger.notice("🔍 GameDetector: Steam fingerprint: '\(fingerprint)'")
         let result = getGameSlugFromFingerprint(fingerprint)
-        
+
         if result == "unknown" {
             logger.critical("❌ GameDetector: DETECTION FAILED")
             logger.critical("   Steam exe path: \(exePath.path)")
@@ -192,63 +192,63 @@ class GameDetector {
         } else {
             logger.notice("✅ GameDetector: Detected game from Steam: \(result)")
         }
-        
+
         return result
     }
-    
+
     // MARK: - Private Detection Methods
-    
+
     /// Extract metadata from a file using exiftool
     private func getFileInfo(_ filePath: URL, property: String) throws -> String? {
         return try exiftool.getFileProperty(filePath.path, property: property)
     }
-    
+
     /// Parse property from INI file
     private func getPropertyFromIni(_ content: String, property: String) -> String? {
         // Match pattern: property=value (with optional \r at end)
         let pattern = "^\(NSRegularExpression.escapedPattern(for: property))=([^\r\n]*)"
-        
+
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else {
             return nil
         }
-        
+
         let nsString = content as NSString
         let matches = regex.matches(in: content, range: NSRange(location: 0, length: nsString.length))
-        
+
         if let match = matches.first, match.numberOfRanges > 1 {
             let range = match.range(at: 1)
             return nsString.substring(with: range).trimmingCharacters(in: .whitespaces)
         }
-        
+
         return nil
     }
-    
+
     /// Extract label from autorun.inf content
     private func getAutorunLabel(_ content: String) -> String? {
         // Match pattern: label=value (with optional \r at end)
         let pattern = "^label=([^\r\n]*)"
-        
+
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines, .caseInsensitive]) else {
             return nil
         }
-        
+
         let nsString = content as NSString
         let matches = regex.matches(in: content, range: NSRange(location: 0, length: nsString.length))
-        
+
         if let match = matches.first, match.numberOfRanges > 1 {
             let range = match.range(at: 1)
             return nsString.substring(with: range).trimmingCharacters(in: .whitespaces)
         }
-        
+
         return nil
     }
-    
+
     /// Match fingerprint to game slug using full game titles
     func getGameSlugFromFingerprint(_ fingerprint: String) -> String {
         // Add spaces around fingerprint for word boundary matching
         let fp = " \(fingerprint) "
         let lowercaseFp = fp.lowercased()
-        
+
         // Check for remastered first, then original
         if lowercaseFp.contains("secrets can kill remastered") || lowercaseFp.contains("nancy drew sck") {
             return "secrets-can-kill-remastered"
@@ -317,7 +317,7 @@ class GameDetector {
         } else if lowercaseFp.contains("sea of darkness") || fp.contains(" SEA ") {
             return "sea-of-darkness"
         }
-        
+
         return "unknown"
     }
 }

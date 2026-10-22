@@ -11,9 +11,9 @@ enum WrappSource: String, CaseIterable, Identifiable, Codable {
     case disk = "disk"
     case herDownload = "her-download"
     case steam = "steam"
-    
+
     var id: String { rawValue }
-    
+
     var displayName: String {
         switch self {
         case .disk:
@@ -24,7 +24,7 @@ enum WrappSource: String, CaseIterable, Identifiable, Codable {
             return "Steam"
         }
     }
-    
+
     var description: String {
         switch self {
         case .disk:

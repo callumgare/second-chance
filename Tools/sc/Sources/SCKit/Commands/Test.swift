@@ -25,20 +25,25 @@ struct IntegrationOptions: ParsableArguments {
 
     @Flag(help: ArgumentHelp(
         "Test each game even when the Mac is heavily loaded.",
-        discussion: "Normally a game is reported as overloaded, not tested, when other programs keep all but one performance core busy for a minute: Wine then takes minutes to start, or never does, so the result would say more about the load than the game."
+        discussion: "Normally a game is reported as overloaded, not tested, when other programs keep all but one performance core busy for a minute: "
+            + "Wine then takes minutes to start, or never does, so the result would say more about the load than the game."
     ))
     var ignoreLoad = false
 
     @Option(help: ArgumentHelp(
         "Which builds to test: disk, steam, her-download, or all — comma-separated. Default: disk.",
-        discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own. her-download builds each game from every installers/<slug>/her-download*.exe or .dmg (docs/her-download.md). Both always build, whatever --refresh-wrapp says.",
+        discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own. "
+            + "her-download builds each game from every installers/<slug>/her-download*.exe or .dmg (docs/her-download.md). "
+            + "Both always build, whatever --refresh-wrapp says.",
         valueName: "sources"
     ))
     var source = "disk"
 
     @Option(help: ArgumentHelp(
         "Launch each game in this tart VM instead of on this Mac.",
-        discussion: "The wrapp is still built here; the test copies it and WrappPuppeteer into the VM and runs the launch-and-quit there. A stopped VM is started headless and stopped afterwards. Games that draw with Direct3D can't render in a VM, so their launch is skipped (docs/testing.md#testing-in-a-vm).",
+        discussion: "The wrapp is still built here; the test copies it and WrappPuppeteer into the VM and runs the launch-and-quit there. "
+            + "A stopped VM is started headless and stopped afterwards. "
+            + "Games that draw with Direct3D can't render in a VM, so their launch is skipped (docs/testing.md#testing-in-a-vm).",
         valueName: "name"
     ))
     var vm: String?

@@ -345,7 +345,10 @@ struct NancyDrewQuitScenario {
                 return true
             }
             if Date().timeIntervalSince(lastLog) >= 5 {
-                logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] Not in a fullscreen Space yet (game says: \(state.map { "\(Int($0.size.width))x\(Int($0.size.height)), native=\($0.native), covering the screen=\($0.fullscreen && !$0.native)" } ?? "nothing"))")
+                let gameSays = state.map {
+                    "\(Int($0.size.width))x\(Int($0.size.height)), native=\($0.native), covering the screen=\($0.fullscreen && !$0.native)"
+                } ?? "nothing"
+                logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] Not in a fullscreen Space yet (game says: \(gameSays))")
                 lastLog = Date()
             }
             Thread.sleep(forTimeInterval: 0.5)
@@ -385,7 +388,8 @@ struct NancyDrewQuitScenario {
                 return (nil, nil)
             case "waiting":
                 if Date().timeIntervalSince(start) >= options.cursorLockSettleTimeout {
-                    return (nil, "The wrapp's cursor lock was still waiting \(Int(options.cursorLockSettleTimeout))s before the first click — see '[CursorLock]' in the wrapp's log")
+                    let waited = Int(options.cursorLockSettleTimeout)
+                    return (nil, "The wrapp's cursor lock was still waiting \(waited)s before the first click — see '[CursorLock]' in the wrapp's log")
                 }
                 if Date().timeIntervalSince(lastLog) >= 10 {
                     logger.notice("  ⏳ Waiting for the wrapp's cursor lock to finish before clicking...")
@@ -458,7 +462,9 @@ struct NancyDrewQuitScenario {
             context.game.click(at: point)
             showClick(at: point, gamePid: gamePid)
             if heldBefore == false, firstClickWasSwallowed(context) {
-                logger.error("❌ The first click is what took the cursor: cnc-ddraw swallowed it, so the wrapp's cursor lock didn't take hold — see '[CursorLock]' in the wrapp's log")
+                logger.error(
+                    "❌ The first click is what took the cursor: cnc-ddraw swallowed it, so the wrapp's cursor lock didn't take hold — see '[CursorLock]' in the wrapp's log"
+                )
                 diagnosticCapture(context, prefix: "first-click-swallowed")
                 return "The game's first click was swallowed: cnc-ddraw took the cursor on it rather than from the wrapp's cursor lock"
             }
@@ -466,7 +472,8 @@ struct NancyDrewQuitScenario {
         }
 
         let splashScreens = SplashScreen.screens(forGame: wrapp.gameSlug)
-        logger.notice("  ℹ️  \(splashScreens.count) splash screen(s) known for \(wrapp.gameSlug)\(splashScreens.isEmpty ? "" : ": " + splashScreens.map(\.name).joined(separator: ", "))")
+        let splashNames = splashScreens.isEmpty ? "" : ": " + splashScreens.map(\.name).joined(separator: ", ")
+        logger.notice("  ℹ️  \(splashScreens.count) splash screen(s) known for \(wrapp.gameSlug)\(splashNames)")
         /// The screen last clicked as a splash screen, and when.
         var lastSplashClicked: ImageFingerprint?
         var lastSplashClick = Date.distantPast

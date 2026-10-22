@@ -12,7 +12,7 @@ private nonisolated let wineUtilitiesLogger = Logger(label: "au.gare.callum.seco
 
 /// Utility functions for Wine operations that don't require progress reporting
 class WineUtilities {
-    
+
     /// Wait for the Wine session to end, with escalating force: `wineserver
     /// -w` returns once every Wine process in the prefix has exited and the
     /// server itself has gone, so that is the signal waited on at each step.

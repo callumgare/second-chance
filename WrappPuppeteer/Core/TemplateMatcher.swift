@@ -188,8 +188,8 @@ enum TemplateMatcher {
         defer { free(coarseScreenshotGray.data) }
         let coarseScreenshotData = coarseScreenshotGray.data.assumingMemoryBound(to: UInt8.self)
 
-        var globalBestMatch: (x: Int, y: Int, correlation: Float, scaleIndex: Int, templateWidth: Int, templateHeight: Int)? = nil
-        var bestTemplateGray: vImage_Buffer? = nil
+        var globalBestMatch: (x: Int, y: Int, correlation: Float, scaleIndex: Int, templateWidth: Int, templateHeight: Int)?
+        var bestTemplateGray: vImage_Buffer?
         var allScaleMatches: [(scaleIndex: Int, scale: CGFloat, matches: [(x: Int, y: Int, correlation: Float)])] = []
 
         // Try each scale variation
@@ -214,7 +214,8 @@ enum TemplateMatcher {
             stepStartTime = Date()
 
             // STAGE 1: Coarse search, over the blurred copies (above).
-            logger.debug("    → Resolution-scaled search: stride=\(coarseStride), sampleStep=\(coarseSampleStep), blur=\(coarseBlurRadius) (width=\(fullWidth), scale=\(String(format: "%.2f", scaleFactor)))")
+            let scale = String(format: "%.2f", scaleFactor)
+            logger.debug("    → Resolution-scaled search: stride=\(coarseStride), sampleStep=\(coarseSampleStep), blur=\(coarseBlurRadius) (width=\(fullWidth), scale=\(scale))")
 
             guard let coarseTemplateGray = boxBlurred(templateGray, radius: coarseBlurRadius) else {
                 logger.debug("    → Failed to blur the template for the coarse pass, skipping")
@@ -360,7 +361,9 @@ enum TemplateMatcher {
             return nil
         }
 
-        logger.debug("  ℹ️  Best match: scale=\(Int(scaledTemplates[bestMatch.scaleIndex].scale * 100))% at (\(bestMatch.x), \(bestMatch.y)) confidence=\(String(format: "%.2f", bestMatch.correlation))")
+        let bestScalePercent = Int(scaledTemplates[bestMatch.scaleIndex].scale * 100)
+        let bestConfidence = String(format: "%.2f", bestMatch.correlation)
+        logger.debug("  ℹ️  Best match: scale=\(bestScalePercent)% at (\(bestMatch.x), \(bestMatch.y)) confidence=\(bestConfidence)")
 
         let templateData = templateGray.data.assumingMemoryBound(to: UInt8.self)
         let templateWidth = bestMatch.templateWidth
@@ -407,12 +410,14 @@ enum TemplateMatcher {
 
         let lowerThreshold = options.minConfidence * 0.9  // 10% tolerance
         guard refinedMatch.correlation >= lowerThreshold else {
-            logger.notice("✗ \((templatePath as NSString).lastPathComponent) not found (best: \(String(format: "%.2f", refinedMatch.correlation)), threshold: \(String(format: "%.2f", lowerThreshold)))")
+            let best = String(format: "%.2f", refinedMatch.correlation)
+            logger.notice("✗ \((templatePath as NSString).lastPathComponent) not found (best: \(best), threshold: \(String(format: "%.2f", lowerThreshold)))")
             return nil
         }
 
         let scalePercent = Int(scaledTemplates[bestMatch.scaleIndex].scale * 100)
-        logger.notice("✓ \((templatePath as NSString).lastPathComponent) found at (\(refinedMatch.x), \(refinedMatch.y)) scale=\(scalePercent)% confidence=\(String(format: "%.2f", refinedMatch.correlation))")
+        let confidence = String(format: "%.2f", refinedMatch.correlation)
+        logger.notice("✓ \((templatePath as NSString).lastPathComponent) found at (\(refinedMatch.x), \(refinedMatch.y)) scale=\(scalePercent)% confidence=\(confidence)")
 
         // Convert coordinates back to full screenshot space
         let result = CGRect(

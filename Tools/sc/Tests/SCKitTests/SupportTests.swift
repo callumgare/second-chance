@@ -91,7 +91,8 @@ struct ProjectVersionTests {
 
     @Test("A project of a different shape is refused")
     func refusesUnexpectedShape() throws {
-        let broken = try fixture().replacingOccurrences(of: "Build configuration list for PBXNativeTarget \"WrappTemplate\"", with: "Build configuration list for PBXNativeTarget \"Renamed\"")
+        let broken = try fixture().replacingOccurrences(of: "Build configuration list for PBXNativeTarget \"WrappTemplate\"",
+                                                        with: "Build configuration list for PBXNativeTarget \"Renamed\"")
         #expect(throws: SCError.self) { try ProjectVersion.rewrite(broken, version: "1.0.0", build: "1") }
     }
 
@@ -430,6 +431,7 @@ struct GameTests {
 @Suite("Build activity")
 struct XcodeActivityTests {
     @Test("xcodebuild's task lines say what the build is doing", arguments: [
+        // swiftlint:disable:next line_length
         (#"PhaseScriptExecution Download\ And\ Copy\ Wine\ Files /r/DerivedData/Build/Intermediates.noindex/SecondChance.build/Debug/WrappTemplate.build/Script-E2A1.sh (in target 'WrappTemplate' from project 'SecondChance')"#,
          "WrappTemplate: running “Download And Copy Wine Files”"),
         (#"SwiftCompile normal x86_64 Compiling\ LogStore.swift /r/Shared/Logging/LogStore.swift (in target 'WrappTemplate' from project 'SecondChance')"#,

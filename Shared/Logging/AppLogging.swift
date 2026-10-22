@@ -56,7 +56,6 @@ nonisolated enum AppLogging {
         osLogEchoesToStderr = getenv("OS_ACTIVITY_DT_MODE") != nil
         unsetenv("OS_ACTIVITY_DT_MODE")
 
-
         LoggingSystem.bootstrap { label in
             #if DEBUG
             // Tripwire: the factory runs for every Logger construction. If one

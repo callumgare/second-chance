@@ -15,7 +15,7 @@ enum CacheStage: String, Codable, CaseIterable {
     case steamClientInstalled = "steam-client-installed"
     case steamClientLogin = "steam-client-login"
     case steamGameInstalled = "steam-game-installed"
-    
+
     var displayName: String {
         switch self {
         case .base:
@@ -34,7 +34,7 @@ enum CacheStage: String, Codable, CaseIterable {
             return "Steam Game Installed"
         }
     }
-    
+
     /// Returns all stages up to and including this stage
     func allStagesUpToHere() -> [CacheStage] {
         guard let index = CacheStage.allCases.firstIndex(of: self) else {
@@ -42,7 +42,7 @@ enum CacheStage: String, Codable, CaseIterable {
         }
         return Array(CacheStage.allCases[0...index])
     }
-    
+
     /// Returns the next stage in the installation process, if any
     var nextStage: CacheStage? {
         guard let index = CacheStage.allCases.firstIndex(of: self),
@@ -60,7 +60,7 @@ struct CacheMetadata: Codable {
     let wrappSource: WrappSource?
     let timestamp: Date
     let gameExePath: String?
-    
+
     init(
         stage: CacheStage,
         gameSlug: String? = nil,

@@ -19,7 +19,7 @@ nonisolated enum WrappBuildState: Equatable {
     case savingApp(substep: String? = nil, elapsedSeconds: Int? = nil)
     case completed
     case error(String)
-    
+
     private var baseText: String {
         switch self {
         case .idle:
@@ -46,7 +46,7 @@ nonisolated enum WrappBuildState: Equatable {
             return "Error: \(message)"
         }
     }
-    
+
     var substep: String? {
         switch self {
         case .detectingGame(let substep, _),
@@ -60,7 +60,7 @@ nonisolated enum WrappBuildState: Equatable {
             return nil
         }
     }
-    
+
     var elapsedSeconds: Int? {
         switch self {
         case .detectingGame(_, let elapsed),
@@ -74,10 +74,10 @@ nonisolated enum WrappBuildState: Equatable {
             return nil
         }
     }
-    
+
     var displayText: String {
         var text = baseText
-        
+
         // Add substep if available and elapsed time indicates we should show it
         if let substep = substep, elapsedSeconds != nil {
             text += " - \(substep)"
@@ -85,15 +85,15 @@ nonisolated enum WrappBuildState: Equatable {
             // Special case: detectingGame shows "..." when no substep
             text += "..."
         }
-        
+
         // Add elapsed time if available (indicates step has run for 5+ seconds)
         if let elapsed = elapsedSeconds, elapsed > 0 {
             text += " (\(elapsed)s)"
         }
-        
+
         return text
     }
-    
+
     var progress: Double? {
         switch self {
         case .idle, .selectingWrappSource, .selectingSource:
@@ -116,5 +116,5 @@ nonisolated enum WrappBuildState: Equatable {
             return nil
         }
     }
-    
+
 }

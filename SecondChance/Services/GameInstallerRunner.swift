@@ -1259,10 +1259,8 @@ class GameInstallerRunner {
         logger.notice("Searching for installer executable in: \(directory.path)")
 
         // First look for .msi files
-        for file in contents {
-            if file.pathExtension.lowercased() == "msi" {
-                return file.path
-            }
+        for file in contents where file.pathExtension.lowercased() == "msi" {
+            return file.path
         }
 
         // Then look for setup.exe
@@ -1309,10 +1307,8 @@ class GameInstallerRunner {
 
         var executables = Set<String>()
 
-        for case let fileURL as URL in enumerator {
-            if fileURL.pathExtension.lowercased() == "exe" {
-                executables.insert(fileURL.path)
-            }
+        for case let fileURL as URL in enumerator where fileURL.pathExtension.lowercased() == "exe" {
+            executables.insert(fileURL.path)
         }
 
         return executables
@@ -1387,7 +1383,6 @@ class GameInstallerRunner {
         throw WrappBuildError.gameExecutableNotFound
     }
 }
-
 
 /// Which installer log `InstallerLogStreamer` is following.
 nonisolated enum InstallerLogFormat: Sendable {

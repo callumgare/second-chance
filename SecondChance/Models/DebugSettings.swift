@@ -10,7 +10,7 @@ import Combine
 /// Singleton class to manage debug settings
 class DebugSettings: ObservableObject {
     static let shared = DebugSettings()
-    
+
     @Published var skipInstaller: Bool
     @Published var debugMode: Bool
     private init() {
@@ -19,7 +19,7 @@ class DebugSettings: ObservableObject {
         self.skipInstaller = arguments.contains("--skip-installer")
         self.debugMode = arguments.contains("--debug")
     }
-    
+
     /// Reset all debug settings to defaults
     func resetToDefaults() {
         skipInstaller = false

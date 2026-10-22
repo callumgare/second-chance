@@ -56,7 +56,8 @@ struct SubprocessLineClassifierTests {
 
     @Test("Inno Setup log lines worth reading stand out from per-file chatter")
     func innoLog() {
-        #expect(InstallerLogStreamer.notableLevel(of: "2026-10-16 20:27:06.623   Dest filename: C:\\Program Files (x86)\\Nancy Drew SCK\\Video\\CWH51_CNV.bik", format: .inno) == nil)
+        #expect(InstallerLogStreamer.notableLevel(
+            of: "2026-10-16 20:27:06.623   Dest filename: C:\\Program Files (x86)\\Nancy Drew SCK\\Video\\CWH51_CNV.bik", format: .inno) == nil)
         #expect(InstallerLogStreamer.notableLevel(of: "2026-10-16 20:25:22.993   Installation process succeeded.", format: .inno) == .notice)
         #expect(InstallerLogStreamer.notableLevel(of: "2026-10-16 20:25:22.993   Exception message:", format: .inno) == .error)
     }

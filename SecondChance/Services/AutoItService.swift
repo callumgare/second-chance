@@ -10,17 +10,17 @@ import Logging
 /// Service for running AutoIt scripts to automate installation dialogs
 class AutoItService {
     static let shared = AutoItService()
-    
+
     let autoitPath: String
     let autoitDir: URL
     private let fileManager = FileManager.default
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.AutoItService")
-    
+
     private init() {
         // Get path to AutoIt bundled in app
         let bundleResourcePath = Bundle.main.resourceURL?.appendingPathComponent("autoit")
         logger.notice("🔍 Looking for bundled AutoIt at: \(bundleResourcePath?.path ?? "nil")")
-        
+
         if let bundlePath = bundleResourcePath, fileManager.fileExists(atPath: bundlePath.path) {
             autoitDir = bundlePath
             // AutoIt3.exe is the main executable
@@ -35,12 +35,12 @@ class AutoItService {
             autoitDir = URL(fileURLWithPath: "/AUTOIT_NOT_BUNDLED")
         }
     }
-    
+
     /// Check if AutoIt is available
     var isAvailable: Bool {
         return fileManager.fileExists(atPath: autoitPath)
     }
-    
+
     /// Get the path to the AutoIt directory
     var directory: URL {
         return autoitDir

@@ -84,7 +84,8 @@ enum FocusDetector {
             if Date().timeIntervalSince(lastLog) >= 2 {
                 let frontmost = NSWorkspace.shared.frontmostApplication
                 let frontmostName = frontmost?.localizedName ?? frontmost?.bundleIdentifier ?? "unknown"
-                logger.notice("   [\(String(format: "%.1f", Date().timeIntervalSince(start)))s] Not focused yet — frontmost is \(frontmostName) (PID \(frontmost?.processIdentifier ?? -1))")
+                let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
+                logger.notice("   [\(elapsed)s] Not focused yet — frontmost is \(frontmostName) (PID \(frontmost?.processIdentifier ?? -1))")
                 lastLog = Date()
             }
 

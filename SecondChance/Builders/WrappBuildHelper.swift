@@ -79,7 +79,7 @@ class WrappBuildHelper {
         try verifyTemplateSignatures(templatePath)
 
         // Check cache first
-        if let _ = try cacheManager.restoreCache(stage: .base, to: path) {
+        if try cacheManager.restoreCache(stage: .base, to: path) != nil {
             return
         }
 
@@ -192,7 +192,8 @@ class WrappBuildHelper {
             removeDanglingSymlinks(in: contents.appendingPathComponent(dir))
         }
         let after = DirectorySize.measure(contents)
-        logger.notice("Removed \(engine), which the game doesn't use: \(entries.count) entries, \(ByteCountFormatter.string(fromByteCount: before.bytes - after.bytes, countStyle: .file))")
+        let freed = ByteCountFormatter.string(fromByteCount: before.bytes - after.bytes, countStyle: .file)
+        logger.notice("Removed \(engine), which the game doesn't use: \(entries.count) entries, \(freed)")
     }
 
     private func isSymlink(_ url: URL) -> Bool {
@@ -506,7 +507,7 @@ class WrappBuildHelper {
     /// Install the Steam client in the wrapp (used by SteamWrappBuilder).
     func installSteamClient(in wrappPath: URL) async throws {
         // Check cache first
-        if let _ = try cacheManager.restoreCache(stage: .steamClientInstalled, to: wrappPath) {
+        if try cacheManager.restoreCache(stage: .steamClientInstalled, to: wrappPath) != nil {
             return
         }
 
@@ -741,10 +742,8 @@ class WrappBuildHelper {
         // Skip deletion in debug mode
         if DebugSettings.shared.debugMode {
             logger.notice("🐛 DEBUG: Keeping \(wrapps.count) temporary wrapp(s) for inspection:")
-            for wrapp in wrapps {
-                if fileManager.fileExists(atPath: wrapp.path) {
-                    logger.notice("   \(wrapp.path)")
-                }
+            for wrapp in wrapps where fileManager.fileExists(atPath: wrapp.path) {
+                logger.notice("   \(wrapp.path)")
             }
             return
         }
@@ -821,7 +820,9 @@ enum WrappError: LocalizedError {
         case .signingFailed(let message):
             return "Code signing failed: \(message)"
         case .templateSignaturesLost:
-            return "Second Chance's copy of the game template is damaged: some of its files have lost their code signatures, so no game could be signed. This happens when Second Chance is copied with a tool that leaves out extended attributes. Download Second Chance again, or copy it with Finder."
+            return "Second Chance's copy of the game template is damaged: some of its files have lost their code signatures, "
+                + "so no game could be signed. This happens when Second Chance is copied with a tool that leaves out "
+                + "extended attributes. Download Second Chance again, or copy it with Finder."
         }
     }
 

@@ -182,7 +182,8 @@ enum VMPuppetRunner {
         pid=$!
         wait "$pid"
         code=$?
-        log show --start "$start" --predicate "processIdentifier == $pid AND subsystem BEGINSWITH 'au.gare.callum.second-chance'" --style ndjson --info --debug > "$J/puppeteer.ndjson" 2>/dev/null
+        log show --start "$start" --predicate "processIdentifier == $pid AND subsystem BEGINSWITH 'au.gare.callum.second-chance'" \\
+          --style ndjson --info --debug > "$J/puppeteer.ndjson" 2>/dev/null
         log show --start "$start" --predicate "subsystem == 'au.gare.callum.second-chance.WrappTemplate'" --style ndjson --info --debug > "$J/game.ndjson" 2>/dev/null
         bundles=$(find "$HOME/Library/Logs/SecondChance/diagnostics" -mindepth 1 -maxdepth 1 -type d -newer "$J/run.sh" 2>/dev/null)
         [ -n "$bundles" ] && tar -cf "$J/diagnostics.tar" $bundles 2>/dev/null
@@ -225,7 +226,8 @@ enum VMPuppetRunner {
     private static func copySteamSignIn(into shell: VMShell) throws {
         let store = SteamSessionStore()
         guard store.hasSession else {
-            throw Failure(description: "This game launches through Steam, and there's no saved Steam sign-in on this Mac to copy into the VM. Build a Steam game from the app first.")
+            throw Failure(description: "This game launches through Steam, and there's no saved Steam sign-in on this Mac to copy into the VM. "
+                + "Build a Steam game from the app first.")
         }
         let root = "~/" + steamStoreInHome
         try shell.check("mkdir -p \(quoted(root)) && chmod 700 \(quoted(root)) && rm -rf \(quoted(root + "/session"))")
@@ -342,7 +344,8 @@ struct VMShell {
         let result = try run("tar -xf - -C \(VMPuppetRunner.quoted(remoteDir))", input: pipe)
         tar.waitUntilExit()
         guard tar.terminationStatus == 0, result.status == 0 else {
-            throw VMPuppetRunner.Failure(description: "Copying \(item.lastPathComponent) into VM \(vm.name) failed: \(result.output.trimmingCharacters(in: .whitespacesAndNewlines))")
+            let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw VMPuppetRunner.Failure(description: "Copying \(item.lastPathComponent) into VM \(vm.name) failed: \(output)")
         }
     }
 

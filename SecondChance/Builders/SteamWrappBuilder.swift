@@ -279,7 +279,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     }
 
     /// What the progress screen says while Steam wants a sign-in.
-    static let signInInstructions = "Steam opens in its own window. Sign in there, or scan its QR code with the Steam app on your phone. You'll stay signed in for your other Nancy Drew games, until you choose Second Chance ▸ Sign Out of Steam."
+    static let signInInstructions = "Steam opens in its own window. Sign in there, or scan its QR code with the Steam app on your phone. "
+        + "You'll stay signed in for your other Nancy Drew games, until you choose Second Chance ▸ Sign Out of Steam."
 
     /// Wait for Steam to sign in, asking the user when it shows its sign-in
     /// window. True once signed in.

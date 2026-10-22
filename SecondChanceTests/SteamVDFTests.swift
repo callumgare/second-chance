@@ -108,7 +108,7 @@ struct SteamVDFTests {
     @Test("Binary: truncated data is an error, not a crash")
     func rejectsTruncatedBinary() {
         var builder = BinaryVDFBuilder()
-        var table: [String]? = nil
+        var table: [String]?
         builder.kv([("name", "Game")], table: &table)
         let truncated = builder.data.prefix(builder.data.count - 3)
         var offset = 0
@@ -122,7 +122,7 @@ struct SteamCachesTests {
     func packageInfo(_ packages: [[Int]]) -> Data {
         var b = BinaryVDFBuilder()
         b.u32(0x0656_5528); b.u32(1)
-        var table: [String]? = nil
+        var table: [String]?
         for (index, apps) in packages.enumerated() {
             b.u32(UInt32(index + 100)); b.zeros(20); b.u32(1); b.u64(0)
             let ids: [(String, Any)] = apps.enumerated().map { (String($0.offset), $0.element) }

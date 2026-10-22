@@ -213,7 +213,8 @@ struct SteamWrappBuilderTests {
         #expect(plist["GameExePath"] as? String == "/Program Files (x86)/Nancy Drew/Nancy Drew Message in a Haunted Mansion")
         #expect(plist["SteamGameId"] == nil)
         #expect(plist["SteamLaunchMode"] == nil)  // no choice offered
-        #expect(FileManager.default.fileExists(atPath: prefix.appendingPathComponent("drive_c/Program Files (x86)/Nancy Drew/Nancy Drew Message in a Haunted Mansion/Game.exe").path))
+        let gameExe = prefix.appendingPathComponent("drive_c/Program Files (x86)/Nancy Drew/Nancy Drew Message in a Haunted Mansion/Game.exe")
+        #expect(FileManager.default.fileExists(atPath: gameExe.path))
         #expect(!FileManager.default.fileExists(atPath: prefix.appendingPathComponent(SteamClient.steamDirInPrefix).path))
     }
 

@@ -13,13 +13,13 @@ extension Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command)
         process.arguments = arguments
-        
+
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
-        
+
         try process.run()
         process.waitUntilExit()
-        
+
         let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8) ?? ""
     }

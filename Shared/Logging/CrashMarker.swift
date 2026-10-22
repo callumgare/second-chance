@@ -49,7 +49,9 @@ nonisolated enum CrashMarker {
         messageLengths.initialize(repeating: 0, count: slots)
         previousActions.initialize(repeating: sigaction(), count: slots)
         for sig in fatalSignals {
-            let text = "\n💥 \(process) (pid \(getpid())) crashed: \(SubprocessWatch.signalName(sig)), run \(RunContext.runID), at unix time \(Int(Date().timeIntervalSince1970)) or later\n"
+            let signalName = SubprocessWatch.signalName(sig)
+            let text = "\n💥 \(process) (pid \(getpid())) crashed: \(signalName), run \(RunContext.runID), "
+                + "at unix time \(Int(Date().timeIntervalSince1970)) or later\n"
             guard sig < slots, let pointer = strdup(text) else { continue }
             messageTexts[Int(sig)] = pointer
             messageLengths[Int(sig)] = strlen(pointer)

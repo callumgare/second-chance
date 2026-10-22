@@ -70,10 +70,11 @@ struct TestRunner {
             title: "Unit tests", log: "test-unit", observer: observer,
             fraction: { board.fraction },
             statusLine: { board.statusLine },
-            table: { suiteTable(board) }
-        ) { sink in
-            try await xcode.runTests(selection: Self.unitSelection, environment: env, resultBundle: bundle, sink: sink)
-        }
+            table: { suiteTable(board) },
+            run: { sink in
+                try await xcode.runTests(selection: Self.unitSelection, environment: env, resultBundle: bundle, sink: sink)
+            }
+        )
         await ui.table(headers: suiteTable(board).headers, rows: suiteTable(board).rows)
         return TestRun(name: "Unit", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle))
     }
@@ -87,7 +88,10 @@ struct TestRunner {
 
     // MARK: - Integration
 
-    func integration(games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL, ignoreLoad: Bool = false, vm: TestVM.Prepared? = nil, stamp: String) async throws -> TestRun {
+    func integration(
+        games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL,
+        ignoreLoad: Bool = false, vm: TestVM.Prepared? = nil, stamp: String
+    ) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
         // Steam; the Her suite, those with a Her download in installers/.
@@ -170,10 +174,11 @@ struct TestRunner {
             title: "Integration tests", log: "test-integration", observer: observer,
             fraction: { board.fraction },
             statusLine: { board.statusLine },
-            table: { gameTable(board, showSource: showSource) }
-        ) { sink in
-            try await xcode.runTests(selection: Self.integrationSelection(sources), environment: environment, resultBundle: bundle, sink: sink)
-        }
+            table: { gameTable(board, showSource: showSource) },
+            run: { sink in
+                try await xcode.runTests(selection: Self.integrationSelection(sources), environment: environment, resultBundle: bundle, sink: sink)
+            }
+        )
         for record in follower.poll() { board.apply(record) }
         let table = gameTable(board, showSource: showSource)
         await ui.table(headers: table.headers, rows: table.rows)

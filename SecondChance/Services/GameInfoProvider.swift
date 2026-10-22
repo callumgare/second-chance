@@ -9,9 +9,9 @@ import Foundation
 /// Provides game information for all supported Nancy Drew titles
 class GameInfoProvider {
     static let shared = GameInfoProvider()
-    
+
     private init() {}
-    
+
     /// All known Nancy Drew games with their metadata, in chronological order
     private lazy var gamesList: [GameInfo] = [
         GameInfo(
@@ -258,17 +258,17 @@ class GameInfoProvider {
             steam: .init(appID: 572700, installDir: "Nancy Drew The Sea of Darkness", exe: "SeaOfDarkness.exe")
         )
     ]
-    
+
     /// Dictionary for fast lookup by slug
     private lazy var games: [String: GameInfo] = {
         Dictionary(uniqueKeysWithValues: gamesList.map { ($0.id, $0) })
     }()
-    
+
     /// Retrieve game information by slug
     func gameInfo(for slug: String) -> GameInfo {
         return games[slug] ?? GameInfo.unknownGame
     }
-    
+
     /// Get all known games in their canonical order
     func allGames() -> [GameInfo] {
         return gamesList

@@ -59,11 +59,11 @@ class WrappBuildViewModel: ObservableObject {
     private var isBuilding = false
     /// The build under way, for `cancelBuild`.
     private var buildTask: Task<Void, Never>?
-    
+
     // Development settings
     var enableCaching = false
     var stagesToRestore: Set<CacheStage> = []
-    
+
     init(makeInput: @escaping WrappBuildInputFactory = { WrappBuildInput(viewModel: $0) }) {
         self.makeInput = makeInput
 
@@ -188,7 +188,7 @@ class WrappBuildViewModel: ObservableObject {
     }
 
     // MARK: - Build Flow
-    
+
     /// Start a build from `source`.
     func build(from source: WrappSource) async {
         switch source {
@@ -212,17 +212,17 @@ class WrappBuildViewModel: ObservableObject {
     func buildFromDisk() async {
         await runBuild(diskBuilder)
     }
-    
+
     /// Start a build from a Her Interactive download
     func buildFromHerDownload() async {
         await runBuild(herDownloadBuilder)
     }
-    
+
     /// Start a build from Steam
     func buildFromSteam() async {
         await runBuild(steamBuilder)
     }
-    
+
     /// Drive any builder: build → completed, or route the failure. The bus
     /// already routed `.failed` to `handleBusEvent`; the local catch mirrors
     /// the same early-cancel rule for throws that bypassed it.
@@ -270,9 +270,8 @@ class WrappBuildViewModel: ObservableObject {
         }
     }
 
-    
     // MARK: - Helper Methods
-    
+
     /// Whether `error` is the user cancelling, which needs no summary.
     nonisolated static func isCancellation(_ error: Error) -> Bool {
         guard let buildError = error as? WrappBuildError else { return error is CancellationError }
@@ -298,7 +297,7 @@ class WrappBuildViewModel: ObservableObject {
             handleError(error)
         }
     }
-    
+
     /// Reset to initial state
     func reset() {
         currentState = .idle

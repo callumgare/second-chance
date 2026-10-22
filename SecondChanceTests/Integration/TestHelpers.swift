@@ -461,7 +461,8 @@ enum AppPuppetRunner {
             throw NSError(
                 domain: "AppPuppetRunner",
                 code: Int(observedExitCode),
-                userInfo: [NSLocalizedDescriptionKey: "Steam wouldn't start the game: the Steam account was playing a game on another computer, and Steam asked whether to stop it there (attempt: \(attemptLabel)). Stop the other game and run this one again."]
+                userInfo: [NSLocalizedDescriptionKey: "Steam wouldn't start the game: the Steam account was playing a game on another computer, "
+                    + "and Steam asked whether to stop it there (attempt: \(attemptLabel)). Stop the other game and run this one again."]
             )
         }
 
@@ -509,7 +510,8 @@ enum AppPuppetRunner {
             throw NSError(
                 domain: "AppPuppetRunner",
                 code: Int(observedExitCode),
-                userInfo: [NSLocalizedDescriptionKey: "\(unarmed.map(\.name).joined(separator: " and ")) never armed in the game (no \"\(unarmed[0].armedMarker)\" in the wrapp's log, attempt: \(attemptLabel))"]
+                userInfo: [NSLocalizedDescriptionKey: "\(unarmed.map(\.name).joined(separator: " and ")) never armed in the game "
+                    + "(no \"\(unarmed[0].armedMarker)\" in the wrapp's log, attempt: \(attemptLabel))"]
             )
         }
 
@@ -586,9 +588,13 @@ enum AppPuppetRunner {
 
         let app = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<NSRunningApplication, Error>) in
             NSWorkspace.shared.openApplication(at: appBundle, configuration: config) { runningApp, error in
-                if let error { cont.resume(throwing: error) }
-                else if let app = runningApp { cont.resume(returning: app) }
-                else { cont.resume(throwing: NSError(domain: NSCocoaErrorDomain, code: 0)) }
+                if let error {
+                    cont.resume(throwing: error)
+                } else if let app = runningApp {
+                    cont.resume(returning: app)
+                } else {
+                    cont.resume(throwing: NSError(domain: NSCocoaErrorDomain, code: 0))
+                }
             }
         }
 

@@ -129,7 +129,8 @@ struct DiskInstallIntegrationTests {
                 Self.progress?.write(["event": "load", "message": "Testing \(game.id) on a heavily loaded Mac (--ignore-load): \(load.summary)."])
             }
         } else if let load = await LoadGate.overloadedReading() {
-            let message = "Not testing \(game.id): the Mac is heavily loaded — \(load.summary). Wine would take minutes to start, or never start; quit the busy programs, or pass --ignore-load to test anyway."
+            let message = "Not testing \(game.id): the Mac is heavily loaded — \(load.summary). "
+                + "Wine would take minutes to start, or never start; quit the busy programs, or pass --ignore-load to test anyway."
             Self.progress?.write(["event": "load", "message": message])
             outcome.overloaded = true
             Issue.record(Comment(rawValue: message))
@@ -157,7 +158,7 @@ struct DiskInstallIntegrationTests {
         let usingPrebuiltWrapp = skipBuild && FileManager.default.fileExists(atPath: prebuiltWrapp.path)
 
         let wrappPath: URL
-        var builtOutputDir: URL? = nil  // cleaned up after WrappPuppeteer, not before
+        var builtOutputDir: URL?  // cleaned up after WrappPuppeteer, not before
         // On every path out, including a build or check that throws: an output
         // directory left behind holds a whole wrapp.
         defer { if let dir = builtOutputDir { cleanup(dir) } }

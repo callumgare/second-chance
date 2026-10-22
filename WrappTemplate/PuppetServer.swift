@@ -117,7 +117,10 @@ enum PuppetServer {
             if !DispatchQueue.main.sync(execute: { globalInfoWindow?.isShowingWarning == true }) { return "ok clicked" }
             usleep(100_000)
         }
-        let state = DispatchQueue.main.sync { "key=\(target.window.isKeyWindow), active=\(NSApp.isActive), clicked at \(target.point) in a \(target.window.frame.size) window, \(globalInfoWindow?.confirmButtonGeometry ?? "")" }
+        let state = DispatchQueue.main.sync {
+            "key=\(target.window.isKeyWindow), active=\(NSApp.isActive), clicked at \(target.point) "
+                + "in a \(target.window.frame.size) window, \(globalInfoWindow?.confirmButtonGeometry ?? "")"
+        }
         logger.warning("[Puppet] Clicking I Understand didn't confirm the save warning (\(state)); confirming it directly")
         DispatchQueue.main.sync { globalInfoWindow?.pressConfirm() }
         return "ok pressed"
