@@ -111,3 +111,23 @@ DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -f $key
 rm $key; echo -n | pbcopy
 DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -p  # must match SUPublicEDKey
 ```
+
+## Moving to Applications
+
+When macOS runs Second Chance translocated, the app offers to move itself
+into Applications (`AppMover`, called from `applicationDidFinishLaunching`,
+never in a headless run or under test). Translocation happens to a
+downloaded app that is opened where it was unpacked instead of being moved
+by Finder first. macOS runs a hidden read-only copy of it from a new random
+path each time, and Sparkle can't install updates there.
+
+`AppMover` asks Security.framework where the original is, then moves it to
+`/Applications`, or to `~/Applications` when `/Applications` can't be
+written to. It goes in under the app's own name, so a `Second Chance 2.app`
+from a second download replaces the older copy, which goes to the Bin. Then
+`AppMover` takes the quarantine attribute off the bundle and reopens it from
+there. Gatekeeper has already passed this copy, since it is running, so
+taking the quarantine off grants nothing new. Without the quarantine, macOS
+runs the app where it is from then on. An original that can't be moved, for
+example on a disk image, is copied instead. "Not Now" leaves the app as it
+is, and the question comes back at the next start.

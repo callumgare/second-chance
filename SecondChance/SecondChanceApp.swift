@@ -12,6 +12,14 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 private var signalSources: [DispatchSourceSignal] = []
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Nobody to ask in a headless run or under test.
+        let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        if !CLIBuilder.isEnabled && !isTestHost {
+            AppMover.offerIfTranslocated()
+        }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Quitting with the first-failure question unanswered: send the
         // report basic, the error screen saying so, then quit again.

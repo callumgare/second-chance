@@ -79,6 +79,10 @@ to do this once.
    <img alt="Final warning, with an Open Anyway button" src="docs/second-warning.png" width="261">
    </p>
 
+4. If Second Chance is still in your Downloads folder (or wherever the zip put it), it asks to move itself into
+   your **Applications** folder. Click **Move to Applications** and it reopens from there. Until it's moved, macOS
+   runs a hidden copy of it that can't install updates.
+
 After all that, Second Chance opens and asks where to install your game from.
 
 ## Which games have been verified to work?
