@@ -339,18 +339,33 @@ struct InfoWindowView: View {
             informative("Part of the game from last time is still running in the background, which can stop it starting properly. "
                 + "You can stop it and carry on, or keep waiting.")
 
-            HStack {
-                Spacer()
-                Button("Don't Start the Game") { viewModel.onLastSessionChoice?(.dontStart) }
-                    .keyboardShortcut(.cancelAction)
-                Button("Continue Anyway") { viewModel.onLastSessionChoice?(.continueAnyway) }
-                Button("Stop It and Continue") { viewModel.onLastSessionChoice?(.stopItAndContinue) }
-                    .keyboardShortcut(.defaultAction)
+            // On one row when they fit; newer macOS draws buttons wider, and
+            // a row too wide would push the window's text out of it.
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    Spacer()
+                    lastSessionButtons
+                }
+                VStack(alignment: .trailing) {
+                    lastSessionButtons
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .fixedSize()
             .padding(.top, 6)
         }
         .accessibilityIdentifier("last-session-closing")
+    }
+
+    @ViewBuilder
+    private var lastSessionButtons: some View {
+        Button("Don't Start the Game") { viewModel.onLastSessionChoice?(.dontStart) }
+            .keyboardShortcut(.cancelAction)
+            .fixedSize()
+        Button("Continue Anyway") { viewModel.onLastSessionChoice?(.continueAnyway) }
+            .fixedSize()
+        Button("Stop It and Continue") { viewModel.onLastSessionChoice?(.stopItAndContinue) }
+            .keyboardShortcut(.defaultAction)
+            .fixedSize()
     }
 
     /// The log buttons at the leading edge and `actions` at the trailing
