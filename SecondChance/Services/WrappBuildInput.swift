@@ -369,11 +369,14 @@ class WrappBuildInput {
         }
     }
 
-    /// The build finished (GUI reveals in Finder; headless does nothing).
+    /// The build finished: reveal the new app in Finder for the person who
+    /// made it. Only for a build started from the app's window (a view
+    /// model), and not a headless one: a test that builds with an app-like
+    /// environment and no view model then deletes its output, and Finder's
+    /// window fell back to the temporary folder, one left open per run.
     @MainActor
     func onWrappBuildComplete(_ wrappPath: URL) async {
-        guard !isHeadlessRun else { return }
-        // Show in Finder
+        guard viewModel != nil, !isHeadlessRun else { return }
         NSWorkspace.shared.selectFile(wrappPath.path, inFileViewerRootedAtPath: "")
     }
 
