@@ -115,10 +115,16 @@ enum Remote {
                               hints: ["Follow it with: sc --on \(rawTarget) attach",
                                       "Or stop it: sc --on \(rawTarget) attach --stop"])
             }
-            let rsyncArgs = ["-aX", "--delete"] + excludes.flatMap { ["--exclude", $0] }
+            // macOS's own rsync at both ends, whatever else is on either PATH.
+            // Extended attributes must survive (the template's non-Mach-O files
+            // keep their code signatures in them), and the two rsyncs disagree
+            // on the flag: Apple's (openrsync, or 2.6.9 before macOS 15.4)
+            // spells it -E and rejects -X, while rsync 3.x reads -E as
+            // --executability and would drop them without a word.
+            let rsyncArgs = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + excludes.flatMap { ["--exclude", $0] }
                 + ["./", "\(target.host):\(target.path)/"]
             try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
-                try await Proc.stream("rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
             }
         }
 

@@ -249,6 +249,13 @@ shows the summary table. `<path>` defaults to this repo's path relative to
 your home directory. On the remote Mac, the GUI-session re-run applies as
 usual.
 
+- **The sync is macOS's own rsync at both ends** (`/usr/bin/rsync -aE
+  --rsync-path=/usr/bin/rsync`), so a remote Mac needs nothing installed.
+  It has to keep extended attributes: the template's non-Mach-O files keep
+  their code signatures in them, and without them every wrapp built there
+  fails to sign. Apple's rsync spells that `-E` and rejects `-X`; Homebrew's
+  rsync 3.x reads `-E` as `--executability` and would drop them silently,
+  which is why the remote end is named rather than left to its `PATH`.
 - **If the connection drops,** sc says so: ssh's exit 255. Pick the run up
   with `sc --on <host>[:<path>] attach`, which doesn't sync.
 - **While a run is still going there, `--on` refuses to sync.** rsync would
