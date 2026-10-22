@@ -181,7 +181,7 @@ later.
 </details>
 
 <details>
-<summary><b>What does Second Chance send when something goes wrong?</b></summary>
+<summary><b>What does Second Chance send, and when?</b></summary>
 
 When making a game app fails, or a game app crashes, Second Chance can send me a report so I can fix it. Nothing is
 sent unless something goes wrong. The first time something fails, it asks which kind of report you'd like to send:
@@ -190,8 +190,12 @@ sent unless something goes wrong. The first time something fails, it asks which 
 - A **detailed** report adds the log of what was happening, with your name and folders taken out. That log is usually
   what it takes to track the problem down.
 
-You can change your choice, or have it ask each time, under **Second Chance → Settings**. Reports go to
-[Sentry](https://sentry.io); [docs/failure-reports.md](docs/failure-reports.md) has exactly what's in them.
+After the first game you add, Second Chance also asks whether to send **success reports**. Say yes, and each time a
+game is set up or played it says which game, where it came from, and whether it worked, so I can tell which games are
+known to work. Nothing about you or your files is sent. If you say no, nothing is sent until something goes wrong.
+
+You can change your choices, or have it ask each time something fails, under **Second Chance → Settings**. Reports go
+to [Sentry](https://sentry.io); [docs/failure-reports.md](docs/failure-reports.md) has exactly what's in them.
 
 </details>
 

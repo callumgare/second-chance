@@ -252,6 +252,7 @@ class WrappBuildHelper {
     func configureWrapp(
         at wrappPath: URL,
         gameInfo: GameInfo,
+        source: WrappSource,
         gameExePath: String,
         installerDir: String,
         steamID: String? = nil,
@@ -292,6 +293,7 @@ class WrappBuildHelper {
         try createAppSettingsPlist(
             at: wrappPath,
             gameInfo: gameInfo,
+            source: source,
             gameExePath: gameExePath,
             installerDir: installerDir,
             steamID: steamID,
@@ -327,6 +329,7 @@ class WrappBuildHelper {
     private func createAppSettingsPlist(
         at wrappPath: URL,
         gameInfo: GameInfo,
+        source: WrappSource,
         gameExePath: String,
         installerDir: String,
         steamID: String?,
@@ -359,6 +362,7 @@ class WrappBuildHelper {
             "GameExePath": gameExePath,
             "GameEngine": gameEngine,
             "GameSlug": gameInfo.id,
+            "GameSource": source.rawValue,
             "GameInstallerDir": installerDir
         ]
 
@@ -530,7 +534,8 @@ class WrappBuildHelper {
 
     // MARK: - Finalization
 
-    /// Sequence the tail of every build: sign → resolve output → save →
+    /// Sequence the tail of every build: sign → ask about success reports
+    /// (once ever) → resolve output → save →
     /// notify completion. Publishes `.signed` and `.completed`; emits
     /// `.savingApp` progress (the disk flow previously never did).
     ///
@@ -548,6 +553,8 @@ class WrappBuildHelper {
         try signWrapp(at: wrappPath)
         await bus.publishWrappBuild(.signed(wrappPath: wrappPath))
 
+        // Asked once ever, before the save panel, while the build has just worked.
+        await input.askAboutSuccessReports()
         await bus.publishWrappBuild(.progress(.savingApp(substep: nil)))
         let outputDir = try await input.getOutputPath(gameName: gameInfo.title)
         try Task.checkCancellation()

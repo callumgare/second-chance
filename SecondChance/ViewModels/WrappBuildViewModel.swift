@@ -256,6 +256,7 @@ class WrappBuildViewModel: ObservableObject {
         do {
             builtWrappURL = try await builder.build(input: input)
             currentState = .completed
+            recordBuild(outcome: SuccessReport.ok)
         } catch {
             if isCancelling { return }
             if !Self.isCancellation(error) {
@@ -265,12 +266,21 @@ class WrappBuildViewModel: ObservableObject {
                     source: selectedWrappSource?.rawValue, engine: detectedGame?.gameEngine.rawValue,
                     summary: summary
                 ))
+                recordBuild(outcome: ErrorChain.identifier(error))
             }
             handleBuildFailure(error)
         }
     }
 
     // MARK: - Helper Methods
+
+    /// Count the build for the success reports, if the person said yes.
+    private func recordBuild(outcome: String) {
+        SuccessReporter.record(SuccessReport(
+            event: .build, outcome: outcome, game: detectedGame?.id,
+            source: selectedWrappSource?.rawValue, engine: detectedGame?.gameEngine.rawValue
+        ))
+    }
 
     /// Whether `error` is the user cancelling, which needs no summary.
     nonisolated static func isCancellation(_ error: Error) -> Bool {

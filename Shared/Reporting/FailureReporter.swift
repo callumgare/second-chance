@@ -139,6 +139,8 @@ nonisolated enum FailureReporter {
             options.maxAttachmentSize = 20 * 1024 * 1024
 
             options.beforeSend = { event in scrub(event) }
+            // Metrics are success reports only, sent when the person said yes.
+            options.beforeSendMetric = { metric in SuccessReporter.scrub(metric) }
         }
         SentrySDK.configureScope { scope in
             scope.setTag(value: process.rawValue, key: "process")

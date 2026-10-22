@@ -23,6 +23,9 @@ struct GameConfig {
     let steamLaunchMode: String?
     let gameTitle: String
     let gameSlug: String
+    /// Where the game came from: `disk`, `her-download` or `steam`, or
+    /// `unknown` for a wrapp built before it was recorded.
+    let gameSource: String
     let bundleId: String
     /// Where the player's saves, the game's settings that live beside them,
     /// and the wrapp's own preferences are kept.
@@ -44,7 +47,7 @@ struct GameConfig {
             appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
             gameInstallerDir: gameInstallerDir, gameEngine: "wine", steamGameId: nil,
             steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
-            bundleId: bundleId, appSupportPath: appSupportPath, scummvmConfigPath: scummvmConfigPath
+            gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, scummvmConfigPath: scummvmConfigPath
         )
     }
 }
@@ -224,6 +227,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     let steamGameId = readPlist(at: settingsPlistPath, key: "SteamGameId")
     let steamLaunchMode = readPlist(at: settingsPlistPath, key: "SteamLaunchMode")
     let gameSlug = readPlist(at: settingsPlistPath, key: "GameSlug") ?? "unknown"
+    let gameSource = readPlist(at: settingsPlistPath, key: "GameSource") ?? "unknown"
 
     let winePrefix = customWinePrefix ?? appPath.appendingPathComponent("Contents/SharedSupport/prefix")
 
@@ -257,6 +261,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         steamLaunchMode: steamLaunchMode,
         gameTitle: gameTitle,
         gameSlug: gameSlug,
+        gameSource: gameSource,
         bundleId: bundleId,
         appSupportPath: appSupportPath,
         scummvmConfigPath: scummvmConfigPath

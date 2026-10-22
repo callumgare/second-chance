@@ -133,6 +133,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             try helper.configureWrapp(
                 at: wrappPath,
                 gameInfo: gameInfo,
+                source: .disk,
                 gameExePath: gameExePath,
                 installerDir: installerDir
             )

@@ -142,6 +142,61 @@ struct ReportingPreferencesTests {
         try Data("{ not json".utf8).write(to: directory.appendingPathComponent(ReportingPreferences.fileName))
         #expect(ReportingPreferences.load(from: directory) == ReportingPreferences())
     }
+
+    @Test("A file saved before success reports existed reads as not asked yet")
+    func beforeSuccessReports() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(#"{ "level" : "detailed", "promptShown" : true }"#.utf8)
+            .write(to: directory.appendingPathComponent(ReportingPreferences.fileName))
+        let preferences = ReportingPreferences.load(from: directory)
+        #expect(preferences.level == .detailed)
+        #expect(preferences.successReports == nil)
+    }
+
+    @Test("The success reports answer is saved", arguments: [true, false])
+    func successReportsRoundTrip(answer: Bool) {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        ReportingPreferences.update(in: directory) { $0.successReports = answer }
+        #expect(ReportingPreferences.load(from: directory).successReports == answer)
+    }
+}
+
+@Suite("Success reports")
+struct SuccessReporterTests {
+    @Test("Only a yes, in a run that reports, is counted", arguments: [
+        (Bool?.none, true, false),
+        (false, true, false),
+        (true, false, false),
+        (true, true, true),
+    ])
+    func gating(answer: Bool?, reportingEnabled: Bool, counted: Bool) {
+        let preferences = ReportingPreferences(successReports: answer)
+        #expect(SuccessReporter.shouldRecord(preferences, reportingEnabled: reportingEnabled) == counted)
+    }
+
+    @Test("A metric leaves with which game and how it went, and nothing about whose Mac it was")
+    func allowedAttributes() {
+        let attributes = [
+            "game": "royal-tower", "source": "steam", "engine": "wine", "outcome": "ok",
+            "os.version": "15.6", "sentry.release": "second-chance@1.0+1",
+            "user.id": "installation", "device.model": "Mac15,3", "memory": "16 GB",
+            "translocated": "no", "process": "wrapp",
+        ]
+        #expect(SuccessReporter.allowed(attributes) == [
+            "game": "royal-tower", "source": "steam", "engine": "wine", "outcome": "ok",
+            "os.version": "15.6", "sentry.release": "second-chance@1.0+1",
+        ])
+    }
+
+    @Test("A report's attributes leave out what it doesn't know")
+    func reportAttributes() {
+        let report = SuccessReport(event: .launch, outcome: "never-started", game: "haunted-carousel",
+                                   source: nil, engine: "wine")
+        #expect(report.attributes == ["outcome": "never-started", "game": "haunted-carousel", "engine": "wine"])
+    }
 }
 
 @Suite("Failure reports")

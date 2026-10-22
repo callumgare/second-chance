@@ -114,7 +114,8 @@ the report, so `capture` gives up after 5 s and the report goes without them.
 
 The SDK runs with everything but crash and failure capture off: no sessions,
 tracing, hang tracking, MetricKit, breadcrumbs or network capture
-(`FailureReporter.start`). Nothing is sent unless something fails.
+(`FailureReporter.start`). Nothing is sent unless something fails, or the
+person has turned on [success reports](#success-reports).
 
 ## Where failures are reported
 
@@ -160,6 +161,52 @@ in the wrapp's exit and quit paths and in the app's `finishTerminating`. A
 detailed report waits for its diagnostics bundle to finish
 (`StartupDiagnostics.bundleWhenComplete`). That wait is bounded by the
 capture's own command timeouts.
+
+## Success reports
+
+Failure reports say what breaks, but not how often things work, so they
+can't say which games are known to work. Success reports count every build
+and every game launch, and how each ended, for people who said yes. They are
+Sentry [Application Metrics](https://docs.sentry.io/platforms/apple/metrics/),
+sent by the SDK `FailureReporter` started (`Shared/Reporting/SuccessReporter.swift`),
+so they are off wherever failure reports are ([When it's off](#when-its-off)).
+
+**The question is asked once, after the first build that worked**, before
+the folder picker (`WrappBuildInput.askAboutSuccessReports`, called from
+`WrappBuildHelper.finalize`). Neither button is the default: Return picks
+neither, and Escape is Don't Send. A yes gets a thank-you. The answer is
+`successReports` in `ReportingPreferences`, nil until asked, so a file saved
+before it existed reads as not asked. It isn't asked in a headless run or
+one that can't report, and Settings changes it after that. A wrapp's
+Failure Reports… menu item shows it.
+
+Two counters, each with `game`, `source`, `engine` and `outcome`:
+
+| Metric | Counted in | `outcome` |
+| ------ | ---------- | --------- |
+| `build` | `WrappBuildViewModel.performBuild` | `ok`, or the failure's `ErrorChain.identifier`. A cancelled build isn't counted |
+| `launch` | `GameLauncher.handleGameTermination`, `reportStuckLaunch` | `ok`, or the failure report's kind: `quit-unexpectedly`, `never-started`, `killed-by-signal`, `exit-code`, `no-window`, `stuck` |
+
+A launch is `ok` when the game ended cleanly, by the same test that decides
+whether a failure is reported, or when the player quit the wrapp while the
+game was running with its window up. Each launch is counted once. A wrapp
+reads its source from `GameSource` in `AppSettings.plist`; one built before
+that was written says `unknown`.
+
+`beforeSendMetric` (`SuccessReporter.scrub`) drops a metric when the answer
+is no longer yes, and cuts the rest down to `SuccessReporter.allowedAttributes`.
+The SDK adds the scope's tags, the installation ID and the Mac's details
+before that hook runs, so a success report leaves with which game and how it
+went, the Second Chance release and environment, and the macOS version:
+nothing that says whose Mac it was.
+
+**What isn't counted:** anything before the question has been answered.
+Someone whose first build fails is never asked, so that failure exists
+only as a failure report, and nothing is held over to send if they say yes
+later. To see which games work, read success rates (`outcome:ok` over all of
+a game's `launch` or `build`) in Sentry's Metrics explorer, grouped by
+`game` and `source`. Read them alongside the failure issues, not instead of
+them.
 
 ## Crash handlers
 

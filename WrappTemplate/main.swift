@@ -266,10 +266,11 @@ class DebugMenuHandler: NSObject {
 // MARK: - Application Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    /// The app menu's Failure Reports…: what the shared setting is, and that
-    /// Second Chance is where it changes.
+    /// The app menu's Failure Reports…: what the shared settings are, and
+    /// that Second Chance is where they change.
     @objc func showFailureReportSettings() {
-        let level = ReportingPreferences.load().level
+        let preferences = ReportingPreferences.load()
+        let level = preferences.level
         let alert = NSAlert()
         alert.messageText = "Failure Reports"
         let current: String
@@ -278,7 +279,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .basic: current = "When the game fails to start, a basic report is sent: which game, and what failed."
         case .manual: current = "When the game fails to start, you're asked what to send."
         }
-        alert.informativeText = "\(current)\n\nYou can change this in Second Chance → Settings. It applies to all your games."
+        let success = preferences.successReports == true
+            ? "Success reports are on: Second Chance counts when a game starts, and whether it worked."
+            : "Success reports are off."
+        alert.informativeText = "\(current)\n\n\(success)\n\nYou can change these in Second Chance → Settings. They apply to all your games."
         alert.runModal()
     }
 

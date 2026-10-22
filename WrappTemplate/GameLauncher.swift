@@ -220,6 +220,8 @@ class GameLauncher {
     private var launchedAt = Date()
     /// Whether the game's own process was ever seen (always, for ScummVM).
     private var gameStarted = false
+    /// Whether this launch has been counted for the success reports.
+    private var launchCounted = false
     /// The prefix's Documents, where the games keep their folders (a link to
     /// the wrapp's saves).
     private var documentsDirectory: URL {
@@ -232,6 +234,10 @@ class GameLauncher {
         // wrapp) is a quit, not a failure, whatever signal the game got.
         if cleanupQueue.sync(execute: { cleanupCompleted }) {
             logger.notice("■ Game stopped after \(ran), because the wrapp is quitting")
+            // The player quit a game that was running: it worked.
+            if gameStarted && diagnostics?.hasSeenWindow != false {
+                recordLaunch(outcome: SuccessReport.ok)
+            }
             infoWindow?.close()
             logger.notice("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
             return
@@ -273,12 +279,16 @@ class GameLauncher {
                 files.append(("Diagnostics", bundle.path))
             }
             let summary = FailureSummary.log(logger, what: "Running \(config.gameTitle)", files: files)
+            let kind = failureKind(exitCode: exitCode, signal: signal)
+            recordLaunch(outcome: kind)
             report(FailureReport(
-                what: "Running the game", kind: failureKind(exitCode: exitCode, signal: signal),
+                what: "Running the game", kind: kind,
                 game: config.gameSlug, engine: config.gameEngine,
                 tags: failureTags(exitCode: exitCode, signal: signal), summary: summary,
                 diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
             ))
+        } else {
+            recordLaunch(outcome: SuccessReport.ok)
         }
 
         // Close info window if it's still open
@@ -305,8 +315,20 @@ class GameLauncher {
             tags: failureTags(exitCode: nil, signal: nil), summary: summary,
             diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
         )
+        recordLaunch(outcome: stuck.kind)
         report(stuck)
         return (stuck, reportTask ?? Task { .disabled })
+    }
+
+    /// Count this launch for the success reports, once: a launch given up
+    /// on as stuck still ends, and that end is not a second launch.
+    private func recordLaunch(outcome: String) {
+        guard !launchCounted else { return }
+        launchCounted = true
+        SuccessReporter.record(SuccessReport(
+            event: .launch, outcome: outcome, game: config.gameSlug,
+            source: config.gameSource, engine: config.gameEngine
+        ))
     }
 
     /// How a run that ended badly ended, as a report's kind: the first of

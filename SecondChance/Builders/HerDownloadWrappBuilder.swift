@@ -240,6 +240,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         try helper.configureWrapp(
             at: wrappPath,
             gameInfo: gameInfo,
+            source: .herDownload,
             gameExePath: gameExePath,
             installerDir: gameDir
         )

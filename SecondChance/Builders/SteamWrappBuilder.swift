@@ -241,6 +241,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             try helper.configureWrapp(
                 at: wrappPath,
                 gameInfo: gameInfo,
+                source: .steam,
                 gameExePath: gameExePath,
                 installerDir: gameDirPath,
                 steamID: runsWithoutSteam ? nil : String(appID),

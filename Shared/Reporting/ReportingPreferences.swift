@@ -2,11 +2,12 @@
 //  ReportingPreferences.swift
 //  Shared
 //
-//  How much a failure report may say, chosen once and shared by Second
-//  Chance and every wrapp. Wrapps are bundles of their own, so this can't
-//  live in UserDefaults: it is a small JSON file in Second Chance's
-//  Application Support folder, read afresh at each failure so a change made
-//  in Second Chance reaches wrapps that are already running.
+//  How much a failure report may say, and whether success reports are sent,
+//  chosen once and shared by Second Chance and every wrapp. Wrapps are
+//  bundles of their own, so this can't live in UserDefaults: it is a small
+//  JSON file in Second Chance's Application Support folder, read afresh at
+//  each use so a change made in Second Chance reaches wrapps that are
+//  already running.
 
 import Foundation
 import Logging
@@ -27,6 +28,9 @@ nonisolated struct ReportingPreferences: Codable, Equatable, Sendable {
     var level: ReportLevel = .basic
     /// Whether the first-failure prompt has been shown, in the app or any wrapp.
     var promptShown: Bool = false
+    /// Whether builds and launches may be counted (`SuccessReporter`); nil
+    /// until the person has been asked, after their first successful build.
+    var successReports: Bool? = nil
 
     static let defaultDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/SecondChance", isDirectory: true)

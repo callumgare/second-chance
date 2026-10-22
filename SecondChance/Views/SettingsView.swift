@@ -2,14 +2,20 @@
 //  SettingsView.swift
 //  SecondChance
 //
-//  Second Chance's Settings window. For now it holds one thing: how much a
-//  failure report says (docs/failure-reports.md). The choice is shared with
-//  every wrapp, through `ReportingPreferences`.
+//  Second Chance's Settings window: how much a failure report says, and
+//  whether success reports are sent (docs/failure-reports.md). Both are
+//  shared with every wrapp, through `ReportingPreferences`.
 
 import SwiftUI
 
 struct SettingsView: View {
     @State private var level = ReportingPreferences.load().level
+    /// Off until the person says yes, which they're asked after their first
+    /// successful build.
+    @State private var successReports = ReportingPreferences.load().successReports ?? false
+    private let disabledReason = FailureReporter.disabledReason(environment: ProcessInfo.processInfo.environment,
+                                                                isDebugBuild: FailureReporter.isDebugBuild,
+                                                                dsn: FailureReporter.dsn)
 
     var body: some View {
         Form {
@@ -46,17 +52,24 @@ struct SettingsView: View {
                     .padding(.top, 4)
                 }
 
-                if let reason = FailureReporter.disabledReason(environment: ProcessInfo.processInfo.environment,
-                                                               isDebugBuild: FailureReporter.isDebugBuild,
-                                                               dsn: FailureReporter.dsn) {
-                    Text("This copy of Second Chance doesn't send reports (\(reason)).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                disabledNote
             } header: {
                 Text("Failure Reports")
+            }
+
+            Section {
+                Toggle("Send success reports", isOn: $successReports)
+
+                Text("When a game is set up or played, say whether it worked: which game, where it came from, and the Second Chance and macOS versions. Nothing about you or your files is sent. It shows which games are known to work.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                disabledNote
+            } header: {
+                Text("Success Reports")
             } footer: {
-                Text("Reports go to the developer through Sentry, and nothing is sent until something fails.")
+                Text("Reports go to the developer through Sentry.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,6 +84,17 @@ struct SettingsView: View {
                 // Having chosen here, nobody needs asking after a failure.
                 $0.promptShown = true
             }
+        }
+        .onChange(of: successReports) { _, successReports in
+            ReportingPreferences.update { $0.successReports = successReports }
+        }
+    }
+
+    @ViewBuilder private var disabledNote: some View {
+        if let disabledReason {
+            Text("This copy of Second Chance doesn't send reports (\(disabledReason)).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
