@@ -829,6 +829,8 @@ func main() {
                 // A run can end badly after the game loaded, with no error
                 // window: its report still has to go before the wrapp does.
                 FailureReporter.wait(for: gameLauncher.reportTask, timeout: 120)
+                // The game has gone, but Wine may not have yet.
+                gameLauncher.waitForWineToEnd()
                 // Or the launch log loses its last lines, the game's exit among them.
                 LogStore.shared.flush()
                 exit(0)

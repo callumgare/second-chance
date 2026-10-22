@@ -13,57 +13,71 @@ private nonisolated let wineUtilitiesLogger = Logger(label: "au.gare.callum.seco
 /// Utility functions for Wine operations that don't require progress reporting
 class WineUtilities {
     
-    /// Wait for Wine server to stop with escalating force
-    /// This is a standalone utility that can be used by WrappTemplate without needing WineManager
-    static func waitTillWineserverStopped(at wrappPath: URL, customPrefixDir: URL? = nil) {
+    /// Wait for the Wine session to end, with escalating force: `wineserver
+    /// -w` returns once every Wine process in the prefix has exited and the
+    /// server itself has gone, so that is the signal waited on at each step.
+    ///
+    /// - `gracefulTimeout`: how long Wine gets to finish by itself. A game
+    ///   that quit leaves explorer and Wine's services to wind down, which
+    ///   takes a few seconds; someone quitting the wrapp wants it gone sooner.
+    ///
+    /// Then `wineserver -k` (SIGTERM) and, if that isn't enough, `-k9`
+    /// (SIGKILL), each followed by another wait, so this returns only once
+    /// Wine has gone or a kill has had its chance and been logged as failing.
+    /// Returns whether Wine is known to have ended.
+    @discardableResult
+    static func waitTillWineserverStopped(at wrappPath: URL, customPrefixDir: URL? = nil,
+                                          gracefulTimeout: TimeInterval = 5) -> Bool {
         let wine = WineEnvironment(appPath: wrappPath, customPrefixDir: customPrefixDir)
-        
-        // Try graceful shutdown with -w (wait for processes to exit)
-        wineUtilitiesLogger.notice("[Wine Cleanup] Running wineserver -w (waiting for processes to exit cleanly)...")
-        let waitProcess = Process()
-        waitProcess.executableURL = URL(fileURLWithPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
-        waitProcess.arguments = ["-w"]
-        waitProcess.environment = wine.environmentVariables()
-        
-        do {
-            try waitProcess.run()
-            
-            // Wait up to 5 seconds for graceful shutdown
-            var elapsed = 0.0
-            let checkInterval = 0.1
-            while waitProcess.isRunning && elapsed < 5.0 {
-                Thread.sleep(forTimeInterval: checkInterval)
-                elapsed += checkInterval
+        let wineserver = wine.wineBinDir.appendingPathComponent("wineserver")
+        // A ScummVM wrapp has no Wine at all.
+        guard FileManager.default.fileExists(atPath: wineserver.path) else { return true }
+
+        func run(_ arguments: [String]) -> Process? {
+            let process = Process()
+            process.executableURL = wineserver
+            process.arguments = arguments
+            process.environment = wine.environmentVariables()
+            do {
+                try process.run()
+                return process
+            } catch {
+                wineUtilitiesLogger.error("[Wine Cleanup] Couldn't run wineserver \(arguments.joined(separator: " ")): \(error.localizedDescription)")
+                return nil
             }
-            
-            if waitProcess.isRunning {
-                wineUtilitiesLogger.error("[Wine Cleanup] Graceful shutdown timed out after 5 seconds")
-                waitProcess.terminate()
-                
-                // Force termination with -k (SIGTERM) - don't wait for it
-                wineUtilitiesLogger.notice("[Wine Cleanup] Running wineserver -k (sending SIGTERM)...")
-                let killProcess = Process()
-                killProcess.executableURL = URL(fileURLWithPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
-                killProcess.arguments = ["-k"]
-                killProcess.environment = wine.environmentVariables()
-                try killProcess.run()
-                
-                // Wait up to 5 more seconds for processes to exit
-                Thread.sleep(forTimeInterval: 5.0)
-                
-                // Force kill with -k9 (SIGKILL) regardless of whether -k finished
-                wineUtilitiesLogger.notice("[Wine Cleanup] Running wineserver -k9 (sending SIGKILL)...")
-                let killForceProcess = Process()
-                killForceProcess.executableURL = URL(fileURLWithPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
-                killForceProcess.arguments = ["-k9"]
-                killForceProcess.environment = wine.environmentVariables()
-                try killForceProcess.run()
-                killForceProcess.waitUntilExit()
-            } else {
-                wineUtilitiesLogger.notice("[Wine Cleanup] Processes exited cleanly")
-            }
-        } catch {
-            wineUtilitiesLogger.error("[Wine Cleanup] Error during wineserver cleanup: \(error)")
         }
+
+        /// Whether Wine ended within `timeout`, by `wineserver -w` returning.
+        func waitForSessionEnd(_ timeout: TimeInterval) -> Bool {
+            guard let waiter = run(["-w"]) else { return false }
+            let ended = DispatchSemaphore(value: 0)
+            waiter.terminationHandler = { _ in ended.signal() }
+            if ended.wait(timeout: .now() + timeout) == .success { return true }
+            waiter.terminate()
+            return false
+        }
+
+        let started = Date()
+        wineUtilitiesLogger.notice("[Wine Cleanup] Waiting for Wine to finish (wineserver -w)...")
+        if waitForSessionEnd(gracefulTimeout) {
+            wineUtilitiesLogger.notice("[Wine Cleanup] Wine finished by itself after \(SubprocessWatch.duration(Date().timeIntervalSince(started)))")
+            return true
+        }
+
+        wineUtilitiesLogger.warning("[Wine Cleanup] Wine was still running after \(Int(gracefulTimeout)) s: stopping it (wineserver -k)")
+        run(["-k"])?.waitUntilExit()
+        if waitForSessionEnd(5) {
+            wineUtilitiesLogger.notice("[Wine Cleanup] Wine stopped")
+            return true
+        }
+
+        wineUtilitiesLogger.error("[Wine Cleanup] Wine ignored SIGTERM: killing it (wineserver -k9)")
+        run(["-k9"])?.waitUntilExit()
+        if waitForSessionEnd(5) {
+            wineUtilitiesLogger.notice("[Wine Cleanup] Wine killed")
+            return true
+        }
+        wineUtilitiesLogger.error("[Wine Cleanup] Wine was still running 5 s after SIGKILL")
+        return false
     }
 }

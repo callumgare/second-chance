@@ -320,7 +320,10 @@ direct assignment.
   on explorer, so the two would keep the whole Wine session alive after the
   game quits; `WineDesktop.release()` ends the `start.exe` once the programs
   are done and explorer then closes normally. A build releases it before
-  `wineserver -w`, which would otherwise wait for ever. `SECOND_CHANCE_PRESTART_DESKTOP=0`
+  `wineserver -w`, which would otherwise wait for ever, and so does a wrapp,
+  which then waits for the session to end before it quits — whether the game
+  ended or the player quit — and kills Wine only if it won't end
+  (`WineUtilities.waitTillWineserverStopped`). `SECOND_CHANCE_PRESTART_DESKTOP=0`
   restores Wine's on-demand start, for comparison. Anything that runs `wine`
   and reads its output must not wait for EOF on a pipe: Wine's background
   services inherit the child's stdout and hold the pipe open.

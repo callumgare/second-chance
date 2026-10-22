@@ -200,6 +200,18 @@ class GameLauncher {
         }
     }
     
+    /// After the game has ended by itself: wait for the rest of its Wine
+    /// session (explorer, Wine's services, the server) to finish, so the
+    /// wrapp never quits leaving Wine running in the prefix. Nothing to wait
+    /// for with ScummVM.
+    func waitForWineToEnd() {
+        guard config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") else { return }
+        // Generous: it ends by itself in seconds, more on a loaded Mac, and
+        // only a session that is stuck reaches the kill.
+        WineUtilities.waitTillWineserverStopped(at: config.appPath, customPrefixDir: config.winePrefix,
+                                                gracefulTimeout: 30)
+    }
+
     // MARK: - Common Cleanup
     
     /// When the game was launched, for how long it ran.
