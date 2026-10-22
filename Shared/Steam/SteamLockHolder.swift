@@ -114,6 +114,14 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
     /// "Only one game can use Steam at a time, so …".
     @MainActor
     func ask(blocked: String) -> Choice {
+        let (alert, choices) = alert(blocked: blocked)
+        let index = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        return choices.indices.contains(index) ? choices[index] : .cancel
+    }
+
+    /// The alert `ask` shows, and what each of its buttons chooses.
+    @MainActor
+    func alert(blocked: String) -> (NSAlert, [Choice]) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         if isBuild {
@@ -121,10 +129,9 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
             alert.informativeText = "Only one game can use Steam at a time, so \(blocked) Wait for Second Chance to finish, then try again."
             alert.addButton(withTitle: "Try Again")
             alert.addButton(withTitle: "Cancel")
-            return alert.runModal() == .alertFirstButtonReturn ? .tryAgain : .cancel
+            return (alert, [.tryAgain, .cancel])
         }
-        let game = name ?? "Another game"
-        alert.messageText = "\(game) is using Steam"
+        alert.messageText = "\(name ?? "Another game") is using Steam"
         alert.informativeText = "Only one game can use Steam at a time, so \(blocked)"
         if canQuit, let name {
             alert.informativeText += """
@@ -136,15 +143,11 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
             let quit = alert.addButton(withTitle: "Quit \(name)")
             quit.hasDestructiveAction = true
             alert.addButton(withTitle: "Cancel")
-            switch alert.runModal() {
-            case .alertFirstButtonReturn: return .tryAgain
-            case .alertSecondButtonReturn: return .quitHolder
-            default: return .cancel
-            }
+            return (alert, [.tryAgain, .quitHolder, .cancel])
         }
         alert.informativeText += " Quit it, then click Try Again."
         alert.addButton(withTitle: "Try Again")
         alert.addButton(withTitle: "Cancel")
-        return alert.runModal() == .alertFirstButtonReturn ? .tryAgain : .cancel
+        return (alert, [.tryAgain, .cancel])
     }
 }

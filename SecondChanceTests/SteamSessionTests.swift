@@ -4,6 +4,7 @@
 //
 //  The shared Steam sign-in, Steam's logs, and the one-wrapp-at-a-time lock.
 
+import AppKit
 import Foundation
 import Testing
 @testable import SecondChance
@@ -242,6 +243,19 @@ struct SteamActiveLockTests {
         #expect(holder.isBuild)
         #expect(holder.name == "Second Chance")
         #expect(!holder.canQuit)
+    }
+
+    @Test("The alert offers to quit only a game it can find, and never as the default")
+    @MainActor
+    func alertChoices() {
+        let unknown = SteamLockHolder(pid: nil, bundleID: "au.example.gone").alert(blocked: "the game can't start until it quits.")
+        #expect(unknown.0.messageText == "Another game is using Steam")
+        #expect(unknown.0.buttons.map(\.title) == ["Try Again", "Cancel"])
+        #expect(unknown.1 == [.tryAgain, .cancel])
+
+        let build = SteamLockHolder(pid: getpid(), bundleID: SteamLockHolder.buildBundleID).alert(blocked: "the game can't start until it quits.")
+        #expect(build.0.messageText == "Second Chance is adding a game from Steam")
+        #expect(build.1 == [.tryAgain, .cancel])
     }
 
     @Test("Waiting for a process that has already gone returns at once")

@@ -28,19 +28,7 @@ enum AppMover {
         }
         logger.notice("Running translocated, from a copy of \(original.path)")
 
-        let alert = NSAlert()
-        alert.messageText = "Move Second Chance to your Applications folder"
-        alert.informativeText = """
-        Second Chance is still where it was downloaded, so macOS doesn't run it from there. \
-        It runs a hidden, read-only copy instead, and makes a new one each time you open it. \
-        From that copy, Second Chance can't install its own updates.
-
-        Moving Second Chance to your Applications folder fixes this. \
-        It will reopen from there, and you won't be asked again.
-        """
-        alert.addButton(withTitle: "Move to Applications")
-        alert.addButton(withTitle: "Not Now")
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        guard offerAlert().runModal() == .alertFirstButtonReturn else {
             logger.notice("Not moving to Applications, as asked")
             return
         }
@@ -69,6 +57,23 @@ enum AppMover {
                 NSApp.terminate(nil)
             }
         }
+    }
+
+    /// The question: Move to Applications, or Not Now.
+    static func offerAlert() -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = "Move Second Chance to your Applications folder"
+        alert.informativeText = """
+        Second Chance is still where it was downloaded, so macOS doesn't run it from there. \
+        It runs a hidden, read-only copy instead, and makes a new one each time you open it. \
+        From that copy, Second Chance can't install its own updates.
+
+        Moving Second Chance to your Applications folder fixes this. \
+        It will reopen from there, and you won't be asked again.
+        """
+        alert.addButton(withTitle: "Move to Applications")
+        alert.addButton(withTitle: "Not Now")
+        return alert
     }
 
     /// Where the app goes: `/Applications` when it can be written to (an
@@ -127,6 +132,10 @@ enum AppMover {
     }
 
     private static func showMoveFailed(original: URL, error: Error) {
+        moveFailedAlert(original: original, error: error).runModal()
+    }
+
+    static func moveFailedAlert(original: URL, error: Error) -> NSAlert {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Second Chance couldn't move itself"
@@ -136,6 +145,6 @@ enum AppMover {
 
         \(error.localizedDescription)
         """
-        alert.runModal()
+        return alert
     }
 }
