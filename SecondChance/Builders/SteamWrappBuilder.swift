@@ -210,6 +210,10 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
             }
             clientCache.save(from: prefix)
+            // Nothing from here on uses Steam or its sign-in. Holding the lock
+            // through patching and saving had a wrapp opened as the build
+            // finished (or from its done screen) find Steam taken by the build.
+            lock.release()
 
             // ── Locate and configure ───────────────────────────────────
             let steamGameDir = prefix.appendingPathComponent(SteamClient.steamDirInPrefix)
@@ -255,7 +259,6 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
             let (shouldLaunch, args) = await input.shouldLaunchGame()
             if shouldLaunch {
-                lock.release()  // the wrapp takes it for its own Steam
                 try await helper.launchGame(at: finalPath, with: args)
             }
             return finalPath

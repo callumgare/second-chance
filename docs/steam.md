@@ -80,7 +80,9 @@ the test host under xcodebuild — can still meet the prompts; answer them
    The build runs Steam inside the wrapp's own prefix, so without this the
    finished `.app` would carry the account's token, and anyone given a copy
    could use the account. A wrapp gets the sign-in from the shared store when
-   it runs, and on a Mac without one asks for it once.
+   it runs, and on a Mac without one asks for it once. Then release the
+   Steam lock: nothing after this uses Steam, and a wrapp opened while the
+   build saves itself would otherwise find Steam taken by the build.
 7. **Configure.** A game that runs without Steam is moved out of
    `steamapps/common/` into `Program Files (x86)/Nancy Drew/`, and the Steam
    client is deleted; otherwise its exe stays in Steam's library and
