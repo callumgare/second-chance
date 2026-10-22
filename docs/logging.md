@@ -47,7 +47,7 @@ costs nothing when someone needs it later.
 Every process (the app, a wrapp, WrappPuppeteer) starts its log with one
 block from `RunContext.logHeader`:
 
-```
+```text
 ━━━ Second Chance 0.4.0 (build 52), pid 4120, run 3f9a2c1e ━━━
   macOS 15.6.0, Mac14,6, process x86_64 under Rosetta
   GUI session; WINEDEBUG=-all,err+all
@@ -104,7 +104,7 @@ Every Wine run through `WineEnvironment.runWine` (installers, patches,
 `reg add`, …) streams its output into the log as it arrives, under the `Wine`
 category, framed by lines from `WineEnvironment` written by `SubprocessWatch`:
 
-```
+```text
 17:22:45.627  notice  WineEnvironment  ▶ wine setup.exe started (pid 1237): start /wait /unix …/setup.exe /verysilent /norestart
 17:23:15.630  notice  WineEnvironment  … wine setup.exe (pid 1237) still running after 30.0s; no output for 30.0s (0 lines so far)
 17:24:24.211  notice  WineEnvironment  ■ wine setup.exe (pid 1237) exited 0 after 1m 39s, 2 lines of output
@@ -147,7 +147,7 @@ The wrapp logs one `■` line when the game ends, with the real exit status of
 the `wine start /wait` launcher (which passes through the game's own), or the
 signal that killed it, how long it ran, and whether its window had appeared:
 
-```
+```text
 16:23:54.173  error   GameLauncher  ■ Game exited 1 after 6.1s, after its window appeared — a crash or an error on the way out
 ```
 
@@ -171,7 +171,7 @@ polling for two minutes.
 A failed build, and a game that crashes, quits with an error or never shows
 its window, ends its log with one critical entry between fixed markers:
 
-```
+```text
 === FAILURE SUMMARY ===
 What failed: Building the wrapp, during "Game installing"
 Error: Wine execution failed with exit code 1 [SecondChance.WineError.executionFailed(exitCode: 1)]
@@ -223,10 +223,10 @@ was killed before its cleanup, once they are 6 hours old, and logs each one.
 
 Entries carry swift-log metadata (`logger.notice("…", metadata: ["pid": "\(pid)"])`)
 and the stage they were logged in. The text formats keep the compact line as it
-was; the full format appends metadata as ` {pid=1237 program=wine setup.exe}`;
+was; the full format appends metadata as ` {pid=1237 program=wine setup.exe}`; <!-- markdownlint-disable-line MD038 -->
 the JSON-lines sink writes everything as fields:
 
-```
+```json
 {"category":"Wine","label":"au.gare.callum.second-chance.Shared.Wine","level":"error",
  "message":"0124:err:module:import_dll …","metadata":{"pid":"1237","program":"wine setup.exe"},
  "pid":4120,"process":"Second Chance","run":"3f9a2c1e","seq":812,"stage":"Game installing",

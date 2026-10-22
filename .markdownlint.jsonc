@@ -1,0 +1,18 @@
+// markdownlint rules for the hand-written docs, read by the editor's linter
+// and by markdownlint-cli2 (whose own settings, such as which files it skips,
+// are in .markdownlint-cli2.jsonc). Default rules, except where one fights a
+// deliberate choice.
+{
+  "default": true,
+  // Prose is wrapped by hand, but tables, links and some long paragraphs are
+  // kept on one line on purpose; rewrapping them would only churn.
+  "MD013": false,
+  // The README lays out its icon, screenshots and collapsible sections in
+  // HTML, which Markdown has no way to express. Only those elements.
+  "MD033": {
+    "allowed_elements": ["a", "b", "details", "img", "p", "picture", "source", "strong", "summary"]
+  },
+  // A doc's sections reuse the same subheadings ("What it does", "Checking
+  // it", ...); only a repeat under the same parent is a mistake.
+  "MD024": { "siblings_only": true }
+}

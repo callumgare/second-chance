@@ -280,7 +280,7 @@ A Direct3D game has no cnc-ddraw to swallow anything, and isn't checked
 
 The helper log should show the lock taking hold, normally on the first click:
 
-```
+```text
 pid=… cursor-lock | armed
 pid=… cursor-lock | window is in its fullscreen Space
 pid=… cursor-lock | posted middle click 1
@@ -370,7 +370,7 @@ corner again, for comparison.
 
 The wrapp's log names the scale each time the surface changes size:
 
-```
+```text
 [Helpers] Mode scaling armed (armed in Game.exe)
 [Helpers] Mode scaling: scaling Direct3D's 800x600 picture up to 1260x945
 [Helpers] Native fullscreen: entering native fullscreen: '…' 1512x945 (a window covering the screen)
@@ -453,14 +453,14 @@ window and Wine's errors alone. ScummVM games aren't checked.
 
 ### Checking it
 
-```
+```text
 [Helpers] Quit watch armed (armed in Game.exe)
 [Helpers] Quit watch: first frame on screen
 ```
 
 A game that quits unexpectedly logs, after the usual `■ Game exited …` line:
 
-```
+```text
 ■ That was no quit: nothing asked the game to quit, and it quit before it drew anything. The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.
     Wine: 0130:err:system:NtUserChangeDisplaySettings Changing L"\\.\DISPLAY1" display settings returned -2.
 ```

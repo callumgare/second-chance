@@ -63,7 +63,6 @@ Sentry DSN, which a build phase writes into the app, and the Sentry slugs
 `sc release` uploads debug symbols to. A clone without one builds fine and
 sends no failure reports ([docs/failure-reports.md](docs/failure-reports.md#the-dsn)).
 
-
 ## Documentation
 
 `docs/` holds per-feature documentation. Read the one that covers what you are
@@ -121,7 +120,7 @@ Documentation is part of a change, not a follow-up to it.
   is actively misleading someone, mark the edit inline as post-implementation,
   dated, with who changed it and why — never a silent rewrite.
 - In any files that are commited (unlike files such as this in the .local dir) you should never refer to details specific
-to the current user's setup such as file paths outside the source code repo or remote machines they may connect to for testing. 
+to the current user's setup such as file paths outside the source code repo or remote machines they may connect to for testing.
 
 Reach for a doc when the material is one feature deep; reach for `AGENTS.md`
 when it applies across the repo. Link between them rather than repeating.
@@ -136,10 +135,10 @@ when it applies across the repo. Link between them rather than repeating.
 ## Architecture
 
 A **wrapp** is the `.app` this tool produces: one game, plus the engine to run
-it. Building one is a *wrapp build*; the thing it is built from is a *source*
+it. Building one is a _wrapp build_; the thing it is built from is a _source_
 (disk, Her download, Steam).
 
-```
+```text
 Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)      CLIBuilder (headless)
                                     │                            │
                                     └────────── both via ────────┘
@@ -169,8 +168,8 @@ step by step, including the resource-ownership rules and both injection seams.
   and `CLIBuilder` both dispatch through the protocol, so a new source needs no
   changes at either call site.
 - **A builder owns its flow and its resources.** Whatever it creates — mounted
-  ISOs, the temp wrapp — it tears down on the success *and* error paths.
-  `WrappBuildHelper` supplies cleanup *primitives* (`removeTempWrapp`); it never
+  ISOs, the temp wrapp — it tears down on the success _and_ error paths.
+  `WrappBuildHelper` supplies cleanup _primitives_ (`removeTempWrapp`); it never
   decides when to call them. The helper never calls a builder: one direction only.
 - **Source-specific work stays out of the helper.** Disk layout and CD-ROM
   mounting live in `DiskWrappBuilder` because no other source uses them.
@@ -223,7 +222,7 @@ direct assignment.
   "executable", "headless" or bare exit codes. Disc images stay a hidden
   extra that is never offered in text. Internal names are fine in code and
   in logs, which are for us. Keep a step's progress text short; what the
-  person must *do* goes in an `.instructions` event, shown at once.
+  person must _do_ goes in an `.instructions` event, shown at once.
 - **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
 
 ## Gotchas
@@ -424,7 +423,7 @@ direct assignment.
 ## Terminology
 
 The Nancy Drew games have a set of common abbrevations use for each game
-(https://nancydrew.fandom.com/wiki/User_blog:BanaBerry/Nancy_Drew_Game_Abbreviations). For example
+(<https://nancydrew.fandom.com/wiki/User_blog:BanaBerry/Nancy_Drew_Game_Abbreviations>). For example
 `Treasure in the Royal Tower` is `TRT` and `The Haunted Carousal` is `CAR`. These abbreviations are hard for me to
 remember so Second Chance avoids these whenever possible and instead uses our shortenings. The full list can be found in
 SecondChance/Services/GameInfoProvider.swift where the id property is the shortening we use for each game. For us

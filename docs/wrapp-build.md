@@ -10,7 +10,7 @@ code is shaped this way, see
 
 ## The shape
 
-```
+```text
 WrappBuildViewModel (GUI)          CLIBuilder (headless)
          │                                  │
          └──────── WrappBuildStrategy ──────┘
@@ -245,7 +245,7 @@ mirror on (`0` forces it off).
 is set, `CLIBuilder` attaches a `ProgressFileWriter`: an `EventBus.app`
 subscriber like any other, which appends one JSON object per line to that file —
 
-```
+```json
 {"event":"stage","stage":"installingGame","text":"Game installing","fraction":0.5}
 {"event":"completed","path":"/…/Nancy Drew - X.app"}
 {"event":"failed","message":"…"}
