@@ -29,33 +29,10 @@ class WineUtilities {
     static func waitTillWineserverStopped(at wrappPath: URL, customPrefixDir: URL? = nil,
                                           gracefulTimeout: TimeInterval = 5) -> Bool {
         let wine = WineEnvironment(appPath: wrappPath, customPrefixDir: customPrefixDir)
-        let wineserver = wine.wineBinDir.appendingPathComponent("wineserver")
         // A ScummVM wrapp has no Wine at all.
-        guard FileManager.default.fileExists(atPath: wineserver.path) else { return true }
-
-        func run(_ arguments: [String]) -> Process? {
-            let process = Process()
-            process.executableURL = wineserver
-            process.arguments = arguments
-            process.environment = wine.environmentVariables()
-            do {
-                try process.run()
-                return process
-            } catch {
-                wineUtilitiesLogger.error("[Wine Cleanup] Couldn't run wineserver \(arguments.joined(separator: " ")): \(error.localizedDescription)")
-                return nil
-            }
-        }
-
-        /// Whether Wine ended within `timeout`, by `wineserver -w` returning.
-        func waitForSessionEnd(_ timeout: TimeInterval) -> Bool {
-            guard let waiter = run(["-w"]) else { return false }
-            let ended = DispatchSemaphore(value: 0)
-            waiter.terminationHandler = { _ in ended.signal() }
-            if ended.wait(timeout: .now() + timeout) == .success { return true }
-            waiter.terminate()
-            return false
-        }
+        guard hasWine(wine) else { return true }
+        func run(_ arguments: [String]) -> Process? { runWineserver(wine, arguments) }
+        func waitForSessionEnd(_ timeout: TimeInterval) -> Bool { Self.waitForSessionEnd(wine, timeout: timeout) }
 
         let started = Date()
         wineUtilitiesLogger.notice("[Wine Cleanup] Waiting for Wine to finish (wineserver -w)...")
@@ -79,5 +56,43 @@ class WineUtilities {
         }
         wineUtilitiesLogger.error("[Wine Cleanup] Wine was still running 5 s after SIGKILL")
         return false
+    }
+
+    /// Whether the prefix's Wine session ended within `timeout`, by `wineserver
+    /// -w` returning: at once when none is running.
+    static func waitForSessionEnd(_ wine: WineEnvironment, timeout: TimeInterval) -> Bool {
+        guard hasWine(wine) else { return true }
+        guard let waiter = runWineserver(wine, ["-w"]) else { return false }
+        let ended = DispatchSemaphore(value: 0)
+        waiter.terminationHandler = { _ in ended.signal() }
+        if ended.wait(timeout: .now() + timeout) == .success { return true }
+        waiter.terminate()
+        return false
+    }
+
+    /// SIGKILL every Wine process in the prefix (`wineserver -k9`), for a
+    /// wrapp that has to exit now and mustn't leave Wine behind.
+    static func killSession(_ wine: WineEnvironment) {
+        guard hasWine(wine) else { return }
+        wineUtilitiesLogger.warning("[Wine Cleanup] Killing Wine before exiting (wineserver -k9)")
+        runWineserver(wine, ["-k9"])?.waitUntilExit()
+    }
+
+    private static func hasWine(_ wine: WineEnvironment) -> Bool {
+        FileManager.default.fileExists(atPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
+    }
+
+    private static func runWineserver(_ wine: WineEnvironment, _ arguments: [String]) -> Process? {
+        let process = Process()
+        process.executableURL = wine.wineBinDir.appendingPathComponent("wineserver")
+        process.arguments = arguments
+        process.environment = wine.environmentVariables()
+        do {
+            try process.run()
+            return process
+        } catch {
+            wineUtilitiesLogger.error("[Wine Cleanup] Couldn't run wineserver \(arguments.joined(separator: " ")): \(error.localizedDescription)")
+            return nil
+        }
     }
 }

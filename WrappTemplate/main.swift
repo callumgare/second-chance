@@ -7,6 +7,7 @@
 import Foundation
 import AppKit
 import Logging
+import os
 
 // NOTE: no top-level Logger in main.swift — top-level code here is eager and
 // runs in source order, so a logger declared at file scope would be
@@ -289,11 +290,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set when the player chose "Launch Directly": once this launch is
     /// cleaned up, the wrapp opens again with `--launch-without-steam`.
     var relaunchWithoutSteam = false
+    /// The game has ended and the wrapp is closing down: waiting for Wine,
+    /// hidden from the Dock. Set from the game's thread, read on main.
+    private let closingState = OSAllocatedUnfairLock(initialState: (closing: false, openAgain: false))
+    var isClosing: Bool {
+        get { closingState.withLock { $0.closing } }
+        set { closingState.withLock { $0.closing = newValue } }
+    }
+    /// Someone opened the game again while it was closing down: once Wine
+    /// has finished, a fresh copy starts.
+    var openAgainWhenClosed: Bool { closingState.withLock { $0.openAgain } }
 
     init(config: GameConfig, gameLauncher: GameLauncher?) {
         self.config = config
         self.gameLauncher = gameLauncher
         super.init()
+    }
+
+    /// Opening the game while this copy is closing down reaches this copy
+    /// (macOS reactivates a running app rather than starting another), which
+    /// would do nothing. Remember it, and start again once Wine has finished.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard isCleaningUp || isClosing else { return true }
+        mainLogger.notice("Opened again while the game is closing: it starts again once Wine has finished")
+        closingState.withLock { $0.openAgain = true }
+        return false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -341,7 +362,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 mainLogger.notice("[Cleanup] All cleanup complete, terminating application")
                 // Drain pending entries so the disk mirror / stderr keep the last lines.
                 if self.relaunchWithoutSteam {
-                    self.openAgainWithoutSteam()
+                    self.openAgain(arguments: [launchWithoutSteamArgument], why: "to start without Steam")
+                } else if self.openAgainWhenClosed {
+                    self.openAgain(arguments: [], why: "as it was opened while closing")
                 }
                 LogStore.shared.flush()
                 if self.gameExitCode != 0 {
@@ -357,11 +380,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
-    /// Open a new instance of this wrapp that starts the game without Steam.
-    /// Called once Steam and the Wine session have been stopped, so the new
-    /// instance finds the prefix free. Through `open`, so it outlives us.
-    private func openAgainWithoutSteam() {
-        var arguments = ["-n", config.appPath.path, "--args", launchWithoutSteamArgument]
+    /// Open a new instance of this wrapp, with `arguments`. Called once Steam
+    /// and the Wine session have been stopped, so the new instance finds the
+    /// prefix free. Through `open`, so it outlives us.
+    func openAgain(arguments wrappArguments: [String], why: String) {
+        var arguments = ["-n", config.appPath.path, "--args"] + wrappArguments
         if CommandLine.arguments.contains("--debug") { arguments.append("--debug") }
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -370,12 +393,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try open.run()
             open.waitUntilExit()
             if open.terminationStatus == 0 {
-                mainLogger.notice("[Cleanup] Opened \(config.gameTitle) again, to start without Steam")
+                mainLogger.notice("[Cleanup] Opened \(config.gameTitle) again, \(why)")
             } else {
-                mainLogger.error("[Cleanup] Couldn't open \(config.gameTitle) again without Steam: open exited \(open.terminationStatus)")
+                mainLogger.error("[Cleanup] Couldn't open \(config.gameTitle) again (\(why)): open exited \(open.terminationStatus)")
             }
         } catch {
-            mainLogger.error("[Cleanup] Couldn't open \(config.gameTitle) again without Steam: \(error.localizedDescription)")
+            mainLogger.error("[Cleanup] Couldn't open \(config.gameTitle) again (\(why)): \(error.localizedDescription)")
         }
     }
 }
@@ -389,6 +412,10 @@ let launchWithoutSteamArgument = "--launch-without-steam"
 
 /// Kept alive for the life of the process.
 private var terminationSignalSources: [DispatchSourceSignal] = []
+
+/// Kills the game's Wine session, once the configuration is known: called
+/// when the wrapp has to exit without its cleanup having finished.
+private var killWineBeforeForcedExit: (() -> Void)?
 
 /// Quit like Cmd-Q on SIGTERM, SIGINT or SIGHUP: end the game and its Wine
 /// session and log that it happened, instead of dying silently or (when the
@@ -409,6 +436,8 @@ private func installTerminationHandlers() {
             // Off the main queue, so it fires even if the main thread is stuck.
             DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
                 mainLogger.error("Cleanup didn't finish within 15 s of \(SubprocessWatch.signalName(sig)); exiting anyway")
+                // Not with Wine still running in the prefix, though.
+                killWineBeforeForcedExit?()
                 LogStore.shared.flush()
                 exit(code)
             }
@@ -518,8 +547,17 @@ func main() {
         mainLogger.notice("Starting the game without Steam this time (\(launchWithoutSteamArgument)), after a launch through Steam failed")
     }
 
-    // Check if wineserver is already running for this prefix
+    // Wine still running in this prefix: usually the game's last session,
+    // whose wrapp is still waiting for it to close down. Wait for that (it
+    // takes seconds), and ask only if it doesn't.
     let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
+    killWineBeforeForcedExit = { WineUtilities.killSession(wine) }
+    if wine.isWineserverRunning() {
+        mainLogger.notice("Wine is still running in this game's prefix, probably from the last time it was played: waiting for it to finish")
+        if WineUtilities.waitForSessionEnd(wine, timeout: 20) {
+            mainLogger.notice("The last session's Wine has finished")
+        }
+    }
     if wine.isWineserverRunning() {
         mainLogger.warning("WARNING ⚠️: Detected running wineserver process for this prefix")
 
@@ -838,7 +876,11 @@ func main() {
                 // window: its report still has to go before the wrapp does.
                 FailureReporter.wait(for: gameLauncher.reportTask, timeout: 120)
                 // The game has gone, but Wine may not have yet.
+                appDelegate.isClosing = true
                 gameLauncher.waitForWineToEnd()
+                if appDelegate.openAgainWhenClosed {
+                    appDelegate.openAgain(arguments: [], why: "as it was opened while closing")
+                }
                 // Or the launch log loses its last lines, the game's exit among them.
                 LogStore.shared.flush()
                 exit(0)
