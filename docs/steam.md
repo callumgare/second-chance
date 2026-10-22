@@ -44,7 +44,9 @@ the test host under xcodebuild — can still meet the prompts; answer them
 
 `SteamWrappBuilder`, in order:
 
-1. **Take the Steam lock**, or fail with `steamInUse` naming who has it.
+1. **Take the Steam lock.** While a game has it, ask what to do about it
+   (`WrappBuildInput.askAboutSteamInUse`, below); a headless build fails
+   with `steamInUse`, naming the game.
 2. **Make the wrapp and install the Steam client into it** — the template,
    the cached prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
    `~/Library/Caches/SecondChance/`). Not `winetricks steam`: it installs
@@ -136,7 +138,9 @@ keeps Steam Cloud saves. A game whose DRM is worked out and set in
 A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
 `WrappTemplate/WrappSteam.swift`, before the game starts:
 
-1. **Take the Steam lock**, or tell the player which game has Steam open.
+1. **Take the Steam lock.** While another game has it, ask the player what
+   to do about it (`GameLauncher.takeSteam`, below). Choosing not to quit it
+   ends the launch without a failure report.
 2. **End any Steam left over** from a run that was force-quit or crashed —
    it would still be running in this prefix, signed in.
 3. **Restore the shared sign-in, start Steam silently, wait for it to sign
@@ -235,9 +239,33 @@ sign-in once. `sc clean steam-client` drops the cached Steam client.
 
 Two wrapps signed in to the same account would knock each other off, and race
 to save the session. `SteamActiveLock` is an `flock` on `active-wrapp.lock` in
-the same directory, recording the holder's pid and bundle ID; the second
-wrapp gets `.heldBy` and can say which game is using Steam. Being an `flock`,
-it is released when the holding process exits, however it exits.
+the same directory, recording the holder's pid and bundle ID (a build
+records `SteamLockHolder.buildBundleID` instead). Being an `flock`,
+it is released when the holding process exits, however it exits. The file is
+opened close-on-exec, so Wine and Steam, started from the holder, never
+carry the lock on after it.
+
+A second taker gets `.heldBy(SteamLockHolder)`. `SteamLockHolder.name` is
+the holding wrapp's name as the person knows it (its game's title, from the
+running app), found only while the pid in the record is still an app with
+that bundle ID. `ask` shows the choice a build and a wrapp both offer:
+
+- **Try Again**, the default, for after they have quit the game themselves.
+  The alert tells them to save in the game and quit it first if they are
+  partway through playing.
+- **Quit <game>**, marked destructive, which says that anything not saved
+  in the game will be lost. `quit` asks the wrapp to quit as Cmd-Q would,
+  which stops its Steam and saves the sign-in back. A wrapp still running
+  40 s later gets SIGTERM, which it treats as a quit, ending itself 15 s on.
+  20 s after that it gets SIGKILL. A wrapp that didn't quit itself leaves
+  its Wine session (the game, Steam signed in) behind, so `quit` then stops
+  that with `wineserver -k`. The waits end as soon as the process exits
+  (`waitForExit`, a kqueue process source).
+- **Cancel**. For a build this is a cancel before it started, so the app
+  goes back to the welcome screen with nothing reported.
+
+A build holding the lock is never offered to be quit: the person can only
+wait for it, and try again.
 
 ## Driving Steam
 

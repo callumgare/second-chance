@@ -34,6 +34,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
+/// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
 /// | `requestVolumeAccess()`       | — (skipped when paths env-supplied)     | NSOpenPanel grant-access       |
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
@@ -185,6 +186,14 @@ class WrappBuildInput {
 
     /// Whether a person is there to sign in to Steam if it asks.
     var canSignInToSteam: Bool { !isHeadlessRun }
+
+    /// What to do about another game holding Steam: quit it, try again, or
+    /// give up. Nil in a headless run, which can't ask and fails instead.
+    @MainActor
+    func askAboutSteamInUse(_ holder: SteamLockHolder) async -> SteamLockHolder.Choice? {
+        if isHeadlessRun { return nil }
+        return holder.ask(blocked: "the game you're adding can't be installed until it quits.")
+    }
 
     /// Grant access to a mounted volume (sandbox). Skipped entirely when the
     /// disk paths came from env vars — headless runs have no sandbox prompts.

@@ -81,6 +81,32 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         self.bus = bus
     }
 
+    /// Take the one-Steam-at-a-time lock, asking the person what to do while
+    /// a game holds it: they can quit it themselves and try again, have it
+    /// quit for them, or give up, which is a cancel rather than a failure.
+    private func takeSteamLock(input: WrappBuildInput) async throws -> SteamActiveLock {
+        while true {
+            switch try SteamActiveLock.acquire(root: lockRoot, bundleID: SteamLockHolder.buildBundleID) {
+            case .acquired(let lock):
+                return lock
+            case .heldBy(let holder):
+                let name = holder.name
+                logger.notice("Steam is in use by \(name ?? "another process") (\(holder.bundleID ?? "unknown"), pid \(holder.pid.map(String.init) ?? "unknown"))")
+                switch await input.askAboutSteamInUse(holder) {
+                case nil:
+                    throw WrappBuildError.steamInUse(by: name)
+                case .tryAgain:
+                    continue
+                case .cancel:
+                    throw WrappBuildError.userCancelledBeforeStart
+                case .quitHolder:
+                    let gone = await Task.detached { holder.quit() }.value
+                    if !gone { throw WrappBuildError.steamInUse(by: name) }
+                }
+            }
+        }
+    }
+
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .steam))
 
@@ -98,12 +124,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         // ── One Steam at a time ────────────────────────────────────────
         let lock: SteamActiveLock
         do {
-            switch try SteamActiveLock.acquire(root: lockRoot, bundleID: "Second Chance build") {
-            case .acquired(let acquired):
-                lock = acquired
-            case .heldBy(_, let bundleID):
-                throw WrappBuildError.steamInUse(by: bundleID)
-            }
+            lock = try await takeSteamLock(input: input)
         } catch {
             await bus.publishWrappBuild(.failed((error as? WrappBuildError) ?? .internalError(error.localizedDescription)))
             throw error

@@ -219,12 +219,14 @@ struct SteamActiveLockTests {
             Issue.record("the first acquire should succeed")
             return
         }
-        guard case .heldBy(let pid, let bundleID) = try SteamActiveLock.acquire(root: root, bundleID: "au.example.two") else {
+        guard case .heldBy(let holder) = try SteamActiveLock.acquire(root: root, bundleID: "au.example.two") else {
             Issue.record("the second acquire should find it held")
             return
         }
-        #expect(pid == getpid())
-        #expect(bundleID == "au.example.one")
+        #expect(holder == SteamLockHolder(pid: getpid(), bundleID: "au.example.one"))
+        // This process isn't an app with that bundle ID: nothing to name or quit.
+        #expect(holder.name == nil)
+        #expect(!holder.canQuit)
         first.release()
         first.release()
         guard case .acquired(let again) = try SteamActiveLock.acquire(root: root, bundleID: "au.example.two") else {
@@ -232,5 +234,27 @@ struct SteamActiveLockTests {
             return
         }
         again.release()
+    }
+
+    @Test("A build holding it is named as Second Chance, and never offered to be quit")
+    func buildHolder() {
+        let holder = SteamLockHolder(pid: getpid(), bundleID: SteamLockHolder.buildBundleID)
+        #expect(holder.isBuild)
+        #expect(holder.name == "Second Chance")
+        #expect(!holder.canQuit)
+    }
+
+    @Test("Waiting for a process that has already gone returns at once")
+    func waitForExitOfGoneProcess() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try process.run()
+        process.waitUntilExit()
+        #expect(SteamLockHolder.waitForExit(of: process.processIdentifier, timeout: 5))
+    }
+
+    @Test("Waiting for a process that is still running times out")
+    func waitForExitOfRunningProcess() {
+        #expect(!SteamLockHolder.waitForExit(of: getpid(), timeout: 0.2))
     }
 }

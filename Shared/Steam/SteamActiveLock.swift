@@ -11,8 +11,8 @@ import Foundation
 nonisolated final class SteamActiveLock: @unchecked Sendable {
     enum Outcome {
         case acquired(SteamActiveLock)
-        /// Another process holds it. `bundleID` names the wrapp, when it said.
-        case heldBy(pid: Int32?, bundleID: String?)
+        /// Another process holds it.
+        case heldBy(SteamLockHolder)
     }
 
     private let fd: Int32
@@ -24,16 +24,18 @@ nonisolated final class SteamActiveLock: @unchecked Sendable {
     /// Try to take the lock in `root` (the session store's directory) for the
     /// wrapp `bundleID`. It is an `flock`, so it is released when this
     /// process exits, however it exits — a crashed wrapp never leaves it held.
+    /// Close-on-exec, so no program started from here (Wine, Steam) carries
+    /// the lock on after the process that took it.
     static func acquire(root: URL = SteamSessionStore.defaultRoot, bundleID: String) throws -> Outcome {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let path = root.appendingPathComponent("active-wrapp.lock").path
-        let fd = open(path, O_RDWR | O_CREAT, 0o600)
+        let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
         guard fd >= 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: path]) }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             let holder = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
             close(fd)
             let lines = holder.split(whereSeparator: \.isNewline).map(String.init)
-            return .heldBy(pid: lines.first.flatMap { Int32($0) }, bundleID: lines.count > 1 ? lines[1] : nil)
+            return .heldBy(SteamLockHolder(pid: lines.first.flatMap { Int32($0) }, bundleID: lines.count > 1 ? lines[1] : nil))
         }
         ftruncate(fd, 0)
         let record = "\(getpid())\n\(bundleID)\n"

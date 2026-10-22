@@ -30,7 +30,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     }
 
     enum Failure: Error {
-        case inUse(by: String?)
+        case inUse(SteamLockHolder)
         case signInTimedOut
         case notStarted(String)
         /// The wrapp is quitting.
@@ -54,8 +54,8 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         switch try SteamActiveLock.acquire(bundleID: config.bundleId) {
         case .acquired(let lock):
             self.lock = lock
-        case .heldBy(_, let bundleID):
-            throw Failure.inUse(by: bundleID)
+        case .heldBy(let holder):
+            throw Failure.inUse(holder)
         }
         prefix = config.winePrefix
         client = SteamClient(wrappPath: config.appPath, prefixDir: config.winePrefix,
