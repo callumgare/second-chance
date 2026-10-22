@@ -39,6 +39,10 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
         return runningApp?.localizedName
     }
 
+    /// A name as alerts and screens show it, in quotes as macOS's own alerts
+    /// quote app names: a game's title has dashes and colons of its own.
+    static func quoted(_ name: String) -> String { "\u{201C}\(name)\u{201D}" }
+
     /// Whether `quit` can be offered: a wrapp that is still running. A build
     /// is never quit for someone — it is theirs to cancel.
     var canQuit: Bool { runningApp != nil }
@@ -108,9 +112,9 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
         case cancel
     }
 
-    /// Ask what to do about the holder: quit it (saying plainly that the
-    /// game loses anything unsaved), try again once they have quit it
-    /// themselves, or give up. `blocked` says what is waiting, as the end of
+    /// Ask what to do about the holder: try again once they have saved and
+    /// quit it themselves, give up, or — the fallback, saying plainly that
+    /// the game loses anything unsaved — have it quit for them. `blocked` says what is waiting, as the end of
     /// "Only one game can use Steam at a time, so …".
     @MainActor
     func ask(blocked: String) -> Choice {
@@ -131,19 +135,20 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
             alert.addButton(withTitle: "Cancel")
             return (alert, [.tryAgain, .cancel])
         }
-        alert.messageText = "\(name ?? "Another game") is using Steam"
+        alert.messageText = "\(name.map(Self.quoted) ?? "Another game") is using Steam"
         alert.informativeText = "Only one game can use Steam at a time, so \(blocked)"
-        if canQuit, let name {
+        if canQuit, let name = name.map(Self.quoted) {
+            // Quitting it themselves comes first: they can save before it
+            // goes. Having it quit for them is the fallback, offered last.
             alert.informativeText += """
-            \n\nSecond Chance can quit \(name) for you, but anything you haven't saved in it will be lost. \
-            If you're partway through playing, save your game in \(name) and quit it yourself, then click Try Again.
+             Save your game in \(name) and quit it, then click Try Again.
+
+            If \(name) won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost.
             """
-            // Try Again is the default: Return mustn't throw away a game.
             alert.addButton(withTitle: "Try Again")
-            let quit = alert.addButton(withTitle: "Quit \(name)")
-            quit.hasDestructiveAction = true
             alert.addButton(withTitle: "Cancel")
-            return (alert, [.tryAgain, .quitHolder, .cancel])
+            alert.addButton(withTitle: "Quit It for Me")
+            return (alert, [.tryAgain, .cancel, .quitHolder])
         }
         alert.informativeText += " Quit it, then click Try Again."
         alert.addButton(withTitle: "Try Again")

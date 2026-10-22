@@ -324,8 +324,7 @@ struct SteamWrappBuilderTests {
         }
         defer { held.release() }
         let run = await build(game: "thornton-hall")
-        // No running app has that bundle ID, so the holder has no name to give.
-        #expect(throws: WrappBuildError.steamInUse(by: nil)) { try run.result.get() }
+        #expect(throws: WrappBuildError.steamInUse(SteamLockHolder(pid: getpid(), bundleID: "au.example.game"))) { try run.result.get() }
         #expect(run.client == nil)
     }
 

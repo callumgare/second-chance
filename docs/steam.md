@@ -250,22 +250,32 @@ the holding wrapp's name as the person knows it (its game's title, from the
 running app), found only while the pid in the record is still an app with
 that bundle ID. `ask` shows the choice a build and a wrapp both offer:
 
-- **Try Again**, the default, for after they have quit the game themselves.
-  The alert tells them to save in the game and quit it first if they are
-  partway through playing.
-- **Quit <game>**, marked destructive, which says that anything not saved
-  in the game will be lost. `quit` asks the wrapp to quit as Cmd-Q would,
-  which stops its Steam and saves the sign-in back. A wrapp still running
-  40 s later gets SIGTERM, which it treats as a quit, ending itself 15 s on.
-  20 s after that it gets SIGKILL. A wrapp that didn't quit itself leaves
-  its Wine session (the game, Steam signed in) behind, so `quit` then stops
-  that with `wineserver -k`. The waits end as soon as the process exits
-  (`waitForExit`, a kqueue process source).
+- **Try Again**, the default. The alert asks them to save their game and
+  quit it themselves, then click this.
+- **Quit It for Me**, the fallback, last, for a game that won't quit; the
+  alert says that anything not saved in it will be lost. `quit` asks the
+  wrapp to quit as Cmd-Q would, which stops its Steam and saves the sign-in
+  back. A wrapp still running 40 s later gets SIGTERM, which it treats as a
+  quit, ending itself 15 s on. 20 s after that it gets SIGKILL. A wrapp that
+  didn't quit itself leaves its Wine session (the game, Steam signed in)
+  behind, so `quit` then stops that with `wineserver -k`. The waits end as
+  soon as the process exits (`waitForExit`, a kqueue process source).
 - **Cancel**. For a build this is a cancel before it started, so the app
   goes back to the welcome screen with nothing reported.
 
 A build holding the lock is never offered to be quit: the person can only
 wait for it, and try again.
+
+A build that still fails with `steamInUse(SteamLockHolder)`, because the game
+didn't quit, ends on the error screen. That screen keeps the same order: the
+message asks them to save and quit the game themselves, **Try Again** is the
+default button (`retrySteamBuild`), and below the message the same fallback
+offers **Quit It for Me** with its warning (`SteamHolderFallback`,
+`quitSteamHolderAndRetry`), which tries again once the game has gone.
+
+Game names in these alerts and screens are in curly quotes
+(`SteamLockHolder.quoted`), as macOS quotes app names in its own alerts,
+since a title's own dashes and colons otherwise run into the sentence.
 
 ## Driving Steam
 

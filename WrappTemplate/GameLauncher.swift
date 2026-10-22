@@ -588,7 +588,7 @@ class GameLauncher {
                     MainActor.assumeIsolated {
                         NSApp.setActivationPolicy(.regular)
                         NSApp.activate(ignoringOtherApps: true)
-                        return holder.ask(blocked: "\(title) can't start until it quits.")
+                        return holder.ask(blocked: "\(SteamLockHolder.quoted(title)) can't start until it quits.")
                     }
                 }
                 switch choice {
@@ -605,9 +605,9 @@ class GameLauncher {
         let (title, detail): (String, String)
         switch error {
         case WrappSteam.Failure.inUse(let holder):
-            let name = holder.name ?? "Another game"
-            (title, detail) = ("\(name) is using Steam",
-                               "Only one game can use Steam at a time. Quit \(holder.name ?? "it"), then open \(config.gameTitle) again.")
+            let name = holder.name.map(SteamLockHolder.quoted)
+            (title, detail) = ("\(name ?? "Another game") is using Steam",
+                               "Only one game can use Steam at a time. Quit \(name ?? "it"), then open \(SteamLockHolder.quoted(config.gameTitle)) again.")
         case WrappSteam.Failure.signInTimedOut:
             (title, detail) = ("Steam didn't sign in", "\(config.gameTitle) needs Steam signed in to start. Open it again to have another go.")
         default:

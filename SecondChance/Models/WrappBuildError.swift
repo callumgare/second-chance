@@ -21,9 +21,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     case steamSignInTimedOut
     /// Steam's own install of the game failed.
     case steamInstallFailed(reason: String)
-    /// Another wrapp, or another build, is running Steam. `by` is its name
-    /// (`SteamLockHolder.name`), when it could be found.
-    case steamInUse(by: String?)
+    /// Another wrapp, or another build, is running Steam. The error screen
+    /// offers to quit it, as a fallback.
+    case steamInUse(SteamLockHolder)
     case installerNotFound
     case gameExecutableNotFound
     case userCancelled
@@ -60,7 +60,13 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .steamInstallFailed(let reason):
             return "Steam couldn't install the game: \(reason)"
         case .steamInUse(let holder):
-            return "\(holder ?? "Another game") is using Steam, and only one game can use it at a time. Quit it and try again."
+            if holder.isBuild {
+                return "Second Chance is already adding a game from Steam, and only one game can use Steam at a time. Wait for it to finish and try again."
+            }
+            guard let name = holder.name.map(SteamLockHolder.quoted) else {
+                return "Another game is using Steam, and only one game can use it at a time. Quit it and try again."
+            }
+            return "\(name) is using Steam, and only one game can use it at a time. Save your game in \(name) and quit it, then click Try Again."
         case .installerNotFound:
             return "Could not find game installer executable"
         case .gameExecutableNotFound:

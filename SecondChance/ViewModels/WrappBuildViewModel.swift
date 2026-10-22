@@ -21,6 +21,13 @@ typealias WrappBuildInputFactory = (WrappBuildViewModel) -> WrappBuildInput
 class WrappBuildViewModel: ObservableObject {
     @Published var currentState: WrappBuildState = .idle
     @Published var selectedWrappSource: WrappSource?
+    /// The game holding Steam, when a Steam build failed because of it: the
+    /// error screen offers to try again, and to quit it as a fallback.
+    @Published var steamInUseHolder: SteamLockHolder?
+    /// Quitting `steamInUseHolder` for the person is under way.
+    @Published var isQuittingSteamHolder = false
+    /// It was asked to quit, and didn't.
+    @Published var steamHolderDidNotQuit = false
     @Published var detectedGame: GameInfo?
     /// Where the finished wrapp was saved, for Show in Finder.
     @Published var builtWrappURL: URL?
@@ -243,6 +250,9 @@ class WrappBuildViewModel: ObservableObject {
     /// welcome screen. Cancelling any later prompt (disk 2, save location)
     /// abandons work already done, so it shows the error screen.
     private func handleBuildFailure(_ error: Error) {
+        if case .steamInUse(let holder) = error as? WrappBuildError {
+            steamInUseHolder = holder
+        }
         if let installError = error as? WrappBuildError, installError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
         } else {
@@ -259,5 +269,32 @@ class WrappBuildViewModel: ObservableObject {
         progress = 0.0
         failureReport.clear()
         FailureReporter.setGame(nil)
+        steamInUseHolder = nil
+        isQuittingSteamHolder = false
+        steamHolderDidNotQuit = false
+    }
+
+    /// Start the Steam build again, from the error screen.
+    func retrySteamBuild() {
+        reset()
+        selectedWrappSource = .steam
+        Task { await build(from: .steam) }
+    }
+
+    /// The fallback the error screen offers: quit the game holding Steam
+    /// for the person, then try again.
+    func quitSteamHolderAndRetry() {
+        guard let holder = steamInUseHolder, !isQuittingSteamHolder else { return }
+        isQuittingSteamHolder = true
+        steamHolderDidNotQuit = false
+        Task {
+            let gone = await Task.detached { holder.quit() }.value
+            isQuittingSteamHolder = false
+            if gone {
+                retrySteamBuild()
+            } else {
+                steamHolderDidNotQuit = true
+            }
+        }
     }
 }

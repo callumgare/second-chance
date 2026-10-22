@@ -90,18 +90,17 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             case .acquired(let lock):
                 return lock
             case .heldBy(let holder):
-                let name = holder.name
-                logger.notice("Steam is in use by \(name ?? "another process") (\(holder.bundleID ?? "unknown"), pid \(holder.pid.map(String.init) ?? "unknown"))")
+                logger.notice("Steam is in use by \(holder.name ?? "another process") (\(holder.bundleID ?? "unknown"), pid \(holder.pid.map(String.init) ?? "unknown"))")
                 switch await input.askAboutSteamInUse(holder) {
                 case nil:
-                    throw WrappBuildError.steamInUse(by: name)
+                    throw WrappBuildError.steamInUse(holder)
                 case .tryAgain:
                     continue
                 case .cancel:
                     throw WrappBuildError.userCancelledBeforeStart
                 case .quitHolder:
                     let gone = await Task.detached { holder.quit() }.value
-                    if !gone { throw WrappBuildError.steamInUse(by: name) }
+                    if !gone { throw WrappBuildError.steamInUse(holder) }
                 }
             }
         }
