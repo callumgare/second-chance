@@ -6,7 +6,9 @@ Guidance for AI coding agents working on the Second Chance codebase.
 
 Second Chance is a native macOS app (Swift/SwiftUI) that wraps pre-Unity Nancy Drew PC games to run on modern Macs via [Wine](https://www.winehq.org/) and [ScummVM](https://www.scummvm.org/). The user points the app at a game installer (CD, Her Interactive download, or Steam) and it produces a standalone `.app` bundle containing the Wine/ScummVM engine plus the installed game.
 
-Read `README.md` for the full project background before making non-trivial changes.
+Read `README.md` (what the app does, for the people who use it) and
+`CONTRIBUTING.md` (how it fits together and how to work on it, for people)
+before making non-trivial changes.
 
 ## Build, Run, Test
 

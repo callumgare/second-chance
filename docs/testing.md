@@ -21,7 +21,7 @@ Silicon emits swift-log for arm64 alone and WrappTemplate then dies with
 `unable to resolve module dependency: 'Logging'`, or at link with `ld: symbol(s)
 not found for architecture x86_64` for every swift-log symbol. That surfaces as
 exit 65 and `** TEST BUILD FAILED **`, which reads like a failing test but is a
-build failure. See the README's *Building* section for the full story.
+build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 
 ```bash
 # Unit tests only (fast, ~6s, no installers needed)

@@ -1,25 +1,45 @@
-An app for running the pre-unity Nancy Drew video games on modern Macs. It (should hopefully) work for all the Nancy Drew games before "Midnight in Salem".
+# Second Chance
 
 <p align="center">
     <img
-        alt="Logo for Second Chance app - a black silhouette of Nancy Drew on a plain brown background" 
-        src="https://github.com/callumgare/second-chance/raw/refs/heads/main/docs/SecondChanceIcon.png"
-        style="width: 200px"
+        alt="Logo for Second Chance app - a black silhouette of Nancy Drew on a plain brown background"
+        src="docs/SecondChanceIcon.png"
+        width="200"
     />
 </p>
 
-> [!WARNING]
-> This project is still very new and there will be bugs. I've tried to make it as user friendly as possible but keep in mind there are still some rough edges. Please let me know if you run into any issues using it.
+**Play the classic Nancy Drew games on a modern Mac.**
 
-Want to play the Nancy Drew adventure games but you own a Mac and can't get them to run?  That's where Second Chance
-comes in. You tell it where to find your copy of one of the Nancy Drew games and it will create a playable version of
-the game as a new app. It works with the CD versions of the games, the versions on Steam, and copies downloaded directly
-from the Her Interactive website (the Windows download, or the Mac one for games whose Mac version was made with Cider).
+Second Chance works with the Nancy Drew adventure games from _Secrets Can Kill_ through to _Sea of Darkness_, every
+game made before Her Interactive moved to a new game engine with _Midnight in Salem_. You tell it where your copy of a
+game is, and it makes a new app that runs that game.
 
+It works with copies of the games from the original CDs, games from Steam, and both Mac and PC copies of the games downloaded from the online Her
+Interactive store (although this is the least tested of the 3, let me know if you find any issues with it).
 
-## Using Second Chance
+<picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/main-screen-dark.png">
+    <img alt="Second Chance's main screen, asking where to install the game from" src="docs/main-screen-light.png">
+</picture>
 
-To get started download **SecondChance.zip** [from the releases page](https://github.com/callumgare/second-chance/releases/latest), or with this button:
+> [!NOTE]
+> Second Chance is still new, so you may run into bugs. If you do, please
+> [let me know](https://github.com/callumgare/second-chance/issues) and I'll do my best to fix them.
+
+## What you'll need
+
+- A Mac running **macOS 15 (Sequoia)** or later.
+- Your own copy of one of the [games listed below](#which-games-have-been-verified-to-work).
+
+## Download
+
+> [!IMPORTANT]
+> macOS will give you some scary warnings when you try to open it for the first time. That's because I'm too cheep to
+> pay for an Apple developer membership ($99 USD a year) so the app is not registered as coming from a developer Apple
+> has verified. See "Opening it for the first time" below for more info.
+
+Download **SecondChance.zip** [from the releases page](https://github.com/callumgare/second-chance/releases/latest), or
+with this button:
 
 <p align="center">
     <a href="https://github.com/callumgare/second-chance/releases/latest/download/SecondChance.zip">
@@ -30,187 +50,175 @@ To get started download **SecondChance.zip** [from the releases page](https://gi
     </a>
 </p>
 
-> [!IMPORTANT]
-> macOS will give you some scary warnings when you try to open it for the first time. That's because I'm too cheep to
-> pay for an Apple developer membership ($99 USD a year) so the app is not officially attributed to a known developer. I pinky promise there's nothing sneaky happening (and if you're technical you
-> can inspect the source code for the app in this repo).
+Open the zip file to get the **Second Chance** app, then drag it into your **Applications** folder.
 
-In the most recent versions of macOS you'll likely see a warning like this on first run. Select **Done**.
+## Opening it for the first time
 
-<p align="center">
-<img alt="Screenshot of first warning" src="https://github.com/callumgare/second-chance/raw/refs/heads/main/docs/first-warning.png" style="width: 261px">
-</p>
+Despite the warnings I pinky promise there's
+nothing sneaky going on (and if you're technical, all of the app's code is here for you to look through). You only have
+to do this once.
 
-Now you need to open **Privacy & Security** in **System Settings**. If you scroll down to near the bottom you should
-see a section that says:
-> "Second Chance" was blocked to protect your Mac. [Open Anyway]
+1. Open Second Chance. You'll likely see a warning like this. Click **Done**.
 
-![privacy settings](./docs/settings.png)
+   <p align="center">
+   <img alt="Warning: “Second Chance” Not Opened" src="docs/first-warning.png" width="261">
+   </p>
 
-Click **Open Anyway**. You'll probably then see a final warning that looks like this:
+2. Open **System Settings** and go to **Privacy & Security**. Scroll down near to the bottom and you should see:
 
-<p align="center">
-<img alt="Screenshot of second warning" src="https://github.com/callumgare/second-chance/raw/refs/heads/main/docs/second-warning.png" style="width: 261px">
-</p>
+   > "Second Chance" was blocked to protect your Mac. [Open Anyway]
 
-Click **Open Anyway** again to continue. macOS may then ask for your password to confirm.
+   ![The Privacy & Security settings, showing the Open Anyway button](docs/settings.png)
 
-Finally after all that you should see a screen like this:
+   Click **Open Anyway**.
 
-<picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./docs/main-screen-dark.png">
-    <img alt="Second Chance's main screen" src="./docs/main-screen-light.png">
-</picture>
+3. You'll probably see one last warning like this. Click **Open Anyway** again. macOS may ask for your password to
+   confirm.
 
-Once you've loaded your CD copy of any of the classic games you can select "Game Disk(s)" and point to the CD. From
-there Second Chance will create a new app for that game. When done it'll ask you where you want to save it. From that
-point on you can just simply open the app it created in to be able to play the game.
+   <p align="center">
+   <img alt="Final warning, with an Open Anyway button" src="docs/second-warning.png" width="261">
+   </p>
 
-Have fun!
+After all that, Second Chance opens and asks where to install your game from.
 
-> [!NOTE]
-> Small advertisement: I'd love to get rid of the scary warnings messages when you first run the app. I want Second
-> Chance to be as easy to use as possible to make it accessible for even the least technically inclined. If you've found
-> Second Chance helpful and you'd like to help out with that too you can send me
-> [a small tip on ko-fi](https://ko-fi.com/callumgare) to allow me to buy an Apple Developer Membership. 
+## Which games have been verified to work?
 
-### Failure reports
+Second Chance knows about all 33 of these games but not all games have been been tested on all platforms. If one of them doesn't work for you, please
+[let me know](https://github.com/callumgare/second-chance/issues).
 
-When building a game, or one of the games Second Chance made, fails or crashes, it sends me a report so I can fix
-it. Nothing is sent unless something goes wrong. The first time something fails, it asks which kind you'd like to send:
+<details>
+<summary><strong>Show the list of games</strong></summary>
+
+Key:\
+**✓** tested and working\
+**–** not tested yet\
+**n/a** not sold on this platform
+
+| #   | Game                           | CD  | Steam | Her Download |
+| --- | ------------------------------ | :-: | :---: | :----------: |
+| 1   | Secrets Can Kill               | ✓   | n/a   | n/a          |
+|     | Secrets Can Kill Remastered    | ✓   | ✓     | –            |
+| 2   | Stay Tuned for Danger          | ✓   | n/a   | –            |
+| 3   | Message in a Haunted Mansion   | ✓   | ✓     | –            |
+| 4   | Treasure in the Royal Tower    | ✓   | ✓     | –            |
+| 5   | The Final Scene                | ✓   | –     | –            |
+| 6   | Secret of the Scarlet Hand     | ✓   | –     | ✓ (Windows)  |
+| 7   | Ghost Dogs of Moon Lake        | ✓   | ✓     | –            |
+| 8   | The Haunted Carousel           | ✓   | –     | –            |
+| 9   | Danger on Deception Island     | ✓   | –     | –            |
+| 10  | The Secret of Shadow Ranch     | ✓   | ✓     | –            |
+| 11  | Curse of Blackmoor Manor       | ✓   | ✓     | –            |
+| 12  | Secret of the Old Clock        | ✓   | ✓     | –            |
+| 13  | Last Train to Blue Moon Canyon | ✓   | ✓     | –            |
+| 14  | Danger by Design               | ✓   | –     | –            |
+| 15  | The Creature of Kapu Cave      | ✓   | –     | –            |
+| 16  | The White Wolf of Icicle Creek | ✓   | –     | –            |
+| 17  | Legend of the Crystal Skull    | ✓   | –     | –            |
+| 18  | The Phantom of Venice          | ✓   | –     | –            |
+| 19  | The Haunting of Castle Malloy  | ✓   | –     | –            |
+| 20  | Ransom of the Seven Ships¹     | ✓   | n/a   | n/a          |
+| 21  | Warnings at Waverly Academy    | ✓   | ✓     | –            |
+| 22  | Trail of the Twister           | ✓   | –     | ✓ (Mac)      |
+| 23  | Shadow at the Water's Edge     | ✓   | ✓     | –            |
+| 24  | The Captive Curse              | ✓   | –     | –            |
+| 25  | Alibi in Ashes                 | ✓   | –     | –            |
+| 26  | Tomb of the Lost Queen         | ✓   | –     | –            |
+| 27  | The Deadly Device              | ✓   | –     | –            |
+| 28  | Ghost of Thornton Hall         | ✓   | ✓     | –            |
+| 29  | The Silent Spy                 | ✓   | –     | –            |
+| 30  | The Shattered Medallion        | ✓   | –     | –            |
+| 31  | Labyrinth of Lies              | ✓   | –     | –            |
+| 32  | Sea of Darkness                | ✓   | –     | –            |
+
+¹ Her Interactive stopped selling Ransom of the Seven Ships in 2020. If you have a copy bought before then it may still work.
+
+</details>
+
+## Something not working?
+
+<details>
+<summary><b>The game won't start, or making the game app failed</b></summary>
+
+You should hopefully get a prompt asking you to send a report. Please pick the detailed report option (all your personal
+details are removed) so I have the most chance of tracking down what the issue is and fixing it.
+
+See "How do I get updates?" for info on updating the game apps which may fix the issue if there's been a fix released in
+the mean time.
+
+</details>
+
+<details>
+<summary><b>Where are my saved games?</b></summary>
+
+Saved games are kept outside the game's app, so deleting the app or making it again doesn't lose them. Each game has
+its own folder in your Library folder, at `~/Library/Application Support/au.gare.callum.SecondChance.nancy-drew.<game>`.
+To get there, open Finder, choose **Go → Go to Folder…**, and type `~/Library/Application Support`.
+
+</details>
+
+<details>
+<summary><b>How do I get updates?</b></summary>
+
+Second Chance checks for new versions by itself and offers to install them. You can also choose
+**Second Chance → Check for Updates…**.
+
+The game apps don't update automatically but if a previously running game has stopped running you can check if there's a
+new version of Second Chance available and if so update that then use that to recreate the game app which may fix the
+problem. Your saved games are kept separate from the game app itself so you can replace the game app without losing your saves.
+
+</details>
+
+<details>
+<summary><b>How do I remove a game?</b></summary>
+
+Drag the game's app to the Trash. Its saved games stay where they are (see above), in case you want to make it again
+later.
+
+</details>
+
+<details>
+<summary><b>What does Second Chance send when something goes wrong?</b></summary>
+
+When making a game app fails, or a game app crashes, Second Chance can send me a report so I can fix it. Nothing is
+sent unless something goes wrong. The first time something fails, it asks which kind of report you'd like to send:
+
 - A **basic** report has only the Second Chance and macOS versions, which game it was, and which step failed.
 - A **detailed** report adds the log of what was happening, with your name and folders taken out. That log is usually
   what it takes to track the problem down.
 
-Later reports are sent the same way. You can change that, or have it ask each time, under **Second Chance → Settings**.
-Reports go to [Sentry](https://sentry.io), and [docs/failure-reports.md](docs/failure-reports.md) has exactly what's in
-them.
+You can change your choice, or have it ask each time, under **Second Chance → Settings**. Reports go to
+[Sentry](https://sentry.io); [docs/failure-reports.md](docs/failure-reports.md) has exactly what's in them.
 
----
+</details>
 
-## Architecture / Code History
-I have many fond memories of whiling away my childhood scoping out old mansions and questioning shady characters.
-So a couple of years back I decided to play though them again. However getting them to run on modern mac hardware ended
-up being quite a process. I found there was limited information online, mostly buried in various forum threads and much
-of which is now outdated.
+## Helping out
 
-Over time I pieced together the different set of tweaks and hacks required to get each game to run. To make running them
-a bit easier I started a (then simple) bash script to help automate the creation of a Wine wrapper for some of the
-games. Over time the scope and complexity grew and grew and it ballooned into something way bigger than a shell scripts
-should be used for. I did my best to keep it organised in a readable way but it was quite brittle and didn't have good
-prospects for long-term maintainability.
+I'd love to get rid of the scary warnings when you first open Second Chance. I want it to be as easy to use as
+possible, so that anyone can play these games again. If Second Chance has helped you and you'd like to help with that
+too, you can send me [a small tip on ko-fi](https://ko-fi.com/callumgare) towards an Apple developer membership.
 
-I'd never written any swift before otherwise I probably would have switched to building it as a proper Mac app a lot
-earlier when doing such a port would have been a lot more straightforward. However with with heavy use of Claude I ended
-up migrating it. The code is pretty terrible to be honest but my main focus was just getting it working. I hope to clean
-that up over time.
+Want to help with the code? Thank you! [CONTRIBUTING.md](CONTRIBUTING.md) explains how to get started.
 
-There's 2 main components, the game wrapper app and the second chance app.
+## Why I made this
 
-### The Game Wrapper App
-This acts as a container which is responsible for running the game. It includes everything necessary to run the game
-except for the game files themselves until the user uses Second Chance install the game into a copy of the Game Wrapper app.
+I have many fond memories of whiling away my childhood scoping out old mansions and questioning shady characters. So a
+couple of years back I decided to play through them again. However, getting them to run on a modern Mac ended up being
+quite a process. There was limited information online, mostly buried in forum threads, and much of it now out of date.
 
-### The Second Chance App
-This provides a user interface for taking the game installer files and installing them inside a copy of the wrapper app.
+Over time I pieced together the set of tweaks and hacks each game needed, and started automating them so that anyone
+could get the games running without having to do the same detective work. Second Chance is the result.
 
-## Testing
+## Credits
 
-### Quick Start
-```bash
-# Run fast unit tests (~5 seconds)
-./sc test unit
+Second Chance is built on:
 
-# Test one specific game
-./sc test integration scarlet-hand
+- [Wine](https://www.winehq.org/), which lets Windows programs run on a Mac.
+- [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw), which fixes the graphics for the games Wine can't draw well on
+  its own.
+- [ScummVM](https://www.scummvm.org/), which runs some of the earlier games natively. ScummVM's support for more of the
+  games is being actively worked on.
 
-# Test all games (takes a bit over an hour and will regularly bring a full screen window to the front)
-./sc test integration
-```
+The Nancy Drew games are made by Her Interactive. Second Chance isn't affiliated with Her Interactive (yet, if you're
+reading this Her Interactive sponsor me!).
 
-`./sc` is the developer CLI for building, running, testing and releasing —
-`./sc --help`, or see [docs/dev-cli.md](docs/dev-cli.md).
-
-## Development
-
-Good luck (and also thank you very much for considering helping out).
-
-### Prerequisites
-
-- **Xcode** (16 or later) — provides `xcodebuild`, Swift 5.0, and macOS SDK
-- **Homebrew** packages:
-  ```bash
-  brew install xcbeautify xctesthtmlreport
-  ```
-  `xcbeautify` pretty-prints build/test output; `xctest-html-report` generates HTML test reports.
-  `./sc setup` checks for these (and `cocogitto`, for releases) and installs the commit hook.
-
-All other dependencies (Wine, ScummVM, winetricks, AutoIt, exiftool) are automatically downloaded and cached in `~/Library/Caches/SecondChance/` during the build process — you don't need to install them yourself.
-
-
-### Building
-
-```bash
-./sc app build      # or ./sc app run to build and launch it
-```
-
-That's the whole thing on a fresh machine — `sc` already handles the architecture
-setup described below. The first run also builds `sc` itself (a Swift package in
-`Tools/sc/`), which takes half a minute.
-
-#### A note on architectures
-
-The `WrappTemplate` target is `ARCHS = x86_64`, because Wine is 32-bit. Everything else in
-the project is universal. This matters on Apple Silicon: a default build only builds the
-*active* architecture (arm64), so Swift Package Manager emits swift-log for arm64 alone.
-`WrappTemplate` then compiles as x86_64, finds only an arm64 slice of the module, and the
-build dies with:
-
-```
-module file '.../Logging.swiftmodule/arm64-apple-macos.swiftmodule' is incompatible with
-this Swift compiler: built for incompatible target
-unable to resolve module dependency: 'Logging'
-```
-
-The fix is `ONLY_ACTIVE_ARCH=NO`: swift-log gets an x86_64 slice alongside the arm64 one,
-`WrappTemplate` links, and the app itself still builds native rather than Rosetta-only.
-`sc` and CI both set it.
-
-Wrapping the build in `arch -x86_64` looks like it should work too, and the old build script used to
-do exactly that. Don't — the architecture of the `xcodebuild` process doesn't reliably
-decide what the build system picks for the Swift package products, so it works on some
-machines and fails on others with the error above. The build setting is the thing that
-actually decides.
-
-So if you're invoking `xcodebuild` by hand rather than using `sc`, pass it:
-
-```bash
-rm -rf DerivedData    # clear any arm64-only Logging module left behind
-xcodebuild -project SecondChance.xcodeproj \
-    -scheme SecondChance \
-    -configuration Debug \
-    -derivedDataPath DerivedData \
-    ONLY_ACTIVE_ARCH=NO \
-    build
-```
-
-If you're building from Xcode's GUI, set **Build Settings → Build Active Architecture Only
-→ Debug → No**, otherwise you'll hit the same error.
-
-`sc test` sets the same flag, so tests run natively too:
-
-```bash
-./sc test unit
-```
-
-It still pins `-destination` to a single architecture, but only to stop xcodebuild matching
-both arm64 and x86_64 and launching two parallel test runners, which doubles Wine installs
-on integration runs.
-
-
-## Built with
-- [wine](https://www.winehq.org/)
-- [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw) - I couldn't seem to get the games to run with the builtin wine
-  DirectX implementation but cnc-ddraw seems to fix that.
-- [ScummVM](https://www.scummvm.org/) - Currently ScummVM just supports some of the earlier games but support more games
-  is being actively worked on.
+Second Chance is open source, under the [GNU General Public License v3](license.txt).
