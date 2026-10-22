@@ -12,8 +12,45 @@ struct WrappBuildProgressView: View {
     var body: some View {
         if case .completed = viewModel.currentState {
             completed
+        } else if let question = viewModel.successReportsQuestion {
+            successReports(question)
         } else {
             inProgress
+        }
+    }
+
+    /// Asked once, after the first build that worked. Neither answer is
+    /// pushed: neither button is the default, and no key picks one.
+    @ViewBuilder
+    private func successReports(_ question: WrappBuildViewModel.SuccessReportsQuestion) -> some View {
+        switch question {
+        case .asking:
+            InstallerPage(title: "Send success reports?") {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("To help identify which games run correctly and which need work Second Chance can notify the developer on a successful run. Only very basic info is sent like the title of the game and macOS version. Nothing about you or your files will ever be sent.")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("You can change this any time in Settings.")
+                        .foregroundStyle(.secondary)
+                }
+                .textSelection(.enabled)
+            } leading: {
+                EmptyView()
+            } trailing: {
+                Button("Don't Send") { viewModel.answerSuccessReports(false) }
+                Button("Send") { viewModel.answerSuccessReports(true) }
+            }
+            .accessibilityIdentifier("success-reports-question")
+        case .thanking:
+            InstallerPage(title: "Thank you!") {
+                Text("Your success reports will help show which games work.")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            } leading: {
+                EmptyView()
+            } trailing: {
+                Button("Continue") { viewModel.finishSuccessReportsQuestion() }
+                    .keyboardShortcut(.defaultAction)
+            }
         }
     }
 

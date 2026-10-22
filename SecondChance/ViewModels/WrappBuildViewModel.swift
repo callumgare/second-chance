@@ -39,6 +39,16 @@ class WrappBuildViewModel: ObservableObject {
 
     @Published var progress: Double = 0.0
 
+    /// Where the success reports question is, while a build waits on it:
+    /// the main window shows it in place of the build's progress.
+    enum SuccessReportsQuestion {
+        case asking
+        /// They said yes, and are being thanked.
+        case thanking
+    }
+    @Published private(set) var successReportsQuestion: SuccessReportsQuestion?
+    private var successReportsAnswered: CheckedContinuation<Void, Never>?
+
     /// The failed build's report, for the error screen.
     let failureReport = FailureReportModel()
 
@@ -206,6 +216,37 @@ class WrappBuildViewModel: ObservableObject {
         logger.notice("The person cancelled the build")
         isCancelling = true
         buildTask.cancel()
+        finishSuccessReportsQuestion()
+    }
+
+    // MARK: - Success reports question
+
+    /// Show the success reports question, and wait until it has been
+    /// answered (and a yes thanked) or the build is cancelled.
+    func askAboutSuccessReports() async {
+        await withCheckedContinuation { continuation in
+            successReportsAnswered = continuation
+            successReportsQuestion = .asking
+            // The build may have been left running in the background.
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func answerSuccessReports(_ send: Bool) {
+        ReportingPreferences.update { $0.successReports = send }
+        logger.notice("Success reports: \(send ? "on" : "off"), as asked after the first successful build")
+        if send {
+            successReportsQuestion = .thanking
+        } else {
+            finishSuccessReportsQuestion()
+        }
+    }
+
+    /// Back to the build, which carries on.
+    func finishSuccessReportsQuestion() {
+        successReportsQuestion = nil
+        successReportsAnswered?.resume()
+        successReportsAnswered = nil
     }
 
     /// Start a build from disk (interactive mode)

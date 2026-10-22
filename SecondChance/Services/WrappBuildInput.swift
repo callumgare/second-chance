@@ -36,7 +36,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
 /// | `requestVolumeAccess()`       | — (skipped when paths env-supplied)     | NSOpenPanel grant-access       |
-/// | `askAboutSuccessReports()`    | — (headless: not asked)                 | NSAlert, once ever             |
+/// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
 /// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
@@ -356,38 +356,14 @@ class WrappBuildInput {
 
     /// Whether to send success reports, asked once, after the first build
     /// that worked: it's a question about games that work, and by then the
-    /// person has seen one. Neither answer is pushed, so neither button is
-    /// the default. Not asked in a headless run or one that can't report,
-    /// nor once answered: Settings changes it after that.
+    /// person has seen one. The main window asks it, in place of the
+    /// build's progress. Not asked in a headless run or one that can't
+    /// report, nor once answered: Settings changes it after that.
     @MainActor
     func askAboutSuccessReports() async {
-        guard !isHeadlessRun, FailureReporter.isEnabled,
+        guard let viewModel, !isHeadlessRun, FailureReporter.isEnabled,
               ReportingPreferences.load().successReports == nil else { return }
-
-        let alert = NSAlert()
-        alert.messageText = "Send success reports?"
-        alert.informativeText = """
-        Second Chance can let the developer know when a game is set up or played, and whether it worked: \
-        which game, where it came from, and the Second Chance and macOS versions. Nothing about you or your \
-        files is sent.
-
-        It helps show which games are known to work, so Second Chance can get better for everyone. You can \
-        change this any time in Settings.
-        """
-        let send = alert.addButton(withTitle: "Send")
-        let dontSend = alert.addButton(withTitle: "Don't Send")
-        send.keyEquivalent = ""
-        dontSend.keyEquivalent = "\u{1b}"
-        let answer = alert.runModal() == .alertFirstButtonReturn
-        ReportingPreferences.update { $0.successReports = answer }
-        logger.notice("Success reports: \(answer ? "on" : "off"), as asked after the first successful build")
-
-        guard answer else { return }
-        let thanks = NSAlert()
-        thanks.messageText = "Thank you!"
-        thanks.informativeText = "Your success reports will help show which games work."
-        thanks.addButton(withTitle: "OK")
-        thanks.runModal()
+        await viewModel.askAboutSuccessReports()
     }
 
     // MARK: - Callbacks

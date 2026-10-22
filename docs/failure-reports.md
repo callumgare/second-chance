@@ -173,8 +173,10 @@ so they are off wherever failure reports are ([When it's off](#when-its-off)).
 
 **The question is asked once, after the first build that worked**, before
 the folder picker (`WrappBuildInput.askAboutSuccessReports`, called from
-`WrappBuildHelper.finalize`). Neither button is the default: Return picks
-neither, and Escape is Don't Send. A yes gets a thank-you. The answer is
+`WrappBuildHelper.finalize`). The main window shows it in place of the
+build's progress (`WrappBuildViewModel.successReportsQuestion`), and the
+build waits for the answer. Neither button is the default, and no key
+picks one. A yes gets a thank-you page before the build goes on. The answer is
 `successReports` in `ReportingPreferences`, nil until asked, so a file saved
 before it existed reads as not asked. It isn't asked in a headless run or
 one that can't report, and Settings changes it after that. A wrapp's

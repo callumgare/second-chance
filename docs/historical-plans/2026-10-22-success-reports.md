@@ -29,8 +29,9 @@ because Sentry won on avoiding a second vendor and a second disclosure.
 ## Decisions
 
 - **Opt-in, asked once, after the first successful build** and before the
-  folder picker: by then the person has seen a game work. Yes and no carry
-  equal weight: neither button is the default. A yes gets a thank-you alert.
+  folder picker: by then the person has seen a game work. It is a page in
+  the main window, not an alert. Yes and no carry equal weight: neither
+  button is the default. A yes gets a thank-you page.
   Settings changes it afterwards.
 - **Builds and launches, both outcomes.** Counting only successes, and
   reading failures from failure reports, mixes two populations under two

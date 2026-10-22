@@ -555,6 +555,7 @@ class WrappBuildHelper {
 
         // Asked once ever, before the save panel, while the build has just worked.
         await input.askAboutSuccessReports()
+        try Task.checkCancellation()
         await bus.publishWrappBuild(.progress(.savingApp(substep: nil)))
         let outputDir = try await input.getOutputPath(gameName: gameInfo.title)
         try Task.checkCancellation()

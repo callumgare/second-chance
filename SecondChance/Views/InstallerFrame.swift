@@ -117,6 +117,7 @@ struct InstallerPage<Content: View, Leading: View, Trailing: View>: View {
                 Text(title)
                     .font(.title2)
                     .fontWeight(.semibold)
+                    .textSelection(.enabled)
                 content()
             }
             .padding(24)
