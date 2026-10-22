@@ -38,6 +38,7 @@ struct ExiftoolServiceTests {
     
     // Test error handling for invalid properties
     @Test("getFileProperty returns nil for invalid property")
+    @MainActor
     func invalidProperty() async throws {
         // We need a test file for this. For now, skip if no test fixture exists
         let testFixturesPath = URL(fileURLWithPath: "/Users/callumgare/repos/second-chance/SecondChance/TestFixtures")
@@ -56,6 +57,7 @@ struct ExiftoolServiceTests {
     
     // Test getFileProperties with multiple properties
     @Test("getFileProperties extracts multiple properties")
+    @MainActor
     func multipleProperties() async throws {
         let testFixturesPath = URL(fileURLWithPath: "/Users/callumgare/repos/second-chance/SecondChance/TestFixtures")
         let mockExePath = testFixturesPath.appendingPathComponent("mock-installer/setup.exe")
@@ -69,7 +71,6 @@ struct ExiftoolServiceTests {
         let properties = ["ProductName", "FileDescription", "Comments"]
         let result = try service.getFileProperties(mockExePath.path, properties: properties)
         
-        #expect(result is [String: String], "Result should be a dictionary")
         // At least some properties should be present (depending on the mock file)
         #expect(!result.isEmpty, "Should extract at least some properties")
     }
@@ -79,6 +80,7 @@ struct ExiftoolServiceTests {
 struct ExiftoolServiceIntegrationTests {
     
     @Test("Extract ProductName from real installer")
+    @MainActor
     func extractProductName() async throws {
         // This test uses a real installer from the installers directory
         let installerPath = "/Users/callumgare/repos/second-chance/installers/secrets-can-kill/setup.exe"

@@ -19,7 +19,7 @@ struct LogWindowTests {
     @Test("Log window delivers entries to onLine callback")
     func windowDeliversEntries() async throws {
         let marker = "LogWindowTest-\(UUID().uuidString)"
-        let window = LogWindow()
+        let window = await MainActor.run { LogWindow() }
         let collector = LineCollector()
 
         await MainActor.run {
@@ -50,7 +50,7 @@ struct LogWindowTests {
     @Test("Live entries stream to an open window")
     func liveEntriesStream() async throws {
         let marker = "LogWindowLiveTest-\(UUID().uuidString)"
-        let window = LogWindow()
+        let window = await MainActor.run { LogWindow() }
         let collector = LineCollector()
 
         await MainActor.run {
@@ -81,18 +81,14 @@ struct LogWindowTests {
         // Emit before opening so the marker is part of the history snapshot.
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(marker)")
 
-        let window = LogWindow()
-
-        func occurrences(of marker: String) -> Int {
-            window.displayedTextForTesting.components(separatedBy: marker).count - 1
-        }
+        let window = await MainActor.run { LogWindow() }
 
         await MainActor.run {
             window.showLogWindow(title: "Test - Reopen")
         }
         // Allow the coalesced flush (100 ms deadline) to render the snapshot.
         try await Task.sleep(for: .milliseconds(400))
-        let firstOpenCount = await MainActor.run { occurrences(of: marker) }
+        let firstOpenCount = occurrences(of: marker, in: await MainActor.run { window.displayedTextForTesting })
         #expect(firstOpenCount == 1, "marker appeared \(firstOpenCount)× on first open — expected exactly 1")
 
         // Close and reopen: the controller (and its text storage) persists,
@@ -102,7 +98,7 @@ struct LogWindowTests {
             window.showLogWindow(title: "Test - Reopen")
         }
         try await Task.sleep(for: .milliseconds(400))
-        let secondOpenCount = await MainActor.run { occurrences(of: marker) }
+        let secondOpenCount = occurrences(of: marker, in: await MainActor.run { window.displayedTextForTesting })
         #expect(secondOpenCount == 1, "marker appeared \(secondOpenCount)× after reopen — history duplicated")
 
         // And once more for good measure (the bug compounded per open).
@@ -111,7 +107,7 @@ struct LogWindowTests {
             window.showLogWindow(title: "Test - Reopen")
         }
         try await Task.sleep(for: .milliseconds(400))
-        let thirdOpenCount = await MainActor.run { occurrences(of: marker) }
+        let thirdOpenCount = occurrences(of: marker, in: await MainActor.run { window.displayedTextForTesting })
         #expect(thirdOpenCount == 1, "marker appeared \(thirdOpenCount)× after second reopen — history duplicated")
 
         await MainActor.run {
@@ -255,7 +251,7 @@ struct LogWindowTests {
         let liveMarker = "ImportLive-\(UUID().uuidString)"
         let fileMarker = "ImportFile-\(UUID().uuidString)"
         let duringMarker = "DuringFile-\(UUID().uuidString)"
-        let window = LogWindow()
+        let window = await MainActor.run { LogWindow() }
 
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(liveMarker)")
 
@@ -287,7 +283,7 @@ struct LogWindowTests {
         let liveMarker = "ResumeLive-\(UUID().uuidString)"
         let fileMarker = "ResumeFile-\(UUID().uuidString)"
         let duringMarker = "ResumeDuring-\(UUID().uuidString)"
-        let window = LogWindow()
+        let window = await MainActor.run { LogWindow() }
 
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(liveMarker)")
 
@@ -319,7 +315,7 @@ struct LogWindowTests {
     func fileViewSurvivesReopen() async throws {
         let liveMarker = "ReopenLive-\(UUID().uuidString)"
         let fileMarker = "ReopenFile-\(UUID().uuidString)"
-        let window = LogWindow()
+        let window = await MainActor.run { LogWindow() }
 
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(liveMarker)")
         await MainActor.run { window.showLogWindow(title: "Test - Reopen File") }

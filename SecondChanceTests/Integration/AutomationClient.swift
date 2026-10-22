@@ -27,7 +27,9 @@ struct AutomationMessage: Sendable {
     let type: String
     let timestamp: Date
     /// All payload fields (everything except kind, type, t).
-    let fields: [String: Any]
+    /// `nonisolated(unsafe)`: `Any` isn't `Sendable`, but these are
+    /// `JSONSerialization`'s immutable values, never changed after parsing.
+    nonisolated(unsafe) let fields: [String: Any]
 
     init?(jsonData: Data) {
         guard let raw = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],

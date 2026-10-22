@@ -45,7 +45,7 @@ struct GameDetectorTests {
     func detectFromFingerprint(fingerprint: String, expectedSlug: String) {
         let detector = GameDetector.shared
         let slug = detector.getGameSlugFromFingerprint(fingerprint)
-        #expect(slug == expectedSlug, "Expected '\(fingerprint)' to match '\(expectedSlug)' but got '\(slug ?? "nil")'")
+        #expect(slug == expectedSlug, "Expected '\(fingerprint)' to match '\(expectedSlug)' but got '\(slug)'")
     }
     
     // Test alternate game codes
@@ -61,7 +61,7 @@ struct GameDetectorTests {
     func detectFromAlternateCodes(code: String, expectedSlug: String) {
         let detector = GameDetector.shared
         let slug = detector.getGameSlugFromFingerprint(code)
-        #expect(slug == expectedSlug, "Expected code '\(code)' to match '\(expectedSlug)' but got '\(slug ?? "nil")'")
+        #expect(slug == expectedSlug, "Expected code '\(code)' to match '\(expectedSlug)' but got '\(slug)'")
     }
     
     // Test that unknown fingerprints return "unknown"
@@ -131,7 +131,7 @@ struct GameDetectorIntegrationTests {
             return
         }
         
-        let detector = GameDetector.shared
+        let detector = await GameDetector.shared
         let gameSlug = try await detector.detectGame(fromDisk: mockDiskPath)
         
         #expect(gameSlug == "scarlet-hand")

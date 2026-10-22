@@ -41,7 +41,7 @@ final class RecordingEventSubscriber: @unchecked Sendable {
     /// Subscribe to a bus. Captures all subsequent `.installation` events.
     func subscribe(to bus: EventBus<AppEvent>) async {
         let token = await bus.subscribe { [weak self] event in
-            await self?.handle(event)
+            self?.handle(event)
         }
         subscriptionToken = token
     }
@@ -56,7 +56,7 @@ final class RecordingEventSubscriber: @unchecked Sendable {
 
     // MARK: - Internal handling
 
-    private func handle(_ appEvent: AppEvent) async {
+    private func handle(_ appEvent: AppEvent) {
         guard case .wrappBuild(let event) = appEvent else { return }
         lock.lock()
         defer { lock.unlock() }

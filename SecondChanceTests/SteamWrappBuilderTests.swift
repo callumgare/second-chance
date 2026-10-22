@@ -66,6 +66,7 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
 }
 
 /// Answers the game picker as a person would, offering what it was shown.
+@MainActor
 final class PickingInput: WrappBuildInput {
     let pick: String
     private(set) var offered: [String]?

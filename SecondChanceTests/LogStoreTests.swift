@@ -25,7 +25,6 @@ struct LogStoreTests {
         cancelBefore()
         _ = before
 
-        let counter = Counter()
         let group = DispatchGroup()
 
         // 8 threads × 100 appends, each batch tagged with its thread index.
@@ -36,12 +35,13 @@ struct LogStoreTests {
                     store.append(level: "notice",
                                  label: "au.gare.callum.second-chance.Test.Ordering",
                                  message: "t\(t)-i\(i)")
-                    counter.increment()
                 }
                 group.leave()
             }
         }
-        _ = group.wait(timeout: .now() + 10)
+        await withCheckedContinuation { done in
+            group.notify(queue: .global()) { done.resume() }
+        }
 
         let (entries, _) = store.snapshot()
         let tagged = entries.filter { $0.label.hasSuffix("Test.Ordering") && $0.message.hasPrefix("t") }
@@ -199,11 +199,6 @@ struct LogStoreTests {
     }
 
     // MARK: - Helpers
-
-    actor Counter {
-        private var value = 0
-        func increment() { value += 1 }
-    }
 
     actor EntryCollector {
         private var batches: [[Entry]] = []

@@ -247,7 +247,7 @@ struct DiskInstallIntegrationTests {
             for patch in recorder.failedPatches {
                 outcome.expect(false, "Patch \(patch.id) failed: \(patch.message)")
             }
-            let expectedPatches = GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .disk).map(\.id)
+            let expectedPatches = await GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .disk).map(\.id)
             outcome.expect(recorder.appliedPatches == expectedPatches,
                     "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")
 

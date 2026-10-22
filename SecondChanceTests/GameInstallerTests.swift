@@ -154,6 +154,7 @@ struct InstallerIntegrationTests {
     // They will be skipped if test fixtures don't exist
     
     @Test("Detect installer type from real setup.exe")
+    @MainActor
     func detectInstallerTypeFromFile() async throws {
         let testFixturesPath = URL(fileURLWithPath: "/Users/callumgare/repos/second-chance/SecondChance/TestFixtures")
         let mockInstallerPath = testFixturesPath.appendingPathComponent("mock-installer/setup.exe")
@@ -164,7 +165,7 @@ struct InstallerIntegrationTests {
         }
         
         let installer = GameInstallerRunner.shared
-        let installerType = installer.detectInstallerType(mockInstallerPath.path)
+        _ = installer.detectInstallerType(mockInstallerPath.path)
         
         // The type will depend on what mock installer we create
         // We just check that it doesn't crash - actual type depends on fixture

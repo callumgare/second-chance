@@ -105,7 +105,7 @@ struct HerDownloadInstallIntegrationTests {
         for patch in recorder.failedPatches {
             outcome.expect(false, "Patch \(patch.id) failed: \(patch.message)")
         }
-        let expectedPatches = download.isMacDownload
+        let expectedPatches = await download.isMacDownload
             ? []
             : GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .herDownload).map(\.id)
         outcome.expect(recorder.appliedPatches == expectedPatches,
