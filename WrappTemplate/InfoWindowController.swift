@@ -17,6 +17,9 @@ class InfoWindowController: NSWindowController {
     /// closes. The monitor itself runs on for the rest of the wrapp's run,
     /// sampling less often once the game has loaded.
     private let loadMonitor: SystemLoadMonitor?
+    /// Watches the launch for signs it's getting somewhere, from `show()`
+    /// until the game has loaded, failed, or the window closes.
+    let activity: LaunchActivityMonitor?
     let appSupportPath: URL
     var onWarningConfirmed: (() -> Void)?
     /// Offers to start the game without Steam when the launch fails, or may
@@ -80,9 +83,10 @@ class InfoWindowController: NSWindowController {
     /// `stage` is what the launch waits on first: Steam, for a game that
     /// needs it, or else the game.
     init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", gameTitle: String = "Nancy Drew",
-         saveWarningEnabled: Bool = true, loadMonitor: SystemLoadMonitor? = nil) {
+         saveWarningEnabled: Bool = true, loadMonitor: SystemLoadMonitor? = nil, activity: LaunchActivityMonitor? = nil) {
         self.appSupportPath = appSupportPath
         self.loadMonitor = loadMonitor
+        self.activity = activity
 
         let shouldShow = saveWarningEnabled && !Self.hasUserDismissedSaveWarning(appSupportPath: appSupportPath)
         self.viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: shouldShow, gameSlug: gameSlug)
@@ -126,12 +130,29 @@ class InfoWindowController: NSWindowController {
                 self.viewModel.heavyLoad = reading
             }
         }
+        // So does this one.
+        activity?.start { [weak self] sign in
+            MainActor.assumeIsolated {
+                self?.viewModel.noteProgress(sign)
+            }
+        }
+    }
+
+    /// A sign the launch is getting somewhere. Safe from any thread.
+    func noteProgress(_ sign: LaunchProgressSign) {
+        DispatchQueue.main.async {
+            self.viewModel.noteProgress(sign)
+        }
     }
 
     /// Show that the launch has moved on to `stage`. Safe from any thread.
     func setStage(_ stage: LoadingStage) {
         DispatchQueue.main.async {
             self.viewModel.setStage(stage)
+            // While Steam waits on the player in its own window, this one
+            // mustn't float over it: both open in the middle of the screen,
+            // and this one would hide the sign-in's QR code.
+            self.window?.level = stage.isWaitingOnThePlayer ? .normal : .floating
         }
     }
 
@@ -139,6 +160,7 @@ class InfoWindowController: NSWindowController {
         DispatchQueue.main.async {
             self.loadMonitor?.observe(nil)
             self.loadMonitor?.slowDown()
+            self.activity?.stop()
             self.viewModel.markGameLoaded()
             self.close()
         }
@@ -156,6 +178,7 @@ class InfoWindowController: NSWindowController {
                    report: FailureReport? = nil, sending: Task<ReportOutcome, Never>? = nil) {
         DispatchQueue.main.async {
             self.loadMonitor?.observe(nil)
+            self.activity?.stop()
             self.viewModel.heavyLoad = nil
             if let report, let sending {
                 self.viewModel.failureReport.track(report, sending: sending)
@@ -178,6 +201,7 @@ class InfoWindowController: NSWindowController {
         }
         viewModel.stopTimer()
         loadMonitor?.observe(nil)
+        activity?.stop()
         window?.close()
     }
 

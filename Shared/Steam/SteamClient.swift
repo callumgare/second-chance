@@ -110,7 +110,7 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         let desktop = await Task.detached {
             WineDesktop.start(wine, logger: logger, outputLogger: outputLogger)
         }.value
-        let offsets = Dictionary(uniqueKeysWithValues: ["connection_log.txt", "steamui_login.txt", "content_log.txt", "console_log.txt"].map {
+        let offsets = Dictionary(uniqueKeysWithValues: Self.followedLogs.map {
             ($0, Self.size(of: logsDir.appendingPathComponent($0)))
         })
         state.withLock {
@@ -129,7 +129,7 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         let deadline = Date().addingTimeInterval(timeout)
         var result = SteamLogs.LoginState.pending
         while Date() < deadline {
-            result = SteamLogs.loginState(connectionLog: newLog("connection_log.txt"), loginLog: newLog("steamui_login.txt"))
+            result = loginState()
             if result != .pending { break }
             try? await Task.sleep(for: .seconds(1))
         }
@@ -139,6 +139,29 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         case .pending: logger.warning("Steam neither signed in nor asked for credentials within \(Int(timeout))s")
         }
         return result
+    }
+
+    /// Where the sign-in has got to now, without waiting or logging.
+    func loginState() -> SteamLogs.LoginState {
+        SteamLogs.loginState(connectionLog: newLog("connection_log.txt"), loginLog: newLog("steamui_login.txt"))
+    }
+
+    /// Whether the client is connecting to Steam's servers, not yet signed in
+    /// (`SteamLogs.isConnecting`).
+    func isConnecting() -> Bool {
+        SteamLogs.isConnecting(connectionLog: newLog("connection_log.txt"))
+    }
+
+    /// What the bootstrapper has got to in this start: checking the client's
+    /// files, or updating them (`SteamLogs.bootstrapPhase`).
+    func bootstrapPhase() -> SteamLogs.BootstrapPhase {
+        SteamLogs.bootstrapPhase(log: newLog("bootstrap_log.txt"))
+    }
+
+    /// Whether `steam.exe` is running. Only one wrapp or build runs Steam at
+    /// a time (`SteamActiveLock`), so any running is this prefix's.
+    static func isSteamRunning() -> Bool {
+        ProcessName.isRunning("steam.exe")
     }
 
     func ownedAppIDs(timeout: TimeInterval) async throws -> Set<Int> {
@@ -160,6 +183,11 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
 
     func installPhase(appID: Int) -> SteamLogs.InstallPhase {
         SteamLogs.installPhase(appID: appID, contentLog: newLog("content_log.txt"))
+    }
+
+    /// The step Steam's launch of `appID` has got to (`SteamLogs.launchStep`).
+    func launchStep(appID: Int) -> String? {
+        SteamLogs.launchStep(appID: appID, consoleLog: newLog("console_log.txt"))
     }
 
     /// What Steam's launch of `appID` is waiting on the player for, if
@@ -232,6 +260,9 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         ProcessLineLogger.attach(to: errors, logger: outputLogger, level: .warning, onLine: onOutputLine)
         try process.run()
     }
+
+    /// The logs whose new text this start reads.
+    private static let followedLogs = ["connection_log.txt", "steamui_login.txt", "content_log.txt", "console_log.txt", "bootstrap_log.txt"]
 
     /// What `name` gained since Steam started.
     private func newLog(_ name: String) -> String {

@@ -80,9 +80,11 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
+| [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Shared/Reporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, or adding a failure that should be reported |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
+| [docs/historical-plans/2026-10-22-launch-timing.md](docs/historical-plans/2026-10-22-launch-timing.md) | You want to know why the loading window says a launch may have failed when it does — how launches were timed under load, why a slow launch is told from a stuck one by its signs of progress, and what the first experiments got wrong |
 | [docs/historical-plans/2026-10-22-her-store-downloads.md](docs/historical-plans/2026-10-22-her-store-downloads.md) | You want to know why Her downloads work as they do — what the Windows and Mac downloads turned out to contain, why a download needs its own answer file, and why some of a Cider app's DLLs are kept |
 | [docs/historical-plans/2026-10-21-failure-reporting.md](docs/historical-plans/2026-10-21-failure-reporting.md) | You want to know why failure reports work as they do — the levels the person picks between, why a basic report carries no message text, why Sentry is static in wrapps, and how a crash from the previous run is held back and asked about |
 | [docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md](docs/historical-plans/2026-10-20-wrapppuppeteer-in-process-control.md) | You want to know why WrappPuppeteer needs no permissions — what the prototypes showed a process can do to its own windows, why captures stalled on a long-running test Mac (systemstatusd), and what each phase found |
@@ -322,9 +324,11 @@ direct assignment.
   Direct3D object exactly 10 s in. `WineDesktop` (`Shared/Wine/`) starts the
   desktop itself and waits until it has registered the display devices,
   which it detects through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key.
-  It waits up to 600 s, since with every core busy a fresh session has taken
-  two and a half minutes to bring it up, and what runs without it is sure to
-  fail; each check is itself a Wine program and gets 120 s, because one cut
+  A build waits up to 600 s, since with every core busy a fresh session has
+  taken two and a half minutes to bring it up, and what runs without it is
+  sure to fail; a wrapp waits for as long as the desktop's `explorer.exe` is
+  still running, as its loading window says meanwhile whether that looks
+  stuck ([docs/wrapp-launch.md](docs/wrapp-launch.md)). Each check is itself a Wine program and gets 120 s, because one cut
   short at 20 s never saw the desktop ready, and the checks back off to one
   every 10 s as the wait grows, so they don't take the CPU the desktop needs. `GameLauncher` does this
   before the game, and `GameInstallerRunner` before every installer and
@@ -350,18 +354,24 @@ direct assignment.
   restores Wine's on-demand start, for comparison. Anything that runs `wine`
   and reads its output must not wait for EOF on a pipe: Wine's background
   services inherit the child's stdout and hold the pipe open.
-- **Wine can't start on a Mac whose performance cores are all busy.** With
-  other programs on every performance core, Wine (under Rosetta) is left the
-  efficiency cores and takes minutes to bring its desktop up, or never does;
-  with a couple of performance cores free it starts in seconds, so it is a
-  cliff, not a slope. `SystemLoad` (`Shared/`) measures it — other programs'
+- **Wine slows sharply once every core is busy.** With other programs on
+  every core (at the priority a Terminal's or a browser's run), Wine 10 takes
+  20–30 s to bring its desktop up and a game 25–50 s to start, and Steam
+  minutes to sign in; with a performance core or two free it starts in
+  seconds, so it is a cliff, not a slope. Wine 9 was worse: its desktop
+  waited minutes, or never came up, with Wine almost idle — a wrapp still on
+  it should be rebuilt. Load at a lower priority (20, a LaunchAgent with no
+  `ProcessType`) doesn't slow Wine at all, which matters when making load
+  to test with ([docs/wrapp-launch.md](docs/wrapp-launch.md#measurements)).
+  `SystemLoad` (`Shared/`) measures it — other programs'
   CPU in cores, against the performance-core count, heavy at all but one;
   the load average is useless here, since starved Wine threads push it past
   100. Every log header carries a `load:` line, `SystemLoadMonitor` logs
   `[Load]` lines while the Mac is heavily loaded during a build or wrapp run, and a failure summary
-  gives the load now and over the last ten minutes; a wrapp's loading window warns
-  while the Mac is heavily loaded (`SystemLoadMonitor`) instead of declaring a
-  possible launch failure; and the integration test reports such a game as
+  gives the load now and over the last ten minutes; a wrapp's loading window says
+  so while the Mac is heavily loaded (`SystemLoadMonitor`), and gives the launch
+  three times as long before it says it may have failed
+  ([docs/wrapp-launch.md](docs/wrapp-launch.md)); and the integration test reports such a game as
   `overloaded` rather than testing it, unless run with `--ignore-load`.
 - **A badly starting Wine game leaves a diagnostics bundle** in
   `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/`
@@ -381,9 +391,11 @@ direct assignment.
   it to `1` to force a bundle and check the capture works.
 - **A Wine wrapp waits on a dialog before it starts the game.** Launched by
   hand (`open`, its `Contents/MacOS/WrappTemplate`, `sc wrapp run`), a wrapp
-  whose engine is Wine shows a save-progress warning and starts nothing until
-  someone clicks **I Understand**, so a script that launches a wrapp and waits
-  for the game waits for ever on an unattended Mac. The wrapp skips the dialog
+  whose engine is Wine (Steam's included) shows a save-progress warning and
+  doesn't start the game until someone clicks **I Understand** — Wine's
+  desktop, and Steam for a game that needs it, start behind it — so a script
+  that launches a wrapp and waits for the game waits for ever on an
+  unattended Mac. The wrapp skips the dialog
   when `~/Library/Application Support/<bundle id>/dont-show-save-warning`
   exists (`InfoWindowController`). Create it for the experiment and remove it
   afterwards, as it is the player's own setting. `SECOND_CHANCE_DATA_DIR`

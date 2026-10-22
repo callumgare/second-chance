@@ -78,11 +78,16 @@ class GameMonitor {
     /// Wait for game to start (works for both Wine and ScummVM games)
     /// `launcher` is the `wine start` process: if it exits before the game's
     /// exe appears, the game never started and there is nothing to wait for.
-    func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil, timeout: TimeInterval = 600,
+    /// Without one (Steam starts the game), `abandonIf` says when there is
+    /// nothing left to wait for: it sees each check's Wine processes, and
+    /// returns why when the game can no longer start. There is no time limit:
+    /// a launch that may still work is waited for until the player gives up.
+    func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil,
+                            abandonIf: ((Set<WineProcessInfo>) -> String?)? = nil,
                             whileWaiting: (() -> Void)? = nil) -> Int32? {
         switch gameEngine {
         case _ where gameEngine == "wine" || gameEngine.hasPrefix("wine-"):
-            return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, timeout: timeout, whileWaiting: whileWaiting)
+            return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, abandonIf: abandonIf, whileWaiting: whileWaiting)
         case "scummvm":
             return waitForScummVMGameToStart(gamePid: gamePid)
         default:
@@ -111,9 +116,9 @@ class GameMonitor {
         }
     }
 
-    /// Activate game window and hide wrapper from dock
-    /// Waits (up to 30s) for the game's first window and activates it.
-    /// Returns whether a window appeared.
+    /// Waits for the game's first window and activates it, for as long as
+    /// the game runs. Returns whether a window appeared: false when the game
+    /// exited first.
     @discardableResult
     func activateGameWindow(gamePid: Int32, infoWindow: InfoWindowController?) -> Bool {
         waitForWindowAndActivate(pid: gamePid, infoWindow: infoWindow)
@@ -169,7 +174,8 @@ class GameMonitor {
     /// Wait for Wine game executable to start
     /// `whileWaiting` runs on every check (about twice a second) until the
     /// game appears: what else the launcher wants to watch meanwhile.
-    private func waitForWineGameToStart(gameExeName: String, launcher: Process?, timeout: TimeInterval = 600,
+    private func waitForWineGameToStart(gameExeName: String, launcher: Process?,
+                                        abandonIf: ((Set<WineProcessInfo>) -> String?)?,
                                         whileWaiting: (() -> Void)? = nil) -> Int32? {
         logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName)")
         logger.debug("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
@@ -177,7 +183,7 @@ class GameMonitor {
         let startTime = Date()
         var gamePid: Int32?
 
-        while Date().timeIntervalSince(startTime) < timeout && gamePid == nil {
+        while gamePid == nil {
             if let launcher, !launcher.isRunning {
                 setExit(from: launcher)
                 let how = launcher.terminationReason == .uncaughtSignal
@@ -208,13 +214,14 @@ class GameMonitor {
             }
 
             if gamePid == nil {
+                if let reason = abandonIf?(processes) {
+                    let waited = SubprocessWatch.duration(Date().timeIntervalSince(startTime))
+                    logger.error("[Game Monitor] Stopped waiting for \(gameExeName) after \(waited): \(reason)")
+                    return nil
+                }
                 whileWaiting?()
                 Thread.sleep(forTimeInterval: 0.5)
             }
-        }
-
-        if gamePid == nil {
-            logger.error("[Game Monitor] ⚠️ Game executable not detected within \(Int(timeout))s timeout")
         }
 
         return gamePid
@@ -232,14 +239,18 @@ class GameMonitor {
         logger.notice("[Game Monitor] Monitoring for windows...")
 
         var windowDetected = false
-        // Long, because the game is only brought to the front once its window
-        // is up: on a loaded machine that has taken almost two minutes, and a
-        // window that came after a shorter wait opened behind whatever the
-        // user had in front. The wait ends as soon as the window appears.
-        let windowTimeout: TimeInterval = 600
+        // For as long as the game runs: on a loaded machine its window has
+        // taken minutes, and the game is only brought to the front once it's
+        // up. The loading window says meanwhile whether that looks stuck, and
+        // the player can give up there.
         let windowStartTime = Date()
 
-        while !windowDetected && Date().timeIntervalSince(windowStartTime) < windowTimeout {
+        while !windowDetected {
+            guard isProcessRunning(pid: pid) else {
+                let waited = SubprocessWatch.duration(Date().timeIntervalSince(windowStartTime))
+                logger.error("[Game Monitor] The game exited \(waited) into waiting for its window, without showing one")
+                return false
+            }
             let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
 
             let gameWindows = windowList.filter { window in
@@ -295,14 +306,6 @@ class GameMonitor {
             }
 
             Thread.sleep(forTimeInterval: 0.2) // Check every 200ms
-        }
-
-        if !windowDetected {
-            logger.error("[Game Monitor] ⚠️ No windows detected after \(Int(windowTimeout))s timeout")
-            // Notify info window even if no windows detected (treat as loaded)
-            DispatchQueue.main.async {
-                infoWindow?.notifyGameLoaded()
-            }
         }
         return windowDetected
     }

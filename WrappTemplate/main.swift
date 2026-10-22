@@ -730,7 +730,9 @@ func main() {
         stage: config.gameEngine.hasPrefix("wine-steam") ? .startingSteam : .startingGame(title: config.gameTitle),
         appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
         saveWarningEnabled: saveWarningEnabled,
-        loadMonitor: loadMonitor)
+        loadMonitor: loadMonitor,
+        activity: LaunchActivityMonitor(steamLogsDir: config.gameEngine.hasPrefix("wine-steam")
+            ? config.winePrefix.appendingPathComponent(SteamClient.steamDirInPrefix).appendingPathComponent("logs") : nil))
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
     infoWindow.reportStuckLaunch = { gameLauncher.reportStuckLaunch() }
@@ -849,12 +851,33 @@ func main() {
         try? config.gameEngine.write(to: gameEngineFile, atomically: true, encoding: .utf8)
     }
 
+    // The save warning holds back only the game itself: Wine, and Steam for
+    // a game that needs it, get going behind it, so the game starts sooner
+    // once the player has read it.
+    let warningConfirmed = DispatchSemaphore(value: 0)
+    if infoWindow.isShowingWarning {
+        mainLogger.notice("Showing the save warning; getting Wine ready behind it")
+        infoWindow.onWarningConfirmed = {
+            mainLogger.notice("Warning confirmed")
+            warningConfirmed.signal()
+        }
+    } else {
+        mainLogger.notice("No warning to show")
+        warningConfirmed.signal()
+    }
+
     // Launch based on engine type
     func launchGameAsync() {
         DispatchQueue.global(qos: .userInitiated).async {
             waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.hasPrefix("wine-steam")
                 ? .startingSteam : .startingGame(title: config.gameTitle))
-            let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
+            let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode) {
+                if warningConfirmed.wait(timeout: .now()) == .timedOut {
+                    mainLogger.notice("Ready to start the game; waiting for the player to confirm the save warning")
+                    warningConfirmed.wait()
+                }
+                mainLogger.notice("Launching the game")
+            }
 
             // Quitting: the app delegate's cleanup stopped the game, waits for
             // Wine and ends the wrapp. Showing an error or exiting here would
@@ -902,16 +925,7 @@ func main() {
 
     switch config.gameEngine {
     case "wine":
-        if infoWindow.isShowingWarning {
-            mainLogger.notice("Waiting for user to confirm save warning before launching game...")
-            infoWindow.onWarningConfirmed = {
-                mainLogger.notice("Warning confirmed, launching game...")
-                launchGameAsync()
-            }
-        } else {
-            mainLogger.notice("No warning to show, launching game immediately...")
-            launchGameAsync()
-        }
+        launchGameAsync()
 
     case "wine-steam", "wine-steam-silent":
         mainLogger.notice("Launching through Steam...")

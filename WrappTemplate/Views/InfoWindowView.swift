@@ -6,6 +6,9 @@
 
 import SwiftUI
 import Combine
+import Logging
+
+private nonisolated let infoWindowLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.InfoWindow")
 
 class InfoWindowViewModel: ObservableObject {
     enum Phase {
@@ -22,8 +25,6 @@ class InfoWindowViewModel: ObservableObject {
     @Published private(set) var stage: LoadingStage
     @Published var showSlowLoadingNote = false
     @Published var showSuspectedHang = false
-    /// Set while the Mac is too busy for the game to start promptly.
-    @Published var heavyLoad: SystemLoadReading?
     @Published var dontShowAgain = false
 
     let saveWarningEnabled: Bool
@@ -48,8 +49,10 @@ class InfoWindowViewModel: ObservableObject {
     }
 
     private(set) var gameHasLoaded = false
-    private var slowLoadingTimer: Timer?
-    private var suspectedHangTimer: Timer?
+    /// The current stage's clock, while the loading content shows.
+    private var clock: LoadingClock?
+    /// Checks `clock` once a second.
+    private var clockTimer: Timer?
     private var quitWhenReported: AnyCancellable?
 
     /// Reports the launch as stuck, for `giveUpIfStuck`: the report and its
@@ -73,29 +76,52 @@ class InfoWindowViewModel: ObservableObject {
     /// the previous stage doesn't carry over.
     func setStage(_ stage: LoadingStage) {
         guard stage != self.stage else { return }
+        if stage.logName != self.stage.logName {
+            infoWindowLogger.debug("[Loading] Stage: \(stage.logName)")
+        }
         self.stage = stage
         guard case .loading = phase else { return }
         startStageTimers()
     }
 
-    /// Start the current stage's clock: the slow note, then the possible
-    /// failure, each after the stage's own delay.
+    /// Start the current stage's clock afresh: the slow note, then the
+    /// possible failure, as the stage's `LoadingClock` judges them.
     func startStageTimers() {
         stopTimer()
         showSlowLoadingNote = false
         showSuspectedHang = false
-        slowLoadingTimer = Self.timer(after: stage.slowNoteAfter) { [weak self] in
-            self?.showSlowLoadingNote = true
-        }
-        suspectedHangTimer = Self.timer(after: stage.possibleFailureAfter) { [weak self] in
-            self?.showSuspectedHang = true
-        }
+        clock = LoadingClock(stage: stage)
+        clock?.heavyLoad = heavyLoad != nil
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.checkClock() }
+        RunLoop.main.add(timer, forMode: .common)
+        clockTimer = timer
     }
 
-    private static func timer(after delay: TimeInterval?, _ fire: @escaping () -> Void) -> Timer? {
-        guard let delay else { return nil }
-        return Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
-            DispatchQueue.main.async(execute: fire)
+    /// A sign the launch is still getting somewhere. Main thread only.
+    func noteProgress(_ sign: LaunchProgressSign) {
+        clock?.note(sign)
+    }
+
+    /// Set while the Mac is too busy for the game to start promptly: the
+    /// stage gets longer before it may count as failed.
+    @Published var heavyLoad: SystemLoadReading? {
+        didSet { clock?.heavyLoad = heavyLoad != nil }
+    }
+
+    private func checkClock() {
+        guard let clock else { return }
+        let ran = Int(Date().timeIntervalSince(clock.started))
+        if !showSlowLoadingNote, clock.isSlow() {
+            showSlowLoadingNote = true
+            infoWindowLogger.notice("[Loading] \(stage.subject) is taking longer than usual: \(ran)s into \(stage.logName)")
+        }
+        // Stays up once shown, until the next stage: a stalled launch that
+        // stirs again isn't proof it will finish.
+        if !showSuspectedHang, clock.mayHaveFailed() {
+            showSuspectedHang = true
+            let quiet = Int(Date().timeIntervalSince(clock.lastProgress))
+            let load = clock.heavyLoad ? " (the Mac is heavily loaded)" : ""
+            infoWindowLogger.warning("[Loading] Possible launch failure: \(ran)s into \(stage.logName), no sign of progress for \(quiet)s\(load)")
         }
     }
 
@@ -138,10 +164,9 @@ class InfoWindowViewModel: ObservableObject {
     }
 
     func stopTimer() {
-        slowLoadingTimer?.invalidate()
-        slowLoadingTimer = nil
-        suspectedHangTimer?.invalidate()
-        suspectedHangTimer = nil
+        clockTimer?.invalidate()
+        clockTimer = nil
+        clock = nil
     }
 }
 
@@ -278,6 +303,19 @@ struct InfoWindowView: View {
                 informative(detail)
             }
 
+            if let progress = viewModel.stage.progress {
+                VStack(alignment: .leading, spacing: 4) {
+                    ProgressView(value: Double(progress.doneKB), total: Double(progress.totalKB))
+                        .accessibilityIdentifier("loading-progress")
+                    if let text = viewModel.stage.progressText {
+                        Text(text)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+            }
+
             // On a heavily loaded Mac a long wait is expected, not a sign the
             // launch failed: say why instead.
             if viewModel.stage == .lastSessionClosing {
@@ -285,15 +323,12 @@ struct InfoWindowView: View {
                     lastSessionNote
                 }
             } else if let load = viewModel.heavyLoad {
+                // The busy Mac explains a slow start; the clock has already
+                // given the stage longer for it, so past that it may still
+                // have failed, and the player should know (and can say so).
                 heavyLoadNote(load)
-                // Past the possible-failure point, a game that can run
-                // without Steam still gets the offer: the busy Mac may be
-                // why Steam is stuck, and the game alone needs far less.
-                if viewModel.showSuspectedHang, viewModel.onLaunchWithoutSteam != nil {
-                    launchWithoutSteamNote
-                    buttonBar {
-                        failureButtons(stillTrying: true)
-                    }
+                if viewModel.showSuspectedHang {
+                    possibleFailureNote
                 }
             } else if viewModel.showSuspectedHang {
                 possibleFailureNote
@@ -317,8 +352,7 @@ struct InfoWindowView: View {
         VStack(alignment: .leading, spacing: 8) {
             caution("Possible launch failure")
 
-            informative("\(viewModel.stage.subject) is taking much longer than usual to start, and may have failed. "
-                + "It's still trying, so you can keep waiting — or look at the log, or quit.")
+            informative(viewModel.stage.possibleFailureText)
 
             launchWithoutSteamNote
 

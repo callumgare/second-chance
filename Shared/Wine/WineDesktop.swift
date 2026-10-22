@@ -14,12 +14,14 @@ import Logging
 /// it 10 seconds; on a loaded machine under Rosetta that runs out, and the
 /// program carries on with no display adapters ("The explorer process failed
 /// to start"). A game then crashes, and an installer or patcher exits non-zero.
-/// Here the wait is up to `timeout` — ten minutes by default: with every core
-/// busy, a fresh Wine session has taken two and a half minutes to bring its
-/// desktop up, and a program run without it is sure to fail. A desktop that is
-/// ready ends the wait at once, so this only costs time when something is
-/// wrong. If the desktop is never ready the program runs anyway, as it would
-/// have.
+/// Here the wait is up to `timeout` — ten minutes by default, and no limit for
+/// a wrapp's game, whose loading window says meanwhile whether it looks stuck:
+/// with every core busy, a fresh Wine session has taken two and a half minutes
+/// to bring its desktop up, and a program run without it is sure to fail. A
+/// desktop that is ready ends the wait at once, so this only costs time when
+/// something is wrong. A desktop whose launcher has exited won't come up, and
+/// one that is never ready doesn't stop the program: it runs anyway, as it
+/// would have.
 ///
 /// Wine runs the desktop through `start.exe /exec`, which is itself a Windows
 /// program waiting for explorer, while explorer only exits once no programs are
@@ -73,11 +75,21 @@ nonisolated public final class WineDesktop {
             // Each check is a Wine program of its own, which on a loaded
             // machine has taken over 30 seconds; cut short, no check would
             // ever see the desktop ready.
+            let launcherRunning = launcher.isRunning
             let result = wine.queryDisplayDevices(timeout: 120)
             let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
             if result == .registered {
                 logger.notice("[Desktop] Ready after \(elapsed)s (\(attempt) checks)")
                 return desktop
+            }
+            // Checked before the query, so a desktop that came up and
+            // registered the devices as its launcher exited isn't missed.
+            // The launcher also exits when an explorer Wine started by itself
+            // already has the desktop, which may yet come up.
+            if !launcherRunning, !ProcessName.isRunning("explorer.exe") {
+                let why = "its launcher exited \(launcher.terminationStatus) after \(elapsed)s without the display devices registered"
+                logger.error("[Desktop] The desktop didn't start: \(why). Running the program anyway")
+                return nil
             }
             logger.debug("[Desktop] Check \(attempt): \(result) (query took \(String(format: "%.1f", Date().timeIntervalSince(queryStart)))s, \(elapsed)s since start)")
             // Back off as the wait grows: each check starts a whole Wine
@@ -87,7 +99,7 @@ nonisolated public final class WineDesktop {
             Thread.sleep(forTimeInterval: min(10, max(0.25, Date().timeIntervalSince(start) / 10)))
         }
         let load = SystemLoad.read().map(\.summary) ?? "unknown (ps failed)"
-        logger.error("[Desktop] Display devices still not registered after \(Int(timeout))s — running the program anyway (load: \(load))")
+        logger.error("[Desktop] Display devices still not registered after \(String(format: "%.0f", timeout))s — running the program anyway (load: \(load))")
         return desktop
     }
 

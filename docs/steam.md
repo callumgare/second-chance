@@ -144,8 +144,12 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
 2. **End any Steam left over** from a run that was force-quit or crashed —
    it would still be running in this prefix, signed in.
 3. **Restore the shared sign-in, start Steam silently, wait for it to sign
-   in.** Without a sign-in, the loading window says to sign in in Steam's
-   window, and waits for up to 30 minutes. Steam's sign-in window is brought
+   in.** This happens behind the save warning, so Steam is usually signed in
+   by the time the player has read it; only the game waits for **I
+   Understand**. Without a sign-in, the loading window says to sign in in
+   Steam's window, and waits for as long as Steam keeps running — there is
+   no time limit, and a Steam that exits ends the wait
+   (`WrappSteam.Failure.exited`). Steam's sign-in window is brought
    to the front as soon as Steam asks (`SteamSignInWindow`): Steam may have
    spent minutes installing and updating itself first, and the player has
    likely gone to another app meanwhile. A build from the app does the same.
@@ -177,15 +181,29 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
    back to the store, take it out of the wrapp, release the lock. On quit this
    is cut short (10 s for Steam) to fit inside the wrapp's 15 s quit fallback.
 
-The loading window names each step: "Starting Steam…", the sign-in prompt,
-then "Steam is starting *Title*…" (`WrappSteam.Status`, shown as a
-`LoadingStage`). Each step has its own clock for the "taking longer than
-usual" note and the possible-launch-failure warning, far longer than a game
-the wrapp starts itself gets (20 s and 50 s): 2 and 10 minutes for Steam's
-start, which on a first run includes its update, and 90 s and 5 minutes for
-Steam starting the game. Waiting for the player to sign in has no clock. The
-warning leaves the spinner up, since the launch may still succeed; a launch
-that has definitely failed shows the error instead.
+The loading window names each step (`WrappSteam.Status`, shown as a
+`LoadingStage`): "Starting Steam…"; "Updating Steam…", with a progress bar,
+while the bootstrapper updates the client (`SteamLogs.bootstrapPhase`);
+"Connecting to Steam…" once the client is signing in
+(`SteamLogs.isConnecting`); the sign-in prompt if it needs one; then "Steam
+is starting *Title*…". Each has its own clock for the "taking longer than
+usual" note and the possible-launch-failure warning, set from launches timed
+on a loaded Mac and described in [wrapp-launch.md](wrapp-launch.md): a
+stalled update is one with no new progress line for 30 s, and Steam's own
+programs' CPU and log writing never count as progress, as Steam does both
+when idle. Waiting for the player to sign in, or to answer any other
+question in Steam's window, has no clock. The warning leaves the spinner up,
+since the launch may still succeed; a launch that has definitely failed
+shows the error instead.
+
+Any launch step Steam waits on, apart from the ones it passes through by
+itself (`SteamLogs.routineLaunchPrompts`: `ShowInterstitials`,
+`CreatingProcess`), counts as a question for the player once it has lasted
+a few seconds: the loading window says Steam is waiting for them
+(`.steamWaitingForPlayer`) and Steam's window comes forward. `ShowInterstitials`
+is routine but not always quick: it usually takes 1–3 s, and has taken 30 s
+with nothing else stirring, which is why Steam starting the game gets 45 s
+without a sign before it counts as stalled.
 
 **A DRM-free game the user chose to launch via Steam can fall back to
 launching directly.** Both the possible-launch-failure warning and the error
@@ -308,6 +326,29 @@ runs `C:\Program Files (x86)\Steam\steam.exe` in the prefix:
   `logs/steamui_login.txt` (`SetLoginState: WaitingForCredentials`, with the
   reason, e.g. `Invalid Password` for a rejected token). Both logs keep earlier
   sessions, so the client only reads what was written since it started them.
+- **Updating itself** comes from `logs/bootstrap_log.txt`
+  (`SteamLogs.bootstrapPhase`): a start with nothing to update logs only
+  `Verifying installation...` and `Verification complete`. One that updates
+  — because Valve has released a newer client (`Checking for update on
+  startup`, then `Downloaded new manifest: … version N, installed version
+  M`), or because a file failed the size check — logs a `Downloading update
+  (X of Y KB)...` line about four times a second, `Download complete.`,
+  `Installing update...`, `Extracting package...`, `Installing update...`
+  again and `Update complete, launching Steam...`, after which the restarted
+  bootstrapper checks its files again. The cached client a build lays in
+  (`SteamClientCache`) is the version of the day it was cached, so a wrapp
+  whose Steam Valve has since updated downloads that update on its next
+  start: about 100 MB, seconds on a fast connection.
+  A couple of minutes after the client starts, a `Background update loop`
+  checks for a newer client and may download one to install at the next
+  start; that isn't this start's update, so it's ignored.
+- **Connecting** comes from the connection log's state, in every line
+  (`[Logged Off, …]`, `[Connecting, …]`, `[Logged On, …]`): from
+  `LogOn() called` to `Logged On` takes a couple of seconds online.
+- **The launch's steps** come from `logs/console_log.txt`
+  (`LaunchApp changed task to <step>`, `SteamLogs.launchStep`): each new one
+  is the launch getting somewhere, and the steps it waits at are
+  `SteamLogs.launchPrompt`.
 - **Installing:** with Steam *not* running, `queueInstall` writes a minimal
   `steamapps/appmanifest_<id>.acf` (`appid`, `Universe`, `installdir`,
   `StateFlags` 1026); the next start installs it with no dialog.

@@ -37,4 +37,26 @@ nonisolated enum ProcessName {
         guard index < size, let end = buffer[index..<size].firstIndex(of: 0) else { return nil }
         return executable(fromPSCommand: String(decoding: buffer[index..<end], as: UTF8.self))
     }
+
+    /// Whether a process named `name` (compared without case: "steam.exe")
+    /// is running, as `ps` lists it. True when `ps` can't be run, so a caller
+    /// waiting for one to go doesn't give up on a failed check.
+    static func isRunning(_ name: String) -> Bool {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-A", "-o", "comm="]
+        let pipe = Pipe()
+        ps.standardOutput = pipe
+        ps.standardError = FileHandle.nullDevice
+        do {
+            try ps.run()
+        } catch {
+            return true
+        }
+        // Read before waiting: the list can be bigger than the pipe's buffer.
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        ps.waitUntilExit()
+        let wanted = name.lowercased()
+        return output.split(separator: "\n").contains { executable(fromPSCommand: String($0)).lowercased() == wanted }
+    }
 }

@@ -108,11 +108,161 @@ struct SteamLogsTests {
         #expect(prompts == [nil, "ShowInterstitials", nil, nil, SteamLogs.playingElsewherePrompt, nil, nil])
     }
 
+    @Test("Each step of Steam's launch is the launch getting somewhere")
+    func launchSteps() {
+        // A real launch's lines, in order (console_log.txt).
+        let lines = [
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to SynchronizingStats with """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to ShowInterstitials with """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp waiting for user response to ShowInterstitials """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp continues with user response "ShowInterstitials""#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to CreatingProcess with """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to WaitingGameWindow with """#,
+        ]
+        let steps = (0...lines.count).map {
+            SteamLogs.launchStep(appID: 31830, consoleLog: lines.prefix($0).joined(separator: "\r\n"))
+        }
+        #expect(steps == [nil, "SynchronizingStats", "ShowInterstitials", "ShowInterstitials", "ShowInterstitials",
+                          "CreatingProcess", "WaitingGameWindow"])
+        #expect(SteamLogs.launchStep(appID: 1, consoleLog: lines.joined(separator: "\n")) == nil)
+    }
+
     @Test("Another app's launch prompt isn't this one's")
     func launchPromptOtherApp() {
         #expect(SteamLogs.launchPrompt(appID: 1, consoleLog: """
         [t] GameAction [AppID 31830, ActionID 1] : LaunchApp waiting for user response to KickingOtherSession ""
         """) == nil)
+    }
+
+    @Test("Connecting runs from the client's LogOn() to its logon response")
+    func connecting() {
+        // A real sign-in, shortened, account removed.
+        let lines = [
+            "[2026-10-22 18:36:19] [Logged Off, 0, 0] [U:1:…] CCMInterface::SetSteamID( [U:1:…] )",
+            "[2026-10-22 18:36:19] [Logged Off, 4, 0] [U:1:…] LogOn() called; not connected yet, scheduling connection. Schedule init returned 1",
+            "[2026-10-22 18:36:20] [Connecting, 4, 0] [U:1:…] PingWebSocketCM() (cmp1-syd1.steamserver.net:443) starting...",
+            "[2026-10-22 18:36:21] [Connected, 4, 7] [U:1:…] Logging on [U:1:…]",
+            "[2026-10-22 18:36:21] [Logging On, 4, 7] [U:1:…] RecvMsgClientLogOnResponse() : [U:1:…] 'OK'",
+            "[2026-10-22 18:36:21] [Logged On, 4, 7] [U:1:…] RecvMsgClientLogOnResponse() : processing complete",
+        ]
+        let states = (0...lines.count).map {
+            SteamLogs.isConnecting(connectionLog: lines.prefix($0).joined(separator: "\r\n"))
+        }
+        #expect(states == [false, false, true, true, true, true, false])
+    }
+
+    // A real start with nothing to update (Windows Steam in a wrapp), then the
+    // background check the client runs a couple of minutes later.
+    static let bootstrapNoUpdate = [
+        "[2026-10-20 04:39:39] Startup - updater built Oct 13 2026 11:45:33",
+        #"[2026-10-20 04:39:39] Startup - Steam Client launched with: "C:\Program Files (x86)\Steam\steam.exe" -silent"#,
+        "[2026-10-20 04:39:39] Windows 10.0.19043.0, 0, 2, 0, 1, 28 ",
+        "[2026-10-20 04:39:39] 3. https://client-update.steamstatic.com, /, Realm 'steamglobal', weight was 1, source = 'baked in'",
+        "[2026-10-20 04:39:39] Verifying installation...",
+        "[2026-10-20 04:39:39] Verifying file sizes only",
+        "[2026-10-20 04:39:39] Verification complete",
+        "[2026-10-20 04:41:44] Background update loop checking for update. . .",
+        "[2026-10-20 04:41:44] Checking for available updates...",
+        "[2026-10-20 04:41:44] Download skipped: /steam_client_win64 version 1791918634, installed version 1791918634, existing pending version 0",
+        "[2026-10-20 04:41:44] Nothing to do",
+    ]
+
+    // A real start that updated (Mac Steam, whose bootstrapper logs the same
+    // lines), shortened.
+    static let bootstrapUpdate = [
+        "[2026-01-14 16:25:20] Startup - updater built May 19 2025 12:53:30",
+        "[2026-01-14 16:25:21] Verifying installation...",
+        "[2026-01-14 16:25:21] Verification complete",
+        "[2026-01-14 16:25:21] Downloading update...",
+        "[2026-01-14 16:25:21] Checking for available updates...",
+        "[2026-01-14 16:25:21] Package file bins_osx.zip.vz.b33a3e002c71252795cd525b82020aa6deadb89b_19166391 missing or incorrect size",
+        "[2026-01-14 16:25:22] Downloading update (0 of 255,438 KB)...",
+        "[2026-01-14 16:25:36] Downloading update (216,899 of 255,438 KB)...",
+        "[2026-01-14 16:25:40] Downloading update (255,438 of 255,438 KB)...",
+        "[2026-01-14 16:25:40] Download complete.",
+        "[2026-01-14 16:25:41] Extracting package...",
+        "[2026-01-14 16:25:49] Installing update...",
+        "[2026-01-14 16:25:53] Update complete, launching Steam...",
+        "[2026-01-14 16:25:54] Startup - updater built Sep 25 2025 08:53:01",
+        "[2026-01-14 16:25:55] Verifying installation...",
+        "[2026-01-14 16:25:55] Verification complete",
+    ]
+
+    @Test("Windows Steam's update at start, as a wrapp's Steam logged it")
+    func bootstrapWindowsUpdate() {
+        // A new client was out: the check at start found it, downloaded it,
+        // installed it and started the new version, which checked its files.
+        let lines = [
+            "[2026-10-22 20:51:56] Startup - updater built Oct 13 2026 11:45:33",
+            "[2026-10-22 20:51:56] Checking for update on startup",
+            "[2026-10-22 20:51:56] Checking for available updates...",
+            "[2026-10-22 20:51:57] Downloaded new manifest: /steam_client_win64 version 1792618285, installed version 1791918634, existing pending version 0",
+            "[2026-10-22 20:51:57] Package file bins_cef_win64.zip.vz.dc48e299b04da4c19389e3de0b37054ab31294e3_105999778 missing or incorrect size",
+            "[2026-10-22 20:51:57] Downloading update (1,024 of 103,515 KB)...",
+            "[2026-10-22 20:52:00] Downloading update (103,515 of 103,515 KB)...",
+            "[2026-10-22 20:52:01] Download complete.",
+            "[2026-10-22 20:52:01] Found pending update",
+            "[2026-10-22 20:52:01] Installing update...",
+            "[2026-10-22 20:52:01] Extracting package...",
+            "[2026-10-22 20:52:07] Installing update...",
+            "[2026-10-22 20:52:07] Committing NTFS transaction (0 non-transactional backup files)",
+            "[2026-10-22 20:52:07] Update complete, launching Steam...",
+            "[2026-10-22 20:52:07] Shutdown",
+            "[2026-10-22 20:52:08] Startup - updater built Oct 21 2026 14:10:53",
+            "[2026-10-22 20:52:08] Verifying installation...",
+            "[2026-10-22 20:52:08] Verification complete",
+        ]
+        func phase(after count: Int) -> SteamLogs.BootstrapPhase {
+            SteamLogs.bootstrapPhase(log: lines.prefix(count).joined(separator: "\r\n"))
+        }
+        #expect(phase(after: 5) == .starting)
+        #expect(phase(after: 6) == .downloading(doneKB: 1_024, totalKB: 103_515))
+        #expect(phase(after: 8) == .downloading(doneKB: 103_515, totalKB: 103_515))
+        #expect(phase(after: 10) == .installing)
+        #expect(phase(after: 11) == .extracting)
+        #expect(phase(after: 12) == .installing)
+        #expect(phase(after: 14) == .restarting)
+        #expect(phase(after: 16) == .restarting)
+        #expect(phase(after: lines.count) == .verified)
+        #expect((6...16).allSatisfy { phase(after: $0).isUpdating })
+    }
+
+    @Test("A start with nothing to update checks the files and hands over")
+    func bootstrapWithoutUpdate() {
+        func phase(after count: Int) -> SteamLogs.BootstrapPhase {
+            SteamLogs.bootstrapPhase(log: Self.bootstrapNoUpdate.prefix(count).joined(separator: "\r\n"))
+        }
+        #expect(phase(after: 0) == .starting)
+        #expect(phase(after: 4) == .starting)
+        #expect(phase(after: 5) == .verifying)
+        #expect(phase(after: 7) == .verified)
+        // The background check comes after the client has started: not this start's update.
+        #expect(phase(after: Self.bootstrapNoUpdate.count) == .verified)
+        #expect(!phase(after: Self.bootstrapNoUpdate.count).isUpdating)
+    }
+
+    @Test("An update's download, extraction and install are followed, with the download's progress")
+    func bootstrapUpdate() {
+        let lines = Self.bootstrapUpdate
+        func phase(after count: Int) -> SteamLogs.BootstrapPhase {
+            SteamLogs.bootstrapPhase(log: lines.prefix(count).joined(separator: "\n"))
+        }
+        #expect(phase(after: 3) == .verified)
+        #expect(phase(after: 4) == .downloading(doneKB: nil, totalKB: nil))
+        // Its checks along the way don't lose the download.
+        #expect(phase(after: 6) == .downloading(doneKB: nil, totalKB: nil))
+        #expect(phase(after: 7) == .downloading(doneKB: 0, totalKB: 255_438))
+        #expect(phase(after: 8) == .downloading(doneKB: 216_899, totalKB: 255_438))
+        #expect(phase(after: 10) == .downloading(doneKB: 255_438, totalKB: 255_438))
+        #expect(phase(after: 11) == .extracting)
+        #expect(phase(after: 12) == .installing)
+        #expect(phase(after: 13) == .restarting)
+        // The restarted bootstrapper is still part of the update until it hands over.
+        #expect(phase(after: 14) == .restarting)
+        #expect(phase(after: 15) == .verifying)
+        #expect(phase(after: lines.count) == .verified)
+        #expect(phase(after: 8).isUpdating)
+        #expect(phase(after: 13).isUpdating)
     }
 }
 

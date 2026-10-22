@@ -31,7 +31,9 @@ nonisolated final class SystemLoadMonitor: @unchecked Sendable {
     /// Once the game is running.
     static let steadyInterval: TimeInterval = 60
 
-    private let queue = DispatchQueue(label: "au.gare.callum.second-chance.Shared.SystemLoadMonitor", qos: .utility)
+    /// User-initiated: at a lower QoS the very load it watches for delayed
+    /// its readings, and the loading window heard late that the Mac is busy.
+    private let queue = DispatchQueue(label: "au.gare.callum.second-chance.Shared.SystemLoadMonitor", qos: .userInitiated)
     private let reminderInterval: TimeInterval
     private var interval: TimeInterval
     private var observer: (@Sendable (SystemLoadReading?) -> Void)?

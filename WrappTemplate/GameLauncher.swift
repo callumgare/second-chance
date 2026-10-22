@@ -336,7 +336,12 @@ class GameLauncher {
 
     // MARK: - Game Launching
 
-    func launchGame(infoWindow: InfoWindowController? = nil, debugMode: Bool = false) -> Int32 {
+    /// Launch the game and wait for it to end. Wine, and Steam for a game
+    /// that needs it, get going first; `beforeTheGame` then holds the game
+    /// itself back, until the player has read the save warning, so that what
+    /// can start behind it does.
+    func launchGame(infoWindow: InfoWindowController? = nil, debugMode: Bool = false,
+                    beforeTheGame: () -> Void = {}) -> Int32 {
         launchedAt = Date()
         gameStarted = false
         LogContext.enterStage("Starting the game")
@@ -356,12 +361,14 @@ class GameLauncher {
             do {
                 let helperReport = helperReport
                 let quitCheck = quitCheck
+                let activity = infoWindow?.activity
                 let status = steamStatusHandler(infoWindow)
                 let made = try takeSteam {
                     try WrappSteam(config: config, status: status,
                                    onOutputLine: {
                                        helperReport?.observe(line: $0)
                                        quitCheck?.observe(line: $0)
+                                       activity?.noteOutput()
                                    })
                 }
                 guard let started = made else {
@@ -377,10 +384,18 @@ class GameLauncher {
                 reportSteamFailure(error)
                 return -1
             }
-            LogContext.enterStage("Starting the game")
-            // The game's own start is timed from here, not from Steam's.
-            launchedAt = Date()
+        } else if config.gameEngine.hasPrefix("wine") {
+            prepareDesktop(WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix))
         }
+        beforeTheGame()
+        if isQuitting {
+            logger.notice("[Game Launch] Quit before the game started")
+            return -1
+        }
+        LogContext.enterStage("Starting the game")
+        // The game's own start is timed from here, not from Steam's or the
+        // time the player took over the warning.
+        launchedAt = Date()
         // Launch the game process (engine-specific)
         let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
         // Steam starts the game itself, so there's no launcher process of
@@ -389,13 +404,13 @@ class GameLauncher {
 
         switch config.gameEngine {
         case "wine":
-            launchResult = launchWineProcess()
+            launchResult = launchWineProcess(activity: infoWindow?.activity)
         case "wine-steam":
             launchResult = launchViaSteam()
         case _ where config.gameEngine.hasPrefix("wine-"):
-            launchResult = launchWineProcess()
+            launchResult = launchWineProcess(activity: infoWindow?.activity)
         case "scummvm":
-            launchResult = launchScummVMProcess()
+            launchResult = launchScummVMProcess(activity: infoWindow?.activity)
         default:
             logger.critical("ERROR: Unknown game engine: \(self.config.gameEngine)")
             return -1
@@ -413,8 +428,9 @@ class GameLauncher {
         if let gameExeName = launchResult.gameExeName {
             logger.notice("[Game Launch] Waiting for game executable to start...")
             let whileWaiting = launchedBySteam ? steamLaunchWatcher(infoWindow) : nil
+            let abandonIf = launchedBySteam ? Self.steamGone() : nil
             if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process,
-                                                                 whileWaiting: whileWaiting) {
+                                                                 abandonIf: abandonIf, whileWaiting: whileWaiting) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
                 gameStarted = true
                 if launchedBySteam { gamePid = detectedPid }
@@ -441,18 +457,17 @@ class GameLauncher {
             }
         } else {
             gameStarted = true
-            // ScummVM - starts immediately
+            // ScummVM is the game's own process, so there's nothing to find:
+            // wait for its window, as for a Wine game's.
             _ = gameMonitor.waitForGameToStart(gameExeName: "scummvm", gamePid: gamePid)
+            logger.notice("[Game Launch] Waiting for ScummVM's window...")
+            if gameMonitor.activateGameWindow(gamePid: gamePid, infoWindow: infoWindow) {
+                helperReport?.gameWindowAppeared()
+            }
         }
 
         // Hide wrapper app from dock now that game has started
         gameMonitor.hideWrapperFromDock()
-
-        // Wait for ScummVM to fully initialize
-        if config.gameEngine == "scummvm" {
-            logger.notice("[Game Launch] Waiting 2 seconds for ScummVM to initialize...")
-            Thread.sleep(forTimeInterval: 2.0)
-        }
 
         // Hide info window now that game has started
         infoWindow?.notifyGameLoaded()
@@ -491,7 +506,8 @@ class GameLauncher {
 
     // MARK: - Wine Game Launching
 
-    private func launchWineProcess() -> (process: Process?, gamePid: Int32, gameExeName: String?) {
+    /// `activity` hears of each line Wine prints.
+    private func launchWineProcess(activity: LaunchActivityMonitor?) -> (process: Process?, gamePid: Int32, gameExeName: String?) {
         // Get game launch info
         let launchInfo = getGameLaunchInfo(config)
 
@@ -511,8 +527,6 @@ class GameLauncher {
             "export \(key)=\"\(value.replacingOccurrences(of: "\"", with: "\\\""))\""
         }
         logger.debug("Wine environment, for running Wine by hand:\n\(exports.joined(separator: "\n"))")
-
-        prepareDesktop(wine)
 
         // Print full command with proper quoting
         let fullCommand = launchInfo.formatLaunchCommand()
@@ -557,6 +571,7 @@ class GameLauncher {
             diagnostics.observe(line: line)
             helperReport?.observe(line: line)
             quitCheck?.observe(line: line)
+            activity?.noteOutput()
         }
         ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, onLine: observe)
         ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, onLine: observe)
@@ -588,6 +603,19 @@ class GameLauncher {
         diagnostics.wineLaunched()
         self.diagnostics = diagnostics
         return (nil, 0, launchInfo.gameExeName)
+    }
+
+    /// While Steam starts the game there is no launcher of ours to watch,
+    /// so the wait for the game ends when Steam has gone: `steam.exe` missing
+    /// from three checks in a row (a second and a half), since it restarts
+    /// itself after an update.
+    private static func steamGone() -> (Set<WineProcessInfo>) -> String? {
+        var missing = 0
+        return { processes in
+            let running = processes.contains { $0.basename.lowercased() == "steam.exe" }
+            missing = running ? 0 : missing + 1
+            return missing >= 3 ? "Steam has exited without starting the game" : nil
+        }
     }
 
     /// `make` once Steam is free. While another game holds it, the player
@@ -624,8 +652,8 @@ class GameLauncher {
             let name = holder.name.map(SteamLockHolder.quoted)
             (title, detail) = ("\(name ?? "Another game") is using Steam",
                                "Only one game can use Steam at a time. Quit \(name ?? "it"), then open \(SteamLockHolder.quoted(config.gameTitle)) again.")
-        case WrappSteam.Failure.signInTimedOut:
-            (title, detail) = ("Steam didn't sign in", "\(config.gameTitle) needs Steam signed in to start. Open it again to have another go.")
+        case WrappSteam.Failure.exited:
+            (title, detail) = ("Steam closed before it signed in", "\(config.gameTitle) needs Steam signed in to start. Open it again to have another go.")
         default:
             (title, detail) = ("Couldn't start Steam", error.localizedDescription)
         }
@@ -640,31 +668,53 @@ class GameLauncher {
     /// starts the game is Steam (`wine-steam`) or the wrapp, with Steam
     /// running (`wine-steam-silent`).
     /// While Steam starts the game: say when its launch is waiting on the
-    /// player. The one that lasts is Steam asking whether to stop the game
-    /// the account is playing on another computer — the game only starts once
-    /// the player answers — so the loading window says so and Steam's window
-    /// comes forward. Reads Steam's log every couple of seconds.
+    /// player — the game only starts once they answer — so the loading
+    /// window says so and Steam's window comes forward. One such wait is
+    /// Steam asking whether to stop the game the account is playing on
+    /// another computer; any other wait that lasts, apart from the routine
+    /// ones Steam passes through by itself, is taken as a question too.
+    /// Reads Steam's log every couple of seconds.
     private func steamLaunchWatcher(_ infoWindow: InfoWindowController?) -> (() -> Void)? {
         guard let steam, let appID = config.steamGameId.flatMap({ Int($0) }) else { return nil }
         let title = config.gameTitle
         var lastCheck = Date.distantPast
-        var shown: String?
+        var seen: (prompt: String, since: Date)?
+        var asking: String?
+        var step: String?
         return { [logger] in
             guard Date().timeIntervalSince(lastCheck) >= 2 else { return }
             lastCheck = Date()
+            if let now = steam.client.launchStep(appID: appID), now != step {
+                logger.debug("[Steam] Launch step: \(now)")
+                step = now
+                infoWindow?.noteProgress(.steamLaunchStep)
+            }
             let prompt = steam.client.launchPrompt(appID: appID)
-            guard prompt != shown else { return }
-            let wasElsewhere = shown == SteamLogs.playingElsewherePrompt
-            shown = prompt
-            if prompt == SteamLogs.playingElsewherePrompt {
+            if let prompt, prompt != seen?.prompt {
+                logger.debug("[Steam] Launch waiting on \(prompt)")
+                seen = (prompt, Date())
+            } else if prompt == nil {
+                seen = nil
+            }
+            let question = seen.flatMap { seen in
+                seen.prompt == SteamLogs.playingElsewherePrompt
+                    || (!SteamLogs.routineLaunchPrompts.contains(seen.prompt) && Date().timeIntervalSince(seen.since) >= 3)
+                    ? seen.prompt : nil
+            }
+            guard question != asking else { return }
+            let answered = asking != nil
+            asking = question
+            if question == SteamLogs.playingElsewherePrompt {
                 logger.error("[Steam] \(SteamLogs.playingElsewhereMarker)")
                 infoWindow?.setStage(.steamPlayingElsewhere)
                 Task { await SteamSignInWindow.bringForward(window: "question about the other computer") }
-            } else if wasElsewhere {
+            } else if let question {
+                logger.notice("[Steam] Steam's launch is waiting on the player (\(question)); bringing its window forward")
+                infoWindow?.setStage(.steamWaitingForPlayer)
+                Task { await SteamSignInWindow.bringForward(window: "question (\(question))") }
+            } else if answered {
                 logger.notice("[Steam] Answered: Steam is starting the game")
                 infoWindow?.setStage(.steamStartingGame(title: title))
-            } else if let prompt {
-                logger.debug("[Steam] Launch waiting on \(prompt)")
             }
         }
     }
@@ -675,6 +725,8 @@ class GameLauncher {
         return { status in
             switch status {
             case .starting: infoWindow?.setStage(.startingSteam)
+            case .updating(let phase): infoWindow?.setStage(.updatingSteam(phase))
+            case .connecting: infoWindow?.setStage(.connectingToSteam)
             case .waitingForSignIn: infoWindow?.setStage(.signingInToSteam)
             case .signedIn: infoWindow?.setStage(launchedBySteam ? .steamStartingGame(title: title) : .startingGame(title: title))
             }
@@ -684,15 +736,17 @@ class GameLauncher {
     // MARK: - Wine Desktop
 
     /// Start Wine's desktop and wait until it has registered the display
-    /// devices, before the game runs. There is no deadline here that matters —
-    /// the info window stays up meanwhile. See `WineDesktop`.
+    /// devices, before the game runs — while the save warning shows, when it
+    /// does. There is no deadline: the loading window says meanwhile whether
+    /// the wait looks stuck. See `WineDesktop`.
     private func prepareDesktop(_ wine: WineEnvironment) {
         // Debug switch, for comparing against Wine's own on-demand start.
         guard ProcessInfo.processInfo.environment["SECOND_CHANCE_PRESTART_DESKTOP"] != "0" else {
             logger.notice("[Desktop] Not pre-starting the desktop (SECOND_CHANCE_PRESTART_DESKTOP=0)")
             return
         }
-        desktop = WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
+        LogContext.enterStage("Starting Wine")
+        desktop = WineDesktop.start(wine, timeout: .infinity, logger: logger, outputLogger: wineOutputLogger)
     }
 
     /// Let the pre-started desktop shut down once the game has exited, or it
@@ -725,7 +779,7 @@ class GameLauncher {
         return ["DYLD_INSERT_LIBRARIES": dylib, "PUPPET_CONTROL_EXE": "scummvm"]
     }
 
-    private func launchScummVMProcess() -> (process: Process?, gamePid: Int32, gameExeName: String?) {
+    private func launchScummVMProcess(activity: LaunchActivityMonitor?) -> (process: Process?, gamePid: Int32, gameExeName: String?) {
         // Get game launch info
         let launchInfo = getGameLaunchInfo(config)
 
@@ -746,10 +800,13 @@ class GameLauncher {
         task.executableURL = URL(fileURLWithPath: launchInfo.executable)
         task.arguments = launchInfo.arguments
         let puppetVariables = scummvmPuppetVariables
+        let helperReport = helperReport
         if !puppetVariables.isEmpty {
             task.environment = ProcessInfo.processInfo.environment.merging(puppetVariables) { $1 }
-            let helperReport = helperReport
-            task.onLine = { helperReport?.observe(line: $0) }
+        }
+        task.onLine = { line in
+            helperReport?.observe(line: line)
+            activity?.noteOutput()
         }
 
         do {
