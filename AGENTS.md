@@ -360,8 +360,11 @@ direct assignment.
   for the game waits for ever on an unattended Mac. The wrapp skips the dialog
   when `~/Library/Application Support/<bundle id>/dont-show-save-warning`
   exists (`InfoWindowController`). Create it for the experiment and remove it
-  afterwards: WrappPuppeteer expects to dismiss that dialog, and fails with
-  `Failed to dismiss info window` when it never appears.
+  afterwards, as it is the player's own setting. `SECOND_CHANCE_DATA_DIR`
+  moves that folder, with the game's saves and the settings some games keep
+  beside them, somewhere else (`Configuration.swift`); WrappPuppeteer sets
+  it to an empty folder for each launch, so a test always meets the dialog
+  and never reads or changes the player's saves and settings.
 - **Disk path resolution**: installers land in
   `Contents/SharedSupport/prefix/drive_c/nancy-drew-installer/{disk-1,disk-combined}`,
   with multi-disk games merged into `disk-combined`. This lives in

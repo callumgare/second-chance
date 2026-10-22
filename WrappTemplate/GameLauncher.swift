@@ -79,8 +79,7 @@ func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
         let scummvmBinary = config.appPath.appendingPathComponent("Contents/MacOS/scummvm").path
         let scummvmIni = resourcesPath.appendingPathComponent("scummvm.ini").path
         let savePath = config.appSupportPath.path
-        let configPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences/\(config.bundleId).ini").path
+        let configPath = config.scummvmConfigPath.path
         
         let arguments = [
             "-f",                           // Fullscreen

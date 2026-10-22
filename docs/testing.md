@@ -223,6 +223,16 @@ how the helper gets into each engine and what the sockets accept. If
 WrappPuppeteer happens to have Screen Recording, a failed run also saves a
 full-screen screenshot; nothing else changes.
 
+**It doesn't touch the player's saves and settings.** A wrapp keeps those in
+`~/Library/Application Support/<bundle id>/` (and ScummVM's in
+`~/Library/Preferences/<bundle id>.ini`), which a test's wrapp, with the same
+bundle id, would share with the player's. WrappPuppeteer sets
+`SECOND_CHANCE_DATA_DIR` to an empty `data` folder in its private directory,
+and the wrapp keeps them there instead, so each launch starts as on a fresh
+Mac: the save warning shows, and no setting the player chose changes the
+test. Before, Warnings at Waverly Academy failed every run on one Mac whose
+`Waverly.INI` there said to play in a window.
+
 Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
 
 | Code | Meaning |

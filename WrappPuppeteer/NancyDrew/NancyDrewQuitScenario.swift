@@ -76,8 +76,13 @@ struct NancyDrewQuitScenario {
         let game = WindowControl(socket: ControlSocket(path: directory + "/game.sock"))
         let context = Context(directory: directory, wrapp: wrappSocket, game: game)
 
+        // Saves and settings go in here too, gone with it, not the player's
+        // (WrappTemplate/Configuration.swift): one the player set to play
+        // in a window would fail the fullscreen check, and a test mustn't
+        // change theirs.
+        let environment = ["SECOND_CHANCE_PUPPET_DIR": directory, "SECOND_CHANCE_DATA_DIR": directory + "/data"]
         guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : [],
-                                              environment: ["SECOND_CHANCE_PUPPET_DIR": directory]) else {
+                                              environment: environment) else {
             return .failed("Failed to launch game")
         }
         ProcessCleanup.track(appPid: app.processIdentifier, helperPid: nil)

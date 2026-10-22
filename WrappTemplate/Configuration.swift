@@ -24,7 +24,11 @@ struct GameConfig {
     let gameTitle: String
     let gameSlug: String
     let bundleId: String
+    /// Where the player's saves, the game's settings that live beside them,
+    /// and the wrapp's own preferences are kept.
     let appSupportPath: URL
+    /// ScummVM's settings for this game.
+    let scummvmConfigPath: URL
 
     /// Whether this launch could start the game without Steam instead: only a
     /// DRM-free game the user chose to launch through Steam. Its files are
@@ -40,7 +44,7 @@ struct GameConfig {
             appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
             gameInstallerDir: gameInstallerDir, gameEngine: "wine", steamGameId: nil,
             steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
-            bundleId: bundleId, appSupportPath: appSupportPath
+            bundleId: bundleId, appSupportPath: appSupportPath, scummvmConfigPath: scummvmConfigPath
         )
     }
 }
@@ -223,12 +227,26 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     
     let winePrefix = customWinePrefix ?? appPath.appendingPathComponent("Contents/SharedSupport/prefix")
     
-    // Setup app support directory
-    let appSupportPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent(bundleId)
-    
+    // Setup app support directory. SECOND_CHANCE_DATA_DIR stands in for it,
+    // and for ScummVM's settings: WrappPuppeteer gives each test launch an
+    // empty one, so a test neither reads nor changes the player's saves and
+    // settings -- a game set to play in a window there fails the fullscreen
+    // check.
+    let appSupportPath: URL
+    let scummvmConfigPath: URL
+    if let dataDir = ProcessInfo.processInfo.environment["SECOND_CHANCE_DATA_DIR"], !dataDir.isEmpty {
+        appSupportPath = URL(fileURLWithPath: dataDir, isDirectory: true)
+        scummvmConfigPath = appSupportPath.appendingPathComponent("scummvm.ini")
+        configLogger.notice("Keeping saves and settings in \(dataDir) (SECOND_CHANCE_DATA_DIR)")
+    } else {
+        appSupportPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(bundleId)
+        scummvmConfigPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/\(bundleId).ini")
+    }
+
     try? FileManager.default.createDirectory(at: appSupportPath, withIntermediateDirectories: true)
-    
+
     return GameConfig(
         appPath: appPath,
         winePrefix: winePrefix,
@@ -240,6 +258,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         gameTitle: gameTitle,
         gameSlug: gameSlug,
         bundleId: bundleId,
-        appSupportPath: appSupportPath
+        appSupportPath: appSupportPath,
+        scummvmConfigPath: scummvmConfigPath
     )
 }
