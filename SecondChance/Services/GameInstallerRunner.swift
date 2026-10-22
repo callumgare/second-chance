@@ -133,6 +133,7 @@ class GameInstallerRunner {
                         attemptNumber: attempt
                     )
                 }
+                await bus.publishWrappBuild(.instructions(nil))
 
                 // Get list of exe files after installation
                 let exesAfter = findExecutableFiles(in: driveCPath)
@@ -175,6 +176,7 @@ class GameInstallerRunner {
                     }
                 }
             } catch {
+                await bus.publishWrappBuild(.instructions(nil))
                 installAttempt += 1
                 if installAttempt >= maxAttempts {
                     if strictInstall {
@@ -1011,6 +1013,15 @@ class GameInstallerRunner {
             try setupAutoItForInstall(in: wrappPath)
         }
 
+        // An installer nothing drives shows its own wizard, for the person
+        // to click through: say so, and what to choose.
+        let interactive = command.underlyingCommandDescription == nil && runsInteractively(
+            installerType: installerType, attemptNumber: attemptNumber, setupIssExists: setupIssExists)
+        if interactive {
+            logger.notice("The installer runs interactively: showing the install instructions")
+            await bus.publishWrappBuild(.instructions(Self.interactiveInstallInstructions(for: gameInfo)))
+        }
+
         // Execute the installer command. The WineManager methods return the
         // Wine exit code (already logged) rather than throwing for non-zero
         // exits. An unattended attempt gets a timeout, since nobody will
@@ -1160,6 +1171,23 @@ class GameInstallerRunner {
         }
 
         return .unknown
+    }
+
+    /// Whether the installer shows its own wizard rather than installing
+    /// silently: what `getInstallerArguments` chooses, from the person's side.
+    func runsInteractively(installerType: InstallerType, attemptNumber: Int, setupIssExists: Bool) -> Bool {
+        switch installerType {
+        case .msi, .innoSetup: return attemptNumber > 0
+        case .installShield: return attemptNumber > 0 || !setupIssExists
+        case .unknown: return true
+        }
+    }
+
+    /// The progress screen's instructions while an installer's own window is
+    /// up for the person to click through.
+    static func interactiveInstallInstructions(for gameInfo: GameInfo) -> String {
+        let tips = gameInfo.installInstructions ?? GameInfo.defaultInstallInstructions
+        return "The game's installer has opened in its own window. Click through it to install the game. \(tips)"
     }
 
     /// Get installer arguments based on type and attempt number

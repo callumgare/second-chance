@@ -41,15 +41,14 @@ other builders are the same shape with less in the middle.
 | 1 | — | `.started(source: .disk)` |
 | 2 | `input.getDisk1Path()`; mount it if it's an ISO | `.isoMounted` |
 | 3 | `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo` | `.progress(.detectingGame)`, `.gameDetected` |
-| 4 | Disk 2, only when `gameInfo.diskCount > 1` | `.isoMounted` |
-| 5 | — | `.disksResolved` |
-| 6 | `helper.createTemporaryWrappPath()`, then `createBaseWrapp` copies `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
-| 7 | `copyGameDisks` lays out `disk-1` / `disk-2` / `disk-combined`, stripping extended attributes and making the copies writable (a CD's directories are read-only, which left copies nothing could delete) | `.progress(.copyingInstaller)` |
-| 8 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
-| 9 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
-| 10 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` / game INI | `.progress(.configuringWrapp)`, `.wrappConfigured` |
-| 11 | `helper.finalize` — sign, resolve output dir, move | `.signed`, `.progress(.savingApp)`, `.completed` |
-| 12 | Unmount ISOs; launch if requested | — |
+| 4 | `helper.createTemporaryWrappPath()`, then `createBaseWrapp` copies `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
+| 5 | `copyGameDisks` copies `disk-1`, stripping extended attributes and making the copy writable (a CD's directories are read-only, which left copies nothing could delete) | `.progress(.copyingInstaller)` |
+| 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
+| 7 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
+| 8 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
+| 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` / game INI | `.progress(.configuringWrapp)`, `.wrappConfigured` |
+| 10 | `helper.finalize` — sign, resolve output dir, move | `.signed`, `.progress(.savingApp)`, `.completed` |
+| 11 | Unmount ISOs; launch if requested | — |
 
 **Step 3 happens exactly once.** `GameInfo` is threaded through every later
 step; nothing downstream re-detects. (An earlier design detected twice.)
@@ -101,8 +100,8 @@ user is prompted.
 | Method | Env var | Fallback |
 | --- | --- | --- |
 | `getDisk1Path()` | `DISK_1_PATH` | NSOpenPanel (disk/ISO) |
-| `getDisk2Path(gameInfo:)` | `DISK_2_PATH` | NSOpenPanel (disk/ISO) |
-| `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe or .dmg) |
+| `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: an alert to swap it for disc 2, with Eject Disc 1, taking a disc that then appears; else NSOpenPanel |
+| `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe, .dmg, or the installer .app in an opened .dmg) |
 | `requestVolumeAccess()` | — (skipped when paths came from env) | NSOpenPanel grant-access |
 | `getOutputPath(gameName:)` | `OUTPUT_PATH` | NSOpenPanel save dialog |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
@@ -172,6 +171,22 @@ already; see the historical plan.
 `.progress(WrappBuildState)` carries the same state enum the UI renders, so
 step display and the event stream can't drift apart. The ViewModel hides
 substeps and elapsed time for the first 5 s so fast steps don't flash.
+
+`.instructions(String?)` is for what the person has to *do* for the build to
+go on — sign in to Steam's window, click through an installer that runs
+interactively (with the game's `installInstructions`). The progress screen
+shows it at once, prominently, until the next `.instructions(nil)`.
+
+## Cancelling
+
+The progress screen's **Cancel** asks for confirmation, then cancels the
+build's task (`WrappBuildViewModel.cancelBuild`). The builders need nothing of
+their own for it: a running Wine program ends its Wine session when its task is
+cancelled (`WineEnvironment.runWine`), Steam's waits are `Task.sleep`s, and
+`helper.finalize` checks before signing and saving, so the build throws and
+each builder cleans up as it does after any failure. The ViewModel ignores the
+resulting `.failed` and goes back to the welcome screen once the build has
+returned; a build that had already saved its app finishes normally.
 
 ## Headless runs
 

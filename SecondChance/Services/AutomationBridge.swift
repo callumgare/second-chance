@@ -173,6 +173,9 @@ final class AutomationBridge: @unchecked Sendable {
             d["type"] = "wrappBuild.completed"; d["wrappPath"] = url.path
         case .failed(let error):
             d["type"] = "wrappBuild.failed"; d["error"] = error.localizedDescription
+        case .instructions(let text):
+            d["type"] = "wrappBuild.instructions"
+            if let text { d["text"] = text }
         case .progress(let state):
             d["type"] = "wrappBuild.progress"; d["state"] = "\(state)"
             if let sub = state.substep { d["substep"] = sub }

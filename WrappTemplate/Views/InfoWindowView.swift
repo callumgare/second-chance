@@ -400,7 +400,7 @@ struct InfoWindowView: View {
         Group {
             message(explanation == nil ? "The game crashed" : "The game quit unexpectedly")
 
-            informative(explanation ?? "It quit with exit code \(exitCode) while it was running.")
+            informative(explanation ?? "It stopped suddenly while it was running (error code \(exitCode)).")
 
             FailureReportCallout(model: viewModel.failureReport)
 

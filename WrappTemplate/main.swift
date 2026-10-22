@@ -443,7 +443,7 @@ func main() {
 
     // Get app path for prefix determination
     guard let executablePath = ProcessInfo.processInfo.arguments.first else {
-        showAlert(message: "Configuration Error", informativeText: "Could not determine executable path.")
+        showAlert(message: "This Game's App Is Damaged", informativeText: "Something in it is missing. Make the game's app again with Second Chance.")
         FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "no-executable-path"))
         exit(1)
     }
@@ -454,7 +454,7 @@ func main() {
     
     // Get bundle ID for prefix path
     guard let bundleId = readPlist(at: infoPlistPath, key: "CFBundleIdentifier") else {
-        showAlert(message: "Configuration Error", informativeText: "Could not read bundle identifier.")
+        showAlert(message: "This Game's App Is Damaged", informativeText: "Something in it is missing. Make the game's app again with Second Chance.")
         FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "no-bundle-identifier"))
         exit(1)
     }
@@ -478,7 +478,7 @@ func main() {
     
     // Load configuration
     guard let loadedConfig = loadConfig(customWinePrefix: winePrefix) else {
-        showAlert(message: "Configuration Error", informativeText: "Could not load game configuration. Please check the app bundle.")
+        showAlert(message: "This Game's App Is Damaged", informativeText: "Something in it is missing. Make the game's app again with Second Chance.")
         FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "unreadable-configuration"))
         exit(1)
     }
@@ -529,12 +529,12 @@ func main() {
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
         
         let alert = NSAlert()
-        alert.messageText = "Wine Process Detected"
-        alert.informativeText = "A Wine server process (wineserver) is already running for this game's prefix. This may cause conflicts.\n\nWould you like to quit the Wine server before continuing?"
+        alert.messageText = "The Game Is Still Closing"
+        alert.informativeText = "Part of the game from last time is still running in the background, which can stop it starting properly.\n\nStop it and carry on?"
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Quit Wine Server")
+        alert.addButton(withTitle: "Stop It and Continue")
         alert.addButton(withTitle: "Continue Anyway")
-        alert.addButton(withTitle: "Cancel Launch")
+        alert.addButton(withTitle: "Don't Start the Game")
         
         let response = alert.runModal()
         
@@ -721,7 +721,7 @@ func main() {
             try mountDirectoryIntoWine(config, hostPath: config.appSupportPath, driveLetter: "a")
         } catch {
             mainLogger.critical("ERROR: Failed to mount directory into Wine: \(error)")
-            showAlert(message: "Configuration Error", informativeText: "Failed to mount directory into Wine: \(error.localizedDescription)")
+            showAlert(message: "Couldn't Open Your Saved Games", informativeText: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)")
             FailureReporter.reportAndWait(FailureReport(what: "Mounting the saves folder", error: error,
                                                         game: config.gameSlug, engine: config.gameEngine))
             exit(1)
@@ -787,7 +787,7 @@ func main() {
             }
         } catch {
             mainLogger.critical("ERROR: Failed to create symbolic link for Documents directory: \(error)")
-            showAlert(message: "Configuration Error", informativeText: "Failed to create symbolic link for save directory: \(error.localizedDescription)")
+            showAlert(message: "Couldn't Open Your Saved Games", informativeText: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)")
             FailureReporter.reportAndWait(FailureReport(what: "Linking the saves folder", error: error,
                                                         game: config.gameSlug, engine: config.gameEngine))
             exit(1)

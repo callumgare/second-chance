@@ -300,25 +300,33 @@ nonisolated public struct WineEnvironment: Sendable {
         ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, metadata: metadata,
                                  onLine: onLine, onEOF: { eofs.leave() })
 
-        let timedOut: Bool = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let deadline: DispatchTime = timeout.map { .now() + $0 } ?? .distantFuture
-                if exited.wait(timeout: deadline) == .success {
-                    continuation.resume(returning: false)
-                    return
+        // Cancelling the task (the person cancelling a build) ends the
+        // program's whole Wine session, as a timeout does.
+        let timedOut: Bool = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let deadline: DispatchTime = timeout.map { .now() + $0 } ?? .distantFuture
+                    if exited.wait(timeout: deadline) == .success {
+                        continuation.resume(returning: false)
+                        return
+                    }
+                    wineLogger.error("\(watch.name) did not finish within \(SubprocessWatch.duration(timeout ?? 0)) — stopping its Wine session")
+                    // What was still running, before it is killed: a hung
+                    // installer is often waiting on another Windows process.
+                    wineLogger.warning("Wine processes at the timeout:\n\(Self.wineProcessSnapshot())")
+                    _ = self.stopWineserver()
+                    process.terminate()
+                    if exited.wait(timeout: .now() + 10) != .success {
+                        kill(process.processIdentifier, SIGKILL)
+                        exited.wait()
+                    }
+                    continuation.resume(returning: true)
                 }
-                wineLogger.error("\(watch.name) did not finish within \(SubprocessWatch.duration(timeout ?? 0)) — stopping its Wine session")
-                // What was still running, before it is killed: a hung
-                // installer is often waiting on another Windows process.
-                wineLogger.warning("Wine processes at the timeout:\n\(Self.wineProcessSnapshot())")
-                _ = self.stopWineserver()
-                process.terminate()
-                if exited.wait(timeout: .now() + 10) != .success {
-                    kill(process.processIdentifier, SIGKILL)
-                    exited.wait()
-                }
-                continuation.resume(returning: true)
             }
+        } onCancel: {
+            wineLogger.notice("Cancelled: stopping \(watch.name) and its Wine session")
+            _ = self.stopWineserver()
+            process.terminate()
         }
 
         // Let the last lines through. Wine's background services inherit the
@@ -333,7 +341,8 @@ nonisolated public struct WineEnvironment: Sendable {
         outputPipe.fileHandleForReading.readabilityHandler = nil
         errorPipe.fileHandleForReading.readabilityHandler = nil
 
-        let outcome = watch.finished(process, note: timedOut ? "timed out" : nil)
+        let outcome = watch.finished(process, note: timedOut ? "timed out" : Task.isCancelled ? "cancelled" : nil)
+        try Task.checkCancellation()
         if timedOut {
             throw WineError.timedOut(seconds: timeout ?? 0)
         }

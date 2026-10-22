@@ -155,10 +155,15 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if let preselected, let steam = Self.steamData(preselected) {
                 try client.queueInstall(appID: steam.appID, installDir: steam.installDir)
             }
+            // Without a saved sign-in, Steam's window is about to ask for one.
+            if !sessionStore.hasSession && input.canSignInToSteam {
+                await bus.publishWrappBuild(.instructions(Self.signInInstructions))
+            }
             try await client.start(silent: true)
             run.started()
 
             run.signedIn = try await signIn(client: client, input: input)
+            await bus.publishWrappBuild(.instructions(nil))
 
             // ── Pick the game ──────────────────────────────────────────
             await bus.publishWrappBuild(.progress(.installingGame(substep: "Checking which games your Steam account owns")))
@@ -273,6 +278,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         return (appID, installDir, exe)
     }
 
+    /// What the progress screen says while Steam wants a sign-in.
+    static let signInInstructions = "Steam opens in its own window. Sign in there, or scan its QR code with the Steam app on your phone. You'll stay signed in for your other Nancy Drew games, until you choose Second Chance ▸ Sign Out of Steam."
+
     /// Wait for Steam to sign in, asking the user when it shows its sign-in
     /// window. True once signed in.
     private func signIn(client: SteamClientDriving, input: WrappBuildInput) async throws -> Bool {
@@ -284,8 +292,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         case .needsCredentials(let reason):
             logger.notice("Steam wants a sign-in\(reason.map { " (\($0))" } ?? "")")
             guard input.canSignInToSteam else { throw WrappBuildError.steamSignInRequired }
-            await bus.publishWrappBuild(.progress(.installingGame(
-                substep: "Sign in to Steam in its window — you can scan the QR code with the Steam app")))
+            await bus.publishWrappBuild(.progress(.installingGame(substep: "Waiting for you to sign in to Steam")))
+            await bus.publishWrappBuild(.instructions(Self.signInInstructions))
             await client.bringSignInWindowForward()
             let deadline = Date().addingTimeInterval(Self.signInTimeout)
             while Date() < deadline {

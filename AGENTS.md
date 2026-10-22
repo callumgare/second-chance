@@ -214,6 +214,16 @@ direct assignment.
 - **Error handling**: The codebase has many `try?` that silently swallow errors. For new code, prefer explicit `do/catch` and log failures. Cleanup operations may use `try?` but should log.
 - **No force unwraps (`!`)** in new code — use `guard let` / `compactMap`. Existing force unwraps are flagged for removal.
 - **File paths**: Never hardcode absolute user paths (e.g. `/Users/...`). Use `Bundle.main.url(forResource:)`, `FileManager` search paths, or environment variables.
+- **Text people see is plain and friendly.** Anything shown to the person
+  using the app — window and alert text, open and save panels, progress
+  steps, error messages (`errorDescription`s reach the error screen), the
+  wrapp's windows — is written for someone who isn't into computers. Say what
+  is happening and what they can do, in everyday words: "disc", not "disk";
+  "the game's app", not "wrapp"; no "Wine", "prefix", "cnc-ddraw", "ISO",
+  "executable", "headless" or bare exit codes. Disc images stay a hidden
+  extra that is never offered in text. Internal names are fine in code and
+  in logs, which are for us. Keep a step's progress text short; what the
+  person must *do* goes in an `.instructions` event, shown at once.
 - **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
 
 ## Gotchas

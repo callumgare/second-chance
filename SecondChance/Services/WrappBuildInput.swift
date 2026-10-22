@@ -29,8 +29,8 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | Method                        | Env var override                        | Fallback (no env var)          |
 /// |-------------------------------|-----------------------------------------|--------------------------------|
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
-/// | `getDisk2Path(gameInfo:)`     | `DISK_2_PATH`                           | NSOpenPanel (disk/ISO)         |
-/// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe or .dmg)     |
+/// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | NSAlert to swap discs, else NSOpenPanel |
+/// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
@@ -64,7 +64,7 @@ class WrappBuildInput {
         if let url = try diskPathFromEnv("DISK_1_PATH", label: "Disk 1") {
             return url
         }
-        guard let url = await selectDiskOrISO(message: "Select the first game disk or ISO:") else {
+        guard let url = await selectDisc(message: "Put the first game disc in your Mac's disc drive, then select it here.") else {
             // Cancelling the very first dialog means the user never started —
             // distinct from cancelling a later prompt mid-install.
             throw WrappBuildError.userCancelledBeforeStart
@@ -72,46 +72,110 @@ class WrappBuildInput {
         return url
     }
 
-    /// Second game disk, only prompted for multi-disk games.
+    /// Second game disk, only asked for multi-disk games, and only once disk 1
+    /// has been copied. When disk 1 is a disc in the drive, the person is
+    /// asked to swap it for disc 2 (with an Eject button), and a disc that
+    /// then appears is used without asking where it is.
     @MainActor
-    func getDisk2Path(gameInfo: GameInfo) async throws -> URL? {
+    func getDisk2Path(gameInfo: GameInfo, disk1: URL) async throws -> URL? {
         guard gameInfo.diskCount > 1 else { return nil }
         if let url = try diskPathFromEnv("DISK_2_PATH", label: "Disk 2") {
             return url
         }
-        guard let url = await selectDiskOrISO(message: "Select the second game disk or ISO:") else {
-            throw WrappBuildError.userCancelled
+        let pickerMessage = "Select disc 2 of \(gameInfo.title)."
+        guard let disc1Volume = Self.ejectableVolume(containing: disk1) else {
+            // A folder or a disc image: nothing to swap, just ask where disk 2 is.
+            guard let url = await selectDisc(message: pickerMessage) else { throw WrappBuildError.userCancelled }
+            return url
         }
-        return url
+
+        let volumesBefore = Self.ejectableVolumes()
+        var ejectFailed = false
+        while true {
+            let alert = NSAlert()
+            alert.messageText = "Now put in disc 2"
+            alert.informativeText = ejectFailed
+                ? "Disc 1 couldn't be ejected. Eject it from the Finder, put in disc 2, then click Continue."
+                : "\(gameInfo.title) comes on two discs, and disc 1 has been copied. Take it out, put in disc 2, then click Continue."
+            alert.addButton(withTitle: "Continue")
+            alert.addButton(withTitle: "Eject Disc 1")
+            alert.addButton(withTitle: "Cancel")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                // A disc that wasn't there before, other than disc 1, is disc 2.
+                let new = Self.ejectableVolumes().filter { $0 != disc1Volume && !volumesBefore.contains($0) }
+                if new.count == 1 {
+                    logger.notice("Disc 2 found in the drive: \(new[0].path)")
+                    return new[0]
+                }
+                guard let url = await selectDisc(message: pickerMessage) else { throw WrappBuildError.userCancelled }
+                return url
+            case .alertSecondButtonReturn:
+                do {
+                    try NSWorkspace.shared.unmountAndEjectDevice(at: disc1Volume)
+                    ejectFailed = false
+                } catch {
+                    logger.warning("Couldn't eject disc 1 (\(disc1Volume.path)): \(error.localizedDescription)")
+                    ejectFailed = true
+                }
+            default:
+                throw WrappBuildError.userCancelled
+            }
+        }
+    }
+
+    /// The root of the ejectable volume (a CD) that `url` is on, or nil when
+    /// it isn't on one: a folder on the Mac, or a mounted disc image.
+    static func ejectableVolume(containing url: URL) -> URL? {
+        guard let values = try? url.resourceValues(forKeys: [.volumeURLKey, .volumeIsEjectableKey, .volumeIsRootFileSystemKey]),
+              values.volumeIsEjectable == true, values.volumeIsRootFileSystem != true,
+              let volume = values.volume,
+              // A disc image is ejectable too, but isn't a disc to swap.
+              !ISOMounter.isDiskImageVolume(volume) else { return nil }
+        return volume.standardizedFileURL
+    }
+
+    /// Every mounted ejectable volume that isn't a disc image.
+    static func ejectableVolumes() -> [URL] {
+        let keys: [URLResourceKey] = [.volumeIsEjectableKey]
+        let volumes = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
+        return volumes.filter {
+            (try? $0.resourceValues(forKeys: Set(keys)))?.volumeIsEjectable == true && !ISOMounter.isDiskImageVolume($0)
+        }.map(\.standardizedFileURL)
     }
 
     /// The extensions a Her Interactive download comes as: a Windows
-    /// installer or a Mac disk image.
-    static let herDownloadExtensions = ["exe", "dmg"]
+    /// installer, a Mac disk image, or the installer app inside that image
+    /// once it's opened.
+    static let herDownloadExtensions = ["exe", "dmg", "app"]
 
-    /// A game downloaded from Her Interactive: its Windows installer (.exe)
-    /// or its Mac disk image (.dmg).
+    /// A game downloaded from Her Interactive: its Windows installer (.exe),
+    /// its Mac disk image (.dmg), or the installer app in the opened image.
     @MainActor
     func getHerInstallerPath() async throws -> URL {
         if let path = environment["HER_INSTALLER_PATH"] {
             let url = URL(fileURLWithPath: path)
             var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-                  !isDirectory.boolValue,
-                  Self.herDownloadExtensions.contains(url.pathExtension.lowercased()) else {
-                throw WrappBuildError.invalidPath("Her download path must be an existing .exe or .dmg file: \(path)")
+            let fileExists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            let fileExtension = url.pathExtension.lowercased()
+            // An app is a folder; the others are files.
+            guard fileExists, Self.herDownloadExtensions.contains(fileExtension),
+                  isDirectory.boolValue == (fileExtension == "app") else {
+                throw WrappBuildError.invalidPath("Her download path must be an existing .exe, .dmg or .app: \(path)")
             }
             return url
         }
 
         let panel = NSOpenPanel()
-        panel.message = "Select the game you downloaded from Her Interactive:"
+        panel.message = "Select the game you downloaded from Her Interactive: the .exe file for Windows, or the .dmg file for Mac."
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = Self.herDownloadExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
 
         guard let url = await runOpenPanel(panel) else {
-            throw WrappBuildError.userCancelled
+            // The first question asked: back to the welcome screen.
+            throw WrappBuildError.userCancelledBeforeStart
         }
         return url
     }
@@ -203,8 +267,8 @@ class WrappBuildInput {
         if anyDiskPathFromEnv { return mountPoint }
 
         let accessPanel = NSOpenPanel()
-        accessPanel.message = "Please grant access to the mounted volume to continue"
-        accessPanel.prompt = "Grant Access"
+        accessPanel.message = "Second Chance needs your permission to read the game disc. Click Allow to continue."
+        accessPanel.prompt = "Allow"
         accessPanel.canChooseFiles = false
         accessPanel.canChooseDirectories = true
         accessPanel.directoryURL = mountPoint
@@ -238,7 +302,8 @@ class WrappBuildInput {
         }
 
         let panel = NSOpenPanel()
-        panel.message = "Choose where to save the Nancy Drew app:"
+        panel.message = "Choose where to save the app for \(gameName). Your Applications folder is a good place: you'll find it there with your other apps."
+        panel.prompt = "Save Here"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
@@ -357,14 +422,16 @@ class WrappBuildInput {
         return response == .OK ? panel.url : nil
     }
 
+    /// Ask for a game disc. Disc images are accepted as well, though the
+    /// message doesn't offer them.
     @MainActor
-    private func selectDiskOrISO(message: String) async -> URL? {
+    private func selectDisc(message: String) async -> URL? {
         let panel = NSOpenPanel()
         panel.message = message
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.canCreateDirectories = false
-        panel.allowedContentTypes = [.folder, UTType(filenameExtension: "iso")!]
+        panel.allowedContentTypes = [.folder] + [UTType(filenameExtension: "iso")].compactMap { $0 }
         panel.directoryURL = URL(fileURLWithPath: "/Volumes")
 
         return await runOpenPanel(panel)

@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import DiskArbitration
 import Logging
 
 /// Thread-safe tracker for mounted ISOs
@@ -36,6 +37,17 @@ class ISOMounter {
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.ISOMounter")
 
     init() {}
+
+    /// Whether the volume at `url` is a mounted disk image (an ISO or DMG)
+    /// rather than a real disc: Disk Arbitration names a disk image's device
+    /// model "Disk Image".
+    static func isDiskImageVolume(_ url: URL) -> Bool {
+        guard let session = DASessionCreate(kCFAllocatorDefault),
+              let disk = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, url as CFURL),
+              let description = DADiskCopyDescription(disk) as? [CFString: Any] else { return false }
+        return (description[kDADiskDescriptionDeviceModelKey] as? String)?
+            .trimmingCharacters(in: .whitespaces) == "Disk Image"
+    }
 
     /// Mount an ISO or DMG if it isn't already mounted, returning the mount
     /// point.

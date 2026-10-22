@@ -62,7 +62,6 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         let disk1Root: URL
         let gameSlug: String
         let gameInfo: GameInfo
-        var disk2Root: URL?
         do {
             let disk1Mounted = try await mountIfISO(disk1, input: input)
             if let mounted = disk1Mounted {
@@ -77,21 +76,6 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             logger.notice("Detected game: \(gameInfo.title)")
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
-
-            // ── Disk 2 (multi-disk games) ─────────────────────────────────
-            if gameInfo.diskCount > 1 {
-                if let disk2 = try await input.getDisk2Path(gameInfo: gameInfo) {
-                    logger.notice("Disk 2: \(disk2.path)")
-                    if let mounted = try await mountIfISO(disk2, input: input) {
-                        await bus.publishWrappBuild(.isoMounted(mounted))
-                        disk2Root = mounted
-                    } else {
-                        disk2Root = disk2
-                    }
-                }
-            }
-
-            await bus.publishWrappBuild(.disksResolved(disk1: disk1Root, disk2: disk2Root))
         } catch {
             await isoMounter.unmountAll()
             let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
@@ -109,12 +93,13 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             try await helper.createBaseWrapp(at: wrappPath)
 
             // Disk-specific layout + CD-ROM mounting stays in the builder —
-            // no other source uses it.
+            // no other source uses it. Disc 2 is asked for only once disc 1
+            // has been copied: a Mac has one drive, so disc 1 comes out first.
             try await copyGameDisks(
                 disk1: disk1Root,
-                disk2: disk2Root,
                 to: wrappPath,
-                gameSlug: gameSlug
+                gameSlug: gameSlug,
+                disk2: { try await self.resolveDisk2(gameInfo: gameInfo, disk1: disk1Root, input: input) }
             )
 
             // Install the game via the engine it actually uses.
@@ -183,6 +168,25 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         }
     }
 
+    /// Disc 2 of a two-disc game, mounted if it's an ISO, or nil for a
+    /// one-disc game. Publishes `disksResolved` either way.
+    private func resolveDisk2(gameInfo: GameInfo, disk1: URL, input: WrappBuildInput) async throws -> URL? {
+        // Not worth asking for disc 2 of a build that has been cancelled.
+        try Task.checkCancellation()
+        var disk2Root: URL?
+        if gameInfo.diskCount > 1, let disk2 = try await input.getDisk2Path(gameInfo: gameInfo, disk1: disk1) {
+            logger.notice("Disk 2: \(disk2.path)")
+            if let mounted = try await mountIfISO(disk2, input: input) {
+                await bus.publishWrappBuild(.isoMounted(mounted))
+                disk2Root = mounted
+            } else {
+                disk2Root = disk2
+            }
+        }
+        await bus.publishWrappBuild(.disksResolved(disk1: disk1, disk2: disk2Root))
+        return disk2Root
+    }
+
     // MARK: - ISO Lifecycle (builder-owned)
 
     /// Mount the given disk if it's an ISO. Returns the mount point, or nil
@@ -202,16 +206,18 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
     /// Copy game installer disks into the wrapp: disk-1, optional disk-2,
     /// and the disk-combined symlink view for multi-disk games. Mounts the
-    /// disk directories as Wine CD-ROM drives.
+    /// disk directories as Wine CD-ROM drives. `disk2` is called once disk 1
+    /// has been copied, and gives disk 2 or nil.
     private func copyGameDisks(
         disk1: URL,
-        disk2: URL?,
         to wrappPath: URL,
-        gameSlug: String
+        gameSlug: String,
+        disk2 resolveDisk2: () async throws -> URL?
     ) async throws {
         // Check cache first
         if let metadata = try cacheManager.restoreCache(stage: .diskGameInstallerCopied, to: wrappPath) {
             if metadata.gameSlug == gameSlug {
+                await bus.publishWrappBuild(.disksResolved(disk1: disk1, disk2: nil))
                 return
             } else {
                 throw WrappError.cachedGameMismatch
@@ -236,7 +242,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         makeWritable(disk1Dest)
 
         // Copy disk 2 if present
-        if let disk2 = disk2 {
+        if let disk2 = try await resolveDisk2() {
+            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: "Copying disc 2")))
             let disk2Dest = installerPath.appendingPathComponent("disk-2")
             try await Task.detached {
                 try FileManager.default.copyItem(at: disk2, to: disk2Dest)

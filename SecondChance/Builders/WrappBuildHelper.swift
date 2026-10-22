@@ -257,7 +257,7 @@ class WrappBuildHelper {
         gameEngine: GameInfo.GameEngine? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil
     ) throws {
-        Task { await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Updating configuration files"))) }
+        Task { await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Adjusting the game's settings"))) }
 
         let infoPlistPath = wrappPath.appendingPathComponent("Contents/Info.plist")
 
@@ -510,7 +510,7 @@ class WrappBuildHelper {
             return
         }
 
-        await bus.publishWrappBuild(.progress(.installingGame(substep: "Installing Steam client")))
+        await bus.publishWrappBuild(.progress(.installingGame(substep: "Installing Steam")))
 
         // Stop wine server first
         let wine = WineEnvironment(appPath: wrappPath)
@@ -540,12 +540,16 @@ class WrappBuildHelper {
         gameInfo: GameInfo,
         input: WrappBuildInput
     ) async throws -> URL {
+        // A build cancelled during a step that doesn't stop for it (a copy,
+        // say) stops here, before anything is saved.
+        try Task.checkCancellation()
         // Sign before moving so failures trigger the builder's cleanup
         try signWrapp(at: wrappPath)
         await bus.publishWrappBuild(.signed(wrappPath: wrappPath))
 
         await bus.publishWrappBuild(.progress(.savingApp(substep: nil)))
         let outputDir = try await input.getOutputPath(gameName: gameInfo.title)
+        try Task.checkCancellation()
         let finalPath = try await saveWrapp(
             from: wrappPath,
             to: outputDir,
@@ -807,9 +811,9 @@ enum WrappError: LocalizedError {
         case .cachedGameMismatch:
             return "Cached wrapp belongs to a different game"
         case .invalidInfoPlist:
-            return "Wrapp Info.plist is missing required keys or has an unexpected bundle identifier"
+            return "Part of Second Chance is damaged (the game app template). Download Second Chance again and try once more."
         case .wineNotFound:
-            return "Wine binary not found in wrapp"
+            return "Part of Second Chance is missing (Wine). Download Second Chance again and try once more."
         case .templateNotFound(let message):
             return message
         case .copyFailed(let message, _, _):

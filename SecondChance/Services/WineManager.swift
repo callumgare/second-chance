@@ -163,7 +163,7 @@ class WineManager {
         // Wine 10 reads this from the X11 Driver key whatever the driver. The
         // wrapp's mode scaling helper scales what Direct3D draws to match.
         // See docs/wine-in-process-helpers.md#mode-scaling.
-        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Configuring display modes"))) }
+        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's display"))) }
         try await runWine(
             at: wrappPath,
             executable: "wine",
@@ -176,7 +176,7 @@ class WineManager {
         )
 
         // Install cnc-ddraw for better DirectDraw compatibility
-        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Installing cnc-ddraw"))) }
+        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's graphics"))) }
         try await installWinetrick("cnc_ddraw", at: wrappPath)
         
         // Configure cnc-ddraw to maintain aspect ratio. windowed=true is what lets
@@ -194,7 +194,7 @@ class WineManager {
             }
         
         // Install isolate_home to remove unnecessary mounts
-        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Configuring drive mounts"))) }
+        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc"))) }
         try await installWinetrick("isolate_home", at: wrappPath)
         
         // Remove all drive mounts and recreate only the ones we need

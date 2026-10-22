@@ -35,7 +35,7 @@ struct WrappBuildCancellationTests {
             Issue.record("Expected error state after late cancellation, got \(viewModel.currentState)")
             return
         }
-        #expect(message == "Installation cancelled by user")
+        #expect(message == "You cancelled installing the game.")
     }
 
     @Test("Other failures still show the error screen")

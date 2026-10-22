@@ -48,7 +48,7 @@ enum WrappBuildError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unsupportedEngine:
-            return "Unsupported game engine"
+            return "Second Chance doesn't know how to run this game yet."
         case .steamGameNotOwned(let title):
             return "Your Steam account doesn't own \(title)"
         case .steamNoGamesOwned:
@@ -56,7 +56,7 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .steamSignInRequired:
             return "Steam needs you to sign in, which a headless build can't do. Build once from the app to sign in."
         case .steamSignInTimedOut:
-            return "Steam didn't sign in in time"
+            return "Steam didn't finish signing in. Try again, and sign in when Steam's window appears."
         case .steamInstallFailed(let reason):
             return "Steam couldn't install the game: \(reason)"
         case .steamInUse(let holder):
@@ -68,27 +68,27 @@ enum WrappBuildError: LocalizedError, Equatable {
             }
             return "\(name) is using Steam, and only one game can use it at a time. Save your game in \(name) and quit it, then click Try Again."
         case .installerNotFound:
-            return "Could not find game installer executable"
+            return "Couldn't find the game's installer. Check that it's the first disc of a Nancy Drew game, or the file you downloaded from Her Interactive."
         case .gameExecutableNotFound:
-            return "Could not find game executable after installation"
+            return "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests."
         case .userCancelled:
-            return "Installation cancelled by user"
+            return "You cancelled installing the game."
         case .userCancelledBeforeStart:
-            return "Installation cancelled before it started"
+            return "You cancelled before installing started."
         case .diskNotFound:
-            return "Could not find disk-1 or disk-combined directory"
+            return "Couldn't find the files copied from the game disc. Try again."
         case .autoItNotAvailable:
-            return "AutoIt automation tool not available in bundle"
+            return "Part of Second Chance is missing (AutoIt). Download Second Chance again and try once more."
         case .autoItScriptNotFound:
-            return "AutoIt automation script not found in bundle"
+            return "Part of Second Chance is missing (an AutoIt script). Download Second Chance again and try once more."
         case .missingRequiredParameter(let param):
             return "Missing required parameter: \(param)"
         case .invalidPath(let message):
-            return "Invalid path: \(message)"
+            return "Second Chance can't install from that: \(message)"
         case .internalError(let message):
             return message
         case .saveFailed(let destination, let reason):
-            return "Couldn't save the wrapp to \(destination): \(reason)"
+            return "Couldn't save the game's app to \(destination): \(reason)"
         case .wrongGame(let expected, let detected):
             return "This disc is \(detected), not \(expected)"
         case .installIncomplete(let reason):

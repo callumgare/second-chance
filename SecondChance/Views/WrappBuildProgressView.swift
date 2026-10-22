@@ -21,8 +21,23 @@ struct WrappBuildProgressView: View {
         viewModel.detectedGame.map { "Nancy Drew: \($0.title)" }
     }
 
+    @State private var confirmingCancel = false
+
     private var inProgress: some View {
         InstallerPage(title: gameName.map { "Installing \($0)" } ?? "Installing…") {
+            if let instructions = viewModel.instructions {
+                Label {
+                    Text(instructions)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "hand.point.right.fill")
+                        .foregroundStyle(.tint)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+            }
+
             Spacer()
 
             VStack(alignment: .leading, spacing: 8) {
@@ -34,7 +49,7 @@ struct WrappBuildProgressView: View {
                 }
 
                 HStack(alignment: .firstTextBaseline) {
-                    Text(Self.status(of: viewModel.currentState))
+                    Text(viewModel.isCancelling ? "Stopping…" : Self.status(of: viewModel.currentState))
                         .lineLimit(2)
                         .textSelection(.enabled)
                     Spacer()
@@ -47,12 +62,28 @@ struct WrappBuildProgressView: View {
                 .foregroundStyle(.secondary)
             }
 
+            Text("This usually takes a few minutes. You can leave it running and do something else.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Spacer()
         } leading: {
             EmptyView()
         } trailing: {
-            Button("Continue") {}
-                .disabled(true)
+            Button("Cancel") {
+                confirmingCancel = true
+            }
+            .keyboardShortcut(.cancelAction)
+            .disabled(viewModel.isCancelling)
+            .confirmationDialog("Stop installing the game?", isPresented: $confirmingCancel) {
+                Button("Stop Installing", role: .destructive) {
+                    viewModel.cancelBuild()
+                }
+                Button("Keep Installing", role: .cancel) {}
+            } message: {
+                Text("Nothing will be saved, and you can start again from the beginning.")
+            }
         }
     }
 
@@ -65,7 +96,7 @@ struct WrappBuildProgressView: View {
         }
         switch state {
         case .detectingGame: return "Finding out which game it is…"
-        case .settingUpWrapp: return "Setting up…"
+        case .settingUpWrapp: return "Getting ready…"
         case .copyingInstaller: return "Copying the installer…"
         case .installingGame: return "Installing the game…"
         case .configuringWrapp: return "Configuring the game…"

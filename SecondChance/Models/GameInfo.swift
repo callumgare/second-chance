@@ -104,13 +104,16 @@ struct GameInfo: Codable, Identifiable, Hashable {
     }
 }
 extension GameInfo {
+    /// What to tell someone clicking through a game's installer themselves,
+    /// for a game with no instructions of its own.
+    static let defaultInstallInstructions = """
+    Accept the options it suggests, with two exceptions: if it offers to install DirectX, \
+    choose not to, and if it asks whether to play the game when it's done, choose No.
+    """
+
     static let unknownGame = GameInfo(
         id: "unknown",
         title: "Other",
-        installInstructions: """
-        - Accept all default options unless the installer tries to install DirectX. \
-        In which case select the option NOT to install DirectX. \
-        If asked if you want to play the game after installation, select "No".
-        """
+        installInstructions: defaultInstallInstructions
     )
 }

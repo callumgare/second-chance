@@ -99,6 +99,14 @@ Integration tests need the game's installer in `installers/<game-slug>/`. Runnin
 keeps bringing a full-screen game to the front, so name the suite rather than running a bare `./sc test`.
 [docs/testing.md](docs/testing.md) covers it all.
 
+## Writing for players
+
+Second Chance is for people who aren't into computers, so anything it shows
+them — windows, alerts, progress steps, error messages — is in plain,
+friendly language: "disc" not "disk", "the game's app" not "wrapp", and no
+"Wine" or other jargon. [AGENTS.md](AGENTS.md#code-conventions) has the
+details. Developer words are fine in code and logs.
+
 ## Documentation
 
 `docs/` holds a document for each feature, and the table in [AGENTS.md](AGENTS.md#documentation) says when to read

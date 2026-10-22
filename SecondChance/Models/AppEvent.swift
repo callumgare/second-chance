@@ -40,6 +40,11 @@ enum WrappBuildEvent {
 
     // Step progress — carries the existing `WrappBuildState` enum used by the UI.
     case progress(WrappBuildState)
+    /// Something the person has to do for the build to go on (sign in to
+    /// Steam, click through an installer), shown prominently and at once on
+    /// the progress screen until the next `.instructions(nil)`. Progress
+    /// substeps, by contrast, wait 5 s and are small.
+    case instructions(String?)
 
     // Intermediate results — the things tests assert on and the UI/logs can show.
     case disksResolved(disk1: URL, disk2: URL?)

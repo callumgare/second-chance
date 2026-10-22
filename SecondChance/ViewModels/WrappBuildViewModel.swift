@@ -31,6 +31,11 @@ class WrappBuildViewModel: ObservableObject {
     @Published var detectedGame: GameInfo?
     /// Where the finished wrapp was saved, for Show in Finder.
     @Published var builtWrappURL: URL?
+    /// What the person has to do for the build to go on, if anything: the
+    /// latest `.instructions` event.
+    @Published var instructions: String?
+    /// The person asked to stop the build, which is winding down.
+    @Published private(set) var isCancelling = false
 
     @Published var progress: Double = 0.0
 
@@ -52,6 +57,8 @@ class WrappBuildViewModel: ObservableObject {
     private var stepTimer: Timer?
     private var shouldShowElapsed = false
     private var isBuilding = false
+    /// The build under way, for `cancelBuild`.
+    private var buildTask: Task<Void, Never>?
     
     // Development settings
     var enableCaching = false
@@ -83,6 +90,8 @@ class WrappBuildViewModel: ObservableObject {
         switch event {
         case .wrappBuild(let buildEvent):
             switch buildEvent {
+            case .instructions(let text):
+                instructions = text
             case .progress(let state):
                 // Error presentation is owned by the `.failed` event, which
                 // carries the typed error. A `.progress(.error)` only has the
@@ -94,9 +103,13 @@ class WrappBuildViewModel: ObservableObject {
                 detectedGame = info
                 FailureReporter.setGame(info.id, source: selectedWrappSource?.rawValue, engine: info.gameEngine.rawValue)
             case .failed(let error):
-                handleBuildFailure(error)
+                instructions = nil
                 stopStepTimer()
+                // A cancelled build goes back to the start once it has wound
+                // down (`runBuild`), whatever error it stopped with.
+                if !isCancelling { handleBuildFailure(error) }
             case .completed:
+                instructions = nil
                 currentState = .completed
                 stopStepTimer()
             default:
@@ -184,6 +197,16 @@ class WrappBuildViewModel: ObservableObject {
         }
     }
 
+    /// Stop the build under way. Each builder cleans up after itself as it
+    /// would after a failure (unmounting discs, removing the half-made app,
+    /// stopping Wine and Steam), and then the welcome screen comes back.
+    func cancelBuild() {
+        guard let buildTask, !isCancelling else { return }
+        logger.notice("The person cancelled the build")
+        isCancelling = true
+        buildTask.cancel()
+    }
+
     /// Start a build from disk (interactive mode)
     func buildFromDisk() async {
         await runBuild(diskBuilder)
@@ -207,7 +230,21 @@ class WrappBuildViewModel: ObservableObject {
         // Install commands free to start a second build.
         guard !isBuilding else { return }
         isBuilding = true
-        defer { isBuilding = false }
+        instructions = nil
+        // Its own task, so that Cancel can cancel just the build.
+        let task = Task { await self.performBuild(builder) }
+        buildTask = task
+        await task.value
+        buildTask = nil
+        isBuilding = false
+        if isCancelling {
+            isCancelling = false
+            // Too late to stop, the app was saved: say so as usual.
+            if builtWrappURL == nil { reset() }
+        }
+    }
+
+    private func performBuild(_ builder: WrappBuildStrategy) async {
         // A new build: none of the last one's stage carries over to it.
         LogContext.clearStage()
         lastProgressState = nil
@@ -219,6 +256,7 @@ class WrappBuildViewModel: ObservableObject {
             builtWrappURL = try await builder.build(input: input)
             currentState = .completed
         } catch {
+            if isCancelling { return }
             if !Self.isCancellation(error) {
                 let summary = FailureSummary.log(logger, what: "Building the wrapp", error: error)
                 failureReport.report(FailureReport(
@@ -267,6 +305,9 @@ class WrappBuildViewModel: ObservableObject {
         detectedGame = nil
         builtWrappURL = nil
         progress = 0.0
+        instructions = nil
+        stopStepTimer()
+        lastProgressState = nil
         failureReport.clear()
         FailureReporter.setGame(nil)
         steamInUseHolder = nil
