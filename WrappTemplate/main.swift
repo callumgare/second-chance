@@ -808,6 +808,11 @@ func main() {
         DispatchQueue.global(qos: .userInitiated).async {
             let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode)
 
+            // Quitting: the app delegate's cleanup stopped the game, waits for
+            // Wine and ends the wrapp. Showing an error or exiting here would
+            // cut that short.
+            if gameLauncher.isQuitting { return }
+
             // A game that quit before it had started, or just after Wine
             // reported an error, failed whatever its exit code says.
             if let failure = gameLauncher.unexpectedQuit {

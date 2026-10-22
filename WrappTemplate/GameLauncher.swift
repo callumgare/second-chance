@@ -198,6 +198,10 @@ class GameLauncher {
         }
     }
 
+    /// The wrapp is quitting (⌘Q, a signal): `performCleanup` has stopped the
+    /// game, waits for Wine, and ends the wrapp once it's done.
+    var isQuitting: Bool { cleanupQueue.sync { cleanupCompleted } }
+
     /// After the game has ended by itself: wait for the rest of its Wine
     /// session (explorer, Wine's services, the server) to finish, so the
     /// wrapp never quits leaving Wine running in the prefix. Nothing to wait
