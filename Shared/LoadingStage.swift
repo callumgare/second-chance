@@ -21,6 +21,10 @@ enum LoadingStage: Equatable {
     case signingInToSteam
     /// Steam starting the game (`-applaunch`).
     case steamStartingGame(title: String)
+    /// Steam's launch waiting for the player to say whether to stop the game
+    /// the account is playing on another computer: no clock, since it's
+    /// waiting on them.
+    case steamPlayingElsewhere
 
     var message: String {
         switch self {
@@ -28,6 +32,7 @@ enum LoadingStage: Equatable {
         case .startingSteam: return "Starting Steam…"
         case .signingInToSteam: return "Sign in to Steam"
         case .steamStartingGame(let title): return "Steam is starting \(title)…"
+        case .steamPlayingElsewhere: return "Your Steam account is playing on another computer"
         }
     }
 
@@ -38,6 +43,8 @@ enum LoadingStage: Equatable {
             return "This game needs Steam running. The first time, Steam updates itself, which can take several minutes."
         case .signingInToSteam:
             return "Use Steam's window, or scan its QR code with the Steam app on your phone."
+        case .steamPlayingElsewhere:
+            return "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here."
         case .startingGame, .steamStartingGame:
             return nil
         }
@@ -46,7 +53,7 @@ enum LoadingStage: Equatable {
     /// What a slow start or a possible failure is about.
     var subject: String {
         switch self {
-        case .startingSteam, .signingInToSteam: return "Steam"
+        case .startingSteam, .signingInToSteam, .steamPlayingElsewhere: return "Steam"
         case .startingGame, .steamStartingGame: return "The game"
         }
     }
@@ -58,7 +65,7 @@ enum LoadingStage: Equatable {
         case .startingGame: return 20
         // Steam's own start includes its update on a first run.
         case .startingSteam: return 120
-        case .signingInToSteam: return nil
+        case .signingInToSteam, .steamPlayingElsewhere: return nil
         // Steam takes a while to hand over, even on an idle Mac (about 90 s
         // from -applaunch to the game's window has been seen).
         case .steamStartingGame: return 90
@@ -70,7 +77,7 @@ enum LoadingStage: Equatable {
         switch self {
         case .startingGame: return 50
         case .startingSteam: return 600
-        case .signingInToSteam: return nil
+        case .signingInToSteam, .steamPlayingElsewhere: return nil
         case .steamStartingGame: return 300
         }
     }

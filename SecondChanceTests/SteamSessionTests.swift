@@ -88,6 +88,32 @@ struct SteamLogsTests {
         [t] AppID 1 scheduler finished : removed from schedule (result Disk Write Failure, state 0x402)
         """) == .failed("Disk Write Failure"))
     }
+
+    @Test("A launch waiting on a prompt reports it until the next step")
+    func launchPrompt() {
+        // The shape of a real launch's lines (console_log.txt), with the
+        // playing-elsewhere prompt where Steam would ask it.
+        let lines = [
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to ShowInterstitials with """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp waiting for user response to ShowInterstitials """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp continues with user response "ShowInterstitials""#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to KickingOtherSession with """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp waiting for user response to KickingOtherSession """#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp continues with user response "KickingOtherSession""#,
+            #"[t] GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to CreatingProcess with """#,
+        ]
+        let prompts = (1...lines.count).map {
+            SteamLogs.launchPrompt(appID: 31830, consoleLog: lines.prefix($0).joined(separator: "\r\n"))
+        }
+        #expect(prompts == [nil, "ShowInterstitials", nil, nil, SteamLogs.playingElsewherePrompt, nil, nil])
+    }
+
+    @Test("Another app's launch prompt isn't this one's")
+    func launchPromptOtherApp() {
+        #expect(SteamLogs.launchPrompt(appID: 1, consoleLog: """
+        [t] GameAction [AppID 31830, ActionID 1] : LaunchApp waiting for user response to KickingOtherSession ""
+        """) == nil)
+    }
 }
 
 @Suite("Steam session store")

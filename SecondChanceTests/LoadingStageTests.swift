@@ -25,10 +25,12 @@ struct LoadingStageTests {
         }
     }
 
-    @Test("Waiting for the player to sign in to Steam never counts as slow")
-    func signInHasNoClock() {
-        #expect(LoadingStage.signingInToSteam.slowNoteAfter == nil)
-        #expect(LoadingStage.signingInToSteam.possibleFailureAfter == nil)
+    @Test("Waiting for the player to answer Steam never counts as slow",
+          arguments: [LoadingStage.signingInToSteam, .steamPlayingElsewhere])
+    func waitingOnThePlayerHasNoClock(stage: LoadingStage) {
+        #expect(stage.slowNoteAfter == nil)
+        #expect(stage.possibleFailureAfter == nil)
+        #expect(stage.subject == "Steam")
     }
 
     @Test("Each stage names what's loading")

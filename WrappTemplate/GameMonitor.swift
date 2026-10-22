@@ -78,10 +78,11 @@ class GameMonitor {
     /// Wait for game to start (works for both Wine and ScummVM games)
     /// `launcher` is the `wine start` process: if it exits before the game's
     /// exe appears, the game never started and there is nothing to wait for.
-    func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil, timeout: TimeInterval = 600) -> Int32? {
+    func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil, timeout: TimeInterval = 600,
+                            whileWaiting: (() -> Void)? = nil) -> Int32? {
         switch gameEngine {
         case "wine", _ where gameEngine.hasPrefix("wine-"):
-            return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, timeout: timeout)
+            return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, timeout: timeout, whileWaiting: whileWaiting)
         case "scummvm":
             return waitForScummVMGameToStart(gamePid: gamePid)
         default:
@@ -166,7 +167,10 @@ class GameMonitor {
     }
     
     /// Wait for Wine game executable to start
-    private func waitForWineGameToStart(gameExeName: String, launcher: Process?, timeout: TimeInterval = 600) -> Int32? {
+    /// `whileWaiting` runs on every check (about twice a second) until the
+    /// game appears: what else the launcher wants to watch meanwhile.
+    private func waitForWineGameToStart(gameExeName: String, launcher: Process?, timeout: TimeInterval = 600,
+                                        whileWaiting: (() -> Void)? = nil) -> Int32? {
         logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName)")
         logger.debug("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
         
@@ -205,6 +209,7 @@ class GameMonitor {
             }
             
             if gamePid == nil {
+                whileWaiting?()
                 Thread.sleep(forTimeInterval: 0.5)
             }
         }

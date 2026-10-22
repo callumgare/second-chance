@@ -110,7 +110,7 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         let desktop = await Task.detached {
             WineDesktop.start(wine, logger: logger, outputLogger: outputLogger)
         }.value
-        let offsets = Dictionary(uniqueKeysWithValues: ["connection_log.txt", "steamui_login.txt", "content_log.txt"].map {
+        let offsets = Dictionary(uniqueKeysWithValues: ["connection_log.txt", "steamui_login.txt", "content_log.txt", "console_log.txt"].map {
             ($0, Self.size(of: logsDir.appendingPathComponent($0)))
         })
         state.withLock {
@@ -160,6 +160,12 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
 
     func installPhase(appID: Int) -> SteamLogs.InstallPhase {
         SteamLogs.installPhase(appID: appID, contentLog: newLog("content_log.txt"))
+    }
+
+    /// What Steam's launch of `appID` is waiting on the player for, if
+    /// anything (`SteamLogs.launchPrompt`).
+    func launchPrompt(appID: Int) -> String? {
+        SteamLogs.launchPrompt(appID: appID, consoleLog: newLog("console_log.txt"))
     }
 
     func manifest(appID: Int) -> SteamAppManifest? {

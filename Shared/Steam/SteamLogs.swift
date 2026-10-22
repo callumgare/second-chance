@@ -86,4 +86,37 @@ nonisolated enum SteamLogs {
         }
         return phase
     }
+
+    /// The launch prompt Steam shows when the account is already playing a
+    /// game on another computer: it asks whether to stop that one.
+    static let playingElsewherePrompt = "KickingOtherSession"
+
+    /// What the wrapp logs when Steam's launch waits on that prompt, which
+    /// the integration tests look for to say why the game never started.
+    static let playingElsewhereMarker = "Steam won't start the game yet: this Steam account is playing a game on another computer, and Steam is asking whether to stop it there"
+
+    /// The prompt Steam's launch of `appID` is waiting on the player for, from
+    /// `logs/console_log.txt`, or nil when its latest step isn't a wait. Steam
+    /// logs each step of a launch as one of
+    ///
+    ///     GameAction [AppID 31830, ActionID 1] : LaunchApp changed task to CreatingProcess with ""
+    ///     GameAction [AppID 31830, ActionID 1] : LaunchApp waiting for user response to CreatingProcess ""
+    ///     GameAction [AppID 31830, ActionID 1] : LaunchApp continues with user response "CreatingProcess"
+    ///
+    /// Some waits are routine and over in a moment (`ShowInterstitials`,
+    /// `CreatingProcess`); `playingElsewherePrompt` is one that lasts until
+    /// the player answers. Pass only the text Steam appended since it started.
+    static func launchPrompt(appID: Int, consoleLog: String) -> String? {
+        let tag = "GameAction [AppID \(appID), "
+        let waiting = "LaunchApp waiting for user response to "
+        var prompt: String?
+        for line in consoleLog.split(whereSeparator: \.isNewline) where line.contains(tag) {
+            if let range = line.range(of: waiting) {
+                prompt = line[range.upperBound...].split(separator: " ").first.map(String.init)
+            } else if line.contains("LaunchApp continues with user response") || line.contains("LaunchApp changed task to") {
+                prompt = nil
+            }
+        }
+        return prompt
+    }
 }

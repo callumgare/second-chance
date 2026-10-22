@@ -22,22 +22,23 @@ nonisolated enum SteamSignInWindow {
     /// Wait up to `timeout` for a window of Steam's to be on screen, then
     /// bring it to the front. Only one wrapp or build runs Steam at a time
     /// (`SteamActiveLock`), so any Steam window on screen is this one's.
-    /// Returns whether it found one to bring forward.
+    /// Returns whether it found one to bring forward. `window` names it in
+    /// the log.
     @discardableResult
-    static func bringForward(timeout: TimeInterval = 60) async -> Bool {
+    static func bringForward(timeout: TimeInterval = 60, window: String = "sign-in window") async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while true {
             if let pid = steamWindowOwner() {
                 let activated = await activate(pid: pid)
                 if activated {
-                    logger.notice("Brought Steam's sign-in window to the front")
+                    logger.notice("Brought Steam's \(window) to the front")
                 } else {
-                    logger.warning("Couldn't bring Steam's sign-in window to the front (pid \(pid)); macOS refused the activation")
+                    logger.warning("Couldn't bring Steam's \(window) to the front (pid \(pid)); macOS refused the activation")
                 }
                 return activated
             }
             guard Date() < deadline else {
-                logger.warning("Steam asked for a sign-in, but none of its windows appeared within \(Int(timeout))s to bring forward")
+                logger.warning("None of Steam's windows appeared within \(Int(timeout))s to bring its \(window) forward")
                 return false
             }
             try? await Task.sleep(for: .seconds(1))

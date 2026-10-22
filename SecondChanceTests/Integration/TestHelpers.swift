@@ -431,9 +431,19 @@ enum AppPuppetRunner {
             TestConsole.echo(gameLogData, title: "Game log (\(attemptLabel)) — \(gameSlug)")
         }
 
+        let gameLog = String(decoding: gameLogData, as: UTF8.self)
+        // Steam held the launch on its "playing on another computer"
+        // question: the puppeteer only sees a game that never appeared.
+        if gameLog.contains(SteamLogs.playingElsewhereMarker) {
+            throw NSError(
+                domain: "AppPuppetRunner",
+                code: Int(observedExitCode),
+                userInfo: [NSLocalizedDescriptionKey: "Steam wouldn't start the game: the Steam account was playing a game on another computer, and Steam asked whether to stop it there (attempt: \(attemptLabel)). Stop the other game and run this one again."]
+            )
+        }
+
         // The wrapp's own verdict on the game's exit says more than the
         // puppeteer's, which only sees the game gone or the wrapp still open.
-        let gameLog = String(decoding: gameLogData, as: UTF8.self)
         if let verdict = gameLog.components(separatedBy: "\n").first(where: { $0.contains(GameQuitCheck.failureMarker) }),
            let range = verdict.range(of: GameQuitCheck.failureMarker) {
             throw NSError(

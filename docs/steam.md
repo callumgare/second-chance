@@ -159,6 +159,20 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
    of the wrapp's own to watch, so the game is found, and watched, by its exe;
    `wine-steam-silent` starts the exe itself, as a Wine game does. Startup
    diagnostics are timed from here, not from Steam's start.
+
+   **Steam plays one game per account at a time.** If the account is
+   already playing on another computer, Steam's launch stops at its
+   `KickingOtherSession` step and asks whether to stop the game there, and
+   the game only starts once the player answers. While it waits for the
+   game, the wrapp reads Steam's `logs/console_log.txt` every couple of
+   seconds for the step its launch is waiting on (`SteamLogs.launchPrompt`;
+   Steam logs `LaunchApp waiting for user response to <step>`). On that one it
+   logs `SteamLogs.playingElsewhereMarker` as an error, switches the loading
+   window to "Your Steam account is playing on another computer"
+   (`LoadingStage.steamPlayingElsewhere`, no clock), and brings Steam's
+   window forward. The integration test fails with that reason instead of a
+   timeout. The step's name comes from Steam's client (`SteamUI.dll`),
+   not from a launch seen to stop there.
 5. **When the game ends, or the wrapp quits:** stop Steam, save the sign-in
    back to the store, take it out of the wrapp, release the lock. On quit this
    is cut short (10 s for Steam) to fit inside the wrapp's 15 s quit fallback.

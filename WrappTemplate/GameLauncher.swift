@@ -397,7 +397,9 @@ class GameLauncher {
         // Wait for game to start
         if let gameExeName = launchResult.gameExeName {
             logger.notice("[Game Launch] Waiting for game executable to start...")
-            if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process) {
+            let whileWaiting = launchedBySteam ? steamLaunchWatcher(infoWindow) : nil
+            if let detectedPid = gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process,
+                                                                 whileWaiting: whileWaiting) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
                 gameStarted = true
                 if launchedBySteam { gamePid = detectedPid }
@@ -623,6 +625,36 @@ class GameLauncher {
     /// Show Steam's progress in the loading window. Once signed in, what
     /// starts the game is Steam (`wine-steam`) or the wrapp, with Steam
     /// running (`wine-steam-silent`).
+    /// While Steam starts the game: say when its launch is waiting on the
+    /// player. The one that lasts is Steam asking whether to stop the game
+    /// the account is playing on another computer — the game only starts once
+    /// the player answers — so the loading window says so and Steam's window
+    /// comes forward. Reads Steam's log every couple of seconds.
+    private func steamLaunchWatcher(_ infoWindow: InfoWindowController?) -> (() -> Void)? {
+        guard let steam, let appID = config.steamGameId.flatMap({ Int($0) }) else { return nil }
+        let title = config.gameTitle
+        var lastCheck = Date.distantPast
+        var shown: String?
+        return { [logger] in
+            guard Date().timeIntervalSince(lastCheck) >= 2 else { return }
+            lastCheck = Date()
+            let prompt = steam.client.launchPrompt(appID: appID)
+            guard prompt != shown else { return }
+            let wasElsewhere = shown == SteamLogs.playingElsewherePrompt
+            shown = prompt
+            if prompt == SteamLogs.playingElsewherePrompt {
+                logger.error("[Steam] \(SteamLogs.playingElsewhereMarker)")
+                infoWindow?.setStage(.steamPlayingElsewhere)
+                Task { await SteamSignInWindow.bringForward(window: "question about the other computer") }
+            } else if wasElsewhere {
+                logger.notice("[Steam] Answered: Steam is starting the game")
+                infoWindow?.setStage(.steamStartingGame(title: title))
+            } else if let prompt {
+                logger.debug("[Steam] Launch waiting on \(prompt)")
+            }
+        }
+    }
+
     private func steamStatusHandler(_ infoWindow: InfoWindowController?) -> (WrappSteam.Status) -> Void {
         let title = config.gameTitle
         let launchedBySteam = config.gameEngine == "wine-steam"
