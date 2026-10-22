@@ -73,7 +73,7 @@ enum LoadingStage: Equatable {
     var detail: String? {
         switch self {
         case .startingSteam:
-            return "This game needs Steam running."
+            return "This game plays through Steam, so it's starting Steam for you first."
         case .updatingSteam:
             return "Steam is updating itself, as it does now and then. The game starts once it's done."
         case .connectingToSteam:
