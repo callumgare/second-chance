@@ -31,9 +31,14 @@ So `sc wrapp build` starts the app as its own responsible process
 (`Proc.stream(…, disclaimResponsibility: true)`, using the private
 `responsibility_spawnattrs_setdisclaim`): the app answers for itself and
 macOS asks nothing. Checked with a freshly rebuilt `sc`, which used to
-prompt again every time. Anything else that runs the app under `sc` without
-it — or the test host under xcodebuild — can still meet the prompts; answer
-them (the microphone can be refused).
+prompt again every time. `sc wrapp run`, `sc wrapp wine` and `sc app run`
+replace `sc` with the program they start (`Proc.exec`), and do the same
+there: `posix_spawn` with `POSIX_SPAWN_SETEXEC` is an exec that takes the
+disclaim attribute, where a plain `execv` kept the program `sc` to macOS. A
+Steam wrapp run that way waited on "'sc' would like to access the
+Microphone". Anything else that runs the app under `sc` without either — or
+the test host under xcodebuild — can still meet the prompts; answer them
+(the microphone can be refused).
 
 ## Building
 

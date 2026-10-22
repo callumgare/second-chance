@@ -168,7 +168,19 @@ enum Proc {
         fflush(stdout)
         fflush(stderr)
         let argv = ([path] + args).map { strdup($0) } + [nil]
-        execv(path, argv)
+        // posix_spawn with SETEXEC is execv that also takes spawn attributes:
+        // here, disclaiming responsibility, as disclaimingPlatformOptions does.
+        // Exec'd plainly, the program would stay sc to macOS, and Steam in a
+        // wrapp would wait on the microphone and local network prompts it
+        // raised for sc.
+        var attributes: posix_spawnattr_t?
+        posix_spawnattr_init(&attributes)
+        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETEXEC))
+        typealias Disclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+        if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim") {
+            _ = unsafeBitCast(symbol, to: Disclaim.self)(&attributes, 1)
+        }
+        errno = posix_spawn(nil, path, nil, &attributes, argv, environ)
         let reason = String(cString: strerror(errno))
         TTY.write(Data("sc: couldn't run \(path): \(reason)\n".utf8), to: STDERR_FILENO)
         exit(127)

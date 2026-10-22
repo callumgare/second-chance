@@ -76,7 +76,8 @@ than one download needs `--her-download` to pick which
 picks which build sources' suites run; [testing.md](testing.md) has what each
 needs.
 
-`wrapp build` starts the app as its own responsible process, so macOS
+`wrapp build` starts the app, and `wrapp run`, `wrapp wine` and `app run`
+the program they replace `sc` with, as its own responsible process, so macOS
 privacy prompts (which Steam waits on) aren't addressed to `sc`; see
 [steam.md](steam.md).
 
