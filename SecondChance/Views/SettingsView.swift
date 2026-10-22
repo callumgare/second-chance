@@ -60,7 +60,11 @@ struct SettingsView: View {
             Section {
                 Toggle("Send success reports", isOn: $successReports)
 
-                Text("When a game is set up or played, say whether it worked: which game, where it came from, and the Second Chance and macOS versions. Nothing about you or your files is sent. It shows which games are known to work.")
+                Text("""
+                    When a game is set up or played, say whether it worked: which game, where it came from, and \
+                    the Second Chance and macOS versions. Nothing about you or your files is sent. It shows which \
+                    games are known to work.
+                    """)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

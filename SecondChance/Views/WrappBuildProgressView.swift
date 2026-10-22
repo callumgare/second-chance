@@ -27,7 +27,11 @@ struct WrappBuildProgressView: View {
         case .asking:
             InstallerPage(title: "Send success reports?") {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("To help identify which games run correctly and which need work Second Chance can notify the developer on a successful run. Only very basic info is sent like the title of the game and macOS version. Nothing about you or your files will ever be sent.")
+                    Text("""
+                        To help identify which games run correctly and which need work Second Chance can notify \
+                        the developer on a successful run. Only very basic info is sent like the title of the game \
+                        and macOS version. Nothing about you or your files will ever be sent.
+                        """)
                         .fixedSize(horizontal: false, vertical: true)
                     Text("You can change this any time in Settings.")
                         .foregroundStyle(.secondary)

@@ -30,7 +30,7 @@ nonisolated struct ReportingPreferences: Codable, Equatable, Sendable {
     var promptShown: Bool = false
     /// Whether builds and launches may be counted (`SuccessReporter`); nil
     /// until the person has been asked, after their first successful build.
-    var successReports: Bool? = nil
+    var successReports: Bool?
 
     static let defaultDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/SecondChance", isDirectory: true)
