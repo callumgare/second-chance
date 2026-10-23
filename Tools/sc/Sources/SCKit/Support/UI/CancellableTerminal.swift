@@ -13,6 +13,16 @@ import Noora
 struct CancellableTerminal: Terminaling {
     let inner: Terminal
 
+    /// Noora reads keys with `getchar()`, and a buffered stdin pulls a whole
+    /// escape sequence into stdio's buffer on the first read, where `poll`
+    /// can't see the rest: an arrow key was then handled a keypress late, so
+    /// ←/→ then Enter at a yes/no prompt toggled back and answered the
+    /// default. Unbuffered, every byte waits on the descriptor.
+    init(inner: Terminal) {
+        self.inner = inner
+        setvbuf(stdin, nil, _IONBF, 0)
+    }
+
     var isInteractive: Bool { inner.isInteractive }
     var isColored: Bool { inner.isColored }
     var signalBehavior: SignalBehavior { inner.signalBehavior }
