@@ -220,11 +220,19 @@ could get the games running without having to do the same detective work. Second
 
 Second Chance is built on:
 
-- [Wine](https://www.winehq.org/), which lets Windows programs run on a Mac.
+- [Wine](https://www.winehq.org/), which lets Windows programs run on a Mac. Special thank you to all the devs who've
+  put countless hours into it, you're the real heros!
+- [Sikarugir (and it's Wineskin ancestor)](https://github.com/Sikarugir-App/Sikarugir), while not used directly is both
+  a heavy inspiration for Second Chance (it helped me confirm that it was possible to run the games today with the right
+  tweaks) and also provides the compiled wine binaries used by Second Chance.
+- [winetricks](https://github.com/Winetricks/winetricks), which sets up a bunch of the Windows parts the games need.
 - [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw), which fixes the graphics for the games Wine can't draw well on
   its own.
 - [ScummVM](https://www.scummvm.org/), which runs some of the earlier games natively. ScummVM's support for more of the
   games is being actively worked on.
+- [AutoIt](https://www.autoitscript.com/), which clicks through the game installers and patches for you.
+- [ExifTool](https://exiftool.org/), which helps work out which game is on a disc.
+- [Sparkle](https://sparkle-project.org/), which keeps Second Chance up to date.
 
 The Nancy Drew games are made by Her Interactive. Second Chance isn't affiliated with Her Interactive (yet, if you're
 reading this Her Interactive sponsor me!).
