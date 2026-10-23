@@ -2,6 +2,27 @@
 
 All notable changes to Second Chance.
 
+## 0.7.0 — 2026-10-23
+
+### Improved
+
+- Suggest updating Second Chance when a game fails to launch. If a game won't start and a newer version of Second Chance has come out since you set it up, it will now suggest updating and setting the game up again.
+
+### Fixed
+
+- Fix Steam-based games sometimes failing to open right after you finish setting them up, because Steam was still tied up finishing the setup process.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- sc release: the tool now asks right at the start whether to publish once the build finishes, instead of leaving the release sitting half-finished at that prompt after the long test/build/symbol-upload run.
+- sc (Noora) prompts: fixed a bug where pressing an arrow key then Enter at a yes/no prompt could register as the opposite answer, because stdin buffering let a whole arrow-key escape sequence slip past the prompt's key reader. stdin is now unbuffered so each key is seen as it's typed.
+- her-download: the file-open prompt for a Mac download's disk image now mentions the installer app inside it, not just the .dmg file, since the open panel already accepted the app. The README's explanation of why Cider's system32 folder is mostly left behind was also corrected to note its graphics and input DLLs are empty placeholders backed by Mac frameworks, so only its C runtime DLLs would actually override Wine's.
+- README: added more entries to the credits.
+- wrapp loading screen: reworded and iterated on the message shown while Steam is starting before a game, settling on explaining that the game runs through Steam so Steam starts first (rather than wording implying Steam just "needs to be running"). Also added a temporary offscreen-rendering helper for generating screenshots of the info window's various states, for use in reviewing UI changes.
+
+</details>
+
 ## 0.6.0 — 2026-10-23
 
 ### New
