@@ -21,8 +21,9 @@ private nonisolated let tarLogger = Logger(label: "au.gare.callum.second-chance.
 /// it is the Windows release, so a wrapp takes the game's folder and leaves
 /// the rest behind. From Cider's own `system32` it takes only the DLLs Wine
 /// doesn't provide itself (the MFC runtimes a disc's installer would have
-/// installed): the rest, `ddraw.dll` and `d3d9.dll` among them, would replace
-/// cnc-ddraw and Wine's builtins.
+/// installed): its C runtimes would replace Wine's builtins, and its
+/// graphics and input DLLs (`ddraw.dll`, `d3d9.dll`, …) are empty
+/// placeholders, as Cider's real ones are Mac libraries in its `Frameworks`.
 ///
 /// The image's layout ([docs/her-download.md](../../docs/her-download.md)):
 ///

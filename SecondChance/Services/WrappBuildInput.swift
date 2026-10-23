@@ -168,7 +168,7 @@ class WrappBuildInput {
         }
 
         let panel = NSOpenPanel()
-        panel.message = "Select the game you downloaded from Her Interactive: the .exe file for Windows, or the .dmg file for Mac."
+        panel.message = "Select the game you downloaded from Her Interactive: the .exe file for Windows, or for Mac the .dmg file or the installer app inside it."
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = Self.herDownloadExtensions.compactMap { UTType(filenameExtension: $0) }

@@ -102,9 +102,13 @@ into the wrapp's `drive_c`. Cider's `C:\Program Files` is a 32-bit Windows's, so
 folder goes to `Program Files (x86)`, where a 32-bit installer puts it in a
 wrapp. Twister lands at the path the disc gives it.
 
-**Most of Cider's own `c_drive/windows/system32` is left behind.** It holds
-Cider's `ddraw.dll`, `d3d9.dll` and C runtimes, which would override cnc-ddraw
-and Wine's builtins. But it also holds the runtimes a disc's installer installs
+**Most of Cider's own `c_drive/windows/system32` is left behind.** Its
+graphics and input DLLs (`ddraw`, `d3d8`, `d3d9`, `dinput`, `opengl32`, …) are
+empty placeholders: Cider's real ones are Mac libraries in the app's
+`Contents/Frameworks` (`libddraw.dylib`, and `libd3d9.dylib` over TransGaming's
+OpenGL renderer `libd3dgl.dylib`), loaded first by its `builtin, native` load
+order. Its C runtimes (`msvcrt`, `msvcr*`, `msvcp*`) are real, and would
+override Wine's builtins. But it also holds the runtimes a disc's installer installs
 with the game, and without them the game doesn't start. Trail of the Twister
 imports `MFC80.DLL`, for which Wine has no builtin, and Wine fails with
 `Importing dlls … failed, status c0000135`. So `CiderPackage` also extracts
