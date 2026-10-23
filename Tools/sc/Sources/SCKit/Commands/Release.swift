@@ -563,19 +563,21 @@ private struct Release {
             ui.success("\(tag) is committed and tagged locally. To publish:", takeaways: [TerminalText(stringLiteral: pushLine), TerminalText(stringLiteral: releaseLine)])
             return
         }
-        let pushed = try await ui.progressStep("Push", success: "Pushed \(branch) and \(tag)") { _ in
-            try await git(["push", "origin", branch, tag])
+        // Each step throws its failure from inside, so it ends on a ✖ rather
+        // than its success message.
+        try await ui.progressStep("Push", success: "Pushed \(branch) and \(tag)") { _ in
+            let pushed = try await git(["push", "origin", branch, tag])
+            guard pushed.succeeded else {
+                throw SCError("git push failed — \(tag) is still committed and tagged locally.",
+                              hints: [pushed.error, "Then run: \(pushLine) && \(releaseLine)"])
+            }
         }
-        guard pushed.succeeded else {
-            throw SCError("git push failed — \(tag) is still committed and tagged locally.",
-                          hints: [pushed.error, "Then run: \(pushLine) && \(releaseLine)"])
-        }
-        try Proc.require("gh", brew: "gh")
         let created = try await ui.progressStep("GitHub release", success: "Created the \(tag) release") { _ in
-            try await Proc.collect("gh", Array(release.dropFirst()), cwd: repo.root)
-        }
-        guard created.succeeded else {
-            throw SCError("gh release create failed — \(tag) is pushed.", hints: [created.error, "Then run: \(releaseLine)"])
+            let created = try await gh(Array(release.dropFirst()))
+            guard created.succeeded else {
+                throw SCError("gh release create failed — \(tag) is pushed.", hints: [created.error, "Then run: \(releaseLine)"])
+            }
+            return created
         }
         ui.success("\(tag) is released.", takeaways: [TerminalText(stringLiteral: created.output.trimmingCharacters(in: .whitespacesAndNewlines))])
     }
@@ -600,6 +602,8 @@ private struct Release {
             }
         }
 
+        if !dryRun && !buildOnly { try await checkGitHubAccess() }
+
         var warnings: [(message: TerminalText, next: TerminalText?)] = []
         defer { ui.warnings(warnings) }
 
@@ -622,6 +626,56 @@ private struct Release {
                              TerminalText(stringLiteral: bad.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n"))))
         }
         return branch
+    }
+
+    /// Publishing ends with `gh release create`, after the tag is pushed, so
+    /// an account that can't write to the repo would fail there with the
+    /// release half done — and GitHub answers it with a 404, which gh puts
+    /// down to a missing "workflow" scope. Find out before anything is written.
+    private func checkGitHubAccess() async throws {
+        try Proc.require("gh", brew: "gh")
+        let account = try await gh(["api", "user", "--jq", ".login"])
+        guard account.succeeded else {
+            throw SCError("gh isn't signed in to GitHub, so it can't create the release.",
+                          hints: [account.error, "Run: gh auth login"])
+        }
+        let login = account.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let view = try await gh(["repo", "view", "--json", "nameWithOwner,viewerPermission",
+                                 "--jq", ".nameWithOwner + \" \" + .viewerPermission"])
+        guard view.succeeded else {
+            throw SCError("gh can't see this repo as \(login).", hints: [view.error])
+        }
+        let fields = view.output.split(separator: " ").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let repoName = fields.first ?? "this repo"
+        let permission = fields.last ?? ""
+        guard ["WRITE", "MAINTAIN", "ADMIN"].contains(permission) else {
+            throw SCError(
+                "gh is signed in as \(login), who can't publish releases to \(repoName) (permission: \(permission.lowercased())).",
+                hints: ["Sign gh in to the repo owner's account (gh auth login) and sc uses it here by itself,"
+                        + " or switch to one that can publish: gh auth switch, or set GH_TOKEN for this run."]
+            )
+        }
+    }
+
+    /// Run gh as the account named after the repo's GitHub owner when gh is
+    /// signed in to one, as gh has no per-repo account and its active one may
+    /// be another (a work account, say) that can't publish here. Otherwise,
+    /// or when GH_TOKEN already says which account, gh picks as usual.
+    func gh(_ args: [String]) async throws -> Proc.Collected {
+        var env: [String: String?] = [:]
+        if ProcessInfo.processInfo.environment["GH_TOKEN"] == nil, let owner = try await gitHubOwner() {
+            let token = try await Proc.collect("gh", ["auth", "token", "--user", owner])
+            let value = token.output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if token.succeeded, !value.isEmpty { env["GH_TOKEN"] = value }
+        }
+        return try await Proc.collect("gh", args, env: env, cwd: repo.root)
+    }
+
+    /// The owner in origin's GitHub URL — git@github.com:owner/repo.git,
+    /// https://github.com/owner/repo — or nil for anything else.
+    private func gitHubOwner() async throws -> String? {
+        let url = try await git(["config", "--get", "remote.origin.url"]).output
+        return url.firstMatch(of: #/github\.com[:\/]([^\/]+)\//#).map { String($0.1) }
     }
 
     private func resolveVersion(override: String?, previous: String?) async throws -> String {

@@ -129,6 +129,17 @@ Answering no, or running with no terminal to ask, prints those commands
 instead. A failed push or `gh release create` leaves the commit and tag in
 place and names what is left to run.
 
+So that last step can't be the first to find out the account is wrong, the
+preflight checks that the account `gh` is signed in as can write to the repo,
+and stops before anything is written if not. GitHub answers a release created
+without that access with a 404, which `gh` blames on a missing `workflow`
+scope — the check names the account and its permission instead.
+
+`gh` has one active account, not one per repo, so `sc release` runs it as the
+account named after the repo's GitHub owner when `gh` is signed in to one
+(`gh auth token --user <owner>`), and as the active account otherwise. A
+`GH_TOKEN` already set wins over both.
+
 The app it produces is **signed with an Apple Development certificate
 and not notarized** (only a Developer ID certificate can be) — on macOS 15+
 users have to approve it under System Settings → Privacy & Security, as the
