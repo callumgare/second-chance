@@ -11,8 +11,9 @@ struct ReleaseCommand: AsyncParsableCommand {
         tag (cocogitto, configured in cog.toml), writes it into the SecondChance \
         and WrappTemplate targets, regenerates CHANGELOG.md and the release notes, \
         runs the unit tests, then builds and zips a Release app, commits and tags \
-        it. Pushing and creating the GitHub release are asked first — \
-        publishing stays a decision you make.
+        it. Pushing and creating the GitHub release are asked first — at the \
+        start, if you'd rather it publish once built than wait for you to check \
+        the build — so publishing stays a decision you make.
         """
     )
 
@@ -111,7 +112,7 @@ private struct Release {
         // deletes the previous ones before writing.
         let rollback = FileRollback([repo.pbxproj, repo.changelog, notesFile])
         let created = [zip, appcast].filter { !FileManager.default.fileExists(atPath: $0.path) }
-        let committed: (version: String, branch: String)?
+        let committed: (version: String, branch: String, publishWhenBuilt: Bool)?
         do {
             committed = try await perform(versionOverride: versionOverride, build: build, test: test, rollback: rollback)
         } catch {
@@ -129,7 +130,7 @@ private struct Release {
         // Outside the rollback: once committed, the files are the commit's,
         // and a failed push mustn't put the old ones back over it.
         if let committed {
-            try await publish(version: committed.version, branch: committed.branch)
+            try await publish(version: committed.version, branch: committed.branch, ask: !committed.publishWhenBuilt)
         }
     }
 
@@ -169,10 +170,13 @@ private struct Release {
         }
     }
 
-    /// Returns the release's version and branch once it's committed and
-    /// tagged (for --build-only, once it's packaged), or nil when it stopped
-    /// short of that (a dry run, --notes-only).
-    private func perform(versionOverride: String?, build: Bool, test: Bool, rollback: FileRollback) async throws -> (version: String, branch: String)? {
+    /// Returns the release's version and branch, and whether to publish
+    /// without asking again, once it's committed and tagged (for
+    /// --build-only, once it's packaged), or nil when it stopped short of
+    /// that (a dry run, --notes-only).
+    private func perform(
+        versionOverride: String?, build: Bool, test: Bool, rollback: FileRollback
+    ) async throws -> (version: String, branch: String, publishWhenBuilt: Bool)? {
         try Proc.require("cog", brew: "cocogitto")
         if build { try Proc.require("xcbeautify", brew: "xcbeautify") }
 
@@ -184,6 +188,12 @@ private struct Release {
         // Lint, before anything is generated: a release can go out with lint
         // failures, but only when someone says so.
         try await checkLint()
+
+        // Asked now, while someone is here to answer: the tests, build and
+        // symbols upload take long enough that they may have walked away,
+        // and a release left waiting at the publish prompt is half done.
+        let publishWhenBuilt = try build && !dryRun && !buildOnly
+            && ui.confirm("Once it's built, push it and create the GitHub release straight away, without waiting for you to check the build?") == true
 
         // 2. Version
         let lastTag = try await git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
@@ -304,7 +314,7 @@ private struct Release {
             ui.warning("Not signed with Developer ID, so not notarized — first launch needs approval in System Settings → Privacy & Security.")
         }
 
-        if buildOnly { return (version, branch) }
+        if buildOnly { return (version, branch, false) }
 
         // 7. Debug symbols, so crash reports from this version can be read.
         try await uploadDebugSymbols()
@@ -316,7 +326,7 @@ private struct Release {
         // 9. Commit and tag locally — still undoable, so the rollback covers
         // them too. Pushing is what other people see, so `run` asks first.
         try await commitAndTag(version: version)
-        return (version, branch)
+        return (version, branch, publishWhenBuilt)
     }
 
     /// The notes rewritten by Claude Code for players, or cog's notes as they
@@ -537,18 +547,19 @@ private struct Release {
         }
     }
 
-    /// Push the branch and tag and create the GitHub release, if the user says
-    /// so. Otherwise — or with no terminal to ask — print the commands. A
+    /// Push the branch and tag and create the GitHub release, if the user said
+    /// so at the start or says so now (`ask`). Otherwise — or with no
+    /// terminal to ask — print the commands. A
     /// failure here leaves the commit and tag alone: they're correct, and
     /// whatever didn't happen can be run by hand.
-    private func publish(version: String, branch: String) async throws {
+    private func publish(version: String, branch: String, ask: Bool) async throws {
         let tag = "v\(version)"
         let push = ["git", "push", "origin", branch, tag]
         let release = ["gh", "release", "create", tag, repo.display(zip), repo.display(appcast), "--title", tag, "--notes-file", repo.display(notesFile)]
         let pushLine = push.map(Self.shellQuoted).joined(separator: " ")
         let releaseLine = release.map(Self.shellQuoted).joined(separator: " ")
 
-        guard try ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub release?") == true else {
+        guard try !ask || ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub release?") == true else {
             ui.success("\(tag) is committed and tagged locally. To publish:", takeaways: [TerminalText(stringLiteral: pushLine), TerminalText(stringLiteral: releaseLine)])
             return
         }

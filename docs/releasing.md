@@ -14,6 +14,12 @@ does ([dev-cli.md](dev-cli.md#lint)). If they find anything it shows what, and
 asks whether to release anyway, defaulting to no; a run that can't ask stops.
 A dry run only reports what they found.
 
+Then, before the long part of the run, it asks whether to publish the release
+as soon as it's built rather than stop for you to check the build first,
+defaulting to no ([Publishing](#publishing)). The tests, build and symbol
+upload take a while, so answering yes lets you leave it to finish. The notes
+still stop for review before any of that starts.
+
 ## What it writes
 
 - **The version.** `MARKETING_VERSION` goes into the `SecondChance` and
@@ -114,8 +120,8 @@ so it works on a dirty tree, building whatever is uncommitted.
 
 Once the build is packaged it commits the project file and `CHANGELOG.md` as
 `chore(release): vX.Y.Z` and tags the commit `vX.Y.Z`, both locally — the
-rollback above takes them back out if either fails. It then asks whether to
-push the branch and tag to `origin` and create the GitHub release with `gh`,
+rollback above takes them back out if either fails. Unless you said at the
+start to publish once built, it then asks whether to push the branch and tag to `origin` and create the GitHub release with `gh`,
 with the zip and `appcast.xml` attached. Publishing the release is what offers
 the update to installed copies, since their feed is the latest release's
 appcast.
