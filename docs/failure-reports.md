@@ -37,7 +37,10 @@ that ends with no error window, and the wrapp's start-up errors. Nothing is
 recorded as answered then, so the next failure asks again. A crash has no
 error screen, so an alert asks the same question at the next start, and the
 crash is sent at the answer. Choosing a level in Settings counts as having
-been asked.
+been asked. Where nobody is there to answer (a headless build, a wrapp
+WrappPuppeteer drives, a test: `FailureReporter.canAsk`), which happens only
+when `SECOND_CHANCE_REPORTING=1` forces reporting on, no alert is shown and a
+crash goes at the setting's level, Manual sending nothing.
 
 What each report contains:
 

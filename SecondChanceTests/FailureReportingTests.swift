@@ -277,6 +277,18 @@ struct FailureReporterGatingTests {
         #expect(FailureReporter.disabledReason(environment: env, isDebugBuild: true, dsn: "") != nil)
     }
 
+    @Test("Nobody is asked about a crash in a headless, WrappPuppeteer or test run",
+          arguments: [
+              (["NON_INTERACTIVE": "true"], false),
+              (["SECOND_CHANCE_PUPPET_DIR": "/tmp/p"], false),
+              (["XCTestConfigurationFilePath": "/x"], false),
+              (["SECOND_CHANCE_REPORTING": "1"], true),
+              ([:], true),
+          ] as [([String: String], Bool)])
+    func canAsk(environment: [String: String], expected: Bool) {
+        #expect(FailureReporter.canAsk(environment: environment) == expected)
+    }
+
     @Test("Without asking, a previous crash goes at the setting's detail; Manual drops it")
     func crashDetail() {
         #expect(FailureReporter.defaultCrashDetail(for: .detailed) == .detailed)

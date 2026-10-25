@@ -201,6 +201,15 @@ nonisolated enum FailureReporter {
         }
     }
 
+    /// Whether anyone is there to answer an alert. Not in a headless build, a
+    /// wrapp WrappPuppeteer drives, or a test: reporting is on in those only
+    /// when `SECOND_CHANCE_REPORTING=1` forces it, and an alert there waits
+    /// for ever.
+    static func canAsk(environment env: [String: String]) -> Bool {
+        env["NON_INTERACTIVE"] != "true" && env["SECOND_CHANCE_PUPPET_DIR"] == nil
+            && env["XCTestConfigurationFilePath"] == nil
+    }
+
     /// Name the game a build is working on, so a crash mid-build says which.
     static func setGame(_ game: String?, source: String? = nil, engine: String? = nil) {
         #if FAILURE_REPORTING
@@ -449,7 +458,10 @@ nonisolated enum FailureReporter {
         logger.error("\(line)")
         let preferences = ReportingPreferences.load()
         let detail: ReportDetail?
-        if !preferences.promptShown {
+        if !canAsk(environment: ProcessInfo.processInfo.environment) {
+            detail = defaultCrashDetail(for: preferences.level)
+            logger.notice("Nobody to ask about the previous run's crash: going by the setting (\(preferences.level))")
+        } else if !preferences.promptShown {
             let answer = CrashReportPrompt.askHowDetailed(process: process)
             ReportingPreferences.update {
                 $0.level = answer == .detailed ? .detailed : .basic
