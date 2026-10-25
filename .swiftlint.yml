@@ -62,6 +62,14 @@ custom_rules:
       # The one place OSLog is written, behind swift-log.
       - "Shared/Logging/OSLogHandler.swift"
     severity: error
+  wine_without_crash_handler:
+    name: "Start Wine without our crash handler"
+    regex: '\btry\??\s+\w+\.run\(\)'
+    message: "Start Wine with runWithoutCrashHandler(), or it inherits Sentry's exception ports and hangs at its third fault (docs/failure-reports.md#child-processes)."
+    included:
+      - "Shared/Wine/"
+      - "Shared/Steam/"
+    severity: error
   no_privacy_annotation:
     name: "No privacy: annotations"
     regex: 'privacy:\s*\.(public|private)'

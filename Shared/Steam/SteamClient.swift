@@ -258,7 +258,7 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         process.standardError = errors
         ProcessLineLogger.attach(to: output, logger: outputLogger, level: .notice, onLine: onOutputLine)
         ProcessLineLogger.attach(to: errors, logger: outputLogger, level: .warning, onLine: onOutputLine)
-        try process.run()
+        try process.runWithoutCrashHandler()
     }
 
     /// The logs whose new text this start reads.

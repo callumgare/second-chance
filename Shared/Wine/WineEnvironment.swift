@@ -193,7 +193,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.standardError = FileHandle.standardError
 
         do {
-            try process.run()
+            try process.runWithoutCrashHandler()
             process.waitUntilExit()
             return process.terminationStatus
         } catch {
@@ -278,7 +278,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.terminationHandler = { _ in exited.signal() }
 
         do {
-            try process.run()
+            try process.runWithoutCrashHandler()
         } catch {
             wineLogger.error("Could not start \(watch.name): \(error)")
             throw error
@@ -372,7 +372,8 @@ nonisolated public struct WineEnvironment: Sendable {
         ps.standardOutput = pipe
         ps.standardError = FileHandle.nullDevice
         do {
-            try ps.run()
+            // swiftlint:disable:next wine_without_crash_handler
+            try ps.run()  // ps, not Wine
         } catch {
             return "(couldn't run ps: \(error.localizedDescription))"
         }
@@ -451,7 +452,7 @@ nonisolated public struct WineEnvironment: Sendable {
             process.standardError = errorPipe
         }
 
-        try process.run()
+        try process.runWithoutCrashHandler()
         return process
     }
 
@@ -475,7 +476,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.standardInput = FileHandle.nullDevice
         if let outputPipe { process.standardOutput = outputPipe }
         if let errorPipe { process.standardError = errorPipe }
-        try process.run()
+        try process.runWithoutCrashHandler()
         return process
     }
 
@@ -523,7 +524,7 @@ nonisolated public struct WineEnvironment: Sendable {
         let done = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in done.signal() }
         do {
-            try process.run()
+            try process.runWithoutCrashHandler()
         } catch {
             return .failedToRun("\(error)")
         }
@@ -550,7 +551,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.environment = environmentVariables()
 
         do {
-            try process.run()
+            try process.runWithoutCrashHandler()
             process.waitUntilExit()
             // wineserver -k0 returns 0 if server is running for this prefix
             return process.terminationStatus == 0
@@ -571,7 +572,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.environment = environmentVariables()
 
         do {
-            try process.run()
+            try process.runWithoutCrashHandler()
             process.waitUntilExit()
             return process.terminationStatus
         } catch {

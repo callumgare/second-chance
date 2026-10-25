@@ -68,6 +68,8 @@ nonisolated final class TaggedProcess: @unchecked Sendable {
     /// `SubprocessLineClassifier` picks (falling back to `.notice` for stdout
     /// and `.warning` for stderr). Returns immediately after starting the process
     /// (non-blocking); call `waitUntilExit()` to block until it finishes.
+    /// Started without our crash handler (`runWithoutCrashHandler()`), as
+    /// what runs here is Wine, winetricks or ScummVM.
     func run() throws {
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -77,7 +79,7 @@ nonisolated final class TaggedProcess: @unchecked Sendable {
         ProcessLineLogger.attach(to: stdoutPipe, logger: logger, level: .notice, onLine: onLine)
         ProcessLineLogger.attach(to: stderrPipe, logger: logger, level: .warning, onLine: onLine)
 
-        try process.run()
+        try process.runWithoutCrashHandler()
     }
 
     func waitUntilExit() {

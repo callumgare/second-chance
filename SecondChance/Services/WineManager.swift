@@ -370,7 +370,7 @@ class WineManager {
         process.arguments = ["-p"]  // Persistent mode
         process.environment = wine.environmentVariables()
 
-        try process.run()
+        try process.runWithoutCrashHandler()
         process.waitUntilExit()
 
         logger.notice("Wine server started in persistent mode")

@@ -100,7 +100,7 @@ class WineUtilities {
         process.arguments = arguments
         process.environment = wine.environmentVariables()
         do {
-            try process.run()
+            try process.runWithoutCrashHandler()
             return process
         } catch {
             wineUtilitiesLogger.error("[Wine Cleanup] Couldn't run wineserver \(arguments.joined(separator: " ")): \(error.localizedDescription)")

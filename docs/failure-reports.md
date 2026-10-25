@@ -229,6 +229,41 @@ default action, past `CrashMarker`. In crash tests with both installed,
 `kill -SEGV`, which raises no Mach exception. Every crash still ended
 normally, with either arrangement.
 
+### Child processes
+
+**Start Wine with `runWithoutCrashHandler()`, never a bare `run()`**
+(`Shared/ChildProcess.swift`). A child inherits its parent's task exception
+ports, so with reporting on, a child's bad memory accesses are sent to
+Sentry's Mach exception handler inside Second Chance or the wrapp, rather than
+becoming a signal in the child. Windows programs fault on purpose all the
+time, and Wine turns each fault into a Windows exception through that signal.
+Sentry answers one fault on each of its two handler threads. It files each as
+a crash of ours, puts back our own ports and replies, and then neither thread
+is left listening. From the child's third fault on, the faulting thread waits
+in the kernel for an answer that never comes.
+
+The sign is a Wine program that sits at 0% CPU with nothing in its output,
+alongside a Sentry crash report for Second Chance or a wrapp that never
+crashed: an `EXC_BAD_ACCESS`, often at address 0, from code at a `0x2…`
+address (Wine's code, translated by Rosetta), with no process name. That is
+how White Wolf's silent install hung for 30 minutes in a Release build.
+Debug, headless and test runs never showed it, because reporting is off in
+all of them; `SECOND_CHANCE_REPORTING=1` with a `SECOND_CHANCE_SENTRY_DSN`
+that goes nowhere turns it on without sending anything, which is how it was
+reproduced
+([the investigation](historical-plans/2026-10-26-sentry-exception-ports.md)).
+
+`runWithoutCrashHandler()` clears our exception ports, starts the child, and
+puts them back, all under a lock. The child, and anything it starts, keeps
+the default ports, so its faults reach Wine. A crash on another of our threads
+in that moment still reaches Sentry's signal handler; only its Mach handler
+misses it. `WineEnvironment`, `WineUtilities`, `SteamClient`, `WineManager`
+and `TaggedProcess` (winetricks, ScummVM) start their processes this way. A
+SwiftLint rule (`wine_without_crash_handler`) rejects a bare `run()` in
+`Shared/Wine/` and `Shared/Steam/`, and `ChildProcessTests` checks that a
+child started this way faults normally while one started with `run()`
+hangs.
+
 ### Testing a crash from a terminal in VS Code
 
 A crashing process can sit in the kernel for hours, in `ps` state `UE`, and
