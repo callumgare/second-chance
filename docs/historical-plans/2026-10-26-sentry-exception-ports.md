@@ -110,6 +110,33 @@ and dies of `SIGSEGV` under `runWithoutCrashHandler()`.
 Clearing for the length of one spawn costs only Sentry's Mach view of a crash
 on another of our threads in that moment; its signal handler still sees it.
 
+## Noticing a stalled install
+
+The hang showed a second problem: for 30 minutes the progress screen looked
+like any install. `InstallStallWatch` now watches an unattended install, and
+the wait for the processes it leaves behind, through `runWine`'s new
+`WineWatchdog` check ([wrapp-build.md](../wrapp-build.md#a-stalled-install)).
+
+- **What counts as progress was found by measuring, not chosen.** The first
+  version reused the wrapp's launch signs (`LaunchActivityMonitor`: CPU, new
+  programs, output) and dropped the planned "files written" sign as
+  redundant. Under load, Alibi in Ashes' Inno Setup install then went 144 s
+  without a sign while copying the game at 0.02 cores. So the folders the
+  install writes to, and the installer's own log, were added, and its gap
+  fell to 8 s.
+- **Not every install happens inside `setup.exe`.** Lost Queen's exits in 13 s
+  and InstallShield finishes over the next two and a half minutes, during
+  `wineserver -w`, which at first nobody watched.
+- **The window stays at 120 s** (three times that while heavily loaded): the
+  worst gap over two passes of every disc game was 56 s.
+- **With an installer window on screen, nothing is stopped.** The person is
+  asked to answer it, and the timeout waits. A GUI build that stalls with no
+  window falls back to the installer's wizard as before; a headless one fails
+  with `installStalled`.
+- **Not done:** a diagnostics bundle on a stall. `runWine` logs the Wine
+  processes when it stops one, and the bundle's stack samples showed nothing
+  useful during this investigation, because Rosetta hides the Windows frames.
+
 ## Found along the way
 
 - With reporting forced on, a headless run that found a previous run's crash

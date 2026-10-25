@@ -84,7 +84,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Shared/Reporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, adding a failure that should be reported, or the success reports that count builds and launches |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
-| [docs/historical-plans/2026-10-26-sentry-exception-ports.md](docs/historical-plans/2026-10-26-sentry-exception-ports.md) | You want to know why a silent install hung only in Release builds, how it was tracked down to Wine inheriting Sentry's exception port, and why Wine is started with the ports cleared rather than Sentry's Mach handler turned off |
+| [docs/historical-plans/2026-10-26-sentry-exception-ports.md](docs/historical-plans/2026-10-26-sentry-exception-ports.md) | You want to know why a silent install hung only in Release builds, how it was tracked down to Wine inheriting Sentry's exception port, and why Wine is started with the ports cleared rather than Sentry's Mach handler turned off; and how a stalled install is noticed and what counts as progress |
 | [docs/historical-plans/2026-10-22-success-reports.md](docs/historical-plans/2026-10-22-success-reports.md) | You want to know why success reports are Sentry metrics rather than an analytics service, why they are asked about after the first successful build, and why nothing before that answer is counted |
 | [docs/historical-plans/2026-10-22-launch-timing.md](docs/historical-plans/2026-10-22-launch-timing.md) | You want to know why the loading window says a launch may have failed when it does — how launches were timed under load, why a slow launch is told from a stuck one by its signs of progress, and what the first experiments got wrong |
 | [docs/historical-plans/2026-10-22-her-store-downloads.md](docs/historical-plans/2026-10-22-her-store-downloads.md) | You want to know why Her downloads work as they do — what the Windows and Mac downloads turned out to contain, why a download needs its own answer file, and why some of a Cider app's DLLs are kept |
@@ -270,7 +270,10 @@ direct assignment.
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
   never take it either, since the interactive installer is a wizard nobody is
   there to click through. An unattended install times out after
-  `SECOND_CHANCE_INSTALL_TIMEOUT` seconds (default 1800). The `--skip-installer` debug flag
+  `SECOND_CHANCE_INSTALL_TIMEOUT` seconds (default 1800), but is stopped long
+  before that once it shows no sign of progress for
+  `SECOND_CHANCE_INSTALL_STALL_SECONDS` (`InstallStallWatch`,
+  [docs/wrapp-build.md](docs/wrapp-build.md#a-stalled-install)). The `--skip-installer` debug flag
   skips running the installer entirely (useful for testing wrapp construction).
   Through `sc` these are `--debug strict-install` and `--debug skip-installer`;
   the `SECOND_CHANCE_*` switches below are `--debug` values on `sc wrapp run`

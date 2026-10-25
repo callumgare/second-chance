@@ -37,6 +37,10 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// The installer exited cleanly but its own record of finishing is
     /// missing (`InstallCompletion`), so the install was cut short.
     case installIncomplete(reason: String)
+    /// An unattended install stopped showing any sign of progress, in a
+    /// build that can't hand the person the installer's wizard instead
+    /// (`InstallStallWatch`).
+    case installStalled
     /// The finished wrapp couldn't be moved to where it was meant to go.
     case saveFailed(destination: String, reason: String)
     /// The disc is a different game from the one asked for.
@@ -93,6 +97,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "This disc is \(detected), not \(expected)"
         case .installIncomplete(let reason):
             return "The game didn't install completely: \(reason)"
+        case .installStalled:
+            return "The game's installer stopped responding, so installing was stopped. Try again."
         case .unsupportedMacDownload(let reason):
             return "Second Chance can't use this Mac download: \(reason). Download the Windows version from Her Interactive instead."
 

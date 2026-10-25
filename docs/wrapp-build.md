@@ -188,6 +188,45 @@ each builder cleans up as it does after any failure. The ViewModel ignores the
 resulting `.failed` and goes back to the welcome screen once the build has
 returned; a build that had already saved its app finishes normally.
 
+## A stalled install
+
+An unattended install (silent, or driven by AutoIt) gets a timeout,
+`SECOND_CHANCE_INSTALL_TIMEOUT` seconds and 30 minutes by default, since nobody
+is watching it. But an install that has stopped getting anywhere gives up long
+before that. `InstallStallWatch` watches the installer, and then the wait for
+the Wine processes it leaves running (an InstallShield `setup.exe` can exit in
+seconds and leave the whole install to them), for signs of progress:
+Wine's programs using the CPU or a new one starting (`LaunchActivityMonitor`),
+a line of Wine's output or of the installer's own log, and a change in the
+size of `drive_c`'s `Program Files (x86)` or `users` (where Temp is). The
+folders and the log matter: under load an Inno Setup install copied the game
+for over two minutes at 0.02 cores, too little to count as Wine working, and
+said nothing on its output. If no sign appears for the window
+(`SECOND_CHANCE_INSTALL_STALL_SECONDS`, 120 s by default and three times that
+while the Mac is heavily loaded), `runWine`'s watchdog check looks for a window
+a Wine program has on screen. Wine's own hidden windows never are.
+
+- **One is on screen.** The installer is asking something the answer file
+  didn't cover. It's brought to the front, the progress screen says to answer
+  it there (an `.instructions` event), and the time doesn't count towards the
+  timeout. Once there is progress again, the instructions go.
+- **None is.** The install has stalled. The Wine session is stopped, with a
+  snapshot of its processes in the log, and `runWine` throws
+  `WineError.stalled`. A GUI build then retries with the installer's wizard
+  as for any failed silent install, and the progress step says the install
+  got stuck. A headless or `STRICT_INSTALL` build fails at once with
+  `WrappBuildError.installStalled`.
+
+When the watch stops it logs the longest the install went without a sign
+(`[Install] longest quiet: …`), which is what the window is set from: it must
+sit well above that for every game, idle and loaded. Building every disc game
+on a test Mac (26 watched installs a pass), the longest gaps were 40 s idle,
+before the folders and the log were watched, and 56 s with every core busy
+(Lost Queen, while its InstallShield processes finished after `setup.exe` had
+exited); all but two games stayed under 15 s. A `setup.exe` frozen with
+`kill -STOP` under a 30 s window was stopped 31 s after its last sign, and its
+headless build failed with `installStalled` about a minute after the freeze.
+
 ## Headless runs
 
 `CLIBuilder` (not the ViewModel) owns headless mode. `NON_INTERACTIVE=true`

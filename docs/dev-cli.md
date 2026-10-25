@@ -113,21 +113,22 @@ and `wrapp run`. Each command accepts the values that make sense for the
 program it runs and lists them in its `--help`; `--debug help` prints them.
 They map onto the app's and wrapp's own switches:
 
-| `--debug` value        | Becomes                               | `app run` | `wrapp build` | `wrapp run` |
-| ---------------------- | ------------------------------------- | :-------: | :-----------: | :---------: |
-| `log-window`           | `--debug`                             | ✓         | ✓             | ✓           |
-| `skip-installer`       | `--skip-installer`                    | ✓         | ✓             |             |
-| `strict-install`       | `STRICT_INSTALL=true`                 |           | ✓             |             |
-| `settings-dialog`      | `--debug-options`                     |           |               | ✓           |
-| `wine=<channels>`      | `SECOND_CHANCE_WINEDEBUG=<channels>`  | ✓         | ✓             | ✓           |
-| `keep-in-dock`         | `SECOND_CHANCE_KEEP_IN_DOCK=1`        |           |               | ✓           |
-| `no-native-fullscreen` | `SECOND_CHANCE_NATIVE_FULLSCREEN=0`   |           |               | ✓           |
-| `no-cursor-lock`       | `SECOND_CHANCE_CURSOR_LOCK=0`         |           |               | ✓           |
-| `no-mode-scaling`      | `SECOND_CHANCE_MODE_SCALING=0`        |           |               | ✓           |
-| `no-prestart-desktop`  | `SECOND_CHANCE_PRESTART_DESKTOP=0`    |           |               | ✓           |
-| `no-diagnostics`       | `SECOND_CHANCE_DIAGNOSTICS=0`         |           |               | ✓           |
-| `slow-start=<seconds>` | `SECOND_CHANCE_DIAG_SLOW_SECONDS`     |           |               | ✓           |
-| `reporting`            | `SECOND_CHANCE_REPORTING=1`           | ✓         | ✓             | ✓           |
+| `--debug` value           | Becomes                               | `app run` | `wrapp build` | `wrapp run` |
+| ------------------------- | ------------------------------------- | :-------: | :-----------: | :---------: |
+| `log-window`              | `--debug`                             | ✓         | ✓             | ✓           |
+| `skip-installer`          | `--skip-installer`                    | ✓         | ✓             |             |
+| `strict-install`          | `STRICT_INSTALL=true`                 |           | ✓             |             |
+| `install-stall=<seconds>` | `SECOND_CHANCE_INSTALL_STALL_SECONDS` | ✓         | ✓             |             |
+| `settings-dialog`         | `--debug-options`                     |           |               | ✓           |
+| `wine=<channels>`         | `SECOND_CHANCE_WINEDEBUG=<channels>`  | ✓         | ✓             | ✓           |
+| `keep-in-dock`            | `SECOND_CHANCE_KEEP_IN_DOCK=1`        |           |               | ✓           |
+| `no-native-fullscreen`    | `SECOND_CHANCE_NATIVE_FULLSCREEN=0`   |           |               | ✓           |
+| `no-cursor-lock`          | `SECOND_CHANCE_CURSOR_LOCK=0`         |           |               | ✓           |
+| `no-mode-scaling`         | `SECOND_CHANCE_MODE_SCALING=0`        |           |               | ✓           |
+| `no-prestart-desktop`     | `SECOND_CHANCE_PRESTART_DESKTOP=0`    |           |               | ✓           |
+| `no-diagnostics`          | `SECOND_CHANCE_DIAGNOSTICS=0`         |           |               | ✓           |
+| `slow-start=<seconds>`    | `SECOND_CHANCE_DIAG_SLOW_SECONDS`     |           |               | ✓           |
+| `reporting`               | `SECOND_CHANCE_REPORTING=1`           | ✓         | ✓             | ✓           |
 
 The table lives in one place, `DebugOption.all` in
 `Tools/sc/Sources/SCKit/Support/DebugOptions.swift`: a new switch is a new row

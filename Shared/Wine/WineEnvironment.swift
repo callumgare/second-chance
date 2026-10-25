@@ -211,13 +211,15 @@ nonisolated public struct WineEnvironment: Sendable {
     /// it printed. Its output is logged under the `Wine` category.
     ///
     /// Throws `WineError.executionFailed` on a non-zero exit,
-    /// `.terminatedBySignal` when it was killed, and `.timedOut` when
-    /// `timeout` passes first — in which case the prefix's wineserver is
+    /// `.terminatedBySignal` when it was killed, `.timedOut` when `timeout`
+    /// passes first, and `.stalled` when `watchdog` says it has stopped
+    /// getting anywhere — in both of which the prefix's wineserver is
     /// stopped, which ends every Windows process in it.
     public func runWine(
         executable: String,
         arguments: [String] = [],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        watchdog: WineWatchdog? = nil
     ) async throws {
         let winePath = wineBinDir.appendingPathComponent(executable)
 
@@ -292,6 +294,7 @@ nonisolated public struct WineEnvironment: Sendable {
         let onLine: @Sendable (String) -> Void = { line in
             watch.sawLine()
             noDisplay.check(line)
+            watchdog?.sawOutput()
         }
         eofs.enter()
         eofs.enter()
@@ -302,25 +305,29 @@ nonisolated public struct WineEnvironment: Sendable {
 
         // Cancelling the task (the person cancelling a build) ends the
         // program's whole Wine session, as a timeout does.
-        let timedOut: Bool = await withTaskCancellationHandler {
+        let ending: WaitEnding = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    let deadline: DispatchTime = timeout.map { .now() + $0 } ?? .distantFuture
-                    if exited.wait(timeout: deadline) == .success {
-                        continuation.resume(returning: false)
+                    let ending = Self.wait(for: exited, timeout: timeout, watchdog: watchdog)
+                    switch ending {
+                    case .exited:
+                        continuation.resume(returning: ending)
                         return
+                    case .timedOut:
+                        wineLogger.error("\(watch.name) did not finish within \(SubprocessWatch.duration(timeout ?? 0)) — stopping its Wine session")
+                    case .stalled(let quietFor):
+                        wineLogger.error("\(watch.name) showed no sign of progress for \(SubprocessWatch.duration(quietFor)) — stopping its Wine session")
                     }
-                    wineLogger.error("\(watch.name) did not finish within \(SubprocessWatch.duration(timeout ?? 0)) — stopping its Wine session")
                     // What was still running, before it is killed: a hung
                     // installer is often waiting on another Windows process.
-                    wineLogger.warning("Wine processes at the timeout:\n\(Self.wineProcessSnapshot())")
+                    wineLogger.warning("Wine processes when it was stopped:\n\(Self.wineProcessSnapshot())")
                     _ = self.stopWineserver()
                     process.terminate()
                     if exited.wait(timeout: .now() + 10) != .success {
                         kill(process.processIdentifier, SIGKILL)
                         exited.wait()
                     }
-                    continuation.resume(returning: true)
+                    continuation.resume(returning: ending)
                 }
             }
         } onCancel: {
@@ -341,10 +348,17 @@ nonisolated public struct WineEnvironment: Sendable {
         outputPipe.fileHandleForReading.readabilityHandler = nil
         errorPipe.fileHandleForReading.readabilityHandler = nil
 
-        let outcome = watch.finished(process, note: timedOut ? "timed out" : Task.isCancelled ? "cancelled" : nil)
+        let note: String? = switch ending {
+        case .timedOut: "timed out"
+        case .stalled: "stalled"
+        case .exited: Task.isCancelled ? "cancelled" : nil
+        }
+        let outcome = watch.finished(process, note: note)
         try Task.checkCancellation()
-        if timedOut {
-            throw WineError.timedOut(seconds: timeout ?? 0)
+        switch ending {
+        case .timedOut: throw WineError.timedOut(seconds: timeout ?? 0)
+        case .stalled(let quietFor): throw WineError.stalled(quietFor: quietFor)
+        case .exited: break
         }
         // Whatever the exit code: a program that couldn't open a window has
         // not done its job, and AutoIt in that state exits 0 without running
@@ -359,6 +373,38 @@ nonisolated public struct WineEnvironment: Sendable {
             throw WineError.executionFailed(exitCode: code)
         case .signalled(let signal):
             throw WineError.terminatedBySignal(signal)
+        }
+    }
+
+    enum WaitEnding: Equatable {
+        case exited
+        case timedOut
+        case stalled(quietFor: TimeInterval)
+    }
+
+    /// Wait for the program to exit, for `timeout` to pass, or for `watchdog`
+    /// to say it has stalled, asking the watchdog every `tick` seconds. Time
+    /// the watchdog says is spent waiting on the person doesn't count towards
+    /// the timeout.
+    static func wait(for exited: DispatchSemaphore, timeout: TimeInterval?, watchdog: WineWatchdog?,
+                     tick: TimeInterval = 5) -> WaitEnding {
+        guard let watchdog else {
+            let deadline: DispatchTime = timeout.map { .now() + $0 } ?? .distantFuture
+            return exited.wait(timeout: deadline) == .success ? .exited : .timedOut
+        }
+        var remaining = timeout
+        while true {
+            let slice = remaining.map { min(tick, max(0, $0)) } ?? tick
+            if exited.wait(timeout: .now() + slice) == .success { return .exited }
+            switch watchdog.check() {
+            case .carryOn:
+                remaining = remaining.map { $0 - slice }
+            case .waitingOnPerson:
+                break
+            case .stalled(let quietFor):
+                return .stalled(quietFor: quietFor)
+            }
+            if let left = remaining, left <= 0 { return .timedOut }
         }
     }
 
@@ -416,10 +462,11 @@ nonisolated public struct WineEnvironment: Sendable {
     public func runWindowsExecutableWithStartAsync(
         exePath: String,
         arguments: [String] = [],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        watchdog: WineWatchdog? = nil
     ) async throws {
         let args = ["start", "/wait", "/unix", exePath] + arguments
-        try await runWine(executable: "wine", arguments: args, timeout: timeout)
+        try await runWine(executable: "wine", arguments: args, timeout: timeout, watchdog: watchdog)
     }
 
     /// Run a Windows executable with wine start /wait (synchronous version for WrappTemplate)
@@ -582,6 +629,26 @@ nonisolated public struct WineEnvironment: Sendable {
     }
 }
 
+// MARK: - Watchdog
+
+/// Watches a Wine program `runWine` is waiting for, and says whether it is
+/// still getting somewhere (`GameInstallerRunner`'s `InstallStallWatch`).
+public protocol WineWatchdog: AnyObject, Sendable {
+    /// The program printed a line.
+    func sawOutput()
+    /// Asked every few seconds while the program runs.
+    func check() -> WineWatchdogVerdict
+}
+
+public enum WineWatchdogVerdict: Sendable, Equatable {
+    case carryOn
+    /// Carry on, and don't count this time towards the timeout: the program
+    /// is waiting on the person, who may take as long as they like.
+    case waitingOnPerson
+    /// Stop it: no sign of progress for this long.
+    case stalled(quietFor: TimeInterval)
+}
+
 // MARK: - Wine Errors
 
 public enum WineError: LocalizedError {
@@ -593,6 +660,9 @@ public enum WineError: LocalizedError {
     /// The program printed Wine's `nodrv_CreateWindow` error: it found no
     /// usable desktop, so it ran without a display.
     case noDisplay
+    /// Its `WineWatchdog` said it had stopped getting anywhere, so it was
+    /// stopped, `quietFor` after its last sign of progress.
+    case stalled(quietFor: TimeInterval)
 
     public var errorDescription: String? {
         switch self {
@@ -608,6 +678,8 @@ public enum WineError: LocalizedError {
             return "Failed to install winetrick: \(trick)"
         case .noDisplay:
             return "The Windows program found no display to open its windows on (Wine's nodrv_CreateWindow)"
+        case .stalled(let quietFor):
+            return "Wine showed no sign of progress for \(SubprocessWatch.duration(quietFor)) and was stopped"
         }
     }
 }

@@ -292,10 +292,11 @@ class WineManager {
         at wrappPath: URL,
         executable: String,
         arguments: [String] = [],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        watchdog: WineWatchdog? = nil
     ) async throws {
         let wine = WineEnvironment(appPath: wrappPath)
-        try await wine.runWine(executable: executable, arguments: arguments, timeout: timeout)
+        try await wine.runWine(executable: executable, arguments: arguments, timeout: timeout, watchdog: watchdog)
     }
 
     /// Run a Windows executable through Wine.
@@ -310,14 +311,16 @@ class WineManager {
         at wrappPath: URL,
         exePath: String,
         arguments: [String] = [],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        watchdog: WineWatchdog? = nil
     ) async throws -> Int32 {
         let args = [exePath] + arguments
         return try await runWineReturningExitCode(
             at: wrappPath,
             executable: "wine",
             arguments: args,
-            timeout: timeout
+            timeout: timeout,
+            watchdog: watchdog
         )
     }
 
@@ -328,11 +331,12 @@ class WineManager {
         at wrappPath: URL,
         exePath: String,
         arguments: [String] = [],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        watchdog: WineWatchdog? = nil
     ) async throws -> Int32 {
         let wine = WineEnvironment(appPath: wrappPath)
         do {
-            try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments, timeout: timeout)
+            try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments, timeout: timeout, watchdog: watchdog)
             return 0
         } catch let WineError.executionFailed(exitCode) {
             return exitCode
@@ -345,10 +349,11 @@ class WineManager {
         at wrappPath: URL,
         executable: String,
         arguments: [String] = [],
-        timeout: TimeInterval? = nil
+        timeout: TimeInterval? = nil,
+        watchdog: WineWatchdog? = nil
     ) async throws -> Int32 {
         do {
-            try await runWine(at: wrappPath, executable: executable, arguments: arguments, timeout: timeout)
+            try await runWine(at: wrappPath, executable: executable, arguments: arguments, timeout: timeout, watchdog: watchdog)
             return 0
         } catch let WineError.executionFailed(exitCode) {
             return exitCode

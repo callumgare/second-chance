@@ -186,9 +186,15 @@ class GameInstallerRunner {
                     } else {
                         logger.critical("❌ Installation failed after \(installAttempt) attempts")
                     }
+                    if case WineError.stalled = error {
+                        throw WrappBuildError.installStalled
+                    }
                     throw error
                 }
 
+                if case WineError.stalled = error {
+                    await bus.publishWrappBuild(.progress(.installingGame(substep: Self.stalledInstallSubstep)))
+                }
                 logger.warning("Silent install failed: \(error) — retrying with interactive mode...")
                 // Start the next attempt in a fresh Wine session: what the
                 // failed one left running is no use to it, and its desktop
@@ -853,8 +859,9 @@ class GameInstallerRunner {
     }
 
     /// Stream an installer log file line-by-line to a dedicated logger.
-    private func startInstallerLogStreaming(_ log: InstallerLogFile) throws -> InstallerLogStreamer {
+    private func startInstallerLogStreaming(_ log: InstallerLogFile, onLine: (@Sendable (String) -> Void)? = nil) throws -> InstallerLogStreamer {
         let streamer = InstallerLogStreamer(logPath: log.hostPath, format: log.format)
+        streamer.onLine = onLine
         try streamer.start()
         return streamer
     }
@@ -994,10 +1001,18 @@ class GameInstallerRunner {
             logger.notice("   Automating: \(underlyingCommand)")
         }
 
+        // An unattended attempt is watched for going quiet, which ends it long
+        // before its timeout would (docs/wrapp-build.md#a-stalled-install).
+        let stallWatch = attemptNumber == 0 ? InstallStallRule.fromEnvironment().map { rule in
+            InstallStallWatch(rule: rule, driveC: driveCPath) { [bus] waiting in
+                Task { await bus.publishWrappBuild(.instructions(waiting ? Self.installerQuestionInstructions : nil)) }
+            }
+        } : nil
+
         // Stream the installer's own log independently from Wine stdout/stderr.
         var logStreamer: InstallerLogStreamer?
         if let installerLog {
-            logStreamer = try startInstallerLogStreaming(installerLog)
+            logStreamer = try startInstallerLogStreaming(installerLog, onLine: stallWatch.map { watch in { _ in watch.sawOutput() } })
         }
         defer {
             if let logStreamer {
@@ -1030,20 +1045,24 @@ class GameInstallerRunner {
         let timeout = attemptNumber == 0 ? Self.unattendedInstallTimeout : nil
         let desktop = await startDesktop(at: wrappPath)
         defer { desktop?.release() }
+        stallWatch?.start()
+        defer { stallWatch?.stop() }
         let exitCode: Int32
         if command.useStartCommand {
             exitCode = try await wineManager.runWindowsExecutableWithStart(
                 at: wrappPath,
                 exePath: command.exePath,
                 arguments: command.arguments,
-                timeout: timeout
+                timeout: timeout,
+                watchdog: stallWatch
             )
         } else {
             exitCode = try await wineManager.runWindowsExecutable(
                 at: wrappPath,
                 exePath: command.exePath,
                 arguments: command.arguments,
-                timeout: timeout
+                timeout: timeout,
+                watchdog: stallWatch
             )
         }
 
@@ -1053,7 +1072,7 @@ class GameInstallerRunner {
             throw WineError.executionFailed(exitCode: exitCode)
         }
 
-        try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: timeout)
+        try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: timeout, watchdog: stallWatch)
 
         // A clean exit isn't proof the install finished: check that the
         // installer's own log says it did.
@@ -1082,10 +1101,13 @@ class GameInstallerRunner {
     ///
     /// The pre-started desktop is released first: it would otherwise keep the
     /// session, and so this wait, going for ever.
-    private func waitForInstallerProcesses(at wrappPath: URL, releasing desktop: WineDesktop?, timeout: TimeInterval?) async throws {
+    /// `watchdog` too, as an InstallShield `setup.exe` can exit in seconds and
+    /// leave the whole install to the processes it started.
+    private func waitForInstallerProcesses(at wrappPath: URL, releasing desktop: WineDesktop?, timeout: TimeInterval?,
+                                           watchdog: WineWatchdog? = nil) async throws {
         desktop?.release()
         logger.notice("Waiting for the installer's remaining Wine processes to finish")
-        try await wineManager.runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"], timeout: timeout)
+        try await wineManager.runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"], timeout: timeout, watchdog: watchdog)
     }
 
     /// Run `step`, and if its Windows program found no display, end the Wine
@@ -1185,6 +1207,15 @@ class GameInstallerRunner {
 
     /// The progress screen's instructions while an installer's own window is
     /// up for the person to click through.
+    /// The progress screen's instructions while an unattended install has
+    /// gone quiet with one of its windows on screen.
+    static let installerQuestionInstructions =
+        "The game's installer is asking something in its own window. Answer it there, and the install will carry on."
+
+    /// The progress screen's step while the stalled unattended install gives
+    /// way to the installer's own window.
+    static let stalledInstallSubstep = "The install got stuck, so the installer is opening for you to finish it"
+
     static func interactiveInstallInstructions(for gameInfo: GameInfo) -> String {
         let tips = gameInfo.installInstructions ?? GameInfo.defaultInstallInstructions
         return "The game's installer has opened in its own window. Click through it to install the game. \(tips)"
@@ -1420,6 +1451,8 @@ nonisolated final class InstallerLogStreamer: @unchecked Sendable {
     private var lines = 0
     private var files = 0
     private var errors = 0
+    /// Called with each line too, after it is counted. Set before `start()`.
+    var onLine: (@Sendable (String) -> Void)?
 
     init(logPath: URL, format: InstallerLogFormat) {
         self.logPath = logPath
@@ -1438,7 +1471,10 @@ nonisolated final class InstallerLogStreamer: @unchecked Sendable {
         ProcessLineLogger.attach(
             to: pipe, logger: logger, level: .debug,
             levelFor: { Self.notableLevel(of: $0, format: format) ?? .debug },
-            onLine: { [weak self] line in self?.count(line) }
+            onLine: { [weak self, onLine] line in
+                self?.count(line)
+                onLine?(line)
+            }
         )
         try process.run()
     }
