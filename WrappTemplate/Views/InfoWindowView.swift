@@ -376,6 +376,7 @@ struct InfoWindowView: View {
             caution("Possible launch failure")
 
             informative(viewModel.stage.possibleFailureText)
+                .textSelection(.enabled)
 
             newerReleaseNote
 
@@ -527,8 +528,10 @@ struct InfoWindowView: View {
     private func errorContent(exitCode: Int32, explanation: String?) -> some View {
         Group {
             message(explanation == nil ? "The game crashed" : "The game quit unexpectedly")
+                .textSelection(.enabled)
 
             informative(explanation ?? "It stopped suddenly while it was running (error code \(exitCode)).")
+                .textSelection(.enabled)
 
             newerReleaseNote
 

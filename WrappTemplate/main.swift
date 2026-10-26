@@ -19,6 +19,7 @@ import os
 func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldContinue: Bool, debugMode: Bool) {
     // Initialize NSApplication if not already done
     _ = NSApplication.shared
+    installEditMenuIfNeeded()
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
 
@@ -682,14 +683,7 @@ func main() {
     )
     appMenu.addItem(quitItem)
 
-    // Edit menu
-    let editMenuItem = NSMenuItem()
-    mainMenu.addItem(editMenuItem)
-    let editMenu = NSMenu(title: "Edit")
-    editMenuItem.submenu = editMenu
-
-    editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
-    editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+    mainMenu.addItem(makeEditMenuItem())
 
     // Debug menu (only in debug mode)
     if debugMode {

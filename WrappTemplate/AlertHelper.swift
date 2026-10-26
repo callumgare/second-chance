@@ -9,6 +9,7 @@ import AppKit
 
 func showAlert(message: String, informativeText: String) {
     _ = NSApplication.shared
+    installEditMenuIfNeeded()
     NSApp.setActivationPolicy(.regular)
     NSApp.activate(ignoringOtherApps: true)
 

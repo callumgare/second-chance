@@ -44,6 +44,10 @@ enum CrashReportPrompt {
         }
         // Above a wrapp's loading window, which floats.
         alert.window.level = .modalPanel
+        if process == .wrapp {
+            // Asked as the wrapp starts, before its menu is up.
+            installEditMenuIfNeeded()
+        }
         NSApp.activate(ignoringOtherApps: true)
         return alert
     }
