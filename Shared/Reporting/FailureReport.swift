@@ -87,6 +87,10 @@ nonisolated struct FailureReport: Sendable {
         if !underlying.isEmpty {
             tags["caused_by"] = underlying.joined(separator: " ← ")
         }
+        if let ended = error as? ProgramExitError {
+            if let exitCode = ended.exitCode { tags["exit_code"] = String(exitCode) }
+            if let signal = ended.signal { tags["signal"] = SubprocessWatch.signalName(signal) }
+        }
         self.init(what: what, kind: ErrorChain.identifier(error), game: game, source: source,
                   engine: engine, tags: tags, summary: summary, diagnostics: diagnostics)
     }
@@ -107,6 +111,15 @@ nonisolated struct FailureReport: Sendable {
         while result.hasSuffix(".") { result.removeLast() }
         return result.trimmingCharacters(in: .whitespaces)
     }
+}
+
+/// An error saying how a program ended. Its exit code or signal goes in a
+/// report's `exit_code` or `signal` tag, as a game run's does: a number,
+/// which holds no path, and often the whole story (126: it couldn't be run
+/// at all).
+nonisolated protocol ProgramExitError: Error {
+    var exitCode: Int32? { get }
+    var signal: Int32? { get }
 }
 
 /// What may stay in an event, by detail level. Pure, so the rules can be

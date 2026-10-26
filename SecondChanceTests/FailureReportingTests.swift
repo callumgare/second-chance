@@ -246,6 +246,21 @@ struct FailureReportTests {
         #expect(report.tags["caused_by"] == "NSPOSIXErrorDomain 2")
         #expect(!report.title.contains("/Users"))
     }
+
+    @Test("A Wine program's exit code or signal goes in a tag")
+    func programExit() {
+        let failed = FailureReport(what: "Building the wrapp", error: WineError.executionFailed(exitCode: 126))
+        #expect(failed.kind == "WineError.executionFailed")
+        #expect(failed.tags["exit_code"] == "126")
+        #expect(failed.tags["signal"] == nil)
+
+        let killed = FailureReport(what: "Building the wrapp", error: WineError.terminatedBySignal(SIGKILL))
+        #expect(killed.tags["signal"] == SubprocessWatch.signalName(SIGKILL))
+        #expect(killed.tags["exit_code"] == nil)
+
+        let other = FailureReport(what: "Building the wrapp", error: WineError.noDisplay)
+        #expect(other.tags.isEmpty)
+    }
 }
 
 @Suite("Failure reporter")

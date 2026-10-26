@@ -684,6 +684,18 @@ public enum WineError: LocalizedError {
     }
 }
 
+extension WineError: ProgramExitError {
+    public var exitCode: Int32? {
+        if case .executionFailed(let code) = self { return code }
+        return nil
+    }
+
+    public var signal: Int32? {
+        if case .terminatedBySignal(let signal) = self { return signal }
+        return nil
+    }
+}
+
 /// Watches a Wine program's output for `nodrv_CreateWindow`, the line Wine
 /// prints when a program tries to open a window without a working desktop.
 private nonisolated final class NoDisplaySignal: @unchecked Sendable {

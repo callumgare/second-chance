@@ -60,7 +60,11 @@ What each report contains:
 **A basic report never contains message text**, because messages and
 associated values can hold paths. The kind of a thrown error is
 `ErrorChain.identifier`: its type and case (`WrappBuildError.installIncomplete`,
-`NSCocoaErrorDomain 513`), with underlying errors in the `caused_by` tag. For a
+`NSCocoaErrorDomain 513`), with underlying errors in the `caused_by` tag, and
+for an error that says how a program ended (`ProgramExitError`: a Wine
+program's `WineError.executionFailed` or `.terminatedBySignal`) its
+`exit_code` or `signal` tag, so a basic report still tells a program that
+couldn't be run at all (126) from one that failed. For a
 game run it is how the run ended: `quit-unexpectedly`, `never-started`,
 `killed-by-signal`, `exit-code` or `no-window`, with `exit_code`, `signal` and
 `diagnostics` tags.
