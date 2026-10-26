@@ -40,6 +40,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
 /// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
+/// | `askAboutUnrecognisedGame(_:)` | — (headless: installs it anyway)       | NSAlert: choose another, install anyway, cancel |
 /// | `onGameDetected()`            | `EXPECTED_GAME_SLUG` (fails on mismatch)| accepts whatever was detected  |
 ///
 /// There are **no separate interactive/non-interactive classes** — one code
@@ -352,6 +353,44 @@ class WrappBuildInput {
         alert.addButton(withTitle: "Continue Without Patch")
         alert.addButton(withTitle: "Cancel Installation")
         return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// What to do with a disc or download whose game wasn't recognised.
+    enum UnrecognisedGameChoice {
+        case installAnyway
+        /// Choose another disc or download, and detect again.
+        case chooseAnother
+    }
+
+    /// The disc or download isn't a game Second Chance recognises: perhaps
+    /// the wrong disc, or a game it doesn't know. It can still be installed,
+    /// as Other, if the person wants it to be; cancelling goes back to the
+    /// welcome screen, as nothing has been built yet. A headless run
+    /// installs it anyway, as one always has.
+    @MainActor
+    func askAboutUnrecognisedGame(_ source: WrappSource) throws -> UnrecognisedGameChoice {
+        if isHeadlessRun { return .installAnyway }
+
+        let what = source == .disk ? "disc" : "download"
+        let alert = NSAlert()
+        alert.messageText = "Second Chance doesn't recognise this game"
+        alert.informativeText = "It may be the wrong \(what), or a game Second Chance doesn't know. "
+            + "You can choose another \(what), or install it anyway, though it may not work."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Choose Another \(what.capitalized)…")
+        alert.addButton(withTitle: "Install Anyway")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            logger.notice("Unrecognised game: choosing another \(what)")
+            return .chooseAnother
+        case .alertSecondButtonReturn:
+            logger.notice("Unrecognised game: installing it anyway")
+            return .installAnyway
+        default:
+            logger.notice("Unrecognised game: cancelled")
+            throw WrappBuildError.userCancelledBeforeStart
+        }
     }
 
     /// Whether to send success reports, asked once, after the first build

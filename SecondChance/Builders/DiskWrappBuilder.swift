@@ -52,36 +52,9 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .disk))
 
-        // ── Resolve disks ──────────────────────────────────────────────
-        let disk1 = try await input.getDisk1Path()
-        logger.notice("Disk 1: \(disk1.path)")
-
-        // Everything from the first mount to the temp wrapp: a failure here
-        // (an unreadable disc, the wrong game) still unmounts what it mounted
-        // and reports itself, like a failure in the build below.
-        let disk1Root: URL
-        let gameSlug: String
-        let gameInfo: GameInfo
-        do {
-            let disk1Mounted = try await mountIfISO(disk1, input: input)
-            if let mounted = disk1Mounted {
-                await bus.publishWrappBuild(.isoMounted(mounted))
-            }
-            disk1Root = disk1Mounted ?? disk1
-
-            // ── Detect the game ONCE; GameInfo threads through from here ──
-            await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
-            gameSlug = try await gameDetector.detectGame(fromDisk: disk1Root)
-            gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
-            logger.notice("Detected game: \(gameInfo.title)")
-            await bus.publishWrappBuild(.gameDetected(gameInfo))
-            try await input.onGameDetected(gameInfo)
-        } catch {
-            await isoMounter.unmountAll()
-            let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
-            await bus.publishWrappBuild(.failed(buildError))
-            throw error
-        }
+        // ── Resolve disk 1 and detect the game ONCE ──────────────────────
+        // GameInfo threads through from here.
+        let (disk1Root, gameSlug, gameInfo) = try await resolveGame(input: input)
 
         // ── Build ──────────────────────────────────────────────────────
         // The builder owns the temp wrapp lifecycle: removed on both the
@@ -186,6 +159,44 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         }
         await bus.publishWrappBuild(.disksResolved(disk1: disk1, disk2: disk2Root))
         return disk2Root
+    }
+
+    /// Disk 1, mounted if it's an image, and the game on it. A disc whose
+    /// game isn't recognised can be swapped for another, which is then
+    /// detected in turn. Everything from the first mount to the temp wrapp:
+    /// a failure here (an unreadable disc, the wrong game) still unmounts
+    /// what it mounted and reports itself, like a failure in the build.
+    private func resolveGame(input: WrappBuildInput) async throws -> (disk1Root: URL, gameSlug: String, gameInfo: GameInfo) {
+        var disk1 = try await input.getDisk1Path()
+        do {
+            while true {
+                logger.notice("Disk 1: \(disk1.path)")
+                let disk1Mounted = try await mountIfISO(disk1, input: input)
+                if let mounted = disk1Mounted {
+                    await bus.publishWrappBuild(.isoMounted(mounted))
+                }
+                let disk1Root = disk1Mounted ?? disk1
+
+                await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
+                let gameSlug = try await gameDetector.detectGame(fromDisk: disk1Root)
+                let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
+                logger.notice("Detected game: \(gameInfo.title)")
+                if gameInfo.id == GameInfo.unknownGame.id,
+                   try await input.askAboutUnrecognisedGame(.disk) == .chooseAnother {
+                    await isoMounter.unmountAll()
+                    disk1 = try await input.getDisk1Path()
+                    continue
+                }
+                await bus.publishWrappBuild(.gameDetected(gameInfo))
+                try await input.onGameDetected(gameInfo)
+                return (disk1Root, gameSlug, gameInfo)
+            }
+        } catch {
+            await isoMounter.unmountAll()
+            let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            await bus.publishWrappBuild(.failed(buildError))
+            throw error
+        }
     }
 
     // MARK: - ISO Lifecycle (builder-owned)

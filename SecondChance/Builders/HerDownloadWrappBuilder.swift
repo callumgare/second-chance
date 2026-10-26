@@ -46,7 +46,22 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .herDownload))
 
-        let download = try await input.getHerInstallerPath()
+        var download = try await input.getHerInstallerPath()
+        while true {
+            do {
+                return try await build(fromDownload: download, input: input)
+            } catch is ChooseAnotherDownload {
+                // Its game wasn't recognised, and the person chose another.
+                download = try await input.getHerInstallerPath()
+            }
+        }
+    }
+
+    /// Thrown once a download's game wasn't recognised and the person chose
+    /// another download, after cleaning up after this one.
+    private struct ChooseAnotherDownload: Error {}
+
+    private func build(fromDownload download: URL, input: WrappBuildInput) async throws -> URL {
         logger.notice("Her Interactive download: \(download.path)")
         switch download.pathExtension.lowercased() {
         case "dmg":
@@ -61,6 +76,15 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         return try await build(fromWindowsInstaller: download, input: input)
     }
 
+    /// Throws `ChooseAnotherDownload` when the game isn't one Second Chance
+    /// recognises and the person would rather choose another download.
+    private func checkRecognised(_ gameInfo: GameInfo, input: WrappBuildInput) async throws {
+        guard gameInfo.id == GameInfo.unknownGame.id else { return }
+        if try await input.askAboutUnrecognisedGame(.herDownload) == .chooseAnother {
+            throw ChooseAnotherDownload()
+        }
+    }
+
     // MARK: - Windows installer
 
     private func build(fromWindowsInstaller installer: URL, input: WrappBuildInput) async throws -> URL {
@@ -71,6 +95,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let gameSlug = try await gameDetector.detectGame(fromHerInstaller: installer)
             gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
             logger.notice("Detected game: \(gameInfo.title)")
+            try await checkRecognised(gameInfo, input: input)
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
         } catch {
@@ -161,6 +186,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let gameSlug = gameDetector.detectGame(fromCiderPackage: package)
             gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
             logger.notice("Detected game: \(gameInfo.title)")
+            try await checkRecognised(gameInfo, input: input)
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
         } catch {
@@ -261,6 +287,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     }
 
     private func publishFailure(_ error: Error) async {
+        // Not a failure: the build carries on with another download.
+        guard !(error is ChooseAnotherDownload) else { return }
         let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
         await bus.publishWrappBuild(.failed(buildError))
     }

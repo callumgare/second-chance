@@ -53,6 +53,13 @@ other builders are the same shape with less in the middle.
 **Step 3 happens exactly once.** `GameInfo` is threaded through every later
 step; nothing downstream re-detects. (An earlier design detected twice.)
 
+A disc or Her download whose game isn't recognised (`GameInfo.unknownGame`,
+"Other") stops at step 3 to ask (`input.askAboutUnrecognisedGame`): choose
+another disc or download, which unmounts this one and goes back to step 2;
+install it anyway, as Other; or cancel, back to the welcome screen. Only the
+game that is finally chosen publishes `.gameDetected`. A headless run never
+asks, and installs it as Other, as it always has.
+
 Step 9 is skipped when `DebugSettings.shared.skipInstaller` is set — Wine may
 still be needed to run the installer later.
 
