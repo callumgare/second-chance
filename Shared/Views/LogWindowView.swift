@@ -273,7 +273,11 @@ private struct LogCell: View {
     let tint: Color
 
     var body: some View {
+        // A table cell is one line unless told otherwise, which showed only
+        // the first line of a message that has several.
         Text(text)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
             .foregroundStyle(tint)
     }
 }
