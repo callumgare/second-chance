@@ -41,6 +41,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
 /// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
 /// | `askAboutUnrecognisedGame(_:)` | — (headless: installs it anyway)       | NSAlert: choose another, install anyway, cancel |
+/// | `ensureRosetta()`             | — (headless: fails if it's missing)     | NSAlert offering to install it |
 /// | `onGameDetected()`            | `EXPECTED_GAME_SLUG` (fails on mismatch)| accepts whatever was detected  |
 ///
 /// There are **no separate interactive/non-interactive classes** — one code
@@ -390,6 +391,39 @@ class WrappBuildInput {
         default:
             logger.notice("Unrecognised game: cancelled")
             throw WrappBuildError.userCancelledBeforeStart
+        }
+    }
+
+    /// Make sure this Mac can run Wine before the build asks for anything:
+    /// without Rosetta every Wine program fails. When it's missing, the
+    /// person is offered it (macOS then asks for an administrator's
+    /// password); declining goes back to the welcome screen, as nothing has
+    /// been built yet. A headless run fails, saying how to install it.
+    @MainActor
+    func ensureRosetta() async throws {
+        guard await !Rosetta.isInstalled() else { return }
+        if isHeadlessRun { throw WrappBuildError.rosettaMissing }
+
+        let alert = NSAlert()
+        alert.messageText = "Second Chance needs Rosetta"
+        alert.informativeText = "The games were made for Windows, and what lets them run on this Mac needs "
+            + "Rosetta, a free part of macOS from Apple. Installing it takes a minute or two, and means "
+            + "agreeing to Apple's licence for it. Your Mac will ask for your password."
+        alert.addButton(withTitle: "Install Rosetta")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            logger.notice("Rosetta is missing, and the person chose not to install it")
+            throw WrappBuildError.userCancelledBeforeStart
+        }
+
+        await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Installing Rosetta")))
+        let outcome = await Rosetta.install()
+        // Back to the welcome screen, where the source's prompts appear.
+        await EventBus.app.publishWrappBuild(.progress(.idle))
+        switch outcome {
+        case .installed: return
+        case .cancelled: throw WrappBuildError.userCancelledBeforeStart
+        case .failed: throw WrappBuildError.rosettaInstallFailed
         }
     }
 

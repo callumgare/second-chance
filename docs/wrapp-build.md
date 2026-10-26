@@ -31,6 +31,25 @@ func build(input: WrappBuildInput) async throws -> URL
 Both entry points dispatch through the protocol, so **adding a source means
 adding a builder, not adding a branch.** Neither call site changes.
 
+## Before any build: Rosetta
+
+Wine is x86_64, so on Apple silicon it runs under Rosetta, which macOS
+doesn't install until something asks for it, and Second Chance, being
+universal, never does. Without it every Wine program fails with exit 126
+("Bad CPU type in executable" from the `sh` that starts it), so the first
+step of every build is `WineError.executionFailed`. So before a builder runs,
+both entry points call `input.ensureRosetta()`, which runs an x86_64 program
+to see whether one can run (`Rosetta.isInstalled`). When it can't, the person
+is offered Rosetta: `softwareupdate --install-rosetta` through `osascript`,
+which asks for an administrator's password, shown as "Installing Rosetta"
+under `.settingUpWrapp`. Declining, or cancelling the password prompt, goes
+back to the welcome screen. A headless run fails with
+`WrappBuildError.rosettaMissing`, which says how to install it.
+
+A wrapp has no such check: its executable is x86_64 only, so without
+Rosetta none of its code runs, and macOS offers to install Rosetta when it
+is opened, as for any Intel app.
+
 ## The disk build, step by step
 
 `DiskWrappBuilder.build(input:)` is the complete and best-exercised path. The

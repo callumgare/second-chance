@@ -295,6 +295,7 @@ class WrappBuildViewModel: ObservableObject {
         loadMonitor.start()
         defer { loadMonitor.stop() }
         do {
+            try await input.ensureRosetta()
             builtWrappURL = try await builder.build(input: input)
             currentState = .completed
             recordBuild(outcome: SuccessReport.ok)

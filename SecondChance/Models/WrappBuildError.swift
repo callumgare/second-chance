@@ -48,6 +48,11 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// A Her Interactive Mac download Second Chance can't take the game
     /// from: not a Cider installer, or one that isn't laid out as expected.
     case unsupportedMacDownload(reason: String)
+    /// This Mac can't run Wine because Rosetta isn't installed, in a build
+    /// with nobody to offer it to (`WrappBuildInput.ensureRosetta`).
+    case rosettaMissing
+    /// The person agreed to install Rosetta, but it didn't install.
+    case rosettaInstallFailed
 
     var errorDescription: String? {
         switch self {
@@ -101,6 +106,10 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "The game's installer stopped responding, so installing was stopped. Try again."
         case .unsupportedMacDownload(let reason):
             return "Second Chance can't use this Mac download: \(reason). Download the Windows version from Her Interactive instead."
+        case .rosettaMissing:
+            return "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license"
+        case .rosettaInstallFailed:
+            return "Rosetta, which the games need, couldn't be installed. Check that your Mac is connected to the internet, then try again."
 
         }
     }

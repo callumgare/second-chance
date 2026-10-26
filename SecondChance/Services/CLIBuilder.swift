@@ -108,6 +108,7 @@ enum CLIBuilder {
         SystemLoadMonitor().start()
 
         do {
+            try await input.ensureRosetta()
             _ = try await builder.build(input: input)
 
             logger.notice("NON-INTERACTIVE MODE: Exiting with success")
