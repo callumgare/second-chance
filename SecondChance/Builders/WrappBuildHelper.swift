@@ -512,9 +512,9 @@ class WrappBuildHelper {
 
         await bus.publishWrappBuild(.progress(.installingGame(substep: "Installing Steam")))
 
-        // Stop wine server first
+        // Stop wine server first; it waits for the server, so off the main thread.
         let wine = WineEnvironment(appPath: wrappPath)
-        _ = wine.stopWineserver()
+        _ = await Blocking.run { wine.stopWineserver() }
 
         // Valve's installer, run silently. Not `winetricks steam`: that first
         // installs Microsoft's core fonts (for a Wine bug that crashed Steam's

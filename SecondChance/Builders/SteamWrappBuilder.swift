@@ -32,7 +32,10 @@ struct SteamWrappPreparer: SteamWrappPreparing {
     func prepare(wrappAt path: URL) async throws {
         try await helper.createBaseWrapp(at: path)
         try await helper.installSteamClient(in: path)
-        clientCache.restore(into: path.appendingPathComponent("Contents/SharedSupport/prefix"))
+        // Hundreds of MB of Steam, so off the main thread.
+        let clientCache = self.clientCache
+        let prefix = path.appendingPathComponent("Contents/SharedSupport/prefix")
+        _ = await Blocking.run { clientCache.restore(into: prefix) }
     }
 }
 
@@ -209,7 +212,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if run.claimStop() {
                 await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
             }
-            clientCache.save(from: prefix)
+            let clientCache = self.clientCache
+            await Blocking.run { clientCache.save(from: prefix) }
             // Nothing from here on uses Steam or its sign-in. Holding the lock
             // through patching and saving had a wrapp opened as the build
             // finished (or from its done screen) find Steam taken by the build.

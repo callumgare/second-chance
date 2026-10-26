@@ -200,7 +200,8 @@ class GameInstallerRunner {
                 // failed one left running is no use to it, and its desktop
                 // may be on its way out while its display key still says it
                 // is up, which would let the next attempt skip starting one.
-                let status = WineEnvironment(appPath: wrappPath).stopWineserver()
+                let wine = WineEnvironment(appPath: wrappPath)
+                let status = await Blocking.run { wine.stopWineserver() }
                 if status != 0 {
                     logger.debug("wineserver -k before the next attempt exited \(status) (no session running)")
                 }
@@ -1126,7 +1127,7 @@ class GameInstallerRunner {
         } catch WineError.noDisplay {
             logger.warning("\(what) found no display to open its windows on — restarting the Wine session and trying once more")
             let wine = WineEnvironment(appPath: wrappPath)
-            let status = wine.stopWineserver()
+            let status = await Blocking.run { wine.stopWineserver() }
             if status != 0 {
                 logger.warning("wineserver -k exited \(status)")
             }
