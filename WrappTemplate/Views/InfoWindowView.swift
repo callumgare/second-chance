@@ -225,7 +225,9 @@ struct InfoWindowView: View {
                     gaveUpContent
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // A lone line of loading text sits level with the icon's middle
+            // rather than its top, where it would look stranded.
+            .frame(maxWidth: .infinity, minHeight: centresLoadingMessage ? Self.iconSize : nil, alignment: .leading)
         }
         .padding(20)
         .frame(width: Self.width)
@@ -246,13 +248,21 @@ struct InfoWindowView: View {
     /// `confirmButtonFrame` is measured in.
     static let rootSpace = "info-window"
 
+    static let iconSize: CGFloat = 64
+
+    /// Loading, with nothing yet beneath the stage's message.
+    private var centresLoadingMessage: Bool {
+        guard case .loading = viewModel.phase else { return false }
+        return viewModel.stage.detail == nil && viewModel.stage.progress == nil
+    }
+
     /// The wrapp's icon, with a caution badge once the game has failed, as
     /// a critical alert's is.
     private var icon: some View {
         Image(nsImage: NSApplication.shared.applicationIconImage)
             .resizable()
             .accessibilityHidden(true)
-            .frame(width: 64, height: 64)
+            .frame(width: Self.iconSize, height: Self.iconSize)
             .overlay(alignment: .bottomTrailing) {
                 if viewModel.phase.isFailure {
                     Image(systemName: "exclamationmark.triangle.fill")
