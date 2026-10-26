@@ -240,7 +240,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             }
 
             if runsWithoutSteam { try removeSteam(from: prefix) }
-            try helper.cleanupUnusedEngine(at: wrappPath, gameEngine: engine)
+            try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: engine)
 
             try helper.configureWrapp(
                 at: wrappPath,
@@ -266,7 +266,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if run.claimStop() {
                 await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
             }
-            helper.removeTempWrapp(wrappPath)
+            await helper.removeTempWrapp(wrappPath)
 
             let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
             await bus.publishWrappBuild(.failed(buildError))

@@ -39,21 +39,21 @@ struct TemplateSignatureTests {
     }
 
     @Test("An intact template passes")
-    func intactPasses() throws {
+    func intactPasses() async throws {
         let (bundle, _) = try makeSignedBundle()
         defer { try? FileManager.default.removeItem(at: bundle) }
-        try WrappBuildHelper.shared.verifyTemplateSignatures(bundle)
+        try await WrappBuildHelper.shared.verifyTemplateSignatures(bundle)
     }
 
     @Test("A template copied without extended attributes fails with templateSignaturesLost")
-    func strippedFails() throws {
+    func strippedFails() async throws {
         let (bundle, dll) = try makeSignedBundle()
         defer { try? FileManager.default.removeItem(at: bundle) }
         for name in ["com.apple.cs.CodeDirectory", "com.apple.cs.CodeRequirements"] {
             _ = removexattr(dll.path, name, 0)
         }
-        #expect {
-            try WrappBuildHelper.shared.verifyTemplateSignatures(bundle)
+        await #expect {
+            try await WrappBuildHelper.shared.verifyTemplateSignatures(bundle)
         } throws: { error in
             guard case WrappError.templateSignaturesLost = error else { return false }
             return true

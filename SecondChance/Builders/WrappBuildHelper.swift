@@ -21,6 +21,8 @@ import Foundation
 import Logging
 import AppKit
 
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildHelper")
+
 /// Source-independent wrapp-building operations shared by every builder.
 class WrappBuildHelper {
     static let shared = WrappBuildHelper()
@@ -29,7 +31,6 @@ class WrappBuildHelper {
     private let wineManager: WineManager
     private let cacheManager: CacheManager
     let bus: EventBus<AppEvent>
-    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildHelper")
 
     init(
         wineManager: WineManager = .shared,
@@ -45,27 +46,14 @@ class WrappBuildHelper {
 
     /// Copy directory using shell command with symlink preservation.
     /// This works around VirtualBuddy shared folder symlink issues.
-    private func copyItemDerefencingSymlinks(at source: URL, to destination: URL) throws {
+    private func copyItemDerefencingSymlinks(at source: URL, to destination: URL) async throws {
         let executable = "/bin/cp"
-        // -R: recursive, -P: preserve symlinks (don't dereference)
+        // -a: recursive, preserving symlinks (not following them) and attributes
         let arguments = ["-a", source.path, destination.path]
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = Pipe() // Suppress output
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+        let copy = try await Process.output(of: executable, arguments)
+        if !copy.succeeded {
             let command = formatShellCommand(executable: executable, arguments: arguments)
-            throw WrappError.copyFailed(message: "cp command failed", command: command, output: errorMessage)
+            throw WrappError.copyFailed(message: "cp command failed", command: command, output: copy.errorOutput)
         }
     }
 
@@ -76,7 +64,7 @@ class WrappBuildHelper {
             throw WrappError.templateNotFound("WrappTemplate.app not found in Second Chance.app bundle")
         }
         // Before the cache too: a cached base wrapp came from this template.
-        try verifyTemplateSignatures(templatePath)
+        try await verifyTemplateSignatures(templatePath)
 
         // Check cache first
         if try cacheManager.restoreCache(stage: .base, to: path) != nil {
@@ -88,7 +76,7 @@ class WrappBuildHelper {
 
         // Copy the entire template (includes both Wine and ScummVM)
         do {
-            try copyItemDerefencingSymlinks(at: templatePath, to: path)
+            try await copyItemDerefencingSymlinks(at: templatePath, to: path)
         } catch {
             if let wrappError = error as? WrappError, let output = wrappError.copyOutput {
                 logger.notice("Copy output: \(output)")
@@ -117,22 +105,16 @@ class WrappBuildHelper {
     /// template says the same in under a second. Only that failure stops the
     /// build: anything else it reports is logged, since a wrapp is re-signed
     /// whole at the end anyway.
-    func verifyTemplateSignatures(_ templatePath: URL) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        process.arguments = ["--verify", templatePath.path]
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = FileHandle.nullDevice
+    func verifyTemplateSignatures(_ templatePath: URL) async throws {
+        let verify: ProcessOutput
         do {
-            try process.run()
+            verify = try await Process.output(of: "/usr/bin/codesign", ["--verify", templatePath.path])
         } catch {
             logger.warning("Couldn't run codesign to check the wrapp template: \(error.localizedDescription)")
             return
         }
-        let output = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        process.waitUntilExit()
-        guard process.terminationStatus != 0 else { return }
+        let output = verify.errorOutput
+        guard !verify.succeeded else { return }
         let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
         if detail.contains("code object is not signed at all") {
             logger.critical("❌ The wrapp template has files without their code signatures: \(detail)")
@@ -142,17 +124,17 @@ class WrappBuildHelper {
     }
 
     /// Remove the engine this game doesn't use from the wrapp.
-    func cleanupUnusedEngine(at wrappPath: URL, gameEngine: GameInfo.GameEngine) throws {
+    func cleanupUnusedEngine(at wrappPath: URL, gameEngine: GameInfo.GameEngine) async throws {
         logger.notice("Cleaning up unused game engine from wrapp...")
 
         let resourcesPath = wrappPath.appendingPathComponent("Contents/Resources")
 
         switch gameEngine {
         case .wine, .wineSteam, .wineSteamSilent:
-            try removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("scummvm-files"),
+            try await removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("scummvm-files"),
                                   engine: "ScummVM", from: wrappPath)
         case .scummvm:
-            try removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("wine-files"),
+            try await removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("wine-files"),
                                   engine: "Wine", from: wrappPath)
         }
 
@@ -170,7 +152,13 @@ class WrappBuildHelper {
     /// removed whole at its top two levels (`Frameworks/GStreamer.framework`,
     /// `SharedSupport/wine`, `MacOS/scummvm`) — the two engines share none of
     /// those — and then any symlink left pointing at nothing.
-    func removeEngineFiles(listedIn list: URL, engine: String, from wrappPath: URL) throws {
+    func removeEngineFiles(listedIn list: URL, engine: String, from wrappPath: URL) async throws {
+        try await Blocking.run { try Self.removeEngineFilesNow(listedIn: list, engine: engine, from: wrappPath) }
+    }
+
+    /// Gigabytes, for Wine: `removeEngineFiles` runs it off the main thread.
+    private nonisolated static func removeEngineFilesNow(listedIn list: URL, engine: String, from wrappPath: URL) throws {
+        let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: list.path) else {
             logger.warning("No \(engine) file list at \(list.path) — leaving \(engine) in the wrapp")
             return
@@ -196,12 +184,13 @@ class WrappBuildHelper {
         logger.notice("Removed \(engine), which the game doesn't use: \(entries.count) entries, \(freed)")
     }
 
-    private func isSymlink(_ url: URL) -> Bool {
-        (try? fileManager.destinationOfSymbolicLink(atPath: url.path)) != nil
+    private nonisolated static func isSymlink(_ url: URL) -> Bool {
+        (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil
     }
 
     /// Remove symlinks directly in `directory` whose target no longer exists.
-    private func removeDanglingSymlinks(in directory: URL) {
+    private nonisolated static func removeDanglingSymlinks(in directory: URL) {
+        let fileManager = FileManager.default
         let items = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         for item in items where isSymlink(item) && !fileManager.fileExists(atPath: item.path) {
             do {
@@ -556,7 +545,7 @@ class WrappBuildHelper {
         // say) stops here, before anything is saved.
         try Task.checkCancellation()
         // Sign before moving so failures trigger the builder's cleanup
-        try signWrapp(at: wrappPath)
+        try await signWrapp(at: wrappPath)
         await bus.publishWrappBuild(.signed(wrappPath: wrappPath))
 
         // Asked once ever, before the save panel, while the build has just worked.
@@ -578,35 +567,20 @@ class WrappBuildHelper {
     }
 
     /// Sign the wrapp app (ad-hoc codesign).
-    func signWrapp(at path: URL) throws {
+    func signWrapp(at path: URL) async throws {
         logger.notice("Signing wrapp...")
 
         let codesignPath = "/usr/bin/codesign"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: codesignPath)
-        process.arguments = [
-            "--force",
-            "--sign", "-",
-            "--verbose=2",
-            path.path
-        ]
+        let arguments = ["--force", "--sign", "-", "--verbose=2", path.path]
+        let sign = try await Process.output(of: codesignPath, arguments)
 
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = Pipe()
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus == 0 {
+        if sign.succeeded {
             logger.notice("✅ Wrapp signed successfully")
         } else {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            let command = "\(codesignPath) \(process.arguments?.joined(separator: " ") ?? "")"
-            logger.error("⚠️ Code signing failed: \(errorMessage)")
+            let command = "\(codesignPath) \(arguments.joined(separator: " "))"
+            logger.error("⚠️ Code signing failed: \(sign.errorOutput)")
             logger.notice("   Command: \(command)")
-            throw WrappError.signingFailed(errorMessage)
+            throw WrappError.signingFailed(sign.errorOutput)
         }
     }
 
@@ -624,12 +598,15 @@ class WrappBuildHelper {
         // Name the destination in any failure: Foundation's own message names
         // the temp bundle ("NancyDrew-<UUID>.app couldn't be moved…"), which
         // says nothing about where it was going.
+        // A copy, not a rename, when the destination is on another volume.
         do {
-            // Remove existing if present
-            if FileManager.default.fileExists(atPath: finalPath.path) {
-                try FileManager.default.removeItem(at: finalPath)
+            try await Blocking.run {
+                // Remove existing if present
+                if FileManager.default.fileExists(atPath: finalPath.path) {
+                    try FileManager.default.removeItem(at: finalPath)
+                }
+                try FileManager.default.moveItem(at: wrappPath, to: finalPath)
             }
-            try FileManager.default.moveItem(at: wrappPath, to: finalPath)
         } catch {
             logger.error("Couldn't save the wrapp to \(finalPath.path): \(ErrorChain.describe(error))")
             throw WrappBuildError.saveFailed(destination: finalPath.path, reason: error.localizedDescription)
@@ -670,7 +647,7 @@ class WrappBuildHelper {
 
     /// Remove one tracked temp wrapp — a cleanup *primitive* the builder
     /// calls on its error path. No-op if already moved or removed.
-    func removeTempWrapp(_ path: URL) {
+    func removeTempWrapp(_ path: URL) async {
         wrappsLock.lock()
         temporaryWrapps.remove(path)
         wrappsLock.unlock()
@@ -687,14 +664,14 @@ class WrappBuildHelper {
         // the processes then run on, one of them using most of a core.
         let wine = WineEnvironment(appPath: path)
         if fileManager.fileExists(atPath: wine.wineBinDir.appendingPathComponent("wineserver").path) {
-            let status = wine.stopWineserver()
+            let status = await Blocking.run { wine.stopWineserver() }
             if status != 0 {
                 logger.debug("wineserver -k for \(path.lastPathComponent) exited \(status) (no session running)")
             }
         }
 
         do {
-            try removeWrappDirectory(path)
+            try await Blocking.run { try Self.removeWrappDirectory(path) }
             logger.notice("🧹 Removed temp wrapp: \(path.lastPathComponent)")
         } catch {
             logger.warning("   ⚠️ Failed to remove \(path.lastPathComponent): \(error.localizedDescription)")
@@ -705,7 +682,8 @@ class WrappBuildHelper {
     /// before they were made writable on copy holds read-only directories that
     /// `removeItem` can't empty, so on failure give the owner write permission
     /// throughout and try again.
-    private func removeWrappDirectory(_ url: URL) throws {
+    private nonisolated static func removeWrappDirectory(_ url: URL) throws {
+        let fileManager = FileManager.default
         do {
             try fileManager.removeItem(at: url)
         } catch {
@@ -737,7 +715,7 @@ class WrappBuildHelper {
                   modified < cutoff else { continue }
             let size = DirectorySize.measure(wrapp)
             do {
-                try removeWrappDirectory(wrapp)
+                try Self.removeWrappDirectory(wrapp)
                 logger.notice("🧹 Removed a temp wrapp left by an earlier run: \(wrapp.lastPathComponent) (\(size.description), last changed \(modified))")
             } catch {
                 logger.warning("Can't remove the stale temp wrapp \(wrapp.path): \(error.localizedDescription)")
@@ -767,7 +745,7 @@ class WrappBuildHelper {
             do {
                 if fileManager.fileExists(atPath: wrapp.path) {
                     logger.notice("   Removing: \(wrapp.path)")
-                    try removeWrappDirectory(wrapp)
+                    try Self.removeWrappDirectory(wrapp)
                 }
             } catch {
                 logger.warning("   ⚠️ Failed to remove \(wrapp.lastPathComponent): \(error.localizedDescription)")
@@ -782,25 +760,19 @@ class WrappBuildHelper {
         let launchDesc = appPath.path + (arguments.isEmpty ? "" : " \(arguments.joined(separator: " "))")
         logger.notice("Launching: \(launchDesc)")
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-
         // Build arguments: open <app-path> --args <app-arguments>
         var openArgs = [appPath.path]
         if !arguments.isEmpty {
             openArgs.append("--args")
             openArgs.append(contentsOf: arguments)
         }
-        process.arguments = openArgs
+        let open = try await Process.output(of: "/usr/bin/open", openArgs)
 
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus == 0 {
+        if open.succeeded {
             logger.notice("Game launched successfully")
         } else {
-            throw NSError(domain: "GameLaunch", code: Int(process.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "Failed to launch game: open command exited with status \(process.terminationStatus)"
+            throw NSError(domain: "GameLaunch", code: Int(open.status), userInfo: [
+                NSLocalizedDescriptionKey: "Failed to launch game: open command exited with status \(open.status)"
             ])
         }
     }

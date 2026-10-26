@@ -10,13 +10,14 @@ import AppKit
 
 // Note: WineEnvironment is defined in this same module
 
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineManager")
+
 /// Manages Wine environment setup and execution
 class WineManager {
     static let shared = WineManager()
 
     private let fileManager = FileManager.default
     private let prefixCacheDir: URL
-    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineManager")
 
     private init() {
         // Set up prefix cache directory in user's Caches (persists between runs)
@@ -83,8 +84,14 @@ class WineManager {
         return cachedPrefix
     }
 
-    /// Save Wine prefix to cache
-    private func cachePrefix(from sourcePath: URL, buildId: String) throws {
+    /// Save Wine prefix to cache: hundreds of MB, copied off the main thread.
+    private func cachePrefix(from sourcePath: URL, buildId: String) async throws {
+        let prefixCacheDir = self.prefixCacheDir
+        try await Blocking.run { try Self.cachePrefix(from: sourcePath, buildId: buildId, in: prefixCacheDir) }
+    }
+
+    private nonisolated static func cachePrefix(from sourcePath: URL, buildId: String, in prefixCacheDir: URL) throws {
+        let fileManager = FileManager.default
         let cachedPrefixDir = prefixCacheDir.appendingPathComponent(buildId)
         let cachedPrefix = cachedPrefixDir.appendingPathComponent("prefix")
 
@@ -139,9 +146,11 @@ class WineManager {
         if let cachedPrefix = getCachedPrefix(buildId: buildId) {
             logger.notice("✓ Using cached Wine prefix (build: \(buildId))")
 
-            // Copy cached prefix to wrapp
-            try? fileManager.removeItem(at: prefixPath)
-            try fileManager.copyItem(at: cachedPrefix, to: prefixPath)
+            // Copy cached prefix to wrapp: hundreds of MB, so off the main thread.
+            try await Blocking.run {
+                try? FileManager.default.removeItem(at: prefixPath)
+                try FileManager.default.copyItem(at: cachedPrefix, to: prefixPath)
+            }
 
             return
         }
@@ -238,7 +247,7 @@ class WineManager {
         try await waitForWineToExit(at: wrappPath)
 
         // Cache the prefix for future use
-        try cachePrefix(from: prefixPath, buildId: buildId)
+        try await cachePrefix(from: prefixPath, buildId: buildId)
     }
     /// Mount a directory as a drive in Wine
     func mountDirectory(
@@ -395,7 +404,7 @@ class WineManager {
             Task.detached {
                 // Streams line-by-line through the logger — live progress during
                 // a slow operation, no single multi-MB entry at the end.
-                let process = TaggedProcess(logger: self.logger)
+                let process = TaggedProcess(logger: logger)
                 process.executableURL = URL(fileURLWithPath: "/bin/bash")
                 process.arguments = [winetricksPath, "--unattended", name]
                 process.environment = wine.environmentVariables()
@@ -409,10 +418,10 @@ class WineManager {
                         return
                     }
 
-                    self.logger.notice("✓ Successfully installed \(name)")
+                    logger.notice("✓ Successfully installed \(name)")
                     continuation.resume()
                 } catch {
-                    self.logger.notice("Failed to install winetrick \(name): \(error)")
+                    logger.notice("Failed to install winetrick \(name): \(error)")
                     continuation.resume(throwing: error)
                 }
             }

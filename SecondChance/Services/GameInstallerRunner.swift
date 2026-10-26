@@ -82,7 +82,7 @@ class GameInstallerRunner {
             logger.notice("DEBUG: Skip installer enabled — using installer path as game exe: \(installerExe)")
 
             // Show what command would have been run using the same code path
-            let installerType = detectInstallerType(installerExe)
+            let installerType = await detectInstallerType(installerExe)
             let command = buildInstallerCommand(
                 installerPath: installerExe,
                 installerType: installerType,
@@ -255,7 +255,7 @@ class GameInstallerRunner {
     /// Returns false, having changed nothing, for an installer that isn't an
     /// InstallShield launcher or that doesn't unpack; it is then run as it is.
     func unpackInstallShieldLauncher(_ launcher: URL, at wrappPath: URL) async throws -> Bool {
-        guard detectInstallerType(launcher.path) == .installShield else {
+        guard await detectInstallerType(launcher.path) == .installShield else {
             logger.notice("\(launcher.lastPathComponent) isn't an InstallShield launcher — running it as it is")
             return false
         }
@@ -464,14 +464,15 @@ class GameInstallerRunner {
         for patch in patches {
             logger.notice("📦 Patch: \(patch.id) — \(patch.title)")
             do {
-                let before = GameFileSnapshot(of: gameInstallDir)
+                // A walk over every file of the game, off the main thread.
+                let before = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }
                 try await apply(
                     patch,
                     wrappPath: wrappPath,
                     driveCPath: driveCPath,
                     gameInstallDir: gameInstallDir
                 )
-                let changed = GameFileSnapshot(of: gameInstallDir).changes(since: before)
+                let changed = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }.changes(since: before)
                 if changed.isEmpty {
                     // A driven patcher's exit code is only AutoIt's: it has
                     // once exited 0 without the patcher ever running.
@@ -519,7 +520,7 @@ class GameInstallerRunner {
         try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: tempDir) }
 
-        try unzipPatchArchive(archiveURL, into: tempDir)
+        try await unzipPatchArchive(archiveURL, into: tempDir)
 
         // The manifest names the payload exactly, so there is no guessing at
         // filenames — they follow no pattern worth pattern-matching.
@@ -550,7 +551,7 @@ class GameInstallerRunner {
             try fileManager.createDirectory(at: destinationDir, withIntermediateDirectories: true)
             // A self-extracting zip is a zip with an exe in front, which unzip
             // reads as is. -o overwrites, so a rebuild is idempotent.
-            try unzipPatchArchive(payload, into: destinationDir)
+            try await unzipPatchArchive(payload, into: destinationDir)
             logger.notice("   → extracted \(patch.payload) into \(destinationDir.lastPathComponent)")
 
         case .runInstaller:
@@ -579,14 +580,9 @@ class GameInstallerRunner {
     }
 
     /// Extract a patch archive with `/usr/bin/unzip`.
-    private func unzipPatchArchive(_ archive: URL, into directory: URL) throws {
-        let unzip = Process()
-        unzip.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        unzip.arguments = ["-q", "-o", archive.path, "-d", directory.path]
-        try unzip.run()
-        unzip.waitUntilExit()
-
-        guard unzip.terminationStatus == 0 else {
+    private func unzipPatchArchive(_ archive: URL, into directory: URL) async throws {
+        let unzip = try await Process.output(of: "/usr/bin/unzip", ["-q", "-o", archive.path, "-d", directory.path])
+        guard unzip.succeeded else {
             throw GamePatchError.unzipFailed(archive.lastPathComponent)
         }
     }
@@ -621,7 +617,7 @@ class GameInstallerRunner {
             return
         }
 
-        let installerType = detectInstallerType(hostPath.path)
+        let installerType = await detectInstallerType(hostPath.path)
         // An Inno Setup patcher keeps a log that says whether it finished;
         // the self-extracting updaters most patches are don't.
         let installerLog = installerType == .innoSetup
@@ -673,7 +669,7 @@ class GameInstallerRunner {
         winePath: String
     ) async throws {
         let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
-        let scriptPath = try stageAutoIt(script: script, inDriveC: driveCPath)
+        let scriptPath = try await stageAutoIt(script: script, inDriveC: driveCPath)
         defer { removeAutoIt(script: scriptPath, inDriveC: driveCPath) }
 
         let scriptWinePath = Self.windowsPath(of: scriptPath, driveC: driveCPath)
@@ -701,7 +697,7 @@ class GameInstallerRunner {
 
     /// Copy AutoIt and a `patch-automation` script into the prefix, returning
     /// the script's host path.
-    private func stageAutoIt(script: String, inDriveC driveCPath: URL) throws -> URL {
+    private func stageAutoIt(script: String, inDriveC driveCPath: URL) async throws -> URL {
         guard AutoItService.shared.isAvailable else {
             throw WrappBuildError.autoItNotAvailable
         }
@@ -710,7 +706,9 @@ class GameInstallerRunner {
         }
         let autoitDestDir = driveCPath.appendingPathComponent("autoit")
         if !fileManager.fileExists(atPath: autoitDestDir.path) {
-            try fileManager.copyItem(at: AutoItService.shared.autoitDir, to: autoitDestDir)
+            // Tens of MB, so off the main thread.
+            let autoitDir = AutoItService.shared.autoitDir
+            try await Blocking.run { try FileManager.default.copyItem(at: autoitDir, to: autoitDestDir) }
         }
         let destination = driveCPath.appendingPathComponent("\(script).au3")
         if fileManager.fileExists(atPath: destination.path) {
@@ -765,7 +763,7 @@ class GameInstallerRunner {
     // MARK: - AutoIt Automation
 
     /// Copy AutoIt and automation script to Wine prefix for installer automation
-    private func setupAutoItForInstall(in wrappPath: URL) throws {
+    private func setupAutoItForInstall(in wrappPath: URL) async throws {
         let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
 
         // Check if AutoIt is available
@@ -782,8 +780,8 @@ class GameInstallerRunner {
             try fileManager.removeItem(at: autoitDestDir)
         }
 
-        // Copy AutoIt directory
-        try fileManager.copyItem(at: autoitSourceDir, to: autoitDestDir)
+        // Copy AutoIt directory: tens of MB, so off the main thread.
+        try await Blocking.run { try FileManager.default.copyItem(at: autoitSourceDir, to: autoitDestDir) }
         logger.notice("✅ Copied AutoIt to drive_c")
 
         // Copy automation script from bundle
@@ -967,7 +965,7 @@ class GameInstallerRunner {
         gameInfo: GameInfo,
         attemptNumber: Int
     ) async throws -> InstallerType {
-        let installerType = detectInstallerType(installerPath)
+        let installerType = await detectInstallerType(installerPath)
         let installerTypeDesc = String(describing: installerType)
         logger.notice("Installer type: \(installerTypeDesc)")
         await bus.publishWrappBuild(.installerResolved(exePath: installerPath, type: installerType))
@@ -1025,7 +1023,7 @@ class GameInstallerRunner {
 
         // Setup AutoIt if needed
         if command.underlyingCommandDescription != nil {
-            try setupAutoItForInstall(in: wrappPath)
+            try await setupAutoItForInstall(in: wrappPath)
         }
 
         // An installer nothing drives shows its own wizard, for the person
@@ -1168,7 +1166,7 @@ class GameInstallerRunner {
     // MARK: - Installer Type Detection
 
     /// Detect installer type from file extension and metadata
-    func detectInstallerType(_ installerPath: String) -> InstallerType {
+    func detectInstallerType(_ installerPath: String) async -> InstallerType {
         let url = URL(fileURLWithPath: installerPath)
 
         // Check file extension first
@@ -1178,7 +1176,8 @@ class GameInstallerRunner {
 
         // Try to extract metadata using exiftool to detect InstallShield/Inno Setup
         do {
-            let metadata = try exiftool.getFileProperties(installerPath, properties: ["ProductName", "Comments"])
+            let exiftool = self.exiftool
+            let metadata = try await Blocking.run { try exiftool.getFileProperties(installerPath, properties: ["ProductName", "Comments"]) }
             logger.notice("🔍 Installer metadata: \(metadata)")
             let combined = (metadata["ProductName"] ?? "") + " " + (metadata["Comments"] ?? "")
             let lowercased = combined.lowercased()
@@ -1531,7 +1530,7 @@ nonisolated final class InstallerLogStreamer: @unchecked Sendable {
 /// The files under a game directory, by size and modification date, so a
 /// patch's effect can be logged. Archive extraction keeps a file's original
 /// date, so a file a patch adds shows up as new rather than as newer.
-struct GameFileSnapshot {
+nonisolated struct GameFileSnapshot: Sendable {
     private var files: [String: (size: Int, modified: Date)] = [:]
 
     init(of directory: URL, fileManager: FileManager = .default) {

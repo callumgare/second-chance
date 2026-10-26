@@ -75,25 +75,16 @@ class ISOMounter {
         }
 
         logger.notice("Mounting ISO: \(isoPath.lastPathComponent)")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         let isDMG = isoPath.pathExtension.lowercased() == "dmg"
-        process.arguments = ["attach", "-nobrowse", "-readonly"] + (isDMG ? ["-noverify"] : []) + [isoPath.path]
-        // A DMG with a licence agreement asks for it on stdin: answer no
-        // rather than wait for ever. Her Interactive's have none.
-        process.standardInput = FileHandle.nullDevice
+        // stdin is empty: a DMG with a licence agreement asks for it there,
+        // and is answered no rather than waited on. Her Interactive's have none.
+        let attach = try await Process.output(
+            of: "/usr/bin/hdiutil",
+            ["attach", "-nobrowse", "-readonly"] + (isDMG ? ["-noverify"] : []) + [isoPath.path]
+        )
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorOutput = (String(data: data, encoding: .utf8) ?? "Unknown error")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard attach.succeeded else {
+            let errorOutput = (attach.output + attach.errorOutput).trimmingCharacters(in: .whitespacesAndNewlines)
             // hdiutil says "image not recognised" for a truncated ISO and for a
             // file that was never one; the image itself can tell them apart.
             let diagnosis = isDMG ? Self.describeSize(of: isoPath) : Self.diagnoseImage(at: isoPath)
@@ -102,14 +93,7 @@ class ISOMounter {
                 NSLocalizedDescriptionKey: "Failed to mount \(isoPath.lastPathComponent): \(errorOutput). \(diagnosis)"
             ])
         }
-
-        // Parse hdiutil output to get mount point
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        guard let output = String(data: data, encoding: .utf8) else {
-            throw NSError(domain: "ISOMount", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to read mount output"
-            ])
-        }
+        let output = attach.output
 
         // Find the mount point in the output (last column, usually /Volumes/...)
         let lines = output.components(separatedBy: "\n")
@@ -177,17 +161,12 @@ class ISOMounter {
         logger.notice("Unmounting \(mountedISOs.count) ISO(s)...")
 
         for mountPoint in mountedISOs {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-            process.arguments = ["detach", mountPoint.path, "-quiet"]
-
             do {
-                try process.run()
-                process.waitUntilExit()
-                if process.terminationStatus == 0 {
+                let detach = try await Process.output(of: "/usr/bin/hdiutil", ["detach", mountPoint.path, "-quiet"])
+                if detach.succeeded {
                     logger.notice("Unmounted: \(mountPoint.path)")
                 } else {
-                    logger.error("Failed to unmount \(mountPoint.path) (exit code: \(process.terminationStatus))")
+                    logger.error("Failed to unmount \(mountPoint.path) (exit code: \(detach.status))")
                 }
             } catch {
                 logger.error("Error unmounting \(mountPoint.path): \(error)")
@@ -199,25 +178,11 @@ class ISOMounter {
 
     /// Check if an ISO is already mounted and return its mount point
     private func findExistingMount(for isoPath: URL) async throws -> URL? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        process.arguments = ["info", "-plist"]
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        // Print any errors to console
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        if let errorOutput = String(data: errorData, encoding: .utf8), !errorOutput.isEmpty {
-            logger.critical("   hdiutil info error: \(errorOutput)")
+        let info = try await Process.output(of: "/usr/bin/hdiutil", ["info", "-plist"])
+        if !info.errorOutput.isEmpty {
+            logger.critical("   hdiutil info error: \(info.errorOutput)")
         }
-
-        let plistData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let plistData = Data(info.output.utf8)
 
         // Parse the plist
         guard let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any],

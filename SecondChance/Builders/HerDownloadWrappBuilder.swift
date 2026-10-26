@@ -137,11 +137,11 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
             // Unlike a disc, nothing reads the installer once the game is in.
             if unpacked && !DebugSettings.shared.skipInstaller {
-                removeQuietly(installerBaseDir, what: "the unpacked installer")
+                await removeQuietly(installerBaseDir, what: "the unpacked installer")
             }
 
             if !DebugSettings.shared.skipInstaller {
-                try helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+                try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
             }
 
             return try await finish(
@@ -151,7 +151,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 input: input
             )
         } catch {
-            helper.removeTempWrapp(wrappPath)
+            await helper.removeTempWrapp(wrappPath)
             await publishFailure(error)
             throw error
         }
@@ -214,7 +214,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let gameExe = try await package.extractGame(into: driveCPath, staging: staging, wineDLLs: wineDLLs) { percent in
                 await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game (\(percent)%)")))
             }
-            removeQuietly(staging, what: "the rest of the Cider app")
+            await removeQuietly(staging, what: "the rest of the Cider app")
             await isoMounter.unmountAll()
 
             let gameExePath = "/" + gameExe.path(relativeTo: driveCPath)
@@ -225,7 +225,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             // ran one, and it is a later build than they patch anyway.
             logger.notice("Not applying game patches: a Mac download is a later build than Her Interactive's patches update")
 
-            try helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+            try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
 
             return try await finish(
                 wrappPath: wrappPath,
@@ -234,7 +234,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 input: input
             )
         } catch {
-            helper.removeTempWrapp(wrappPath)
+            await helper.removeTempWrapp(wrappPath)
             await isoMounter.unmountAll()
             await publishFailure(error)
             throw error
@@ -293,9 +293,10 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         await bus.publishWrappBuild(.failed(buildError))
     }
 
-    private func removeQuietly(_ url: URL, what: String) {
+    /// Hundreds of MB, so off the main thread.
+    private func removeQuietly(_ url: URL, what: String) async {
         do {
-            try fileManager.removeItem(at: url)
+            try await Blocking.run { try FileManager.default.removeItem(at: url) }
         } catch {
             logger.warning("Couldn't remove \(what) at \(url.path): \(error)")
         }

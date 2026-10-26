@@ -36,14 +36,14 @@ class GameDetector {
         stepLogger.notice("Found \(contents.count) items in disk")
 
         if let setupExe = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.exe" }) {
-            if let productName = try? getFileInfo(setupExe, property: "Product Name") {
+            if let productName = try? await getFileInfo(setupExe, property: "Product Name") {
                 stepLogger.notice("Product Name: \(productName)")
                 fingerprint += " \(productName)"
             }
         }
 
         if let msiFile = contents.first(where: { $0.pathExtension.lowercased() == "msi" }) {
-            if let subject = try? getFileInfo(msiFile, property: "Subject") {
+            if let subject = try? await getFileInfo(msiFile, property: "Subject") {
                 stepLogger.notice("MSI Subject: \(subject)")
                 fingerprint += " \(subject)"
             }
@@ -98,13 +98,14 @@ class GameDetector {
         var fingerprint = installerPath.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: "_", with: " ")
 
-        if let productName = try? getFileInfo(installerPath, property: "Product Name") {
+        if let productName = try? await getFileInfo(installerPath, property: "Product Name") {
             logger.notice("Product Name: \(productName)")
             fingerprint += " \(productName)"
         }
 
         do {
-            for signal in try Self.embeddedInstallerSignals(in: installerPath) {
+            // Reads the whole installer, hundreds of MB, so off the main thread.
+            for signal in try await Blocking.run({ try Self.embeddedInstallerSignals(in: installerPath) }) {
                 logger.notice("Embedded: \(signal)")
                 fingerprint += " \(signal)"
             }
@@ -199,8 +200,9 @@ class GameDetector {
     // MARK: - Private Detection Methods
 
     /// Extract metadata from a file using exiftool
-    private func getFileInfo(_ filePath: URL, property: String) throws -> String? {
-        return try exiftool.getFileProperty(filePath.path, property: property)
+    private func getFileInfo(_ filePath: URL, property: String) async throws -> String? {
+        let exiftool = self.exiftool
+        return try await Blocking.run { try exiftool.getFileProperty(filePath.path, property: property) }
     }
 
     /// Parse property from INI file

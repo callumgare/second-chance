@@ -165,7 +165,7 @@ struct InstallerIntegrationTests {
         }
 
         let installer = GameInstallerRunner.shared
-        _ = installer.detectInstallerType(mockInstallerPath.path)
+        _ = await installer.detectInstallerType(mockInstallerPath.path)
 
         // The type will depend on what mock installer we create
         // We just check that it doesn't crash - actual type depends on fixture

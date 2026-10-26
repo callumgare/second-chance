@@ -100,7 +100,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             // Clean up unused engine unless we skipped the installer — wine
             // might be needed to run the installer later.
             if !DebugSettings.shared.skipInstaller {
-                try helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+                try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
             }
 
             try helper.configureWrapp(
@@ -133,7 +133,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             return finalPath
         } catch {
             // Tear down builder-owned resources before rethrowing.
-            helper.removeTempWrapp(wrappPath)
+            await helper.removeTempWrapp(wrappPath)
             await isoMounter.unmountAll()
 
             let installError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
@@ -250,8 +250,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         }.value
 
         // Remove extended attributes, resource forks, and Finder info that would cause codesign to fail
-        try removeExtendedAttributes(from: disk1Dest)
-        makeWritable(disk1Dest)
+        try await removeExtendedAttributes(from: disk1Dest)
+        await makeWritable(disk1Dest)
 
         // Copy disk 2 if present
         if let disk2 = try await resolveDisk2() {
@@ -262,8 +262,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             }.value
 
             // Remove extended attributes from disk 2 as well
-            try removeExtendedAttributes(from: disk2Dest)
-            makeWritable(disk2Dest)
+            try await removeExtendedAttributes(from: disk2Dest)
+            await makeWritable(disk2Dest)
 
             // Create combined disk directory with symlinks
             let combinedDest = installerPath.appendingPathComponent("disk-combined")
@@ -362,46 +362,24 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// delete the copy afterwards: not a failed build's cleanup, not the
     /// integration test's, and not a user deleting the wrapp. Each such copy
     /// left behind is gigabytes, and they had filled a test machine's disk.
-    private func makeWritable(_ path: URL) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/chmod")
-        process.arguments = ["-R", "u+w", path.path]
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = FileHandle.nullDevice
+    private func makeWritable(_ path: URL) async {
         do {
-            try process.run()
-            process.waitUntilExit()
+            let chmod = try await Process.output(of: "/bin/chmod", ["-R", "u+w", path.path])
+            if !chmod.succeeded {
+                logger.warning("⚠️ Could not make \(path.lastPathComponent) writable: \(chmod.errorOutput)")
+            }
         } catch {
             logger.warning("⚠️ Could not run chmod on \(path.lastPathComponent): \(error.localizedDescription)")
-            return
-        }
-        if process.terminationStatus != 0 {
-            let message = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-            logger.warning("⚠️ Could not make \(path.lastPathComponent) writable: \(message)")
         }
     }
 
     /// Remove extended attributes, resource forks, and Finder info that
     /// would cause codesign to fail.
-    private func removeExtendedAttributes(from path: URL) throws {
+    private func removeExtendedAttributes(from path: URL) async throws {
         logger.notice("Removing extended attributes from \(path.lastPathComponent)...")
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
-        process.arguments = ["-cr", path.path]
-
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        process.standardOutput = Pipe()
-
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            logger.warning("⚠️ Failed to remove extended attributes: \(errorMessage)")
+        let xattr = try await Process.output(of: "/usr/bin/xattr", ["-cr", path.path])
+        if !xattr.succeeded {
+            logger.warning("⚠️ Failed to remove extended attributes: \(xattr.errorOutput)")
             // Don't throw - this is not critical, codesign will just fail later with a better message
         }
     }

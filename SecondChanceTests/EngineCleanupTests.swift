@@ -6,7 +6,7 @@ import Foundation
 struct EngineCleanupTests {
 
     @Test("Listed entries go whole, with the symlinks that pointed into them")
-    func removesWholeEntries() throws {
+    func removesWholeEntries() async throws {
         let fm = FileManager.default
         let wrapp = fm.temporaryDirectory.appendingPathComponent("cleanup-\(UUID().uuidString).app")
         let contents = wrapp.appendingPathComponent("Contents")
@@ -28,7 +28,7 @@ struct EngineCleanupTests {
         try fm.createDirectory(at: list.deletingLastPathComponent(), withIntermediateDirectories: true)
         try "Frameworks/Engine.framework/Versions/A/Engine\nFrameworks/libz.1.3.1.dylib\n".write(to: list, atomically: true, encoding: .utf8)
 
-        try WrappBuildHelper.shared.removeEngineFiles(listedIn: list, engine: "Test", from: wrapp)
+        try await WrappBuildHelper.shared.removeEngineFiles(listedIn: list, engine: "Test", from: wrapp)
 
         let left = try fm.contentsOfDirectory(atPath: frameworks.path).sorted()
         #expect(left == ["libkeep.dylib"])

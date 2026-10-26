@@ -8,7 +8,9 @@ import Foundation
 import Logging
 
 /// Service for extracting metadata from files using exiftool
-class ExiftoolService {
+/// Nonisolated, and holding nothing that changes, so it can run off the
+/// main thread: each call waits on exiftool, which takes up to a second or two.
+nonisolated final class ExiftoolService: Sendable {
     static let shared = ExiftoolService()
 
     let exiftoolPath: String
