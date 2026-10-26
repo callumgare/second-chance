@@ -85,6 +85,7 @@ struct SecondChanceApp: App {
         FailureReporter.setRunLogs(in: appLogs, prefix: "run")
         CrashMarker.install(in: appLogs, logger: logger)
         WrappBuildHelper.shared.sweepStaleTemporaryWrapps()
+        LaunchHistory.record()
 
         // Clear the Wine prefix cache before anything else touches it. Works in
         // both GUI and headless launches (`--clear-wine-cache`).
@@ -194,5 +195,22 @@ struct SecondChanceApp: App {
             alert.alertStyle = .warning
         }
         alert.runModal()
+    }
+}
+
+/// Whether Second Chance has been opened before, for the welcome screen's
+/// greeting. Read and recorded once per launch, so the greeting doesn't
+/// change while the window is open.
+enum LaunchHistory {
+    private static let key = "hasLaunchedBefore"
+    private(set) static var isReturning = false
+
+    static func record() {
+        // Neither a test nor a headless run is someone opening the app, and
+        // the README's screenshot shows the first-time greeting.
+        let environment = ProcessInfo.processInfo.environment
+        guard !TestHost.isRunning, !CLIBuilder.isEnabled, environment[ReadmeScreenshot.pathEnvVar] == nil else { return }
+        isReturning = UserDefaults.standard.bool(forKey: key)
+        UserDefaults.standard.set(true, forKey: key)
     }
 }

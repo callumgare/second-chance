@@ -13,7 +13,7 @@ struct WelcomeView: View {
     private let sources: [WrappSource] = [.disk, .steam, .herDownload]
 
     var body: some View {
-        InstallerPage(title: "Welcome, Detective") {
+        InstallerPage(title: LaunchHistory.isReturning ? "Welcome back, Detective" : "Welcome, Detective") {
             Text("Second Chance makes a Nancy Drew game playable on this Mac. Choose where to install it from.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
