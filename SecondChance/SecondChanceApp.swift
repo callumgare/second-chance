@@ -12,10 +12,16 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 private var signalSources: [DispatchSourceSignal] = []
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // No Dock icon, and not brought to the front as it starts (TestHost).
+        if TestHost.isRunning {
+            NSApp.setActivationPolicy(.accessory)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Nobody to ask in a headless run or under test.
-        let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-        if !CLIBuilder.isEnabled && !isTestHost {
+        if !CLIBuilder.isEnabled && !TestHost.isRunning {
             AppMover.offerIfTranslocated()
         }
     }
@@ -71,8 +77,7 @@ struct SecondChanceApp: App {
         // Not under test: every test run would push a real run's log out.
         let appLogs = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/SecondChance/app", isDirectory: true)
-        let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-        let runLog = isTestHost ? nil : RotatingLogFile.start(in: appLogs, prefix: "run", logger: logger)
+        let runLog = TestHost.isRunning ? nil : RotatingLogFile.start(in: appLogs, prefix: "run", logger: logger)
         RunContext.logHeader(logger, extra: [("log", runLog?.path ?? "none")])
         // FailureReporter first: when Sentry handles crashes, CrashMarker
         // installs no handler of its own (docs/failure-reports.md).
@@ -154,6 +159,8 @@ struct SecondChanceApp: App {
                 .environmentObject(wrappBuildViewModel)
         }
         .windowResizability(.contentSize)
+        .defaultLaunchBehavior(TestHost.isRunning ? .suppressed : .automatic)
+        .restorationBehavior(TestHost.isRunning ? .disabled : .automatic)
         .commands {
             InstallCommands(viewModel: wrappBuildViewModel)
             if DebugCommands.isEnabled {

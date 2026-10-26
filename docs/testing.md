@@ -9,6 +9,10 @@ does not work for it — everything goes through `xcodebuild` against the
 `SecondChance` scheme. (`Tools/sc`, the CLI itself, is a Swift package with its
 own tests; `sc test unit` runs those too.)
 
+The tests run inside `Second Chance.app`, their test host. Under test it opens
+no window and stays out of the Dock and the foreground (`TestHost`), so a run
+doesn't take over the Mac; it also keeps no run log.
+
 For the repo-wide conventions see `AGENTS.md`; for the build flow these tests
 exercise, see [wrapp-build.md](wrapp-build.md).
 
