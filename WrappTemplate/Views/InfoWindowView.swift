@@ -658,6 +658,8 @@ func renderInfoWindowShots(to dir: String) {
         return vm
     }
     let shots: [(String, InfoWindowViewModel)] = [
+        ("loading", vm(.startingGame(title: "Stay Tuned for Danger")) { _ in }),
+        ("loading-with-detail", vm(.startingSteam) { _ in }),
         ("error-crashed", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .error(exitCode: 1, explanation: nil) }),
         ("error-quit-unexpectedly", vm(.startingGame(title: "The White Wolf of Icicle Creek")) {
             $0.phase = .error(exitCode: 0, explanation: "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.")
