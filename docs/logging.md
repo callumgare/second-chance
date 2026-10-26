@@ -20,10 +20,15 @@ what goes into the log and where it ends up.
 | `DerivedData/sc-logs/<time>-wrapp-build-<slug>.full.log` | A wrapp build's whole log, every level, full format (`SECOND_CHANCE_LOG_FILE`). |
 | `DerivedData/sc-logs/<time>-wrapp-build-<slug>.jsonl` | The same as JSON lines (`SECOND_CHANCE_LOG_JSONL`). |
 | `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` | Each wrapp launch's whole log, every level; the newest 10 are kept. The header names it. |
-| `~/Library/Logs/SecondChance/app/run-<time>.log` | Each run of Second Chance's whole log, every level; the newest 10 are kept. The header names it, and Debug → Show Run Log in Finder opens it. Not written under test, or when `SECOND_CHANCE_LOG_FILE` or `--mirror-logs` chose a file instead. |
+| `~/Library/Logs/SecondChance/app/run-<time>.log` | Each run of Second Chance's whole log, every level; the newest 10 are kept. The header names it, and Developer → Show Run Log in Finder opens it. Not written under test, or when `SECOND_CHANCE_LOG_FILE` or `--mirror-logs` chose a file instead. |
 | `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/` | A bundle from a launch that started badly (see AGENTS.md): stacks, process lists, Wine's output and the wrapp's log. |
 | Save Log…, `--mirror-logs` | The app's in-memory ring (the last 50,000 entries), or the whole session, to a file you choose or `~/Downloads`. |
 | OSLog (`log show`) | Every entry, crash-durable, under the `au.gare.callum.second-chance` subsystems. |
+
+In Second Chance the log window and Save Log… are on the error screen, and at
+any time in the Developer menu (Show Log Window, ⌥⌘L). That menu is in every
+Debug build, in a Release one launched with ⌥ held, and whenever **Show
+Developer menu** is on in Settings (`DebugCommands`).
 
 ## Levels
 

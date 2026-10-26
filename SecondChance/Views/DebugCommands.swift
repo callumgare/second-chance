@@ -2,8 +2,9 @@
 //  DebugCommands.swift
 //  SecondChance
 //
-//  The Debug menu: switches for testing and diagnosing builds. It is in
-//  every Debug build, and in a Release one launched with ⌥ held.
+//  The Developer menu: the log, and switches for testing and diagnosing
+//  builds. It is in every Debug build, in a Release one launched with ⌥
+//  held, and whenever "Show Developer menu" is on in Settings.
 
 import AppKit
 import SwiftUI
@@ -12,8 +13,11 @@ struct DebugCommands: Commands {
     @ObservedObject var settings = DebugSettings.shared
     @ObservedObject var logWindow = LogWindow.shared
 
-    /// Whether this run has the menu, decided once at launch.
-    static let isEnabled: Bool = {
+    /// The Settings switch that shows the menu.
+    static let settingKey = "showDeveloperMenu"
+
+    /// Whether this run has the menu whatever the setting, decided once at launch.
+    static let isAlwaysShown: Bool = {
         #if DEBUG
         return true
         #else
@@ -22,7 +26,7 @@ struct DebugCommands: Commands {
     }()
 
     var body: some Commands {
-        CommandMenu("Debug") {
+        CommandMenu("Developer") {
             Toggle("Skip Installer", isOn: $settings.skipInstaller)
                 .help("Copy the game's files but don't run its installer, for testing a wrapp's set-up without waiting for an install.")
 
@@ -39,6 +43,7 @@ struct DebugCommands: Commands {
                 }
             ))
             .keyboardShortcut("l", modifiers: [.command, .option])
+            Button("Save Log…") { saveLog() }
             // Every entry of this run, where the in-memory log Save Log reads
             // keeps only the last 50,000.
             Button("Show Run Log in Finder") {
@@ -52,6 +57,17 @@ struct DebugCommands: Commands {
 
             Button("Crash Now…") { confirmCrash() }
             Button("Reset Debug Settings") { settings.resetToDefaults() }
+        }
+    }
+
+    private func saveLog() {
+        guard let url = LogExporter.selectSaveURL() else { return }
+        Task {
+            guard await !LogExporter.export(to: url) else { return }
+            let alert = NSAlert()
+            alert.messageText = "Save Failed"
+            alert.informativeText = "The log file could not be saved. Please try again."
+            alert.runModal()
         }
     }
 

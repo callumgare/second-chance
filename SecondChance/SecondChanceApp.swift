@@ -63,6 +63,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct SecondChanceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var wrappBuildViewModel = WrappBuildViewModel()
+    @AppStorage(DebugCommands.settingKey) private var showDeveloperMenu = false
 
     private let appStartTime = Date()
 
@@ -164,7 +165,7 @@ struct SecondChanceApp: App {
         .restorationBehavior(TestHost.isRunning ? .disabled : .automatic)
         .commands {
             InstallCommands(viewModel: wrappBuildViewModel)
-            if DebugCommands.isEnabled {
+            if DebugCommands.isAlwaysShown || showDeveloperMenu {
                 DebugCommands()
             }
             CommandGroup(after: .appInfo) {
