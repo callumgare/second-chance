@@ -2,6 +2,36 @@
 
 All notable changes to Second Chance.
 
+## 0.8.0 — 2026-10-26
+
+### Improved
+
+- Ask what to do with a game that isn't recognised. If a disc or download isn't a game Second Chance knows, you can now choose another one, install it anyway, or cancel, instead of it being installed without a word.
+- Notice a stalled install much sooner. If an install stops getting anywhere, Second Chance now spots it within a couple of minutes instead of waiting 30. If the installer is asking you a question, its window comes to the front and the progress screen tells you to answer it.
+- Keep the window responding while a game's app is being built, including Steam games. Before, it could freeze for a few seconds at a time.
+- Add a setting to show the Developer menu.
+
+### Fixed
+
+- Fix games freezing, or installs hanging for 30 minutes, in some cases. White Wolf's install was one. Rebuild a game's app to get this fix.
+- Fix a loading message that sat at the top of the icon's height instead of being centred beside it.
+- Fix "What's in a report?" in Settings so it opens when you click anywhere on its row, without a flicker.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Log window cells now show every line of a multi-line entry, such as the run's header, instead of only the first.
+- Headless builds, WrappPuppeteer-driven runs and tests with reporting forced on no longer show the "how detailed?" alert for a previous crash and wait on it forever. They send the crash at the setting's level without asking.
+- Wine is now started with the app's Mach exception ports cleared (Process.runWithoutCrashHandler). With reporting on, Wine processes inherited Sentry's handler and hung at their next intentional fault. A lint rule covers Shared/Wine and Shared/Steam, and ChildProcessTests checks the port isn't inherited.
+- The unattended install watch (InstallStallWatch) looks for signs of progress: CPU use by Wine programs, new processes, output lines, and growing install folders. SECOND_CHANCE_INSTALL_STALL_SECONDS (sc --debug install-stall=) sets the window, and 0 turns it off. On a stall with nothing on screen, the Wine session is stopped and the build falls back to the installer's wizard, or a headless build fails with a plain error.
+- Blocking tools (hdiutil, codesign, cp, xattr, chmod, exiftool, unzip) and large copies or removals during a build now run through Process.output and Blocking.run off the main thread. Waits for Wine to stop and the Steam client cache restore and save do too. Debug builds log [Hang] when the main thread stalls.
+- sc release now runs gh as the account named after the repo's owner when signed in to one. The preflight stops if that account can't write to the repo, and failed push or release steps end on a ✖ instead of a success message.
+- The test host no longer opens its window or shows in the Dock or foreground while tests run.
+- The loading window is now rendered among the info window's screenshots.
+- Docs: recorded the polish notes and what was done about each.
+
+</details>
+
 ## 0.7.0 — 2026-10-23
 
 ### Improved
