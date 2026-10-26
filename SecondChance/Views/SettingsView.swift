@@ -13,6 +13,7 @@ struct SettingsView: View {
     /// Off until the person says yes, which they're asked after their first
     /// successful build.
     @State private var successReports = ReportingPreferences.load().successReports ?? false
+    @State private var showsReportContents = false
     private let disabledReason = FailureReporter.disabledReason(environment: ProcessInfo.processInfo.environment,
                                                                 isDebugBuild: FailureReporter.isDebugBuild,
                                                                 dsn: FailureReporter.dsn)
@@ -32,7 +33,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                DisclosureGroup("What's in a report?") {
+                DisclosureGroup(isExpanded: $showsReportContents) {
                     Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
                         GridRow {
                             Color.clear.frame(width: 0, height: 0).gridColumnAlignment(.leading)
@@ -50,6 +51,12 @@ struct SettingsView: View {
                     }
                     .font(.callout)
                     .padding(.top, 4)
+                } label: {
+                    // The whole row toggles it, not only the chevron and the words.
+                    Text("What's in a report?")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { withAnimation { showsReportContents.toggle() } }
                 }
 
                 disabledNote
@@ -80,6 +87,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        // The window grows to fit, but a moment after the content does, which
+        // would otherwise flash a scroller while the disclosure opens.
+        .scrollIndicators(.never)
         .frame(width: 520)
         .fixedSize(horizontal: false, vertical: true)
         .onChange(of: level) { _, level in
