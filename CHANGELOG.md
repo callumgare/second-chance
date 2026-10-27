@@ -2,6 +2,20 @@
 
 All notable changes to Second Chance.
 
+## 0.9.0 — 2026-10-27
+
+### Improved
+
+- Offer to install Rosetta when it's missing. Second Chance needs it to build a game's app, and before this a Mac without it failed at the first step, so now you're asked and it installs with your administrator password.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Failure reports for a failed Wine program now include its exit code or signal as the exit_code or signal tag, as a game run's report already did. Before, a build failure was reported as WineError.executionFailed with no exit code, so a program that couldn't be run at all (126) looked the same as one that failed. WineError now adopts ProgramExitError, the error type that says how a program ended. Both values are numbers, so they hold no paths.
+- The Rosetta check works like this: before any build, Second Chance runs an x86_64 program to see whether one can run, and if not, it offers to install Rosetta through softwareupdate. Declining returns to the welcome screen. A headless build fails with the command to run instead. Game apps need no check, since they are Intel-only and macOS offers Rosetta when one is opened.
+
+</details>
+
 ## 0.8.0 — 2026-10-26
 
 ### Improved
