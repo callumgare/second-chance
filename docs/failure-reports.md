@@ -291,7 +291,7 @@ wrapps from the Finder, so they never inherit VS Code's handler.
 It reports the previous run's crash when `CrashMarker` caught it, and opens
 the marker file.
 
-The app's Developer menu ([docs/logging.md](logging.md#where-each-log-lives) says when it
+The app's Debug menu ([docs/logging.md](logging.md#where-each-log-lives) says when it
 shows) has **Crash Now…**, and the wrapp's `--debug-options` dialog a **Crash Now**
 button, for checking a crash end to end.
 

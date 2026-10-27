@@ -14,7 +14,7 @@ struct SettingsView: View {
     /// successful build.
     @State private var successReports = ReportingPreferences.load().successReports ?? false
     @State private var showsReportContents = false
-    @AppStorage(DebugCommands.settingKey) private var showDeveloperMenu = false
+    @AppStorage(DebugCommands.settingKey) private var showDebugMenu = false
     private let disabledReason = FailureReporter.disabledReason(environment: ProcessInfo.processInfo.environment,
                                                                 isDebugBuild: FailureReporter.isDebugBuild,
                                                                 dsn: FailureReporter.dsn)
@@ -88,11 +88,11 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Show Developer menu", isOn: $showDeveloperMenu)
+                Toggle("Show Debug menu", isOn: $showDebugMenu)
                     .disabled(DebugCommands.isAlwaysShown)
 
                 Text(DebugCommands.isAlwaysShown
-                     ? "This copy of Second Chance always shows the Developer menu."
+                     ? "This copy of Second Chance always shows the Debug menu."
                      : "Adds a menu with the log of what Second Chance is doing, and settings for testing it.")
                     .font(.callout)
                     .foregroundStyle(.secondary)

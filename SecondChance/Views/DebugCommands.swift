@@ -2,9 +2,9 @@
 //  DebugCommands.swift
 //  SecondChance
 //
-//  The Developer menu: the log, and switches for testing and diagnosing
+//  The Debug menu: the log, and switches for testing and diagnosing
 //  builds. It is in every Debug build, in a Release one launched with ⌥
-//  held, and whenever "Show Developer menu" is on in Settings.
+//  held, and whenever "Show Debug menu" is on in Settings.
 
 import AppKit
 import SwiftUI
@@ -14,7 +14,7 @@ struct DebugCommands: Commands {
     @ObservedObject var logWindow = LogWindow.shared
 
     /// The Settings switch that shows the menu.
-    static let settingKey = "showDeveloperMenu"
+    static let settingKey = "showDebugMenu"
 
     /// Whether this run has the menu whatever the setting, decided once at launch.
     static let isAlwaysShown: Bool = {
@@ -26,7 +26,7 @@ struct DebugCommands: Commands {
     }()
 
     var body: some Commands {
-        CommandMenu("Developer") {
+        CommandMenu("Debug") {
             Toggle("Skip Installer", isOn: $settings.skipInstaller)
                 .help("Copy the game's files but don't run its installer, for testing a wrapp's set-up without waiting for an install.")
 
