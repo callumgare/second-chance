@@ -102,11 +102,11 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        // The window grows to fit, but a moment after the content does, which
-        // would otherwise flash a scroller while the disclosure opens.
-        .scrollIndicators(.never)
-        .frame(width: 520)
-        .fixedSize(horizontal: false, vertical: true)
+        // A fixed height that fits everything with "What's in a report?"
+        // closed; opened, the form scrolls. Sizing the window to the content
+        // instead can't be animated: SwiftUI gives the window its new height
+        // at once while the content is still animating towards it.
+        .frame(width: 520, height: 640)
         .onChange(of: level) { _, level in
             ReportingPreferences.update {
                 $0.level = level
