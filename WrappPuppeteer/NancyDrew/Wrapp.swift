@@ -54,6 +54,11 @@ struct Wrapp {
     /// goes through cnc-ddraw, which can swallow its first click.
     let graphics: GameGraphicsAPI
 
+    /// The shape of the picture every game draws, width over height: they
+    /// all run at 640x480, 800x600 or 1024x768. On a display of another
+    /// shape the wrapp shows it at this shape, with black bars beside it.
+    static let pictureAspect = 4.0 / 3.0
+
     init(appPath: String) {
         self.appPath = appPath
         let settings = Wrapp.readSettings(appPath: appPath)

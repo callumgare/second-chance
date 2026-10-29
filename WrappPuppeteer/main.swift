@@ -32,8 +32,9 @@ func printUsage() {
         --record <dir>         Save the game window to <dir> from when it appears
                                until the run ends
         --record-seconds <s>   Click nothing: record for <s> seconds, then quit
-        --classify             Print each frame's nearest splash screen of the game
-                               and how near it is (no launch)
+        --classify             Print each frame's nearest splash screen of the game,
+                               how near it is, and anything light where the bars
+                               beside a 4:3 picture should be (no launch)
         --make-splash-reference
                                Save a frame's picture, bars trimmed, as a splash
                                reference image (no launch)
@@ -123,16 +124,23 @@ if let arguments = classifyArguments {
     }
     for frame in frames {
         let name = (frame as NSString).lastPathComponent
-        guard let fingerprint = ImageFingerprint(imageAt: frame) else {
+        guard let image = PictureFrameCheck.image(atPath: frame),
+              let fingerprint = ImageFingerprint(image: image) else {
             print("\(name)\tblank")
             continue
         }
+        // Light where the bars beside a 4:3 picture should be, as the quit
+        // scenario checks the menu for
+        let framing = PictureFrameCheck.findings(in: image, pictureAspect: Wrapp.pictureAspect).map { finding in
+            "\(finding.bar)=\(finding.flatColour ?? String(format: "%.0f%%", finding.lightFraction * 100))"
+        }
+        let frameColumn = "light-in-bars:" + (framing.isEmpty ? "none" : framing.joined(separator: ","))
         guard let nearest = SplashScreen.closest(fingerprint, among: screens) else {
-            print("\(name)\t-")
+            print("\(name)\t-\t\(frameColumn)")
             continue
         }
         let verdict = nearest.distance <= SplashScreen.matchDistance ? "SPLASH" : "-"
-        print("\(name)\t\(verdict)\t\(nearest.screen.name)\t\(String(format: "%.3f", nearest.distance))")
+        print("\(name)\t\(verdict)\t\(nearest.screen.name)\t\(String(format: "%.3f", nearest.distance))\t\(frameColumn)")
     }
     exit(0)
 }

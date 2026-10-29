@@ -96,7 +96,7 @@ struct ImageFingerprint {
         return context.makeImage()
     }
 
-    // MARK: - Private
+    // MARK: - Rendering and trimming
 
     /// A channel above this, out of 255, is picture rather than margin.
     private static let darkThreshold: UInt8 = 24
@@ -107,14 +107,14 @@ struct ImageFingerprint {
     /// line of thin lettering on black, which then fingerprints as blank.
     private static let contentFraction = 0.15
 
-    private static func makeContext(width: Int, height: Int) -> CGContext? {
+    static func makeContext(width: Int, height: Int) -> CGContext? {
         CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
                   space: CGColorSpaceCreateDeviceRGB(),
                   bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
     }
 
     /// The image scaled to `width`×`height`, as RGBX bytes, top row first.
-    private static func render(_ image: CGImage, width: Int, height: Int) -> [UInt8]? {
+    static func render(_ image: CGImage, width: Int, height: Int) -> [UInt8]? {
         guard let context = makeContext(width: width, height: height) else { return nil }
         context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))

@@ -332,7 +332,8 @@ dependency only runs one way:
 - **`WrappPuppeteer/Core/`** — reusable automation with no knowledge of Nancy
   Drew, wrapps or engines: the control-socket client (`InProcessControl`),
   OCR (`TextRecognizer`), template matching (`TemplateMatcher`), screen
-  fingerprints (`ImageFingerprint`), recording a window (`WindowRecorder`),
+  fingerprints (`ImageFingerprint`), checking a picture's bars
+  (`PictureFrameCheck`), recording a window (`WindowRecorder`),
   window listing (`WindowFinder`), focus (`FocusDetector`), processes
   (`ProcessControl`, `ProcessFinder`, `ProcessCleanup`), the click ring
   (`InputAutomation`), the optional full-screen screenshot (`ScreenCapture`)
@@ -487,7 +488,8 @@ $WP "built-apps/Nancy Drew - <game>.app" --record /tmp/rec --record-seconds 60
 $WP --make-splash-reference /tmp/rec/004960.png \
   WrappPuppeteer/NancyDrew/assets/splash/splash-<slug>-her-logo.png
 
-# Check every frame: SPLASH, the nearest reference and its distance
+# Check every frame: SPLASH, the nearest reference and its distance, and
+# anything light where the bars beside a 4:3 picture should be
 $WP --classify <slug> /tmp/rec
 ```
 
@@ -498,6 +500,39 @@ it. `--record` also works on a normal run
 (without `--record-seconds`), to see afterwards what each click did. The
 record directory's path must not contain spaces: the game's control socket
 takes the path a capture is saved to as one word.
+
+### The picture's bars and shape
+
+On a display of another shape than the game's, the wrapp shows the game's
+picture at its own shape, centred, with black bars beside it
+([mode scaling](wine-in-process-helpers.md#mode-scaling) does it for a
+Direct3D game, cnc-ddraw for a DirectDraw one, ScummVM for its own). Nothing
+else in the run would notice a bar left light grey, or a picture stretched to
+the display's shape: the game still plays. So the first capture Exit is found
+in — the menu, fully drawn, which every run reaches — is checked for it
+(`PictureFrameCheck`).
+
+Every game draws a 4:3 picture (`Wrapp.pictureAspect`), so everything
+outside a 4:3 area centred in the capture must be dark. A bar fails once 2%
+of it isn't (a cursor out in a bar stays well under that), and the failure
+says which way. The top 4% of the side bars is left out: White Wolf gives its
+window a title bar once play starts, and a capture of a fullscreen window with
+one shows it across the top, under where the menu bar goes.
+
+- **nearly all of it one flat colour** — the bar was left undrawn, showing
+  the window's own background: `the right bar is #ececec, not black`.
+- **anything else** — the picture reaches out over where the bar should be:
+  `the picture reaches into the left bar (100% of it isn't dark), so it's
+  stretched or not 4:3`.
+
+A pass logs `🖼️  The picture is framed rightly in 2560x1440`; a failure saves
+the capture to `/tmp/picture-frame-*.png` and names it in the log. On a 4:3
+display there are no bars, and the check passes by having nothing to find.
+`--classify` prints the same check for each frame (`light-in-bars:`).
+
+Splash screens aren't used for this: the scenario often skips them by
+clicking the Her Interactive logo before any is recognised, and the shared
+`any` references don't keep one shape, since games frame them differently.
 
 ## Testing in a VM
 

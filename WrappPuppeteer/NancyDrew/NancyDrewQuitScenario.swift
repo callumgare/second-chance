@@ -221,6 +221,35 @@ struct NancyDrewQuitScenario {
         }
     }
 
+    /// Why the game's picture, in a capture of its menu, is framed wrongly
+    /// — light in the bars beside it, either a bar left undrawn or the
+    /// picture stretched over it — or nil. A failing capture is kept, and
+    /// its path logged.
+    private func pictureFrameFailure(capturePath: String) -> String? {
+        guard let image = PictureFrameCheck.image(atPath: capturePath) else {
+            logger.warning("⚠️  Couldn't read the menu's capture, so the picture's framing wasn't checked")
+            return nil
+        }
+        let findings = PictureFrameCheck.findings(in: image, pictureAspect: Wrapp.pictureAspect)
+        guard !findings.isEmpty else {
+            logger.notice("  🖼️  The picture is framed rightly in \(image.width)x\(image.height): nothing light where the bars are")
+            return nil
+        }
+        let described = findings.map { finding in
+            if let colour = finding.flatColour {
+                return "the \(finding.bar) bar is \(colour), not black"
+            }
+            let percent = Int((finding.lightFraction * 100).rounded())
+            return "the picture reaches into the \(finding.bar) bar (\(percent)% of it isn't dark), so it's stretched or not 4:3"
+        }.joined(separator: "; ")
+        logger.error("❌ The game's picture is framed wrongly in \(image.width)x\(image.height): \(described)")
+        let kept = "/tmp/picture-frame-\(Int(Date().timeIntervalSince1970)).png"
+        if (try? FileManager.default.copyItem(atPath: capturePath, toPath: kept)) != nil {
+            logger.notice("📸 Game window: \(kept)")
+        }
+        return "The game's picture is framed wrongly: \(described)"
+    }
+
     /// Show the click ring where a window point is on screen. The game's
     /// window position comes from the on-screen window list, which needs no
     /// permission.
@@ -562,6 +591,12 @@ struct NancyDrewQuitScenario {
             let searchStartTime = Date()
             let analysis = MainMenuScreen.analyze(screenshotPath: shotPath, app: app)
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
+            // The menu, fully drawn, is what every run reaches: its frame is
+            // checked once, the first time Exit is found on it.
+            if analysis.quitButton != nil, !clickedExitButton, let failure = pictureFrameFailure(capturePath: shotPath) {
+                forceQuit(app)
+                return failure
+            }
             try? FileManager.default.removeItem(atPath: shotPath)
 
             var exitTarget = analysis.quitButton.map(toPoints)
