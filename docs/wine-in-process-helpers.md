@@ -350,7 +350,12 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
 - paints Wine's window surface black outside the OpenGL view, wrapping
   `-[WineContentView setColorImage:]`. The bars beside a picture of another
   shape are the Mac window's own surface, which nothing draws into and which
-  Wine fills with AppKit's light grey window background.
+  Wine fills with AppKit's light grey window background. That surface covers
+  only the mode's screen scaled up (x 0–1920 for 800×600 on a 2560×1440
+  display), not the whole display, so beyond it, in the right-hand bar, the
+  Mac window's own background shows. The helper makes that black too, both
+  when the image arrives and after `-[WineWindow checkTransparency]`, which
+  sets an opaque window's background back to AppKit's colour.
 
 Once Wine's window covers the display, [native fullscreen](#native-fullscreen)
 puts it into a Space as for any other Direct3D game. The Space is the size the

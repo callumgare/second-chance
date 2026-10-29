@@ -177,12 +177,24 @@ static NSRect unconstrainedBorderless(NSWindow *self, SEL _cmd, NSRect frame, NS
 // new surface with AppKit's light grey window background, so the bars at the
 // sides would be grey. Here every surface image a borderless window with an
 // OpenGL view gets is painted black outside that view.
+//
+// The surface doesn't reach the right-hand bar, though: it covers the mode's
+// screen scaled up (0-1920 of a 2560-wide display for 800x600), not the
+// display, so past it the Mac window's own background shows -- AppKit's
+// window background colour, which Wine gives an opaque window in
+// -checkTransparency. That window's background is made black too, and again
+// whenever -checkTransparency sets it back.
 
 static IMP gWineSetColorImage;
+static IMP gWineCheckTransparency;
 
 @interface NSView (WineContentViewMethods)
 - (BOOL)hasGLDescendant;
 - (void)setColorImage:(CGImageRef)image;
+@end
+
+@interface NSWindow (WineWindowMethods)
+- (void)checkTransparency;
 @end
 
 /// The OpenGL view filling part of a borderless window's content, in the
@@ -195,10 +207,25 @@ static BOOL partialGLViewFrame(NSView *content, NSRect *frame) {
     return !NSContainsRect(*frame, content.bounds);
 }
 
+/// Makes an opaque window's background black when its content is a partial
+/// OpenGL view, so no bar beside the picture shows AppKit's light grey.
+static void blackenBackgroundBesideGLView(NSWindow *window) {
+    NSRect glFrame;
+    if (!window.isOpaque || !partialGLViewFrame(window.contentView, &glFrame)) return;
+    if ([window.backgroundColor isEqual:NSColor.blackColor]) return;
+    window.backgroundColor = NSColor.blackColor;
+}
+
+static void checkTransparencyKeepingBlack(NSWindow *self, SEL _cmd) {
+    ((void (*)(id, SEL))gWineCheckTransparency)(self, _cmd);
+    blackenBackgroundBesideGLView(self);
+}
+
 static void blackOutsideGLView(NSView *self, SEL _cmd, CGImageRef image) {
     NSRect glFrame;
     CGImageRef painted = NULL;
     if (image && partialGLViewFrame(self, &glFrame)) {
+        blackenBackgroundBesideGLView(self.window);
         size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
         CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
         CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, 0, space,
@@ -249,6 +276,13 @@ static void emulatedModeScalingInit(void) {
     }
 
     Class wineWindow = NSClassFromString(@"WineWindow");
+    Method checkTransparency = class_getInstanceMethod(wineWindow, @selector(checkTransparency));
+    if (checkTransparency) {
+        gWineCheckTransparency = method_setImplementation(checkTransparency, (IMP)checkTransparencyKeepingBlack);
+    } else {
+        helperReport("EmulatedMode", "warning", "no -[WineWindow checkTransparency]; the bar right of a scaled picture may be grey");
+    }
+
     Method constrain = class_getInstanceMethod(wineWindow, @selector(constrainFrameRect:toScreen:));
     if (constrain) {
         gWineConstrainFrameRect = method_setImplementation(constrain, (IMP)unconstrainedBorderless);
