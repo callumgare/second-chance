@@ -355,7 +355,10 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   display), not the whole display, so beyond it, in the right-hand bar, the
   Mac window's own background shows. The helper makes that black too, both
   when the image arrives and after `-[WineWindow checkTransparency]`, which
-  sets an opaque window's background back to AppKit's colour.
+  sets an opaque window's background back to AppKit's colour. A window with a
+  title bar gets the same while a picture is being scaled: White Wolf gives
+  its window one once play starts, still covering the display. (An ordinary
+  titled window's OpenGL view fills it, so it has no bars to paint.)
 
 Once Wine's window covers the display, [native fullscreen](#native-fullscreen)
 puts it into a Space as for any other Direct3D game. The Space is the size the

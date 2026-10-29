@@ -113,6 +113,9 @@ static CGFloat wineScale(void) {
 
 static IMP gWineUpdateBackingSize;
 static char kScaledBackingKey;   // the size this file last gave the context's surface, as an NSValue
+/// Whether a picture is being scaled up now: set and cleared on Wine's
+/// threads, read on the main thread.
+static _Atomic BOOL gScaling;
 
 static void scaledUpdateBackingSize(NSOpenGLContext *self, SEL _cmd, const CGSize *size) {
     ((void (*)(id, SEL, const CGSize *))gWineUpdateBackingSize)(self, _cmd, size);
@@ -129,6 +132,7 @@ static void scaledUpdateBackingSize(NSOpenGLContext *self, SEL _cmd, const CGSiz
         if (previous) {
             CGLDisable(cgl, kCGLCESurfaceBackingSize);
             objc_setAssociatedObject(self, &kScaledBackingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            gScaling = NO;
             os_log(gLog, "[EmulatedMode] surface back to its view's size");
         }
         return;
@@ -142,6 +146,7 @@ static void scaledUpdateBackingSize(NSOpenGLContext *self, SEL _cmd, const CGSiz
     CGLSetParameter(cgl, kCGLCPSurfaceBackingSize, backing);
     CGLEnable(cgl, kCGLCESurfaceBackingSize);
     objc_setAssociatedObject(self, &kScaledBackingKey, [NSValue valueWithSize:wanted], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    gScaling = YES;
     os_log(gLog, "[EmulatedMode] surface %dx%d for a %.0fx%.0f view (scale %.3f)",
            backing[0], backing[1], size->width, size->height, scale);
     helperReport("EmulatedMode", "notice", "scaling Direct3D's %dx%d picture up to %.0fx%.0f",
@@ -176,7 +181,10 @@ static NSRect unconstrainedBorderless(NSWindow *self, SEL _cmd, NSRect frame, NS
 // shows Wine's window surface, which nothing draws into there -- Wine fills a
 // new surface with AppKit's light grey window background, so the bars at the
 // sides would be grey. Here every surface image a borderless window with an
-// OpenGL view gets is painted black outside that view.
+// OpenGL view gets is painted black outside that view -- and one with a title
+// bar, while a picture is being scaled: White Wolf gives its window one once
+// play starts, still covering the display, and an ordinary titled window's
+// OpenGL view fills it.
 //
 // The surface doesn't reach the right-hand bar, though: it covers the mode's
 // screen scaled up (0-1920 of a 2560-wide display for 800x600), not the
@@ -197,11 +205,13 @@ static IMP gWineCheckTransparency;
 - (void)checkTransparency;
 @end
 
-/// The OpenGL view filling part of a borderless window's content, in the
-/// content view's coordinates; NO if there isn't one, or it fills the content.
+/// The OpenGL view filling part of a borderless window's content -- or a
+/// titled one's while a picture is scaled -- in the content view's
+/// coordinates; NO if there isn't one, or it fills the content.
 static BOOL partialGLViewFrame(NSView *content, NSRect *frame) {
     NSWindow *window = content.window;
-    if (!window || (window.styleMask & NSWindowStyleMaskTitled) || content.subviews.count != 1) return NO;
+    if (!window || content.subviews.count != 1) return NO;
+    if ((window.styleMask & NSWindowStyleMaskTitled) && !gScaling) return NO;
     if (![content respondsToSelector:@selector(hasGLDescendant)] || ![content hasGLDescendant]) return NO;
     *frame = content.subviews.firstObject.frame;
     return !NSContainsRect(*frame, content.bounds);
