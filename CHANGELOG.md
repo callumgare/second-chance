@@ -2,6 +2,22 @@
 
 All notable changes to Second Chance.
 
+## 0.10.0 — 2026-10-30
+
+### Fixed
+
+- Fix a white bar beside the picture in White Wolf. When the game's picture is scaled up on a wide screen, the empty space on the right is now black, including when the window has a title bar.
+- Fix the Settings window jumping around when you open or close "What's in a report?". The window now keeps a fixed height, so nothing is cut off.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- The `sc` tool's sync to a remote Mac (`--on`) now skips Xcode's compilation cache in DerivedData. That folder holds huge sparse files that every build touches, and sending them in full stretched a sync from seconds to over a quarter of an hour.
+- The puppeteer test that clicks quit now checks that a game's picture is 4:3 with black bars on either side. A flat light colour means a bar was never drawn, and anything else means the picture was stretched into it. `--classify` prints the same measure. White Wolf's title-screen reference image is replaced with one cut from the picture alone, without the window's title bar.
+- The black-bar fix for a titled window can't be reproduced on demand, so the integration test does not exercise it. The fix only paints the background beside the OpenGL view while a picture is being scaled, since an ordinary titled window's view fills the window.
+
+</details>
+
 ## 0.9.0 — 2026-10-27
 
 ### Improved
