@@ -72,7 +72,14 @@ enum Remote {
         "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    static let excludes = [".git", "built-apps", "test-results", "tmp", "Tools/sc/.build", "DerivedData/sc-logs", "DerivedData/sc-jobs"]
+    /// Not synced. Xcode's compilation cache is sparse files tens of
+    /// gigabytes long that every build touches, so rsync sends all of them,
+    /// mostly zeros, each time; the remote Mac runs the build it's sent and
+    /// doesn't compile, so it never needs them.
+    static let excludes = [
+        ".git", "built-apps", "test-results", "tmp", "Tools/sc/.build",
+        "DerivedData/sc-logs", "DerivedData/sc-jobs", "DerivedData/CompilationCache.noindex",
+    ]
 
     /// Whether the command needs this repo synced there first. `attach`
     /// follows a run already going, so it must not touch the checkout.
