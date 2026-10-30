@@ -30,6 +30,11 @@ nonisolated protocol SteamClientDriving: Sendable {
     func start(silent: Bool) async throws
     /// Wait until Steam has signed in or is asking for credentials.
     func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState
+    /// Where the sign-in has got to now, without waiting or logging.
+    func loginState() -> SteamLogs.LoginState
+    /// Whether Steam is running. It exits and starts again when it has
+    /// updated itself, so one check that finds it missing proves nothing.
+    func isRunning() -> Bool
     /// Bring Steam's sign-in window to the front, once it's asking for one:
     /// it may be minutes since the player last looked (`SteamSignInWindow`).
     func bringSignInWindowForward() async
@@ -164,6 +169,8 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         ProcessName.isRunning("steam.exe")
     }
 
+    func isRunning() -> Bool { Self.isSteamRunning() }
+
     func ownedAppIDs(timeout: TimeInterval) async throws -> Set<Int> {
         let url = steamDir.appendingPathComponent("appcache/packageinfo.vdf")
         let deadline = Date().addingTimeInterval(timeout)
@@ -210,10 +217,17 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     func shutdown(timeout: TimeInterval) async {
         let start = Date()
         logger.notice("Shutting Steam down")
-        do {
-            try run(["-shutdown"])
-        } catch {
-            logger.warning("Couldn't ask Steam to shut down: \(error.localizedDescription)")
+        // `steam.exe -shutdown` with no Steam to tell starts a Wine session
+        // of its own, whose errors (the wrapp being deleted beneath it) then
+        // look like the cause of whatever failed.
+        if Self.isSteamRunning() {
+            do {
+                try run(["-shutdown"])
+            } catch {
+                logger.warning("Couldn't ask Steam to shut down: \(error.localizedDescription)")
+            }
+        } else {
+            logger.notice("Steam isn't running; ending its Wine session")
         }
         state.withLock { desktop }?.release()
         // Steam usually exits within seconds, but has been seen to leave a

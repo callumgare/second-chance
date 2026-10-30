@@ -49,6 +49,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     private let lockRoot: URL
     private let makeClient: (URL) -> SteamClientDriving
     private let preparer: SteamWrappPreparing
+    /// How often the sign-in wait looks at Steam.
+    private let signInPollInterval: Duration
+    /// How many looks in a row must find Steam missing before it counts as
+    /// exited: it restarts itself after an update (exit 42), which leaves a
+    /// moment with no steam.exe.
+    private let steamExitedChecks: Int
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.SteamWrappBuilder")
 
@@ -71,8 +77,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         lockRoot: URL = SteamSessionStore.defaultRoot,
         makeClient: ((URL) -> SteamClientDriving)? = nil,
         preparer: SteamWrappPreparing? = nil,
+        signInPollInterval: Duration = .seconds(2),
+        steamExitedChecks: Int = 8,
         bus: EventBus<AppEvent> = .app
     ) {
+        self.signInPollInterval = signInPollInterval
+        self.steamExitedChecks = steamExitedChecks
         self.helper = helper
         self.installerRunner = installerRunner
         self.gameInfoProvider = gameInfoProvider
@@ -292,25 +302,52 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
     /// Wait for Steam to sign in, asking the user when it shows its sign-in
     /// window. True once signed in.
+    ///
+    /// A Steam that exits first is started once more: its first start
+    /// updates it, and one that crashed part-way through the download sat
+    /// for the whole timeout before, then updated and signed in on the next
+    /// build. Exiting again fails the build.
     private func signIn(client: SteamClientDriving, input: WrappBuildInput) async throws -> Bool {
-        switch await client.waitForLogin(timeout: Self.startTimeout) {
-        case .signedIn:
-            return true
-        case .pending:
-            throw WrappBuildError.steamSignInTimedOut
-        case .needsCredentials(let reason):
-            logger.notice("Steam wants a sign-in\(reason.map { " (\($0))" } ?? "")")
-            guard input.canSignInToSteam else { throw WrappBuildError.steamSignInRequired }
-            await bus.publishWrappBuild(.progress(.installingGame(substep: "Waiting for you to sign in to Steam")))
-            await bus.publishWrappBuild(.instructions(Self.signInInstructions))
-            await client.bringSignInWindowForward()
-            let deadline = Date().addingTimeInterval(Self.signInTimeout)
-            while Date() < deadline {
-                if await client.waitForLogin(timeout: 2) == .signedIn { return true }
-                try await Task.sleep(for: .seconds(2))
+        var deadline = Date().addingTimeInterval(Self.startTimeout)
+        var asked = false
+        var restarted = false
+        var missingChecks = 0
+        while Date() < deadline {
+            switch client.loginState() {
+            case .signedIn:
+                logger.notice("Steam signed in")
+                return true
+            case .needsCredentials(let reason) where !asked:
+                asked = true
+                logger.notice("Steam wants a sign-in\(reason.map { " (\($0))" } ?? "")")
+                guard input.canSignInToSteam else { throw WrappBuildError.steamSignInRequired }
+                await bus.publishWrappBuild(.progress(.installingGame(substep: "Waiting for you to sign in to Steam")))
+                await bus.publishWrappBuild(.instructions(Self.signInInstructions))
+                await client.bringSignInWindowForward()
+                deadline = Date().addingTimeInterval(Self.signInTimeout)
+            case .pending, .needsCredentials:
+                break
             }
-            throw WrappBuildError.steamSignInTimedOut
+            missingChecks = client.isRunning() ? 0 : missingChecks + 1
+            if missingChecks >= steamExitedChecks {
+                guard !restarted else {
+                    logger.error("Steam exited again before it signed in")
+                    throw WrappBuildError.steamExited
+                }
+                logger.warning("Steam exited before it signed in; starting it again")
+                restarted = true
+                missingChecks = 0
+                try await client.start(silent: true)
+                if !asked { deadline = Date().addingTimeInterval(Self.startTimeout) }
+            }
+            try await Task.sleep(for: signInPollInterval)
         }
+        if asked {
+            logger.warning("Nobody signed in to Steam within \(Int(Self.signInTimeout))s")
+        } else {
+            logger.warning("Steam neither signed in nor asked for credentials within \(Int(Self.startTimeout))s")
+        }
+        throw WrappBuildError.steamSignInTimedOut
     }
 
     private func waitForInstall(client: SteamClientDriving, appID: Int) async throws {

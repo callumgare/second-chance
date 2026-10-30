@@ -19,6 +19,8 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// Steam neither signed in nor asked for credentials in time, or nobody
     /// signed in to the window it showed.
     case steamSignInTimedOut
+    /// Steam exited before it signed in, twice: once is started again.
+    case steamExited
     /// Steam's own install of the game failed.
     case steamInstallFailed(reason: String)
     /// Another wrapp, or another build, is running Steam. The error screen
@@ -66,6 +68,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Steam needs you to sign in, which a headless build can't do. Build once from the app to sign in."
         case .steamSignInTimedOut:
             return "Steam didn't finish signing in. Try again, and sign in when Steam's window appears."
+        case .steamExited:
+            return "Steam closed unexpectedly while it was starting up. Try again."
         case .steamInstallFailed(let reason):
             return "Steam couldn't install the game: \(reason)"
         case .steamInUse(let holder):

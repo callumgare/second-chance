@@ -61,7 +61,11 @@ the test host under xcodebuild — can still meet the prompts; answer them
    session, or one Steam rejects, the GUI says to sign in in Steam's window
    (QR or password), brings that window to the front (as a wrapp does; see
    [Running](#running)) and waits up to 30 minutes; a headless build fails
-   with `steamSignInRequired` instead.
+   with `steamSignInRequired` instead. A Steam that exits first — missing
+   from eight checks two seconds apart, since it restarts itself after an
+   update — is started once more, and exiting again fails the build with
+   `steamExited`. A first start that crashed part-way through its update
+   otherwise sat out the whole 20-minute wait for a Steam that was gone.
 4. **Pick the game from the ones the account owns** (`ownedAppIDs`), so
    nobody is offered a game Steam won't install. From the app,
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
@@ -364,7 +368,10 @@ runs `C:\Program Files (x86)\Steam\steam.exe` in the prefix:
   the phase (`Preallocating`, `Downloading`, `Verifying Staged`, `Committing`,
   then `Fully Installed`), which `installPhase` reports.
 - **`shutdown(timeout:)`** runs `steam.exe -shutdown`, releases the desktop and
-  waits for the prefix's Wine session to end. Steam usually goes in seconds but
+  waits for the prefix's Wine session to end. It sends `-shutdown` only while
+  `steam.exe` is running: with no Steam to tell, it starts a Wine session of
+  its own, whose errors as the wrapp is deleted beneath it ended up in the
+  failure summary. Steam usually goes in seconds but
   has been seen to leave a web helper running for minutes, so after the
   timeout it stops the wineserver.
 

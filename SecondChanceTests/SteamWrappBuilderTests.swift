@@ -18,6 +18,9 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     var login = SteamLogs.LoginState.signedIn
     var owned: Set<Int> = []
     var install = SteamLogs.InstallPhase.installed
+    /// How many of its starts Steam exits after, before signing in.
+    var exitsBeforeSignIn = 0
+    private var starts = 0
     private(set) var calls: [String] = []
     private(set) var savedSignedIn: Bool?
     private var queued: (appID: Int, installDir: String)?
@@ -36,8 +39,13 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
         return signedIn ? .saved : .notSignedIn
     }
     func queueInstall(appID: Int, installDir: String) throws { record("queueInstall \(appID)"); queued = (appID, installDir) }
-    func start(silent: Bool) async throws { record("start") }
-    func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState { login }
+    func start(silent: Bool) async throws {
+        record("start")
+        lock.withLock { starts += 1 }
+    }
+    func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState { loginState() }
+    func loginState() -> SteamLogs.LoginState { isRunning() ? lock.withLock { login } : .pending }
+    func isRunning() -> Bool { lock.withLock { starts > exitsBeforeSignIn } }
     /// The player signs in once the sign-in window is in front of them.
     func bringSignInWindowForward() async {
         record("bringSignInWindowForward")
@@ -157,6 +165,8 @@ struct SteamWrappBuilderTests {
                 return fake
             },
             preparer: FakePreparer(),
+            signInPollInterval: .milliseconds(10),
+            steamExitedChecks: 3,
             bus: bus
         )
         let result: Result<URL, Error>
@@ -315,6 +325,22 @@ struct SteamWrappBuilderTests {
         defer { try? FileManager.default.removeItem(at: base) }
         let run = await build(game: "thornton-hall") { $0.install = .failed("Disk Write Failure") }
         #expect(throws: WrappBuildError.steamInstallFailed(reason: "Disk Write Failure")) { try run.result.get() }
+    }
+
+    @Test("Steam exiting before it signs in is started again, and the build carries on")
+    func exitedOnceRestarts() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall") { $0.exitsBeforeSignIn = 1 }
+        _ = try run.result.get()
+        #expect(run.client?.calls.filter { $0 == "start" }.count == 2)
+    }
+
+    @Test("Steam exiting twice before it signs in fails the build")
+    func exitedTwiceFails() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall") { $0.exitsBeforeSignIn = 2 }
+        #expect(throws: WrappBuildError.steamExited) { try run.result.get() }
+        #expect(run.client?.calls.filter { $0 == "start" }.count == 2)
     }
 
     @Test("Another wrapp using Steam stops the build before anything is made")
