@@ -138,7 +138,7 @@ user is prompted.
 | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: an alert to swap it for disc 2, with Eject Disc 1, taking a disc that then appears; else NSOpenPanel |
 | `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe, .dmg, or the installer .app in an opened .dmg) |
 | `requestVolumeAccess()` | — (skipped when paths came from env) | NSOpenPanel grant-access |
-| `getOutputPath(gameName:)` | `OUTPUT_PATH` | NSOpenPanel save dialog |
+| `getOutputPath(gameName:)` | `OUTPUT_PATH` | NSOpenPanel save dialog, opening in `/Applications`, or `~/Applications` for someone who can't write there; it turns down a folder that can't be written to while it is still open |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
 | `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | NSAlert |
 

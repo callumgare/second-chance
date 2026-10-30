@@ -310,12 +310,32 @@ class WrappBuildInput {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.directoryURL = Self.defaultOutputFolder()
+        // The panel holds its delegate weakly.
+        let validator = WritableFolderValidator()
+        panel.delegate = validator
 
-        guard let url = await runOpenPanel(panel) else {
+        let url = await runOpenPanel(panel)
+        withExtendedLifetime(validator) {}
+        guard let url else {
             throw WrappBuildError.userCancelled
         }
         return url
+    }
+
+    /// /Applications, or for someone who isn't an administrator, and so can't
+    /// add apps there, the Applications folder in their home folder.
+    private static func defaultOutputFolder() -> URL {
+        let shared = URL(fileURLWithPath: "/Applications")
+        if FileManager.default.isWritableFile(atPath: shared.path) { return shared }
+        let own = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
+        do {
+            try FileManager.default.createDirectory(at: own, withIntermediateDirectories: true)
+        } catch {
+            logger.warning("Couldn't make \(own.path) to offer instead of /Applications: \(error.localizedDescription)")
+            return FileManager.default.homeDirectoryForCurrentUser
+        }
+        return own
     }
 
     /// Whether to launch the finished wrapp (headless automation support).
@@ -501,6 +521,20 @@ class WrappBuildInput {
     // MARK: - Panel Helpers
 
     @MainActor
+    /// Turns down a folder the game's app can't be saved in while the panel
+    /// is still open: found only once the build had finished, it lost the
+    /// whole install.
+    final class WritableFolderValidator: NSObject, NSOpenSavePanelDelegate {
+        func panel(_ sender: Any, validate url: URL) throws {
+            guard !FileManager.default.isWritableFile(atPath: url.path) else { return }
+            throw NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError, userInfo: [
+                NSLocalizedDescriptionKey: "You can't save in “\(FileManager.default.displayName(atPath: url.path))”.",
+                NSLocalizedRecoverySuggestionErrorKey: "Your Mac account doesn't have permission to add things there. "
+                    + "Choose another folder, such as the Applications folder in your home folder.",
+            ])
+        }
+    }
+
     private func runOpenPanel(_ panel: NSOpenPanel) async -> URL? {
         let response: NSApplication.ModalResponse
         if let keyWindow = NSApp.keyWindow {
