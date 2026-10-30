@@ -66,8 +66,17 @@ other builders are the same shape with less in the middle.
 | 7 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 8 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
 | 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` / game INI | `.progress(.configuringWrapp)`, `.wrappConfigured` |
-| 10 | `helper.finalize` — sign, resolve output dir, move | `.signed`, `.progress(.savingApp)`, `.completed` |
+| 10 | `helper.finalize` — take the quarantine off, sign, resolve output dir, move | `.signed`, `.progress(.savingApp)`, `.completed` |
 | 11 | Unmount ISOs; launch if requested | — |
+
+**`finalize` takes `com.apple.quarantine` off the wrapp.** A Second Chance
+unpacked from a download carries the quarantine on every file in it,
+`WrappTemplate.app` included, and `cp -a` copies it into the wrapp. macOS
+then runs the wrapp translocated — from a read-only copy — so its prefix is
+the cache's half-symlinked copy (`getWinePrefix`), where Steam can't update
+itself or write its logs, and its launch never got past starting Steam. The
+same reasoning as [`AppMover`](updates.md#moving-to-applications) applies:
+Second Chance made the wrapp itself, so the quarantine guards nothing.
 
 **Step 3 happens exactly once.** `GameInfo` is threaded through every later
 step; nothing downstream re-detects. (An earlier design detected twice.)

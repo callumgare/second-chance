@@ -276,7 +276,11 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         return String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
     }
 
+    /// The size of the file itself: a read-only wrapp's prefix has its larger
+    /// files as symlinks into the bundle (`getWinePrefix`), and the size of
+    /// the link would have every earlier session's log read as new.
     private static func size(of url: URL) -> UInt64 {
-        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.uint64Value ?? 0
+        let path = url.resolvingSymlinksInPath().path
+        return ((try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? NSNumber)?.uint64Value ?? 0
     }
 }

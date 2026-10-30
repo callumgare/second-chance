@@ -544,6 +544,10 @@ class WrappBuildHelper {
         // A build cancelled during a step that doesn't stop for it (a copy,
         // say) stops here, before anything is saved.
         try Task.checkCancellation()
+        // The template keeps the quarantine of the download Second Chance
+        // came in (`cp -a` copies it), and macOS runs a quarantined wrapp
+        // translocated: read-only, where Steam can't run or sign in.
+        await Blocking.run { AppMover.removeQuarantine(from: wrappPath) }
         // Sign before moving so failures trigger the builder's cleanup
         try await signWrapp(at: wrappPath)
         await bus.publishWrappBuild(.signed(wrappPath: wrappPath))
