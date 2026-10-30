@@ -70,6 +70,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Steam didn't finish signing in. Try again, and sign in when Steam's window appears."
         case .steamExited:
             return "Steam closed unexpectedly while it was starting up. Try again."
+        case .steamInstallFailed(let reason) where reason == "Not enough disk space":
+            return "There isn't enough free space on your Mac for Steam to install the game. Free up some space, then try again."
         case .steamInstallFailed(let reason):
             return "Steam couldn't install the game: \(reason)"
         case .steamInUse(let holder):

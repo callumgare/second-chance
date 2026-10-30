@@ -327,6 +327,12 @@ struct SteamWrappBuilderTests {
         #expect(throws: WrappBuildError.steamInstallFailed(reason: "Disk Write Failure")) { try run.result.get() }
     }
 
+    @Test("Not enough disk space says so in everyday words")
+    func diskFull() {
+        let message = WrappBuildError.steamInstallFailed(reason: "Not enough disk space").errorDescription ?? ""
+        #expect(message.contains("free space on your Mac"))
+    }
+
     @Test("Steam exiting before it signs in is started again, and the build carries on")
     func exitedOnceRestarts() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
