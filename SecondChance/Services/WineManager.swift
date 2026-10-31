@@ -160,7 +160,7 @@ class WineManager {
         try await wine.run(.wine(["wineboot", "-u"]))
 
         // Wait for wineserver to finish
-        try await wine.run(.wineserver(["-w"]))
+        try await wine.server.waitUntilProgramsExit(timeout: nil)
 
         // Have Wine say yes to a game's display mode switch without making it,
         // and scale the game up to the real display instead. Old games quit
@@ -232,7 +232,7 @@ class WineManager {
 
         // Ensure Wine server is fully shut down before caching
         // This ensures all registry changes and file writes are flushed to disk
-        try await wine.run(.wineserver(["-w"]))
+        try await wine.server.waitUntilProgramsExit(timeout: nil)
 
         // Cache the prefix for future use
         try await cachePrefix(from: prefixPath, buildId: buildId)

@@ -470,7 +470,8 @@ private func installTerminationHandlers() {
 /// and the launch carries on to `nextStage`. Runs off the main thread, before
 /// the game starts; "Don't Start the Game" exits the wrapp, leaving it be.
 private func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nextStage: LoadingStage) {
-    guard wine.isWineserverRunning() else { return }
+    let server = wine.server
+    guard Blocking.wait({ await server.isRunning }) else { return }
     mainLogger.notice("Wine is still running in this game's prefix, probably from the last time it was played: waiting for it to finish")
     let started = Date()
     infoWindow.setStage(.lastSessionClosing)
@@ -486,11 +487,11 @@ private func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, 
         }
         if first { decided.signal() }
     }
-    let waiter = WineUtilities.onSessionEnd(wine) { decide(.ended) }
+    let waiter = server.onStop { decide(.ended) }
     DispatchQueue.main.async {
         infoWindow.onLastSessionChoice = { choice in decide(.choice(choice)) }
     }
-    if waiter == nil, !wine.isWineserverRunning() { decide(.ended) }
+    if waiter == nil, !Blocking.wait({ await server.isRunning }) { decide(.ended) }
     decided.wait()
     waiter?.terminate()
     DispatchQueue.main.async { infoWindow.onLastSessionChoice = nil }
@@ -501,8 +502,11 @@ private func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, 
         mainLogger.notice("The last session's Wine finished after \(waited)")
     case .choice(.stopItAndContinue):
         mainLogger.notice("Player chose to stop the last session's Wine after \(waited)")
-        wine.stopWineserver()
-        if !WineUtilities.waitForSessionEnd(wine, timeout: 10) {
+        let stopped = Blocking.wait {
+            await server.stop()
+            return await server.waitUntilStopped(timeout: 10)
+        }
+        if !stopped {
             mainLogger.warning("The last session's Wine was still running 10 s after it was stopped; starting anyway")
         }
     case .choice(.continueAnyway):
@@ -608,7 +612,7 @@ func main() {
     }
 
     let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
-    killWineBeforeForcedExit = { WineUtilities.killSession(wine) }
+    killWineBeforeForcedExit = { Blocking.wait { await wine.server.kill() } }
 
     // Check for debug mode
     var debugMode = false

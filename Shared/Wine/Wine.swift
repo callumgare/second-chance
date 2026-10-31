@@ -154,46 +154,4 @@ nonisolated public struct Wine: Sendable {
         try process.runWithoutCrashHandler()
         return process
     }
-
-    /// Check if wineserver is running for this prefix
-    public func isWineserverRunning() -> Bool {
-        let wineserverPath = binDir.appendingPathComponent("wineserver")
-        // A ScummVM wrapp has no Wine at all, so no wineserver to be running.
-        guard FileManager.default.fileExists(atPath: wineserverPath.path) else { return false }
-
-        let process = Process()
-        process.executableURL = wineserverPath
-        process.arguments = ["-k0"]  // Send null signal to check if server is running
-        process.environment = environment
-
-        do {
-            try process.runWithoutCrashHandler()
-            process.waitUntilExit()
-            // wineserver -k0 returns 0 if server is running for this prefix
-            return process.terminationStatus == 0
-        } catch {
-            wineLogger.error("Error checking for wineserver: \(error)")
-            return false
-        }
-    }
-
-    /// Stop wineserver for this prefix
-    @discardableResult
-    public func stopWineserver() -> Int32 {
-        let wineserverPath = binDir.appendingPathComponent("wineserver")
-
-        let process = Process()
-        process.executableURL = wineserverPath
-        process.arguments = ["-k"]  // Kill all Wine processes for this prefix
-        process.environment = environment
-
-        do {
-            try process.runWithoutCrashHandler()
-            process.waitUntilExit()
-            return process.terminationStatus
-        } catch {
-            wineLogger.error("Error stopping wineserver: \(error)")
-            return -1
-        }
-    }
 }

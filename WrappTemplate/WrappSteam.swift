@@ -66,9 +66,10 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         // A wrapp that was force-quit or crashed never stopped its Steam, which
         // is still running here, signed in. This wrapp holds the Steam lock, so
         // nothing else can be using it: end it before starting afresh.
-        if client.wine.isWineserverRunning() {
+        let server = client.wine.server
+        if Blocking.wait({ await server.isRunning }) {
             logger.warning("A Wine session from an earlier run is still going here (it ended before it could stop Steam); stopping it")
-            client.wine.stopWineserver()
+            Blocking.wait { await server.stop() }
         }
 
         do {

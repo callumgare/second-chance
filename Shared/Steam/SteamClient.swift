@@ -229,20 +229,20 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
         // Steam usually exits within seconds, but has been seen to leave a
         // web helper running for minutes; waiting on the whole session
         // covers every Steam process, and the timeout covers the stragglers.
-        let wine = wine
-        let stopped = await Task.detached {
-            while Date().timeIntervalSince(start) < timeout {
-                if !wine.isWineserverRunning() { return true }
-                try? await Task.sleep(for: .seconds(1))
+        var stopped = false
+        while Date().timeIntervalSince(start) < timeout {
+            if await !wine.server.isRunning {
+                stopped = true
+                break
             }
-            return false
-        }.value
+            try? await Task.sleep(for: .seconds(1))
+        }
         let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
         if stopped {
             logger.notice("Steam and its Wine session stopped after \(elapsed)s")
         } else {
             logger.warning("Steam's Wine session was still running after \(elapsed)s; stopping it")
-            wine.stopWineserver()
+            await wine.server.stop()
         }
     }
 

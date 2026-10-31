@@ -195,11 +195,7 @@ class GameInstallerRunner {
                 // failed one left running is no use to it, and its desktop
                 // may be on its way out while its display key still says it
                 // is up, which would let the next attempt skip starting one.
-                let wine = Wine(wrapp: wrappPath)
-                let status = await Blocking.run { wine.stopWineserver() }
-                if status != 0 {
-                    logger.debug("wineserver -k before the next attempt exited \(status) (no session running)")
-                }
+                await Wine(wrapp: wrappPath).server.stop()
             }
         }
 
@@ -1082,7 +1078,7 @@ class GameInstallerRunner {
                                            watchdog: WineWatchdog? = nil) async throws {
         desktop?.release()
         logger.notice("Waiting for the installer's remaining Wine processes to finish")
-        try await Wine(wrapp: wrappPath).run(.wineserver(["-w"]), timeout: timeout, watchdog: watchdog)
+        try await Wine(wrapp: wrappPath).server.waitUntilProgramsExit(timeout: timeout, watchdog: watchdog)
     }
 
     /// Run `step`, and if its Windows program found no display, end the Wine
@@ -1102,11 +1098,7 @@ class GameInstallerRunner {
             return try await step()
         } catch WineError.noDisplay {
             logger.warning("\(what) found no display to open its windows on — restarting the Wine session and trying once more")
-            let wine = Wine(wrapp: wrappPath)
-            let status = await Blocking.run { wine.stopWineserver() }
-            if status != 0 {
-                logger.warning("wineserver -k exited \(status)")
-            }
+            await Wine(wrapp: wrappPath).server.stop()
             return try await step()
         }
     }

@@ -217,7 +217,7 @@ nonisolated extension Wine {
         // A check stopped short is routine; an installer stopped short isn't.
         let level: Logger.Level = onTimeout == .stopSession ? .error : .debug
         let stop: @Sendable () -> Void = {
-            if onTimeout == .stopSession { _ = self.stopWineserver() }
+            if onTimeout == .stopSession { self.server.stopNow() }
             process.terminate()
         }
         let ending: WaitEnding = await withTaskCancellationHandler {

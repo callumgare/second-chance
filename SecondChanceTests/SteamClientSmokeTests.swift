@@ -64,7 +64,7 @@ struct SteamClientSmokeTests {
             throw error
         }
         await client.shutdown(timeout: 90)
-        #expect(!client.wine.isWineserverRunning())
+        #expect(await !client.wine.server.isRunning)
         let saved = try client.saveLogin(to: store, signedIn: signedIn)
         #expect(saved == .saved || saved == .unchanged)
     }

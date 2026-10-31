@@ -181,9 +181,10 @@ class GameLauncher {
                 // Briefly: the quit fallback kills everything after 15s, and
                 // Steam has been seen to ignore -shutdown when it's stuck.
                 self.steam?.finish(timeout: 8)
-                self.logger.debug("[Cleanup/performCleanup] Calling WineUtilities.waitTillWineserverStopped...")
-                WineUtilities.waitTillWineserverStopped(at: self.config.appPath, customPrefixDir: self.config.winePrefix)
-                self.logger.debug("[Cleanup/performCleanup] WineUtilities.waitTillWineserverStopped returned")
+                let server = Wine(wrapp: self.config.appPath, prefix: self.config.winePrefix).server
+                self.logger.debug("[Cleanup/performCleanup] Shutting down Wine...")
+                Blocking.wait { await server.shutDown() }
+                self.logger.debug("[Cleanup/performCleanup] Wine shut down")
                 self.logger.debug("[Cleanup/performCleanup] About to call completion handler")
                 completion()
                 logger.debug("[Cleanup/performCleanup] Completion handler called")
@@ -210,8 +211,8 @@ class GameLauncher {
         guard config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") else { return }
         // Generous: it ends by itself in seconds, more on a loaded Mac, and
         // only a session that is stuck reaches the kill.
-        WineUtilities.waitTillWineserverStopped(at: config.appPath, customPrefixDir: config.winePrefix,
-                                                gracefulTimeout: 30)
+        let server = Wine(wrapp: config.appPath, prefix: config.winePrefix).server
+        Blocking.wait { await server.shutDown(gracePeriod: 30) }
     }
 
     // MARK: - Common Cleanup

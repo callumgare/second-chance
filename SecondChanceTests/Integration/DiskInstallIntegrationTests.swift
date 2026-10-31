@@ -81,7 +81,7 @@ struct DiskInstallIntegrationTests {
               let tempWrapp = WrappInfo.enclosingAppBundle(of: URL(fileURLWithPath: installerPath)) else {
             return
         }
-        Wine(wrapp: tempWrapp).stopWineserver()
+        await Wine(wrapp: tempWrapp).server.stop()
         _ = await recorder.waitForCompletion(timeout: 60)
     }
 
