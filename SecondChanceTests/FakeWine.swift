@@ -5,7 +5,8 @@
 //  A wrapp whose `wine` and `wineserver` are shell scripts, for testing what
 //  Second Chance runs without running Wine. Each records its arguments, one
 //  call per line with each argument in brackets, then runs the body it was
-//  given.
+//  given. A call is recorded in one write, so one stopped as it starts can't
+//  leave half a line for the next to join.
 
 import Foundation
 @testable import SecondChance
@@ -27,7 +28,8 @@ struct FakeWine {
             let script = bin.appendingPathComponent(tool)
             try """
             #!/bin/sh
-            { printf '%s' '\(tool)'; for argument in "$@"; do printf ' [%s]' "$argument"; done; echo; } >> '\(calls.path)'
+            call='\(tool)'; for argument in "$@"; do call="$call [$argument]"; done
+            printf '%s\n' "$call" >> '\(calls.path)'
             \(body)
 
             """.write(to: script, atomically: true, encoding: .utf8)
