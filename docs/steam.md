@@ -82,10 +82,16 @@ the test host under xcodebuild — can still meet the prompts; answer them
    first start, and checked against the licences here instead
    (`steamGameNotOwned`), so it needs no restart.
 5. **Wait for the install**, showing Steam's phase — "Downloading 397 MB
-   through Steam", "Checking the download", "Finishing the install". A
-   Steam that exits meanwhile, missing from eight checks in a row as during
-   the sign-in, fails the build with `steamExitedWhileInstalling` rather
-   than leaving it to wait out the four-hour limit.
+   through Steam", "Checking the download", "Finishing the install" — and,
+   while it downloads, how far it has got: the progress bar fills, with
+   "1.2 GB of 2.4 GB, about 3 minutes left" under it (`SteamDownloadMeter`,
+   below). A download that gets nowhere for a minute says so on the
+   progress screen (check the internet; Steam carries on by itself once it
+   can), and one that gets nowhere for 30 minutes fails the build with
+   `steamDownloadStalled`. A Steam that exits meanwhile, missing from eight
+   checks in a row as during the sign-in, fails the build with
+   `steamExitedWhileInstalling` rather than leaving it to wait out the
+   four-hour limit.
 6. **Stop Steam, save the session, and take the sign-in out of the wrapp.**
    The build runs Steam inside the wrapp's own prefix, so without this the
    finished `.app` would carry the account's token, and anyone given a copy
@@ -369,11 +375,29 @@ runs `C:\Program Files (x86)\Steam\steam.exe` in the prefix:
   the account doesn't own — its manifest just sits there. `ownedAppIDs` reads
   the account's licences from `appcache/packageinfo.vdf`, which Steam writes a
   few seconds after signing in, so it waits for that file.
-- **Progress is phases, not a percentage.** The manifest's `BytesDownloaded`
-  stays 0 until the download is over, and the download folder's size is
-  inflated by preallocation. `logs/content_log.txt` gives the total size and
-  the phase (`Preallocating`, `Downloading`, `Verifying Staged`, `Committing`,
-  then `Fully Installed`), which `installPhase` reports.
+- **Steam doesn't say how far its download has got.** The manifest's
+  `BytesDownloaded` stays 0 until the download is over.
+  `logs/content_log.txt` gives the total size (`update started : download
+  0/<bytes>`), the phase (`Preallocating`, `Downloading`, `Staging`,
+  `Verifying Staged`, `Committing`, then `Fully Installed`), which
+  `installPhase` reports, and `Current download rate: <n> Mbps` only once a
+  minute. The download folder is no help either: preallocation gives its
+  files real blocks, not sparse ones, so `du` jumps to nearly the whole size
+  in the first second (1.9 of 2.4 GB) and then barely moves.
+- **So the download is measured by Wine's network traffic.**
+  `SteamDownloadMeter` reads `nettop -P -L 1 -x -J bytes_in` (no permission
+  needed, a few hundredths of a second) every couple of seconds and sums
+  the bytes received by Wine's processes — `wine`, `wineserver` and the
+  Windows programs nettop names by their exe — from the moment the
+  download starts. Only the sum means anything: a connection's count sits
+  with `wineserver` in one sample and with the program using it in the
+  next. A process that exits takes its count with it, so only growth
+  counts. Measured on a 2.4 GB download (Ghost of Thornton Hall), the sum
+  grew a steady 47 MB every 3 s, matching Steam's own 122 Mbps, and ended
+  about 1 % over Steam's figure, which is Steam's other traffic; the bar
+  stops at 99 % for that reason. It counts any other Wine program on the
+  Mac that downloads at the same time, which only one Steam at a time
+  makes unlikely. Without `nettop`, the build shows the phase alone.
 - **`shutdown(timeout:)`** runs `steam.exe -shutdown`, releases the desktop and
   waits for the prefix's Wine session to end. It sends `-shutdown` only while
   `steam.exe` is running: with no Steam to tell, it starts a Wine session of

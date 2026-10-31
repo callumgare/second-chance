@@ -54,6 +54,13 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     private let signInPollInterval: Duration
     /// How often the install wait looks at Steam.
     private let installPollInterval: Duration
+    /// What Wine has received, for the download's progress.
+    private let networkCounter: WineNetworkCounting
+    /// How long a download may get nowhere before the person is told, and
+    /// before the build gives up on it. Steam keeps retrying by itself, and
+    /// a connection that drops for a while is worth waiting out.
+    private let downloadStallNote: TimeInterval
+    private let downloadStallLimit: TimeInterval
     /// How many looks in a row must find Steam missing before it counts as
     /// exited: it restarts itself after an update (exit 42), which leaves a
     /// moment with no steam.exe.
@@ -82,11 +89,17 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         preparer: SteamWrappPreparing? = nil,
         signInPollInterval: Duration = .seconds(2),
         installPollInterval: Duration = .seconds(2),
+        networkCounter: WineNetworkCounting = NettopNetworkCounter(),
+        downloadStallNote: TimeInterval = 60,
+        downloadStallLimit: TimeInterval = 30 * 60,
         steamExitedChecks: Int = 8,
         bus: EventBus<AppEvent> = .app
     ) {
         self.signInPollInterval = signInPollInterval
         self.installPollInterval = installPollInterval
+        self.networkCounter = networkCounter
+        self.downloadStallNote = downloadStallNote
+        self.downloadStallLimit = downloadStallLimit
         self.steamExitedChecks = steamExitedChecks
         self.helper = helper
         self.installerRunner = installerRunner
@@ -366,19 +379,29 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         throw WrappBuildError.steamSignInTimedOut
     }
 
-    /// Wait for Steam to install the game. A Steam that exits — missing from
+    /// Wait for Steam to install the game, showing how far its download has
+    /// got (`SteamDownloadMeter`). A Steam that exits — missing from
     /// `steamExitedChecks` checks in a row, as for the sign-in — fails the
     /// build: it would otherwise sit out the whole timeout for a Steam that
-    /// was gone.
+    /// was gone. A download that stops getting anywhere is told to the
+    /// person after `downloadStallNote`, and fails the build after
+    /// `downloadStallLimit`.
     private func waitForInstall(client: SteamClientDriving, appID: Int) async throws {
         let deadline = Date().addingTimeInterval(Self.installTimeout)
         var lastSubstep = ""
         var missingChecks = 0
+        var meter: SteamDownloadMeter?
+        var meterUnavailable = false
+        var loggedTenth = -1
+        var stalled = false
         while Date() < deadline {
             let phase = client.installPhase(appID: appID)
             switch phase {
             case .installed:
-                if client.manifest(appID: appID)?.isFullyInstalled != false { return }
+                if client.manifest(appID: appID)?.isFullyInstalled != false {
+                    if stalled { await bus.publishWrappBuild(.instructions(nil)) }
+                    return
+                }
             case .failed(let reason):
                 throw WrappBuildError.steamInstallFailed(reason: reason)
             case .waiting, .updating:
@@ -389,6 +412,52 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 lastSubstep = substep
                 await bus.publishWrappBuild(.progress(.installingGame(substep: substep)))
             }
+
+            // ── The download's progress ────────────────────────────────
+            if case .updating(let name, let total?) = phase, Self.downloadPhases.contains(name), !meterUnavailable {
+                if let count = await networkCounter.bytesReceived() {
+                    let now = Date()
+                    if meter == nil {
+                        logger.notice("Steam is downloading \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file)); measuring it by Wine's network traffic")
+                        meter = SteamDownloadMeter(total: total, now: now)
+                    }
+                    meter?.add(count, at: now)
+                    if let meter {
+                        await bus.publishWrappBuild(.stepProgress(StepProgress(fraction: meter.fraction, text: meter.text(now: now))))
+                        let tenth = Int(meter.fraction * 10)
+                        if tenth > loggedTenth {
+                            loggedTenth = tenth
+                            logger.notice("[Steam] Downloaded \(meter.text(now: now))")
+                        }
+                        let quiet = meter.quietFor(now: now)
+                        if quiet >= downloadStallLimit {
+                            logger.error("Steam's download got nowhere for \(Int(quiet))s, at \(meter.text(now: now))")
+                            throw WrappBuildError.steamDownloadStalled
+                        } else if quiet >= downloadStallNote, !stalled {
+                            stalled = true
+                            logger.warning("Steam's download has got nowhere for \(Int(quiet))s, at \(meter.text(now: now))")
+                            await bus.publishWrappBuild(.instructions(Self.downloadStalledInstructions))
+                        } else if quiet < downloadStallNote, stalled {
+                            stalled = false
+                            logger.notice("Steam's download is moving again")
+                            await bus.publishWrappBuild(.instructions(nil))
+                        }
+                    }
+                } else {
+                    // Phases only, as before there was a meter.
+                    meterUnavailable = true
+                    logger.warning("Can't read Wine's network traffic, so the download's progress won't show")
+                }
+            } else if meter != nil {
+                // Past the download: checking and committing it are the
+                // disk's work, with nothing to measure.
+                meter = nil
+                if stalled {
+                    stalled = false
+                    await bus.publishWrappBuild(.instructions(nil))
+                }
+            }
+
             missingChecks = client.isRunning() ? 0 : missingChecks + 1
             if missingChecks >= steamExitedChecks {
                 logger.error("Steam exited while installing the game (\(substep))")
@@ -399,8 +468,15 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         throw WrappBuildError.steamInstallFailed(reason: "it was still going after \(Int(Self.installTimeout / 3600)) hours")
     }
 
-    /// What the progress line says during an install. Steam gives phases and
-    /// a total, never a running count, so there's no percentage to show.
+    /// Steam's phases in which it is downloading.
+    private static let downloadPhases: Set<String> = ["Downloading", "Staging"]
+
+    /// What the progress screen says while Steam's download is stuck.
+    static let downloadStalledInstructions = "Steam hasn't downloaded anything for a while. Check that this Mac is connected to the internet. "
+        + "The download carries on by itself once it can."
+
+    /// What the progress line says during an install: Steam's phase. How far
+    /// the download has got goes beside it (`stepProgress`).
     static func substep(for phase: SteamLogs.InstallPhase) -> String {
         switch phase {
         case .waiting:

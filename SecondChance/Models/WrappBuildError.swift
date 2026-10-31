@@ -24,6 +24,8 @@ enum WrappBuildError: LocalizedError, Equatable {
     case steamExited
     /// Steam exited while it was installing the game.
     case steamExitedWhileInstalling
+    /// Steam's download of the game got nowhere for too long.
+    case steamDownloadStalled
     /// Steam's own install of the game failed.
     case steamInstallFailed(reason: String)
     /// Another wrapp, or another build, is running Steam. The error screen
@@ -78,6 +80,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Steam closed unexpectedly while it was starting up. Try again."
         case .steamExitedWhileInstalling:
             return "Steam closed unexpectedly while it was downloading the game. Try again."
+        case .steamDownloadStalled:
+            return "Steam stopped downloading the game. Check that this Mac is connected to the internet, then try again."
         case .steamInstallFailed(let reason) where reason == "Not enough disk space":
             return "There isn't enough free space on your Mac for Steam to install the game. Free up some space, then try again."
         case .steamInstallFailed(let reason):

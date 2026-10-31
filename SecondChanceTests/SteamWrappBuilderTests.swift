@@ -25,6 +25,8 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     var updatingChecks = 0
     /// Steam exits once the install has started, and never finishes it.
     var exitsWhileInstalling = false
+    /// How many install checks find Steam still downloading a 1 MB game.
+    var downloadingChecks = 0
     private var starts = 0
     private(set) var calls: [String] = []
     private(set) var savedSignedIn: Bool?
@@ -76,6 +78,11 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
             lock.withLock { installing = true }
             return .updating(phase: "Downloading", bytesToDownload: 1)
         }
+        let downloading = lock.withLock {
+            defer { downloadingChecks = max(downloadingChecks - 1, 0) }
+            return downloadingChecks > 0
+        }
+        if downloading { return .updating(phase: "Downloading", bytesToDownload: 1_000_000) }
         if install == .installed, let queued, let game = GameInfoProvider.shared.allGames().first(where: { $0.steamAppID == queued.appID }) {
             let exe = prefix.appendingPathComponent(SteamClient.steamDirInPrefix)
                 .appendingPathComponent("steamapps/common/\(queued.installDir)/\(game.steamExePath ?? "Game.exe")")
@@ -110,6 +117,24 @@ final class PickingInput: WrappBuildInput {
     override func chooseSteamGame(from owned: [GameInfo]) async throws -> GameInfo {
         offered = owned.map(\.id)
         return try #require(owned.first { $0.id == pick })
+    }
+}
+
+/// Wine's network traffic: each read gives the next count, the last one
+/// over and over; nil when there's none to give.
+final class FakeNetworkCounter: WineNetworkCounting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts: [Int64]?
+
+    init(_ counts: [Int64]?) { self.counts = counts }
+
+    func bytesReceived() async -> Int64? {
+        lock.withLock {
+            guard var counts, let first = counts.first else { return nil }
+            if counts.count > 1 { counts.removeFirst() }
+            self.counts = counts
+            return first
+        }
     }
 }
 
@@ -160,6 +185,7 @@ struct SteamWrappBuilderTests {
     /// Build `game` headless, named up front as `STEAM_GAME_SLUG`; or, with
     /// `picking`, as the app does, choosing it once Steam has signed in.
     func build(game: String, mode: String? = nil, picking: PickingInput? = nil,
+               network: [Int64]? = [0], stallNote: TimeInterval = 60, stallLimit: TimeInterval = 60,
                configure: @escaping (FakeSteamClient) -> Void = { _ in }) async -> Run {
         let bus = EventBus<AppEvent>()
         let events = Events()
@@ -190,6 +216,9 @@ struct SteamWrappBuilderTests {
             preparer: FakePreparer(),
             signInPollInterval: .milliseconds(10),
             installPollInterval: .milliseconds(10),
+            networkCounter: FakeNetworkCounter(network),
+            downloadStallNote: stallNote,
+            downloadStallLimit: stallLimit,
             steamExitedChecks: 3,
             bus: bus
         )
@@ -395,6 +424,40 @@ struct SteamWrappBuilderTests {
         let run = await build(game: "thornton-hall") { $0.exitsWhileInstalling = true }
         #expect(throws: WrappBuildError.steamExitedWhileInstalling) { try run.result.get() }
         #expect(run.client?.calls.contains("shutdown") == true)
+    }
+
+    @Test("A download's figures fill the progress bar as it goes")
+    func downloadProgress() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall", network: [5_000, 255_000, 505_000, 755_000]) { $0.downloadingChecks = 6 }
+        _ = try run.result.get()
+        let fractions = run.events.compactMap { event -> Double? in
+            if case .stepProgress(let progress?) = event { return progress.fraction }
+            return nil
+        }
+        // Counted from where the download started, not from Wine's start.
+        #expect(fractions.first == 0)
+        #expect(fractions.last == 0.75)
+        #expect(fractions == fractions.sorted())
+    }
+
+    @Test("A download that gets nowhere is told to the person, then fails the build")
+    func downloadStalls() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall", network: [5_000], stallNote: 0.05, stallLimit: 0.3) { $0.downloadingChecks = 10_000 }
+        #expect(throws: WrappBuildError.steamDownloadStalled) { try run.result.get() }
+        #expect(run.events.contains {
+            if case .instructions(SteamWrappBuilder.downloadStalledInstructions) = $0 { return true }
+            return false
+        })
+    }
+
+    @Test("Without Wine's network counts, a download shows its phase alone")
+    func noNetworkCounts() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall", network: nil) { $0.downloadingChecks = 3 }
+        _ = try run.result.get()
+        #expect(!run.events.contains { if case .stepProgress = $0 { return true }; return false })
     }
 
     @Test("Another wrapp using Steam stops the build before anything is made")
