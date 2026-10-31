@@ -38,6 +38,11 @@ public nonisolated enum SteamStartupStage: Equatable, Sendable {
         guard case .updating(.downloading(let done?, let total?)) = self, total > 0 else { return nil }
         return (min(done, total), total)
     }
+
+    /// The download's figures: "217 of 255 MB".
+    public var downloadText: String? {
+        download.map { "\($0.doneKB / 1024) of \($0.totalKB / 1024) MB" }
+    }
 }
 
 /// Follows a starting Steam's logs through `check`, logging each step of an

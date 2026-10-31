@@ -11,6 +11,7 @@
 //
 //  One object per line:
 //    {"event":"stage","stage":"installingGame","text":"Game installing","fraction":0.5}
+//    {"event":"step-progress","text":"1.2 GB of 2.4 GB","fraction":0.5}
 //    {"event":"completed","path":"/…/Nancy Drew - X.app"}
 //    {"event":"failed","message":"…"}
 //  plus, from the integration tests, per-game lines:
@@ -123,6 +124,13 @@ nonisolated final class ProgressFileWriter: @unchecked Sendable {
             guard let stage = Self.stageName(state) else { return }
             var record: [String: Any] = ["event": "stage", "stage": stage, "text": Self.text(state)]
             if let fraction = state.progress { record["fraction"] = fraction }
+            write(record)
+        case .stepProgress(let progress):
+            var record: [String: Any] = ["event": "step-progress"]
+            if let progress {
+                record["text"] = progress.text
+                if let fraction = progress.fraction { record["fraction"] = fraction }
+            }
             write(record)
         case .completed(let wrappPath):
             write(["event": "completed", "path": wrappPath.path])

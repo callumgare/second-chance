@@ -60,7 +60,7 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
         }
     }
     func bootstrapPhase() -> SteamLogs.BootstrapPhase {
-        lock.withLock { updatingChecks > 0 ? .downloading(doneKB: 1, totalKB: 2) : .verified }
+        lock.withLock { updatingChecks > 0 ? .downloading(doneKB: 51_200, totalKB: 102_400) : .verified }
     }
     func isConnecting() -> Bool { false }
     func isRunning() -> Bool { lock.withLock { starts > exitsBeforeSignIn && !(exitsWhileInstalling && installing) } }
@@ -372,6 +372,11 @@ struct SteamWrappBuilderTests {
         _ = try run.result.get()
         #expect(run.events.contains {
             if case .progress(.installingGame(substep: "Updating Steam", _)) = $0 { return true }
+            return false
+        })
+        // With the download's figures, for the progress bar.
+        #expect(run.events.contains {
+            if case .stepProgress(StepProgress(fraction: 0.5, text: "50 of 100 MB")) = $0 { return true }
             return false
         })
     }

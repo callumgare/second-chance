@@ -337,6 +337,10 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             }
             if !asked, let stage = startup.check(client) {
                 await bus.publishWrappBuild(.progress(.installingGame(substep: stage.message)))
+                if let download = stage.download, let text = stage.downloadText {
+                    await bus.publishWrappBuild(.stepProgress(StepProgress(
+                        fraction: Double(download.doneKB) / Double(download.totalKB), text: text)))
+                }
             }
             missingChecks = client.isRunning() ? 0 : missingChecks + 1
             if missingChecks >= steamExitedChecks {

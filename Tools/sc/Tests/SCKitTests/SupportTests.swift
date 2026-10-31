@@ -298,6 +298,20 @@ struct LiveRegionTests {
     }
 }
 
+@Suite("Build status line")
+struct BuildStatusLineTests {
+    @Test("A step's figures follow its stage, and go when the stage changes")
+    func figures() {
+        let status = BuildStatusLine(label: "Building X")
+        #expect(status.line(after: ProgressRecord(event: "stage", text: "Downloading through Steam")) == "Building X — Downloading through Steam")
+        #expect(status.line(after: ProgressRecord(event: "step-progress", text: "1.2 GB of 2.4 GB"))
+            == "Building X — Downloading through Steam (1.2 GB of 2.4 GB)")
+        #expect(status.line(after: ProgressRecord(event: "stage", text: "Checking the download")) == "Building X — Checking the download")
+        #expect(status.line(after: ProgressRecord(event: "step-progress")) == "Building X — Checking the download")
+        #expect(status.line(after: ProgressRecord(event: "completed")) == nil)
+    }
+}
+
 @Suite("Games and sources")
 struct GameTests {
     @Test("Slugs resolve from the app's own catalog")

@@ -5,6 +5,7 @@ import Foundation
 /// the integration tests write when `TEST_RUNNER_PROGRESS_PATH` is.
 ///
 /// `{"event":"stage","stage":"installingGame","text":"Game installing","fraction":0.5}`
+/// `{"event":"step-progress","text":"1.2 GB of 2.4 GB","fraction":0.5}` (no `text` when the figures are gone)
 /// `{"event":"completed","path":"…/Nancy Drew - X.app"}`
 /// `{"event":"failed","message":"…"}`
 /// `{"event":"game","source":"disk","slug":"stay-tuned","phase":"launching"}` (`source` defaults to disk)

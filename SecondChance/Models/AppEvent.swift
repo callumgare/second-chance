@@ -45,6 +45,11 @@ enum WrappBuildEvent {
     /// the progress screen until the next `.instructions(nil)`. Progress
     /// substeps, by contrast, wait 5 s and are small.
     case instructions(String?)
+    /// How far the current step has got, where the build can tell: a
+    /// download's bytes. Shown under the step until the next step, or until
+    /// `.stepProgress(nil)`. Publish it after the step's `.progress`, which
+    /// clears it.
+    case stepProgress(StepProgress?)
 
     // Intermediate results — the things tests assert on and the UI/logs can show.
     /// The temporary wrapp the build works in, as it starts making it: what
@@ -67,6 +72,15 @@ enum WrappBuildEvent {
     // runs continue past it), so this is the only record of it beyond the log.
     case patchApplied(id: String)
     case patchFailed(id: String, message: String)
+}
+
+/// How far a step has got, measured rather than guessed.
+nonisolated struct StepProgress: Equatable, Sendable {
+    /// From 0 to 1; nil when there's a figure to show but no total to
+    /// measure it against.
+    var fraction: Double?
+    /// The figures, for the person: "1.2 GB of 2.4 GB".
+    var text: String
 }
 
 // MARK: - Lifecycle events

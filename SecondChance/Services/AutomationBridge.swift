@@ -178,6 +178,12 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
         case .instructions(let text):
             d["type"] = "wrappBuild.instructions"
             if let text { d["text"] = text }
+        case .stepProgress(let progress):
+            d["type"] = "wrappBuild.stepProgress"
+            if let progress {
+                d["text"] = progress.text
+                if let fraction = progress.fraction { d["fraction"] = fraction }
+            }
         case .progress(let state):
             d["type"] = "wrappBuild.progress"; d["state"] = "\(state)"
             if let sub = state.substep { d["substep"] = sub }

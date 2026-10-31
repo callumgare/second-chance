@@ -185,7 +185,9 @@ terminal to answer on; each has a flag equivalent.
 The headless app reports its build stage through a JSON-lines file:
 `sc wrapp build` sets `SECOND_CHANCE_PROGRESS_PATH`, and `CLIBuilder` attaches a
 `ProgressFileWriter`, an `EventBus.app` subscriber that writes one line per
-`.progress(WrappBuildState)`, `.completed` and `.failed` event. The integration
+`.progress(WrappBuildState)`, `.stepProgress`, `.completed` and `.failed`
+event; a step's figures (a Steam download's, say) follow its stage on the
+status line. The integration
 test writes the same file (`TEST_RUNNER_PROGRESS_PATH`) plus per-game
 `started`/`building`/`launching`/`finished` lines, which drive the
 `sc test integration` table; each game's build writes its stage lines with the

@@ -255,6 +255,14 @@ go on — sign in to Steam's window, click through an installer that runs
 interactively (with the game's `installInstructions`). The progress screen
 shows it at once, prominently, until the next `.instructions(nil)`.
 
+`.stepProgress(StepProgress?)` is how far the current step has got, where the
+build can measure it rather than guess: so far, Steam's downloads
+([steam.md](steam.md)). It carries a fraction, which fills the progress bar in
+place of the step's fixed share of the build, and its figures ("1.2 GB of
+2.4 GB"), shown under the step. Each new step clears it, so publish it after
+the step's `.progress`. `ProgressFileWriter` writes it as a `step-progress`
+record, which `sc wrapp build` shows after the stage.
+
 ## Running Wine
 
 Every Wine, `wineserver` and winetricks process — the build's and the wrapp's

@@ -250,12 +250,9 @@ struct WrappBuilder {
             try await ui.progressStep(label, success: "Built \(game.wrappName)", failure: "Couldn't build \(game.wrappName)") { update in
                 // The step's message is replaced by each update, so every update
                 // keeps the game in it.
+                let status = BuildStatusLine(label: label)
                 let following = follower.follow { record in
-                    switch record.event {
-                    case "stage": if let text = record.text { update("\(label) — \(text)") }
-                    case "failed": if let message = record.message { update("\(label) — failed: \(message)") }
-                    default: break
-                    }
+                    if let line = status.line(after: record) { update(line) }
                 }
                 defer { following.cancel() }
                 try await ui.logStep(
@@ -330,6 +327,38 @@ struct WrappBuilder {
         ui.line(ui.format("\(.primary("▸ Launching \(wrapp.deletingPathExtension().lastPathComponent)"))"))
         Proc.exec(wrapp.appendingPathComponent("Contents/MacOS/WrappTemplate").path,
                   debug.arguments + arguments, env: debug.environment.mapValues { $0 })
+    }
+}
+
+// MARK: - Status line
+
+/// What a wrapp build's progress step says, from the app's progress
+/// records: the stage, with the step's figures after it while it has some
+/// ("Downloading through Steam — 1.2 GB of 2.4 GB").
+final class BuildStatusLine: @unchecked Sendable {
+    private let lock = NSLock()
+    private let label: String
+    private var stage: String?
+
+    init(label: String) { self.label = label }
+
+    /// The line to show after `record`, or nil when it changes nothing.
+    func line(after record: ProgressRecord) -> String? {
+        lock.withLock {
+            switch record.event {
+            case "stage":
+                guard let text = record.text else { return nil }
+                stage = text
+                return "\(label) — \(text)"
+            case "step-progress":
+                let base = stage.map { "\(label) — \($0)" } ?? label
+                return record.text.map { "\(base) (\($0))" } ?? base
+            case "failed":
+                return record.message.map { "\(label) — failed: \($0)" }
+            default:
+                return nil
+            }
+        }
     }
 }
 

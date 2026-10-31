@@ -40,6 +40,9 @@ class WrappBuildViewModel: ObservableObject {
     @Published private(set) var isCancelling = false
 
     @Published var progress: Double = 0.0
+    /// How far the current step has got, when the build can measure it
+    /// (`WrappBuildEvent.stepProgress`). Cleared at each new step.
+    @Published private(set) var stepProgress: StepProgress?
 
     /// Where the success reports question is, while a build waits on it:
     /// the main window shows it in place of the build's progress.
@@ -120,6 +123,8 @@ class WrappBuildViewModel: ObservableObject {
             switch buildEvent {
             case .instructions(let text):
                 instructions = text
+            case .stepProgress(let measured):
+                stepProgress = measured
             case .progress(let state):
                 // Error presentation is owned by the `.failed` event, which
                 // carries the typed error. A `.progress(.error)` only has the
@@ -168,6 +173,7 @@ class WrappBuildViewModel: ObservableObject {
         stepStartTime = Date()
         shouldShowElapsed = false
         lastProgressState = state
+        stepProgress = nil
         stopStepTimer()
 
         // Initially show state without elapsed time (substep hidden until 5 s)

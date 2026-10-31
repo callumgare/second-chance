@@ -95,8 +95,8 @@ public enum LoadingStage: Equatable {
 
     /// "217 of 255 MB", under the progress bar.
     public var progressText: String? {
-        guard let progress else { return nil }
-        return "\(progress.doneKB / 1024) of \(progress.totalKB / 1024) MB"
+        guard case .updatingSteam(let phase) = self else { return nil }
+        return SteamStartupStage.updating(phase).downloadText
     }
 
     /// The stage for where a starting Steam has got to.

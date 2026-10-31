@@ -82,7 +82,12 @@ struct WrappBuildProgressView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 8) {
-                if let progress = viewModel.currentState.progress {
+                // A step that can measure itself (a download) fills the bar
+                // as it goes; otherwise the bar shows how far through the
+                // build's steps it is.
+                if let fraction = viewModel.stepProgress?.fraction {
+                    ProgressView(value: min(max(fraction, 0), 1), total: 1.0)
+                } else if let progress = viewModel.currentState.progress {
                     ProgressView(value: progress, total: 1.0)
                 } else {
                     ProgressView()
@@ -101,9 +106,16 @@ struct WrappBuildProgressView: View {
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+                if let figures = viewModel.stepProgress?.text {
+                    Text(figures)
+                        .font(.callout)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            Text("This usually takes a few minutes. You can leave it running and do something else.")
+            Text(Self.howLong(from: viewModel.selectedWrappSource))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -126,6 +138,16 @@ struct WrappBuildProgressView: View {
                 Text("Nothing will be saved, and you can start again from the beginning.")
             }
         }
+    }
+
+    /// How long to expect: a Steam build downloads the game, which takes as
+    /// long as the connection makes it.
+    static func howLong(from source: WrappSource?) -> String {
+        let leave = "You can leave it running and do something else."
+        if source == .steam {
+            return "Steam downloads the game, so how long this takes depends on your internet connection. \(leave)"
+        }
+        return "This usually takes a few minutes. \(leave)"
     }
 
     /// What the build is doing, for the person watching: the step's
