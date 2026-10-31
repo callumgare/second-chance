@@ -28,6 +28,7 @@ final class RecordingEventSubscriber: @unchecked Sendable {
     private(set) var configuredWrapp: (exePath: String, installerDir: String)?
     private(set) var mountedISOs: [URL] = []
     private(set) var disksResolved: (disk1: URL, disk2: URL?)?
+    private(set) var workingWrapp: URL?
     private(set) var signedWrapp: URL?
     private(set) var completedWrapp: URL?
     private(set) var failedError: WrappBuildError?
@@ -66,6 +67,8 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             progressStates.append(state)
         case .disksResolved(let disk1, let disk2):
             disksResolved = (disk1, disk2)
+        case .wrappStarted(let path):
+            workingWrapp = path
         case .gameDetected(let info):
             detectedGame = info
         case .isoMounted(let url):
@@ -94,6 +97,9 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             break
         }
     }
+
+    /// `workingWrapp`, safe to read while the build runs.
+    var currentWorkingWrapp: URL? { lock.withLock { workingWrapp } }
 
     /// Block until a .completed or .failed event is received, or the timeout elapses.
     func waitForCompletion(timeout: TimeInterval = 300) async -> Bool {

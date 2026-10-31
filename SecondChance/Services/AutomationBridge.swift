@@ -163,6 +163,8 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
             d["exePath"] = exePath; d["installerDir"] = installerDir; d["gameId"] = info.id
         case .signed(let url):
             d["type"] = "wrappBuild.signed"; d["wrappPath"] = url.path
+        case .wrappStarted(let url):
+            d["type"] = "wrappBuild.wrappStarted"; d["wrappPath"] = url.path
         case .patchApplied(let id):
             d["type"] = "wrappBuild.patchApplied"; d["patchId"] = id
         case .patchFailed(let id, let message):

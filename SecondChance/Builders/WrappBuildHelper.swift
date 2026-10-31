@@ -65,6 +65,7 @@ class WrappBuildHelper {
         }
         // Before the cache too: a cached base wrapp came from this template.
         try await verifyTemplateSignatures(templatePath)
+        await bus.publishWrappBuild(.wrappStarted(path: path))
 
         // Check cache first
         if try cacheManager.restoreCache(stage: .base, to: path) != nil {

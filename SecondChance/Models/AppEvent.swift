@@ -47,6 +47,9 @@ enum WrappBuildEvent {
     case instructions(String?)
 
     // Intermediate results — the things tests assert on and the UI/logs can show.
+    /// The temporary wrapp the build works in, as it starts making it: what
+    /// the integration tests measure to learn how much disk a build takes.
+    case wrappStarted(path: URL)
     case disksResolved(disk1: URL, disk2: URL?)
     case gameDetected(GameInfo)
     case isoMounted(URL)

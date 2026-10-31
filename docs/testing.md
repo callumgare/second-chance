@@ -225,6 +225,16 @@ sets both for `--refresh-wrapp skip|template` and `--wrapps-dir`.
 `TEST_RUNNER_PROGRESS_PATH` asks the suite to write its per-game progress as
 JSON lines, which is how `sc` draws the live game table.
 
+The table gives each game's **Build** and **Launch** times, its own work alone:
+a game that waited its turn while another game built or launched has that
+time in a **Waited** column instead, shown once any game waited. **Disk** is
+the most its build took on disk at once, sampled every 15 s: the build's
+working wrapp in `$TMPDIR` and what it has saved. `sc` keeps each game's
+largest in `test-results/integration-sizes.json` (`IntegrationSizes`), which
+stays on each Mac, and passes the file to the suite as
+`TEST_RUNNER_SIZE_ESTIMATES_PATH`. The total Swift Testing reports for a
+game's test still includes its waiting.
+
 ## WrappPuppeteer
 
 `WrappPuppeteer` (a CLI tool wrapped as an `.app`) drives the launch-and-quit

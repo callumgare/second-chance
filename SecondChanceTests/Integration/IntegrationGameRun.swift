@@ -66,7 +66,9 @@ struct IntegrationGameRun {
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-\(source)-integration-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             outputDir = dir
-            guard let built = try await buildWrapp(build, into: dir, outcome: outcome, afterBuild: afterBuild, check: check) else {
+            guard let built = try await outcome.timed(.build, {
+                try await buildWrapp(build, into: dir, outcome: outcome, afterBuild: afterBuild, check: check)
+            }) else {
                 return
             }
             wrapp = built
@@ -86,7 +88,9 @@ struct IntegrationGameRun {
             return
         }
         outcome.phase("launching")
-        let exitCode = try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout)
+        let exitCode = try await outcome.timed(.launch) {
+            try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout)
+        }
         outcome.puppeteerExit = exitCode
         outcome.expect(exitCode == 0, "WrappPuppeteer exited with \(exitCode) for \(label)")
         await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
@@ -183,6 +187,16 @@ struct IntegrationGameRun {
             Task { await MainActor.run { Task { await build.start(viewModel) } } }
         }
 
+        // How much disk the build takes at most, for `sc` to know how many
+        // can be built at once: its working wrapp, and what's been saved.
+        let sampler = Task.detached { [recorder] in
+            while !Task.isCancelled {
+                outcome.notePeak(bytes: Self.diskUse(of: [recorder.currentWorkingWrapp, outputDir]))
+                try? await Task.sleep(for: .seconds(15))
+            }
+        }
+        defer { sampler.cancel() }
+
         // Only a backstop for a build that hangs: the build times out its own
         // installer, patches, and Steam's sign-in and download, and reports
         // which one, so this must not cut a slow but healthy build short.
@@ -190,6 +204,8 @@ struct IntegrationGameRun {
         if !succeeded && recorder.failedError == nil {
             await Self.stopTimedOutBuild(recorder: recorder)
         }
+        let finalUse = await Blocking.run { Self.diskUse(of: [outputDir]) }
+        outcome.notePeak(bytes: finalUse)
         Attachment.record(Data(recorder.events.map { "\($0)" }.joined(separator: "\n").utf8), named: "\(source)-events-\(label).txt")
 
         guard afterBuild(recorder, outcome) else { return nil }
@@ -225,6 +241,13 @@ struct IntegrationGameRun {
         }
         await Wine(wrapp: tempWrapp).server.stop()
         _ = await recorder.waitForCompletion(timeout: 60)
+    }
+
+    /// What the folders hold on disk together, missing ones counting nothing.
+    private nonisolated static func diskUse(of folders: [URL?]) -> Int64 {
+        folders.compactMap { $0 }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+            .reduce(0) { $0 + DirectorySize.measure($1, within: $1).bytes }
     }
 
     /// Removes the test's output directory. A wrapp built from discs can hold
@@ -273,6 +296,15 @@ final class GameOutcome: @unchecked Sendable {
     var skipped: String?
     private var failedExpectations = 0
 
+    /// What the time went on, so a game that waited for others isn't
+    /// charged for it: building, launching, and waiting its turn for either.
+    enum Timing: String {
+        case build, launch, queued
+    }
+    private let lock = NSLock()
+    private var timings: [Timing: TimeInterval] = [:]
+    private var peakBytes: Int64 = 0
+
     init(slug: String, source: String = "disk", progress: ProgressFileWriter?) {
         self.slug = slug
         self.source = source
@@ -283,6 +315,21 @@ final class GameOutcome: @unchecked Sendable {
     func expect(_ condition: Bool, _ comment: Comment, sourceLocation: SourceLocation = #_sourceLocation) {
         #expect(condition, comment, sourceLocation: sourceLocation)
         if !condition { failedExpectations += 1 }
+    }
+
+    /// Run `body`, adding the time it takes to `timing`.
+    func timed<T>(_ timing: Timing, _ body: () async throws -> T) async rethrows -> T {
+        let start = Date()
+        defer {
+            let elapsed = Date().timeIntervalSince(start)
+            lock.withLock { timings[timing, default: 0] += elapsed }
+        }
+        return try await body()
+    }
+
+    /// The build's disk use now, kept if it's the most so far.
+    func notePeak(bytes: Int64) {
+        lock.withLock { peakBytes = max(peakBytes, bytes) }
     }
 
     func phase(_ phase: String) {
@@ -307,6 +354,10 @@ final class GameOutcome: @unchecked Sendable {
             "seconds": Date().timeIntervalSince(started),
         ]
         if let puppeteerExit { record["puppeteerExit"] = Int(puppeteerExit) }
+        lock.withLock {
+            for (timing, seconds) in timings { record["\(timing.rawValue)Seconds"] = seconds }
+            if peakBytes > 0 { record["peakBytes"] = peakBytes }
+        }
         if let skipped { record["message"] = skipped }
         progress?.write(record)
     }

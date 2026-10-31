@@ -687,4 +687,53 @@ struct TestVMTests {
         let without = TestVM.Prepared(name: "sc-sequoia", target: "admin@192.168.64.2", sshKey: nil, startedHere: false)
         #expect(without.testEnvironment["TEST_RUNNER_VM_SSH_KEY"] == nil)
     }
+
+    @Test("Games building side by side each keep their own stage, and the launching one leads the status line")
+    func boardWithGamesSideBySide() {
+        let board = GameBoard(games: ["stay-tuned", "blue-moon", "old-clock"].compactMap { Catalog.game(slug: $0) })
+        board.apply(ProgressRecord(event: "game", slug: "stay-tuned", phase: "started"))
+        board.apply(ProgressRecord(event: "game", slug: "blue-moon", phase: "started"))
+        board.apply(ProgressRecord(event: "stage", text: "Game installing", source: "disk", slug: "stay-tuned"))
+        board.apply(ProgressRecord(event: "stage", text: "Copying the disc", source: "disk", slug: "blue-moon"))
+        #expect(board.rows.map(\.stage) == ["Game installing", "Copying the disc", nil])
+        #expect(board.statusLine == "0/3 games · blue-moon: Copying the disc · also running: stay-tuned")
+
+        board.apply(ProgressRecord(event: "game", slug: "stay-tuned", phase: "launching"))
+        #expect(board.statusLine == "0/3 games · stay-tuned: launching · also running: blue-moon")
+
+        // A finished game's late stage line doesn't bring it back.
+        board.apply(ProgressRecord(event: "game", slug: "blue-moon", phase: "finished", result: "passed", seconds: 9))
+        board.apply(ProgressRecord(event: "stage", text: "Saving", source: "disk", slug: "blue-moon"))
+        #expect(board.rows[1].stage == nil)
+        #expect(board.statusLine == "1/3 games · stay-tuned: launching")
+    }
+
+    @Test("The table charges a game for its own build and launch, and shows waiting apart")
+    func tableSplitsTheTime() throws {
+        let board = GameBoard(games: ["stay-tuned", "blue-moon"].compactMap { Catalog.game(slug: $0) })
+        let record = try #require(ProgressRecord.decode(
+            #"{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":200,"#
+            + #""buildSeconds":120,"launchSeconds":30,"queuedSeconds":50,"peakBytes":3500000000}"#
+        ))
+        board.apply(record)
+        #expect(board.peakBytes == ["disk/stay-tuned": 3_500_000_000])
+        let table = TestRunner.gameTable(board, showSource: false)
+        #expect(table.headers == ["Game", "Engine", "Result", "Build", "Launch", "Waited", "Disk"])
+        #expect(table.rows[0].count == 7)
+
+        let unwaited = GameBoard(games: ["blue-moon"].compactMap { Catalog.game(slug: $0) })
+        unwaited.apply(ProgressRecord(event: "game", slug: "blue-moon", phase: "finished", result: "passed", seconds: 9))
+        #expect(TestRunner.gameTable(unwaited, showSource: false).headers == ["Game", "Engine", "Result", "Build", "Launch"])
+    }
+
+    @Test("Each game's largest build size is kept between runs")
+    func integrationSizesKeepTheLargest() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-sizes-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sizes = IntegrationSizes(testResults: dir)
+        #expect(sizes.load().isEmpty)
+        try sizes.record(["disk/stay-tuned": 300, "disk/blue-moon": 100])
+        try sizes.record(["disk/stay-tuned": 200, "steam/blue-moon": 50])
+        #expect(sizes.load() == ["disk/stay-tuned": 300, "disk/blue-moon": 100, "steam/blue-moon": 50])
+    }
 }

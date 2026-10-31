@@ -185,7 +185,10 @@ The headless app reports its build stage through a JSON-lines file:
 `.progress(WrappBuildState)`, `.completed` and `.failed` event. The integration
 test writes the same file (`TEST_RUNNER_PROGRESS_PATH`) plus per-game
 `started`/`building`/`launching`/`finished` lines, which drive the
-`sc test integration` table. [wrapp-build.md](wrapp-build.md#headless-runs) has
+`sc test integration` table; each game's build writes its stage lines with the
+game's `source` and `slug`, so games building side by side each keep their
+own, and its `finished` line splits its time into build, launch and waiting
+([testing.md](testing.md#filtering-games)). [wrapp-build.md](wrapp-build.md#headless-runs) has
 the record format.
 
 The app copies its log lines to stderr only when stderr is a terminal. `sc`

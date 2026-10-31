@@ -91,7 +91,7 @@ struct TestRunner {
 
     private func suiteTable(_ board: TestBoard) -> (headers: [String], rows: [StyledTableRow]) {
         let rows: [StyledTableRow] = board.suiteRows.map { suite in
-            [.plain(suite.name), statusCell(suite.status.rawValue), .muted(suite.seconds.map { String(format: "%.1fs", $0) } ?? "")]
+            [.plain(suite.name), Self.statusCell(suite.status.rawValue), .muted(suite.seconds.map { String(format: "%.1fs", $0) } ?? "")]
         }
         return (["Suite", "Result", "Time"], rows)
     }
@@ -135,10 +135,12 @@ struct TestRunner {
         let follower = ProgressFollower(url: progressFile)
         defer { follower.remove() }
 
+        let sizes = IntegrationSizes(testResults: repo.testResults)
         var env = [
             "TEST_RUNNER_REPO_ROOT": repo.root.path,
             "TEST_RUNNER_PROGRESS_PATH": progressFile.path,
             "TEST_RUNNER_WRAPPS_DIR": wrappsDir.path,
+            "TEST_RUNNER_SIZE_ESTIMATES_PATH": sizes.url.path,
         ]
         // Asked for by name, so missing ISOs are a failure, not a skip that
         // would report a pass having tested nothing.
@@ -185,13 +187,18 @@ struct TestRunner {
             title: "Integration tests", log: "test-integration", observer: observer,
             fraction: { board.fraction },
             statusLine: { board.statusLine },
-            table: { gameTable(board, showSource: showSource) },
+            table: { Self.gameTable(board, showSource: showSource) },
             run: { sink in
                 try await xcode.runTests(selection: Self.integrationSelection(sources), environment: environment, resultBundle: bundle, sink: sink)
             }
         )
         for record in follower.poll() { board.apply(record) }
-        let table = gameTable(board, showSource: showSource)
+        do {
+            try sizes.record(board.peakBytes)
+        } catch {
+            ui.warning("Couldn't record how much disk each game's build took in \(sizes.url.path): \(error.localizedDescription)")
+        }
+        let table = Self.gameTable(board, showSource: showSource)
         await ui.table(headers: table.headers, rows: table.rows)
         if board.hasOverloadedGames {
             ui.warning("Some games weren't tested: the Mac was heavily loaded, so Wine would have taken minutes to start, or never started.",
@@ -204,15 +211,25 @@ struct TestRunner {
         return TestRun(name: "Integration", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle))
     }
 
-    private func gameTable(_ board: GameBoard, showSource: Bool) -> (headers: [String], rows: [StyledTableRow]) {
-        let rows: [StyledTableRow] = board.rows.map { game in
+    /// Build and launch times are the game's own: the time it spent waiting
+    /// for others is in Waited, shown once any game waited.
+    static func gameTable(_ board: GameBoard, showSource: Bool) -> (headers: [String], rows: [StyledTableRow]) {
+        let gameRows = board.rows
+        let showWaited = gameRows.contains { ($0.queuedSeconds ?? 0) >= 1 }
+        let showDisk = gameRows.contains { $0.peakBytes != nil }
+        let seconds: (Double?) -> TableCellStyle = { .muted($0.map { String(format: "%.0fs", $0) } ?? "") }
+        let rows: [StyledTableRow] = gameRows.map { game in
             (showSource ? [.muted(game.source)] : [])
-                + [.plain(game.slug), .muted(game.engine), statusCell(game.status), .muted(game.seconds.map { String(format: "%.0fs", $0) } ?? "")]
+                + [.plain(game.slug), .muted(game.engine), Self.statusCell(game.status), seconds(game.buildSeconds), seconds(game.launchSeconds)]
+                + (showWaited ? [seconds(game.queuedSeconds)] : [])
+                + (showDisk ? [.muted(game.peakBytes.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "")] : [])
         }
-        return ((showSource ? ["Source"] : []) + ["Game", "Engine", "Result", "Time"], rows)
+        let headers = (showSource ? ["Source"] : []) + ["Game", "Engine", "Result", "Build", "Launch"]
+            + (showWaited ? ["Waited"] : []) + (showDisk ? ["Disk"] : [])
+        return (headers, rows)
     }
 
-    private func statusCell(_ status: String) -> TableCellStyle {
+    private static func statusCell(_ status: String) -> TableCellStyle {
         switch status {
         case "passed": .success(status)
         case "failed": .danger(status)
@@ -313,6 +330,10 @@ final class GameBoard: @unchecked Sendable {
         var status: String
         var stage: String?
         var seconds: Double?
+        var buildSeconds: Double?
+        var launchSeconds: Double?
+        var queuedSeconds: Double?
+        var peakBytes: Int64?
     }
 
     private let lock = NSLock()
@@ -320,7 +341,8 @@ final class GameBoard: @unchecked Sendable {
     /// Steam is two rows.
     private var rowsByKey: [String: Row]
     private var order: [String]
-    private var current: String?
+    /// The games under way, in the order they started: several build at once.
+    private var running: [String] = []
 
     private static func key(_ source: String, _ slug: String) -> String { "\(source)/\(slug)" }
 
@@ -356,12 +378,17 @@ final class GameBoard: @unchecked Sendable {
                 case "started":
                     row.status = "running"
                     row.stage = "starting"
-                    current = key
+                    running.removeAll { $0 == key }
+                    running.append(key)
                 case "finished":
                     row.status = record.result ?? "failed"
                     row.seconds = record.seconds
+                    row.buildSeconds = record.buildSeconds
+                    row.launchSeconds = record.launchSeconds
+                    row.queuedSeconds = record.queuedSeconds
+                    row.peakBytes = record.peakBytes
                     row.stage = nil
-                    if current == key { current = nil }
+                    running.removeAll { $0 == key }
                 default:
                     row.stage = record.phase
                 }
@@ -369,7 +396,10 @@ final class GameBoard: @unchecked Sendable {
                 let label = source == "disk" ? slug : "\(slug) (\(source))"
                 return "▸ \(label): \(record.phase ?? "")\(record.result.map { " (\($0))" } ?? "")"
             case "stage":
-                guard let key = current, let text = record.text else { return nil }
+                // A build's stage names its game; one that doesn't is the
+                // latest game's, as when only one ran at a time.
+                let key = record.slug.map { Self.key(record.source ?? "disk", $0) } ?? running.last
+                guard let key, let text = record.text, rowsByKey[key]?.status == "running" else { return nil }
                 rowsByKey[key]?.stage = text
                 return nil
             default:
@@ -379,7 +409,7 @@ final class GameBoard: @unchecked Sendable {
     }
 
     /// In the catalogue's order, which never changes: rows don't jump
-    /// around as games finish. The status line names the running game even
+    /// around as games finish. The status line names the running games even
     /// when a short window trims the table.
     var rows: [Row] {
         lock.withLock { order.compactMap { rowsByKey[$0] } }
@@ -397,11 +427,27 @@ final class GameBoard: @unchecked Sendable {
         lock.withLock {
             let done = rowsByKey.values.filter { !["pending", "running"].contains($0.status) }.count
             var line = "\(done)/\(order.count) games"
-            if let current, let row = rowsByKey[current] {
-                let label = row.source == "disk" ? row.slug : "\(row.slug) (\(row.source))"
-                line += " · \(label): \(row.stage ?? "running")"
+            let rows = running.compactMap { rowsByKey[$0] }
+            // The one launching, which has the screen, else the latest.
+            guard let focus = rows.first(where: { $0.stage == "launching" }) ?? rows.last else { return line }
+            line += " · \(Self.label(focus)): \(focus.stage ?? "running")"
+            let others = rows.filter { $0.source != focus.source || $0.slug != focus.slug }
+            if !others.isEmpty {
+                line += " · also running: \(others.map(Self.label).joined(separator: ", "))"
             }
             return line
+        }
+    }
+
+    private static func label(_ row: Row) -> String {
+        row.source == "disk" ? row.slug : "\(row.slug) (\(row.source))"
+    }
+
+    /// The most disk each game's build took, by `source/slug`, for the games
+    /// that said.
+    var peakBytes: [String: Int64] {
+        lock.withLock {
+            rowsByKey.compactMapValues(\.peakBytes)
         }
     }
 

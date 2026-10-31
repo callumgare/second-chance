@@ -8,7 +8,9 @@ import Foundation
 /// `{"event":"completed","path":"…/Nancy Drew - X.app"}`
 /// `{"event":"failed","message":"…"}`
 /// `{"event":"game","source":"disk","slug":"stay-tuned","phase":"launching"}` (`source` defaults to disk)
-/// `{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":81.2}`
+/// `{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":81.2,`
+/// ` "buildSeconds":60.1,"launchSeconds":20.3,"queuedSeconds":0.8,"peakBytes":3500000000}`
+/// A game's build's own `stage` lines carry its `source` and `slug` too.
 struct ProgressRecord: Decodable, Equatable, Sendable {
     let event: String
     var stage: String?
@@ -20,8 +22,16 @@ struct ProgressRecord: Decodable, Equatable, Sendable {
     var slug: String?
     var phase: String?
     var result: String?
+    /// All the game's test took, waiting its turn included.
     var seconds: Double?
     var puppeteerExit: Int32?
+    /// What the time went on: building, launching, and waiting for a turn
+    /// at either while other games had it.
+    var buildSeconds: Double?
+    var launchSeconds: Double?
+    var queuedSeconds: Double?
+    /// The most disk the game's build took at once.
+    var peakBytes: Int64?
 
     static func decode(_ line: String) -> ProgressRecord? {
         try? JSONDecoder().decode(ProgressRecord.self, from: Data(line.utf8))
