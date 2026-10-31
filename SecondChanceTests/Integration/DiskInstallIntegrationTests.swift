@@ -78,21 +78,11 @@ struct DiskInstallIntegrationTests {
     /// build a moment to fail and tear down (unmount, remove the temp wrapp).
     private func stopTimedOutBuild(recorder: RecordingEventSubscriber) async {
         guard let installerPath = recorder.resolvedInstaller?.exePath,
-              let tempWrapp = Self.enclosingAppBundle(of: URL(fileURLWithPath: installerPath)) else {
+              let tempWrapp = WrappInfo.enclosingAppBundle(of: URL(fileURLWithPath: installerPath)) else {
             return
         }
         WineEnvironment(appPath: tempWrapp).stopWineserver()
         _ = await recorder.waitForCompletion(timeout: 60)
-    }
-
-    /// The outermost `.app` bundle containing `url`, if any.
-    private static func enclosingAppBundle(of url: URL) -> URL? {
-        var bundle = URL(fileURLWithPath: "/")
-        for component in url.pathComponents.dropFirst() {
-            bundle.appendPathComponent(component)
-            if component.hasSuffix(".app") { return bundle }
-        }
-        return nil
     }
 
     // MARK: - Game filter

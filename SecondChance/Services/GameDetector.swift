@@ -230,13 +230,16 @@ class GameDetector {
     }
 
     /// Whether `folder` is a game that's already installed rather than its
-    /// installer: no installer at its top level, and one of the games' own
-    /// programs (`internalGameExePath`, `steamExePath`) instead. Game files
-    /// alone don't tell the two apart, since many discs carry them too —
-    /// Phantom of Venice's even holds a whole installed copy — but every disc
-    /// has an installer beside them.
+    /// installer: one of the games' own programs (`internalGameExePath`,
+    /// `steamExePath`) is at its top level. No disc has one there, though
+    /// many carry the game's files in folders — Phantom of Venice's even
+    /// holds a whole installed copy. An installer beside it doesn't make it
+    /// a disc: the InstallShield games (Haunted Carousel to Blue Moon) leave
+    /// a `Setup.exe` and `Setup.ini` in the installed folder, a stub that
+    /// fails with "The InstallShield Engine (iKernel.exe) could not be
+    /// launched" when run.
     nonisolated static func isInstalledGame(at folder: URL, games: [GameInfo]) throws -> Bool {
-        guard case .unrecognised(let programs) = try installerLookup(in: folder) else { return false }
+        let programs = try topLevelFileNames(in: folder).filter { $0.lowercased().hasSuffix(".exe") }
         let gamePrograms = Set(games.flatMap { game in
             [game.internalGameExePath, game.steamExePath].compactMap { path in
                 path?.split(separator: "/").last.map { $0.lowercased() }

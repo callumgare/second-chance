@@ -5,7 +5,7 @@ import Foundation
 /// Telling a disc from a game that's already installed, and finding the
 /// installer on a disc. The disc layouts are the top levels of the real
 /// discs (a name ending in `/` is a folder); the installed ones are a
-/// download of Castle Malloy and White Wolf as a build installs it.
+/// download of Castle Malloy, and games as a build installs them.
 @Suite("Installed game detection")
 struct InstalledGameDetectionTests {
     static let discs: [(slug: String, contents: [String], installer: String)] = [
@@ -31,6 +31,9 @@ struct InstalledGameDetectionTests {
     static let installedGames: [(name: String, contents: [String])] = [
         ("Castle Malloy download", ["CastleMalloy.INI", "CastleMalloy.exe", "CastleMalloy.gdf", "Ciftree/", "Ndtl.cif",
                                     "Ndui.dll", "Sound/", "Video/", "binkw32.dll", "lua5.1.dll"]),
+        // InstallShield leaves a stub Setup.exe in the installed folder.
+        ("Haunted Carousel installed", ["CDSound/", "CDVideo/", "Game.exe", "Nancy.cid", "Setup.exe", "Setup.ini",
+                                        "ciftree.dat", "readme.txt"]),
         ("White Wolf installed", ["Ciftree/", "DirectX/", "Game.exe", "Game.ini", "Nancy.cid", "Ndui.dll", "Sound/",
                                   "Video/", "binkw32.dll", "d3dx9_30.dll"]),
     ]

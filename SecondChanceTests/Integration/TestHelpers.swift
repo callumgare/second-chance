@@ -314,6 +314,16 @@ enum WrappInfo {
             .appendingPathComponent("DerivedData/Build/Products/Debug/WrappPuppeteer.app")
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
+
+    /// The outermost `.app` bundle containing `url`, if any.
+    static func enclosingAppBundle(of url: URL) -> URL? {
+        var bundle = URL(fileURLWithPath: "/")
+        for component in url.pathComponents.dropFirst() {
+            bundle.appendPathComponent(component)
+            if component.hasSuffix(".app") { return bundle }
+        }
+        return nil
+    }
 }
 
 /// One integration game at a time, across suites. Each suite is `.serialized`,
@@ -376,6 +386,16 @@ enum InstalledGameCheck {
         Task { await MainActor.run { Task { await viewModel.buildFromDisk() } } }
         // It's turned down before the copy, so in moments.
         let completed = await recorder.waitForCompletion(timeout: 120)
+        if !completed && recorder.failedError == nil {
+            // Not turned down, and an installer is running: left alone it
+            // carries on into the next game's test, waiting on a dialog.
+            await MainActor.run { viewModel.cancelBuild() }
+            if let installer = recorder.resolvedInstaller?.exePath,
+               let tempWrapp = WrappInfo.enclosingAppBundle(of: URL(fileURLWithPath: installer)) {
+                WineEnvironment(appPath: tempWrapp).stopWineserver()
+            }
+            _ = await recorder.waitForCompletion(timeout: 60)
+        }
         await recorder.unsubscribe(from: EventBus.app)
 
         let eventTrace = recorder.events.map { "\($0)" }.joined(separator: "\n")

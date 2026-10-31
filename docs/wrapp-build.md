@@ -91,12 +91,13 @@ asks, and installs it as Other, as it always has.
 **An installed game isn't a disc.** Someone may choose the folder of a game
 already installed, from an old PC or a copy found online, rather than its
 disc. Step 3 turns that down first, before detection, with
-`installedGameNotInstaller`: a folder with no installer at its top level
-(no `.msi`, `setup.exe` or `install.exe`) and one of the games' own programs
-(the last part of `internalGameExePath`, or `steamExePath`) instead. Game
-files alone don't decide it, since many discs carry them too — Phantom of
-Venice's holds a whole installed copy — but every Nancy Drew disc has an
-installer at its top level.
+`installedGameNotInstaller`: a folder with one of the games' own programs
+(the last part of `internalGameExePath`, or `steamExePath`) at its top
+level. No disc has one there, though many carry the game's files in folders
+— Phantom of Venice's holds a whole installed copy. An installer beside it
+doesn't make it a disc: the InstallShield games (Haunted Carousel to Blue
+Moon) leave a `Setup.exe` in the installed folder, a stub that fails with
+"The InstallShield Engine (iKernel.exe) could not be launched".
 
 **A disc with no installer by name** might be one Second Chance doesn't
 know: a special edition, or one in another language. For a Wine game, step 3
