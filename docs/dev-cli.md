@@ -195,8 +195,8 @@ which forces that copy on (`0` forces it off).
 ## Tests
 
 `sc test unit` runs every suite except a short denylist —
-`TestRunner.unitExclusions`: the disk-install integration suite and the two
-exiftool suites — so **a new suite runs by default**. It then runs `Tools/sc`'s
+`TestRunner.unitExclusions`: the integration suites for discs, Steam and Her
+downloads — so **a new suite runs by default**. It then runs `Tools/sc`'s
 own Swift tests. `sc test integration [<slug>…]` runs the per-game integration
 suite with one worker; `sc test` runs both, as two separate xcodebuild runs.
 Each run writes `test-results/<time>-<suite>.xcresult`, and an HTML report goes

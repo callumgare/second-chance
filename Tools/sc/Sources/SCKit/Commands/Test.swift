@@ -135,7 +135,7 @@ struct TestUnitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unit",
         abstract: "Run the unit tests (seconds), plus sc's own tests.",
-        discussion: "Every suite except the integration and exiftool ones — a new suite runs by default."
+        discussion: "Every suite except the integration ones — a new suite runs by default."
     )
 
     @OptionGroup var global: GlobalOptions

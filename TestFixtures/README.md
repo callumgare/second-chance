@@ -16,21 +16,11 @@ Mock installer files for testing installer type detection:
 - `setup.msi` - Mock MSI installer
 - `inno-setup.exe` - Mock Inno Setup installer
 
-## Creating Mock Executables
+## Windows programs and MSIs
 
-Since tests need actual PE (Windows executable) files for exiftool to parse, you can create minimal mock executables:
-
-```bash
-# On macOS with Wine installed
-cat > test.c <<EOF
-int main() { return 0; }
-EOF
-
-# Compile with mingw (if available)
-x86_64-w64-mingw32-gcc test.c -o setup.exe
-
-# Or download a minimal PE file and edit metadata with exiftool
-```
+The tests that read a Windows program's version info or an MSI's subject
+(`WindowsExecutableTests`, `MSISummaryTests`) build their files byte by byte
+in the test, so they need nothing here.
 
 ## Usage in Tests
 

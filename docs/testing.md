@@ -100,9 +100,9 @@ the mock disk in `TestFixtures/`, not real ISOs) and `ProgressFileWriterTests`
 (the progress stream `sc` reads).
 
 **`sc test unit` runs every suite except a denylist**, `TestRunner.unitExclusions`
-in `Tools/sc/Sources/SCKit/Support/TestRunner.swift`: `DiskInstallIntegrationTests`
-(real installs) and `ExiftoolServiceTests` / `ExiftoolServiceIntegrationTests`
-(they shell out to the bundled exiftool). A new suite therefore runs by default;
+in `Tools/sc/Sources/SCKit/Support/TestRunner.swift`: `DiskInstallIntegrationTests`,
+`SteamInstallIntegrationTests` and `HerDownloadInstallIntegrationTests` (real
+installs). A new suite therefore runs by default;
 one that is slow or needs the environment set up has to be added to that list.
 
 The exception is a suite that switches itself off unless told where its

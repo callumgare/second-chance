@@ -231,7 +231,6 @@ Second Chance is built on:
 - [ScummVM](https://www.scummvm.org/), which runs some of the earlier games natively. ScummVM's support for more of the
   games is being actively worked on.
 - [AutoIt](https://www.autoitscript.com/), which clicks through the game installers and patches for you.
-- [ExifTool](https://exiftool.org/), which helps work out which game is on a disc.
 - [Sparkle](https://sparkle-project.org/), which keeps Second Chance up to date.
 
 The Nancy Drew games are made by Her Interactive. Second Chance isn't affiliated with Her Interactive (yet, if you're

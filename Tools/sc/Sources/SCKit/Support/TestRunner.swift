@@ -29,9 +29,6 @@ struct TestRunner {
         "SteamInstallIntegrationTests",
         // Real installs from Her downloads: `sc test integration --source her-download`.
         "HerDownloadInstallIntegrationTests",
-        // Shell out to the bundled exiftool.
-        "ExiftoolServiceTests",
-        "ExiftoolServiceIntegrationTests",
     ]
 
     static var unitSelection: [String] {

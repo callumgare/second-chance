@@ -224,7 +224,6 @@
 				E217338E2F04AA580058E8E9 /* Frameworks */,
 				E217338F2F04AA580058E8E9 /* Resources */,
 				E2127F502F063FF300E02402 /* Embeded Wrapper Template App */,
-				E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */,
 				E25DDA6952206C43D18B125E /* Download And Copy AutoIt Files */,
 				E280B72C30319B6700501790 /* Download And Copy Game Patches */,
 				E2D5E0102F01000000000001 /* Stamp Sentry DSN */,
@@ -488,26 +487,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/WrappTemplate/setup-game-patches.sh\"\n";
-		};
-		E2A0E3BE2F074C16007E9F60 /* Download And Copy Exiftool Files */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/WrappTemplate/setup-exiftool.sh",
-			);
-			name = "Download And Copy Exiftool Files";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Resources/exiftool",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/WrappTemplate/setup-exiftool.sh\"\n";
 		};
 		E2A159062F064DDD00292958 /* Download And Copy Wine Files */ = {
 			isa = PBXShellScriptBuildPhase;

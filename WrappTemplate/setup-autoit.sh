@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # This script downloads and embeds AutoIt into the SecondChance app bundle
-# Similar to setup-exiftool.sh, it uses a cache to avoid re-downloading
+# It uses a cache to avoid re-downloading
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 

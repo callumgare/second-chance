@@ -51,7 +51,7 @@ installs the commit-message hook (see [Commit messages](#commit-messages)). `./s
 [docs/dev-cli.md](docs/dev-cli.md) explains them. The first run also builds `sc` itself (a Swift package in
 `Tools/sc/`), which takes half a minute.
 
-Everything else — Wine, ScummVM, winetricks, AutoIt, exiftool — is downloaded and cached in
+Everything else — Wine, ScummVM, winetricks, AutoIt — is downloaded and cached in
 `~/Library/Caches/SecondChance/` during the build, so you don't need to install it yourself.
 
 ## Building and running

@@ -81,6 +81,18 @@ Second Chance made the wrapp itself, so the quarantine guards nothing.
 **Step 3 happens exactly once.** `GameInfo` is threaded through every later
 step; nothing downstream re-detects. (An earlier design detected twice.)
 
+**How a game is recognised.** `GameDetector` gathers the names a disc gives
+itself into one fingerprint and matches it against the games' titles: the
+product name in `setup.exe`'s version info (`WindowsExecutable`), the
+subject of an `.msi`'s summary information (`MSISummary`), `setup.ini`'s
+`AppName` and `Product`, `autorun.inf`'s label, and the volume name. Some
+discs name the game in only one of these: Castle Malloy's only in its MSI's
+subject. A Her download adds the names its installer carries as plain text
+(`embeddedInstallerSignals`). The same version info tells InstallShield from
+Inno Setup (`GameInstallerRunner.detectInstallerType`). Both readers are
+Swift, in `Shared/Windows/` and `SecondChance/Services/`, and read only as
+much of the file as they need.
+
 A disc or Her download whose game isn't recognised (`GameInfo.unknownGame`,
 "Other") stops at step 3 to ask (`input.askAboutUnrecognisedGame`): choose
 another disc or download, which unmounts this one and goes back to step 2;
