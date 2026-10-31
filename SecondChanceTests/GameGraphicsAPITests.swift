@@ -58,14 +58,14 @@ struct GameGraphicsAPITests {
     @Test("An .exe's imports are read, lower-cased", arguments: [UInt16(0x10B), 0x20B])
     func readsImports(magic: UInt16) {
         let image = Self.peImage(importing: ["KERNEL32.dll", "DDRAW.dll", "dsound.dll"], magic: magic)
-        #expect(WindowsExecutable.importedDLLs(in: image) == ["kernel32.dll", "ddraw.dll", "dsound.dll"])
+        #expect(WindowsExecutable(data: image)?.importedDLLs == ["kernel32.dll", "ddraw.dll", "dsound.dll"])
     }
 
     @Test("Something that isn't a PE image has no imports to read")
     func rejectsNonPE() {
-        #expect(WindowsExecutable.importedDLLs(in: Data("#!/bin/sh\n".utf8)) == nil)
-        #expect(WindowsExecutable.importedDLLs(in: Data()) == nil)
-        #expect(WindowsExecutable.importedDLLs(at: URL(fileURLWithPath: "/nonexistent/Game.exe")) == nil)
+        #expect(WindowsExecutable(data: Data("#!/bin/sh\n".utf8)) == nil)
+        #expect(WindowsExecutable(data: Data()) == nil)
+        #expect(WindowsExecutable(contentsOf: URL(fileURLWithPath: "/nonexistent/Game.exe")) == nil)
     }
 
     // The imports of real Nancy Drew games: the DirectDraw ones up to Shadow
