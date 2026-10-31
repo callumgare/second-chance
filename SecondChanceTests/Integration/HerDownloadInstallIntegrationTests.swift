@@ -45,105 +45,39 @@ struct HerDownloadInstallIntegrationTests {
 
     private func buildAndLaunch(_ download: HerDownloadCase) async throws {
         let game = download.game
-        let outcome = GameOutcome(slug: download.label, source: "her-download", progress: Self.progress)
-        defer { outcome.finish() }
+        let run = IntegrationGameRun(game: game, label: download.label, source: "her-download", progress: Self.progress)
+        try await run.run { _ in
+            IntegrationGameRun.Build(
+                expectedEngine: game.gameEngine,
+                makeInput: { outputDir, viewModel in
+                    WrappBuildInput(herDownload: download.file, outputDir: outputDir, viewModel: viewModel)
+                },
+                start: { await $0.buildFromHerDownload() }
+            )
+        } check: { recorder, wrapp, outcome in
+            // A Mac download's game lands where the disc's installer puts it;
+            // the Windows download's installer has its own idea of where.
+            if download.isMacDownload, let expectedExe = game.internalGameExePath {
+                outcome.expect(recorder.detectedExePath == expectedExe, "Exe \(recorder.detectedExePath ?? "nil"), expected \(expectedExe)")
+            }
 
-        if !LoadGate.ignoringLoad, let load = await LoadGate.overloadedReading() {
-            let message = "Not testing \(download.label): the Mac is heavily loaded — \(load.summary)."
-            Self.progress?.write(["event": "load", "message": message])
-            outcome.overloaded = true
-            Issue.record(Comment(rawValue: message))
-            return
-        }
-        if let reason = VMTarget.screenBlockedReason() {
-            let message = "Not testing \(download.label): \(reason), so the game couldn't come to the front."
-            Self.progress?.write(["event": "screen", "message": message])
-            outcome.locked = true
-            Issue.record(Comment(rawValue: message))
-            return
-        }
+            let expectedPatches = await download.isMacDownload
+                ? []
+                : GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .herDownload).map(\.id)
+            outcome.expect(recorder.appliedPatches == expectedPatches,
+                           "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")
 
-        let outputDir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-her-integration-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: outputDir) }
+            outcome.expect(recorder.configuredWrapp != nil, "wrappConfigured event not emitted")
+            if let exe = WrappInfo.gameExe(at: wrapp) {
+                outcome.expect(FileManager.default.fileExists(atPath: exe.path), "The wrapp's game exe isn't in it: \(exe.path)")
+            }
 
-        let recorder = RecordingEventSubscriber()
-        await recorder.subscribe(to: EventBus.app)
-        defer { Task { await recorder.unsubscribe(from: EventBus.app) } }
-        outcome.phase("building")
-        await Self.progress?.subscribe(to: EventBus.app)
-
-        let logStart = LogStore.shared.nextSequence
-        defer {
-            LogStore.shared.flush()
-            let lines = LogStore.shared.snapshot().entries.filter { $0.seq >= logStart }.map { LogFormatter.full(entry: $0) }
-            if !lines.isEmpty {
-                Attachment.record(Data((lines.joined(separator: "\n") + "\n").utf8), named: "secondchance-her-\(download.label).txt")
+            // Neither the unpacked installer nor the rest of the Cider app ships.
+            let sharedSupport = wrapp.appendingPathComponent("Contents/SharedSupport")
+            for leftover in ["prefix/drive_c/nancy-drew-installer", "cider-staging"] {
+                outcome.expect(!FileManager.default.fileExists(atPath: sharedSupport.appendingPathComponent(leftover).path),
+                               "\(leftover) shipped in the wrapp")
             }
         }
-
-        let viewModel = await MainActor.run {
-            WrappBuildViewModel(makeInput: { WrappBuildInput(herDownload: download.file, outputDir: outputDir, viewModel: $0) })
-        }
-        Task { await MainActor.run { Task { await viewModel.buildFromHerDownload() } } }
-        // A backstop only: the build times out its own installer and patches.
-        let succeeded = await recorder.waitForCompletion(timeout: 3000)
-        Attachment.record(Data(recorder.events.map { "\($0)" }.joined(separator: "\n").utf8), named: "her-events-\(download.label).txt")
-
-        outcome.expect(succeeded, "The build did not complete")
-        try #require(recorder.failedError == nil, "The build failed: \(String(describing: recorder.failedError))")
-
-        outcome.expect(recorder.detectedGame?.id == game.id, "Detected \(recorder.detectedGame?.id ?? "nil"), not \(game.id)")
-        outcome.expect(recorder.routedEngine == game.gameEngine,
-                       "Engine \(String(describing: recorder.routedEngine)), expected \(game.gameEngine)")
-        // A Mac download's game lands where the disc's installer puts it;
-        // the Windows download's installer has its own idea of where.
-        if download.isMacDownload, let expectedExe = game.internalGameExePath {
-            outcome.expect(recorder.detectedExePath == expectedExe, "Exe \(recorder.detectedExePath ?? "nil"), expected \(expectedExe)")
-        }
-
-        for patch in recorder.failedPatches {
-            outcome.expect(false, "Patch \(patch.id) failed: \(patch.message)")
-        }
-        let expectedPatches = await download.isMacDownload
-            ? []
-            : GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .herDownload).map(\.id)
-        outcome.expect(recorder.appliedPatches == expectedPatches,
-                       "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")
-
-        outcome.expect(recorder.configuredWrapp != nil, "wrappConfigured event not emitted")
-        outcome.expect(recorder.signedWrapp != nil, "signed event not emitted")
-        let wrapp = try #require(recorder.completedWrapp, "completed event not emitted")
-        outcome.expect(try WrappInfo.gameSlug(at: wrapp) == game.id, "Wrapp GameSlug isn't \(game.id)")
-        if let exe = WrappInfo.gameExe(at: wrapp) {
-            outcome.expect(FileManager.default.fileExists(atPath: exe.path), "The wrapp's game exe isn't in it: \(exe.path)")
-        }
-
-        // Neither the unpacked installer nor the rest of the Cider app ships.
-        let sharedSupport = wrapp.appendingPathComponent("Contents/SharedSupport")
-        for leftover in ["prefix/drive_c/nancy-drew-installer", "cider-staging"] {
-            outcome.expect(!FileManager.default.fileExists(atPath: sharedSupport.appendingPathComponent(leftover).path),
-                           "\(leftover) shipped in the wrapp")
-        }
-
-        guard WrappInfo.wrappPuppeteerBundle() != nil else {
-            Attachment.record("WrappPuppeteer not built — skipped the launch", named: "launch-skipped-\(download.label).txt")
-            await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
-            outcome.completed = true
-            return
-        }
-        // A VM can't render Direct3D; the build above was still tested.
-        if let reason = VMTarget.launchSkipReason(wrappURL: wrapp) {
-            outcome.skipped = "\(game.title) \(reason)"
-            await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
-            outcome.completed = true
-            return
-        }
-        outcome.phase("launching")
-        let exitCode = try await AppPuppetRunner.run(wrappURL: wrapp, game: game)
-        outcome.puppeteerExit = exitCode
-        outcome.expect(exitCode == 0, "WrappPuppeteer exited \(exitCode)")
-        await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
-        outcome.completed = true
     }
 }
