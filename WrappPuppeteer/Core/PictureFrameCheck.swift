@@ -60,8 +60,10 @@ enum PictureFrameCheck {
     private static let innerMargin = 3
     private static let outerMargin = 2
     /// The top of the side bars is left out too, as this fraction of the
-    /// height: a fullscreen window with a title bar has it, under the menu
-    /// bar's place, across the top of a capture of it, down to about 4.2%.
+    /// height: a fullscreen window with a title bar has it across the top of
+    /// a capture of it, under the menu bar's place down to about 4.2%, or
+    /// from the very top down to 3% on a display with a notch, where the
+    /// menu bar is beside the notch, outside the window (docs/testing.md).
     private static let titleBarAllowance = 0.05
     /// A channel above this, out of 255, isn't dark (as `ImageFingerprint`).
     private static let darkThreshold = 24
