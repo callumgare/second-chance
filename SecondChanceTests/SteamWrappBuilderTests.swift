@@ -21,6 +21,8 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     var install = SteamLogs.InstallPhase.installed
     /// How many of its starts Steam exits after, before signing in.
     var exitsBeforeSignIn = 0
+    /// How many sign-in checks find Steam still updating itself.
+    var updatingChecks = 0
     private var starts = 0
     private(set) var calls: [String] = []
     private(set) var savedSignedIn: Bool?
@@ -45,7 +47,20 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
         lock.withLock { starts += 1 }
     }
     func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState { loginState() }
-    func loginState() -> SteamLogs.LoginState { isRunning() ? lock.withLock { login } : .pending }
+    func loginState() -> SteamLogs.LoginState {
+        guard isRunning() else { return .pending }
+        return lock.withLock {
+            guard updatingChecks == 0 else {
+                updatingChecks -= 1
+                return .pending
+            }
+            return login
+        }
+    }
+    func bootstrapPhase() -> SteamLogs.BootstrapPhase {
+        lock.withLock { updatingChecks > 0 ? .downloading(doneKB: 1, totalKB: 2) : .verified }
+    }
+    func isConnecting() -> Bool { false }
     func isRunning() -> Bool { lock.withLock { starts > exitsBeforeSignIn } }
     /// The player signs in once the sign-in window is in front of them.
     func bringSignInWindowForward() async {
@@ -340,6 +355,17 @@ struct SteamWrappBuilderTests {
         let run = await build(game: "thornton-hall") { $0.exitsBeforeSignIn = 1 }
         _ = try run.result.get()
         #expect(run.client?.calls.filter { $0 == "start" }.count == 2)
+    }
+
+    @Test("While Steam updates itself before signing in, the progress line says so")
+    func updatingBeforeSignIn() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall") { $0.updatingChecks = 3 }
+        _ = try run.result.get()
+        #expect(run.events.contains {
+            if case .progress(.installingGame(substep: "Updating Steam", _)) = $0 { return true }
+            return false
+        })
     }
 
     @Test("Steam exiting twice before it signs in fails the build")

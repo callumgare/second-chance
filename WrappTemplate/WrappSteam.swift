@@ -20,12 +20,8 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 nonisolated final class WrappSteam: @unchecked Sendable {
     /// Where Steam has got to, for the loading window.
     enum Status: Equatable {
-        case starting
-        /// Updating itself, which the bootstrapper reports as it goes: each
-        /// new phase or download figure is a new status.
-        case updating(SteamLogs.BootstrapPhase)
-        /// Started, and connecting to Steam's servers to sign in.
-        case connecting
+        /// Starting, updating itself or connecting (`SteamStartupWatch`).
+        case startup(SteamStartupStage)
         case waitingForSignIn
         case signedIn
     }
@@ -74,7 +70,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         }
 
         do {
-            status(.starting)
+            status(.startup(.starting))
             let client = client
             let store = store
             let restored = try Blocking.wait { try await client.restoreLogin(from: store) }
@@ -96,8 +92,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     func waitUntilSignedIn(status: (Status) -> Void) throws {
         let client = client
         var asked = false
-        var reported: Status = .starting
-        var lastPhase = SteamLogs.BootstrapPhase.starting
+        var startup = SteamStartupWatch()
         var lastRunningCheck = Date()
         var missingChecks = 0
         while true {
@@ -111,25 +106,13 @@ nonisolated final class WrappSteam: @unchecked Sendable {
             case .needsCredentials(let reason) where !asked:
                 asked = true
                 logger.notice("Steam is asking for credentials\(reason.map { " (\($0))" } ?? "")")
-                reported = .waitingForSignIn
                 status(.waitingForSignIn)
                 Blocking.wait { await client.bringSignInWindowForward() }
             case .pending, .needsCredentials:
                 break
             }
-            if !asked {
-                let phase = client.bootstrapPhase()
-                if phase != lastPhase {
-                    Self.logPhase(phase, after: lastPhase)
-                    lastPhase = phase
-                }
-                // Once the update is in and the files check out, Steam is
-                // starting again, as on any start.
-                let now: Status = phase.isUpdating ? .updating(phase) : client.isConnecting() ? .connecting : .starting
-                if now != reported {
-                    reported = now
-                    status(now)
-                }
+            if !asked, let stage = startup.check(client) {
+                status(.startup(stage))
             }
             // An exited Steam will never sign in. It restarts itself after
             // an update, so it has to be missing from a few checks in a row.
@@ -143,37 +126,6 @@ nonisolated final class WrappSteam: @unchecked Sendable {
                 }
             }
             Thread.sleep(forTimeInterval: 1)
-        }
-    }
-
-    /// A line for each step of an update; download progress only every
-    /// tenth of the way, as the bootstrapper reports it four times a second.
-    private static func logPhase(_ phase: SteamLogs.BootstrapPhase, after previous: SteamLogs.BootstrapPhase) {
-        switch phase {
-        case .starting:
-            break
-        case .verifying:
-            logger.notice("[Steam] Checking its files")
-        case .verified:
-            logger.notice("[Steam] Its files are up to date")
-        case .downloading(let done, let total):
-            guard let done, let total, total > 0 else {
-                if case .downloading = previous { return }
-                logger.notice("[Steam] Updating: downloading the update")
-                return
-            }
-            var previousTenth = -1
-            if case .downloading(let before?, _) = previous { previousTenth = Int(before * 10 / total) }
-            let tenth = Int(done * 10 / total)
-            if tenth != previousTenth {
-                logger.notice("[Steam] Updating: downloaded \(done / 1024) of \(total / 1024) MB")
-            }
-        case .extracting:
-            logger.notice("[Steam] Updating: extracting the update")
-        case .installing:
-            logger.notice("[Steam] Updating: installing the update")
-        case .restarting:
-            logger.notice("[Steam] Updated: starting the new version")
         }
     }
 

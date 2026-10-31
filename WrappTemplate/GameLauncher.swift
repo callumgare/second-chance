@@ -736,9 +736,7 @@ class GameLauncher {
         let launchedBySteam = config.gameEngine == "wine-steam"
         return { status in
             switch status {
-            case .starting: infoWindow?.setStage(.startingSteam)
-            case .updating(let phase): infoWindow?.setStage(.updatingSteam(phase))
-            case .connecting: infoWindow?.setStage(.connectingToSteam)
+            case .startup(let stage): infoWindow?.setStage(LoadingStage(steam: stage))
             case .waitingForSignIn: infoWindow?.setStage(.signingInToSteam)
             case .signedIn: infoWindow?.setStage(launchedBySteam ? .steamStartingGame(title: title) : .startingGame(title: title))
             }

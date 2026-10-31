@@ -53,14 +53,9 @@ public enum LoadingStage: Equatable {
     public var message: String {
         switch self {
         case .startingGame(let title): return "Starting \(title)…"
-        case .startingSteam: return "Starting Steam…"
-        case .updatingSteam(let phase):
-            switch phase {
-            case .extracting, .installing: return "Installing Steam's update…"
-            case .restarting: return "Starting the updated Steam…"
-            default: return "Updating Steam…"
-            }
-        case .connectingToSteam: return "Connecting to Steam…"
+        case .startingSteam: return SteamStartupStage.starting.message + "…"
+        case .updatingSteam(let phase): return SteamStartupStage.updating(phase).message + "…"
+        case .connectingToSteam: return SteamStartupStage.connecting.message + "…"
         case .signingInToSteam: return "Sign in to Steam"
         case .steamStartingGame(let title): return "Steam is starting \(title)…"
         case .steamPlayingElsewhere: return "Your Steam account is playing on another computer"
@@ -94,14 +89,23 @@ public enum LoadingStage: Equatable {
     /// How far a download has got, for a progress bar: done and total in
     /// kilobytes. Nil when there's nothing to measure yet.
     public var progress: (doneKB: Int64, totalKB: Int64)? {
-        guard case .updatingSteam(.downloading(let done?, let total?)) = self, total > 0 else { return nil }
-        return (min(done, total), total)
+        guard case .updatingSteam(let phase) = self else { return nil }
+        return SteamStartupStage.updating(phase).download
     }
 
     /// "217 of 255 MB", under the progress bar.
     public var progressText: String? {
         guard let progress else { return nil }
         return "\(progress.doneKB / 1024) of \(progress.totalKB / 1024) MB"
+    }
+
+    /// The stage for where a starting Steam has got to.
+    public init(steam stage: SteamStartupStage) {
+        switch stage {
+        case .starting: self = .startingSteam
+        case .updating(let phase): self = .updatingSteam(phase)
+        case .connecting: self = .connectingToSteam
+        }
     }
 
     /// The stage's name in the log: its case, without a title.

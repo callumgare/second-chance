@@ -163,7 +163,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             try await preparer.prepare(wrappAt: wrappPath)
 
             // Sign in with the shared session when there is one.
-            await bus.publishWrappBuild(.progress(.installingGame(substep: "Starting Steam")))
+            await bus.publishWrappBuild(.progress(.installingGame(substep: SteamStartupStage.starting.message)))
             let restored = try await client.restoreLogin(from: sessionStore)
             if !restored && !input.canSignInToSteam { throw WrappBuildError.steamSignInRequired }
             if let preselected, let steam = Self.steamData(preselected) {
@@ -302,7 +302,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         + "You'll stay signed in for your other Nancy Drew games, until you choose Second Chance ▸ Sign Out of Steam."
 
     /// Wait for Steam to sign in, asking the user when it shows its sign-in
-    /// window. True once signed in.
+    /// window, and saying meanwhile whether it's updating itself or
+    /// connecting (`SteamStartupWatch`). True once signed in.
     ///
     /// A Steam that exits first is started once more: its first start
     /// updates it, and one that crashed part-way through the download sat
@@ -313,6 +314,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         var asked = false
         var restarted = false
         var missingChecks = 0
+        var startup = SteamStartupWatch()
         while Date() < deadline {
             switch client.loginState() {
             case .signedIn:
@@ -329,6 +331,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             case .pending, .needsCredentials:
                 break
             }
+            if !asked, let stage = startup.check(client) {
+                await bus.publishWrappBuild(.progress(.installingGame(substep: stage.message)))
+            }
             missingChecks = client.isRunning() ? 0 : missingChecks + 1
             if missingChecks >= steamExitedChecks {
                 guard !restarted else {
@@ -338,6 +343,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 logger.warning("Steam exited before it signed in; starting it again")
                 restarted = true
                 missingChecks = 0
+                startup = SteamStartupWatch()
+                await bus.publishWrappBuild(.progress(.installingGame(substep: SteamStartupStage.starting.message)))
                 try await client.start(silent: true)
                 if !asked { deadline = Date().addingTimeInterval(Self.startTimeout) }
             }

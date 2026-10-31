@@ -32,6 +32,11 @@ nonisolated public protocol SteamClientDriving: Sendable {
     func waitForLogin(timeout: TimeInterval) async -> SteamLogs.LoginState
     /// Where the sign-in has got to now, without waiting or logging.
     func loginState() -> SteamLogs.LoginState
+    /// What the bootstrapper has got to in this start (`SteamLogs.bootstrapPhase`).
+    func bootstrapPhase() -> SteamLogs.BootstrapPhase
+    /// Whether the client is connecting to Steam's servers, not yet signed in
+    /// (`SteamLogs.isConnecting`).
+    func isConnecting() -> Bool
     /// Whether Steam is running. It exits and starts again when it has
     /// updated itself, so one check that finds it missing proves nothing.
     func isRunning() -> Bool

@@ -66,6 +66,9 @@ the test host under xcodebuild — can still meet the prompts; answer them
    update — is started once more, and exiting again fails the build with
    `steamExited`. A first start that crashed part-way through its update
    otherwise sat out the whole 20-minute wait for a Steam that was gone.
+   Until it signs in or asks, the progress line says what Steam is doing —
+   "Starting Steam", "Updating Steam", "Connecting to Steam" — from the same
+   `SteamStartupWatch` a wrapp's loading window uses (see [Running](#running)).
 4. **Pick the game from the ones the account owns** (`ownedAppIDs`), so
    nobody is offered a game Steam won't install. From the app,
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
@@ -191,7 +194,8 @@ The loading window names each step (`WrappSteam.Status`, shown as a
 `LoadingStage`): "Starting Steam…"; "Updating Steam…", with a progress bar,
 while the bootstrapper updates the client (`SteamLogs.bootstrapPhase`);
 "Connecting to Steam…" once the client is signing in
-(`SteamLogs.isConnecting`); the sign-in prompt if it needs one; then "Steam
+(`SteamLogs.isConnecting`) — those three from `SteamStartupWatch`
+(`Shared`), which a build's sign-in wait follows too; the sign-in prompt if it needs one; then "Steam
 is starting *Title*…". Each has its own clock for the "taking longer than
 usual" note and the possible-launch-failure warning, set from launches timed
 on a loaded Mac and described in [wrapp-launch.md](wrapp-launch.md): a
