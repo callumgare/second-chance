@@ -3,7 +3,7 @@
 //  SecondChance
 //
 //  Running a program without freezing the window: `Process.output(of:_:)`
-//  waits for it through `Blocking.run` (Shared/Blocking.swift).
+//  waits for it through `Blocking.run` (SecondChanceKit).
 
 import Foundation
 import SecondChanceKit

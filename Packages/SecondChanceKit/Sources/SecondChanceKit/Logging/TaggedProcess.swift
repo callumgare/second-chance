@@ -16,7 +16,7 @@
 //  For processes whose pipes you build yourself, use
 //  `ProcessLineLogger.attach(to:logger:level:)` directly instead. Wine
 //  programs don't use this: they start through `Wine.run`, `output(of:)` or
-//  `start` (Shared/Wine/WineProcess.swift), which log their output themselves.
+//  `start` (Wine/WineProcess.swift), which log their output themselves.
 
 import Foundation
 import Logging

@@ -15,8 +15,8 @@ import Foundation
 import Logging
 
 /// Second Chance's lines about the Wine programs it runs. A fixed label:
-/// `Shared/` compiles into three targets with three different subsystems, so
-/// this file cannot pick one — a stable `.Shared` leaf still matches
+/// this package is linked by three targets with three different subsystems,
+/// so this file cannot pick one — a stable `.Shared` leaf still matches
 /// `BEGINSWITH 'au.gare.callum.second-chance'`.
 private nonisolated let launcherLogger = Logger(label: "au.gare.callum.second-chance.Shared.WineProcess")
 

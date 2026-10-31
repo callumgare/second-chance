@@ -6,6 +6,11 @@ _Written after implementation. There was no written plan beforehand: the
 approach was agreed in conversation, and this records it and what turned up
 while doing it._
 
+_Post-implementation edit, 2026-11-01, by Claude at Callum's request: the
+package was then moved from `Shared/` to `Packages/SecondChanceKit/` and
+renamed from `Shared` to `SecondChanceKit`, so its folder, its name and its
+main module match. Paths below are as they were when this was written._
+
 `Shared/` used to be a synchronized folder that Xcode added to three targets
 (Second Chance, WrappTemplate and WrappPuppeteer), so each compiled its own
 copy of every file into its own module. Nothing marked where the shared code

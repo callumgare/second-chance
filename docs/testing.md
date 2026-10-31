@@ -320,7 +320,7 @@ went untested.
 come to the front while the screen is locked (the frontmost app is then
 `loginwindow`) or the display asleep, so a game launched then only times out
 waiting for focus. Before each launch the test asks `ScreenState`
-(`Shared/Sources/SecondChanceKit/ScreenState.swift`), and if nothing can come to the front, records
+(`Packages/SecondChanceKit/Sources/SecondChanceKit/ScreenState.swift`), and if nothing can come to the front, records
 why and moves on without launching it; the build, which needs no screen, has
 still been tested. The table shows those games as `locked`,
 and `sc` says to keep the Mac awake and unlocked (`caffeinate -d`) and rerun

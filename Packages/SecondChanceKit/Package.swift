@@ -25,7 +25,7 @@ let swiftSettings: [SwiftSetting] = [
 ]
 
 let package = Package(
-    name: "Shared",
+    name: "SecondChanceKit",
     platforms: [.macOS(.v15)],
     products: [
         // Left to Xcode to link statically: a wrapp's Contents/Frameworks

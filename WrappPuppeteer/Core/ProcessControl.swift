@@ -80,8 +80,8 @@ enum ProcessCleanup {
 
 // MARK: - Finding processes
 
-/// Named to avoid shadowing Foundation.ProcessInfo — this target also compiles
-/// Shared/ sources that use the Foundation type.
+/// Named to avoid shadowing Foundation.ProcessInfo — this target also links
+/// SecondChanceKit, whose sources use the Foundation type.
 struct RunningProcess {
     let pid: Int32
     /// Executable basename.

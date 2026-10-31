@@ -64,7 +64,7 @@ or staying windowed; the cursor locked or left alone) also go to stderr, as
 `second-chance-helper[<helper>] <level>: <message>` (`helper_common.h`). Wine
 passes stderr on to whatever started the game, so the lines reach the wrapp's
 log through its own pipe or, for a game Steam launches, Steam's.
-`InProcessHelperReport` (`Shared/Sources/SecondChanceKit/Wine/`) watches them. The wrapp logs
+`InProcessHelperReport` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) watches them. The wrapp logs
 `[Helpers] Native fullscreen armed`, `[Helpers] Cursor lock armed`,
 `[Helpers] Mode scaling armed` and `[Helpers] Puppet control armed` as each
 helper arms. If a helper it armed hasn't reported arming a minute after the
@@ -209,7 +209,7 @@ open from the menu bar closes it, and with nothing ever locking the cursor the
 helper kept clicking for its full 15 tries — again on every return to the app.
 
 So the wrapp arms it only where cnc-ddraw may be drawing. `GameGraphicsAPI`
-(`Shared/Sources/SecondChanceKit/Wine/`) reads the DLLs the game's `.exe` imports, from its PE import
+(`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) reads the DLLs the game's `.exe` imports, from its PE import
 directory: `ddraw.dll` means DirectDraw; `d3d8.dll` or `d3d9.dll` without it
 means Direct3D, and cursor lock stays unarmed. Anything else — an `.exe` that
 can't be read, or one importing neither, as a game that loads its graphics DLL
@@ -432,7 +432,7 @@ format](#how-they-get-into-the-game-process)) when each of these first happens:
   which ⌘Q in the game, Quit from its Dock menu and a logout all reach. These go
   to the game's process, not the wrapp, so the wrapp can't see them itself.
 
-The wrapp (`GameQuitCheck`, in `Shared/Sources/SecondChanceKit/Wine/`) reads those lines and Wine's
+The wrapp (`GameQuitCheck`, in `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) reads those lines and Wine's
 `err:` lines from the game's output. When the game exits it judges the exit a
 failure if nothing asked the game to quit and the game:
 

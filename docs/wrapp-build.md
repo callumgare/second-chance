@@ -90,7 +90,7 @@ discs name the game in only one of these: Castle Malloy's only in its MSI's
 subject. A Her download adds the names its installer carries as plain text
 (`embeddedInstallerSignals`). The same version info tells InstallShield from
 Inno Setup (`GameInstallerRunner.detectInstallerType`). Both readers are
-Swift, in `Shared/Sources/SecondChanceKit/Windows/` and `SecondChance/Services/`, and read only as
+Swift, in `Packages/SecondChanceKit/Sources/SecondChanceKit/Windows/` and `SecondChance/Services/`, and read only as
 much of the file as they need.
 
 A disc or Her download whose game isn't recognised (`GameInfo.unknownGame`,
@@ -164,7 +164,7 @@ The division that keeps this from re-tangling:
   used only by `HerDownloadWrappBuilder` ([her-download.md](her-download.md)).
   The helper's part in a Her build is a primitive both builders use:
   `installAnswerFile` copies the answer file for the build's source.
-  Driving Steam lives in `Shared/Sources/SecondChanceKit/Steam/` and `SteamWrappBuilder`
+  Driving Steam lives in `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/` and `SteamWrappBuilder`
   ([steam.md](steam.md)); the helper only installs the Steam client
   (`installSteamClient`), as it installs Wine's other pieces.
 - **Resources created and consumed inside one function** are cleaned up inside
@@ -276,7 +276,7 @@ record, which `sc wrapp build` shows after the stage.
 ## Running Wine
 
 Every Wine, `wineserver` and winetricks process — the build's and the wrapp's
-— starts in one place, `Shared/Sources/SecondChanceKit/Wine/WineProcess.swift`. `Wine(wrapp:prefix:)`
+— starts in one place, `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/WineProcess.swift`. `Wine(wrapp:prefix:)`
 names one wrapp's Wine and the prefix it runs in (the wrapp's own unless given
 another), and a `WineCommand` says what to run: `.program(exe, args)`,
 `.start(exe, args)` for `wine start /wait`, `.wine(args)` for a builtin such as
@@ -303,10 +303,10 @@ the prefix's session (`shutDown(gracePeriod:)` escalates from waiting to
 `-k` to `-k9`), and `Winetricks` (app only, as only Second Chance bundles it)
 installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,
 which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
-GCD queues call it through `Blocking.wait` (`Shared/Sources/SecondChanceKit/Blocking.swift`), the
+GCD queues call it through `Blocking.wait` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`), the
 build's blocking work goes the other way through `Blocking.run`, and a
 SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
-`Shared/Sources/SecondChanceKit/Wine/`.
+`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`.
 
 ## Cancelling
 

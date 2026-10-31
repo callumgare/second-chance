@@ -3,7 +3,7 @@
 //  SecondChance
 //
 //  A wrapp's Wine prefix: making it, caching it, and mounting discs into it.
-//  Running Wine programs is `Wine`'s (Shared/Wine/).
+//  Running Wine programs is `Wine`'s (SecondChanceKit's Wine/).
 
 import Foundation
 import Logging

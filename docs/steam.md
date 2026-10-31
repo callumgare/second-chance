@@ -3,7 +3,7 @@
 Steam-sourced wrapps run the real Steam client inside the wrapp's Wine
 prefix: some games will only run with a signed-in Steam, and Steam's own
 sign-in window (with QR sign-in) means Second Chance never handles a password.
-The parts that drive it live in `Shared/Sources/SecondChanceKit/Steam/`,
+The parts that drive it live in `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`,
 part of the shared package the app, the wrapp and WrappPuppeteer all use.
 
 Steam builds and Steam wrapps work end to end, tested by
