@@ -352,10 +352,13 @@ focus wait, since a wrapp that missed the game never brings it to the front
 either, and the focus failure would hide the cause. When the game never
 comes to the front, or no Exit button or logo turns up in time, the
 scenario logs the windows on screen and saves a capture of the game window to
-`/tmp` (`game-window-detected-*.png` once the game is up,
-`exit-not-found-*.png`), naming it in its log — plus a full-screen screenshot
-(`game-not-focused-*.png`, `info-window-still-open-*.png`, …) if it happens to
-have Screen Recording. The per-attempt captures, deleted as they are
+`/tmp` (`game-window-detected-window-*.png` once the game is up,
+`exit-not-found-window-*.png`), naming it in its log — plus a full-screen
+screenshot (`game-not-focused-screen-*.png`, `exit-not-found-screen-*.png`, …)
+if it happens to have Screen Recording, or a log line saying it doesn't. The
+integration test attaches each screenshot logged (a `📸` line) to the run's
+results, as `screenshot-<attempt>-<slug>-<file>.png`, since `/tmp` doesn't
+outlast a restart of the test Mac. The per-attempt captures, deleted as they are
 analysed, are of the game window alone, captured by the game: a notification
 or another app in front of the game can't reach the OCR, and once the game
 has closed its window there is nothing to capture, rather than "Exit" in

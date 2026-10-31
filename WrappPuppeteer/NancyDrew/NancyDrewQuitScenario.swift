@@ -215,9 +215,10 @@ struct NancyDrewQuitScenario {
     }
 
     /// Capture the game window, through the game, into /tmp for diagnosing a
-    /// failure later, and log where.
+    /// failure later, and log where. The integration test attaches every
+    /// capture logged with 📸 to its results.
     private func diagnosticCapture(_ context: Context, prefix: String) {
-        let path = "/tmp/\(prefix)-\(Int(Date().timeIntervalSince1970)).png"
+        let path = "/tmp/\(prefix)-window-\(Int(Date().timeIntervalSince1970)).png"
         if context.game.capture(to: path) != nil {
             logger.notice("📸 Game window: \(path)")
         }
@@ -225,10 +226,14 @@ struct NancyDrewQuitScenario {
 
     /// A screenshot of the whole screen, which shows what else was in front —
     /// but only if WrappPuppeteer happens to have Screen Recording, which it
-    /// doesn't need.
+    /// doesn't need. Named apart from `diagnosticCapture`'s, which is often
+    /// taken in the same second.
     private func optionalScreenshot(prefix: String) {
-        guard CGPreflightScreenCaptureAccess() else { return }
-        if let path = ScreenCapture.captureScreen(prefix: prefix) {
+        guard CGPreflightScreenCaptureAccess() else {
+            logger.notice("No full-screen screenshot: WrappPuppeteer doesn't have Screen Recording")
+            return
+        }
+        if let path = ScreenCapture.captureScreen(prefix: "\(prefix)-screen") {
             logger.notice("📸 Full screen screenshot: \(path)")
         }
     }

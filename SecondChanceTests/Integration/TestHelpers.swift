@@ -453,6 +453,7 @@ enum AppPuppetRunner {
         // The game runs in its own process inside the wrapp, so it is not covered
         // by the pid-scoped fetch above and needs its own subsystem query.
         let gameLogData = SystemLogReader.fetchGame(since: launchTime)
+        attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
         try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
                   attemptLabel: attemptLabel, requiredHelpers: requiredHelpers)
         return (exitCode: observedExitCode, pid: pid)
@@ -554,6 +555,34 @@ enum AppPuppetRunner {
             Data(exitCodeSummary.utf8),
             named: "wrapp-puppeteer-exit-code-\(attemptLabel)-\(gameSlug).txt"
         )
+    }
+
+    /// The paths of the screenshots WrappPuppeteer logs, with 📸, when a run
+    /// goes wrong: the game window, and the whole screen when it has Screen
+    /// Recording.
+    static func screenshotPaths(in log: String) -> [String] {
+        log.components(separatedBy: "\n").compactMap { line in
+            guard let marker = line.range(of: "📸 ") else { return nil }
+            let path = line[marker.upperBound...].components(separatedBy: ": ").last?
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            return path.hasPrefix("/") && path.hasSuffix(".png") ? path : nil
+        }
+    }
+
+    /// Attach the screenshots the run logged, as they're otherwise left in
+    /// the test Mac's /tmp. Only for a run on this Mac: a run in a VM leaves
+    /// them in the VM.
+    private static func attachScreenshots(loggedIn log: String, gameSlug: String, attemptLabel: String) {
+        for path in screenshotPaths(in: log) {
+            let url = URL(fileURLWithPath: path)
+            do {
+                let data = try Data(contentsOf: url)
+                Attachment.record(data, named: "screenshot-\(attemptLabel)-\(gameSlug)-\(url.lastPathComponent)")
+            } catch {
+                Attachment.record(Data("Couldn't read \(path): \(error.localizedDescription)\n".utf8),
+                                  named: "screenshot-\(attemptLabel)-\(gameSlug)-\(url.lastPathComponent).txt")
+            }
+        }
     }
 
     private static func decodeExitCode(fromKqueueStatus status: Int32) -> Int32 {
