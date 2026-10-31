@@ -82,7 +82,10 @@ the test host under xcodebuild — can still meet the prompts; answer them
    first start, and checked against the licences here instead
    (`steamGameNotOwned`), so it needs no restart.
 5. **Wait for the install**, showing Steam's phase — "Downloading 397 MB
-   through Steam", "Checking the download", "Finishing the install".
+   through Steam", "Checking the download", "Finishing the install". A
+   Steam that exits meanwhile, missing from eight checks in a row as during
+   the sign-in, fails the build with `steamExitedWhileInstalling` rather
+   than leaving it to wait out the four-hour limit.
 6. **Stop Steam, save the session, and take the sign-in out of the wrapp.**
    The build runs Steam inside the wrapp's own prefix, so without this the
    finished `.app` would carry the account's token, and anyone given a copy

@@ -23,6 +23,8 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     var exitsBeforeSignIn = 0
     /// How many sign-in checks find Steam still updating itself.
     var updatingChecks = 0
+    /// Steam exits once the install has started, and never finishes it.
+    var exitsWhileInstalling = false
     private var starts = 0
     private(set) var calls: [String] = []
     private(set) var savedSignedIn: Bool?
@@ -61,7 +63,8 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
         lock.withLock { updatingChecks > 0 ? .downloading(doneKB: 1, totalKB: 2) : .verified }
     }
     func isConnecting() -> Bool { false }
-    func isRunning() -> Bool { lock.withLock { starts > exitsBeforeSignIn } }
+    func isRunning() -> Bool { lock.withLock { starts > exitsBeforeSignIn && !(exitsWhileInstalling && installing) } }
+    private var installing = false
     /// The player signs in once the sign-in window is in front of them.
     func bringSignInWindowForward() async {
         record("bringSignInWindowForward")
@@ -69,6 +72,10 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     }
     func ownedAppIDs(timeout: TimeInterval) async throws -> Set<Int> { owned }
     func installPhase(appID: Int) -> SteamLogs.InstallPhase {
+        if exitsWhileInstalling {
+            lock.withLock { installing = true }
+            return .updating(phase: "Downloading", bytesToDownload: 1)
+        }
         if install == .installed, let queued, let game = GameInfoProvider.shared.allGames().first(where: { $0.steamAppID == queued.appID }) {
             let exe = prefix.appendingPathComponent(SteamClient.steamDirInPrefix)
                 .appendingPathComponent("steamapps/common/\(queued.installDir)/\(game.steamExePath ?? "Game.exe")")
@@ -182,6 +189,7 @@ struct SteamWrappBuilderTests {
             },
             preparer: FakePreparer(),
             signInPollInterval: .milliseconds(10),
+            installPollInterval: .milliseconds(10),
             steamExitedChecks: 3,
             bus: bus
         )
@@ -374,6 +382,14 @@ struct SteamWrappBuilderTests {
         let run = await build(game: "thornton-hall") { $0.exitsBeforeSignIn = 2 }
         #expect(throws: WrappBuildError.steamExited) { try run.result.get() }
         #expect(run.client?.calls.filter { $0 == "start" }.count == 2)
+    }
+
+    @Test("Steam exiting partway through the install fails the build, rather than waiting out the timeout")
+    func exitedWhileInstalling() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall") { $0.exitsWhileInstalling = true }
+        #expect(throws: WrappBuildError.steamExitedWhileInstalling) { try run.result.get() }
+        #expect(run.client?.calls.contains("shutdown") == true)
     }
 
     @Test("Another wrapp using Steam stops the build before anything is made")

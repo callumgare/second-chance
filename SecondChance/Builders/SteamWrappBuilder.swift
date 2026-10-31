@@ -52,6 +52,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     private let preparer: SteamWrappPreparing
     /// How often the sign-in wait looks at Steam.
     private let signInPollInterval: Duration
+    /// How often the install wait looks at Steam.
+    private let installPollInterval: Duration
     /// How many looks in a row must find Steam missing before it counts as
     /// exited: it restarts itself after an update (exit 42), which leaves a
     /// moment with no steam.exe.
@@ -79,10 +81,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         makeClient: ((URL) -> SteamClientDriving)? = nil,
         preparer: SteamWrappPreparing? = nil,
         signInPollInterval: Duration = .seconds(2),
+        installPollInterval: Duration = .seconds(2),
         steamExitedChecks: Int = 8,
         bus: EventBus<AppEvent> = .app
     ) {
         self.signInPollInterval = signInPollInterval
+        self.installPollInterval = installPollInterval
         self.steamExitedChecks = steamExitedChecks
         self.helper = helper
         self.installerRunner = installerRunner
@@ -358,9 +362,14 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         throw WrappBuildError.steamSignInTimedOut
     }
 
+    /// Wait for Steam to install the game. A Steam that exits — missing from
+    /// `steamExitedChecks` checks in a row, as for the sign-in — fails the
+    /// build: it would otherwise sit out the whole timeout for a Steam that
+    /// was gone.
     private func waitForInstall(client: SteamClientDriving, appID: Int) async throws {
         let deadline = Date().addingTimeInterval(Self.installTimeout)
         var lastSubstep = ""
+        var missingChecks = 0
         while Date() < deadline {
             let phase = client.installPhase(appID: appID)
             switch phase {
@@ -376,7 +385,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 lastSubstep = substep
                 await bus.publishWrappBuild(.progress(.installingGame(substep: substep)))
             }
-            try await Task.sleep(for: .seconds(2))
+            missingChecks = client.isRunning() ? 0 : missingChecks + 1
+            if missingChecks >= steamExitedChecks {
+                logger.error("Steam exited while installing the game (\(substep))")
+                throw WrappBuildError.steamExitedWhileInstalling
+            }
+            try await Task.sleep(for: installPollInterval)
         }
         throw WrappBuildError.steamInstallFailed(reason: "it was still going after \(Int(Self.installTimeout / 3600)) hours")
     }
