@@ -97,9 +97,9 @@ struct GameGraphicsAPITests {
         try Self.peImage(importing: ["kernel32.dll", "d3d9.dll"]).write(to: direct3D)
         let missing = directory.appendingPathComponent("Missing.exe")
 
-        #expect(WineEnvironment.inProcessHelperVariables(gameExe: directDraw, environment: [:])["CURSOR_LOCK_EXE"] == "Game.exe")
-        #expect(WineEnvironment.inProcessHelperVariables(gameExe: missing, environment: [:])["CURSOR_LOCK_EXE"] == "Missing.exe")
-        let d3dVariables = WineEnvironment.inProcessHelperVariables(gameExe: direct3D, environment: [:])
+        #expect(Wine.inProcessHelperVariables(gameExe: directDraw, environment: [:])["CURSOR_LOCK_EXE"] == "Game.exe")
+        #expect(Wine.inProcessHelperVariables(gameExe: missing, environment: [:])["CURSOR_LOCK_EXE"] == "Missing.exe")
+        let d3dVariables = Wine.inProcessHelperVariables(gameExe: direct3D, environment: [:])
         #expect(d3dVariables["CURSOR_LOCK_EXE"] == nil)
         // The other helpers don't depend on it.
         #expect(d3dVariables["NATIVE_MACOS_FULLSCREEN_EXE"] == "Secrets.exe")
@@ -118,11 +118,11 @@ struct GameGraphicsAPITests {
         try Self.peImage(importing: ["kernel32.dll", "d3d9.dll"]).write(to: direct3D)
         let missing = directory.appendingPathComponent("Missing.exe")
 
-        #expect(WineEnvironment.inProcessHelperVariables(gameExe: directDraw, environment: [:])["EMULATED_MODE_SCALING_EXE"] == nil)
-        #expect(WineEnvironment.inProcessHelperVariables(gameExe: direct3D, environment: [:])["EMULATED_MODE_SCALING_EXE"] == "Wolf.exe")
-        #expect(WineEnvironment.inProcessHelperVariables(gameExe: missing, environment: [:])["EMULATED_MODE_SCALING_EXE"] == "Missing.exe")
+        #expect(Wine.inProcessHelperVariables(gameExe: directDraw, environment: [:])["EMULATED_MODE_SCALING_EXE"] == nil)
+        #expect(Wine.inProcessHelperVariables(gameExe: direct3D, environment: [:])["EMULATED_MODE_SCALING_EXE"] == "Wolf.exe")
+        #expect(Wine.inProcessHelperVariables(gameExe: missing, environment: [:])["EMULATED_MODE_SCALING_EXE"] == "Missing.exe")
         // Its off switch.
-        #expect(WineEnvironment.inProcessHelperVariables(
+        #expect(Wine.inProcessHelperVariables(
             gameExe: direct3D, environment: ["SECOND_CHANCE_MODE_SCALING": "0"])["EMULATED_MODE_SCALING_EXE"] == nil)
     }
 }

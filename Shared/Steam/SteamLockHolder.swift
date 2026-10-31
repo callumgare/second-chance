@@ -82,7 +82,7 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
             gone = Self.waitForExit(of: pid, timeout: patience.kill)
         }
         if let appURL {
-            let wine = WineEnvironment(appPath: appURL)
+            let wine = Wine(wrapp: appURL)
             if wine.isWineserverRunning() {
                 logger.notice("[Steam] Stopping the Wine session \(name) left running")
                 wine.stopWineserver()

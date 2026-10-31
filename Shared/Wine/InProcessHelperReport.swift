@@ -31,7 +31,7 @@ nonisolated final class InProcessHelperReport: @unchecked Sendable {
             }
         }
 
-        /// The variable that arms it (`WineEnvironment.inProcessHelperVariables`).
+        /// The variable that arms it (`Wine.inProcessHelperVariables`).
         var variable: String {
             switch self {
             case .nativeFullscreen: return "NATIVE_MACOS_FULLSCREEN_EXE"

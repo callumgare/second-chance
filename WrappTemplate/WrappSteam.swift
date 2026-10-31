@@ -75,9 +75,9 @@ nonisolated final class WrappSteam: @unchecked Sendable {
             status(.starting)
             let client = client
             let store = store
-            let restored = try Self.waitThrowing { try await client.restoreLogin(from: store) }
+            let restored = try Blocking.wait { try await client.restoreLogin(from: store) }
             logger.notice(restored ? "Restored the shared Steam sign-in" : "No saved Steam sign-in; Steam will ask for one")
-            try Self.waitThrowing { try await client.start(silent: true) }
+            try Blocking.wait { try await client.start(silent: true) }
         } catch {
             finish(timeout: 30)
             throw error
@@ -111,7 +111,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
                 logger.notice("Steam is asking for credentials\(reason.map { " (\($0))" } ?? "")")
                 reported = .waitingForSignIn
                 status(.waitingForSignIn)
-                Self.wait { await client.bringSignInWindowForward() }
+                Blocking.wait { await client.bringSignInWindowForward() }
             case .pending, .needsCredentials:
                 break
             }
@@ -184,7 +184,7 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         }
         guard first else { return }
         let client = client
-        Self.wait { await client.shutdown(timeout: timeout) }
+        Blocking.wait { await client.shutdown(timeout: timeout) }
         do {
             let result = try client.saveLogin(to: store, signedIn: state.withLock { signedIn })
             logger.notice("Steam sign-in: \(String(describing: result))")
@@ -193,31 +193,5 @@ nonisolated final class WrappSteam: @unchecked Sendable {
         }
         SteamSessionStore.strip(from: prefix)
         lock.release()
-    }
-
-    // MARK: Waiting on async from a background thread
-
-    private final class Box<T>: @unchecked Sendable {
-        var value: T
-        init(_ value: T) { self.value = value }
-    }
-
-    private static func wait<T>(_ operation: @escaping @Sendable () async -> T) -> T where T: Sendable {
-        let done = DispatchSemaphore(value: 0)
-        let box = Box<T?>(nil)
-        Task.detached {
-            box.value = await operation()
-            done.signal()
-        }
-        done.wait()
-        guard let value = box.value else { preconditionFailure("the operation finished without a value") }
-        return value
-    }
-
-    @discardableResult
-    private static func waitThrowing<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) throws -> T {
-        try wait { () async -> Result<T, Error> in
-            do { return .success(try await operation()) } catch { return .failure(error) }
-        }.get()
     }
 }

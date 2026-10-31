@@ -198,7 +198,7 @@ class GameInstallerRunner {
                 // failed one left running is no use to it, and its desktop
                 // may be on its way out while its display key still says it
                 // is up, which would let the next attempt skip starting one.
-                let wine = WineEnvironment(appPath: wrappPath)
+                let wine = Wine(wrapp: wrappPath)
                 let status = await Blocking.run { wine.stopWineserver() }
                 if status != 0 {
                     logger.debug("wineserver -k before the next attempt exited \(status) (no session running)")
@@ -1124,7 +1124,7 @@ class GameInstallerRunner {
             return try await step()
         } catch WineError.noDisplay {
             logger.warning("\(what) found no display to open its windows on — restarting the Wine session and trying once more")
-            let wine = WineEnvironment(appPath: wrappPath)
+            let wine = Wine(wrapp: wrappPath)
             let status = await Blocking.run { wine.stopWineserver() }
             if status != 0 {
                 logger.warning("wineserver -k exited \(status)")
@@ -1139,7 +1139,7 @@ class GameInstallerRunner {
     /// A program run without it is sure to fail: AutoIt then can't open its
     /// window and exits 0 without having run its script.
     private func startDesktop(at wrappPath: URL) async -> WineDesktop? {
-        let wine = WineEnvironment(appPath: wrappPath)
+        let wine = Wine(wrapp: wrappPath)
         let logger = self.logger
         return await Task.detached {
             WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)

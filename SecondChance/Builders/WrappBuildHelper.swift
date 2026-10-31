@@ -301,7 +301,7 @@ class WrappBuildHelper {
         // the game wrapp but we set this one up in case it's run on a read-only system.
         let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
         let driveCPath = prefixPath.appendingPathComponent("drive_c")
-        let documentsPath = driveCPath.appendingPathComponent("/users/\(WineEnvironment.wineUsername)/Documents")
+        let documentsPath = driveCPath.appendingPathComponent("/users/\(Wine.username)/Documents")
 
         // Remove existing Documents directory/symlink if it exists
         try? FileManager.default.removeItem(at: documentsPath)
@@ -513,7 +513,7 @@ class WrappBuildHelper {
         await bus.publishWrappBuild(.progress(.installingGame(substep: "Installing Steam")))
 
         // Stop wine server first; it waits for the server, so off the main thread.
-        let wine = WineEnvironment(appPath: wrappPath)
+        let wine = Wine(wrapp: wrappPath)
         _ = await Blocking.run { wine.stopWineserver() }
 
         // Valve's installer, run silently. Not `winetricks steam`: that first
@@ -666,8 +666,8 @@ class WrappBuildHelper {
         // A build that failed partway can leave its Wine session running,
         // and once the wrapp is gone so is the wineserver that could stop it:
         // the processes then run on, one of them using most of a core.
-        let wine = WineEnvironment(appPath: path)
-        if fileManager.fileExists(atPath: wine.wineBinDir.appendingPathComponent("wineserver").path) {
+        let wine = Wine(wrapp: path)
+        if fileManager.fileExists(atPath: wine.binDir.appendingPathComponent("wineserver").path) {
             let status = await Blocking.run { wine.stopWineserver() }
             if status != 0 {
                 logger.debug("wineserver -k for \(path.lastPathComponent) exited \(status) (no session running)")

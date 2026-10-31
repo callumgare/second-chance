@@ -20,7 +20,7 @@ nonisolated final class SteamSessionStore: @unchecked Sendable {
     static let files = [
         "drive_c/Program Files (x86)/Steam/config/loginusers.vdf",
         "drive_c/Program Files (x86)/Steam/config/config.vdf",
-        "drive_c/users/\(WineEnvironment.wineUsername)/AppData/Local/Steam/local.vdf",
+        "drive_c/users/\(Wine.username)/AppData/Local/Steam/local.vdf",
     ]
     /// The one that holds the token. Its modification time says which of two
     /// sessions is newer.

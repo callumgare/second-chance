@@ -32,10 +32,10 @@ struct WineNoDisplayTests {
         defer { try? FileManager.default.removeItem(at: wrapp) }
 
         await #expect(throws: WineError.self) {
-            try await WineEnvironment(appPath: wrapp).runWine(executable: "wine", arguments: ["AutoIt3.exe"])
+            try await Wine(wrapp: wrapp).runWine(executable: "wine", arguments: ["AutoIt3.exe"])
         }
         do {
-            try await WineEnvironment(appPath: wrapp).runWine(executable: "wine", arguments: ["AutoIt3.exe"])
+            try await Wine(wrapp: wrapp).runWine(executable: "wine", arguments: ["AutoIt3.exe"])
         } catch WineError.noDisplay {
             // Expected.
         } catch {
@@ -51,6 +51,6 @@ struct WineNoDisplayTests {
         )
         defer { try? FileManager.default.removeItem(at: wrapp) }
 
-        try await WineEnvironment(appPath: wrapp).runWine(executable: "wine", arguments: ["setup.exe"])
+        try await Wine(wrapp: wrapp).runWine(executable: "wine", arguments: ["setup.exe"])
     }
 }

@@ -28,7 +28,7 @@ class WineUtilities {
     @discardableResult
     static func waitTillWineserverStopped(at wrappPath: URL, customPrefixDir: URL? = nil,
                                           gracefulTimeout: TimeInterval = 5) -> Bool {
-        let wine = WineEnvironment(appPath: wrappPath, customPrefixDir: customPrefixDir)
+        let wine = Wine(wrapp: wrappPath, prefix: customPrefixDir)
         // A ScummVM wrapp has no Wine at all.
         guard hasWine(wine) else { return true }
         func run(_ arguments: [String]) -> Process? { runWineserver(wine, arguments) }
@@ -60,7 +60,7 @@ class WineUtilities {
 
     /// Whether the prefix's Wine session ended within `timeout`, by `wineserver
     /// -w` returning: at once when none is running.
-    static func waitForSessionEnd(_ wine: WineEnvironment, timeout: TimeInterval) -> Bool {
+    static func waitForSessionEnd(_ wine: Wine, timeout: TimeInterval) -> Bool {
         guard hasWine(wine) else { return true }
         guard let waiter = runWineserver(wine, ["-w"]) else { return false }
         let ended = DispatchSemaphore(value: 0)
@@ -73,7 +73,7 @@ class WineUtilities {
     /// Call `onEnd` once the prefix's Wine session has ended (`wineserver
     /// -w` returning). Returns the waiter, to `terminate()` when the wait is
     /// no longer wanted, or nil when it couldn't be started.
-    static func onSessionEnd(_ wine: WineEnvironment, _ onEnd: @escaping @Sendable () -> Void) -> Process? {
+    static func onSessionEnd(_ wine: Wine, _ onEnd: @escaping @Sendable () -> Void) -> Process? {
         guard hasWine(wine), let waiter = runWineserver(wine, ["-w"]) else { return nil }
         waiter.terminationHandler = { process in
             // Terminated by us: no longer wanted.
@@ -84,21 +84,21 @@ class WineUtilities {
 
     /// SIGKILL every Wine process in the prefix (`wineserver -k9`), for a
     /// wrapp that has to exit now and mustn't leave Wine behind.
-    static func killSession(_ wine: WineEnvironment) {
+    static func killSession(_ wine: Wine) {
         guard hasWine(wine) else { return }
         wineUtilitiesLogger.warning("[Wine Cleanup] Killing Wine before exiting (wineserver -k9)")
         runWineserver(wine, ["-k9"])?.waitUntilExit()
     }
 
-    private static func hasWine(_ wine: WineEnvironment) -> Bool {
-        FileManager.default.fileExists(atPath: wine.wineBinDir.appendingPathComponent("wineserver").path)
+    private static func hasWine(_ wine: Wine) -> Bool {
+        FileManager.default.fileExists(atPath: wine.binDir.appendingPathComponent("wineserver").path)
     }
 
-    private static func runWineserver(_ wine: WineEnvironment, _ arguments: [String]) -> Process? {
+    private static func runWineserver(_ wine: Wine, _ arguments: [String]) -> Process? {
         let process = Process()
-        process.executableURL = wine.wineBinDir.appendingPathComponent("wineserver")
+        process.executableURL = wine.binDir.appendingPathComponent("wineserver")
         process.arguments = arguments
-        process.environment = wine.environmentVariables()
+        process.environment = wine.environment
         do {
             try process.runWithoutCrashHandler()
             return process

@@ -12,12 +12,12 @@ struct SubprocessWatchTests {
         ([], "wine"),
     ])
     func names(arguments: [String], expected: String) {
-        #expect(WineEnvironment.displayName(executable: "wine", arguments: arguments) == expected)
+        #expect(Wine.displayName(executable: "wine", arguments: arguments) == expected)
     }
 
     @Test("Other executables keep their own name")
     func otherExecutables() {
-        #expect(WineEnvironment.displayName(executable: "wineserver", arguments: ["-w"]) == "wineserver")
+        #expect(Wine.displayName(executable: "wineserver", arguments: ["-w"]) == "wineserver")
     }
 
     @Test("Durations read naturally")
@@ -34,7 +34,7 @@ struct SubprocessWatchTests {
 
     @Test("The re-run command holds only the variables Second Chance sets")
     func reproductionCommand() {
-        let wine = WineEnvironment(appPath: URL(fileURLWithPath: "/tmp/Test Wrapp.app"))
+        let wine = Wine(wrapp: URL(fileURLWithPath: "/tmp/Test Wrapp.app"))
         let command = wine.reproductionCommand(
             winePath: URL(fileURLWithPath: "/tmp/Test Wrapp.app/Contents/SharedSupport/wine/bin/wine"),
             arguments: ["reg", "add", "it's"]

@@ -393,7 +393,7 @@ enum InstalledGameCheck {
             build.cancel()
             if let installer = recorder.resolvedInstaller?.exePath,
                let tempWrapp = WrappInfo.enclosingAppBundle(of: URL(fileURLWithPath: installer)) {
-                WineEnvironment(appPath: tempWrapp).stopWineserver()
+                Wine(wrapp: tempWrapp).stopWineserver()
             }
             _ = await recorder.waitForCompletion(timeout: 60)
         }

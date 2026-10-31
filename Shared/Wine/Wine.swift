@@ -1,8 +1,10 @@
 //
-//  WineEnvironment.swift
-//  Shared Wine environment and execution logic
+//  Wine.swift
+//  Shared
 //
-//  Used by both SecondChance app and WrappTemplate runtime
+//  One Wine and the prefix it runs in: where its programs are, the
+//  environment they run with, and running them. Used by Second Chance's
+//  build and by the wrapp.
 
 import Foundation
 import Logging
@@ -10,33 +12,36 @@ import Logging
 /// Fixed label: `Shared/` compiles into three targets with three different
 /// subsystems, so this file cannot pick one — a stable `.Shared` leaf still
 /// matches `BEGINSWITH 'au.gare.callum.second-chance'`.
-private nonisolated let wineLogger = Logger(label: "au.gare.callum.second-chance.Shared.WineEnvironment")
+private nonisolated let wineLogger = Logger(label: "au.gare.callum.second-chance.Shared.Wine")
 /// What Wine and the Windows programs it runs print, as its own category so
 /// it can be told apart from Second Chance's lines about running it.
 private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.Shared.Wine")
 
-/// Wine configuration and execution utilities
-nonisolated public struct WineEnvironment: Sendable {
+/// A wrapp's Wine and the prefix it runs in.
+nonisolated public struct Wine: Sendable {
     let wineDir: URL
-    let wineBinDir: URL
-    let prefixDir: URL
+    let binDir: URL
+    let prefix: URL
     let frameworksDir: URL
 
-    static let wineUsername = "crossover"
+    /// The Windows user name: whose folder under `drive_c/users` the saves are in.
+    public static let username = "crossover"
 
     /// `WINEDEBUG` when `SECOND_CHANCE_WINEDEBUG` is unset: every channel
     /// off except the err class. See docs/logging.md.
     static let defaultWineDebug = "-all,err+all"
 
-    public init(appPath: URL, customPrefixDir: URL? = nil) {
-        self.wineDir = appPath.appendingPathComponent("Contents/SharedSupport/wine")
-        self.wineBinDir = wineDir.appendingPathComponent("bin")
-        self.prefixDir = customPrefixDir ?? appPath.appendingPathComponent("Contents/SharedSupport/prefix")
-        self.frameworksDir = appPath.appendingPathComponent("Contents/Frameworks")
+    /// The Wine bundled in `wrapp`, running in `prefix`: the wrapp's own
+    /// unless given another.
+    public init(wrapp: URL, prefix: URL? = nil) {
+        self.wineDir = wrapp.appendingPathComponent("Contents/SharedSupport/wine")
+        self.binDir = wineDir.appendingPathComponent("bin")
+        self.prefix = prefix ?? wrapp.appendingPathComponent("Contents/SharedSupport/prefix")
+        self.frameworksDir = wrapp.appendingPathComponent("Contents/Frameworks")
     }
 
-    /// Get only the Wine-specific environment variables (not all system vars)
-    public func wineSpecificEnvironmentVariables() -> [String: String] {
+    /// The variables Second Chance sets for Wine, and only those.
+    public var variables: [String: String] {
         let dyldFallbackLibraryPath = [
             frameworksDir.appendingPathComponent("moltenvkcx").path,
             wineDir.appendingPathComponent("lib").path,
@@ -64,11 +69,11 @@ nonisolated public struct WineEnvironment: Sendable {
             .flatMap { $0.isEmpty ? nil : $0 } ?? Self.defaultWineDebug
 
         return [
-            "WINEPREFIX": prefixDir.path,
-            "WINE": wineBinDir.appendingPathComponent("wine").path,
-            "USER": WineEnvironment.wineUsername,
+            "WINEPREFIX": prefix.path,
+            "WINE": binDir.appendingPathComponent("wine").path,
+            "USER": Self.username,
             "WINEDEBUG": wineDebug,
-            "PATH": "\(wineBinDir.path):\(originalPath):/opt/local/bin:/opt/local/sbin",
+            "PATH": "\(binDir.path):\(originalPath):/opt/local/bin:/opt/local/sbin",
             "DYLD_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
             "GST_PLUGIN_PATH": frameworksDir.appendingPathComponent("GStreamer.framework/Libraries/gstreamer-1.0").path,
             "WINETRICKS_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
@@ -87,102 +92,20 @@ nonisolated public struct WineEnvironment: Sendable {
         ]
     }
 
-    /// The directory WrappPuppeteer gave the wrapp for its control sockets,
-    /// when it started the wrapp; nil for every player's launch.
-    public static func puppetDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {
-        guard let directory = environment["SECOND_CHANCE_PUPPET_DIR"], !directory.isEmpty else { return nil }
-        return directory
-    }
-
-    /// Variables a wrapp sets on itself at start-up, so that every Wine
-    /// process it starts inherits them — the desktop, the game, Steam — and
-    /// Second Chance's own installer runs don't.
-    ///
-    /// `NATIVE_FULLSCREEN_BELOW_NOTCH` shows Wine a notched display without the
-    /// strip the notch sits in, which a fullscreen Space leaves out, so a game
-    /// in one gets mouse positions that match its picture. It has to reach
-    /// explorer.exe, which registers the displays the game sees, which is why
-    /// it isn't among `inProcessHelperVariables`. Native fullscreen's off switch
-    /// turns it off too.
-    public static func wrappSessionVariables(
-        environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> [String: String] {
-        guard environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" else { return [:] }
-        return ["NATIVE_FULLSCREEN_BELOW_NOTCH": "1"]
-    }
-
-    /// The variables that arm the in-process helpers bundled into Wine's Mac
-    /// driver for the game whose .exe is at `gameExe`: native fullscreen puts
-    /// the game's window into a real macOS fullscreen Space, cursor lock gets
-    /// cnc-ddraw to take the mouse without swallowing the player's first click
-    /// (only in a game that may draw through cnc-ddraw: `GameGraphicsAPI`),
-    /// mode scaling scales a Direct3D game's picture up to the display when
-    /// Wine is emulating the display mode the game switched to (only in a game
-    /// that may draw with Direct3D), quit watch tells the wrapp when the game
-    /// first drew and whether it was asked to quit, and puppet control (only when WrappPuppeteer
-    /// started the wrapp) lets it see and click the game. Every Mac-driver
-    /// process loads them, so each is told which one is the game (by the
-    /// .exe's name, which Wine puts in the process's argv[0]), and a Wine
-    /// program passes its environment on to the programs it starts — so these
-    /// work set on Steam as well as on the game.
-    /// See docs/wine-in-process-helpers.md.
-    public static func inProcessHelperVariables(
-        gameExe exeURL: URL, environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> [String: String] {
-        let gameExe = exeURL.lastPathComponent
-        var env: [String: String] = [:]
-        // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
-        // debug switch for telling its main-thread polling apart from other causes.
-        if environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
-            env["NATIVE_MACOS_FULLSCREEN_EXE"] = gameExe
-        }
-        // SECOND_CHANCE_CURSOR_LOCK=0 leaves cursor lock unarmed, bringing back
-        // cnc-ddraw's swallowed first click — for comparison. A Direct3D game
-        // never goes through cnc-ddraw, and the lock's middle clicks would
-        // only close the menus a player opens from the menu bar.
-        let graphicsAPI = GameGraphicsAPI(exeAt: exeURL)
-        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", graphicsAPI.mayUseCncDdraw {
-            env["CURSOR_LOCK_EXE"] = gameExe
-        }
-        // SECOND_CHANCE_MODE_SCALING=0 leaves mode scaling unarmed, so a game
-        // that switches the display mode draws into a corner of its window —
-        // for comparison. The prefix's EmulateModeset (WineManager) stays on.
-        if environment["SECOND_CHANCE_MODE_SCALING"] != "0", graphicsAPI.mayUseDirect3D {
-            env["EMULATED_MODE_SCALING_EXE"] = gameExe
-        }
-        // Quit watch only reports, so it has no off switch: what it says
-        // lets the wrapp tell a game that quit before it drew anything from
-        // a player quitting (GameQuitCheck).
-        env["QUIT_WATCH_EXE"] = gameExe
-        // Puppet control arms only when WrappPuppeteer started the wrapp,
-        // which it marks by passing the directory for the helper's socket.
-        if puppetDirectory(in: environment) != nil {
-            env["PUPPET_CONTROL_EXE"] = gameExe
-        }
-        return env
-    }
-
-    /// Generate Wine environment variables (includes system vars + Wine-specific vars)
-    public func environmentVariables() -> [String: String] {
-        var env = ProcessInfo.processInfo.environment
-
-        // Merge in Wine-specific variables
-        for (key, value) in wineSpecificEnvironmentVariables() {
-            env[key] = value
-        }
-
-        return env
+    /// What a Wine program runs with: ours over the parent's.
+    public var environment: [String: String] {
+        ProcessInfo.processInfo.environment.merging(variables) { $1 }
     }
 
     /// Run a Wine executable
     @discardableResult
     public func runExecutable(_ executable: String, arguments: [String] = []) -> Int32 {
-        let executablePath = wineBinDir.appendingPathComponent(executable)
+        let executablePath = binDir.appendingPathComponent(executable)
 
         let process = Process()
         process.executableURL = executablePath
         process.arguments = arguments
-        process.environment = environmentVariables()
+        process.environment = environment
         // Explicitly inherit the parent's stdio. Foundation nominally does this by
         // default, but in practice it's unreliable (notably for a GUI-app binary
         // invoked directly from a terminal). Wiring the handles explicitly ensures
@@ -221,10 +144,10 @@ nonisolated public struct WineEnvironment: Sendable {
         timeout: TimeInterval? = nil,
         watchdog: WineWatchdog? = nil
     ) async throws {
-        let winePath = wineBinDir.appendingPathComponent(executable)
+        let winePath = binDir.appendingPathComponent(executable)
 
         guard FileManager.default.fileExists(atPath: winePath.path) else {
-            throw NSError(domain: "WineEnvironment", code: 1, userInfo: [
+            throw NSError(domain: "Wine", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: """
                 Wine framework not found at: \(winePath.path)
 
@@ -242,7 +165,7 @@ nonisolated public struct WineEnvironment: Sendable {
             throw WineError.executionFailed(exitCode: 126)
         }
 
-        let env = environmentVariables()
+        let env = environment
         let quotedArguments = arguments.map { "\"\($0)\"" }.joined(separator: " ")
 
         // Run through /bin/sh so Wine gets exactly these variables exported,
@@ -451,7 +374,7 @@ nonisolated public struct WineEnvironment: Sendable {
     /// sets, one per line.
     func reproductionCommand(winePath: URL, arguments: [String]) -> String {
         let quote: (String) -> String = { "'" + $0.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-        let variables = wineSpecificEnvironmentVariables()
+        let variables = variables
             .sorted { $0.key < $1.key }
             .map { "  \($0.key)=\(quote($0.value)) \\" }
         return (["env \\"] + variables + ["  " + ([winePath.path] + arguments).map(quote).joined(separator: " ")])
@@ -477,7 +400,7 @@ nonisolated public struct WineEnvironment: Sendable {
         outputPipe: Pipe? = nil,
         errorPipe: Pipe? = nil
     ) throws -> Process {
-        let wineExecutable = wineBinDir.appendingPathComponent("wine")
+        let wineExecutable = binDir.appendingPathComponent("wine")
         let exeURL = URL(fileURLWithPath: exePath)
         let exeDir = exeURL.deletingLastPathComponent().path
         let exeFileName = exeURL.lastPathComponent
@@ -489,7 +412,7 @@ nonisolated public struct WineEnvironment: Sendable {
         process.executableURL = wineExecutable
         process.arguments = args
 
-        process.environment = environmentVariables().merging(Self.inProcessHelperVariables(gameExe: exeURL)) { $1 }
+        process.environment = environment.merging(Self.inProcessHelperVariables(gameExe: exeURL)) { $1 }
         process.currentDirectoryURL = URL(fileURLWithPath: exeDir)
 
         if let outputPipe = outputPipe {
@@ -517,9 +440,9 @@ nonisolated public struct WineEnvironment: Sendable {
     /// session has.
     public func startDesktop(outputPipe: Pipe? = nil, errorPipe: Pipe? = nil) throws -> Process {
         let process = Process()
-        process.executableURL = wineBinDir.appendingPathComponent("wine")
+        process.executableURL = binDir.appendingPathComponent("wine")
         process.arguments = ["explorer.exe", "/desktop"]
-        process.environment = environmentVariables()
+        process.environment = environment
         process.standardInput = FileHandle.nullDevice
         if let outputPipe { process.standardOutput = outputPipe }
         if let errorPipe { process.standardError = errorPipe }
@@ -561,9 +484,9 @@ nonisolated public struct WineEnvironment: Sendable {
         }
 
         let process = Process()
-        process.executableURL = wineBinDir.appendingPathComponent("wine")
+        process.executableURL = binDir.appendingPathComponent("wine")
         process.arguments = ["reg", "query", #"HKLM\HARDWARE\DEVICEMAP\VIDEO"#]
-        process.environment = environmentVariables()
+        process.environment = environment
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = output
@@ -588,14 +511,14 @@ nonisolated public struct WineEnvironment: Sendable {
 
     /// Check if wineserver is running for this prefix
     public func isWineserverRunning() -> Bool {
-        let wineserverPath = wineBinDir.appendingPathComponent("wineserver")
+        let wineserverPath = binDir.appendingPathComponent("wineserver")
         // A ScummVM wrapp has no Wine at all, so no wineserver to be running.
         guard FileManager.default.fileExists(atPath: wineserverPath.path) else { return false }
 
         let process = Process()
         process.executableURL = wineserverPath
         process.arguments = ["-k0"]  // Send null signal to check if server is running
-        process.environment = environmentVariables()
+        process.environment = environment
 
         do {
             try process.runWithoutCrashHandler()
@@ -611,12 +534,12 @@ nonisolated public struct WineEnvironment: Sendable {
     /// Stop wineserver for this prefix
     @discardableResult
     public func stopWineserver() -> Int32 {
-        let wineserverPath = wineBinDir.appendingPathComponent("wineserver")
+        let wineserverPath = binDir.appendingPathComponent("wineserver")
 
         let process = Process()
         process.executableURL = wineserverPath
         process.arguments = ["-k"]  // Kill all Wine processes for this prefix
-        process.environment = environmentVariables()
+        process.environment = environment
 
         do {
             try process.runWithoutCrashHandler()
@@ -626,73 +549,6 @@ nonisolated public struct WineEnvironment: Sendable {
             wineLogger.error("Error stopping wineserver: \(error)")
             return -1
         }
-    }
-}
-
-// MARK: - Watchdog
-
-/// Watches a Wine program `runWine` is waiting for, and says whether it is
-/// still getting somewhere (`GameInstallerRunner`'s `InstallStallWatch`).
-public protocol WineWatchdog: AnyObject, Sendable {
-    /// The program printed a line.
-    func sawOutput()
-    /// Asked every few seconds while the program runs.
-    func check() -> WineWatchdogVerdict
-}
-
-public enum WineWatchdogVerdict: Sendable, Equatable {
-    case carryOn
-    /// Carry on, and don't count this time towards the timeout: the program
-    /// is waiting on the person, who may take as long as they like.
-    case waitingOnPerson
-    /// Stop it: no sign of progress for this long.
-    case stalled(quietFor: TimeInterval)
-}
-
-// MARK: - Wine Errors
-
-public enum WineError: LocalizedError {
-    case executionFailed(exitCode: Int32)
-    case terminatedBySignal(Int32)
-    case timedOut(seconds: TimeInterval)
-    case winetricksNotFound
-    case winetricksFailed(trick: String)
-    /// The program printed Wine's `nodrv_CreateWindow` error: it found no
-    /// usable desktop, so it ran without a display.
-    case noDisplay
-    /// Its `WineWatchdog` said it had stopped getting anywhere, so it was
-    /// stopped, `quietFor` after its last sign of progress.
-    case stalled(quietFor: TimeInterval)
-
-    public var errorDescription: String? {
-        switch self {
-        case .executionFailed(let code):
-            return "Wine execution failed with exit code \(code)"
-        case .terminatedBySignal(let signal):
-            return "Wine was killed by \(SubprocessWatch.signalName(signal))"
-        case .timedOut(let seconds):
-            return "Wine did not finish within \(SubprocessWatch.duration(seconds)) and was stopped"
-        case .winetricksNotFound:
-            return "Winetricks not found in bundle"
-        case .winetricksFailed(let trick):
-            return "Failed to install winetrick: \(trick)"
-        case .noDisplay:
-            return "The Windows program found no display to open its windows on (Wine's nodrv_CreateWindow)"
-        case .stalled(let quietFor):
-            return "Wine showed no sign of progress for \(SubprocessWatch.duration(quietFor)) and was stopped"
-        }
-    }
-}
-
-extension WineError: ProgramExitError {
-    public var exitCode: Int32? {
-        if case .executionFailed(let code) = self { return code }
-        return nil
-    }
-
-    public var signal: Int32? {
-        if case .terminatedBySignal(let signal) = self { return signal }
-        return nil
     }
 }
 

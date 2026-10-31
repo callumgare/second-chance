@@ -2,25 +2,10 @@
 //  ProcessUtilities.swift
 //  SecondChance
 //
-//  Running blocking work without freezing the window. The build runs on the
-//  main actor, as everything in this target does by default, so a
-//  subprocess waited for there, or a large copy or removal, stops the window
-//  responding until it's done. `MainThreadWatchdog` logs when that happens.
+//  Running a program without freezing the window: `Process.output(of:_:)`
+//  waits for it through `Blocking.run` (Shared/Blocking.swift).
 
 import Foundation
-
-nonisolated enum Blocking {
-    /// Run `work` on a background thread and wait for it there, leaving the
-    /// calling thread (usually the main one) free. A detached task, so it
-    /// doesn't inherit the caller's actor.
-    static func run<T>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
-        try await Task.detached(priority: .userInitiated) { try work() }.value
-    }
-
-    static func run<T>(_ work: @escaping @Sendable () -> T) async -> T {
-        await Task.detached(priority: .userInitiated) { work() }.value
-    }
-}
 
 /// What a finished subprocess said and how it ended.
 nonisolated struct ProcessOutput: Sendable {

@@ -223,8 +223,9 @@ direct assignment.
   waited for with `waitUntilExit()`, or a big copy, removal or walk over
   files, freezes the window until it's done. Run a program with
   `Process.output(of:_:)` and other blocking work in `Blocking.run`
-  (`SecondChance/Utilities/ProcessUtilities.swift`); what such a closure calls
-  must be `nonisolated`. Wine still starts through `runWithoutCrashHandler()`.
+  (`Shared/Blocking.swift`); what such a closure calls must be `nonisolated`.
+  Code on a plain thread — the wrapp's `main()` and GCD queues — calls async
+  code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
   A Debug build logs `[Hang]` whenever the main thread stalls for more than
   0.25 s (`MainThreadWatchdog`), so a build's log shows any step that still
   blocks.

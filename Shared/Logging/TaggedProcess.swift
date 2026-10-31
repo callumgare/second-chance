@@ -14,7 +14,7 @@
 //    process.waitUntilExit()
 //
 //  For processes whose pipes you build yourself (see
-//  `WineEnvironment.runWindowsExecutableWithStart`), use
+//  `Wine.runWindowsExecutableWithStart`), use
 //  `ProcessLineLogger.attach(to:logger:level:)` directly instead.
 
 import Foundation

@@ -73,8 +73,8 @@ func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldC
 func launchWineShell(_ config: GameConfig) {
     mainLogger.notice("Opening Wine shell...")
 
-    let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
-    let wineEnvVars = wine.wineSpecificEnvironmentVariables()
+    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
+    let wineEnvVars = wine.variables
 
     mainLogger.notice("Wine prefix: \(config.winePrefix)")
     mainLogger.notice("Wine environment variables: \(wineEnvVars)")
@@ -234,13 +234,13 @@ func launchShell(_ config: GameConfig) {
 
 func launchWineControlPanel(_ config: GameConfig) {
     mainLogger.notice("Launching Wine control panel...")
-    let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
+    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
     wine.runExecutable("wine", arguments: ["control"])
 }
 
 func launchWineConfig(_ config: GameConfig) {
     mainLogger.notice("Launching Wine config...")
-    let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
+    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
     wine.runExecutable("winecfg")
 }
 
@@ -469,7 +469,7 @@ private func installTerminationHandlers() {
 /// also offers to stop it; if it closes before anyone answers, the offer goes
 /// and the launch carries on to `nextStage`. Runs off the main thread, before
 /// the game starts; "Don't Start the Game" exits the wrapp, leaving it be.
-private func waitForLastSession(_ wine: WineEnvironment, infoWindow: InfoWindowController, then nextStage: LoadingStage) {
+private func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nextStage: LoadingStage) {
     guard wine.isWineserverRunning() else { return }
     mainLogger.notice("Wine is still running in this game's prefix, probably from the last time it was played: waiting for it to finish")
     let started = Date()
@@ -527,7 +527,7 @@ func main() {
     CrashMarker.arm()
     installTerminationHandlers()
     // Before any Wine process starts, so that every one inherits them.
-    for (name, value) in WineEnvironment.wrappSessionVariables() {
+    for (name, value) in Wine.wrappSessionVariables() {
         setenv(name, value, 1)
     }
 
@@ -561,7 +561,7 @@ func main() {
     // Returns `nil` for normal launches (double-click, `open`, `--debug`, …),
     // so the regular game-launch flow below is unchanged.
     if let wineArgs = extractWineSubcommand(from: CommandLine.arguments) {
-        let wine = WineEnvironment(appPath: appPath, customPrefixDir: winePrefix)
+        let wine = Wine(wrapp: appPath, prefix: winePrefix)
         let exitCode = wine.runExecutable("wine", arguments: wineArgs)
         exit(exitCode)
     }
@@ -607,7 +607,7 @@ func main() {
         mainLogger.notice("Starting the game without Steam this time (\(launchWithoutSteamArgument)), after a launch through Steam failed")
     }
 
-    let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
+    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
     killWineBeforeForcedExit = { WineUtilities.killSession(wine) }
 
     // Check for debug mode
@@ -777,7 +777,7 @@ func main() {
         }
 
         // Link save directory
-        let documentsPath = config.winePrefix.appendingPathComponent("drive_c/users/\(WineEnvironment.wineUsername)/Documents")
+        let documentsPath = config.winePrefix.appendingPathComponent("drive_c/users/\(Wine.username)/Documents")
         do {
             var targetPath: URL? = documentsPath
 

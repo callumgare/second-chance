@@ -8,7 +8,7 @@ import Foundation
 import Logging
 import AppKit
 
-// Note: WineEnvironment is defined in this same module
+// Note: Wine is defined in this same module
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineManager")
 
@@ -295,7 +295,7 @@ class WineManager {
 
     // MARK: - Wine Execution
 
-    /// Run a program with Wine. See `WineEnvironment.runWine` for what it
+    /// Run a program with Wine. See `Wine.runWine` for what it
     /// logs and throws.
     func runWine(
         at wrappPath: URL,
@@ -304,14 +304,14 @@ class WineManager {
         timeout: TimeInterval? = nil,
         watchdog: WineWatchdog? = nil
     ) async throws {
-        let wine = WineEnvironment(appPath: wrappPath)
+        let wine = Wine(wrapp: wrappPath)
         try await wine.runWine(executable: executable, arguments: arguments, timeout: timeout, watchdog: watchdog)
     }
 
     /// Run a Windows executable through Wine.
     ///
     /// Returns the Wine process exit code rather than throwing for a
-    /// non-zero one, which `WineEnvironment.runWine` has already logged as
+    /// non-zero one, which `Wine.runWine` has already logged as
     /// an error. A signal, a timeout or a failure to start still throws.
     /// Callers that need to treat a non-zero exit as an error should inspect
     /// the returned code.
@@ -343,7 +343,7 @@ class WineManager {
         timeout: TimeInterval? = nil,
         watchdog: WineWatchdog? = nil
     ) async throws -> Int32 {
-        let wine = WineEnvironment(appPath: wrappPath)
+        let wine = Wine(wrapp: wrappPath)
         do {
             try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments, timeout: timeout, watchdog: watchdog)
             return 0
@@ -376,13 +376,13 @@ class WineManager {
 
     /// Start Wine server manually (prevents automatic shutdown)
     func startWineServer(at wrappPath: URL) throws {
-        let wine = WineEnvironment(appPath: wrappPath)
-        let wineserverPath = wine.wineBinDir.appendingPathComponent("wineserver")
+        let wine = Wine(wrapp: wrappPath)
+        let wineserverPath = wine.binDir.appendingPathComponent("wineserver")
 
         let process = Process()
         process.executableURL = wineserverPath
         process.arguments = ["-p"]  // Persistent mode
-        process.environment = wine.environmentVariables()
+        process.environment = wine.environment
 
         try process.runWithoutCrashHandler()
         process.waitUntilExit()
@@ -397,7 +397,7 @@ class WineManager {
             throw WineError.winetricksNotFound
         }
 
-        let wine = WineEnvironment(appPath: wrappPath)
+        let wine = Wine(wrapp: wrappPath)
 
         // Run in detached task to avoid blocking
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -407,7 +407,7 @@ class WineManager {
                 let process = TaggedProcess(logger: logger)
                 process.executableURL = URL(fileURLWithPath: "/bin/bash")
                 process.arguments = [winetricksPath, "--unattended", name]
-                process.environment = wine.environmentVariables()
+                process.environment = wine.environment
 
                 do {
                     try process.run()

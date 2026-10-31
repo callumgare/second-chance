@@ -225,7 +225,7 @@ class GameLauncher {
     /// The prefix's Documents, where the games keep their folders (a link to
     /// the wrapp's saves).
     private var documentsDirectory: URL {
-        config.winePrefix.appendingPathComponent("drive_c/users/\(WineEnvironment.wineUsername)/Documents")
+        config.winePrefix.appendingPathComponent("drive_c/users/\(Wine.username)/Documents")
     }
 
     private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
@@ -373,7 +373,7 @@ class GameLauncher {
             let graphics = GameGraphicsAPI(exeAt: gameExe)
             logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
             helperReport = InProcessHelperReport(
-                armingVariables: WineEnvironment.inProcessHelperVariables(gameExe: gameExe), logger: logger)
+                armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe), logger: logger)
             quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.gameEngine.hasPrefix("wine-steam"))
         } else if config.gameEngine == "scummvm", !scummvmPuppetVariables.isEmpty {
             helperReport = InProcessHelperReport(armingVariables: scummvmPuppetVariables, logger: logger)
@@ -407,7 +407,7 @@ class GameLauncher {
                 return -1
             }
         } else if config.gameEngine.hasPrefix("wine") {
-            prepareDesktop(WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix))
+            prepareDesktop(Wine(wrapp: config.appPath, prefix: config.winePrefix))
         }
         beforeTheGame()
         if isQuitting {
@@ -538,10 +538,10 @@ class GameLauncher {
             logger.notice("Game executable name: \(gameExeName)")
         }
 
-        let wine = WineEnvironment(appPath: config.appPath, customPrefixDir: config.winePrefix)
+        let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
 
         // Get Wine-specific environment variables
-        let wineEnvVars = wine.wineSpecificEnvironmentVariables()
+        let wineEnvVars = wine.variables
 
         // Export commands for running Wine by hand against this prefix, as one
         // entry at debug: needed when reproducing, noise otherwise.
@@ -761,7 +761,7 @@ class GameLauncher {
     /// devices, before the game runs — while the save warning shows, when it
     /// does. There is no deadline: the loading window says meanwhile whether
     /// the wait looks stuck. See `WineDesktop`.
-    private func prepareDesktop(_ wine: WineEnvironment) {
+    private func prepareDesktop(_ wine: Wine) {
         // Debug switch, for comparing against Wine's own on-demand start.
         guard ProcessInfo.processInfo.environment["SECOND_CHANCE_PRESTART_DESKTOP"] != "0" else {
             logger.notice("[Desktop] Not pre-starting the desktop (SECOND_CHANCE_PRESTART_DESKTOP=0)")
@@ -790,7 +790,7 @@ class GameLauncher {
     /// it, since their variables aren't set. Empty for every player's launch.
     /// See docs/wine-in-process-helpers.md.
     private var scummvmPuppetVariables: [String: String] {
-        guard WineEnvironment.puppetDirectory() != nil else { return [:] }
+        guard Wine.puppetDirectory() != nil else { return [:] }
         let dylib = config.appPath.appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib").path
         // dyld kills a process whose inserted dylib is missing, so a wrapp
         // built without it runs the game without puppet control instead.

@@ -24,7 +24,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 enum PuppetServer {
     /// Start serving if WrappPuppeteer started the wrapp.
     static func startIfRequested() {
-        guard let directory = WineEnvironment.puppetDirectory() else { return }
+        guard let directory = Wine.puppetDirectory() else { return }
         let path = (directory as NSString).appendingPathComponent("wrapp.sock")
         let thread = Thread { serve(path: path) }
         thread.name = "PuppetServer"

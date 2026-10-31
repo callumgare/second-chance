@@ -75,7 +75,7 @@ nonisolated enum RunContext {
             ? "GUI session (\(launchdSession ?? "unknown"))"
             : "no GUI session (\(launchdSession ?? "unknown")) — Wine can't open windows here (run through `sc in-gui-session`)"
         let wineDebug = ProcessInfo.processInfo.environment["SECOND_CHANCE_WINEDEBUG"]
-            .flatMap { $0.isEmpty ? nil : $0 } ?? WineEnvironment.defaultWineDebug
+            .flatMap { $0.isEmpty ? nil : $0 } ?? Wine.defaultWineDebug
 
         var lines = [
             "\(name) \(version) (build \(build)), pid \(ProcessInfo.processInfo.processIdentifier), run \(runID)",

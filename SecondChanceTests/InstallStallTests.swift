@@ -45,13 +45,13 @@ struct InstallStallTests {
         // value above zero traps when freed below it.
         let exited = DispatchSemaphore(value: 0)
         exited.signal()
-        #expect(WineEnvironment.wait(for: exited, timeout: 5, watchdog: FakeWatchdog([]), tick: 0.01) == .exited)
+        #expect(Wine.wait(for: exited, timeout: 5, watchdog: FakeWatchdog([]), tick: 0.01) == .exited)
     }
 
     @Test("A stalled verdict ends the wait at once")
     func stalls() {
         let watchdog = FakeWatchdog([.carryOn, .stalled(quietFor: 120)])
-        #expect(WineEnvironment.wait(for: DispatchSemaphore(value: 0), timeout: nil, watchdog: watchdog, tick: 0.01)
+        #expect(Wine.wait(for: DispatchSemaphore(value: 0), timeout: nil, watchdog: watchdog, tick: 0.01)
                 == .stalled(quietFor: 120))
     }
 
@@ -61,13 +61,13 @@ struct InstallStallTests {
         // waiting on the person don't count, so the third, carrying on, times
         // it out only after the fourth.
         let watchdog = FakeWatchdog([.waitingOnPerson, .waitingOnPerson, .carryOn, .carryOn])
-        #expect(WineEnvironment.wait(for: DispatchSemaphore(value: 0), timeout: 0.02, watchdog: watchdog, tick: 0.01) == .timedOut)
+        #expect(Wine.wait(for: DispatchSemaphore(value: 0), timeout: 0.02, watchdog: watchdog, tick: 0.01) == .timedOut)
         #expect(watchdog.checks == 4)
     }
 
     @Test("Without a watchdog, the timeout alone ends it")
     func noWatchdog() {
-        #expect(WineEnvironment.wait(for: DispatchSemaphore(value: 0), timeout: 0.01, watchdog: nil) == .timedOut)
+        #expect(Wine.wait(for: DispatchSemaphore(value: 0), timeout: 0.01, watchdog: nil) == .timedOut)
     }
 
     // MARK: The installer's window

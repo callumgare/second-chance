@@ -213,7 +213,7 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             window appeared: \(windowAppeared)
             wrapp version: \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?")
             macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)
-            WINEDEBUG: \(ProcessInfo.processInfo.environment["SECOND_CHANCE_WINEDEBUG"].flatMap { $0.isEmpty ? nil : $0 } ?? WineEnvironment.defaultWineDebug)
+            WINEDEBUG: \(ProcessInfo.processInfo.environment["SECOND_CHANCE_WINEDEBUG"].flatMap { $0.isEmpty ? nil : $0 } ?? Wine.defaultWineDebug)
 
             Files: sample.txt (thread stacks of the game process), sample-<name>-<pid>.txt
             (every other Wine process, sampled at the same moment), top.txt (CPU/memory),

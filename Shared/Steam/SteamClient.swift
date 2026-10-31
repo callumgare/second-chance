@@ -56,8 +56,8 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     static let windowsExecutable = #"C:\Program Files (x86)\Steam\steam.exe"#
     static let steamDirInPrefix = "drive_c/Program Files (x86)/Steam"
 
-    let wine: WineEnvironment
-    var steamDir: URL { wine.prefixDir.appendingPathComponent(Self.steamDirInPrefix) }
+    let wine: Wine
+    var steamDir: URL { wine.prefix.appendingPathComponent(Self.steamDirInPrefix) }
     var logsDir: URL { steamDir.appendingPathComponent("logs") }
 
     private let state = NSLock()
@@ -79,7 +79,7 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     /// the game's .exe, when Steam will launch a game — not while a build
     /// installs one.
     init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
-        wine = WineEnvironment(appPath: wrappPath, customPrefixDir: prefixDir)
+        wine = Wine(wrapp: wrappPath, prefix: prefixDir)
         self.gameExe = gameExe
         self.onOutputLine = onOutputLine
     }
@@ -89,14 +89,14 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     }
 
     func restoreLogin(from store: SteamSessionStore) async throws -> Bool {
-        guard let fragment = try store.restore(into: wine.prefixDir) else { return false }
+        guard let fragment = try store.restore(into: wine.prefix) else { return false }
         defer { try? FileManager.default.removeItem(at: fragment) }
         try await wine.runWine(executable: "wine", arguments: ["reg", "import", SteamSessionStore.fragmentWindowsPath], timeout: 120)
         return true
     }
 
     func saveLogin(to store: SteamSessionStore, signedIn: Bool) throws -> SteamSessionStore.CaptureResult {
-        try store.capture(from: wine.prefixDir, signedIn: signedIn)
+        try store.capture(from: wine.prefix, signedIn: signedIn)
     }
 
     func queueInstall(appID: Int, installDir: String) throws {
@@ -257,11 +257,11 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     /// until it is told to stop.
     private func run(_ arguments: [String]) throws {
         let process = Process()
-        process.executableURL = wine.wineBinDir.appendingPathComponent("wine")
+        process.executableURL = wine.binDir.appendingPathComponent("wine")
         process.arguments = [Self.windowsExecutable] + arguments
-        var env = wine.environmentVariables()
+        var env = wine.environment
         if let gameExe {
-            env.merge(WineEnvironment.inProcessHelperVariables(gameExe: gameExe)) { $1 }
+            env.merge(Wine.inProcessHelperVariables(gameExe: gameExe)) { $1 }
         }
         process.environment = env
         process.standardInput = FileHandle.nullDevice

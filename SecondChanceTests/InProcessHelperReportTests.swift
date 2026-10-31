@@ -30,7 +30,7 @@ struct InProcessHelperReportTests {
     @Test("Every helper armed by its variable has to report arming")
     func reportsUnarmedHelpers() {
         let report = InProcessHelperReport(
-            armingVariables: WineEnvironment.inProcessHelperVariables(gameExe: unreadableExe), logger: logger)
+            armingVariables: Wine.inProcessHelperVariables(gameExe: unreadableExe), logger: logger)
         report.observe(line: "second-chance-helper[CursorLock] notice: armed in Game.exe")
         report.observe(line: "second-chance-helper[NativeFullscreen] notice: entering native fullscreen: 'x' 640x480")
         report.observe(line: "second-chance-helper[EmulatedMode] notice: armed in Game.exe")
@@ -42,10 +42,10 @@ struct InProcessHelperReportTests {
 
     @Test("Puppet control is armed only when WrappPuppeteer gave the wrapp a directory")
     func armsPuppetControlOnlyForWrappPuppeteer() {
-        let player = WineEnvironment.inProcessHelperVariables(gameExe: unreadableExe, environment: [:])
+        let player = Wine.inProcessHelperVariables(gameExe: unreadableExe, environment: [:])
         #expect(player["PUPPET_CONTROL_EXE"] == nil)
         #expect(player["CURSOR_LOCK_EXE"] == "Game.exe")
-        let puppeteer = WineEnvironment.inProcessHelperVariables(
+        let puppeteer = Wine.inProcessHelperVariables(
             gameExe: unreadableExe, environment: ["SECOND_CHANCE_PUPPET_DIR": "/tmp/wrapp-puppeteer-1"])
         #expect(puppeteer["PUPPET_CONTROL_EXE"] == "Game.exe")
         #expect(InProcessHelperReport(armingVariables: puppeteer, logger: logger).check() == [.nativeFullscreen, .cursorLock, .modeScaling, .quitWatch, .puppetControl])
@@ -53,8 +53,8 @@ struct InProcessHelperReportTests {
 
     @Test("A wrapp shows Wine the display below the notch unless native fullscreen is off")
     func belowNotchFollowsNativeFullscreen() {
-        #expect(WineEnvironment.wrappSessionVariables(environment: [:]) == ["NATIVE_FULLSCREEN_BELOW_NOTCH": "1"])
-        #expect(WineEnvironment.wrappSessionVariables(environment: ["SECOND_CHANCE_NATIVE_FULLSCREEN": "0"]) == [:])
+        #expect(Wine.wrappSessionVariables(environment: [:]) == ["NATIVE_FULLSCREEN_BELOW_NOTCH": "1"])
+        #expect(Wine.wrappSessionVariables(environment: ["SECOND_CHANCE_NATIVE_FULLSCREEN": "0"]) == [:])
     }
 
     @Test("A helper switched off isn't expected to arm")

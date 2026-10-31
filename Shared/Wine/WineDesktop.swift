@@ -42,7 +42,7 @@ nonisolated public final class WineDesktop {
     /// Nil when it was already running, or could not be started — in both
     /// cases there is nothing to release. Blocks: each check runs `reg.exe`.
     public static func start(
-        _ wine: WineEnvironment,
+        _ wine: Wine,
         timeout: TimeInterval = 600,
         logger: Logger,
         outputLogger: Logger
