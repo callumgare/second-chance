@@ -31,6 +31,8 @@ struct GameLaunchInfo {
     let workingDirectory: String?
     let gameExeName: String?
     let gameExePath: String?  // Unix path to the game executable (for Wine games)
+    /// What Wine runs, for a Wine game.
+    var wineCommand: WineCommand?
 
     func formatLaunchCommand() -> String {
         let formattedCommand = formatShellCommand(executable: executable, arguments: arguments)
@@ -61,14 +63,16 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
     let gameExeDir = (gameExeUnixPath as NSString).deletingLastPathComponent
     switch config.gameEngine {
     case _ where config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-"):
-        let wineBinaryPath = config.appPath.path + "/Contents/SharedSupport/wine/bin/wine"
-
+        // By name, from its own folder: games look for their files beside them.
+        let command = WineCommand.start(gameExeName, unixPath: false, in: URL(fileURLWithPath: gameExeDir))
+        let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
         return GameLaunchInfo(
-            executable: wineBinaryPath,
-            arguments: ["start", "/wait", gameExeName],
+            executable: command.executable(in: wine).path,
+            arguments: command.processArguments,
             workingDirectory: gameExeDir,
             gameExeName: gameExeName,
-            gameExePath: gameExeUnixPath
+            gameExePath: gameExeUnixPath,
+            wineCommand: command
         )
 
     case "scummvm":
@@ -541,15 +545,9 @@ class GameLauncher {
 
         let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
 
-        // Get Wine-specific environment variables
-        let wineEnvVars = wine.variables
-
         // Export commands for running Wine by hand against this prefix, as one
         // entry at debug: needed when reproducing, noise otherwise.
-        let exports = wineEnvVars.sorted(by: { $0.key < $1.key }).map { key, value in
-            "export \(key)=\"\(value.replacingOccurrences(of: "\"", with: "\\\""))\""
-        }
-        logger.debug("Wine environment, for running Wine by hand:\n\(exports.joined(separator: "\n"))")
+        logger.debug("Wine environment, for running Wine by hand:\n\(wine.shellExports)")
 
         // Print full command with proper quoting
         let fullCommand = launchInfo.formatLaunchCommand()
@@ -558,36 +556,15 @@ class GameLauncher {
         // Launch the game
         logger.notice("[Wine] Launching game process...")
 
-        // Capture Wine's stdout/stderr and log them
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-
-        let process: Process
-        do {
-            // For Wine, we need to pass the game exe path, not the wine binary
-            // The working directory change and wine binary call are handled by runWindowsExecutableWithStart
-            guard let gameExeUnixPath = launchInfo.gameExePath else {
-                logger.critical("ERROR: gameExePath is nil for Wine game")
-                return (nil, -1, nil)
-            }
-
-            process = try wine.runWindowsExecutableWithStart(
-                exePath: gameExeUnixPath,
-                arguments: [],
-                outputPipe: outputPipe,
-                errorPipe: errorPipe
-            )
-        } catch {
-            logger.critical("ERROR: Failed to launch game: \(error)")
+        guard let command = launchInfo.wineCommand, let gameExeUnixPath = launchInfo.gameExePath else {
+            logger.critical("ERROR: no game program to run for a Wine game")
             return (nil, -1, nil)
         }
 
-        // Stream Wine output line-by-line through the logger (reaches the
-        // terminal, the log window and the export; survives chunk splits).
-        // Diagnostics sees the same lines, to keep recent context and spot crashes.
+        // Wine's output is logged line by line (reaching the terminal, the
+        // log window and the export). Diagnostics sees the same lines, to keep
+        // recent context and spot crashes.
         let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
-        diagnostics.wineLaunched()
-        self.diagnostics = diagnostics
         let helperReport = helperReport
         let quitCheck = quitCheck
         let observe: @Sendable (String) -> Void = { line in
@@ -596,8 +573,18 @@ class GameLauncher {
             quitCheck?.observe(line: line)
             activity?.noteOutput()
         }
-        ProcessLineLogger.attach(to: outputPipe, logger: wineOutputLogger, level: .notice, onLine: observe)
-        ProcessLineLogger.attach(to: errorPipe, logger: wineOutputLogger, level: .warning, onLine: observe)
+        let game: WineProcess
+        do {
+            game = try wine.start(command,
+                                  environment: Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath)),
+                                  output: .log(wineOutputLogger, onLine: observe))
+        } catch {
+            logger.critical("ERROR: Failed to launch game: \(error)")
+            return (nil, -1, nil)
+        }
+        diagnostics.wineLaunched()
+        self.diagnostics = diagnostics
+        let process = game.process
 
         logger.notice("[Wine] Game process started with PID \(process.processIdentifier)")
 

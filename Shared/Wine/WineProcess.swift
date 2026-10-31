@@ -66,7 +66,9 @@ nonisolated extension Wine {
         output: WineOutput = .log()
     ) async throws {
         launcherLogger.debug("To re-run by hand:\n\(command.commandLine(in: self))")
-        let watch = SubprocessWatch(name: command.displayName, logger: launcherLogger)
+        // In the terminal, its own output is what someone is there to read.
+        let quiet: Bool = if case .terminal = output { true } else { false }
+        let watch = SubprocessWatch(name: command.displayName, logger: launcherLogger, level: quiet ? .debug : nil)
         let noDisplay = NoDisplaySignal()
         let launched = try launch(command, environment: extra, output: output, watch: watch) { line in
             noDisplay.check(line)

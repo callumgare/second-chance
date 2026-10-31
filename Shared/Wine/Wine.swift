@@ -93,65 +93,12 @@ nonisolated public struct Wine: Sendable {
         ProcessInfo.processInfo.environment.merging(variables) { $1 }
     }
 
-    /// Run a Wine executable
-    @discardableResult
-    public func runExecutable(_ executable: String, arguments: [String] = []) -> Int32 {
-        let executablePath = binDir.appendingPathComponent(executable)
-
-        let process = Process()
-        process.executableURL = executablePath
-        process.arguments = arguments
-        process.environment = environment
-        // Explicitly inherit the parent's stdio. Foundation nominally does this by
-        // default, but in practice it's unreliable (notably for a GUI-app binary
-        // invoked directly from a terminal). Wiring the handles explicitly ensures
-        // stdin/stdout/stderr reach the child — e.g. so interactive Wine tools run
-        // via the `wine` subcommand (wine cmd, wine regedit, etc.) work as expected.
-        process.standardInput = FileHandle.standardInput
-        process.standardOutput = FileHandle.standardOutput
-        process.standardError = FileHandle.standardError
-
-        do {
-            try process.runWithoutCrashHandler()
-            process.waitUntilExit()
-            return process.terminationStatus
-        } catch {
-            wineLogger.error("ERROR: Failed to run \(executable): \(error)")
-            return -1
-        }
-    }
-
-    /// Run a Windows executable with wine start /wait (synchronous version for WrappTemplate)
-    /// Returns the Process object for async monitoring
-    public func runWindowsExecutableWithStart(
-        exePath: String,
-        arguments: [String] = [],
-        outputPipe: Pipe? = nil,
-        errorPipe: Pipe? = nil
-    ) throws -> Process {
-        let wineExecutable = binDir.appendingPathComponent("wine")
-        let exeURL = URL(fileURLWithPath: exePath)
-        let exeDir = exeURL.deletingLastPathComponent().path
-        let exeFileName = exeURL.lastPathComponent
-
-        // Use just the filename, not /unix path
-        let args = ["start", "/wait", exeFileName] + arguments
-
-        let process = Process()
-        process.executableURL = wineExecutable
-        process.arguments = args
-
-        process.environment = environment.merging(Self.inProcessHelperVariables(gameExe: exeURL)) { $1 }
-        process.currentDirectoryURL = URL(fileURLWithPath: exeDir)
-
-        if let outputPipe = outputPipe {
-            process.standardOutput = outputPipe
-        }
-        if let errorPipe = errorPipe {
-            process.standardError = errorPipe
-        }
-
-        try process.runWithoutCrashHandler()
-        return process
+    /// `export NAME='value'` lines for `variables`, sorted: pasted into a
+    /// shell, they run Wine by hand against this prefix. Wine's own folder
+    /// is first on their PATH.
+    public var shellExports: String {
+        variables.sorted { $0.key < $1.key }
+            .map { "export \($0.key)='\($0.value.replacingOccurrences(of: "'", with: "'\\''"))'" }
+            .joined(separator: "\n")
     }
 }

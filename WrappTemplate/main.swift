@@ -74,12 +74,9 @@ func launchWineShell(_ config: GameConfig) {
     mainLogger.notice("Opening Wine shell...")
 
     let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
-    let wineEnvVars = wine.variables
 
     mainLogger.notice("Wine prefix: \(config.winePrefix)")
-    mainLogger.notice("Wine environment variables: \(wineEnvVars)")
-
-    let wineBinPath = config.appPath.path + "/Contents/SharedSupport/wine/bin"
+    mainLogger.notice("Wine environment variables: \(wine.variables)")
 
     // Get the game launch command
     let launchInfo = getGameLaunchInfo(config)
@@ -95,7 +92,6 @@ func launchWineShell(_ config: GameConfig) {
     script += "clear\n"
     script += "echo 'Wine Debug Shell'\n"
     script += "echo '================'\n"
-    script += "echo 'Wine binary directory: \(wineBinPath)'\n"
     script += "echo 'Wine environment variables have been set.'\n"
     script += "echo ''\n"
     script += "echo 'Game launch command:'\n"
@@ -111,15 +107,9 @@ func launchWineShell(_ config: GameConfig) {
     script += "echo '  wine \"C:\\windows\\syswow64\\cnc-ddraw config.exe\"  (cnc-ddraw configuration)'\n"
     script += "echo ''\n"
 
-    // Export all Wine environment variables
-    for (key, value) in wineEnvVars.sorted(by: { $0.key < $1.key }) {
-        let escapedValue = value.replacingOccurrences(of: "'", with: "'\\''")
-        script += "export \(key)='\(escapedValue)'\n"
-    }
-
-    // Add wine bin directory to the front of PATH
-    let escapedWineBinPath = wineBinPath.replacingOccurrences(of: "'", with: "'\\''")
-    script += "export PATH='\(escapedWineBinPath)':$PATH\n"
+    // Export all Wine environment variables; Wine's binaries come first on
+    // their PATH.
+    script += wine.shellExports + "\n"
     script += "echo 'Wine binaries are now in PATH'\n"
 
     // CD to drive_c directory
@@ -234,14 +224,28 @@ func launchShell(_ config: GameConfig) {
 
 func launchWineControlPanel(_ config: GameConfig) {
     mainLogger.notice("Launching Wine control panel...")
-    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
-    wine.runExecutable("wine", arguments: ["control"])
+    runInTerminal(.wine(["control"]), with: Wine(wrapp: config.appPath, prefix: config.winePrefix))
 }
 
 func launchWineConfig(_ config: GameConfig) {
     mainLogger.notice("Launching Wine config...")
-    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
-    wine.runExecutable("winecfg")
+    // winecfg is a Windows program, run through wine: Wine has no bin/winecfg.
+    runInTerminal(.wine(["winecfg"]), with: Wine(wrapp: config.appPath, prefix: config.winePrefix))
+}
+
+/// Run `command` with our own stdin, stdout and stderr, and wait for it:
+/// its exit code, or 1 when it couldn't be run or was killed.
+@discardableResult
+func runInTerminal(_ command: WineCommand, with wine: Wine) -> Int32 {
+    do {
+        try Blocking.wait { try await wine.run(command, output: .terminal) }
+        return 0
+    } catch WineError.executionFailed(let code) {
+        return code
+    } catch {
+        mainLogger.error("Couldn't run \(command.displayName): \(error)")
+        return 1
+    }
 }
 
 func showWinePrefixInFinder(_ config: GameConfig) {
@@ -565,9 +569,7 @@ func main() {
     // Returns `nil` for normal launches (double-click, `open`, `--debug`, …),
     // so the regular game-launch flow below is unchanged.
     if let wineArgs = extractWineSubcommand(from: CommandLine.arguments) {
-        let wine = Wine(wrapp: appPath, prefix: winePrefix)
-        let exitCode = wine.runExecutable("wine", arguments: wineArgs)
-        exit(exitCode)
+        exit(runInTerminal(.wine(wineArgs), with: Wine(wrapp: appPath, prefix: winePrefix)))
     }
 
     // Load configuration

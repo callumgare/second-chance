@@ -70,6 +70,13 @@ custom_rules:
       - "Shared/Wine/"
       - "Shared/Steam/"
     severity: error
+  wine_path_outside_library:
+    name: "Run Wine through the Wine library"
+    regex: '\.binDir\b'
+    message: "Start Wine programs with Wine.run, output(of:) or start (Shared/Wine/WineProcess.swift) rather than from Wine's own folder; shellExports or WineCommand.commandLine(in:) give it for running by hand."
+    excluded:
+      - "Shared/Wine/"
+    severity: error
   no_privacy_annotation:
     name: "No privacy: annotations"
     regex: 'privacy:\s*\.(public|private)'
