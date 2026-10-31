@@ -28,12 +28,18 @@ enum PictureFrameCheck {
     /// What's light in the bars a picture of `pictureAspect` (width over
     /// height), fitted and centred, leaves in `image`. Empty when they're
     /// dark, and when the image has the picture's shape and so no bars.
-    static func findings(in image: CGImage, pictureAspect: Double) -> [Finding] {
+    /// `ignoring` leaves out parts of the image something else is known to
+    /// draw over, as fractions of its size with a top-left origin.
+    static func findings(in image: CGImage, pictureAspect: Double, ignoring: [CGRect] = []) -> [Finding] {
         let width = sampleWidth
         let height = max(1, Int((Double(image.height) / Double(image.width) * Double(width)).rounded()))
         guard pictureAspect > 0, let pixels = ImageFingerprint.render(image, width: width, height: height) else { return [] }
+        let ignored = ignoring.map {
+            CGRect(x: $0.minX * Double(width), y: $0.minY * Double(height),
+                   width: $0.width * Double(width), height: $0.height * Double(height))
+        }
         return bars(width: width, height: height, pictureAspect: pictureAspect).compactMap { bar in
-            finding(in: bar.rect, named: bar.name, pixels: pixels, width: width)
+            finding(in: bar.rect, named: bar.name, pixels: pixels, width: width, ignoring: ignored)
         }
     }
 
@@ -55,8 +61,8 @@ enum PictureFrameCheck {
     private static let outerMargin = 2
     /// The top of the side bars is left out too, as this fraction of the
     /// height: a fullscreen window with a title bar has it, under the menu
-    /// bar's place, across the top of a capture of it.
-    private static let titleBarAllowance = 0.04
+    /// bar's place, across the top of a capture of it, down to about 4.2%.
+    private static let titleBarAllowance = 0.05
     /// A channel above this, out of 255, isn't dark (as `ImageFingerprint`).
     private static let darkThreshold = 24
     /// A bar fails once this much of it isn't dark: a cursor out in a bar
@@ -89,12 +95,15 @@ enum PictureFrameCheck {
         return bars
     }
 
-    private static func finding(in rect: CGRect, named name: String, pixels: [UInt8], width: Int) -> Finding? {
+    private static func finding(in rect: CGRect, named name: String, pixels: [UInt8], width: Int,
+                                ignoring ignored: [CGRect]) -> Finding? {
         let rect = rect.integral
         var light: [(Int, Int, Int)] = []
         var total = 0
         for y in Int(rect.minY)..<Int(rect.maxY) {
             for x in Int(rect.minX)..<Int(rect.maxX) {
+                let centre = CGPoint(x: Double(x) + 0.5, y: Double(y) + 0.5)
+                if ignored.contains(where: { $0.contains(centre) }) { continue }
                 let offset = (y * width + x) * 4
                 let pixel = (Int(pixels[offset]), Int(pixels[offset + 1]), Int(pixels[offset + 2]))
                 total += 1

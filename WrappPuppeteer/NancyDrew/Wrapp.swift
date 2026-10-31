@@ -59,6 +59,15 @@ struct Wrapp {
     /// shape the wrapp shows it at this shape, with black bars beside it.
     static let pictureAspect = 4.0 / 3.0
 
+    /// Whether the game starts through Steam, whose overlay shows a notice
+    /// ("Press Shift+Tab to begin") in the window's bottom-right corner for
+    /// a few seconds after it starts.
+    var showsSteamOverlay: Bool { engineSetting.lowercased().contains("steam") }
+
+    /// The corner Steam's overlay notice takes, in points: it is about 285
+    /// by 90 points, and this leaves room around it.
+    static let steamOverlayNoticeSize = CGSize(width: 340, height: 120)
+
     init(appPath: String) {
         self.appPath = appPath
         let settings = Wrapp.readSettings(appPath: appPath)

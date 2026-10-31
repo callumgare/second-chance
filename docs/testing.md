@@ -527,15 +527,24 @@ in — the menu, fully drawn, which every run reaches — is checked for it
 Every game draws a 4:3 picture (`Wrapp.pictureAspect`), so everything
 outside a 4:3 area centred in the capture must be dark. A bar fails once 2%
 of it isn't (a cursor out in a bar stays well under that), and the failure
-says which way. The top 4% of the side bars is left out: White Wolf gives its
-window a title bar once play starts, and a capture of a fullscreen window with
-one shows it across the top, under where the menu bar goes.
+says which way. The top 5% of the side bars is left out: macOS shows a
+fullscreen window's title bar while the cursor rests at the top of the screen
+(and when the game starts with it there), and a capture of the window then
+shows it across the top, under where the menu bar goes.
 
 - **nearly all of it one flat colour** — the bar was left undrawn, showing
   the window's own background: `the right bar is #ececec, not black`.
 - **anything else** — the picture reaches out over where the bar should be:
   `the picture reaches into the left bar (100% of it isn't dark), so it's
   stretched or not 4:3`.
+
+Light that comes and goes isn't a framing fault. A game started through
+Steam shows Steam's overlay notice in the bottom-right corner for its first
+few seconds, over the right bar, so for those games that corner (340 by 120
+points, `Wrapp.steamOverlayNoticeSize`) is left out and the check doesn't
+wait for the notice to go. For anything else that comes and goes, a capture
+that fails is taken again every second, for up to 12 s, and the check fails
+only if none of them passes; a run that passes first time doesn't wait.
 
 A pass logs `🖼️  The picture is framed rightly in 2560x1440`; a failure saves
 the capture to `/tmp/picture-frame-*.png` and names it in the log. On a 4:3

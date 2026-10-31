@@ -221,16 +221,45 @@ struct NancyDrewQuitScenario {
         }
     }
 
+    /// Light in a bar that comes and goes isn't the picture's framing. The
+    /// corner Steam's overlay notice shows in is left out for a game started
+    /// through Steam, so it doesn't hold the check up; for anything else
+    /// that comes and goes (a cursor, a notice somewhere unexpected), a
+    /// capture that fails is taken again, every second, for this long, and
+    /// the framing is wrong only if none of them passes.
+    private static let pictureFrameRecheckSeconds: TimeInterval = 12
+
     /// Why the game's picture, in a capture of its menu, is framed wrongly
     /// — light in the bars beside it, either a bar left undrawn or the
-    /// picture stretched over it — or nil. A failing capture is kept, and
-    /// its path logged.
-    private func pictureFrameFailure(capturePath: String) -> String? {
-        guard let image = PictureFrameCheck.image(atPath: capturePath) else {
+    /// picture stretched over it — or nil. A failing capture is taken again
+    /// until one passes or `pictureFrameRecheckSeconds` is up; the last one
+    /// is kept, and its path logged. `windowSize` is the window's, in points.
+    private func pictureFrameFailure(_ context: Context, capturePath: String, windowSize: CGSize) -> String? {
+        guard var image = PictureFrameCheck.image(atPath: capturePath) else {
             logger.warning("⚠️  Couldn't read the menu's capture, so the picture's framing wasn't checked")
             return nil
         }
-        let findings = PictureFrameCheck.findings(in: image, pictureAspect: Wrapp.pictureAspect)
+        var ignoring: [CGRect] = []
+        if wrapp.showsSteamOverlay, windowSize.width > 0, windowSize.height > 0 {
+            let notice = Wrapp.steamOverlayNoticeSize
+            let width = min(1, notice.width / windowSize.width), height = min(1, notice.height / windowSize.height)
+            ignoring.append(CGRect(x: 1 - width, y: 1 - height, width: width, height: height))
+        }
+        let check = { (image: CGImage) in
+            PictureFrameCheck.findings(in: image, pictureAspect: Wrapp.pictureAspect, ignoring: ignoring)
+        }
+        var findings = check(image)
+        let deadline = Date().addingTimeInterval(Self.pictureFrameRecheckSeconds)
+        if !findings.isEmpty {
+            logger.notice("  ⏳ Something light where the picture's bars are — looking again in case it goes away")
+        }
+        while !findings.isEmpty, Date() < deadline {
+            Thread.sleep(forTimeInterval: 1)
+            guard context.game.capture(to: capturePath) != nil,
+                  let again = PictureFrameCheck.image(atPath: capturePath) else { continue }
+            image = again
+            findings = check(image)
+        }
         guard !findings.isEmpty else {
             logger.notice("  🖼️  The picture is framed rightly in \(image.width)x\(image.height): nothing light where the bars are")
             return nil
@@ -593,7 +622,8 @@ struct NancyDrewQuitScenario {
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
             // The menu, fully drawn, is what every run reaches: its frame is
             // checked once, the first time Exit is found on it.
-            if analysis.quitButton != nil, !clickedExitButton, let failure = pictureFrameFailure(capturePath: shotPath) {
+            if analysis.quitButton != nil, !clickedExitButton,
+               let failure = pictureFrameFailure(context, capturePath: shotPath, windowSize: state.size) {
                 forceQuit(app)
                 return failure
             }

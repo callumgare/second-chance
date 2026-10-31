@@ -182,9 +182,11 @@ static NSRect unconstrainedBorderless(NSWindow *self, SEL _cmd, NSRect frame, NS
 // new surface with AppKit's light grey window background, so the bars at the
 // sides would be grey. Here every surface image a borderless window with an
 // OpenGL view gets is painted black outside that view -- and one with a title
-// bar, while a picture is being scaled: White Wolf gives its window one once
-// play starts, still covering the display, and an ordinary titled window's
-// OpenGL view fills it.
+// bar, while a picture is being scaled: White Wolf's window has been seen
+// with one, still covering the display, and its right bar white. What gives
+// it one is unknown -- not the title bar macOS shows over a fullscreen window
+// while the cursor rests at the top of the screen, which leaves the bars
+// black without this. An ordinary titled window's OpenGL view fills it.
 //
 // The surface doesn't reach the right-hand bar, though: it covers the mode's
 // screen scaled up (0-1920 of a 2560-wide display for 800x600), not the
