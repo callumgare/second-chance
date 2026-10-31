@@ -376,27 +376,28 @@ enum InstalledGameCheck {
             .appendingPathComponent("sc-installed-game-check-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: outputDir) }
 
+        // Its own bus, not EventBus.app: the test host's window follows
+        // that, and would show this expected failure as its error screen.
+        let bus = EventBus<AppEvent>()
         let recorder = RecordingEventSubscriber()
-        await recorder.subscribe(to: EventBus.app)
-        let viewModel = await MainActor.run {
-            WrappBuildViewModel(makeInput: {
-                WrappBuildInput(disk1: installedGame, outputDir: outputDir, viewModel: $0)
-            })
+        await recorder.subscribe(to: bus)
+        let build = Task { @MainActor in
+            let builder = DiskWrappBuilder(installerRunner: GameInstallerRunner(bus: bus), bus: bus)
+            _ = try await builder.build(input: WrappBuildInput(disk1: installedGame, outputDir: outputDir))
         }
-        Task { await MainActor.run { Task { await viewModel.buildFromDisk() } } }
         // It's turned down before the copy, so in moments.
         let completed = await recorder.waitForCompletion(timeout: 120)
         if !completed && recorder.failedError == nil {
             // Not turned down, and an installer is running: left alone it
             // carries on into the next game's test, waiting on a dialog.
-            await MainActor.run { viewModel.cancelBuild() }
+            build.cancel()
             if let installer = recorder.resolvedInstaller?.exePath,
                let tempWrapp = WrappInfo.enclosingAppBundle(of: URL(fileURLWithPath: installer)) {
                 WineEnvironment(appPath: tempWrapp).stopWineserver()
             }
             _ = await recorder.waitForCompletion(timeout: 60)
         }
-        await recorder.unsubscribe(from: EventBus.app)
+        await recorder.unsubscribe(from: bus)
 
         let eventTrace = recorder.events.map { "\($0)" }.joined(separator: "\n")
         Attachment.record(Data(eventTrace.utf8), named: "installed-game-check-events-\(game.id).txt")
