@@ -251,10 +251,14 @@ struct NancyDrewQuitScenario {
             return nil
         }
         var ignoring: [CGRect] = []
-        if wrapp.showsSteamOverlay, windowSize.width > 0, windowSize.height > 0 {
-            let notice = Wrapp.steamOverlayNoticeSize
-            let width = min(1, notice.width / windowSize.width), height = min(1, notice.height / windowSize.height)
-            ignoring.append(CGRect(x: 1 - width, y: 1 - height, width: width, height: height))
+        if windowSize.width > 0, windowSize.height > 0 {
+            // The title bar, should something have brought it up.
+            ignoring.append(CGRect(x: 0, y: 0, width: 1, height: min(1, Wrapp.titleBarHeight / windowSize.height)))
+            if wrapp.showsSteamOverlay {
+                let notice = Wrapp.steamOverlayNoticeSize
+                let width = min(1, notice.width / windowSize.width), height = min(1, notice.height / windowSize.height)
+                ignoring.append(CGRect(x: 1 - width, y: 1 - height, width: width, height: height))
+            }
         }
         let check = { (image: CGImage) in
             PictureFrameCheck.findings(in: image, pictureAspect: Wrapp.pictureAspect, ignoring: ignoring)

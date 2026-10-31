@@ -527,8 +527,9 @@ in — the menu, fully drawn, which every run reaches — is checked for it
 Every game draws a 4:3 picture (`Wrapp.pictureAspect`), so everything
 outside a 4:3 area centred in the capture must be dark. A bar fails once 2%
 of it isn't (a cursor out in a bar stays well under that), and the failure
-says which way. The top 5% of the side bars is left out, for the window's
-title bar ([the cursor and the title bar](#the-cursor-and-the-title-bar)).
+says which way. The top 72 points of the window are left out, for its title
+bar (`Wrapp.titleBarHeight`,
+[the cursor and the title bar](#the-cursor-and-the-title-bar)).
 
 - **nearly all of it one flat colour** — the bar was left undrawn, showing
   the window's own background: `the right bar is #ececec, not black`.
@@ -582,13 +583,15 @@ that strip, beside the notch:
 - **Someone moving the mouse at the test Mac brings it up too**, over Screen
   Sharing included. Mid-run, nothing undoes that until the mouse moves away
   from the top again.
-- **A capture of the game window shows it** across the top. Without a
-  notch it sits below a dark strip where the menu bar goes, from about 2% to
-  4.2% of the height; on the notched display the menu bar is outside the
-  window, so it starts at the very top and reaches 3.0% (56 of 1890 pixels).
-  That is why the [framing check](#the-pictures-bars-and-shape) leaves out
-  the top 5% of the side bars, which covers both: every capture taken with it
-  showing on the notched display passed the check. A splash reference recorded with it showing has it baked
+- **A capture of the game window shows it** across the top. The menu bar
+  and title bar are a fixed height in points, whatever the display's size:
+  without a notch the title bar sits below a dark strip where the menu bar
+  goes, about 30 points down to 60; on the notched display the menu bar is
+  outside the window, so the title bar starts at the very top and reaches
+  28 points. That is why the [framing check](#the-pictures-bars-and-shape)
+  leaves out the top 72 points of the window, which covers both on any
+  height of display: every capture taken with it showing on the notched
+  display passed the check. A splash reference recorded with it showing has it baked
   in and matches worse without it: White Wolf's `title` reference once did,
   and was recorded again.
 - **It doesn't turn the bars white.** With the title bar showing, White

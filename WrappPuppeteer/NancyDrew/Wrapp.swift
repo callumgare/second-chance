@@ -68,6 +68,13 @@ struct Wrapp {
     /// by 90 points, and this leaves room around it.
     static let steamOverlayNoticeSize = CGSize(width: 340, height: 120)
 
+    /// How far down a fullscreen window macOS's title bar can reach, in
+    /// points, when the cursor at the top of the screen shows it: about 60
+    /// on a display without a notch, below the menu bar's place, and 28 on
+    /// one with a notch, where the menu bar is outside the window
+    /// (docs/testing.md).
+    static let titleBarHeight: CGFloat = 72
+
     init(appPath: String) {
         self.appPath = appPath
         let settings = Wrapp.readSettings(appPath: appPath)

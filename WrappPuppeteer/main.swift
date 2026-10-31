@@ -130,8 +130,12 @@ if let arguments = classifyArguments {
             continue
         }
         // Light where the bars beside a 4:3 picture should be, as the quit
-        // scenario checks the menu for
-        let framing = PictureFrameCheck.findings(in: image, pictureAspect: Wrapp.pictureAspect).map { finding in
+        // scenario checks the menu for. A frame doesn't say its scale, so
+        // the title bar's place is reckoned at this Mac's, where frames are
+        // usually recorded.
+        let scale = Double(NSScreen.main?.backingScaleFactor ?? 1)
+        let titleBar = CGRect(x: 0, y: 0, width: 1, height: min(1, Double(Wrapp.titleBarHeight) * scale / Double(image.height)))
+        let framing = PictureFrameCheck.findings(in: image, pictureAspect: Wrapp.pictureAspect, ignoring: [titleBar]).map { finding in
             "\(finding.bar)=\(finding.flatColour ?? String(format: "%.0f%%", finding.lightFraction * 100))"
         }
         let frameColumn = "light-in-bars:" + (framing.isEmpty ? "none" : framing.joined(separator: ","))

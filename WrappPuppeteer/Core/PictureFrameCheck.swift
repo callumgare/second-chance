@@ -59,12 +59,6 @@ enum PictureFrameCheck {
     /// where some windows have a thin line.
     private static let innerMargin = 3
     private static let outerMargin = 2
-    /// The top of the side bars is left out too, as this fraction of the
-    /// height: a fullscreen window with a title bar has it across the top of
-    /// a capture of it, under the menu bar's place down to about 4.2%, or
-    /// from the very top down to 3% on a display with a notch, where the
-    /// menu bar is beside the notch, outside the window (docs/testing.md).
-    private static let titleBarAllowance = 0.05
     /// A channel above this, out of 255, isn't dark (as `ImageFingerprint`).
     private static let darkThreshold = 24
     /// A bar fails once this much of it isn't dark: a cursor out in a bar
@@ -84,9 +78,8 @@ enum PictureFrameCheck {
             let barWidth = (w - h * pictureAspect) / 2
             let depth = barWidth - Double(innerMargin + outerMargin)
             guard depth >= 1 else { return [] }
-            let top = (h * titleBarAllowance).rounded(.up)
-            bars.append(("left", CGRect(x: Double(outerMargin), y: top, width: depth, height: h - top)))
-            bars.append(("right", CGRect(x: w - barWidth + Double(innerMargin), y: top, width: depth, height: h - top)))
+            bars.append(("left", CGRect(x: Double(outerMargin), y: 0, width: depth, height: h)))
+            bars.append(("right", CGRect(x: w - barWidth + Double(innerMargin), y: 0, width: depth, height: h)))
         } else {
             let barHeight = (h - w / pictureAspect) / 2
             let depth = barHeight - Double(innerMargin + outerMargin)
