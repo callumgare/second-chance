@@ -68,7 +68,7 @@ class GameInstallerRunner {
         }
 
         // Get list of exe files before installation
-        let exesBefore = findExecutableFiles(in: driveCPath)
+        let exesBefore = await Blocking.run { Self.findExecutableFiles(in: driveCPath) }
 
         // Check if debug mode is enabled to skip installer
         let skipInstaller = DebugSettings.shared.skipInstaller
@@ -131,7 +131,7 @@ class GameInstallerRunner {
                 await bus.publishWrappBuild(.instructions(nil))
 
                 // Get list of exe files after installation
-                let exesAfter = findExecutableFiles(in: driveCPath)
+                let exesAfter = await Blocking.run { Self.findExecutableFiles(in: driveCPath) }
 
                 // Try to find the game executable
                 do {
@@ -143,7 +143,7 @@ class GameInstallerRunner {
                     )
                     if let found = gameExe {
                         do {
-                            try checkInstallFinished(
+                            try await checkInstallFinished(
                                 gameDir: found.deletingLastPathComponent(),
                                 installerType: installerType,
                                 driveCPath: driveCPath
@@ -924,8 +924,9 @@ class GameInstallerRunner {
     /// left its uninstall log, which it writes only once it has finished.
     /// (Inno Setup and MSI installs were already checked against their own
     /// logs in `runInstaller`.) See `InstallCompletion`.
-    func checkInstallFinished(gameDir: URL, installerType: InstallerType, driveCPath: URL) throws {
-        let size = DirectorySize.measure(gameDir)
+    func checkInstallFinished(gameDir: URL, installerType: InstallerType, driveCPath: URL) async throws {
+        // A walk over the whole game, so off the main thread.
+        let size = await Blocking.run { DirectorySize.measure(gameDir) }
         logger.notice("Installed: \(size.description) in \(gameDir.lastPathComponent)")
         guard installerType == .installShield else { return }
         if let problem = InstallCompletion.installShieldProblem(gameDir: gameDir, driveC: driveCPath) {
@@ -1294,9 +1295,10 @@ class GameInstallerRunner {
         throw WrappBuildError.installerNotFound
     }
 
-    /// Find executable files in directory
-    private func findExecutableFiles(in directory: URL) -> Set<String> {
-        guard let enumerator = fileManager.enumerator(
+    /// Find executable files in directory: a walk over the whole of drive C,
+    /// so run it off the main thread.
+    private nonisolated static func findExecutableFiles(in directory: URL) -> Set<String> {
+        guard let enumerator = FileManager.default.enumerator(
             at: directory,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]

@@ -82,8 +82,10 @@ nonisolated public final class WineDesktop: Sendable {
             // Checked before the query, so a desktop that came up and
             // registered the devices as its launcher exited isn't missed.
             // The launcher also exits when an explorer Wine started by itself
-            // already has the desktop, which may yet come up.
-            if !launcherRunning, !ProcessName.isRunning("explorer.exe") {
+            // already has the desktop, which may yet come up: that one is in
+            // this prefix's session, so it's the session that's checked, not
+            // any explorer.exe on the Mac, which may be another build's.
+            if !launcherRunning, await !wine.server.isRunning {
                 let why = "its launcher exited \(launcher.process.terminationStatus) after \(elapsed)s without the display devices registered"
                 logger.error("[Desktop] The desktop didn't start: \(why). Running the program anyway")
                 return nil

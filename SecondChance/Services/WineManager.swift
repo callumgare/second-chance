@@ -16,6 +16,10 @@ class WineManager {
 
     private let fileManager = FileManager.default
     private let prefixCacheDir: URL
+    /// Held while a build looks in the cache and, finding nothing, makes the
+    /// prefix and caches it: builds running side by side would otherwise
+    /// each make one, and remove the cache from under each other.
+    private let prefixCreation = AsyncMutex()
 
     private init() {
         // Set up prefix cache directory in user's Caches (persists between runs)
@@ -64,7 +68,8 @@ class WineManager {
         let cachedPrefixDir = prefixCacheDir.appendingPathComponent(buildId)
         let cachedPrefix = cachedPrefixDir.appendingPathComponent("prefix")
 
-        // Check if cached prefix exists and is a directory
+        // Check if cached prefix exists and is a directory. A prefix is
+        // only ever renamed into place whole (`cachePrefix`).
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: cachedPrefix.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
@@ -91,9 +96,19 @@ class WineManager {
     private nonisolated static func cachePrefix(from sourcePath: URL, buildId: String, in prefixCacheDir: URL) throws {
         let fileManager = FileManager.default
         let cachedPrefixDir = prefixCacheDir.appendingPathComponent(buildId)
-        let cachedPrefix = cachedPrefixDir.appendingPathComponent("prefix")
 
         logger.notice("Caching Wine prefix for build: \(buildId)...")
+
+        // Copied in under a hidden name first, then renamed into place, so a
+        // build looking in the cache meanwhile never takes half a prefix.
+        let incoming = prefixCacheDir.appendingPathComponent(".incoming-\(UUID().uuidString)")
+        do {
+            try fileManager.createDirectory(at: incoming, withIntermediateDirectories: true)
+            try fileManager.copyItem(at: sourcePath, to: incoming.appendingPathComponent("prefix"))
+        } catch {
+            try? fileManager.removeItem(at: incoming)
+            throw error
+        }
 
         // Remove old cache for this build if it exists, and every other build's:
         // a prefix only serves the build and engine that made it, and each is
@@ -105,10 +120,10 @@ class WineManager {
             logger.warning("Couldn't list the Wine prefix cache to remove old prefixes: \(error.localizedDescription)")
             entries = []
         }
-        for entry in entries {
+        for entry in entries where entry != incoming {
             do {
                 try fileManager.removeItem(at: entry)
-                if entry.lastPathComponent != buildId {
+                if entry.lastPathComponent != buildId && !entry.lastPathComponent.hasPrefix(".") {
                     logger.notice("Removed the cached Wine prefix for build \(entry.lastPathComponent)")
                 }
             } catch {
@@ -116,12 +131,7 @@ class WineManager {
             }
         }
 
-        // Create cache directory
-        try fileManager.createDirectory(at: cachedPrefixDir, withIntermediateDirectories: true)
-
-        // Copy prefix to cache
-        try fileManager.copyItem(at: sourcePath, to: cachedPrefix)
-
+        try fileManager.moveItem(at: incoming, to: cachedPrefixDir)
         logger.notice("✓ Cached Wine prefix for build: \(buildId)")
     }
 
@@ -139,20 +149,27 @@ class WineManager {
     /// the build's `bus`.
     func createWinePrefix(at wrappPath: URL, bus: EventBus<AppEvent>) async throws {
         let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
-
-        // Check if we have a cached prefix
         let buildId = getBuildIdentifier(for: wrappPath)
-        if let cachedPrefix = getCachedPrefix(buildId: buildId) {
-            logger.notice("✓ Using cached Wine prefix (build: \(buildId))")
 
-            // Copy cached prefix to wrapp: hundreds of MB, so off the main thread.
-            try await Blocking.run {
-                try? FileManager.default.removeItem(at: prefixPath)
-                try FileManager.default.copyItem(at: cachedPrefix, to: prefixPath)
-            }
-
-            return
+        // A build that finds the cache empty makes the prefix while any
+        // other waits, then finds it cached.
+        let cachedPrefix = try await prefixCreation.withLock { () -> URL? in
+            if let cachedPrefix = getCachedPrefix(buildId: buildId) { return cachedPrefix }
+            try await makeWinePrefix(at: wrappPath, prefixPath: prefixPath, buildId: buildId, bus: bus)
+            return nil
         }
+        guard let cachedPrefix else { return }
+        logger.notice("✓ Using cached Wine prefix (build: \(buildId))")
+
+        // Copy cached prefix to wrapp: hundreds of MB, so off the main thread.
+        try await Blocking.run {
+            try? FileManager.default.removeItem(at: prefixPath)
+            try FileManager.default.copyItem(at: cachedPrefix, to: prefixPath)
+        }
+    }
+
+    /// Make the prefix from scratch, and cache it.
+    private func makeWinePrefix(at wrappPath: URL, prefixPath: URL, buildId: String, bus: EventBus<AppEvent>) async throws {
 
         let wine = Wine(wrapp: wrappPath)
         let winetricks = Winetricks(wine: wine)

@@ -27,6 +27,12 @@ class CacheManager {
         try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
     }
 
+    // Process-wide, and every WrappBuildViewModel sets both when it's made,
+    // so two builds side by side share them; and saving or restoring a stage
+    // replaces a fixed folder, unlocked. A development aid, off by default
+    // (and in the integration tests): don't turn it on for builds that run
+    // together.
+
     /// Configure which stages should be restored from cache (for development)
     var stagesToRestore: Set<CacheStage> = []
 
