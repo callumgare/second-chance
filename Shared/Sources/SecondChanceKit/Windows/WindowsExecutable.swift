@@ -20,6 +20,7 @@ nonisolated public struct WindowsExecutable: Sendable {
     private let directoryCount: Int
 
     private struct Section: Sendable {
+        let name: String
         let virtualAddress: Int
         let size: Int
         let rawOffset: Int
@@ -55,11 +56,21 @@ nonisolated public struct WindowsExecutable: Sendable {
             let header = sectionTable + index * 40
             guard let virtualSize = bytes.u32(at: header + 8), let virtualAddress = bytes.u32(at: header + 12),
                   let rawSize = bytes.u32(at: header + 16), let rawOffset = bytes.u32(at: header + 20) else { break }
-            sections.append(Section(virtualAddress: virtualAddress, size: max(virtualSize, rawSize), rawOffset: rawOffset))
+            // Eight bytes, padded with NULs.
+            let nameBytes = (0..<8).compactMap { bytes.u8(at: header + $0) }.prefix { $0 != 0 }
+            let name = String(decoding: nameBytes.map(UInt8.init), as: UTF8.self)
+            sections.append(Section(name: name, virtualAddress: virtualAddress, size: max(virtualSize, rawSize),
+                                    rawOffset: rawOffset))
         }
         self.bytes = bytes
         self.sections = sections
     }
+
+    // MARK: - Sections
+
+    /// The names of the program's sections, as its section table has them
+    /// (".text", ".rdata" …). Packers and copy protection add their own.
+    public var sectionNames: [String] { sections.map(\.name) }
 
     // MARK: - Imports
 

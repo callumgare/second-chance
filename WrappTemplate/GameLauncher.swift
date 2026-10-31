@@ -127,6 +127,8 @@ class GameLauncher {
     /// Set when the game's exit was no quit, but the game failing: it quit
     /// before it had started, or just after Wine reported an error.
     private(set) var unexpectedQuit: GameQuitCheck.Failure?
+    /// The copy protection the game's .exe is wrapped in; Wine games only.
+    private(set) var copyProtection: CopyProtection?
     /// The failure report for a run that ended badly, and its sending — for
     /// the error window to show, and for the wrapp to wait on before it exits.
     private(set) var failureReport: FailureReport?
@@ -353,6 +355,7 @@ class GameLauncher {
         if let exitCode { tags["exit_code"] = String(exitCode) }
         if let signal { tags["signal"] = SubprocessWatch.signalName(signal) }
         if let reason = diagnostics?.lastReason { tags["diagnostics"] = reason.rawValue }
+        if let copyProtection { tags["copy_protection"] = copyProtection.rawValue }
         return tags
     }
 
@@ -382,6 +385,10 @@ class GameLauncher {
             helperReport = InProcessHelperReport(
                 armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe), logger: logger)
             quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.gameEngine.hasPrefix("wine-steam"))
+            copyProtection = CopyProtection(exeAt: gameExe)
+            if let copyProtection {
+                logger.warning("[Game Launch] \(gameExe.lastPathComponent) is wrapped in \(copyProtection.name) copy protection, which may not run under Wine")
+            }
         } else if config.gameEngine == "scummvm", !scummvmPuppetVariables.isEmpty {
             helperReport = InProcessHelperReport(armingVariables: scummvmPuppetVariables, logger: logger)
         }

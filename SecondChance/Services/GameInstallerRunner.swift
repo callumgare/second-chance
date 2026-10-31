@@ -230,6 +230,12 @@ class GameInstallerRunner {
             logger.warning("⚠️  Failed to apply patches: \(error)")
         }
 
+        // Only logged: it says why a launch will likely fail, and which
+        // editions of a game carry it.
+        if let protection = await Blocking.run({ CopyProtection(exeAt: gameExe) }) {
+            logger.warning("\(gameExe.lastPathComponent) is wrapped in \(protection.name) copy protection, which may not run under Wine")
+        }
+
         return ("/" + relativePath, installerDir)
     }
 

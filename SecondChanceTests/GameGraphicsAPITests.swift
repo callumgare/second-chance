@@ -14,7 +14,7 @@ import Testing
 struct GameGraphicsAPITests {
     /// A minimal PE32 image: one section holding an import directory that
     /// names `dlls`.
-    static func peImage(importing dlls: [String], magic: UInt16 = 0x10B) -> Data {
+    static func peImage(importing dlls: [String], magic: UInt16 = 0x10B, sectionName: String = "") -> Data {
         var bytes = [UInt8](repeating: 0, count: 0x400)
         func put16(_ value: Int, at offset: Int) {
             bytes[offset] = UInt8(value & 0xFF)
@@ -43,6 +43,7 @@ struct GameGraphicsAPITests {
         put32(sectionRVA, at: section + 12)
         put32(0x200, at: section + 16)  // SizeOfRawData
         put32(sectionFileOffset, at: section + 20)
+        for (i, byte) in sectionName.utf8.prefix(8).enumerated() { bytes[section + i] = byte }
 
         // Descriptors first (and a zero one to end them), then the names.
         var nameOffset = (dlls.count + 1) * 20

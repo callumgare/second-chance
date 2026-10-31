@@ -69,7 +69,10 @@ program's `WineError.executionFailed` or `.terminatedBySignal`) its
 couldn't be run at all (126) from one that failed. For a
 game run it is how the run ended: `quit-unexpectedly`, `never-started`,
 `killed-by-signal`, `exit-code` or `no-window`, with `exit_code`, `signal` and
-`diagnostics` tags.
+`diagnostics` tags, and `copy_protection` (`securom`, `safedisc`,
+`starforce`) when the game's `.exe` is wrapped in disc copy protection
+(`CopyProtection`). That is only a tag: whether such a wrapper is why a game
+failed is for the report to show, and the launch and the build log it too.
 
 Every event says how detailed it is in the `report_detail` tag (`basic` or
 `detailed`), so `report_detail:detailed` in Sentry's search finds the ones
