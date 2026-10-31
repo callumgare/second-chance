@@ -126,6 +126,12 @@ struct WineLauncherTests {
         try await fake.wine.run(.program("Game.exe"), environment: ["QUIT_WATCH_EXE": "Game.exe"])
     }
 
+    @Test("Wine gets only its own DYLD_ variables, not the test host's")
+    func noInheritedDyld() {
+        let wine = Wine(wrapp: URL(fileURLWithPath: "/nonexistent/Game.app"))
+        #expect(wine.environment.keys.filter { $0.hasPrefix("DYLD_") } == ["DYLD_FALLBACK_LIBRARY_PATH"])
+    }
+
     @Test("Blocking.wait returns what the work returns, and rethrows what it throws")
     func blockingWait() async throws {
         let value = await Task.detached { Blocking.wait { await Task.yield(); return 42 } }.value

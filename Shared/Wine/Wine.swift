@@ -88,9 +88,15 @@ nonisolated public struct Wine: Sendable {
         ]
     }
 
-    /// What a Wine program runs with: ours over the parent's.
+    /// What a Wine program runs with: ours over the parent's, less the
+    /// parent's `DYLD_*`. Those are the test host's under `xcodebuild test`
+    /// (its injected libraries and framework paths), and loaded into Wine they
+    /// changed what an installer did. Wine used to start through `/bin/sh`,
+    /// which, being protected, never got them, so none ever reached Wine.
     public var environment: [String: String] {
-        ProcessInfo.processInfo.environment.merging(variables) { $1 }
+        ProcessInfo.processInfo.environment
+            .filter { !$0.key.hasPrefix("DYLD_") }
+            .merging(variables) { $1 }
     }
 
     /// `export NAME='value'` lines for `variables`, sorted: pasted into a

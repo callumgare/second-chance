@@ -81,7 +81,8 @@ struct WineServerTests {
         defer { fake.remove() }
         let started = Date()
         #expect(await !fake.wine.server.waitUntilStopped(timeout: 0.3))
-        #expect(Date().timeIntervalSince(started) < 5)
+        // Well short of never; generous, as the suite runs in parallel.
+        #expect(Date().timeIntervalSince(started) < 15)
         #expect(await fake.wine.server.isRunning)
     }
 
