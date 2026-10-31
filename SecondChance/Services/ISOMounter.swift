@@ -27,6 +27,33 @@ actor MountedISOTracker {
     }
 }
 
+/// Why a disc image or a Mac download wouldn't mount. Each case is its own
+/// kind in a failure report, which says nothing more: why hdiutil turned it
+/// down is in the log.
+nonisolated enum DiscImageError: LocalizedError, Equatable {
+    /// Shorter than its own header says: a download or copy that didn't finish.
+    case incomplete
+    /// A raw copy of a CD (a BIN, often renamed .iso), which a Mac can't mount.
+    case rawCDImage
+    /// No ISO 9660 header: not a copy of a CD at all.
+    case notADiscImage
+    /// It looks whole, but hdiutil turned it down anyway.
+    case wontOpen
+
+    var errorDescription: String? {
+        switch self {
+        case .incomplete:
+            return "That file is only part of a game disc: it may not have finished downloading or copying. Copy it again, then try again."
+        case .rawCDImage:
+            return "That file is a copy of a game disc in a form a Mac can't open. Choose the game's disc instead."
+        case .notADiscImage:
+            return "That file isn't a copy of a game disc. Choose the game's disc instead."
+        case .wontOpen:
+            return "Your Mac couldn't open that file. If you downloaded it, try downloading it again."
+        }
+    }
+}
+
 /// Mounts game ISOs via hdiutil and unmounts everything it mounted.
 ///
 /// Owns the mounted-ISO tracking. The caller decides when mounting and
@@ -57,17 +84,12 @@ class ISOMounter {
     /// (a gzipped archive, for the Her Interactive Mac downloads) is checked
     /// as it is read.
     ///
-    /// - Parameters:
-    ///   - isoPath: the `.iso` or `.dmg` file to mount.
-    ///   - requestAccess: closure the mounter invokes with the raw mount point
-    ///     so sandboxed callers can prompt for volume access (or skip straight
-    ///     through when access was granted some other way). Returning the URL
-    ///     unchanged is the no-op default.
-    /// - Returns: the mounted volume's URL (verified accessible).
-    func mount(
-        _ isoPath: URL,
-        requestAccess: @Sendable (URL) async throws -> URL = { $0 }
-    ) async throws -> URL {
+    /// Anything other than a `.dmg` is taken to be a CD image, whatever its
+    /// name: one that won't mount throws a `DiscImageError` saying why.
+    ///
+    /// - Parameter isoPath: the disc image or `.dmg` file to mount.
+    /// - Returns: the mounted volume's URL.
+    func mount(_ isoPath: URL) async throws -> URL {
         // Check if this ISO is already mounted
         if let existingMount = try? await findExistingMount(for: isoPath) {
             logger.notice("ISO already mounted: \(existingMount.path)")
@@ -87,11 +109,9 @@ class ISOMounter {
             let errorOutput = (attach.output + attach.errorOutput).trimmingCharacters(in: .whitespacesAndNewlines)
             // hdiutil says "image not recognised" for a truncated ISO and for a
             // file that was never one; the image itself can tell them apart.
-            let diagnosis = isDMG ? Self.describeSize(of: isoPath) : Self.diagnoseImage(at: isoPath)
-            logger.error("hdiutil couldn't attach \(isoPath.path): \(errorOutput) — \(diagnosis)")
-            throw NSError(domain: "ISOMount", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Failed to mount \(isoPath.lastPathComponent): \(errorOutput). \(diagnosis)"
-            ])
+            let diagnosis = isDMG ? (.wontOpen, Self.describeSize(of: isoPath)) : Self.diagnoseImage(at: isoPath)
+            logger.error("hdiutil couldn't attach \(isoPath.path): \(errorOutput) — \(diagnosis.description)")
+            throw diagnosis.problem
         }
         let output = attach.output
 
@@ -100,10 +120,7 @@ class ISOMounter {
         for line in lines {
             let parts = line.components(separatedBy: "\t").map { $0.trimmingCharacters(in: .whitespaces) }
             if let mountPoint = parts.last, mountPoint.hasPrefix("/") {
-                var mountURL = URL(fileURLWithPath: mountPoint)
-
-                // For sandboxed apps, may need user to grant access
-                mountURL = try await requestAccess(mountURL)
+                let mountURL = URL(fileURLWithPath: mountPoint)
 
                 // Track that we mounted this
                 await tracker.insert(mountURL)
@@ -123,21 +140,30 @@ class ISOMounter {
         return "it is \(ByteCountFormatter.string(fromByteCount: size, countStyle: .file))"
     }
 
-    /// What an ISO 9660 image's own header says about it: its size against
-    /// the size its primary volume descriptor declares, or that it has none.
-    nonisolated static func diagnoseImage(at url: URL) -> String {
+    /// What an ISO 9660 image's own header says about why it wouldn't
+    /// mount: its size against the size its primary volume descriptor
+    /// declares, or that it has none — the problem for the person, and a
+    /// description for the log.
+    nonisolated static func diagnoseImage(at url: URL) -> (problem: DiscImageError, description: String) {
         let size = ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
         let sizeText = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         guard let handle = try? FileHandle(forReadingFrom: url) else {
-            return "the file can't be read (\(sizeText))"
+            return (.wontOpen, "the file can't be read (\(sizeText))")
         }
         defer { try? handle.close() }
+        // A raw image (a BIN, often renamed .iso) keeps every sector's 2352
+        // bytes, starting with the CD sync pattern, which hdiutil can't read.
+        let sync: [UInt8] = [0x00] + Array(repeating: 0xFF, count: 10) + [0x00]
+        if let start = try? handle.read(upToCount: sync.count), start.elementsEqual(sync) {
+            return (.rawCDImage, "it is \(sizeText) and a raw CD image (2352-byte sectors, a BIN), which hdiutil can't mount")
+        }
         // The primary volume descriptor is sector 16 of 2048-byte sectors.
         let descriptorOffset: UInt64 = 16 * 2048
         guard (try? handle.seek(toOffset: descriptorOffset)) != nil,
               let descriptor = try? handle.read(upToCount: 2048), descriptor.count == 2048,
               descriptor[1...5].elementsEqual("CD001".utf8) else {
-            return "it is \(sizeText) and has no ISO 9660 header, so it isn't a CD image (or is cut off before its first 34 KB)"
+            return (.notADiscImage,
+                    "it is \(sizeText) and has no ISO 9660 header, so it isn't a CD image (or is cut off before its first 34 KB)")
         }
         func uint32LE(_ offset: Int) -> Int64 {
             descriptor[offset..<(offset + 4)].reversed().reduce(Int64(0)) { $0 << 8 | Int64($1) }
@@ -148,9 +174,10 @@ class ISOMounter {
         let declared = uint32LE(80) * uint16LE(128)
         let declaredText = ByteCountFormatter.string(fromByteCount: declared, countStyle: .file)
         if declared > 0 && size < declared {
-            return "it is truncated: \(sizeText) of the \(declaredText) its header declares (an incomplete download or copy)"
+            return (.incomplete,
+                    "it is truncated: \(sizeText) of the \(declaredText) its header declares (an incomplete download or copy)")
         }
-        return "it is a \(sizeText) ISO 9660 image whose header declares \(declaredText)"
+        return (.wontOpen, "it is a \(sizeText) ISO 9660 image whose header declares \(declaredText)")
     }
 
     /// Unmount everything this mounter mounted. Safe to call when nothing is mounted.

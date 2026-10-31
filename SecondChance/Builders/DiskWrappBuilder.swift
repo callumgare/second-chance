@@ -154,7 +154,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         var disk2Root: URL?
         if gameInfo.diskCount > 1, let disk2 = try await input.getDisk2Path(gameInfo: gameInfo, disk1: disk1) {
             logger.notice("Disk 2: \(disk2.path)")
-            if let mounted = try await mountIfISO(disk2, input: input) {
+            if let mounted = try await mountIfImage(disk2) {
                 await bus.publishWrappBuild(.isoMounted(mounted))
                 disk2Root = mounted
             } else {
@@ -180,7 +180,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         do {
             while true {
                 logger.notice("Disk 1: \(disk1.path)")
-                let disk1Mounted = try await mountIfISO(disk1, input: input)
+                let disk1Mounted = try await mountIfImage(disk1)
                 if let mounted = disk1Mounted {
                     await bus.publishWrappBuild(.isoMounted(mounted))
                 }
@@ -235,13 +235,15 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
     // MARK: - ISO Lifecycle (builder-owned)
 
-    /// Mount the given disk if it's an ISO. Returns the mount point, or nil
-    /// when the path was already a directory.
-    private func mountIfISO(_ disk: URL, input: WrappBuildInput) async throws -> URL? {
-        guard disk.pathExtension.lowercased() == "iso" else { return nil }
-        return try await isoMounter.mount(disk) { mountPoint in
-            try await input.requestVolumeAccess(mountPoint: mountPoint)
-        }
+    /// Mount the given disk if it's a file, a disc image whatever its name.
+    /// Returns the mount point, or nil when the path was already a folder.
+    /// The disc picker takes only `.iso` files, but what counts as one is up
+    /// to the apps on the Mac, and another app can claim other names for it.
+    private func mountIfImage(_ disk: URL) async throws -> URL? {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: disk.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else { return nil }
+        return try await isoMounter.mount(disk)
     }
 
     // MARK: - Disk Layout (disk-specific; not shared with other sources)

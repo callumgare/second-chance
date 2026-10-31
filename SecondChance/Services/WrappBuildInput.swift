@@ -37,7 +37,6 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
-/// | `requestVolumeAccess()`       | — (skipped when paths env-supplied)     | NSOpenPanel grant-access       |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
@@ -262,36 +261,6 @@ class WrappBuildInput {
     func askAboutSteamInUse(_ holder: SteamLockHolder) async -> SteamLockHolder.Choice? {
         if isHeadlessRun { return nil }
         return holder.ask(blocked: "the game you're adding can't be installed until it quits.")
-    }
-
-    /// Grant access to a mounted volume (sandbox). Skipped entirely when the
-    /// disk paths came from env vars — headless runs have no sandbox prompts.
-    @MainActor
-    func requestVolumeAccess(mountPoint: URL) async throws -> URL {
-        // Headless/env-supplied runs can't prompt — pass the mount point through.
-        if anyDiskPathFromEnv { return mountPoint }
-
-        let accessPanel = NSOpenPanel()
-        accessPanel.message = "Second Chance needs your permission to read the game disc. Click Allow to continue."
-        accessPanel.prompt = "Allow"
-        accessPanel.canChooseFiles = false
-        accessPanel.canChooseDirectories = true
-        accessPanel.directoryURL = mountPoint
-        accessPanel.canCreateDirectories = false
-
-        let response: NSApplication.ModalResponse
-        if let keyWindow = NSApp.keyWindow {
-            response = await accessPanel.beginSheetModal(for: keyWindow)
-        } else {
-            response = accessPanel.runModal()
-        }
-
-        guard response == .OK, let selectedURL = accessPanel.url else {
-            throw NSError(domain: "ISOMount", code: 3, userInfo: [
-                NSLocalizedDescriptionKey: "Access to mounted volume was denied"
-            ])
-        }
-        return selectedURL
     }
 
     // MARK: - Output Choices
@@ -560,18 +529,14 @@ class WrappBuildInput {
             || environment["STEAM_GAME_SLUG"] != nil || environment["NON_INTERACTIVE"] == "true"
     }
 
-    /// Resolve a disk path (directory or ISO) from an env var with validation.
+    /// Resolve a disk path (a folder, or any file, which is mounted as a disc
+    /// image) from an env var with validation.
     private func diskPathFromEnv(_ name: String, label: String) throws -> URL? {
         guard let path = environment[name] else { return nil }
         let url = URL(fileURLWithPath: path)
 
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             throw WrappBuildError.invalidPath("\(label) path does not exist: \(path)")
-        }
-
-        guard isDirectory.boolValue || url.pathExtension.lowercased() == "iso" else {
-            throw WrappBuildError.invalidPath("\(label) path must be a directory or ISO file")
         }
 
         return url

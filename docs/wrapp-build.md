@@ -58,7 +58,7 @@ other builders are the same shape with less in the middle.
 | Step | What happens | Event published |
 | --- | --- | --- |
 | 1 | — | `.started(source: .disk)` |
-| 2 | `input.getDisk1Path()`; mount it if it's an ISO | `.isoMounted` |
+| 2 | `input.getDisk1Path()`; mount it if it's a file rather than a folder | `.isoMounted` |
 | 3 | Turn down an installed game (`GameDetector.isInstalledGame`), then `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo`, then, for a Wine game, find its installer (`GameDetector.installerLookup`) | `.progress(.detectingGame)`, `.gameDetected` |
 | 4 | `helper.createTemporaryWrappPath()`, then `createBaseWrapp` copies `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1`, stripping extended attributes and making the copy writable (a CD's directories are read-only, which left copies nothing could delete) | `.progress(.copyingInstaller)` |
@@ -99,6 +99,17 @@ another disc or download, which unmounts this one and goes back to step 2;
 install it anyway, as Other; or cancel, back to the welcome screen. Only the
 game that is finally chosen publishes `.gameDetected`. A headless run never
 asks, and installs it as Other, as it always has.
+
+**A disc image is any file.** The disc picker offers folders and `.iso`
+files, but which files count as `.iso` is up to the apps on the Mac, and
+`DISK_1_PATH` can name anything, so whatever is chosen that isn't a folder is
+mounted (`ISOMounter.mount`), whatever its name. One that won't mount fails
+with a `DiscImageError` saying why, from the image's own bytes
+(`ISOMounter.diagnoseImage`): `incomplete` (shorter than its header says),
+`rawCDImage` (a BIN, often renamed `.iso`, which hdiutil can't mount),
+`notADiscImage` (no ISO 9660 header) or `wontOpen`. The case is the failure
+report's kind, so even a basic report says which; hdiutil's own words are in
+the log.
 
 **An installed game isn't a disc.** Someone may choose the folder of a game
 already installed, from an old PC or a copy found online, rather than its
@@ -170,7 +181,6 @@ user is prompted.
 | `getDisk1Path()` | `DISK_1_PATH` | NSOpenPanel (disk/ISO) |
 | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: an alert to swap it for disc 2, with Eject Disc 1, taking a disc that then appears; else NSOpenPanel |
 | `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe, .dmg, or the installer .app in an opened .dmg) |
-| `requestVolumeAccess()` | — (skipped when paths came from env) | NSOpenPanel grant-access |
 | `getOutputPath(gameName:)` | `OUTPUT_PATH` | NSOpenPanel save dialog, opening in `/Applications`, or `~/Applications` for someone who can't write there; it turns down a folder that can't be written to while it is still open |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
 | `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | NSAlert |
@@ -184,10 +194,10 @@ seam rather than a hard dependency on the real process environment.
 
 Two subtleties:
 
-- `requestVolumeAccess` returns the mount point unchanged when the disk paths
-  came from env vars. A modal sheet under a `.prohibited` activation policy is
-  invisible *and* unfocusable, so a headless run that prompted would hang
-  forever. `confirmPatchFailure` short-circuits for the same reason.
+- Nothing that would prompt does so in a headless run: a modal sheet under a
+  `.prohibited` activation policy is invisible *and* unfocusable, so a run
+  that prompted would hang forever. `confirmPatchFailure` short-circuits for
+  this reason.
 - Cancelling the *first* dialog throws `.userCancelledBeforeStart`, not
   `.userCancelled`. The ViewModel routes the former back to the welcome screen
   (nothing had happened yet) and the latter to the error screen (work is being

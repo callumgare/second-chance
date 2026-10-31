@@ -26,20 +26,36 @@ struct ISOImageDiagnosisTests {
     func truncated() throws {
         let url = try write(isoHeader(blocks: 1_000, length: 100 * 2048))
         defer { try? FileManager.default.removeItem(at: url) }
-        #expect(ISOMounter.diagnoseImage(at: url).hasPrefix("it is truncated"))
+        let diagnosis = ISOMounter.diagnoseImage(at: url)
+        #expect(diagnosis.problem == .incomplete)
+        #expect(diagnosis.description.hasPrefix("it is truncated"))
     }
 
     @Test("A file without an ISO 9660 header isn't a CD image")
     func notAnImage() throws {
         let url = try write(Data(repeating: 0x5A, count: 50_000))
         defer { try? FileManager.default.removeItem(at: url) }
-        #expect(ISOMounter.diagnoseImage(at: url).contains("no ISO 9660 header"))
+        let diagnosis = ISOMounter.diagnoseImage(at: url)
+        #expect(diagnosis.problem == .notADiscImage)
+        #expect(diagnosis.description.contains("no ISO 9660 header"))
+    }
+
+    @Test("A raw CD image (a BIN) is told from a file that isn't one")
+    func rawImage() throws {
+        // Each 2352-byte sector starts with the 12-byte sync pattern.
+        var sector = Data([0x00] + Array(repeating: 0xFF, count: 10) + [0x00])
+        sector.append(Data(count: 2352 - sector.count))
+        let url = try write(Data((0..<20).flatMap { _ in sector }))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(ISOMounter.diagnoseImage(at: url).problem == .rawCDImage)
     }
 
     @Test("A complete image is described as one")
     func complete() throws {
         let url = try write(isoHeader(blocks: 20, length: 20 * 2048))
         defer { try? FileManager.default.removeItem(at: url) }
-        #expect(ISOMounter.diagnoseImage(at: url).contains("ISO 9660 image"))
+        let diagnosis = ISOMounter.diagnoseImage(at: url)
+        #expect(diagnosis.problem == .wontOpen)
+        #expect(diagnosis.description.contains("ISO 9660 image"))
     }
 }
