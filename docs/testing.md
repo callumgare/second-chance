@@ -559,7 +559,9 @@ macOS shows a fullscreen window's title bar, and the menu bar above it, while
 the cursor rests at the top of the screen. What a test captures can change
 with it, so where the cursor is matters to a run even though every click the
 test makes goes through the game's socket, not the real cursor. What is known,
-from experiments on a 2560x1440 test Mac with White Wolf:
+from experiments with White Wolf on a 2560x1440 display without a notch (on
+a notched one, where the game's window sits below the notch's strip and the
+menu bar beside it, none of this has been tried):
 
 - **A game started with the cursor at the top shows the title bar** from the
   start, every time. WrappPuppeteer therefore moves the cursor to the middle
@@ -597,9 +599,10 @@ The capture leaves out the macOS cursor (`showsCursor = NO` in
 does, draws it into the picture where the mouse is, and it is in the capture.
 A sprite over a splash screen could push its fingerprint further from the
 reference, which is the other reason the cursor starts in the bar. It didn't
-show in practice: on a 3024x1890 display White Wolf's `title` matched at
-0.055 with the cursor in the middle and at the left edge alike, where a
-2560x1440 one gives 0.023, so the display's shape counted and the sprite
+show in practice: on a notched MacBook display, where the game's window is
+3024x1890 below the notch, White Wolf's `title` matched at 0.055 with the
+cursor in the middle and at the left edge alike, where a 2560x1440 display
+without a notch gives 0.023, so the window's shape counted and the sprite
 didn't.
 
 ## Testing in a VM
