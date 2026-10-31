@@ -89,7 +89,7 @@ class WrappBuildHelper {
         }
 
         // Create Wine prefix (ScummVM doesn't need initialization)
-        try await wineManager.createWinePrefix(at: path)
+        try await wineManager.createWinePrefix(at: path, bus: bus)
 
         // Save to cache
         try cacheManager.saveCache(wrappPath: path, stage: .base)
@@ -622,8 +622,10 @@ class WrappBuildHelper {
 
     // MARK: - Temp Wrapp Tracking (cleanup primitives)
 
-    private var temporaryWrapps: Set<URL> = []
-    private let wrappsLock = NSLock()
+    // Process-wide, not per helper: each build has a helper of its own (for
+    // its own bus), and the app's quit cleans up through `.shared`.
+    private static var temporaryWrapps: Set<URL> = []
+    private static let wrappsLock = NSLock()
 
     /// Create a fresh temporary wrapp path and register it for cleanup.
     func createTemporaryWrappPath() -> URL {
@@ -636,24 +638,22 @@ class WrappBuildHelper {
 
     /// Register a temporary wrapp for tracking
     private func registerTemporaryWrapp(_ path: URL) {
-        wrappsLock.lock()
-        defer { wrappsLock.unlock() }
-        temporaryWrapps.insert(path)
+        Self.wrappsLock.lock()
+        defer { Self.wrappsLock.unlock() }
+        Self.temporaryWrapps.insert(path)
     }
 
     /// Unregister a temporary wrapp (call after successful move/save)
     func unregisterTemporaryWrapp(_ path: URL) {
-        wrappsLock.lock()
-        defer { wrappsLock.unlock() }
-        temporaryWrapps.remove(path)
+        Self.wrappsLock.lock()
+        defer { Self.wrappsLock.unlock() }
+        Self.temporaryWrapps.remove(path)
     }
 
     /// Remove one tracked temp wrapp — a cleanup *primitive* the builder
     /// calls on its error path. No-op if already moved or removed.
     func removeTempWrapp(_ path: URL) async {
-        wrappsLock.lock()
-        temporaryWrapps.remove(path)
-        wrappsLock.unlock()
+        Self.wrappsLock.withLock { _ = Self.temporaryWrapps.remove(path) }
 
         guard fileManager.fileExists(atPath: path.path) else { return }
 
@@ -721,10 +721,10 @@ class WrappBuildHelper {
     }
 
     func cleanupTemporaryWrapps() {
-        wrappsLock.lock()
-        let wrapps = Array(temporaryWrapps)
-        temporaryWrapps.removeAll()
-        wrappsLock.unlock()
+        Self.wrappsLock.lock()
+        let wrapps = Array(Self.temporaryWrapps)
+        Self.temporaryWrapps.removeAll()
+        Self.wrappsLock.unlock()
 
         guard !wrapps.isEmpty else { return }
 

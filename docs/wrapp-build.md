@@ -216,8 +216,15 @@ panel appearing:
 ```swift
 WrappBuildViewModel(makeInput: {
     WrappBuildInput(disk1: disk1, disk2: disk2, outputDir: outputDir, viewModel: $0)
-})
+}, bus: bus)
 ```
+
+The ViewModel's other parameter is the bus its builds report on. The app's
+window leaves it as `EventBus.app`; an integration test gives each build a bus
+of its own, so one build's events never reach another's recorder. The
+ViewModel hands that bus to its builders, and to a `WrappBuildHelper` and
+`GameInstallerRunner` of its own, since `.shared` ones report on
+`EventBus.app`.
 
 That convenience initializer (test target only, in
 `SecondChanceTests/Integration/IntegrationTestInput.swift`) just packs typed
@@ -227,7 +234,10 @@ above takes its env-var branch.
 ## Events are the contract
 
 Builds report progress and results only by publishing `WrappBuildEvent`s on
-`EventBus.app`. The UI renders them, `AutomationBridge` serialises them to its
+the bus they were given: `EventBus.app` in the app and headless, or a test's own.
+Nothing on the build path publishes to `EventBus.app` itself (`BuildBusTests`
+checks), as that would reach the app's window rather than whoever started the
+build. The UI renders them, `AutomationBridge` serialises them to its
 socket, and the integration test asserts on them via
 `RecordingEventSubscriber`.
 
@@ -396,7 +406,9 @@ subscriber like any other, which appends one JSON object per line to that file â
 `stage` is a stable name for the `WrappBuildState` case and `text` is what the
 progress view would say. This is how `sc wrapp build` shows the build stage
 ([dev-cli.md](dev-cli.md)); the integration test writes the same stream (from
-`TEST_RUNNER_PROGRESS_PATH`) with extra per-game `"event":"game"` lines.
+`TEST_RUNNER_PROGRESS_PATH`) with extra per-game `"event":"game"` lines, and
+follows each game's build with a `tagged` writer on that build's bus, so its
+lines also carry the game's `source` and `slug`.
 Because the writer is a bus subscriber, a dropped `bus.publish` shows up there
 too. The record format is a contract with `ProgressRecord` in `Tools/sc`.
 

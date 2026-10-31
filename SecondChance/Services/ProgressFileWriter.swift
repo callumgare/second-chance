@@ -16,6 +16,8 @@
 //  plus, from the integration tests, per-game lines:
 //    {"event":"game","slug":"stay-tuned","phase":"started"}
 //    {"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":81.2}
+//  The tests follow each game's build through a `tagged` writer, so its
+//  stage, completed and failed lines carry the game's source and slug too.
 //
 
 import Foundation
@@ -24,7 +26,16 @@ import Logging
 nonisolated final class ProgressFileWriter: @unchecked Sendable {
     private nonisolated static let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.ProgressFileWriter")
 
-    private let handle: FileHandle
+    /// The file, shared by a writer and every `tagged` copy of it.
+    private final class Sink: @unchecked Sendable {
+        let handle: FileHandle
+        let lock = NSLock()
+        init(handle: FileHandle) { self.handle = handle }
+    }
+
+    private let sink: Sink
+    /// Added to every record this writer writes.
+    private let tags: [String: String]
     private let lock = NSLock()
     private var token: EventBus<AppEvent>.Token?
 
@@ -48,23 +59,31 @@ nonisolated final class ProgressFileWriter: @unchecked Sendable {
             Self.logger.error("Can't open progress file \(path) (\(String(cString: strerror(errno)))); progress won't be reported")
             return nil
         }
-        self.init(handle: FileHandle(fileDescriptor: descriptor, closeOnDealloc: true))
+        self.init(sink: Sink(handle: FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)), tags: [:])
     }
 
-    private init(handle: FileHandle) {
-        self.handle = handle
+    private init(sink: Sink, tags: [String: String]) {
+        self.sink = sink
+        self.tags = tags
     }
 
-    /// Write one record.
+    /// A writer to the same file that adds `tags` to every record, with a
+    /// bus subscription of its own: one per build when several run at once.
+    func tagged(_ tags: [String: String]) -> ProgressFileWriter {
+        ProgressFileWriter(sink: sink, tags: self.tags.merging(tags) { $1 })
+    }
+
+    /// Write one record. Its own values win over the writer's tags.
     func write(_ record: [String: Any]) {
+        let record = record.merging(tags) { own, _ in own }
         guard JSONSerialization.isValidJSONObject(record),
               let data = try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys]) else {
             Self.logger.error("Progress record isn't valid JSON: \(record)")
             return
         }
-        lock.lock()
-        handle.write(data + Data("\n".utf8))
-        lock.unlock()
+        sink.lock.lock()
+        sink.handle.write(data + Data("\n".utf8))
+        sink.lock.unlock()
     }
 
     /// Report the build's progress, completion and failure from the bus.

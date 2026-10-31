@@ -135,12 +135,20 @@ struct IntegrationGameRun {
         afterBuild: (RecordingEventSubscriber, GameOutcome) -> Bool,
         check: (RecordingEventSubscriber, URL, GameOutcome) async throws -> Void
     ) async throws -> URL? {
+        // A bus of the build's own, so a build running alongside it can't
+        // put its events in this one's recorder or progress.
+        let bus = EventBus<AppEvent>()
         let recorder = RecordingEventSubscriber()
-        await recorder.subscribe(to: EventBus.app)
-        defer { Task { await recorder.unsubscribe(from: EventBus.app) } }
+        await recorder.subscribe(to: bus)
+        let buildProgress = progress?.tagged(["source": source, "slug": label])
+        await buildProgress?.subscribe(to: bus)
+        defer {
+            Task {
+                await recorder.unsubscribe(from: bus)
+                await buildProgress?.unsubscribe(from: bus)
+            }
+        }
         outcome.phase("building")
-        // Subscribes once for the whole run; later games reuse it.
-        await progress?.subscribe(to: EventBus.app)
 
         // Attach this build's log, every level, from LogStore: this process's
         // own log, without a trip through os_log (which the test host may not
@@ -161,7 +169,7 @@ struct IntegrationGameRun {
         // Start the build as its own task so waitForCompletion() can run
         // alongside it.
         let viewModel = await MainActor.run {
-            WrappBuildViewModel(makeInput: { build.makeInput(outputDir, $0) })
+            WrappBuildViewModel(makeInput: { build.makeInput(outputDir, $0) }, bus: bus)
         }
         Task { await MainActor.run { Task { await build.start(viewModel) } } }
 

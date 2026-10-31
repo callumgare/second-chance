@@ -52,9 +52,11 @@ class WrappBuildViewModel: ObservableObject {
     /// The failed build's report, for the error screen.
     let failureReport = FailureReportModel()
 
-    private let diskBuilder = DiskWrappBuilder()
-    private let herDownloadBuilder = HerDownloadWrappBuilder()
-    private let steamBuilder = SteamWrappBuilder()
+    private let diskBuilder: DiskWrappBuilder
+    private let herDownloadBuilder: HerDownloadWrappBuilder
+    private let steamBuilder: SteamWrappBuilder
+    /// Where this view model's builds report, and where it follows them.
+    let bus: EventBus<AppEvent>
     private let cacheManager = CacheManager.shared
     private var busSubscriptionToken: EventBus<AppEvent>.Token?
     private let makeInput: WrappBuildInputFactory
@@ -74,17 +76,31 @@ class WrappBuildViewModel: ObservableObject {
     var enableCaching = false
     var stagesToRestore: Set<CacheStage> = []
 
-    init(makeInput: @escaping WrappBuildInputFactory = { WrappBuildInput(viewModel: $0) }) {
+    /// `bus` is `EventBus.app` for the app's window. A test gives each build
+    /// a bus of its own, so builds running side by side don't hear each
+    /// other's events.
+    init(
+        makeInput: @escaping WrappBuildInputFactory = { WrappBuildInput(viewModel: $0) },
+        bus: EventBus<AppEvent> = .app
+    ) {
         self.makeInput = makeInput
+        self.bus = bus
+        // The helper and installer runner report on the bus too, so each
+        // build has its own rather than the `.app`-bound `.shared` ones.
+        let helper = WrappBuildHelper(bus: bus)
+        let installerRunner = GameInstallerRunner(bus: bus)
+        diskBuilder = DiskWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
+        herDownloadBuilder = HerDownloadWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
+        steamBuilder = SteamWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
 
         // Configure cache manager based on settings
         cacheManager.cachingEnabled = enableCaching
         cacheManager.stagesToRestore = stagesToRestore
 
-        // Subscribe to the app-wide bus so wrapp-build events drive our @Published properties.
+        // Subscribe to the build's bus so wrapp-build events drive our @Published properties.
         // (Headless runs are driven by CLIBuilder, which was extracted from here.)
         Task { @MainActor in
-            let token = await EventBus.app.subscribe { [weak self] event in
+            let token = await bus.subscribe { [weak self] event in
                 await self?.handleBusEvent(event)
             }
             self.busSubscriptionToken = token
@@ -295,7 +311,7 @@ class WrappBuildViewModel: ObservableObject {
         loadMonitor.start()
         defer { loadMonitor.stop() }
         do {
-            try await input.ensureRosetta()
+            try await input.ensureRosetta(bus: bus)
             builtWrappURL = try await builder.build(input: input)
             currentState = .completed
             recordBuild(outcome: SuccessReport.ok)

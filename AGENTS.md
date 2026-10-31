@@ -164,7 +164,8 @@ Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)      CLIBuilder (headless
                   Models (GameInfo, WrappBuildState, WrappSource, AppEvent, …)
 ```
 
-Progress and results flow the other way, as typed events on `EventBus.app`.
+Progress and results flow the other way, as typed events on the build's bus
+— `EventBus.app`, unless a test gave the ViewModel one of its own.
 
 [docs/wrapp-build.md](docs/wrapp-build.md) walks the whole flow
 step by step, including the resource-ownership rules and both injection seams.
@@ -193,7 +194,9 @@ step by step, including the resource-ownership rules and both injection seams.
 - **`EventBus.app` / `AppEvent`** (`Models/AppEvent.swift`): the build publishes
   `WrappBuildEvent`s; the UI renders them and the integration tests assert on
   them. **The events are the contract** — when moving orchestration code, every
-  `bus.publish` moves with it, or the flow silently stops reporting.
+  `bus.publish` moves with it, or the flow silently stops reporting. Publish to
+  the bus the build was given, never `EventBus.app` itself: the integration
+  tests run builds side by side, each on its own bus (`BuildBusTests` checks).
 - **Detect the game once.** `DiskWrappBuilder` runs `GameDetector` and threads
   `GameInfo` through; nothing downstream re-detects.
 - **Services are singletons** (`XxxManager.shared`) but the build path takes them

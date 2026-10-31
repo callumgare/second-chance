@@ -85,4 +85,27 @@ struct ProgressFileWriterTests {
         disk.write(["event": "game", "slug": "stay-tuned", "phase": "finished", "result": "passed", "seconds": 1.5])
         #expect(try records(at: url).map { $0["slug"] as? String } == ["stay-tuned", "old-clock", "stay-tuned"])
     }
+
+    @Test("A tagged writer adds the game to each build's lines, on a bus of its own")
+    func taggedWritersFollowTheirOwnBus() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("progress-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let writer = try #require(ProgressFileWriter(path: url.path))
+        let first = writer.tagged(["source": "disk", "slug": "stay-tuned"])
+        let second = writer.tagged(["source": "disk", "slug": "old-clock"])
+        let firstBus = EventBus<AppEvent>()
+        let secondBus = EventBus<AppEvent>()
+        await first.subscribe(to: firstBus)
+        await second.subscribe(to: secondBus)
+
+        await firstBus.publishWrappBuild(.progress(.savingApp()))
+        await secondBus.publishWrappBuild(.failed(.installerNotFound))
+        // A record's own values win over the tags.
+        first.write(["event": "game", "slug": "own-slug", "phase": "started"])
+
+        let lines = try records(at: url)
+        #expect(lines.map { $0["slug"] as? String } == ["stay-tuned", "old-clock", "own-slug"])
+        #expect(lines.map { $0["event"] as? String } == ["stage", "failed", "game"])
+        #expect(lines.allSatisfy { $0["source"] as? String == "disk" })
+    }
 }

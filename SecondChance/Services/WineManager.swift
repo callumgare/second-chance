@@ -135,8 +135,9 @@ class WineManager {
         }
     }
 
-    /// Create a new Wine prefix at the specified path
-    func createWinePrefix(at wrappPath: URL) async throws {
+    /// Create a new Wine prefix at the specified path, reporting its steps on
+    /// the build's `bus`.
+    func createWinePrefix(at wrappPath: URL, bus: EventBus<AppEvent>) async throws {
         let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
 
         // Check if we have a cached prefix
@@ -169,11 +170,11 @@ class WineManager {
         // Wine 10 reads this from the X11 Driver key whatever the driver. The
         // wrapp's mode scaling helper scales what Direct3D draws to match.
         // See docs/wine-in-process-helpers.md#mode-scaling.
-        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's display"))) }
+        Task { await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's display"))) }
         try await wine.registry.set(.string("Y"), for: "EmulateModeset", in: .x11Driver)
 
         // Install cnc-ddraw for better DirectDraw compatibility
-        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's graphics"))) }
+        Task { await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's graphics"))) }
         try await winetricks.install(.cncDdraw)
 
         // Configure cnc-ddraw to maintain aspect ratio. windowed=true is what lets
@@ -191,7 +192,7 @@ class WineManager {
             }
 
         // Install isolate_home to remove unnecessary mounts
-        Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc"))) }
+        Task { await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc"))) }
         try await winetricks.install(.isolateHome)
 
         // Remove all drive mounts and recreate only the ones we need

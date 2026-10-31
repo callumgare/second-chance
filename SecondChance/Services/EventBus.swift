@@ -41,6 +41,9 @@ actor EventBus<Event> {
         subscribers[token.id] = nil
     }
 
+    /// Whether anyone is subscribed.
+    var hasSubscribers: Bool { !subscribers.isEmpty }
+
     /// Remove all subscribers.
     func unsubscribeAll() {
         subscribers.removeAll()
