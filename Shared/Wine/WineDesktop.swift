@@ -131,8 +131,7 @@ nonisolated public final class WineDesktop: Sendable {
     /// waiting for.
     static func queryDisplayDevices(_ wine: Wine, timeout: TimeInterval) async -> DisplayQueryResult {
         do {
-            let values = try await wine.output(of: .wine(["reg", "query", #"HKLM\HARDWARE\DEVICEMAP\VIDEO"#]),
-                                               timeout: timeout, onTimeout: .stopProgram)
+            let values = try await wine.registry.values(in: .videoDeviceMap, timeout: timeout)
             return values.contains(#"\Device\Video"#) ? .registered : .notYet(exitCode: 0)
         } catch WineError.executionFailed(let code) {
             return .notYet(exitCode: code)
