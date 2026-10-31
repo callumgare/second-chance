@@ -146,7 +146,10 @@ nonisolated public struct WineServer: Sendable {
     func stopNow() {
         guard hasWine else { return }
         do {
-            try wine.start(.wineserver(["-k"]), output: .discard).process.waitUntilExit()
+            let stopping = try wine.start(.wineserver(["-k"]), output: .discard)
+            if !stopping.waitUntilExit(within: 10) {
+                logger.warning("wineserver -k was still running after 10 s")
+            }
         } catch {
             logger.warning("Couldn't stop Wine (wineserver -k): \(error.localizedDescription)")
         }

@@ -385,7 +385,7 @@ nonisolated public final class WineProcess: @unchecked Sendable {
     }
 
     /// Blocks. True once it has exited.
-    fileprivate func waitUntilExit(within timeout: TimeInterval?) -> Bool {
+    func waitUntilExit(within timeout: TimeInterval?) -> Bool {
         guard exited.wait(timeout: timeout.map { .now() + $0 } ?? .distantFuture) == .success else { return false }
         exited.signal()
         return true
