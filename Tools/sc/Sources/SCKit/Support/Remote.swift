@@ -3,8 +3,8 @@ import Foundation
 /// `--on <host>[:<path>]`: run the same command on another Mac.
 ///
 /// 1. rsync this repo there (everything but per-machine output and settings:
-///    `.git`, `.env`, `built-apps`, `test-results`, `tmp`, sc's own `.build`
-///    and logs);
+///    `.git`, `.env`, `built-apps`, `test-results`, `tmp`, sc's own `.build`,
+///    and all of `DerivedData` but `Build/Products`);
 /// 2. `ssh` in and run `./sc` with the same arguments, minus `--on`, plus an
 ///    explicit `--logs` so the output looks the way it would have here.
 ///
@@ -74,13 +74,21 @@ enum Remote {
     }
 
     /// Not synced. `.env` holds each Mac's own settings, such as whether
-    /// tests hide their windows there. Xcode's compilation cache is sparse
-    /// files tens of gigabytes long that every build touches, so rsync sends
-    /// all of them, mostly zeros, each time; the remote Mac runs the build
-    /// it's sent and doesn't compile, so it never needs them.
+    /// tests hide their windows there.
     static let excludes = [
         ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build",
-        "DerivedData/sc-logs", "DerivedData/sc-jobs", "DerivedData/CompilationCache.noindex",
+    ]
+
+    /// Of `DerivedData`, only what was built, `Build/Products`, is synced.
+    /// The rest records this checkout's absolute path (Swift packages' state,
+    /// the build's intermediates), so a build there in a checkout elsewhere
+    /// failed looking for files here; and Xcode's compilation cache is sparse
+    /// files tens of gigabytes long that rsync would send in full. rsync
+    /// neither sends nor deletes what these leave out, so the remote Mac's
+    /// own build state, logs and jobs stay as they are there.
+    static let derivedDataFilters = [
+        "--include", "/DerivedData/Build/", "--include", "/DerivedData/Build/Products/",
+        "--exclude", "/DerivedData/Build/*", "--exclude", "/DerivedData/*",
     ]
 
     /// Whether the command needs this repo synced there first. `attach`
@@ -131,7 +139,7 @@ enum Remote {
             // spells it -E and rejects -X, while rsync 3.x reads -E as
             // --executability and would drop them without a word.
             let rsyncArgs = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + excludes.flatMap { ["--exclude", $0] }
-                + ["./", "\(target.host):\(target.path)/"]
+                + derivedDataFilters + ["./", "\(target.host):\(target.path)/"]
             try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
                 try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
             }

@@ -651,6 +651,17 @@ struct DotEnvTests {
     func notSynced() {
         #expect(Remote.excludes.contains(".env"))
     }
+
+    @Test("Of DerivedData, --on syncs only the built products")
+    func derivedDataFilters() throws {
+        let filters = Remote.derivedDataFilters
+        // rsync takes the first rule that matches, so each include must come
+        // before the exclude that would otherwise cover it.
+        let include = try #require(filters.firstIndex(of: "/DerivedData/Build/Products/"))
+        let exclude = try #require(filters.firstIndex(of: "/DerivedData/Build/*"))
+        #expect(include < exclude)
+        #expect(filters.suffix(2) == ["--exclude", "/DerivedData/*"])
+    }
 }
 
 @Suite("Test VMs")

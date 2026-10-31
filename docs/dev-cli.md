@@ -264,14 +264,18 @@ pipe is held open by the job itself, so it survives the sc that started it.
 The newest 10 finished runs are kept.
 
 **`--on <host>[:<path>]` runs a command on another Mac.** It rsyncs the repo
-there (excluding `.git`, `.env`, `built-apps`, `test-results`, `tmp`, sc's own `.build`,
-`DerivedData/sc-logs`, `DerivedData/sc-jobs` and Xcode's compilation cache,
-`DerivedData/CompilationCache.noindex`: sparse files tens of gigabytes long
-that every build touches, which rsync would send in full) and runs `./sc` with the same
+there (excluding `.git`, `.env`, `built-apps`, `test-results`, `tmp`, sc's own
+`.build`, and all of `DerivedData` but what was built, `Build/Products`) and runs `./sc` with the same
 arguments over `ssh` (`-t` when interactive). Output stays there: a test run's
 results and report are in the remote Mac's `test-results/`, and the terminal
 shows the summary table. `<path>` defaults to this repo's path relative to
-your home directory. `.env` stays behind because it holds each Mac's own
+your home directory. The rest of `DerivedData` stays behind because it
+records this checkout's absolute path (Swift packages' state, the build's
+intermediates), so a build on the other Mac, in a checkout elsewhere, failed
+looking for files here; and it holds Xcode's compilation cache, sparse files
+tens of gigabytes long that rsync would send in full. rsync neither sends nor
+deletes what it leaves out, so the other Mac keeps its own build state, logs
+and jobs, and a build there is incremental. `.env` stays behind because it holds each Mac's own
 settings, such as whether tests hide their windows there
 ([testing.md](testing.md)). On the remote Mac, the GUI-session re-run applies as
 usual.
