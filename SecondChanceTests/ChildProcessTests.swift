@@ -54,7 +54,15 @@ struct ChildProcessTests {
     /// Run `body` with this process's bad-access exception port pointing at a
     /// port nobody reads, as Sentry's is once its handler threads have gone.
     /// Kept short: while it is set, a crash in this test process would hang.
+    /// Holds the launcher's lock throughout, as other suites start children
+    /// in parallel: one restoring ports it saved before ours were set would
+    /// undo them mid-test, and one with the ports cleared would let the
+    /// control child start without our dead port.
     private func withDeadExceptionPort(_ body: (mach_port_t) throws -> Void) throws {
+        try InheritedExceptionPorts.holding { try setDeadExceptionPort(body) }
+    }
+
+    private func setDeadExceptionPort(_ body: (mach_port_t) throws -> Void) throws {
         let task = mach_task_self_
         let saved = savedBadAccessPort()
         var port = mach_port_t(MACH_PORT_NULL)

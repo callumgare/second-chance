@@ -31,8 +31,18 @@ extension Process {
 
 nonisolated enum InheritedExceptionPorts {
     /// Held while the ports are cleared, so two launches can't save each
-    /// other's cleared ports and leave them cleared for good.
-    private static let lock = NSLock()
+    /// other's cleared ports and leave them cleared for good. Recursive, so
+    /// code holding it (`holding`) can still start a child.
+    private static let lock = NSRecursiveLock()
+
+    /// Run `body` with no launch clearing or restoring the ports meanwhile:
+    /// for code that sets this task's exception ports itself (the tests), so
+    /// a launch on another thread can't put back ports saved before it.
+    static func holding<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return try body()
+    }
 
     /// Run `body` (which starts a child) with this task's exception ports
     /// cleared, then put them back. A crash on another thread in that moment
