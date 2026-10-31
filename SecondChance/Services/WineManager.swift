@@ -2,17 +2,15 @@
 //  WineManager.swift
 //  SecondChance
 //
-//  Manages Wine environment and execution
+//  A wrapp's Wine prefix: making it, caching it, and mounting discs into it.
+//  Running Wine programs is `Wine`'s (Shared/Wine/).
 
 import Foundation
 import Logging
-import AppKit
-
-// Note: Wine is defined in this same module
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineManager")
 
-/// Manages Wine environment setup and execution
+/// Makes and caches wrapps' Wine prefixes.
 class WineManager {
     static let shared = WineManager()
 
@@ -155,15 +153,14 @@ class WineManager {
             return
         }
 
+        let wine = Wine(wrapp: wrappPath)
+        let winetricks = Winetricks(wine: wine)
+
         // Run wineboot to initialize (wineboot is a Windows program, so run it through wine)
-        try await runWine(
-            at: wrappPath,
-            executable: "wine",
-            arguments: ["wineboot", "-u"]
-        )
+        try await wine.run(.wine(["wineboot", "-u"]))
 
         // Wait for wineserver to finish
-        try await waitForWineToExit(at: wrappPath)
+        try await wine.run(.wineserver(["-w"]))
 
         // Have Wine say yes to a game's display mode switch without making it,
         // and scale the game up to the real display instead. Old games quit
@@ -173,20 +170,11 @@ class WineManager {
         // wrapp's mode scaling helper scales what Direct3D draws to match.
         // See docs/wine-in-process-helpers.md#mode-scaling.
         Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's display"))) }
-        try await runWine(
-            at: wrappPath,
-            executable: "wine",
-            arguments: [
-                "reg", "add", "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver",
-                "/v", "EmulateModeset", "/t", "REG_SZ", "/d", "Y", "/f",
-            ],
-            // As for the drive registry writes in mountDirectory.
-            timeout: 600
-        )
+        try await wine.registry.set(.string("Y"), for: "EmulateModeset", in: .x11Driver)
 
         // Install cnc-ddraw for better DirectDraw compatibility
         Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's graphics"))) }
-        try await installWinetrick("cnc_ddraw", at: wrappPath)
+        try await winetricks.install(.cncDdraw)
 
         // Configure cnc-ddraw to maintain aspect ratio. windowed=true is what lets
         // native fullscreen adopt the window, but it also makes cnc-ddraw swallow
@@ -204,7 +192,7 @@ class WineManager {
 
         // Install isolate_home to remove unnecessary mounts
         Task { await EventBus.app.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc"))) }
-        try await installWinetrick("isolate_home", at: wrappPath)
+        try await winetricks.install(.isolateHome)
 
         // Remove all drive mounts and recreate only the ones we need
         let dosdevicesPath = prefixPath.appendingPathComponent("dosdevices")
@@ -244,7 +232,7 @@ class WineManager {
 
         // Ensure Wine server is fully shut down before caching
         // This ensures all registry changes and file writes are flushed to disk
-        try await waitForWineToExit(at: wrappPath)
+        try await wine.run(.wineserver(["-w"]))
 
         // Cache the prefix for future use
         try await cachePrefix(from: prefixPath, buildId: buildId)
@@ -274,157 +262,7 @@ class WineManager {
         // Set drive type in Wine registry if specified
         if !driveType.isEmpty {
             logger.notice("Setting drive \(driveLetter): type to \(driveType) in Wine registry")
-            try await runWine(
-                at: wrappPath,
-                executable: "wine",
-                arguments: [
-                    "reg", "add",
-                    "HKEY_LOCAL_MACHINE\\Software\\Wine\\Drives",
-                    "/v", "\(driveLetter):",
-                    "/t", "REG_SZ",
-                    "/d", driveType,
-                    "/f"
-                ],
-                // A registry write takes seconds on an idle machine, but over
-                // a minute with every core busy (starting the Wine session is
-                // most of it); one that runs for ten means the prefix is broken.
-                timeout: 600
-            )
-        }
-    }
-
-    // MARK: - Wine Execution
-
-    /// Run a program with Wine. See `Wine.run` for what it
-    /// logs and throws.
-    func runWine(
-        at wrappPath: URL,
-        executable: String,
-        arguments: [String] = [],
-        timeout: TimeInterval? = nil,
-        watchdog: WineWatchdog? = nil
-    ) async throws {
-        let command: WineCommand = executable == "wineserver" ? .wineserver(arguments) : .wine(arguments)
-        try await Wine(wrapp: wrappPath).run(command, timeout: timeout, watchdog: watchdog)
-    }
-
-    /// Run a Windows executable through Wine.
-    ///
-    /// Returns the Wine process exit code rather than throwing for a
-    /// non-zero one, which `Wine.run` has already logged as
-    /// an error. A signal, a timeout or a failure to start still throws.
-    /// Callers that need to treat a non-zero exit as an error should inspect
-    /// the returned code.
-    @discardableResult
-    func runWindowsExecutable(
-        at wrappPath: URL,
-        exePath: String,
-        arguments: [String] = [],
-        timeout: TimeInterval? = nil,
-        watchdog: WineWatchdog? = nil
-    ) async throws -> Int32 {
-        let args = [exePath] + arguments
-        return try await runWineReturningExitCode(
-            at: wrappPath,
-            executable: "wine",
-            arguments: args,
-            timeout: timeout,
-            watchdog: watchdog
-        )
-    }
-
-    /// Run executable with wine start /wait. Returns the exit code like
-    /// `runWindowsExecutable`.
-    @discardableResult
-    func runWindowsExecutableWithStart(
-        at wrappPath: URL,
-        exePath: String,
-        arguments: [String] = [],
-        timeout: TimeInterval? = nil,
-        watchdog: WineWatchdog? = nil
-    ) async throws -> Int32 {
-        let wine = Wine(wrapp: wrappPath)
-        do {
-            try await wine.run(.start(exePath, arguments), timeout: timeout, watchdog: watchdog)
-            return 0
-        } catch let WineError.executionFailed(exitCode) {
-            return exitCode
-        }
-    }
-
-    /// Run a Wine program and return its exit code. Shared helper for
-    /// `runWindowsExecutable` and friends.
-    private func runWineReturningExitCode(
-        at wrappPath: URL,
-        executable: String,
-        arguments: [String] = [],
-        timeout: TimeInterval? = nil,
-        watchdog: WineWatchdog? = nil
-    ) async throws -> Int32 {
-        do {
-            try await runWine(at: wrappPath, executable: executable, arguments: arguments, timeout: timeout, watchdog: watchdog)
-            return 0
-        } catch let WineError.executionFailed(exitCode) {
-            return exitCode
-        }
-    }
-
-    /// Wait for Wine server to exit
-    func waitForWineToExit(at wrappPath: URL) async throws {
-        try await runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"])
-    }
-
-    /// Start Wine server manually (prevents automatic shutdown)
-    func startWineServer(at wrappPath: URL) throws {
-        let wine = Wine(wrapp: wrappPath)
-        let wineserverPath = wine.binDir.appendingPathComponent("wineserver")
-
-        let process = Process()
-        process.executableURL = wineserverPath
-        process.arguments = ["-p"]  // Persistent mode
-        process.environment = wine.environment
-
-        try process.runWithoutCrashHandler()
-        process.waitUntilExit()
-
-        logger.notice("Wine server started in persistent mode")
-    }
-
-    /// Install a winetrick
-    func installWinetrick(_ name: String, at wrappPath: URL) async throws {
-        // Check if winetricks is bundled
-        guard let winetricksPath = Bundle.main.path(forResource: "winetricks", ofType: nil) else {
-            throw WineError.winetricksNotFound
-        }
-
-        let wine = Wine(wrapp: wrappPath)
-
-        // Run in detached task to avoid blocking
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            Task.detached {
-                // Streams line-by-line through the logger — live progress during
-                // a slow operation, no single multi-MB entry at the end.
-                let process = TaggedProcess(logger: logger)
-                process.executableURL = URL(fileURLWithPath: "/bin/bash")
-                process.arguments = [winetricksPath, "--unattended", name]
-                process.environment = wine.environment
-
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-
-                    if process.terminationStatus != 0 {
-                        continuation.resume(throwing: WineError.executionFailed(exitCode: process.terminationStatus))
-                        return
-                    }
-
-                    logger.notice("✓ Successfully installed \(name)")
-                    continuation.resume()
-                } catch {
-                    logger.notice("Failed to install winetrick \(name): \(error)")
-                    continuation.resume(throwing: error)
-                }
-            }
+            try await Wine(wrapp: wrappPath).registry.set(.string(driveType), for: "\(driveLetter):", in: .wineDrives)
         }
     }
 }

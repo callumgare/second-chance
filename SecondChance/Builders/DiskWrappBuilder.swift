@@ -28,6 +28,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     private let gameDetector: GameDetector
     private let gameInfoProvider: GameInfoProvider
     private let isoMounter: ISOMounter
+    private let wineManager: WineManager
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.DiskWrappBuilder")
 
@@ -37,6 +38,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         gameDetector: GameDetector = .shared,
         gameInfoProvider: GameInfoProvider = .shared,
         isoMounter: ISOMounter = ISOMounter(),
+        wineManager: WineManager = .shared,
         bus: EventBus<AppEvent> = .app
     ) {
         self.helper = helper
@@ -44,6 +46,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         self.gameDetector = gameDetector
         self.gameInfoProvider = gameInfoProvider
         self.isoMounter = isoMounter
+        self.wineManager = wineManager
         self.bus = bus
     }
 
@@ -244,7 +247,6 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     // MARK: - Disk Layout (disk-specific; not shared with other sources)
 
     private let fileManager = FileManager.default
-    private let wineManager = WineManager.shared
     private let cacheManager = CacheManager.shared
 
     /// Copy game installer disks into the wrapp: disk-1, optional disk-2,

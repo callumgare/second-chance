@@ -32,17 +32,14 @@ class GameInstallerRunner {
     var patchFailureConfirmation: (@MainActor (String, Error) async -> Bool)?
 
     private let fileManager = FileManager.default
-    private let wineManager: WineManager
     private let catalog: GamePatchCatalog
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner")
     let bus: EventBus<AppEvent>
 
     init(
-        wineManager: WineManager = .shared,
         catalog: GamePatchCatalog = .shared,
         bus: EventBus<AppEvent> = .app
     ) {
-        self.wineManager = wineManager
         self.catalog = catalog
         self.bus = bus
     }
@@ -268,12 +265,15 @@ class GameInstallerRunner {
         let exitCode = try await retryingIfNoDisplay(at: wrappPath, "The installer launcher") {
             let desktop = await self.startDesktop(at: wrappPath)
             defer { desktop?.release() }
-            let exitCode = try await self.wineManager.runWindowsExecutable(
-                at: wrappPath,
-                exePath: launcher.path,
-                arguments: ["/extract_all:C:\\nancy-drew-installer\\unpacked"],
-                timeout: Self.unpackTimeout
-            )
+            // A launcher that won't unpack isn't a failure: it's run as it is.
+            let exitCode: Int32
+            do {
+                try await Wine(wrapp: wrappPath).run(.program(launcher.path, ["/extract_all:C:\\nancy-drew-installer\\unpacked"]),
+                                                     timeout: Self.unpackTimeout)
+                exitCode = 0
+            } catch WineError.executionFailed(let code) {
+                exitCode = code
+            }
             try await self.waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.unpackTimeout)
             return exitCode
         }
@@ -630,23 +630,16 @@ class GameInstallerRunner {
         let arguments = silentPatchArguments(for: installerType, logPath: installerLog?.windowsPath)
         logger.notice("   → running \(patch.payload) (\(installerType)) \(arguments.joined(separator: " "))")
 
-        // runWine stops the prefix's wineserver on timeout, which is the only
+        // Wine.run stops the prefix's wineserver on timeout, which is the only
         // thing that ends the Windows process.
         let desktop = await startDesktop(at: wrappPath)
         defer { desktop?.release() }
-        let exitCode: Int32
         do {
-            exitCode = try await wineManager.runWindowsExecutable(
-                at: wrappPath,
-                exePath: winePath,
-                arguments: arguments,
-                timeout: Self.patchInstallerTimeout
-            )
+            try await Wine(wrapp: wrappPath).run(.program(winePath, arguments), timeout: Self.patchInstallerTimeout)
+        } catch WineError.executionFailed(let code) {
+            throw GamePatchError.installerFailed(id: patch.id, exitCode: code)
         } catch WineError.timedOut {
             throw GamePatchError.timedOut(patch.id)
-        }
-        guard exitCode == 0 else {
-            throw GamePatchError.installerFailed(id: patch.id, exitCode: exitCode)
         }
         do {
             try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.patchInstallerTimeout)
@@ -675,16 +668,19 @@ class GameInstallerRunner {
         logger.notice("   → running \(patch.payload) through AutoIt (\(script).au3)")
         let desktop = await startDesktop(at: wrappPath)
         defer { desktop?.release() }
+        let autoIt = Self.windowsPath(of: driveCPath.appendingPathComponent("autoit/AutoIt3.exe"), driveC: driveCPath)
+        // The script failing still waits for what the patcher started.
         let exitCode: Int32
         do {
-            exitCode = try await wineManager.runWindowsExecutable(
-                at: wrappPath,
-                exePath: Self.windowsPath(of: driveCPath.appendingPathComponent("autoit/AutoIt3.exe"), driveC: driveCPath),
+            do {
                 // /ErrorStdOut: a script error is printed (and logged) rather than
                 // shown in a message box nobody will close.
-                arguments: ["/ErrorStdOut", scriptWinePath, winePath],
-                timeout: Self.patchInstallerTimeout
-            )
+                try await Wine(wrapp: wrappPath).run(.program(autoIt, ["/ErrorStdOut", scriptWinePath, winePath]),
+                                                     timeout: Self.patchInstallerTimeout)
+                exitCode = 0
+            } catch WineError.executionFailed(let code) {
+                exitCode = code
+            }
             try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.patchInstallerTimeout)
         } catch WineError.timedOut {
             throw GamePatchError.timedOut(patch.id)
@@ -1044,30 +1040,12 @@ class GameInstallerRunner {
         defer { desktop?.release() }
         stallWatch?.start()
         defer { stallWatch?.stop() }
-        let exitCode: Int32
-        if command.useStartCommand {
-            exitCode = try await wineManager.runWindowsExecutableWithStart(
-                at: wrappPath,
-                exePath: command.exePath,
-                arguments: command.arguments,
-                timeout: timeout,
-                watchdog: stallWatch
-            )
-        } else {
-            exitCode = try await wineManager.runWindowsExecutable(
-                at: wrappPath,
-                exePath: command.exePath,
-                arguments: command.arguments,
-                timeout: timeout,
-                watchdog: stallWatch
-            )
-        }
-
-        // A non-zero exit code usually means the install failed. Throw so the
-        // caller's silent→interactive retry logic can kick in.
-        if exitCode != 0 {
-            throw WineError.executionFailed(exitCode: exitCode)
-        }
+        // A non-zero exit code usually means the install failed, and throws
+        // `executionFailed`, so the caller's silent→interactive retry can kick in.
+        let program: WineCommand = command.useStartCommand
+            ? .start(command.exePath, command.arguments)
+            : .program(command.exePath, command.arguments)
+        try await Wine(wrapp: wrappPath).run(program, timeout: timeout, watchdog: stallWatch)
 
         try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: timeout, watchdog: stallWatch)
 
@@ -1104,7 +1082,7 @@ class GameInstallerRunner {
                                            watchdog: WineWatchdog? = nil) async throws {
         desktop?.release()
         logger.notice("Waiting for the installer's remaining Wine processes to finish")
-        try await wineManager.runWine(at: wrappPath, executable: "wineserver", arguments: ["-w"], timeout: timeout, watchdog: watchdog)
+        try await Wine(wrapp: wrappPath).run(.wineserver(["-w"]), timeout: timeout, watchdog: watchdog)
     }
 
     /// Run `step`, and if its Windows program found no display, end the Wine
