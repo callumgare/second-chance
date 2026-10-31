@@ -122,8 +122,12 @@ class WineManager {
             entries = []
         }
         // By name: the listing's URLs end in a slash where `incoming` doesn't,
-        // so they never compare equal.
-        for entry in entries where entry.lastPathComponent != incoming.lastPathComponent {
+        // so they never compare equal. Another process (a second app, or a
+        // test run beside this one) may be copying in its own prefix, and
+        // removing that would fail its rename, so only an old one is left
+        // over from a copy that never finished.
+        for entry in entries where entry.lastPathComponent != incoming.lastPathComponent
+            && !Self.isAnotherCopyInProgress(entry) {
             do {
                 try fileManager.removeItem(at: entry)
                 if entry.lastPathComponent != buildId && !entry.lastPathComponent.hasPrefix(".") {
@@ -136,6 +140,15 @@ class WineManager {
 
         try fileManager.moveItem(at: incoming, to: cachedPrefixDir)
         logger.notice("✓ Cached Wine prefix for build: \(buildId)")
+    }
+
+    /// Whether `entry` is a prefix another process is still copying into the
+    /// cache: an `.incoming-` folder changed within the last hour.
+    nonisolated static func isAnotherCopyInProgress(_ entry: URL, now: Date = Date()) -> Bool {
+        guard entry.lastPathComponent.hasPrefix(".incoming-") else { return false }
+        let modified = (try? entry.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        guard let modified else { return false }
+        return now.timeIntervalSince(modified) < 3600
     }
 
     /// Clear all cached Wine prefixes
@@ -255,8 +268,13 @@ class WineManager {
         // This ensures all registry changes and file writes are flushed to disk
         try await wine.server.waitUntilProgramsExit(timeout: nil)
 
-        // Cache the prefix for future use
-        try await cachePrefix(from: prefixPath, buildId: buildId)
+        // Cache the prefix for future use. Only a saving for the next build:
+        // this one has its prefix, so it carries on if caching fails.
+        do {
+            try await cachePrefix(from: prefixPath, buildId: buildId)
+        } catch {
+            logger.warning("Couldn't cache the Wine prefix, so the next build will make its own: \(error.localizedDescription)")
+        }
     }
     /// Mount a directory as a drive in Wine
     func mountDirectory(

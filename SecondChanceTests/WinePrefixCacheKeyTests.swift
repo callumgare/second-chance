@@ -4,6 +4,7 @@
 //
 //  A cached Wine prefix is only reused by the engine that created it.
 
+import Foundation
 import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
@@ -28,5 +29,19 @@ struct WinePrefixCacheKeyTests {
     @Test("Without an engine version the key is the build alone", arguments: [nil, "", " ()\n"])
     func noEngine(version: String?) {
         #expect(WineManager.prefixCacheKey(build: "dev", engineVersion: version) == "dev")
+    }
+
+    @Test("Caching leaves another process's copy in progress alone, but not an old one")
+    func otherCopies() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("prefix-cache-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let incoming = dir.appendingPathComponent(".incoming-\(UUID().uuidString)")
+        let cached = dir.appendingPathComponent("dev-other-engine")
+        try FileManager.default.createDirectory(at: incoming, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: cached, withIntermediateDirectories: true)
+
+        #expect(WineManager.isAnotherCopyInProgress(incoming))
+        #expect(!WineManager.isAnotherCopyInProgress(incoming, now: Date().addingTimeInterval(2 * 3600)))
+        #expect(!WineManager.isAnotherCopyInProgress(cached))
     }
 }
