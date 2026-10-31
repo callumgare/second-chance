@@ -1,6 +1,7 @@
 import Testing
 import Logging
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Subprocess line classifier")
 struct SubprocessLineClassifierTests {

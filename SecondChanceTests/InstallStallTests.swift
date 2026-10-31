@@ -9,6 +9,7 @@ import CoreGraphics
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("A stalled install")
 struct InstallStallTests {

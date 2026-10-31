@@ -9,6 +9,7 @@
 
 import Foundation
 @testable import SecondChance
+@testable import SecondChanceKit
 
 enum IntegrationStages {
     /// Builds at once (`sc test integration --build-concurrency`), and the

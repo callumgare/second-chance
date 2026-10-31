@@ -8,6 +8,8 @@
 
 import AppKit
 import SwiftUI
+import SecondChanceKit
+import SecondChanceReporting
 
 struct DebugCommands: Commands {
     @ObservedObject var settings = DebugSettings.shared

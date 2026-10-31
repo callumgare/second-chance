@@ -7,6 +7,8 @@
 import Foundation
 import AppKit
 import SwiftUI
+import SecondChanceKit
+import SecondChanceReporting
 
 var globalInfoWindow: InfoWindowController?
 

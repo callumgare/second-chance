@@ -6,6 +6,7 @@
 
 import Foundation
 @testable import SecondChance
+@testable import SecondChanceKit
 
 /// Decides whether the Mac is calm enough to test a game.
 ///

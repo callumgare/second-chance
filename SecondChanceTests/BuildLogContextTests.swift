@@ -10,6 +10,7 @@ import Foundation
 import Logging
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("A build's part of the log")
 struct BuildLogContextTests {

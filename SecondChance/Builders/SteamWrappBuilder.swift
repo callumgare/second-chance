@@ -13,6 +13,7 @@
 
 import Foundation
 import Logging
+import SecondChanceKit
 
 /// Makes the wrapp Steam is installed into: the template, a Wine prefix and
 /// the Steam client. Tests stand in a small fake bundle.

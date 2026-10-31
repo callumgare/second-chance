@@ -6,6 +6,7 @@
 
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Wine prefix cache key")
 struct WinePrefixCacheKeyTests {

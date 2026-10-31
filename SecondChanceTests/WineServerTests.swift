@@ -10,6 +10,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Wine server")
 struct WineServerTests {

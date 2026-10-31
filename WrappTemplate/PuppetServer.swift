@@ -18,6 +18,7 @@
 import AppKit
 import Foundation
 import Logging
+import SecondChanceKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.PuppetServer")
 

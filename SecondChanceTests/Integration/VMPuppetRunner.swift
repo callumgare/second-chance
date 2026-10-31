@@ -12,6 +12,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 /// The VM `sc` prepared: running, reachable over SSH, someone logged in at
 /// its console, Rosetta installed (`TestVM` in Tools/sc).

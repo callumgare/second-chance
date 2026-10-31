@@ -7,6 +7,7 @@
 import Foundation
 import AppKit
 import Logging
+import SecondChanceKit
 
 // MARK: - Wine Process Info
 

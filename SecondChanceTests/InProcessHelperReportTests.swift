@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import Logging
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("In-process helper report")
 struct InProcessHelperReportTests {

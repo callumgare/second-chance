@@ -23,6 +23,7 @@
 
 import Foundation
 import Logging
+import SecondChanceKit
 
 /// `@unchecked Sendable`: every piece of mutable state is confined to `queue`.
 nonisolated final class StartupDiagnostics: @unchecked Sendable {

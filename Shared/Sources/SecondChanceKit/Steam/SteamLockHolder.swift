@@ -1,0 +1,180 @@
+//
+//  SteamLockHolder.swift
+//  Shared
+//
+//  Whoever holds the one-Steam-at-a-time lock (`SteamActiveLock`), as the
+//  person knows it — the game's name, not its bundle ID — and the way to quit
+//  it for them when they ask: its own quit first, which stops its Steam and
+//  saves the sign-in back, then harder, then its Wine session.
+
+import AppKit
+import Foundation
+import Logging
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.Steam")
+
+nonisolated public struct SteamLockHolder: Sendable, Equatable {
+    /// What a build writes in the lock instead of a wrapp's bundle ID.
+    public static let buildBundleID = "Second Chance build"
+
+    public let pid: Int32?
+    public let bundleID: String?
+
+    /// Second Chance building a game from Steam, not a wrapp playing one.
+    public var isBuild: Bool { bundleID == Self.buildBundleID }
+
+    /// The running wrapp, when the lock's record still names it. A record
+    /// whose process has become another app never matches.
+    private var runningApp: NSRunningApplication? {
+        guard let pid, let bundleID, !isBuild,
+              let app = NSRunningApplication(processIdentifier: pid),
+              app.bundleIdentifier == bundleID else { return nil }
+        return app
+    }
+
+    /// The name to show: the wrapp's (its game's title), or Second Chance for
+    /// a build. Nil when the holder can't be found.
+    public var name: String? {
+        if isBuild { return "Second Chance" }
+        return runningApp?.localizedName
+    }
+
+    /// A name as alerts and screens show it, in quotes as macOS's own alerts
+    /// quote app names: a game's title has dashes and colons of its own.
+    public static func quoted(_ name: String) -> String { "\u{201C}\(name)\u{201D}" }
+
+    /// Whether `quit` can be offered: a wrapp that is still running. A build
+    /// is never quit for someone — it is theirs to cancel.
+    public var canQuit: Bool { runningApp != nil }
+
+    /// How long each way of quitting gets before the next, harder one.
+    public struct Patience: Sendable {
+        /// The wrapp's own quit, which stops Steam (up to 10 s) and sends
+        /// any failure report under way (up to 15 s).
+        var quit: TimeInterval = 40
+        /// SIGTERM, which the wrapp takes as a quit and ends itself 15 s on.
+        var terminate: TimeInterval = 20
+        var kill: TimeInterval = 5
+
+        public init() {}
+    }
+
+    /// Quit the wrapp, as Cmd-Q would; then SIGTERM; then SIGKILL — each
+    /// once the one before has had its time. A wrapp that didn't quit itself
+    /// leaves its Wine session (the game, Steam signed in) running, which
+    /// would keep the account busy, so that is stopped too. Blocks; call it
+    /// off the main thread. Returns whether the wrapp has gone.
+    public func quit(patience: Patience = Patience()) -> Bool {
+        guard let app = runningApp, let pid else { return true }
+        let name = app.localizedName ?? bundleID ?? "the wrapp"
+        let appURL = app.bundleURL
+        logger.notice("[Steam] Quitting \(name) (pid \(pid)), which holds Steam")
+
+        app.terminate()
+        if Self.waitForExit(of: pid, timeout: patience.quit) {
+            logger.notice("[Steam] \(name) quit")
+            return true
+        }
+        logger.warning("[Steam] \(name) didn't quit within \(Int(patience.quit))s; sending it SIGTERM")
+        kill(pid, SIGTERM)
+        var gone = Self.waitForExit(of: pid, timeout: patience.terminate)
+        if !gone {
+            logger.warning("[Steam] \(name) didn't end within \(Int(patience.terminate))s of SIGTERM; killing it")
+            kill(pid, SIGKILL)
+            gone = Self.waitForExit(of: pid, timeout: patience.kill)
+        }
+        if let appURL {
+            for wine in Self.wines(of: appURL, bundleID: bundleID) {
+                let server = wine.server
+                if Blocking.wait({ await server.isRunning }) {
+                    logger.notice("[Steam] Stopping the Wine session \(name) left running in \(wine.prefix.path)")
+                    Blocking.wait { await server.stop() }
+                }
+            }
+        }
+        if !gone { logger.error("[Steam] \(name) (pid \(pid)) is still running after SIGKILL") }
+        return gone
+    }
+
+    /// Where a wrapp's Wine session may be: in its own prefix, or — when that
+    /// is read-only, as on a disk image — in the copy it makes in Caches
+    /// (`getWinePrefix`), when there is one.
+    static func wines(of appURL: URL, bundleID: String?,
+                      caches: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first) -> [Wine] {
+        var wines = [Wine(wrapp: appURL)]
+        if let bundleID, let caches {
+            let copy = caches.appendingPathComponent(bundleID).appendingPathComponent("prefix")
+            if FileManager.default.fileExists(atPath: copy.path) {
+                wines.append(Wine(wrapp: appURL, prefix: copy))
+            }
+        }
+        return wines
+    }
+
+    /// Wait for process `pid` — not a child of ours — to exit.
+    static func waitForExit(of pid: Int32, timeout: TimeInterval) -> Bool {
+        let exited = DispatchSemaphore(value: 0)
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global())
+        source.setEventHandler { exited.signal() }
+        source.resume()
+        defer { source.cancel() }
+        // Gone before the source was watching: it would never fire.
+        if kill(pid, 0) != 0 && errno == ESRCH { return true }
+        return exited.wait(timeout: .now() + timeout) == .success
+    }
+
+    // MARK: Asking
+
+    public enum Choice {
+        case quitHolder
+        case tryAgain
+        case cancel
+    }
+
+    /// Ask what to do about the holder: try again once they have saved and
+    /// quit it themselves, give up, or — the fallback, saying plainly that
+    /// the game loses anything unsaved — have it quit for them. `blocked` says what is waiting, as the end of
+    /// "Only one game can use Steam at a time, so …".
+    @MainActor
+    public func ask(blocked: String) -> Choice {
+        let (alert, choices) = alert(blocked: blocked)
+        let index = alert.runModal().rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
+        return choices.indices.contains(index) ? choices[index] : .cancel
+    }
+
+    /// The alert `ask` shows, and what each of its buttons chooses.
+    @MainActor
+    func alert(blocked: String) -> (NSAlert, [Choice]) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        if isBuild {
+            alert.messageText = "Second Chance is adding a game from Steam"
+            alert.informativeText = "Only one game can use Steam at a time, so \(blocked) Wait for Second Chance to finish, then try again."
+            alert.addButton(withTitle: "Try Again")
+            alert.addButton(withTitle: "Cancel")
+            return (alert, [.tryAgain, .cancel])
+        }
+        alert.messageText = "\(name.map(Self.quoted) ?? "Another game") is using Steam"
+        alert.informativeText = "Only one game can use Steam at a time, so \(blocked)"
+        if canQuit, let name = name.map(Self.quoted) {
+            // Quitting it themselves comes first: they can save before it
+            // goes. Having it quit for them is the fallback, offered last.
+            alert.informativeText += """
+             Save your game in \(name) and quit it, then click Try Again.
+
+            If \(name) won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost.
+            """
+            alert.addButton(withTitle: "Try Again")
+            alert.addButton(withTitle: "Cancel")
+            // Destructive, as macOS marks a button that loses work. It's the
+            // only warning style an alert button takes: macOS 26 ignores a
+            // red title (`contentTintColor`, `attributedTitle`).
+            alert.addButton(withTitle: "Quit It Without Saving").hasDestructiveAction = true
+            return (alert, [.tryAgain, .cancel, .quitHolder])
+        }
+        alert.informativeText += " Quit it, then click Try Again."
+        alert.addButton(withTitle: "Try Again")
+        alert.addButton(withTitle: "Cancel")
+        return (alert, [.tryAgain, .cancel])
+    }
+}

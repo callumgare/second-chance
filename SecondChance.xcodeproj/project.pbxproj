@@ -14,6 +14,11 @@
 		E2C5A0002F01000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = E2C5A0012F01000000000001 /* Sparkle */; };
 		E2D5E0002F01000000000001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = E2D5E0012F01000000000001 /* Sentry */; };
 		E2D5E0022F01000000000001 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = E2D5E0012F01000000000001 /* Sentry */; };
+		E25C0A102F01000000000001 /* SecondChanceKit in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0A012F01000000000001 /* SecondChanceKit */; };
+		E25C0A112F01000000000001 /* SecondChanceReporting in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0A022F01000000000001 /* SecondChanceReporting */; };
+		E25C0A122F01000000000001 /* SecondChanceKit in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0A012F01000000000001 /* SecondChanceKit */; };
+		E25C0A132F01000000000001 /* SecondChanceReporting in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0A022F01000000000001 /* SecondChanceReporting */; };
+		E25C0A142F01000000000001 /* SecondChanceKit in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0A012F01000000000001 /* SecondChanceKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +63,7 @@
 		E21733912F04AA580058E8E9 /* Second Chance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Second Chance.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E24D78DE2F063E1E00B38683 /* WrappTemplate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WrappTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2A0E3C32F075266007E9F60 /* SecondChanceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SecondChanceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E25C0A032F01000000000001 /* Shared */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = Shared; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -123,11 +129,6 @@
 			path = WrappTemplate;
 			sourceTree = "<group>";
 		};
-		E2FC5BF22F160FB100AC5301 /* Shared */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Shared;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +137,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E2B000042F01000000000001 /* Logging in Frameworks */,
+				E25C0A142F01000000000001 /* SecondChanceKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -146,6 +148,8 @@
 				E2B000002F01000000000001 /* Logging in Frameworks */,
 				E2C5A0002F01000000000001 /* Sparkle in Frameworks */,
 				E2D5E0002F01000000000001 /* Sentry in Frameworks */,
+				E25C0A102F01000000000001 /* SecondChanceKit in Frameworks */,
+				E25C0A112F01000000000001 /* SecondChanceReporting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -162,6 +166,8 @@
 			files = (
 				E2B000022F01000000000001 /* Logging in Frameworks */,
 				E2D5E0022F01000000000001 /* Sentry in Frameworks */,
+				E25C0A122F01000000000001 /* SecondChanceKit in Frameworks */,
+				E25C0A132F01000000000001 /* SecondChanceReporting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -171,7 +177,7 @@
 		E21733882F04AA580058E8E9 = {
 			isa = PBXGroup;
 			children = (
-				E2FC5BF22F160FB100AC5301 /* Shared */,
+				E25C0A032F01000000000001 /* Shared */,
 				E2C65E102F15FA4700FAFF50 /* WrappTemplate */,
 				E21733932F04AA580058E8E9 /* SecondChance */,
 				E2A0E3C42F075266007E9F60 /* SecondChanceTests */,
@@ -207,11 +213,11 @@
 			);
 			fileSystemSynchronizedGroups = (
 				AABB00010000000000000001 /* WrappPuppeteer */,
-				E2FC5BF22F160FB100AC5301 /* Shared */,
 			);
 			name = WrappPuppeteer;
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
+				E25C0A012F01000000000001 /* SecondChanceKit */,
 			);
 			productName = WrappPuppeteer;
 			productType = "com.apple.product-type.application";
@@ -235,13 +241,14 @@
 			);
 			fileSystemSynchronizedGroups = (
 				E21733932F04AA580058E8E9 /* SecondChance */,
-				E2FC5BF22F160FB100AC5301 /* Shared */,
 			);
 			name = SecondChance;
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
 				E2C5A0012F01000000000001 /* Sparkle */,
 				E2D5E0012F01000000000001 /* Sentry */,
+				E25C0A012F01000000000001 /* SecondChanceKit */,
+				E25C0A022F01000000000001 /* SecondChanceReporting */,
 			);
 			productName = SecondChance;
 			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
@@ -264,12 +271,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				E2FC5BF22F160FB100AC5301 /* Shared */,
 			);
 			name = WrappTemplate;
 			packageProductDependencies = (
 				E2B000012F01000000000001 /* Logging */,
 				E2D5E0012F01000000000001 /* Sentry */,
+				E25C0A012F01000000000001 /* SecondChanceKit */,
+				E25C0A022F01000000000001 /* SecondChanceReporting */,
 			);
 			productName = WrappTemplate;
 			productReference = E24D78DE2F063E1E00B38683 /* WrappTemplate.app */;
@@ -337,6 +345,7 @@
 				E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */,
 				E2C5A0052F01000000000001 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				E2D5E0052F01000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+				E25C0A002F01000000000001 /* XCLocalSwiftPackageReference "Shared" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
@@ -805,7 +814,6 @@
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -853,7 +861,6 @@
 				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
 				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -894,7 +901,6 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -935,7 +941,6 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) FAILURE_REPORTING";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1038,6 +1043,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		E25C0A002F01000000000001 /* XCLocalSwiftPackageReference "Shared" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Shared;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		E2B000052F01000000000001 /* XCRemoteSwiftPackageReference "swift-log" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1080,6 +1092,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E2D5E0052F01000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
+		};
+		E25C0A012F01000000000001 /* SecondChanceKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E25C0A002F01000000000001 /* XCLocalSwiftPackageReference "Shared" */;
+			productName = SecondChanceKit;
+		};
+		E25C0A022F01000000000001 /* SecondChanceReporting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E25C0A002F01000000000001 /* XCLocalSwiftPackageReference "Shared" */;
+			productName = SecondChanceReporting;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

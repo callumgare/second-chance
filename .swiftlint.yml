@@ -60,27 +60,27 @@ custom_rules:
     message: "Use swift-log's Logger(label:) (AGENTS.md, Code Conventions)."
     excluded:
       # The one place OSLog is written, behind swift-log.
-      - "Shared/Logging/OSLogHandler.swift"
+      - "Shared/Sources/SecondChanceKit/Logging/OSLogHandler.swift"
     severity: error
   wine_without_crash_handler:
     name: "Start Wine without our crash handler"
     regex: '\btry\??\s+\w+\.run\(\)'
     message: "Start Wine with runWithoutCrashHandler(), or it inherits Sentry's exception ports and hangs at its third fault (docs/failure-reports.md#child-processes)."
     included:
-      - "Shared/Wine/"
-      - "Shared/Steam/"
+      - "Shared/Sources/SecondChanceKit/Wine/"
+      - "Shared/Sources/SecondChanceKit/Steam/"
     severity: error
   wine_path_outside_library:
     name: "Run Wine through the Wine library"
     regex: '\.binDir\b'
-    message: "Start Wine programs with Wine.run, output(of:) or start (Shared/Wine/WineProcess.swift) rather than from Wine's own folder; shellExports or WineCommand.commandLine(in:) give it for running by hand."
+    message: "Start Wine programs with Wine.run, output(of:) or start (Shared/Sources/SecondChanceKit/Wine/WineProcess.swift) rather than from Wine's own folder; shellExports or WineCommand.commandLine(in:) give it for running by hand."
     excluded:
-      - "Shared/Wine/"
+      - "Shared/Sources/SecondChanceKit/Wine/"
     severity: error
   no_privacy_annotation:
     name: "No privacy: annotations"
     regex: 'privacy:\s*\.(public|private)'
     message: "swift-log has no privacy annotations; OSLogHandler handles OSLog's (AGENTS.md, Code Conventions)."
     excluded:
-      - "Shared/Logging/OSLogHandler.swift"
+      - "Shared/Sources/SecondChanceKit/Logging/OSLogHandler.swift"
     severity: error

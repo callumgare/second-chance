@@ -9,6 +9,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("MSI summary")
 struct MSISummaryTests {

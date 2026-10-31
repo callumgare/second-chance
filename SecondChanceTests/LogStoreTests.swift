@@ -11,6 +11,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("LogStore", .serialized)
 struct LogStoreTests {

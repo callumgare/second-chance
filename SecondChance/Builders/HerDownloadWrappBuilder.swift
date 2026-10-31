@@ -15,6 +15,7 @@
 
 import Foundation
 import Logging
+import SecondChanceKit
 
 /// Builds a wrapp from a Her Interactive download.
 final class HerDownloadWrappBuilder: WrappBuildStrategy {

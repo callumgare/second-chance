@@ -1,0 +1,97 @@
+//
+//  AppLogging.swift
+//  Shared
+//
+//  Bootstrap function to configure swift-log with our multiplex handler.
+//
+//  LoggingSystem.bootstrap is once-only per process (a second call is a
+//  precondition failure), so this performs exactly one bootstrap and is
+//  idempotent afterwards. A second call with a *different* subsystem records
+//  a fault rather than being silently swallowed.
+
+import Foundation
+import os
+import Logging
+
+nonisolated public enum AppLogging {
+
+    private static let lock = NSLock()
+    private static var bootstrapped = false
+    /// Set once by `bootstrap`; see there.
+    nonisolated(unsafe) private(set) static var osLogEchoesToStderr = false
+    private static var completedBootstrap = false
+    private static var subsystemUsed: String?
+
+    /// Bootstrap the logging system. Must be the first executable statement of
+    /// the process — a Logger constructed before this call is permanently
+    /// bound to swift-log's default StreamLogHandler and never reaches
+    /// LogStore, the log window, or the export.
+    ///
+    /// - Parameters:
+    ///   - subsystem: The subsystem for this process (e.g. "au.gare.callum.second-chance.SecondChance")
+    ///   - fileNamePrefix: Prefix for generated files (currently unused, kept for API stability)
+    nonisolated public static func bootstrap(subsystem: String, fileNamePrefix: String = "") {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !bootstrapped else {
+            if let existing = subsystemUsed, existing != subsystem {
+                // Programming error: two different subsystems in one process.
+                // Record a fault where it will survive even a crash.
+                os_log("AppLogging.bootstrap called again with different subsystem: %{public}@ vs %{public}@",
+                       log: .default, type: .fault, existing, subsystem)
+            }
+            return
+        }
+        bootstrapped = true
+        subsystemUsed = subsystem
+
+        // Under Xcode and xcodebuild's test runs (`OS_ACTIVITY_DT_MODE`), os_log
+        // copies every entry to stderr itself, beside LogStore's copy: each
+        // line appeared twice in two formats, torn where the two writers met.
+        // os_log has latched the variable by now, so this process skips os_log
+        // instead; and it's unset so the processes this one starts (the
+        // wrapp, WrappPuppeteer) don't inherit it and do write to os_log,
+        // which is how the integration tests read their logs.
+        osLogEchoesToStderr = getenv("OS_ACTIVITY_DT_MODE") != nil
+        unsetenv("OS_ACTIVITY_DT_MODE")
+
+        LoggingSystem.bootstrap { label in
+            #if DEBUG
+            // Tripwire: the factory runs for every Logger construction. If one
+            // happens while bootstrap() is still on the stack, logging state
+            // (e.g. the disk mirror) may not be configured yet — loud in debug.
+            if !completedBootstrap {
+                assertionFailure("Logger created before AppLogging.bootstrap() completed! Label: \(label)")
+            }
+            #endif
+            return MultiplexLogHandler(label: label)
+        }
+
+        // Check for --mirror-logs flag (WrappTemplate and WrappPuppeteer have no settings UI).
+        // SECOND_CHANCE_LOG_FILE names the mirror file, for callers that want
+        // the full log somewhere they choose (sc keeps it beside its step logs).
+        if let path = ProcessInfo.processInfo.environment["SECOND_CHANCE_LOG_FILE"], !path.isEmpty {
+            LogStore.shared.setDiskMirror(enabled: true, path: URL(fileURLWithPath: path))
+        } else if CommandLine.arguments.contains("--mirror-logs") {
+            LogStore.shared.setDiskMirror(enabled: true)
+        }
+
+        completedBootstrap = true
+
+        // Settle the run ID now, so processes started from here inherit it.
+        _ = RunContext.runID
+
+        if let path = ProcessInfo.processInfo.environment["SECOND_CHANCE_LOG_JSONL"], !path.isEmpty {
+            JSONLinesLogSink.start(path: URL(fileURLWithPath: path))
+        }
+    }
+
+    /// Whether bootstrap() has fully returned. Call sites that construct
+    /// loggers very early can assert this in debug builds.
+    nonisolated static var isBootstrapped: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return completedBootstrap
+    }
+}

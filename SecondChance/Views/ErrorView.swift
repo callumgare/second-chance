@@ -6,6 +6,8 @@
 //  back to the start
 
 import SwiftUI
+import SecondChanceKit
+import SecondChanceReporting
 
 struct ErrorView: View {
     let message: String

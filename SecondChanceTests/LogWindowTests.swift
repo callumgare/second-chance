@@ -6,6 +6,7 @@ import Testing
 import Foundation
 import Logging
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("LogWindow streaming", .serialized)
 struct LogWindowTests {

@@ -7,6 +7,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 /// Builds binary KeyValues and the cache files around them.
 struct BinaryVDFBuilder {

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Game quit check")
 struct GameQuitCheckTests {

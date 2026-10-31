@@ -6,6 +6,7 @@
 
 import Foundation
 import Logging
+import SecondChanceKit
 
 private nonisolated let configLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Configuration")
 

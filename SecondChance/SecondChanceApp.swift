@@ -4,6 +4,8 @@
 
 import SwiftUI
 import Logging
+import SecondChanceKit
+import SecondChanceReporting
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.App")
 

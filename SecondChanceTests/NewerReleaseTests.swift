@@ -8,6 +8,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Newer release")
 struct NewerReleaseTests {

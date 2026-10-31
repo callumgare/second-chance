@@ -7,6 +7,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Wine programs without a display")
 struct WineNoDisplayTests {

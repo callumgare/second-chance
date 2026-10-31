@@ -15,6 +15,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 private let environment = ProcessInfo.processInfo.environment
 

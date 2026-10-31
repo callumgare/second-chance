@@ -6,6 +6,7 @@
 
 import Foundation
 import AppKit
+import SecondChanceKit
 
 func showAlert(message: String, informativeText: String) {
     _ = NSApplication.shared

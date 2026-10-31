@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import Logging
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Failure summary")
 struct FailureSummaryTests {

@@ -5,9 +5,11 @@ goes to [Sentry](https://sentry.io), at the detail the person chose. This is
 how the developer hears about failures nobody files an issue for, and how
 often each one happens.
 
-The code is in `Shared/Reporting/`: `FailureReporter` is the only file that
-imports Sentry. `Shared/Views/FailureReportCallout.swift` and
-`CrashReportPrompt.swift` are the UI.
+The code is the `SecondChanceReporting` module, in
+`Shared/Sources/SecondChanceReporting/`: `FailureReporter` and
+`SuccessReporter` are the only files that import Sentry, and
+`Views/FailureReportCallout.swift` and `Views/CrashReportPrompt.swift` are
+the UI.
 
 ## Levels
 
@@ -175,7 +177,7 @@ Failure reports say what breaks, but not how often things work, so they
 can't say which games are known to work. Success reports count every build
 and every game launch, and how each ended, for people who said yes. They are
 Sentry [Application Metrics](https://docs.sentry.io/platforms/apple/metrics/),
-sent by the SDK `FailureReporter` started (`Shared/Reporting/SuccessReporter.swift`),
+sent by the SDK `FailureReporter` started (`Shared/Sources/SecondChanceReporting/SuccessReporter.swift`),
 so they are off wherever failure reports are ([When it's off](#when-its-off)).
 
 **The question is asked once, after the first build that worked**, before
@@ -221,7 +223,7 @@ them.
 
 **When Sentry handles crashes, `CrashMarker` installs no signal handler of
 its own.** `FailureReporter.start` runs first, then `CrashMarker.arm()`,
-which sees `FailureReporter.handlesCrashes` and stands aside. Sentry records
+which sees `CrashMarker.sentryHandlesCrashes` (`start` sets it) and stands aside. Sentry records
 the crash, and at the next start `previousRunCrashed` logs the line
 `CrashMarker` would have ("The previous run crashed …"), with the path of
 macOS's `.ips`. When reporting is off (Debug, headless, test and
@@ -239,7 +241,7 @@ normally, with either arrangement.
 ### Child processes
 
 **Start Wine with `runWithoutCrashHandler()`, never a bare `run()`**
-(`Shared/ChildProcess.swift`). A child inherits its parent's task exception
+(`Shared/Sources/SecondChanceKit/ChildProcess.swift`). A child inherits its parent's task exception
 ports, so with reporting on, a child's bad memory accesses are sent to
 Sentry's Mach exception handler inside Second Chance or the wrapp, rather than
 becoming a signal in the child. Windows programs fault on purpose all the
@@ -265,10 +267,10 @@ puts them back, all under a lock. The child, and anything it starts, keeps
 the default ports, so its faults reach Wine. A crash on another of our threads
 in that moment still reaches Sentry's signal handler; only its Mach handler
 misses it. Every Wine, `wineserver` and winetricks process starts this way,
-as all of them start in one place (`Shared/Wine/WineProcess.swift`), and so
+as all of them start in one place (`Shared/Sources/SecondChanceKit/Wine/WineProcess.swift`), and so
 does ScummVM (`TaggedProcess`). A
 SwiftLint rule (`wine_without_crash_handler`) rejects a bare `run()` in
-`Shared/Wine/` and `Shared/Steam/`, and `ChildProcessTests` checks that a
+`Shared/Sources/SecondChanceKit/Wine/` and `Shared/Sources/SecondChanceKit/Steam/`, and `ChildProcessTests` checks that a
 child started this way faults normally while one started with `run()`
 hangs.
 
@@ -307,10 +309,12 @@ Sentry is linked dynamically.
 Xcode still embeds an empty 52 KB `Sentry.framework` that only carries
 Sentry's privacy manifest. Nothing links against it, so losing it is harmless.
 
-WrappPuppeteer compiles `Shared/` but doesn't link Sentry. Everything that
-touches the SDK is therefore inside `#if FAILURE_REPORTING`, which only the
-SecondChance and WrappTemplate targets define
-(`SWIFT_ACTIVE_COMPILATION_CONDITIONS`).
+WrappPuppeteer doesn't link Sentry. Everything that touches the SDK is
+therefore in the `SecondChanceReporting` module of the shared package
+(`Shared/`), which only Second Chance and WrappTemplate depend on;
+WrappPuppeteer uses `SecondChanceKit` alone. Code in `SecondChanceKit` can't
+see the reporting module, so where it must know about Sentry,
+`FailureReporter` tells it: `start` sets `CrashMarker.sentryHandlesCrashes`.
 
 ## When it's off
 

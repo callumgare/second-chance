@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Structured log output")
 struct StructuredLogTests {

@@ -10,6 +10,7 @@
 
 import Foundation
 import Logging
+import SecondChanceKit
 
 private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.Wine")
 

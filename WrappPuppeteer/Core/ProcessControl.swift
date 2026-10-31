@@ -7,6 +7,7 @@
 import Foundation
 import AppKit
 import Logging
+import SecondChanceKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.ProcessControl")
 

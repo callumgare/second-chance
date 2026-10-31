@@ -7,6 +7,8 @@
 import SwiftUI
 import Combine
 import Logging
+import SecondChanceKit
+import SecondChanceReporting
 
 private nonisolated let infoWindowLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.InfoWindow")
 

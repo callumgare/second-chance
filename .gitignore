@@ -21,3 +21,9 @@ xcuserdata/
 
 # Local settings: the Sentry DSN and slugs (.env.example)
 /.env
+
+# What `swift build` or `swift test` leave in the shared package. Xcode
+# resolves the package's dependencies in the project's own Package.resolved.
+/Shared/.build
+/Shared/.swiftpm
+/Shared/Package.resolved

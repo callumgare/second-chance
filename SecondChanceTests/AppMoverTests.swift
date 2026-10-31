@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Moving the app to Applications")
 struct AppMoverTests {

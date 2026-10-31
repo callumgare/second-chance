@@ -25,6 +25,7 @@
 
 import Foundation
 import Logging
+import SecondChanceKit
 
 enum CLIBuilder {
     private nonisolated static let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.CLIBuilder")

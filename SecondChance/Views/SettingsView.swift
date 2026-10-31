@@ -7,6 +7,7 @@
 //  shared with every wrapp, through `ReportingPreferences`.
 
 import SwiftUI
+import SecondChanceReporting
 
 struct SettingsView: View {
     @State private var level = ReportingPreferences.load().level

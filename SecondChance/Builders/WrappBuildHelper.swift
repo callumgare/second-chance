@@ -20,6 +20,7 @@
 import Foundation
 import Logging
 import AppKit
+import SecondChanceKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildHelper")
 

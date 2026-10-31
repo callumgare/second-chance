@@ -10,6 +10,7 @@ import Testing
 import Foundation
 import Logging
 @testable import SecondChance
+@testable import SecondChanceKit
 
 private let testLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.ErrorViewTests")
 

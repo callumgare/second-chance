@@ -11,6 +11,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 private let python = "/usr/bin/python3"
 

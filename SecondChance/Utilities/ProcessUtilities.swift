@@ -6,6 +6,7 @@
 //  waits for it through `Blocking.run` (Shared/Blocking.swift).
 
 import Foundation
+import SecondChanceKit
 
 /// What a finished subprocess said and how it ended.
 nonisolated struct ProcessOutput: Sendable {

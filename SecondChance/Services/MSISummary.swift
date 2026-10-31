@@ -10,6 +10,7 @@
 //  a crash or a hang.
 
 import Foundation
+import SecondChanceKit
 
 nonisolated struct MSISummary: Sendable {
     /// PIDSI_SUBJECT, which an MSI sets to the product's name.

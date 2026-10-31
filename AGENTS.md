@@ -74,19 +74,20 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template — or how a Wine program is run (`Shared/Wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`) |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template — or how a Wine program is run (`Shared/Sources/SecondChanceKit/Wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`) |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, retaking the README screenshots, `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
-| [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
+| [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Sources/SecondChanceKit/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
-| [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
+| [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Shared/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
 | [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
-| [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Shared/Reporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, adding a failure that should be reported, or the success reports that count builds and launches |
+| [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Shared/Sources/SecondChanceReporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, adding a failure that should be reported, or the success reports that count builds and launches |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
+| [docs/historical-plans/2026-11-01-shared-package.md](docs/historical-plans/2026-11-01-shared-package.md) | You want to know why the shared code is a local Swift package split into `SecondChanceKit` and `SecondChanceReporting`, how the core learns that Sentry handles crashes without importing it, or why the package needs the Swift settings it has |
 | [docs/historical-plans/2026-10-31-wine-library.md](docs/historical-plans/2026-10-31-wine-library.md) | You want to know why every Wine program starts through one launcher with `wine.registry`, `wine.server` and `Winetricks` beside it, why ExifTool gave way to native readers of Windows programs and MSIs, or why Wine's environment leaves out inherited `DYLD_*` variables |
 | [docs/historical-plans/2026-10-26-polish-notes.md](docs/historical-plans/2026-10-26-polish-notes.md) | You want to know why the build moved its blocking work off the main thread and how the stalls were found, why a game that isn't recognised is asked about, or why the Developer menu is a setting |
 | [docs/historical-plans/2026-10-26-sentry-exception-ports.md](docs/historical-plans/2026-10-26-sentry-exception-ports.md) | You want to know why a silent install hung only in Release builds, how it was tracked down to Wine inheriting Sentry's exception port, and why Wine is started with the ports cleared rather than Sentry's Mach handler turned off; and how a stalled install is noticed and what counts as progress |
@@ -138,7 +139,7 @@ when it applies across the repo. Link between them rather than repeating.
 ## Tech Stack
 
 - **Swift 5.0** / **SwiftUI**, deployment target **macOS 15.0** (some targets 15.6)
-- Xcode project (`SecondChance.xcodeproj`), no SPM package manifest
+- Xcode project (`SecondChance.xcodeproj`), with the shared code in a local Swift package (`Shared/Package.swift`)
 - Uses Swift Testing framework (`@Test`, `#expect`) — not XCTest
 - Unsandboxed app (required for Wine); entitlements enable dyld env vars, unsigned executable memory, and disable library validation
 
@@ -170,6 +171,39 @@ Progress and results flow the other way, as typed events on the build's bus
 
 [docs/wrapp-build.md](docs/wrapp-build.md) walks the whole flow
 step by step, including the resource-ownership rules and both injection seams.
+
+### Shared code is a local package
+
+Code more than one app uses lives in `Shared/`, a local Swift package the
+Xcode project depends on, in two modules:
+
+- **`SecondChanceKit`** (`Shared/Sources/SecondChanceKit/`): logging, Wine,
+  Steam, the loading window's stages and the rest. Second Chance,
+  WrappTemplate and WrappPuppeteer all link it.
+- **`SecondChanceReporting`** (`Shared/Sources/SecondChanceReporting/`):
+  failure and success reports, and the only code that imports Sentry.
+  Second Chance and WrappTemplate link it; WrappPuppeteer doesn't.
+
+The rules that keep it working:
+
+- **`public` is the boundary.** A declaration an app (or the reporting
+  module) uses must be `public`; everything else stays `internal`. Make a
+  declaration public when the compiler asks, not ahead of time. A `public`
+  function's default argument values must be public too. Tests reach the
+  rest with `@testable import SecondChanceKit`.
+- **`SecondChanceKit` never depends on reporting.** When it needs to know
+  something only reporting knows, reporting tells it (as
+  `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
+- **`Package.swift` mirrors the app targets' Swift settings** — Swift 5
+  mode, `MainActor` default isolation, approachable concurrency,
+  `MemberImportVisibility`, bare `/regex/` literals. Change a target's Swift
+  settings and the package's together, or the same code means different
+  things in each.
+- **A new file is picked up by being in the folder**; nothing to tick in
+  Xcode. A file in an app's folder can't be used by the package.
+- **Products stay static.** Don't mark a library `.dynamic`: a wrapp's
+  `Contents/Frameworks` is replaced by the engine's
+  (`check-output-collisions.sh` checks).
 
 ### Key abstractions
 
@@ -227,13 +261,13 @@ direct assignment.
   waited for with `waitUntilExit()`, or a big copy, removal or walk over
   files, freezes the window until it's done. Run a program with
   `Process.output(of:_:)` and other blocking work in `Blocking.run`
-  (`Shared/Blocking.swift`); what such a closure calls must be `nonisolated`.
+  (`Shared/Sources/SecondChanceKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
   Code on a plain thread — the wrapp's `main()` and GCD queues — calls async
   code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
   A Debug build logs `[Hang]` whenever the main thread stalls for more than
   0.25 s (`MainThreadWatchdog`), so a build's log shows any step that still
   blocks.
-- **Logging**: All logging goes through [swift-log](https://github.com/apple/swift-log) — `import Logging`, then `private nonisolated let logger = Logger(label: "<subsystem>.<Category>")`. Subsystems: `au.gare.callum.second-chance.SecondChance` (main app), `au.gare.callum.second-chance.WrappTemplate`, `au.gare.callum.second-chance.WrappPuppeteer` — all siblings under the `au.gare.callum.second-chance` prefix. Levels mean something — [docs/logging.md](docs/logging.md#levels) has the rules: `.debug` for detail only useful when digging (it is kept everywhere but not shown on the terminal), `.notice` for the normal story of a run, `.warning` for something unusual the run survives, `.error` for a failure, `.critical` for one that ends the build or the game (no `.fault` — that's the OSLog name). No `privacy:` annotations, no `os.Logger`, no `print()`. Every executable calls `AppLogging.bootstrap(subsystem:)` as its **first** statement (`SecondChanceApp.init()`, `WrappTemplate`'s `main()`, `WrappPuppeteer`'s top of `main.swift`) — a `Logger` created before bootstrap is silently orphaned to swift-log's default stdout handler and never reaches the store. Log records fan out in-process via `MultiplexLogHandler` to `LogStore` (in-memory ring, 50k entries) and OSLog (crash-durable, the only place `privacy: .public` still exists — inside `OSLogHandler`) — except when `OS_ACTIVITY_DT_MODE` is set (Xcode, `xcodebuild test`), where os_log would copy every entry to stderr a second time, so only LogStore's copy is written — and the variable is unset at bootstrap, so the wrapp and WrappPuppeteer started from a test still write to OSLog. Terminal stderr, the floating log window (`LogWindow`, instant history + live batches), and Save Log… (`LogExporter`, lossless where `log show` dropped `.debug` entries) all read from `LogStore`; no process shells out to `/usr/bin/log` except `SystemLogReader.fetch(pid:since:)` in integration tests. A wrapp build's entries carry its id through the task-local `LogContext.$build`; code that logs for a build from a detached task, a dispatch queue or a pipe's reader re-binds it, as `Blocking.run` and `ProcessLineLogger` do ([docs/logging.md](docs/logging.md#which-build-an-entry-is-from)). Subprocess output (Wine, ScummVM, winetricks) is captured line-by-line via `ProcessLineLogger`/`TaggedProcess` in `Shared/Logging/`, each line at the level `SubprocessLineClassifier` picks from its content rather than from the pipe it came down. Integration tests still read WrappPuppeteer's and the wrapp's OSLog via `log show` (rendered in the compact format, with the process in front of the category) — that's why OSLog stays in the multiplex; the test host's own build log is attached straight from `LogStore`.
+- **Logging**: All logging goes through [swift-log](https://github.com/apple/swift-log) — `import Logging`, then `private nonisolated let logger = Logger(label: "<subsystem>.<Category>")`. Subsystems: `au.gare.callum.second-chance.SecondChance` (main app), `au.gare.callum.second-chance.WrappTemplate`, `au.gare.callum.second-chance.WrappPuppeteer` — all siblings under the `au.gare.callum.second-chance` prefix. Levels mean something — [docs/logging.md](docs/logging.md#levels) has the rules: `.debug` for detail only useful when digging (it is kept everywhere but not shown on the terminal), `.notice` for the normal story of a run, `.warning` for something unusual the run survives, `.error` for a failure, `.critical` for one that ends the build or the game (no `.fault` — that's the OSLog name). No `privacy:` annotations, no `os.Logger`, no `print()`. Every executable calls `AppLogging.bootstrap(subsystem:)` as its **first** statement (`SecondChanceApp.init()`, `WrappTemplate`'s `main()`, `WrappPuppeteer`'s top of `main.swift`) — a `Logger` created before bootstrap is silently orphaned to swift-log's default stdout handler and never reaches the store. Log records fan out in-process via `MultiplexLogHandler` to `LogStore` (in-memory ring, 50k entries) and OSLog (crash-durable, the only place `privacy: .public` still exists — inside `OSLogHandler`) — except when `OS_ACTIVITY_DT_MODE` is set (Xcode, `xcodebuild test`), where os_log would copy every entry to stderr a second time, so only LogStore's copy is written — and the variable is unset at bootstrap, so the wrapp and WrappPuppeteer started from a test still write to OSLog. Terminal stderr, the floating log window (`LogWindow`, instant history + live batches), and Save Log… (`LogExporter`, lossless where `log show` dropped `.debug` entries) all read from `LogStore`; no process shells out to `/usr/bin/log` except `SystemLogReader.fetch(pid:since:)` in integration tests. A wrapp build's entries carry its id through the task-local `LogContext.$build`; code that logs for a build from a detached task, a dispatch queue or a pipe's reader re-binds it, as `Blocking.run` and `ProcessLineLogger` do ([docs/logging.md](docs/logging.md#which-build-an-entry-is-from)). Subprocess output (Wine, ScummVM, winetricks) is captured line-by-line via `ProcessLineLogger`/`TaggedProcess` in `Shared/Sources/SecondChanceKit/Logging/`, each line at the level `SubprocessLineClassifier` picks from its content rather than from the pipe it came down. Integration tests still read WrappPuppeteer's and the wrapp's OSLog via `log show` (rendered in the compact format, with the process in front of the category) — that's why OSLog stays in the multiplex; the test host's own build log is attached straight from `LogStore`.
 - **Error handling**: The codebase has many `try?` that silently swallow errors. For new code, prefer explicit `do/catch` and log failures. Cleanup operations may use `try?` but should log.
 - **No force unwraps (`!`)** in new code — use `guard let` / `compactMap`. Existing force unwraps are flagged for removal.
 - **File paths**: Never hardcode absolute user paths (e.g. `/Users/...`). Use `Bundle.main.url(forResource:)`, `FileManager` search paths, or environment variables.
@@ -256,7 +290,7 @@ direct assignment.
   `privacy:`) and its Wine ones (`wine_without_crash_handler`,
   `wine_path_outside_library`) ([docs/dev-cli.md](docs/dev-cli.md#lint)).
 - **Every Wine program starts through the Wine library.** `Wine.run`,
-  `output(of:)` and `start` (`Shared/Wine/WineProcess.swift`) take a
+  `output(of:)` and `start` (`Shared/Sources/SecondChanceKit/Wine/WineProcess.swift`) take a
   `WineCommand`; `wine.registry`, `wine.server` and `Winetricks` cover the
   registry, the session and winetricks. Don't build a `Process` for Wine,
   `wineserver` or winetricks: the launcher is what clears Sentry's exception
@@ -354,7 +388,7 @@ direct assignment.
   first desktop access starts `explorer.exe /desktop` and waits only 10 s for
   it; on a loaded machine under Rosetta that runs out, and the game carries on
   with no display adapters — Secrets Can Kill Remastered then crashes on a null
-  Direct3D object exactly 10 s in. `WineDesktop` (`Shared/Wine/`) starts the
+  Direct3D object exactly 10 s in. `WineDesktop` (`Shared/Sources/SecondChanceKit/Wine/`) starts the
   desktop itself and waits until it has registered the display devices,
   which it detects through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key.
   A build waits up to 600 s, since with every core busy a fresh session has
@@ -396,7 +430,7 @@ direct assignment.
   it should be rebuilt. Load at a lower priority (20, a LaunchAgent with no
   `ProcessType`) doesn't slow Wine at all, which matters when making load
   to test with ([docs/wrapp-launch.md](docs/wrapp-launch.md#measurements)).
-  `SystemLoad` (`Shared/`) measures it — other programs'
+  `SystemLoad` (`SecondChanceKit`) measures it — other programs'
   CPU in cores, against the performance-core count, heavy at all but one;
   the load average is useless here, since starved Wine threads push it past
   100. Every log header carries a `load:` line, `SystemLoadMonitor` logs
@@ -442,7 +476,7 @@ direct assignment.
   `DiskWrappBuilder` — it is deliberately not in the shared helper, because no
   other source has disks.
 - **A new file in `WrappTemplate/` must be listed to be built.** Unlike
-  `SecondChance/` and `Shared/`, the WrappTemplate target takes only the files
+  `SecondChance/`, the WrappTemplate target takes only the files
   named in its `membershipExceptions` list in `project.pbxproj` (Xcode's
   synchronized-folder exception set, used here as an allow-list). A file left
   off it isn't compiled, and the build fails with `cannot find type … in
@@ -461,8 +495,8 @@ direct assignment.
   `FailureReport` whose `what` and `kind` are fixed words or identifiers,
   never a message, which can hold a path. Reporting is off in Debug,
   headless, test and WrappPuppeteer runs, and anything touching the SDK sits
-  inside `#if FAILURE_REPORTING`, because WrappPuppeteer compiles `Shared/`
-  without it. WrappTemplate must link the static `Sentry` product: a
+  in the `SecondChanceReporting` module, which WrappPuppeteer doesn't link
+  (next bullet but one). WrappTemplate must link the static `Sentry` product: a
   dynamic one would be deleted along with the rest of `Contents/Frameworks`.
   `FailureReporter.start` comes before `CrashMarker.arm()`, which stands
   aside when Sentry handles crashes, since Sentry would take every real

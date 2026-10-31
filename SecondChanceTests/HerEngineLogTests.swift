@@ -7,6 +7,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+@testable import SecondChanceKit
 
 @Suite("Her Interactive engine log")
 struct HerEngineLogTests {

@@ -7,6 +7,8 @@
 import Foundation
 import AppKit
 import Logging
+import SecondChanceKit
+import SecondChanceReporting
 
 // MARK: - Directory Mounting
 

@@ -14,7 +14,10 @@ There are two main parts:
 - **The game wrapper app** (`WrappTemplate`, a _wrapp_ for short) is the app Second Chance makes. It holds everything
   needed to run one game — Wine or ScummVM, their settings, and the installed game itself.
 
-Second Chance copies the wrapper from inside itself for each game and installs the game into the copy.
+Second Chance copies the wrapper from inside itself for each game and installs the game into the copy. Code both apps
+use (logging, running Wine, driving Steam, failure reports) is in `Shared/`, a local Swift package with two modules:
+`SecondChanceKit`, and `SecondChanceReporting`, which holds everything that uses Sentry. WrappPuppeteer, the tool the
+integration tests drive games with, uses `SecondChanceKit` too.
 [docs/wrapp-build.md](docs/wrapp-build.md) walks through a build step by step, and [AGENTS.md](AGENTS.md) has the
 architecture, code conventions, and the gotchas that have caught people out. Read it before making a non-trivial
 change — it's written for AI coding agents, but it's just as useful for people.

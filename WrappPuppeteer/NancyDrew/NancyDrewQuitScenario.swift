@@ -9,6 +9,7 @@ import Foundation
 import AppKit
 import CoreGraphics
 import Logging
+import SecondChanceKit
 
 struct NancyDrewQuitScenario {
     struct Options {

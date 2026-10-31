@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SecondChanceKit
 
 enum WrappBuildError: LocalizedError, Equatable {
     case unsupportedEngine

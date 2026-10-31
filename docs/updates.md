@@ -58,7 +58,7 @@ A fix for a game that won't start may already be in a newer Second Chance,
 and the only way a wrapp gets it is by being built again. So when a launch
 fails — the error screen, the possible-failure note, or a launch the player
 gave up on — the wrapp reads the same appcast once (`NewerRelease`,
-`Shared/NewerRelease.swift`). If its newest item's `sparkle:version` is
+`Shared/Sources/SecondChanceKit/NewerRelease.swift`). If its newest item's `sparkle:version` is
 greater than the wrapp's own `CFBundleVersion`, the window says which
 version set the game up, which is out, and to update Second Chance and set
 the game up again. A launch that works makes no request.

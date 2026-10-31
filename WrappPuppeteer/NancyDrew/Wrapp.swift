@@ -6,6 +6,7 @@
 //  read from its AppSettings.plist, and how its engine behaves under test.
 
 import Foundation
+import SecondChanceKit
 
 /// The engine running the game inside a wrapp. Maps the wrapp's `GameEngine`
 /// setting (`wine`, `wineSteam`, `wineSteamSilent`, `scummvm`) to the

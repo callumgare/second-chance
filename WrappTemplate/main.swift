@@ -8,6 +8,8 @@ import Foundation
 import AppKit
 import Logging
 import os
+import SecondChanceKit
+import SecondChanceReporting
 
 // NOTE: no top-level Logger in main.swift — top-level code here is eager and
 // runs in source order, so a logger declared at file scope would be
