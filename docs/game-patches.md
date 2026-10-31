@@ -195,7 +195,7 @@ uses the generic silent flags for whichever installer family
 If an installer ignores those and puts up a wizard, nothing would ever answer
 it, so `runPatchInstaller` gives the Wine run a 15-minute timeout, long enough
 for a patcher on a fully loaded machine (most finish in seconds). On timeout
-`WineEnvironment.runWine` stops the prefix's wineserver — the only thing that
+`Wine.run` stops the prefix's wineserver — the only thing that
 ends a Windows process — and the patch is reported as failed.
 
 ### Failure is not fatal

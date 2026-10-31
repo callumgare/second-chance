@@ -27,7 +27,7 @@ driver, `winemac.so`, a weak dependency on the dylib. The header comment of
 
 Every process that talks to the Mac driver loads `winemac.so` — `explorer.exe`
 as well as the game — so each helper checks whether it is in the game before
-doing anything. `WineEnvironment.inProcessHelperVariables(gameExe:)` sets
+doing anything. `Wine.inProcessHelperVariables(gameExe:)` sets
 `NATIVE_MACOS_FULLSCREEN_EXE`, `CURSOR_LOCK_EXE` and
 `EMULATED_MODE_SCALING_EXE` to the game's `.exe` name,
 and a helper only arms in the process running that `.exe`
@@ -42,8 +42,8 @@ Leaving a variable unset is what the off switches do.
 
 A Wine program passes its environment on to the programs it starts, so the
 variables reach the game from whichever process launches it.
-`runWindowsExecutableWithStart` sets them on the `wine start` it runs the game
-with. A game Steam launches (`-applaunch`, the `wine-steam` engine) is started
+`GameLauncher` sets them on the `wine start` it runs the game with
+(`wine.start`). A game Steam launches (`-applaunch`, the `wine-steam` engine) is started
 by the Steam client, which has the environment it was started with — not the
 `-applaunch` call's — so the wrapp's `SteamClient` sets them on every Steam
 process it runs. Steam's own processes have other names and never arm.
@@ -162,7 +162,7 @@ It has to act in `explorer.exe` too, not only in the game: in Wine 10 the
 desktop process registers the displays, and the game takes them from there.
 So rather than naming the game's `.exe`, it is armed by
 `NATIVE_FULLSCREEN_BELOW_NOTCH=1`. The wrapp sets that on itself at start-up
-(`WineEnvironment.wrappSessionVariables`), and every Wine process it starts
+(`Wine.wrappSessionVariables`), and every Wine process it starts
 inherits it. Second Chance's own installer runs never have it.
 
 It does nothing unless the main display is a built-in one with a below-notch
@@ -498,7 +498,7 @@ capture in every ScummVM wrapp.
 
 It arms only when WrappPuppeteer started the wrapp. WrappPuppeteer passes
 `SECOND_CHANCE_PUPPET_DIR`, a private directory; when that is set,
-`WineEnvironment.inProcessHelperVariables` sets `PUPPET_CONTROL_EXE` to the
+`Wine.inProcessHelperVariables` sets `PUPPET_CONTROL_EXE` to the
 game's `.exe`, and the helper in that process listens on
 `$SECOND_CHANCE_PUPPET_DIR/game.sock`. A player's launch sets neither, so
 nothing listens.

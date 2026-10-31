@@ -74,7 +74,7 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template                                |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template — or how a Wine program is run (`Shared/Wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`) |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, retaking the README screenshots, `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Shared/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
@@ -249,7 +249,15 @@ direct assignment.
   rather than loosening a rule; where a line genuinely must break one, a
   `swiftlint:disable:next` with the reason. `.swiftlint.yml`'s custom rules
   enforce this file's logging conventions (no `print()`, `os.Logger` or
-  `privacy:`) ([docs/dev-cli.md](docs/dev-cli.md#lint)).
+  `privacy:`) and its Wine ones (`wine_without_crash_handler`,
+  `wine_path_outside_library`) ([docs/dev-cli.md](docs/dev-cli.md#lint)).
+- **Every Wine program starts through the Wine library.** `Wine.run`,
+  `output(of:)` and `start` (`Shared/Wine/WineProcess.swift`) take a
+  `WineCommand`; `wine.registry`, `wine.server` and `Winetricks` cover the
+  registry, the session and winetricks. Don't build a `Process` for Wine,
+  `wineserver` or winetricks: the launcher is what clears Sentry's exception
+  ports, nulls stdin, logs each line with its pid and never waits on a pipe
+  for EOF ([docs/wrapp-build.md](docs/wrapp-build.md#running-wine)).
 - **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
 
 ## Gotchas
@@ -294,7 +302,7 @@ direct assignment.
   the `SECOND_CHANCE_*` switches below are `--debug` values on `sc wrapp run`
   too ([docs/dev-cli.md](docs/dev-cli.md#debug-options) has the table).
 - **`SECOND_CHANCE_WINEDEBUG`** sets Wine's `WINEDEBUG` for every Wine process
-  Second Chance or a wrapp starts (`WineEnvironment`); unset, it is
+  Second Chance or a wrapp starts (`Wine`); unset, it is
   `-all,err+all` — only Wine's `err:` lines, which is where it names the cause
   of most failures.
   Wrapp output lands in the wrapp's log, so `SECOND_CHANCE_WINEDEBUG=+seh,+d3d9
@@ -319,7 +327,7 @@ direct assignment.
   deactivated. A helper running inside the game process posts a middle click
   (which the games ignore, so the publisher logo isn't skipped) until Wine's
   cursor state shows the lock, and again on every return to the app.
-  `WineEnvironment` arms it alongside native fullscreen — but not for a game
+  `Wine.inProcessHelperVariables` arms it alongside native fullscreen — but not for a game
   whose `.exe` imports Direct3D rather than `ddraw.dll` (`GameGraphicsAPI`),
   since those never use cnc-ddraw and its clicks close their menus; both live in
   `WrappTemplate/InProcessHelpers/`. Read
@@ -365,7 +373,7 @@ direct assignment.
   `wineserver -w`, which would otherwise wait for ever, and so does a wrapp,
   which then waits for the session to end before it quits — whether the game
   ended or the player quit — and kills Wine only if it won't end
-  (`WineUtilities.waitTillWineserverStopped`); even its 15 s quit fallback
+  (`wine.server.shutDown`); even its 15 s quit fallback
   kills Wine before exiting. A launch that still finds Wine running in the
   prefix waits for it in the loading window (`LoadingStage.lastSessionClosing`),
   which after 3 s also offers to stop it, and drops that offer and carries on

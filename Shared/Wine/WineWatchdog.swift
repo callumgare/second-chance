@@ -4,7 +4,7 @@
 
 import Foundation
 
-/// Watches a Wine program `runWine` is waiting for, and says whether it is
+/// Watches a Wine program `Wine.run` is waiting for, and says whether it is
 /// still getting somewhere (`GameInstallerRunner`'s `InstallStallWatch`).
 public protocol WineWatchdog: AnyObject, Sendable {
     /// The program printed a line.

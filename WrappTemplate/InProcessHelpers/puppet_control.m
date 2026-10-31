@@ -11,7 +11,7 @@
 //
 //  Armed only when WrappPuppeteer starts the wrapp: SECOND_CHANCE_PUPPET_DIR
 //  names a private directory, and PUPPET_CONTROL_EXE (set by
-//  WineEnvironment.inProcessHelperVariables when that directory is) names the
+//  Wine.inProcessHelperVariables when that directory is) names the
 //  game's .exe -- or `scummvm`, which the wrapp loads this dylib into with
 //  DYLD_INSERT_LIBRARIES. Nothing a player runs sets either.
 //

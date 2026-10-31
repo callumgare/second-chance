@@ -53,7 +53,7 @@ nonisolated struct InstallStallRule: Equatable {
 
 /// Watches one unattended installer run, through `LaunchActivityMonitor`'s
 /// signs, the installer's own log, and the folders it writes to, and answers
-/// `runWine`'s checks. The folders matter: under load an Inno Setup install
+/// `Wine.run`'s checks. The folders matter: under load an Inno Setup install
 /// copied the game for minutes at 0.02 cores, below what counts as Wine
 /// working, saying nothing on its output. Quiet for longer than the rule
 /// allows, it looks for a window the installer has put on screen: if there

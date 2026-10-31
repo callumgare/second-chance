@@ -105,15 +105,20 @@ Pass `classify: false` to log every line at exactly the given level.
 
 ## Subprocess runs
 
-Every Wine run through `WineEnvironment.runWine` (installers, patches,
-`reg add`, …) streams its output into the log as it arrives, under the `Wine`
-category, framed by lines from `WineEnvironment` written by `SubprocessWatch`:
+Every Wine run through `Wine.run` (installers, patches, `reg add`,
+winetricks, …) streams its output into the log as it arrives, under the `Wine`
+category, framed by lines from `WineProcess` written by `SubprocessWatch`:
 
 ```text
-17:22:45.627  notice  WineEnvironment  ▶ wine setup.exe started (pid 1237): start /wait /unix …/setup.exe /verysilent /norestart
-17:23:15.630  notice  WineEnvironment  … wine setup.exe (pid 1237) still running after 30.0s; no output for 30.0s (0 lines so far)
-17:24:24.211  notice  WineEnvironment  ■ wine setup.exe (pid 1237) exited 0 after 1m 39s, 2 lines of output
+17:22:45.627  notice  WineProcess  ▶ wine setup.exe started (pid 1237): start /wait /unix …/setup.exe /verysilent /norestart
+17:23:15.630  notice  WineProcess  … wine setup.exe (pid 1237) still running after 30.0s; no output for 30.0s (0 lines so far)
+17:24:24.211  notice  WineProcess  ■ wine setup.exe (pid 1237) exited 0 after 1m 39s, 2 lines of output
 ```
+
+A check run every few seconds (`Wine.output(of:)`: the desktop's display
+check, `wine.server`'s `wineserver` calls) writes the same lines at `.debug`,
+and a program run in the terminal (the `wine` pass-through) writes them at
+`.debug` too, so its own output is all the terminal shows.
 
 The `■` line says how it ended: `exited N` (an error when N isn't 0) or
 `was killed by SIGKILL (9)`; a signal is never reported as an exit code. The

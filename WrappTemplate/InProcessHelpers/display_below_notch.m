@@ -32,7 +32,7 @@
 //  registered by explorer.exe, and the game takes them from there.
 //
 //  Armed by NATIVE_FULLSCREEN_BELOW_NOTCH, which a wrapp sets on itself
-//  (WineEnvironment.wrappSessionVariables), so Second Chance's own installer
+//  (Wine.wrappSessionVariables), so Second Chance's own installer
 //  runs never see it. It does nothing unless the main display is a built-in
 //  one with a notch, and stops shifting anything if that display's mode
 //  changes while the game runs.

@@ -245,12 +245,47 @@ go on — sign in to Steam's window, click through an installer that runs
 interactively (with the game's `installInstructions`). The progress screen
 shows it at once, prominently, until the next `.instructions(nil)`.
 
+## Running Wine
+
+Every Wine, `wineserver` and winetricks process — the build's and the wrapp's
+— starts in one place, `Shared/Wine/WineProcess.swift`. `Wine(wrapp:prefix:)`
+names one wrapp's Wine and the prefix it runs in (the wrapp's own unless given
+another), and a `WineCommand` says what to run: `.program(exe, args)`,
+`.start(exe, args)` for `wine start /wait`, `.wine(args)` for a builtin such as
+`reg`, `.wineserver(args)`, or `.script(url, args)` for winetricks. Then:
+
+- `wine.run(command)` waits for it, logs it (see
+  [logging.md](logging.md#subprocess-runs)), and throws `WineError` for a
+  non-zero exit, a signal, a timeout, a stall or `nodrv_CreateWindow`. A
+  timeout, a stall or cancelling the task stops the whole Wine session
+  (`OnTimeout.stopSession`), as a program stuck on another Windows program is
+  only freed by ending both; `.stopProgram` stops just the one.
+- `wine.output(of: command)` returns what it printed. It's captured to a file,
+  never a pipe: Wine's background services inherit a pipe and hold it open,
+  so reading one to its end can wait for ever. Its timeout stops only it.
+- `wine.start(command)` doesn't wait: the game, Steam, the desktop. It returns
+  a `WineProcess` to watch or end.
+
+Each process starts with `runWithoutCrashHandler()`, gets stdin from
+`/dev/null` (unless it runs in the terminal), and has its output logged line by
+line with its pid. Facades on `Wine` cover the rest: `wine.registry` sets,
+imports and reads registry values with named keys (`.x11Driver`,
+`.wineDrives`, `.videoDeviceMap`), `wine.server` checks on, waits for and ends
+the prefix's session (`shutDown(gracePeriod:)` escalates from waiting to
+`-k` to `-k9`), and `Winetricks` (app only, as only Second Chance bundles it)
+installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,
+which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
+GCD queues call it through `Blocking.wait` (`Shared/Blocking.swift`), the
+build's blocking work goes the other way through `Blocking.run`, and a
+SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
+`Shared/Wine/`.
+
 ## Cancelling
 
 The progress screen's **Cancel** asks for confirmation, then cancels the
 build's task (`WrappBuildViewModel.cancelBuild`). The builders need nothing of
 their own for it: a running Wine program ends its Wine session when its task is
-cancelled (`WineEnvironment.runWine`), Steam's waits are `Task.sleep`s, and
+cancelled (`Wine.run`), Steam's waits are `Task.sleep`s, and
 `helper.finalize` checks before signing and saving, so the build throws and
 each builder cleans up as it does after any failure. The ViewModel ignores the
 resulting `.failed` and goes back to the welcome screen once the build has
@@ -271,7 +306,7 @@ folders and the log matter: under load an Inno Setup install copied the game
 for over two minutes at 0.02 cores, too little to count as Wine working, and
 said nothing on its output. If no sign appears for the window
 (`SECOND_CHANCE_INSTALL_STALL_SECONDS`, 120 s by default and three times that
-while the Mac is heavily loaded), `runWine`'s watchdog check looks for a window
+while the Mac is heavily loaded), `Wine.run`'s watchdog check looks for a window
 a Wine program has on screen. Wine's own hidden windows never are.
 
 - **One is on screen.** The installer is asking something the answer file
@@ -279,7 +314,7 @@ a Wine program has on screen. Wine's own hidden windows never are.
   it there (an `.instructions` event), and the time doesn't count towards the
   timeout. Once there is progress again, the instructions go.
 - **None is.** The install has stalled. The Wine session is stopped, with a
-  snapshot of its processes in the log, and `runWine` throws
+  snapshot of its processes in the log, and `Wine.run` throws
   `WineError.stalled`. A GUI build then retries with the installer's wizard
   as for any failed silent install, and the progress step says the install
   got stuck. A headless or `STRICT_INSTALL` build fails at once with
@@ -312,7 +347,7 @@ default `direct`) and a saved Steam sign-in, since a headless build can't sign
 in — it fails with `steamSignInRequired` rather than wait.
 
 An installer or patcher that prints Wine's `nodrv_CreateWindow` error found
-no desktop to open its windows on, so `runWine` throws `WineError.noDisplay`
+no desktop to open its windows on, so `Wine.run` throws `WineError.noDisplay`
 whatever its exit code (AutoIt in that state exits 0 without running its
 script). `GameInstallerRunner` then stops the Wine session and runs that step
 once more with a fresh desktop (a failed install attempt likewise gets a fresh
