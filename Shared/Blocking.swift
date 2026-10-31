@@ -19,12 +19,21 @@ nonisolated enum Blocking {
     /// Run `work` on a background thread and wait for it there, leaving the
     /// calling thread (usually the main one) free. A detached task, so it
     /// doesn't inherit the caller's actor.
+    /// The caller's build goes with it (`LogContext.build`), which a
+    /// detached task wouldn't otherwise inherit, so what `work` logs is
+    /// still that build's.
     static func run<T>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
-        try await Task.detached(priority: .userInitiated) { try work() }.value
+        let build = LogContext.build
+        return try await Task.detached(priority: .userInitiated) {
+            try LogContext.$build.withValue(build) { try work() }
+        }.value
     }
 
     static func run<T>(_ work: @escaping @Sendable () -> T) async -> T {
-        await Task.detached(priority: .userInitiated) { work() }.value
+        let build = LogContext.build
+        return await Task.detached(priority: .userInitiated) {
+            LogContext.$build.withValue(build) { work() }
+        }.value
     }
 
     /// Run async `work` and block this thread until it finishes.

@@ -222,9 +222,11 @@ nonisolated extension Wine {
             if onTimeout == .stopSession { self.server.stopNow() }
             process.terminate()
         }
+        // The wait is on a queue of its own; what it logs is still the build's.
+        let build = LogContext.build
         let ending: WaitEnding = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async {
+                DispatchQueue.global(qos: .userInitiated).async { LogContext.$build.withValue(build) {
                     let ending = Self.wait(for: process.exited, timeout: timeout, watchdog: watchdog)
                     let what = onTimeout == .stopSession ? "its Wine session" : "it"
                     switch ending {
@@ -248,7 +250,7 @@ nonisolated extension Wine {
                         _ = process.waitUntilExit(within: nil)
                     }
                     continuation.resume(returning: ending)
-                }
+                } }
             }
         } onCancel: {
             launcherLogger.log(level: onTimeout == .stopSession ? .notice : .debug,

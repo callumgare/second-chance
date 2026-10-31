@@ -67,6 +67,7 @@ nonisolated final class JSONLinesLogSink: @unchecked Sendable {
         ]
         if let error = entry.error { object["error"] = error }
         if let stage = entry.stage { object["stage"] = stage }
+        if let build = entry.build { object["build"] = build }
         if !entry.metadata.isEmpty { object["metadata"] = entry.metadata }
         guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]) else {
             return nil

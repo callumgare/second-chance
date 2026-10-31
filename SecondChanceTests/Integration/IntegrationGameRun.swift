@@ -152,15 +152,21 @@ struct IntegrationGameRun {
 
         // Attach this build's log, every level, from LogStore: this process's
         // own log, without a trip through os_log (which the test host may not
-        // be writing to — see MultiplexLogHandler).
+        // be writing to — see MultiplexLogHandler). Its entries are the ones
+        // tagged with its build; what was logged meanwhile untagged goes in
+        // an attachment of its own, since with builds side by side it can't
+        // be told whose it was.
+        let buildLog = BuildLogContext()
         let logStart = LogStore.shared.nextSequence
         defer {
             LogStore.shared.flush()
-            let lines = LogStore.shared.snapshot().entries
-                .filter { $0.seq >= logStart }
-                .map { LogFormatter.full(entry: $0) }
-            if !lines.isEmpty {
-                Attachment.record(Data((lines.joined(separator: "\n") + "\n").utf8), named: "secondchance-\(source)-\(label).txt")
+            let entries = LogStore.shared.snapshot().entries.filter { $0.seq >= logStart }
+            for (name, part) in [
+                ("secondchance-\(source)-\(label).txt", entries.filter { $0.build == buildLog.id }),
+                ("untagged-\(source)-\(label).txt", entries.filter { $0.build == nil }),
+            ] where !part.isEmpty {
+                let text = part.map { LogFormatter.full(entry: $0) }.joined(separator: "\n") + "\n"
+                Attachment.record(Data(text.utf8), named: name)
             }
         }
 
@@ -171,7 +177,11 @@ struct IntegrationGameRun {
         let viewModel = await MainActor.run {
             WrappBuildViewModel(makeInput: { build.makeInput(outputDir, $0) }, bus: bus)
         }
-        Task { await MainActor.run { Task { await build.start(viewModel) } } }
+        // The build takes the log context it starts in, so its entries carry
+        // this test's id.
+        LogContext.$build.withValue(buildLog) {
+            Task { await MainActor.run { Task { await build.start(viewModel) } } }
+        }
 
         // Only a backstop for a build that hangs: the build times out its own
         // installer, patches, and Steam's sign-in and download, and reports

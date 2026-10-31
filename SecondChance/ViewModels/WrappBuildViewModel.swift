@@ -303,6 +303,15 @@ class WrappBuildViewModel: ObservableObject {
     }
 
     private func performBuild(_ builder: WrappBuildStrategy) async {
+        // The build's own part of the log, so its entries can be told from
+        // another build's running alongside it. One the caller bound is kept,
+        // which is how a test knows which entries are its build's.
+        await LogContext.$build.withValue(LogContext.build ?? BuildLogContext()) {
+            await performBuildLogged(builder)
+        }
+    }
+
+    private func performBuildLogged(_ builder: WrappBuildStrategy) async {
         // A new build: none of the last one's stage carries over to it.
         LogContext.clearStage()
         lastProgressState = nil

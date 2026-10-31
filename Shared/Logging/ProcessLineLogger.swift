@@ -49,6 +49,9 @@ nonisolated enum ProcessLineLogger {
         }
         let fh = pipe.fileHandleForReading
         let pending = PendingBytes()
+        // The pipe is read on a queue of its own, outside the task that
+        // started the program, so carry its build across to each line.
+        let build = LogContext.build
 
         fh.readabilityHandler = { handle in
             let data = handle.availableData
@@ -58,7 +61,7 @@ nonisolated enum ProcessLineLogger {
                     let line = String(decoding: pending.buffer, as: UTF8.self)
                         .trimmingCharacters(in: .newlines)
                     if !line.isEmpty {
-                        logger.log(level: levelOf(line), "\(line)", metadata: metadata)
+                        LogContext.$build.withValue(build) { logger.log(level: levelOf(line), "\(line)", metadata: metadata) }
                         onLine?(line)
                     }
                     pending.buffer.removeAll()
@@ -79,7 +82,7 @@ nonisolated enum ProcessLineLogger {
                 let line = String(decoding: lineData, as: UTF8.self)
                     .trimmingCharacters(in: .newlines)
                 if !line.isEmpty {
-                    logger.log(level: levelOf(line), "\(line)", metadata: metadata)
+                    LogContext.$build.withValue(build) { logger.log(level: levelOf(line), "\(line)", metadata: metadata) }
                     onLine?(line)
                 }
             }

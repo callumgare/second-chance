@@ -199,7 +199,8 @@ The cause of a failure is usually logged well before the failure: the "first
 error in this stage" line is there because the last errors are usually
 consequences. Stages are what the build's progress shows (`LogContext.enterStage`,
 called next to each `━━━ Stage ━━━` divider); a wrapp has "Starting the game"
-and "Playing". The error line keeps the error's type and case and its chain of
+and "Playing". In a build, both the stage and the entries searched are that
+build's own ([below](#which-build-an-entry-is-from)). The error line keeps the error's type and case and its chain of
 underlying errors, which `localizedDescription` drops. The load lines are
 there for the same reason: by the time a starved Wine program is noticed
 failing, the load that starved it may have gone, so the summary gives the
@@ -246,6 +247,23 @@ the JSON-lines sink writes everything as fields:
 so `jq 'select(.level == "error" and .stage == "Game installing")'` or
 `jq 'select(.metadata.pid == "1237")'` replaces parsing columns and prefixes.
 Wine output lines and `SubprocessWatch` lines carry `pid` and `program`.
+
+### Which build an entry is from
+
+A wrapp build runs inside a `BuildLogContext`, bound as the task-local
+`LogContext.$build` by `WrappBuildViewModel`. Every entry logged in it carries
+the build's id (`Entry.build`, `"build"` in JSON lines), and the build has a
+stage of its own, so two builds in one process — the integration tests run
+them side by side — don't put each other's entries in their stage, and a
+failure summary looks only at its own build's entries. The context goes
+wherever the build's task goes, but not to a detached task, a dispatch queue
+or a pipe's reader: `Blocking.run`, `ProcessLineLogger` and `WineProcess`'s
+wait carry it across. New code that logs for the build off its task should
+do the same, capturing `LogContext.build` and logging inside
+`LogContext.$build.withValue(_:)`. A build started inside a context a caller
+bound uses that one, which is how the integration test knows its build's id;
+it attaches what was logged untagged meanwhile separately
+(`untagged-<source>-<game>.txt`), where a missed carry shows up.
 
 ## Environment variables
 
