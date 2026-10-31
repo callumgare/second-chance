@@ -63,6 +63,27 @@ struct GameInstallerTests {
         #expect(args.contains("/r"), "InstallShield interactive install should include /r for recording")
     }
 
+    // Wine is given each argument as it is, with no shell in between to
+    // halve the backslashes.
+    @Test("InstallShield installer arguments - silent install names the answer file")
+    func installShieldArgumentsSilent() throws {
+        let wrapp = FileManager.default.temporaryDirectory.appendingPathComponent("iss-\(UUID().uuidString).app")
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let installerDir = wrapp.appendingPathComponent("Contents/SharedSupport/prefix/drive_c/nancy-drew-installer")
+        try FileManager.default.createDirectory(at: installerDir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: installerDir.appendingPathComponent("setup.iss").path, contents: nil)
+
+        let args = GameInstallerRunner.shared.getInstallerArguments(
+            installerPath: testInstallerPath,
+            installerType: .installShield,
+            gameInfo: testGameInfo,
+            wrappPath: wrapp,
+            attemptNumber: 0
+        )
+
+        #expect(args == ["/s", "/sms", #"/f1C:\nancy-drew-installer\setup.iss"#])
+    }
+
     @Test("Inno Setup installer arguments - silent install")
     func innoSetupArgumentsSilent() {
         let installer = GameInstallerRunner.shared

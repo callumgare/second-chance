@@ -843,7 +843,7 @@ class GameInstallerRunner {
         return InstallerLogFile(
             format: format,
             hostPath: hostPath,
-            windowsPath: "C:\\\\windows\\\\temp\\\\\(fileName)"
+            windowsPath: "C:\\windows\\temp\\\(fileName)"
         )
     }
 
@@ -884,7 +884,7 @@ class GameInstallerRunner {
 
         if useAutoIt {
             let autoitArgs = [
-                "C:\\\\installshield-custom-dialog-automate.au3",
+                "C:\\installshield-custom-dialog-automate.au3",
                 installerPath,
                 gameInfo.title
             ]
@@ -893,10 +893,10 @@ class GameInstallerRunner {
                 : "wine start /wait \(installerPath) \(args.joined(separator: " "))"
 
             return InstallerCommand(
-                exePath: "C:\\\\autoit\\\\AutoIt3.exe",
+                exePath: "C:\\autoit\\AutoIt3.exe",
                 arguments: autoitArgs,
                 useStartCommand: false,
-                commandDescription: "C:\\\\autoit\\\\AutoIt3.exe \(autoitArgs.joined(separator: " "))",
+                commandDescription: "C:\\autoit\\AutoIt3.exe \(autoitArgs.joined(separator: " "))",
                 underlyingCommandDescription: underlyingCommand
             )
         } else if installerType == .msi {
@@ -1212,7 +1212,7 @@ class GameInstallerRunner {
                     return []
                 } else {
                     // Silent install with .iss response file
-                    let windowsIssPath = "C:\\\\nancy-drew-installer\\\\setup.iss"
+                    let windowsIssPath = "C:\\nancy-drew-installer\\setup.iss"
                     return ["/s", "/sms", "/f1\(windowsIssPath)"]
                 }
             } else {
