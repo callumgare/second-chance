@@ -444,12 +444,17 @@ struct SteamWrappBuilderTests {
     @Test("A download that gets nowhere is told to the person, then fails the build")
     func downloadStalls() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
-        let run = await build(game: "thornton-hall", network: [5_000], stallNote: 0.05, stallLimit: 0.3) { $0.downloadingChecks = 10_000 }
+        // Both limits already passed at every check, as on a Mac too busy to
+        // check in time: the person is still told before the build gives up.
+        let run = await build(game: "thornton-hall", network: [5_000], stallNote: 0, stallLimit: 0) { $0.downloadingChecks = 10_000 }
         #expect(throws: WrappBuildError.steamDownloadStalled) { try run.result.get() }
-        #expect(run.events.contains {
+        let told = run.events.firstIndex {
             if case .instructions(SteamWrappBuilder.downloadStalledInstructions) = $0 { return true }
             return false
-        })
+        }
+        let failed = run.events.firstIndex { if case .failed = $0 { return true }; return false }
+        #expect(told != nil)
+        #expect(told.flatMap { told in failed.map { told < $0 } } == true)
     }
 
     @Test("Without Wine's network counts, a download shows its phase alone")

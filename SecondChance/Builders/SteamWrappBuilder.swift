@@ -430,13 +430,16 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                             logger.notice("[Steam] Downloaded \(meter.text(now: now))")
                         }
                         let quiet = meter.quietFor(now: now)
-                        if quiet >= downloadStallLimit {
-                            logger.error("Steam's download got nowhere for \(Int(quiet))s, at \(meter.text(now: now))")
-                            throw WrappBuildError.steamDownloadStalled
-                        } else if quiet >= downloadStallNote, !stalled {
+                        // The person is always told before the build gives
+                        // up, even when one check finds it past both: a Mac
+                        // asleep mid-download wakes to the note, not a failure.
+                        if quiet >= downloadStallNote, !stalled {
                             stalled = true
                             logger.warning("Steam's download has got nowhere for \(Int(quiet))s, at \(meter.text(now: now))")
                             await bus.publishWrappBuild(.instructions(Self.downloadStalledInstructions))
+                        } else if quiet >= downloadStallLimit, stalled {
+                            logger.error("Steam's download got nowhere for \(Int(quiet))s, at \(meter.text(now: now))")
+                            throw WrappBuildError.steamDownloadStalled
                         } else if quiet < downloadStallNote, stalled {
                             stalled = false
                             logger.notice("Steam's download is moving again")
