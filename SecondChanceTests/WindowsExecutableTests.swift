@@ -195,7 +195,8 @@ enum TestPE {
     }
 }
 
-private extension Array where Element == UInt8 {
+/// Writing the little-endian integers test images are made of.
+extension Array where Element == UInt8 {
     mutating func put16(_ value: Int, at offset: Int) {
         self[offset] = UInt8(value & 0xFF)
         self[offset + 1] = UInt8(value >> 8 & 0xFF)

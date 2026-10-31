@@ -34,8 +34,7 @@ nonisolated public struct WindowsExecutable: Sendable {
 
     /// Nil if `data` isn't a PE image.
     public init?(data: Data) {
-        // Offsets below count from zero.
-        let bytes = data.startIndex == 0 ? data : Data(data)
+        let bytes = data
         guard bytes.u16(at: 0) == 0x5A4D,  // "MZ"
               let pe = bytes.u32(at: 0x3C), bytes.u32(at: pe) == 0x0000_4550,  // "PE\0\0"
               let sectionCount = bytes.u16(at: pe + 6),
@@ -207,8 +206,8 @@ nonisolated public struct WindowsExecutable: Sendable {
     private func cString(atRVA rva: Int) -> String? {
         guard var offset = fileOffset(ofRVA: rva) else { return nil }
         var characters: [UInt8] = []
-        while offset < bytes.count, bytes[offset] != 0, characters.count < 256 {
-            characters.append(bytes[offset])
+        while let byte = bytes.u8(at: offset), byte != 0, characters.count < 256 {
+            characters.append(UInt8(byte))
             offset += 1
         }
         return String(bytes: characters, encoding: .ascii)
@@ -223,18 +222,5 @@ nonisolated public struct WindowsExecutable: Sendable {
             position += 2
         }
         return String(decoding: units, as: UTF16.self)
-    }
-}
-
-private extension Data {
-    /// Little-endian, from a zero-based offset; nil past the end.
-    nonisolated func u16(at offset: Int) -> Int? {
-        guard offset >= 0, offset + 2 <= count else { return nil }
-        return Int(self[offset]) | Int(self[offset + 1]) << 8
-    }
-
-    nonisolated func u32(at offset: Int) -> Int? {
-        guard let low = u16(at: offset), let high = u16(at: offset + 2) else { return nil }
-        return low | high << 16
     }
 }
