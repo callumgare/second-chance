@@ -12,13 +12,8 @@ import UniformTypeIdentifiers
 class GameDetector {
     static let shared = GameDetector()
 
-    private let exiftool: ExiftoolService
     private nonisolated static let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameDetector")
     private nonisolated var logger: Logger { Self.logger }
-
-    init(exiftool: ExiftoolService = .shared) {
-        self.exiftool = exiftool
-    }
 
     /// Detect game from disk path
     func detectGame(fromDisk diskPath: URL) async throws -> String {
@@ -37,14 +32,14 @@ class GameDetector {
         stepLogger.notice("Found \(contents.count) items in disk")
 
         if let setupExe = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.exe" }) {
-            if let productName = try? await getFileInfo(setupExe, property: "Product Name") {
+            if let productName = await versionStrings(of: setupExe)["ProductName"] {
                 stepLogger.notice("Product Name: \(productName)")
                 fingerprint += " \(productName)"
             }
         }
 
         if let msiFile = contents.first(where: { $0.pathExtension.lowercased() == "msi" }) {
-            if let subject = try? await getFileInfo(msiFile, property: "Subject") {
+            if let subject = await Blocking.run({ MSISummary(contentsOf: msiFile)?.subject }) {
                 stepLogger.notice("MSI Subject: \(subject)")
                 fingerprint += " \(subject)"
             }
@@ -99,7 +94,7 @@ class GameDetector {
         var fingerprint = installerPath.deletingPathExtension().lastPathComponent
             .replacingOccurrences(of: "_", with: " ")
 
-        if let productName = try? await getFileInfo(installerPath, property: "Product Name") {
+        if let productName = await versionStrings(of: installerPath)["ProductName"] {
             logger.notice("Product Name: \(productName)")
             fingerprint += " \(productName)"
         }
@@ -260,10 +255,10 @@ class GameDetector {
 
     // MARK: - Private Detection Methods
 
-    /// Extract metadata from a file using exiftool
-    private func getFileInfo(_ filePath: URL, property: String) async throws -> String? {
-        let exiftool = self.exiftool
-        return try await Blocking.run { try exiftool.getFileProperty(filePath.path, property: property) }
+    /// A Windows program's version strings: empty when it has none, or isn't
+    /// one. Mapped, so off the main thread.
+    private func versionStrings(of file: URL) async -> [String: String] {
+        await Blocking.run { WindowsExecutable(contentsOf: file)?.versionStrings ?? [:] }
     }
 
     /// Parse property from INI file

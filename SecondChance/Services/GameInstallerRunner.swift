@@ -33,19 +33,16 @@ class GameInstallerRunner {
 
     private let fileManager = FileManager.default
     private let wineManager: WineManager
-    private let exiftool: ExiftoolService
     private let catalog: GamePatchCatalog
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner")
     let bus: EventBus<AppEvent>
 
     init(
         wineManager: WineManager = .shared,
-        exiftool: ExiftoolService = .shared,
         catalog: GamePatchCatalog = .shared,
         bus: EventBus<AppEvent> = .app
     ) {
         self.wineManager = wineManager
-        self.exiftool = exiftool
         self.catalog = catalog
         self.bus = bus
     }
@@ -1176,21 +1173,15 @@ class GameInstallerRunner {
             return .msi
         }
 
-        // Try to extract metadata using exiftool to detect InstallShield/Inno Setup
-        do {
-            let exiftool = self.exiftool
-            let metadata = try await Blocking.run { try exiftool.getFileProperties(installerPath, properties: ["ProductName", "Comments"]) }
-            logger.notice("🔍 Installer metadata: \(metadata)")
-            let combined = (metadata["ProductName"] ?? "") + " " + (metadata["Comments"] ?? "")
-            let lowercased = combined.lowercased()
-
-            if lowercased.contains("installshield") {
-                return .installShield
-            } else if lowercased.contains("inno setup") {
-                return .innoSetup
-            }
-        } catch {
-            logger.warning("⚠️ Failed to detect installer type via exiftool: \(error)")
+        // InstallShield and Inno Setup name themselves in the installer's
+        // version info. Mapped, so off the main thread.
+        let strings = await Blocking.run { WindowsExecutable(contentsOf: url)?.versionStrings ?? [:] }
+        logger.notice("🔍 Installer version info: ProductName=\(strings["ProductName"] ?? "–"), Comments=\(strings["Comments"] ?? "–")")
+        let combined = [strings["ProductName"], strings["Comments"]].compactMap { $0 }.joined(separator: " ").lowercased()
+        if combined.contains("installshield") {
+            return .installShield
+        } else if combined.contains("inno setup") {
+            return .innoSetup
         }
 
         return .unknown
