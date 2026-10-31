@@ -638,6 +638,19 @@ struct DotEnvTests {
         #expect(values["EMPTY"] == "")
         #expect(values.count == 4)
     }
+
+    @Test("Hiding the test host's windows reaches it only when set")
+    func hideTestUI() {
+        #expect(TestRunner.hostEnvironment(dotEnv: ["SECOND_CHANCE_HIDE_TEST_UI": "1", "SENTRY_DSN": "x"])
+            == ["TEST_RUNNER_SECOND_CHANCE_HIDE_TEST_UI": "1"])
+        #expect(TestRunner.hostEnvironment(dotEnv: ["SECOND_CHANCE_HIDE_TEST_UI": ""]).isEmpty)
+        #expect(TestRunner.hostEnvironment(dotEnv: [:]).isEmpty)
+    }
+
+    @Test("Each Mac keeps its own: --on doesn't sync it")
+    func notSynced() {
+        #expect(Remote.excludes.contains(".env"))
+    }
 }
 
 @Suite("Test VMs")

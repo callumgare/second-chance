@@ -9,11 +9,15 @@ does not work for it — everything goes through `xcodebuild` against the
 `SecondChance` scheme. (`Tools/sc`, the CLI itself, is a Swift package with its
 own tests; `sc test unit` runs those too.)
 
-The tests run inside `Second Chance.app`, their test host. Under test it opens
-no window and stays out of the Dock and the foreground (`TestHost`), so a run
-doesn't take over the Mac — a log window a test opens is built but never
-put on screen; it also keeps no run log and leaves the welcome
-screen's first-launch greeting alone.
+The tests run inside `Second Chance.app`, their test host. Under test it keeps
+no run log and leaves the welcome screen's first-launch greeting alone
+(`TestHost`). Where the repo's `.env` sets `SECOND_CHANCE_HIDE_TEST_UI=1`,
+`sc test unit` and `sc test integration` pass it on and the host also opens no
+window and stays out of the Dock and the foreground — a log window a test
+opens is built but never put on screen — so a run doesn't take over a Mac
+someone is using. Leave it unset on a test Mac: there the windows show, which
+helps explain a failure. `.env` isn't synced by `--on`, so each Mac keeps its
+own. A game an integration test launches still comes to the front either way.
 
 For the repo-wide conventions see `AGENTS.md`; for the build flow these tests
 exercise, see [wrapp-build.md](wrapp-build.md).

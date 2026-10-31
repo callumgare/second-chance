@@ -14,7 +14,7 @@ private var signalSources: [DispatchSourceSignal] = []
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // No Dock icon, and not brought to the front as it starts (TestHost).
-        if TestHost.isRunning {
+        if TestHost.hidesUI {
             NSApp.setActivationPolicy(.accessory)
         }
     }
@@ -162,7 +162,7 @@ struct SecondChanceApp: App {
                 .environmentObject(wrappBuildViewModel)
         }
         .windowResizability(.contentSize)
-        .defaultLaunchBehavior(TestHost.isRunning ? .suppressed : .automatic)
+        .defaultLaunchBehavior(TestHost.hidesUI ? .suppressed : .automatic)
         .restorationBehavior(TestHost.isRunning ? .disabled : .automatic)
         .commands {
             InstallCommands(viewModel: wrappBuildViewModel)

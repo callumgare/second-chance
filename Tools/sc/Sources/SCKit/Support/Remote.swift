@@ -2,8 +2,9 @@ import Foundation
 
 /// `--on <host>[:<path>]`: run the same command on another Mac.
 ///
-/// 1. rsync this repo there (everything but per-machine output: `.git`,
-///    `built-apps`, `test-results`, `tmp`, sc's own `.build` and logs);
+/// 1. rsync this repo there (everything but per-machine output and settings:
+///    `.git`, `.env`, `built-apps`, `test-results`, `tmp`, sc's own `.build`
+///    and logs);
 /// 2. `ssh` in and run `./sc` with the same arguments, minus `--on`, plus an
 ///    explicit `--logs` so the output looks the way it would have here.
 ///
@@ -72,12 +73,13 @@ enum Remote {
         "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// Not synced. Xcode's compilation cache is sparse files tens of
-    /// gigabytes long that every build touches, so rsync sends all of them,
-    /// mostly zeros, each time; the remote Mac runs the build it's sent and
-    /// doesn't compile, so it never needs them.
+    /// Not synced. `.env` holds each Mac's own settings, such as whether
+    /// tests hide their windows there. Xcode's compilation cache is sparse
+    /// files tens of gigabytes long that every build touches, so rsync sends
+    /// all of them, mostly zeros, each time; the remote Mac runs the build
+    /// it's sent and doesn't compile, so it never needs them.
     static let excludes = [
-        ".git", "built-apps", "test-results", "tmp", "Tools/sc/.build",
+        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build",
         "DerivedData/sc-logs", "DerivedData/sc-jobs", "DerivedData/CompilationCache.noindex",
     ]
 

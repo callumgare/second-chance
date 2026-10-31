@@ -51,6 +51,18 @@ struct TestRunner {
         ["-parallel-testing-worker-count", "1"] + sources.map { "-only-testing:SecondChanceTests/\(integrationSuite($0))" }
     }
 
+    /// The `.env` setting that has the test host keep its windows out of the
+    /// way (`TestHost.hidesUI`): set on a Mac someone is using while tests
+    /// run, left out on a test Mac, where seeing them helps with a failure.
+    static let hideUISetting = "SECOND_CHANCE_HIDE_TEST_UI"
+
+    /// What the test host gets from `.env`, as xcodebuild's `TEST_RUNNER_`
+    /// variables (passed on to it without the prefix).
+    static func hostEnvironment(dotEnv: [String: String]) -> [String: String] {
+        guard let value = dotEnv[hideUISetting], !value.isEmpty else { return [:] }
+        return ["TEST_RUNNER_\(hideUISetting)": value]
+    }
+
     // MARK: - Unit
 
     func unit(stamp: String) async throws -> TestRun {
@@ -65,6 +77,7 @@ struct TestRunner {
             if let keep = board.apply(event), live { ui.line(ui.format("\(.danger(keep))")) }
         }
         let env = ["TEST_RUNNER_REPO_ROOT": repo.root.path]
+            .merging(Self.hostEnvironment(dotEnv: DotEnv.load(repo))) { _, new in new }
 
         let status = try await runSuite(
             title: "Unit tests", log: "test-unit", observer: observer,
@@ -136,6 +149,7 @@ struct TestRunner {
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
+        env.merge(Self.hostEnvironment(dotEnv: DotEnv.load(repo))) { _, new in new }
         // The test launches each game in the VM instead (VMPuppetRunner).
         if let vm {
             env.merge(vm.testEnvironment) { _, new in new }

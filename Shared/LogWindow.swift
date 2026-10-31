@@ -303,9 +303,9 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func show(relativeTo referenceWindow: NSWindow? = nil) {
-        // Under test the window is built but never put on screen, as the
-        // main window isn't (TestHost): tests read the display model.
-        guard let logWindow = window, !TestHost.isRunning else { return }
+        // A test host hiding its windows builds this one but never puts it
+        // on screen, as it doesn't the main window: tests read the model.
+        guard let logWindow = window, !TestHost.hidesUI else { return }
         let screens = NSScreen.screens
         if screens.count > 1, let ref = referenceWindow {
             let refScreen = ref.screen ?? NSScreen.main

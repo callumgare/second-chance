@@ -1,8 +1,9 @@
 import Foundation
 
 /// The repo's `.env` (see `.env.example`): local settings that aren't
-/// committed — the Sentry DSN the build writes into the app, and the Sentry
-/// organisation and project `sc release` uploads debug symbols to.
+/// committed, nor synced by `--on` — the Sentry DSN the build writes into the
+/// app, the Sentry organisation and project `sc release` uploads debug
+/// symbols to, and whether tests hide their windows on this Mac.
 enum DotEnv {
     /// `KEY=value` lines, as a shell would read them: blank lines and `#`
     /// comments skipped, an optional `export`, optional quotes, last one wins.
