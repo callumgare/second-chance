@@ -138,18 +138,8 @@ nonisolated extension Wine {
     ) throws -> Launched {
         let executable = command.executable(in: self)
         if command.isBundled, !FileManager.default.fileExists(atPath: executable.path) {
-            throw NSError(domain: "Wine", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: """
-                Wine framework not found at: \(executable.path)
-
-                To use this app, you need to bundle Wine:
-                1. Download CrossOver or extract Wine from Wineskin
-                2. Copy the wine folder to: Second Chance.app/Contents/SharedSupport/wine/
-                3. The structure should be: Second Chance.app/Contents/SharedSupport/wine/bin/wine
-
-                Or run from Xcode: copy wine to the app's built location.
-                """
-            ])
+            launcherLogger.error("Can't run \(command.displayName): there's no Wine at \(executable.path)")
+            throw WineError.notBundled
         }
 
         let process = Process()

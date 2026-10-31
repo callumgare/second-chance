@@ -8,6 +8,8 @@ public enum WineError: LocalizedError, Equatable {
     case executionFailed(exitCode: Int32)
     case terminatedBySignal(Int32)
     case timedOut(seconds: TimeInterval)
+    /// The wrapp has no Wine at all where it should be.
+    case notBundled
     case winetricksNotFound
     case winetricksFailed(trick: String)
     /// The program printed Wine's `nodrv_CreateWindow` error: it found no
@@ -25,6 +27,9 @@ public enum WineError: LocalizedError, Equatable {
             return "Wine was killed by \(SubprocessWatch.signalName(signal))"
         case .timedOut(let seconds):
             return "Wine did not finish within \(SubprocessWatch.duration(seconds)) and was stopped"
+        case .notBundled:
+            // Seen by the person, so in everyday words; the path is in the log.
+            return "Part of what runs the game is missing. Downloading Second Chance again, then making the game's app again, should fix it."
         case .winetricksNotFound:
             return "Winetricks not found in bundle"
         case .winetricksFailed(let trick):

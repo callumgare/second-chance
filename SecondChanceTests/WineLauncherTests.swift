@@ -150,3 +150,18 @@ private nonisolated final class SeenLines: @unchecked Sendable {
     func add(_ line: String) { lock.withLock { lines.append(line) } }
     var all: [String] { lock.withLock { lines } }
 }
+
+@Suite("Wine missing from a wrapp")
+struct WineNotBundledTests {
+    @Test("A wrapp with no Wine says so in everyday words")
+    func notBundled() async throws {
+        let wrapp = FileManager.default.temporaryDirectory.appendingPathComponent("no-wine-\(UUID().uuidString).app")
+        await #expect(throws: WineError.notBundled) {
+            try await Wine(wrapp: wrapp).run(.program("setup.exe"))
+        }
+        let text = try #require(WineError.notBundled.errorDescription)
+        for word in ["Wine", "wrapp", "prefix", "executable", "bundle", "/"] {
+            #expect(!text.contains(word), "says \"\(word)\"")
+        }
+    }
+}
