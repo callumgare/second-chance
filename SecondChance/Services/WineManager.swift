@@ -120,7 +120,9 @@ class WineManager {
             logger.warning("Couldn't list the Wine prefix cache to remove old prefixes: \(error.localizedDescription)")
             entries = []
         }
-        for entry in entries where entry != incoming {
+        // By name: the listing's URLs end in a slash where `incoming` doesn't,
+        // so they never compare equal.
+        for entry in entries where entry.lastPathComponent != incoming.lastPathComponent {
             do {
                 try fileManager.removeItem(at: entry)
                 if entry.lastPathComponent != buildId && !entry.lastPathComponent.hasPrefix(".") {
