@@ -82,14 +82,31 @@ nonisolated struct SteamLockHolder: Sendable, Equatable {
             gone = Self.waitForExit(of: pid, timeout: patience.kill)
         }
         if let appURL {
-            let server = Wine(wrapp: appURL).server
-            if Blocking.wait({ await server.isRunning }) {
-                logger.notice("[Steam] Stopping the Wine session \(name) left running")
-                Blocking.wait { await server.stop() }
+            for wine in Self.wines(of: appURL, bundleID: bundleID) {
+                let server = wine.server
+                if Blocking.wait({ await server.isRunning }) {
+                    logger.notice("[Steam] Stopping the Wine session \(name) left running in \(wine.prefix.path)")
+                    Blocking.wait { await server.stop() }
+                }
             }
         }
         if !gone { logger.error("[Steam] \(name) (pid \(pid)) is still running after SIGKILL") }
         return gone
+    }
+
+    /// Where a wrapp's Wine session may be: in its own prefix, or — when that
+    /// is read-only, as on a disk image — in the copy it makes in Caches
+    /// (`getWinePrefix`), when there is one.
+    static func wines(of appURL: URL, bundleID: String?,
+                      caches: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first) -> [Wine] {
+        var wines = [Wine(wrapp: appURL)]
+        if let bundleID, let caches {
+            let copy = caches.appendingPathComponent(bundleID).appendingPathComponent("prefix")
+            if FileManager.default.fileExists(atPath: copy.path) {
+                wines.append(Wine(wrapp: appURL, prefix: copy))
+            }
+        }
+        return wines
     }
 
     /// Wait for process `pid` — not a child of ours — to exit.

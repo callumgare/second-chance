@@ -447,4 +447,18 @@ struct SteamActiveLockTests {
     func waitForExitOfRunningProcess() {
         #expect(!SteamLockHolder.waitForExit(of: getpid(), timeout: 0.2))
     }
+
+    @Test("A wrapp's session is looked for in its prefix, and in its copy in Caches when it has one")
+    func holderPrefixes() throws {
+        let caches = FileManager.default.temporaryDirectory.appendingPathComponent("caches-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: caches) }
+        let app = URL(fileURLWithPath: "/Volumes/Games/Nancy Drew.app")
+        let own = app.appendingPathComponent("Contents/SharedSupport/prefix")
+
+        #expect(SteamLockHolder.wines(of: app, bundleID: "au.example.one", caches: caches).map(\.prefix.path) == [own.path])
+        let copy = caches.appendingPathComponent("au.example.one/prefix")
+        try FileManager.default.createDirectory(at: copy, withIntermediateDirectories: true)
+        #expect(SteamLockHolder.wines(of: app, bundleID: "au.example.one", caches: caches).map(\.prefix.path) == [own.path, copy.path])
+        #expect(SteamLockHolder.wines(of: app, bundleID: nil, caches: caches).map(\.prefix.path) == [own.path])
+    }
 }
