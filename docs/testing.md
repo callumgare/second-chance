@@ -527,10 +527,8 @@ in — the menu, fully drawn, which every run reaches — is checked for it
 Every game draws a 4:3 picture (`Wrapp.pictureAspect`), so everything
 outside a 4:3 area centred in the capture must be dark. A bar fails once 2%
 of it isn't (a cursor out in a bar stays well under that), and the failure
-says which way. The top 5% of the side bars is left out: macOS shows a
-fullscreen window's title bar while the cursor rests at the top of the screen
-(and when the game starts with it there), and a capture of the window then
-shows it across the top, under where the menu bar goes.
+says which way. The top 5% of the side bars is left out, for the window's
+title bar ([the cursor and the title bar](#the-cursor-and-the-title-bar)).
 
 - **nearly all of it one flat colour** — the bar was left undrawn, showing
   the window's own background: `the right bar is #ececec, not black`.
@@ -554,6 +552,55 @@ display there are no bars, and the check passes by having nothing to find.
 Splash screens aren't used for this: the scenario often skips them by
 clicking the Her Interactive logo before any is recognised, and the shared
 `any` references don't keep one shape, since games frame them differently.
+
+### The cursor and the title bar
+
+macOS shows a fullscreen window's title bar, and the menu bar above it, while
+the cursor rests at the top of the screen. What a test captures can change
+with it, so where the cursor is matters to a run even though every click the
+test makes goes through the game's socket, not the real cursor. What is known,
+from experiments on a 2560x1440 test Mac with White Wolf:
+
+- **A game started with the cursor at the top shows the title bar** from the
+  start, every time. WrappPuppeteer therefore moves the cursor to the middle
+  of the screen's left edge before it launches the wrapp: away from the top,
+  in the bar beside the picture on a widescreen display (see the game's own
+  cursor, below), and clear of the Dock and hot corners.
+- **Once shown, it stays until the mouse really moves.** Neither a jump of
+  the real cursor (`CGWarpMouseCursorPosition`) nor mouse moves posted inside
+  the game (the puppet socket's `move`) shows or hides it alone. The two
+  together do: a jump to the top followed by a few small moves in the game
+  there shows it, and the same in the middle hides it. Neither needs a
+  permission. Posting mouse events from outside the game (`CGEventPost`)
+  would need Accessibility, which WrappPuppeteer doesn't have.
+- **Someone moving the mouse at the test Mac brings it up too**, over Screen
+  Sharing included. Mid-run, nothing undoes that until the mouse moves away
+  from the top again.
+- **A capture of the game window shows it** across the top, below a dark
+  strip where the menu bar goes: from about 2% to 4.2% of the height. That is
+  why the [framing check](#the-pictures-bars-and-shape) leaves out the top 5%
+  of the side bars. A splash reference recorded with it showing has it baked
+  in and matches worse without it: White Wolf's `title` reference once did,
+  and was recorded again.
+- **It doesn't turn the bars white.** With the title bar showing, White
+  Wolf's bars stay black, even with the mode scaling helper's handling of a
+  titled window
+  ([mode scaling](wine-in-process-helpers.md#mode-scaling)) taken out. A
+  check that brought the title bar up and looked at the bars again was tried
+  and dropped, as it couldn't fail. The white right bar that handling fixes,
+  seen in two runs with White Wolf's window titled, has an unknown cause; it
+  may have been this title bar after all, with something else that run did
+  differently, or something else entirely.
+
+The capture leaves out the macOS cursor (`showsCursor = NO` in
+`puppet_control.m`), but a game that draws its own cursor, as White Wolf
+does, draws it into the picture where the mouse is, and it is in the capture.
+A sprite over a splash screen could push its fingerprint further from the
+reference, which is the other reason the cursor starts in the bar. It didn't
+show in practice: on a 3024x1890 display White Wolf's `title` matched at
+0.055 with the cursor in the middle and at the left edge alike, where a
+2560x1440 one gives 0.023, so the display's shape counted and the sprite
+didn't.
 
 ## Testing in a VM
 

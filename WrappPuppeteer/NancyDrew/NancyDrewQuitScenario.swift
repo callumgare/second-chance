@@ -80,6 +80,17 @@ struct NancyDrewQuitScenario {
         // (WrappTemplate/Configuration.swift): one the player set to play
         // in a window would fail the fullscreen check, and a test mustn't
         // change theirs.
+        // A game started with the cursor at the top of the screen has its
+        // fullscreen window's title bar showing until the mouse moves, over
+        // the top of every capture (docs/testing.md). The middle of the left
+        // edge is in the bar beside the picture on a widescreen display, so
+        // a game that draws its own cursor doesn't draw it over the splash
+        // screens, and is clear of the menu bar, the Dock and hot corners.
+        // Moving the cursor needs no permission; all the test's clicks go
+        // through the game's socket, so nothing moves it back.
+        let screen = CGDisplayBounds(CGMainDisplayID())
+        CGWarpMouseCursorPosition(CGPoint(x: screen.minX + 2, y: screen.midY))
+
         let environment = ["SECOND_CHANCE_PUPPET_DIR": directory, "SECOND_CHANCE_DATA_DIR": directory + "/data"]
         guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : [],
                                               environment: environment) else {
