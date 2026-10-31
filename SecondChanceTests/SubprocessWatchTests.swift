@@ -12,12 +12,13 @@ struct SubprocessWatchTests {
         ([], "wine"),
     ])
     func names(arguments: [String], expected: String) {
-        #expect(Wine.displayName(executable: "wine", arguments: arguments) == expected)
+        #expect(WineCommand.wine(arguments).displayName == expected)
     }
 
     @Test("Other executables keep their own name")
     func otherExecutables() {
-        #expect(Wine.displayName(executable: "wineserver", arguments: ["-w"]) == "wineserver")
+        #expect(WineCommand.wineserver(["-w"]).displayName == "wineserver")
+        #expect(WineCommand.script(URL(fileURLWithPath: "/x/winetricks"), ["cnc_ddraw"]).displayName == "winetricks")
     }
 
     @Test("Durations read naturally")
@@ -35,10 +36,7 @@ struct SubprocessWatchTests {
     @Test("The re-run command holds only the variables Second Chance sets")
     func reproductionCommand() {
         let wine = Wine(wrapp: URL(fileURLWithPath: "/tmp/Test Wrapp.app"))
-        let command = wine.reproductionCommand(
-            winePath: URL(fileURLWithPath: "/tmp/Test Wrapp.app/Contents/SharedSupport/wine/bin/wine"),
-            arguments: ["reg", "add", "it's"]
-        )
+        let command = WineCommand.wine(["reg", "add", "it's"]).commandLine(in: wine)
         #expect(command.hasPrefix("env \\\n"))
         #expect(command.contains("  WINEPREFIX='/tmp/Test Wrapp.app/Contents/SharedSupport/prefix' \\"))
         #expect(!command.contains("SSH_AUTH_SOCK"))

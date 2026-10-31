@@ -295,7 +295,7 @@ class WineManager {
 
     // MARK: - Wine Execution
 
-    /// Run a program with Wine. See `Wine.runWine` for what it
+    /// Run a program with Wine. See `Wine.run` for what it
     /// logs and throws.
     func runWine(
         at wrappPath: URL,
@@ -304,14 +304,14 @@ class WineManager {
         timeout: TimeInterval? = nil,
         watchdog: WineWatchdog? = nil
     ) async throws {
-        let wine = Wine(wrapp: wrappPath)
-        try await wine.runWine(executable: executable, arguments: arguments, timeout: timeout, watchdog: watchdog)
+        let command: WineCommand = executable == "wineserver" ? .wineserver(arguments) : .wine(arguments)
+        try await Wine(wrapp: wrappPath).run(command, timeout: timeout, watchdog: watchdog)
     }
 
     /// Run a Windows executable through Wine.
     ///
     /// Returns the Wine process exit code rather than throwing for a
-    /// non-zero one, which `Wine.runWine` has already logged as
+    /// non-zero one, which `Wine.run` has already logged as
     /// an error. A signal, a timeout or a failure to start still throws.
     /// Callers that need to treat a non-zero exit as an error should inspect
     /// the returned code.
@@ -345,7 +345,7 @@ class WineManager {
     ) async throws -> Int32 {
         let wine = Wine(wrapp: wrappPath)
         do {
-            try await wine.runWindowsExecutableWithStartAsync(exePath: exePath, arguments: arguments, timeout: timeout, watchdog: watchdog)
+            try await wine.run(.start(exePath, arguments), timeout: timeout, watchdog: watchdog)
             return 0
         } catch let WineError.executionFailed(exitCode) {
             return exitCode

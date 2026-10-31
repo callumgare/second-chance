@@ -8,7 +8,7 @@
 
 import Foundation
 
-extension Wine {
+nonisolated extension Wine {
     /// The directory WrappPuppeteer gave the wrapp for its control sockets,
     /// when it started the wrapp; nil for every player's launch.
     public static func puppetDirectory(in environment: [String: String] = ProcessInfo.processInfo.environment) -> String? {

@@ -22,6 +22,9 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
 
     let name: String
     private let logger: Logging.Logger
+    /// Every line at this level, when set: for a program run so often that its
+    /// lines are only detail, such as the desktop's checks.
+    private let level: Logging.Logger.Level?
     private let heartbeat: TimeInterval
     private let lock = NSLock()
     private var startTime = Date()
@@ -33,10 +36,13 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
     /// - Parameters:
     ///   - name: What to call the process in the log, e.g. `wine setup.exe`.
     ///   - heartbeat: Log a "still running" line after this long without output.
-    init(name: String, logger: Logging.Logger, heartbeat: TimeInterval = 30) {
+    ///   - level: Log every line at this level, rather than a failure at `.error`
+    ///     and the rest at `.notice`.
+    init(name: String, logger: Logging.Logger, heartbeat: TimeInterval = 30, level: Logging.Logger.Level? = nil) {
         self.name = name
         self.logger = logger
         self.heartbeat = heartbeat
+        self.level = level
     }
 
     /// Log the start and begin the heartbeat. `detail` is usually the
@@ -48,9 +54,9 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
             lastOutput = startTime
         }
         if let detail {
-            logger.notice("▶ \(name) started (pid \(pid)): \(detail)", metadata: metadata(pid))
+            logger.log(level: level ?? .notice, "▶ \(name) started (pid \(pid)): \(detail)", metadata: metadata(pid))
         } else {
-            logger.notice("▶ \(name) started (pid \(pid))", metadata: metadata(pid))
+            logger.log(level: level ?? .notice, "▶ \(name) started (pid \(pid))", metadata: metadata(pid))
         }
 
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
@@ -88,11 +94,12 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
         let suffix = note.map { " — \($0)" } ?? ""
         switch outcome {
         case .exited(0):
-            logger.notice("■ \(name) (pid \(pid)) exited 0 \(summary)\(suffix)", metadata: metadata(pid))
+            logger.log(level: level ?? .notice, "■ \(name) (pid \(pid)) exited 0 \(summary)\(suffix)", metadata: metadata(pid))
         case .exited(let code):
-            logger.error("■ \(name) (pid \(pid)) exited \(code) \(summary)\(suffix)", metadata: metadata(pid))
+            logger.log(level: level ?? .error, "■ \(name) (pid \(pid)) exited \(code) \(summary)\(suffix)", metadata: metadata(pid))
         case .signalled(let signal):
-            logger.error("■ \(name) (pid \(pid)) was killed by \(Self.signalName(signal)) \(summary)\(suffix)", metadata: metadata(pid))
+            logger.log(level: level ?? .error, "■ \(name) (pid \(pid)) was killed by \(Self.signalName(signal)) \(summary)\(suffix)",
+                       metadata: metadata(pid))
         }
     }
 
@@ -101,7 +108,7 @@ nonisolated final class SubprocessWatch: @unchecked Sendable {
             (Date().timeIntervalSince(startTime), Date().timeIntervalSince(lastOutput), lineCount, self.pid)
         }
         guard quiet >= heartbeat - 0.5 else { return }
-        logger.notice("… \(name) (pid \(pid)) still running after \(Self.duration(elapsed)); no output for \(Self.duration(quiet)) (\(lines) lines so far)",
+        logger.log(level: level ?? .notice, "… \(name) (pid \(pid)) still running after \(Self.duration(elapsed)); no output for \(Self.duration(quiet)) (\(lines) lines so far)",
                       metadata: metadata(pid))
     }
 

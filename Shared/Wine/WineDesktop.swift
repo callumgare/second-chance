@@ -29,54 +29,51 @@ import Logging
 /// `release()` ends `start.exe` once the programs are done; explorer then
 /// closes normally. Call it before `wineserver -w`, which would otherwise wait
 /// for ever.
-nonisolated public final class WineDesktop {
-    private let launcher: Process
+nonisolated public final class WineDesktop: Sendable {
+    private let launcher: WineProcess
     private let logger: Logger
 
-    private init(launcher: Process, logger: Logger) {
+    private init(launcher: WineProcess, logger: Logger) {
         self.launcher = launcher
         self.logger = logger
     }
 
     /// Start the desktop and wait until it has registered the display devices.
     /// Nil when it was already running, or could not be started — in both
-    /// cases there is nothing to release. Blocks: each check runs `reg.exe`.
+    /// cases there is nothing to release. Cancelling the task ends the wait,
+    /// leaving the desktop starting.
     public static func start(
         _ wine: Wine,
         timeout: TimeInterval = 600,
         logger: Logger,
         outputLogger: Logger
-    ) -> WineDesktop? {
+    ) async -> WineDesktop? {
         let start = Date()
-        if wine.displayDevicesRegistered() {
+        if await queryDisplayDevices(wine, timeout: 20) == .registered {
             logger.notice("[Desktop] Already running (checked in \(String(format: "%.1f", Date().timeIntervalSince(start)))s)")
             return nil
         }
 
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        let launcher: Process
+        let launcher: WineProcess
         do {
-            launcher = try wine.startDesktop(outputPipe: outputPipe, errorPipe: errorPipe)
+            launcher = try wine.start(.wine(["explorer.exe", "/desktop"]), output: .log(outputLogger))
         } catch {
             logger.warning("[Desktop] Could not start the desktop, leaving it to Wine: \(error)")
             return nil
         }
-        ProcessLineLogger.attach(to: outputPipe, logger: outputLogger, level: .notice)
-        ProcessLineLogger.attach(to: errorPipe, logger: outputLogger, level: .warning)
-        logger.notice("[Desktop] Started explorer.exe /desktop (launcher PID \(launcher.processIdentifier)), waiting for display devices...")
+        logger.notice("[Desktop] Started explorer.exe /desktop (launcher PID \(launcher.pid)), waiting for display devices...")
         let desktop = WineDesktop(launcher: launcher, logger: logger)
 
         let deadline = start.addingTimeInterval(timeout)
         var attempt = 0
-        while Date() < deadline {
+        while Date() < deadline, !Task.isCancelled {
             attempt += 1
             let queryStart = Date()
             // Each check is a Wine program of its own, which on a loaded
             // machine has taken over 30 seconds; cut short, no check would
             // ever see the desktop ready.
             let launcherRunning = launcher.isRunning
-            let result = wine.queryDisplayDevices(timeout: 120)
+            let result = await queryDisplayDevices(wine, timeout: 120)
             let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
             if result == .registered {
                 logger.notice("[Desktop] Ready after \(elapsed)s (\(attempt) checks)")
@@ -87,7 +84,7 @@ nonisolated public final class WineDesktop {
             // The launcher also exits when an explorer Wine started by itself
             // already has the desktop, which may yet come up.
             if !launcherRunning, !ProcessName.isRunning("explorer.exe") {
-                let why = "its launcher exited \(launcher.terminationStatus) after \(elapsed)s without the display devices registered"
+                let why = "its launcher exited \(launcher.process.terminationStatus) after \(elapsed)s without the display devices registered"
                 logger.error("[Desktop] The desktop didn't start: \(why). Running the program anyway")
                 return nil
             }
@@ -96,7 +93,11 @@ nonisolated public final class WineDesktop {
             // process, which on a machine short of CPU competes with the
             // desktop it is waiting for. A tenth of the time waited so far,
             // between a quarter of a second and ten seconds.
-            Thread.sleep(forTimeInterval: min(10, max(0.25, Date().timeIntervalSince(start) / 10)))
+            try? await Task.sleep(for: .seconds(min(10, max(0.25, Date().timeIntervalSince(start) / 10))))
+        }
+        if Task.isCancelled {
+            logger.notice("[Desktop] Stopped waiting for the display devices: cancelled")
+            return desktop
         }
         let load = SystemLoad.read().map(\.summary) ?? "unknown (ps failed)"
         logger.error("[Desktop] Display devices still not registered after \(String(format: "%.0f", timeout))s — running the program anyway (load: \(load))")
@@ -107,7 +108,38 @@ nonisolated public final class WineDesktop {
     /// Safe to call more than once.
     public func release() {
         guard launcher.isRunning else { return }
-        logger.notice("[Desktop] Releasing the desktop launcher (PID \(launcher.processIdentifier))")
+        logger.notice("[Desktop] Releasing the desktop launcher (PID \(launcher.pid))")
         launcher.terminate()
+    }
+
+    /// How one check for the display devices went, for logging.
+    enum DisplayQueryResult: Equatable {
+        case registered
+        case notYet(exitCode: Int32)
+        case timedOut
+        case failedToRun(String)
+    }
+
+    /// Whether the desktop process has registered the display devices — the
+    /// point after which Direct3D can enumerate adapters — and the reason when
+    /// it hasn't.
+    ///
+    /// `HKLM\HARDWARE\DEVICEMAP\VIDEO` is volatile: wineserver starts with it
+    /// empty and the desktop process fills it in while initialising the
+    /// display. Each check runs `reg.exe`, about a second, and stopping one
+    /// that runs too long mustn't stop the session, whose desktop it is
+    /// waiting for.
+    static func queryDisplayDevices(_ wine: Wine, timeout: TimeInterval) async -> DisplayQueryResult {
+        do {
+            let values = try await wine.output(of: .wine(["reg", "query", #"HKLM\HARDWARE\DEVICEMAP\VIDEO"#]),
+                                               timeout: timeout, onTimeout: .stopProgram)
+            return values.contains(#"\Device\Video"#) ? .registered : .notYet(exitCode: 0)
+        } catch WineError.executionFailed(let code) {
+            return .notYet(exitCode: code)
+        } catch WineError.timedOut {
+            return .timedOut
+        } catch {
+            return .failedToRun("\(error)")
+        }
     }
 }

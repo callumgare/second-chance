@@ -4,7 +4,7 @@
 
 import Foundation
 
-public enum WineError: LocalizedError {
+public enum WineError: LocalizedError, Equatable {
     case executionFailed(exitCode: Int32)
     case terminatedBySignal(Int32)
     case timedOut(seconds: TimeInterval)

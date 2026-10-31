@@ -1139,11 +1139,7 @@ class GameInstallerRunner {
     /// A program run without it is sure to fail: AutoIt then can't open its
     /// window and exits 0 without having run its script.
     private func startDesktop(at wrappPath: URL) async -> WineDesktop? {
-        let wine = Wine(wrapp: wrappPath)
-        let logger = self.logger
-        return await Task.detached {
-            WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
-        }.value
+        await WineDesktop.start(Wine(wrapp: wrappPath), logger: logger, outputLogger: wineOutputLogger)
     }
 
     /// Throw `failure(reason)` unless the installer's log records it

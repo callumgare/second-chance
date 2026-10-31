@@ -91,7 +91,7 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     func restoreLogin(from store: SteamSessionStore) async throws -> Bool {
         guard let fragment = try store.restore(into: wine.prefix) else { return false }
         defer { try? FileManager.default.removeItem(at: fragment) }
-        try await wine.runWine(executable: "wine", arguments: ["reg", "import", SteamSessionStore.fragmentWindowsPath], timeout: 120)
+        try await wine.run(.wine(["reg", "import", SteamSessionStore.fragmentWindowsPath]), timeout: 120)
         return true
     }
 
@@ -110,11 +110,7 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     }
 
     func start(silent: Bool) async throws {
-        let wine = wine
-        // Blocks while it waits for the display devices; keep that off the caller.
-        let desktop = await Task.detached {
-            WineDesktop.start(wine, logger: logger, outputLogger: outputLogger)
-        }.value
+        let desktop = await WineDesktop.start(wine, logger: logger, outputLogger: outputLogger)
         let offsets = Dictionary(uniqueKeysWithValues: Self.followedLogs.map {
             ($0, Self.size(of: logsDir.appendingPathComponent($0)))
         })
@@ -256,23 +252,9 @@ nonisolated final class SteamClient: SteamClientDriving, @unchecked Sendable {
     /// over to the client and exits (42 after an update), and the client runs
     /// until it is told to stop.
     private func run(_ arguments: [String]) throws {
-        let process = Process()
-        process.executableURL = wine.binDir.appendingPathComponent("wine")
-        process.arguments = [Self.windowsExecutable] + arguments
-        var env = wine.environment
-        if let gameExe {
-            env.merge(Wine.inProcessHelperVariables(gameExe: gameExe)) { $1 }
-        }
-        process.environment = env
-        process.standardInput = FileHandle.nullDevice
-        // Not read to EOF: Wine's services inherit the pipes and hold them open.
-        let output = Pipe()
-        let errors = Pipe()
-        process.standardOutput = output
-        process.standardError = errors
-        ProcessLineLogger.attach(to: output, logger: outputLogger, level: .notice, onLine: onOutputLine)
-        ProcessLineLogger.attach(to: errors, logger: outputLogger, level: .warning, onLine: onOutputLine)
-        try process.runWithoutCrashHandler()
+        _ = try wine.start(.program(Self.windowsExecutable, arguments),
+                           environment: gameExe.map { Wine.inProcessHelperVariables(gameExe: $0) } ?? [:],
+                           output: .log(outputLogger, onLine: onOutputLine))
     }
 
     /// The logs whose new text this start reads.

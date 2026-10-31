@@ -768,7 +768,8 @@ class GameLauncher {
             return
         }
         LogContext.enterStage("Starting Wine")
-        desktop = WineDesktop.start(wine, timeout: .infinity, logger: logger, outputLogger: wineOutputLogger)
+        let logger = logger, outputLogger = wineOutputLogger
+        desktop = Blocking.wait { await WineDesktop.start(wine, timeout: .infinity, logger: logger, outputLogger: outputLogger) }
     }
 
     /// Let the pre-started desktop shut down once the game has exited, or it
