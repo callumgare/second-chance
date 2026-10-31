@@ -349,9 +349,13 @@ enum InstalledGameCheck {
         let bus = EventBus<AppEvent>()
         let recorder = RecordingEventSubscriber()
         await recorder.subscribe(to: bus)
-        let build = Task { @MainActor in
-            let builder = DiskWrappBuilder(installerRunner: GameInstallerRunner(bus: bus), bus: bus)
-            _ = try await builder.build(input: WrappBuildInput(disk1: installedGame, outputDir: outputDir))
+        // A log context of its own, so its lines aren't another game's
+        // build's untagged ones.
+        let build = LogContext.$build.withValue(BuildLogContext()) {
+            Task { @MainActor in
+                let builder = DiskWrappBuilder(installerRunner: GameInstallerRunner(bus: bus), bus: bus)
+                _ = try await builder.build(input: WrappBuildInput(disk1: installedGame, outputDir: outputDir))
+            }
         }
         // It's turned down before the copy, so in moments.
         let completed = await recorder.waitForCompletion(timeout: 120)

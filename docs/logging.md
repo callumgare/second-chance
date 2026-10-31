@@ -256,9 +256,10 @@ the build's id (`Entry.build`, `"build"` in JSON lines), and the build has a
 stage of its own, so two builds in one process — the integration tests run
 them side by side — don't put each other's entries in their stage, and a
 failure summary looks only at its own build's entries. The context goes
-wherever the build's task goes, but not to a detached task, a dispatch queue
-or a pipe's reader: `Blocking.run`, `ProcessLineLogger` and `WineProcess`'s
-wait carry it across. New code that logs for the build off its task should
+wherever the build's task goes, but not to a detached task, a dispatch queue,
+a timer or a pipe's reader: `Blocking.run`, `ProcessLineLogger`,
+`WineProcess`'s wait, `SystemLoadMonitor` and `LaunchActivityMonitor` carry it
+across. New code that logs for the build off its task should
 do the same, capturing `LogContext.build` and logging inside
 `LogContext.$build.withValue(_:)`. A build started inside a context a caller
 bound uses that one, which is how the integration test knows its build's id;

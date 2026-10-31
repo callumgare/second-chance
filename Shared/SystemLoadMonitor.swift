@@ -49,12 +49,14 @@ nonisolated final class SystemLoadMonitor: @unchecked Sendable {
     }
 
     func start() {
+        // What it logs is the starter's build's, though it logs from a timer.
+        let build = LogContext.build
         queue.async {
             guard self.timer == nil else { return }
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(deadline: .now(), repeating: self.interval)
             // Holds the monitor until `stop()`, so a caller needn't keep it.
-            timer.setEventHandler { self.sample() }
+            timer.setEventHandler { LogContext.$build.withValue(build) { self.sample() } }
             self.timer = timer
             timer.resume()
         }

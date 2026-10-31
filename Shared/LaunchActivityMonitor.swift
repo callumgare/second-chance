@@ -44,13 +44,15 @@ nonisolated final class LaunchActivityMonitor: @unchecked Sendable {
 
     /// Start sampling, telling `onSign` on the main queue about each sign.
     func start(onSign: @escaping @Sendable (LaunchProgressSign) -> Void) {
+        // What it logs is the starter's build's, though it logs from a timer.
+        let build = LogContext.build
         queue.async {
             self.onSign = onSign
             guard self.timer == nil else { return }
             self.started = Date()
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(deadline: .now(), repeating: 1)
-            timer.setEventHandler { self.sample() }
+            timer.setEventHandler { LogContext.$build.withValue(build) { self.sample() } }
             self.timer = timer
             timer.resume()
         }
