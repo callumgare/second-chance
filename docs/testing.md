@@ -559,33 +559,41 @@ macOS shows a fullscreen window's title bar, and the menu bar above it, while
 the cursor rests at the top of the screen. What a test captures can change
 with it, so where the cursor is matters to a run even though every click the
 test makes goes through the game's socket, not the real cursor. What is known,
-from experiments with White Wolf on a 2560x1440 display without a notch (on
-a notched one, where the game's window sits below the notch's strip and the
-menu bar beside it, none of this has been tried):
+from experiments with White Wolf on two displays: a 2560x1440 one without a
+notch, and a notched MacBook's, where the game's window is 1512x945 points
+(3024x1890 pixels) below the notch's 37-point strip and the menu bar sits in
+that strip, beside the notch:
 
 - **A game started with the cursor at the top shows the title bar** from the
-  start, every time. WrappPuppeteer therefore moves the cursor to the middle
-  of the screen's left edge before it launches the wrapp: away from the top,
-  in the bar beside the picture on a widescreen display (see the game's own
-  cursor, below), and clear of the Dock and hot corners.
-- **Once shown, it stays until the mouse really moves.** Neither a jump of
-  the real cursor (`CGWarpMouseCursorPosition`) nor mouse moves posted inside
-  the game (the puppet socket's `move`) shows or hides it alone. The two
-  together do: a jump to the top followed by a few small moves in the game
-  there shows it, and the same in the middle hides it. Neither needs a
-  permission. Posting mouse events from outside the game (`CGEventPost`)
-  would need Accessibility, which WrappPuppeteer doesn't have.
+  start, every time, on both. WrappPuppeteer therefore moves the cursor to the
+  middle of the screen's left edge before it launches the wrapp: away from
+  the top, in the bar beside the picture on a widescreen display (see the
+  game's own cursor, below), and clear of the Dock and hot corners.
+- **Once shown, it stays until the mouse really moves.** What shows and hides
+  it differs between the two displays. Mouse moves posted inside the game
+  (the puppet socket's `move`) do neither alone on either. A jump of the real
+  cursor (`CGWarpMouseCursorPosition`) to the top does nothing alone on the
+  display without a notch, but on the notched one, where the top of the
+  screen is the menu bar's strip above the game's window, it shows the title
+  bar by itself. A jump followed by a few small moves in the game at the same
+  height shows it at the top and hides it in the middle on both. None of
+  this needs a permission. Posting mouse events from outside the game
+  (`CGEventPost`) would need Accessibility, which WrappPuppeteer doesn't have.
 - **Someone moving the mouse at the test Mac brings it up too**, over Screen
   Sharing included. Mid-run, nothing undoes that until the mouse moves away
   from the top again.
-- **A capture of the game window shows it** across the top, below a dark
-  strip where the menu bar goes: from about 2% to 4.2% of the height. That is
-  why the [framing check](#the-pictures-bars-and-shape) leaves out the top 5%
-  of the side bars. A splash reference recorded with it showing has it baked
+- **A capture of the game window shows it** across the top. Without a
+  notch it sits below a dark strip where the menu bar goes, from about 2% to
+  4.2% of the height; on the notched display the menu bar is outside the
+  window, so it starts at the very top and reaches 3.0% (56 of 1890 pixels).
+  That is why the [framing check](#the-pictures-bars-and-shape) leaves out
+  the top 5% of the side bars, which covers both: every capture taken with it
+  showing on the notched display passed the check. A splash reference recorded with it showing has it baked
   in and matches worse without it: White Wolf's `title` reference once did,
   and was recorded again.
 - **It doesn't turn the bars white.** With the title bar showing, White
-  Wolf's bars stay black, even with the mode scaling helper's handling of a
+  Wolf's bars stay black on both displays, and on the one without a notch
+  even with the mode scaling helper's handling of a
   titled window
   ([mode scaling](wine-in-process-helpers.md#mode-scaling)) taken out. A
   check that brought the title bar up and looked at the bars again was tried
