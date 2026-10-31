@@ -100,7 +100,7 @@ struct TestRunner {
 
     func integration(
         games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL,
-        ignoreLoad: Bool = false, vm: TestVM.Prepared? = nil, stamp: String
+        ignoreLoad: Bool = false, buildConcurrency: Int = 1, diskMargin: Double = 10, vm: TestVM.Prepared? = nil, stamp: String
     ) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
@@ -141,6 +141,8 @@ struct TestRunner {
             "TEST_RUNNER_PROGRESS_PATH": progressFile.path,
             "TEST_RUNNER_WRAPPS_DIR": wrappsDir.path,
             "TEST_RUNNER_SIZE_ESTIMATES_PATH": sizes.url.path,
+            "TEST_RUNNER_BUILD_CONCURRENCY": "\(buildConcurrency)",
+            "TEST_RUNNER_DISK_MARGIN_GB": "\(diskMargin)",
         ]
         // Asked for by name, so missing ISOs are a failure, not a skip that
         // would report a pass having tested nothing.

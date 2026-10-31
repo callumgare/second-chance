@@ -29,6 +29,20 @@ struct SystemLoadTests {
         #expect(abs((reading.topPrograms.first?.cores ?? 0) - 1.935) < 0.001)
     }
 
+    @Test("Leaves out what the caller started, and what that started, when asked")
+    func leavesOutTheCallersTree() {
+        let ps = """
+          100     1  97.5 /usr/bin/yes
+          400     1  99.0 /Applications/Second Chance.app/Contents/MacOS/Second Chance
+          500   400  80.0 /bin/cp
+          501   500  70.0 /usr/bin/ditto
+          600     1  50.0 /usr/bin/hdiutil
+        """
+        let reading = SystemLoad.reading(fromPSWithParents: ps, excludingTreeOf: 400, fastCores: 8)
+        #expect(abs(reading.otherCores - 1.475) < 0.001)
+        #expect(Set(reading.topPrograms.map(\.name)) == ["yes", "hdiutil"])
+    }
+
     @Test("Heavy once other programs use all but one performance core", arguments: [
         (6.7, 8, false), (7.0, 8, true), (9.2, 8, true), (2.9, 4, false), (3.0, 4, true), (0.9, 1, false), (1.0, 1, true),
     ])

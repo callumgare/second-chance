@@ -60,10 +60,15 @@ nonisolated public enum SystemLoad {
 
     /// Read the current load, or nil if `ps` couldn't be run. Blocks for as
     /// long as `ps` takes (well under a second).
-    public static func read() -> SystemLoadReading? {
+    ///
+    /// `excludingDescendants` leaves out everything this process started, and
+    /// what that started, as well as itself: the integration tests' own
+    /// builds (their copies, disc mounts and signing) aren't other programs
+    /// the Mac is busy with.
+    public static func read(excludingDescendants: Bool = false) -> SystemLoadReading? {
         let ps = Process()
         ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-A", "-o", "pid=,pcpu=,comm="]
+        ps.arguments = ["-A", "-o", excludingDescendants ? "pid=,ppid=,pcpu=,comm=" : "pid=,pcpu=,comm="]
         let pipe = Pipe()
         ps.standardOutput = pipe
         ps.standardError = FileHandle.nullDevice
@@ -75,7 +80,37 @@ nonisolated public enum SystemLoad {
         // Read before waiting: the list can be bigger than the pipe's buffer.
         let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         ps.waitUntilExit()
-        return reading(fromPS: output, excludingPid: ProcessInfo.processInfo.processIdentifier, fastCores: fastCoreCount)
+        let me = ProcessInfo.processInfo.processIdentifier
+        if excludingDescendants {
+            return reading(fromPSWithParents: output, excludingTreeOf: me, fastCores: fastCoreCount)
+        }
+        return reading(fromPS: output, excludingPid: me, fastCores: fastCoreCount)
+    }
+
+    /// The reading `ps -A -o pid=,ppid=,pcpu=,comm=` output gives, leaving
+    /// out `root`, everything descended from it, and every Wine process.
+    static func reading(fromPSWithParents output: String, excludingTreeOf root: Int32, fastCores: Int) -> SystemLoadReading {
+        var parent: [Int32: Int32] = [:]
+        var rest: [(pid: Int32, line: String)] = []
+        for line in output.split(separator: "\n") {
+            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+            guard fields.count == 3, let pid = Int32(fields[0]), let ppid = Int32(fields[1]) else { continue }
+            parent[pid] = ppid
+            rest.append((pid, String(fields[2])))
+        }
+        func descends(_ pid: Int32) -> Bool {
+            var next: Int32? = pid
+            var steps = 0
+            while let current = next, current > 1, steps < 64 {
+                if current == root { return true }
+                next = parent[current]
+                steps += 1
+            }
+            return false
+        }
+        // What's left is `ps`'s other format, with the tree already taken out.
+        let others = rest.filter { !descends($0.pid) }.map { "\($0.pid) \($0.line)" }.joined(separator: "\n")
+        return reading(fromPS: others, excludingPid: root, fastCores: fastCores)
     }
 
     /// The reading `ps -A -o pid=,pcpu=,comm=` output gives, leaving out

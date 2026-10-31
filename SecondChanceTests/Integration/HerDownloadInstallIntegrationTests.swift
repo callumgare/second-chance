@@ -32,15 +32,14 @@ struct HerDownloadCase: Sendable, CustomTestStringConvertible {
 
 @Suite(
     "Her download install — per game",
-    .serialized,
     .enabled(if: !HerDownloadCase.all.isEmpty, "No her-download*.exe or .dmg in installers/<slug>/")
 )
 struct HerDownloadInstallIntegrationTests {
     static let progress = ProgressFileWriter.fromEnvironment("PROGRESS_PATH")
 
-    @Test("Each Her download builds and launches", .timeLimit(.minutes(60)), arguments: HerDownloadCase.all)
+    @Test("Each Her download builds and launches", arguments: HerDownloadCase.all)
     func download(_ download: HerDownloadCase) async throws {
-        try await IntegrationSerial.shared.run { try await buildAndLaunch(download) }
+        try await buildAndLaunch(download)
     }
 
     private func buildAndLaunch(_ download: HerDownloadCase) async throws {
@@ -49,6 +48,7 @@ struct HerDownloadInstallIntegrationTests {
         try await run.run { _ in
             IntegrationGameRun.Build(
                 expectedEngine: game.gameEngine,
+                installers: [download.file],
                 makeInput: { outputDir, viewModel in
                     WrappBuildInput(herDownload: download.file, outputDir: outputDir, viewModel: viewModel)
                 },

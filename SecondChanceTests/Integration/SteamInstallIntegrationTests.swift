@@ -15,7 +15,7 @@ import os
 import Testing
 @testable import SecondChance
 
-@Suite("Steam install — per game", .serialized,
+@Suite("Steam install — per game",
        .enabled(if: SteamSessionStore().hasSession, "No saved Steam sign-in on this Mac: build a Steam game from the app once"))
 struct SteamInstallIntegrationTests {
     static let progress = ProgressFileWriter.fromEnvironment("PROGRESS_PATH")
@@ -28,10 +28,12 @@ struct SteamInstallIntegrationTests {
     /// hour and a half partway through a full run.
     private static let ownedSlugs = OSAllocatedUnfairLock<Set<String>?>(initialState: nil)
 
-    @Test("Each game on Steam builds from Steam and launches", .timeLimit(.minutes(60)), arguments: selectedGames)
+    @Test("Each game on Steam builds from Steam and launches", arguments: selectedGames)
     func game(_ game: GameInfo) async throws {
-        // A DRM-free game is built to launch directly, the default answer.
-        try await IntegrationSerial.shared.run {
+        // One Steam game at a time, built and launched (IntegrationStages.steam);
+        // games from other sources build alongside. A DRM-free game is built
+        // to launch directly, the default answer.
+        try await IntegrationStages.steam.withLock {
             try await buildAndLaunch(game, launchMode: game.offersSteamLaunchChoice ? .direct : nil)
         }
     }

@@ -12,8 +12,10 @@ import Foundation
 /// With all but one performance core taken by other programs, Wine takes
 /// minutes to start or never does: a build then spends its full timeouts
 /// failing, and the result says more about the load than the game. So before
-/// each game the test waits a while for the load to ease, and if it doesn't,
-/// reports the game as overloaded instead of testing it.
+/// a game's build, and again before its launch, the test waits a while for
+/// the load to ease, and if it doesn't, reports the game as overloaded
+/// instead of testing it. The test host's own descendants — the other games
+/// building alongside — aren't counted: they are the run, not the Mac's load.
 /// `sc test integration --ignore-load` (`IGNORE_LOAD=1` in the test's
 /// environment) tests regardless, for deliberate stress runs.
 enum LoadGate {
@@ -30,10 +32,10 @@ enum LoadGate {
     static func overloadedReading(patience: TimeInterval = 60, interval: TimeInterval = 10) async -> SystemLoadReading? {
         let wait = lock.withLock { lastGameWasOverloaded } ? interval : patience
         let deadline = Date().addingTimeInterval(wait)
-        var reading = SystemLoad.read()
+        var reading = SystemLoad.read(excludingDescendants: true)
         while let current = reading, current.isHeavy, Date() < deadline {
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            reading = SystemLoad.read()
+            reading = SystemLoad.read(excludingDescendants: true)
         }
         let overloaded = reading.flatMap { $0.isHeavy ? $0 : nil }
         lock.withLock { lastGameWasOverloaded = overloaded != nil }
@@ -42,6 +44,6 @@ enum LoadGate {
 
     /// The current reading if the Mac is heavily loaded.
     static func heavyReadingNow() -> SystemLoadReading? {
-        SystemLoad.read().flatMap { $0.isHeavy ? $0 : nil }
+        SystemLoad.read(excludingDescendants: true).flatMap { $0.isHeavy ? $0 : nil }
     }
 }

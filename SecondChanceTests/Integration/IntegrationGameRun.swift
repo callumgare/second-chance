@@ -24,19 +24,23 @@ struct IntegrationGameRun {
     struct Build {
         /// The engine the build should route the game to.
         let expectedEngine: GameInfo.GameEngine
+        /// The files it installs from, to estimate the disk it needs before
+        /// it has been measured; none for a Steam game.
+        var installers: [URL] = []
         /// The input for its view model, given the test's output directory.
         let makeInput: @MainActor (URL, WrappBuildViewModel) -> WrappBuildInput
         /// Starts the build: `buildFromDisk()` and the like.
         let start: @MainActor (WrappBuildViewModel) async -> Void
     }
 
-    /// Runs the whole test.
+    /// Runs the whole test: waits for its turn to build (`IntegrationStages`),
+    /// builds and checks the wrapp, then waits for its turn on screen and
+    /// launches it.
     ///
     /// - `prebuiltWrapp`: a wrapp to launch instead of building one
     ///   (`SKIP_BUILD`); the build and its checks are skipped.
-    /// - `prepare`: the build to run, once the Mac can test the game; nil
-    ///   holds the game back without building, having set the outcome's
-    ///   reason.
+    /// - `prepare`: the build to run; nil holds the game back without
+    ///   building, having set the outcome's reason.
     /// - `afterBuild`: false ends the test once the build is over, before
     ///   any assertion, having set the outcome's reason.
     /// - `check`: the suite's own assertions on the build it made.
@@ -51,9 +55,13 @@ struct IntegrationGameRun {
         let outcome = GameOutcome(slug: label, source: source, progress: progress)
         defer { outcome.finish() }
 
-        guard await mayTest(outcome) else { return }
-
         let wrapp: URL
+        // The build's place in the gate, given back once its output is gone:
+        // declared first, so it is released after the output is removed.
+        var ticket: BuildGate.Ticket?
+        defer {
+            if let ticket { Task { await IntegrationStages.build.release(ticket) } }
+        }
         // On every path out, including a build or check that throws: an output
         // directory left behind holds a whole wrapp.
         var outputDir: URL?
@@ -63,14 +71,25 @@ struct IntegrationGameRun {
             wrapp = prebuiltWrapp
         } else {
             guard let build = try await prepare(outcome) else { return }
+
+            outcome.phase("waiting to build")
+            let bytes = IntegrationStages.reservation(source: source, label: label, installers: build.installers)
+            do {
+                ticket = try await outcome.timed(.queued) { try await IntegrationStages.build.admit(bytes: bytes) }
+            } catch {
+                outcome.expect(false, "Not building \(label): \(error)")
+                return
+            }
+            guard await loadAllows(outcome) else { return }
+
             let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-\(source)-integration-\(UUID().uuidString)")
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             outputDir = dir
-            guard let built = try await outcome.timed(.build, {
-                try await buildWrapp(build, into: dir, outcome: outcome, afterBuild: afterBuild, check: check)
-            }) else {
-                return
+            let built = try await outcome.timed(.build) {
+                try await buildWrapp(build, into: dir, ticket: ticket, outcome: outcome, afterBuild: afterBuild, check: check)
             }
+            if let ticket { await IntegrationStages.build.finishedBuilding(ticket) }
+            guard let built else { return }
             wrapp = built
         }
 
@@ -87,45 +106,56 @@ struct IntegrationGameRun {
             outcome.completed = true
             return
         }
-        outcome.phase("launching")
-        let exitCode = try await outcome.timed(.launch) {
-            try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout)
+
+        outcome.phase("waiting to launch")
+        let waitingSince = Date()
+        try await IntegrationStages.launch.withLock {
+            outcome.add(.queued, Date().timeIntervalSince(waitingSince))
+            guard screenAllows(outcome), await loadAllows(outcome) else { return }
+            outcome.phase("launching")
+            let exitCode = try await outcome.timed(.launch) {
+                try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout)
+            }
+            outcome.puppeteerExit = exitCode
+            outcome.expect(exitCode == 0, "WrappPuppeteer exited with \(exitCode) for \(label)")
+            await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
+            outcome.completed = true
         }
-        outcome.puppeteerExit = exitCode
-        outcome.expect(exitCode == 0, "WrappPuppeteer exited with \(exitCode) for \(label)")
-        await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
-        outcome.completed = true
     }
 
-    // MARK: - Before the build
+    // MARK: - Whether the Mac can test it
 
-    /// Whether the Mac can test the game fairly. A Mac too busy for Wine to
-    /// start would make this a test of the load, not the game (see
-    /// `LoadGate`); and a game launched while the screen is locked or the
-    /// display asleep can never come to the front, so WrappPuppeteer would
-    /// only time out waiting for it, long after the build.
-    private func mayTest(_ outcome: GameOutcome) async -> Bool {
+    /// Whether the Mac is calm enough to build or launch the game fairly: one
+    /// too busy for Wine to start would make this a test of the load, not the
+    /// game (see `LoadGate`). Checked before the build and again before the
+    /// launch. Other games' builds in this run don't count as load.
+    private func loadAllows(_ outcome: GameOutcome) async -> Bool {
         if LoadGate.ignoringLoad {
             if let load = LoadGate.heavyReadingNow() {
                 progress?.write(["event": "load", "message": "Testing \(label) on a heavily loaded Mac (--ignore-load): \(load.summary)."])
             }
-        } else if let load = await LoadGate.overloadedReading() {
-            let message = "Not testing \(label): the Mac is heavily loaded — \(load.summary). "
-                + "Wine would take minutes to start, or never start; quit the busy programs, or pass --ignore-load to test anyway."
-            progress?.write(["event": "load", "message": message])
-            outcome.overloaded = true
-            Issue.record(Comment(rawValue: message))
-            return false
+            return true
         }
+        guard let load = await LoadGate.overloadedReading() else { return true }
+        let message = "Not testing \(label): the Mac is heavily loaded — \(load.summary). "
+            + "Wine would take minutes to start, or never start; quit the busy programs, or pass --ignore-load to test anyway."
+        progress?.write(["event": "load", "message": message])
+        outcome.overloaded = true
+        Issue.record(Comment(rawValue: message))
+        return false
+    }
 
-        if let reason = VMTarget.screenBlockedReason() {
-            let message = "Not testing \(label): \(reason), so the game couldn't come to the front. Keep the Mac awake and unlocked for the run (caffeinate -d)."
-            progress?.write(["event": "screen", "message": message])
-            outcome.locked = true
-            Issue.record(Comment(rawValue: message))
-            return false
-        }
-        return true
+    /// Whether the game can come to the front: launched while the screen is
+    /// locked or the display asleep, it never can, so WrappPuppeteer would
+    /// only time out waiting for it. Checked just before the launch; the
+    /// build doesn't need the screen.
+    private func screenAllows(_ outcome: GameOutcome) -> Bool {
+        guard let reason = VMTarget.screenBlockedReason() else { return true }
+        let message = "Not launching \(label): \(reason), so the game couldn't come to the front. Keep the Mac awake and unlocked for the run (caffeinate -d)."
+        progress?.write(["event": "screen", "message": message])
+        outcome.locked = true
+        Issue.record(Comment(rawValue: message))
+        return false
     }
 
     // MARK: - The build
@@ -135,6 +165,7 @@ struct IntegrationGameRun {
     private func buildWrapp(
         _ build: Build,
         into outputDir: URL,
+        ticket: BuildGate.Ticket?,
         outcome: GameOutcome,
         afterBuild: (RecordingEventSubscriber, GameOutcome) -> Bool,
         check: (RecordingEventSubscriber, URL, GameOutcome) async throws -> Void
@@ -191,7 +222,9 @@ struct IntegrationGameRun {
         // can be built at once: its working wrapp, and what's been saved.
         let sampler = Task.detached { [recorder] in
             while !Task.isCancelled {
-                outcome.notePeak(bytes: Self.diskUse(of: [recorder.currentWorkingWrapp, outputDir]))
+                let bytes = Self.diskUse(of: [recorder.currentWorkingWrapp, outputDir])
+                outcome.notePeak(bytes: bytes)
+                if let ticket { await IntegrationStages.build.noteUse(ticket, bytes: bytes) }
                 try? await Task.sleep(for: .seconds(15))
             }
         }
@@ -320,11 +353,12 @@ final class GameOutcome: @unchecked Sendable {
     /// Run `body`, adding the time it takes to `timing`.
     func timed<T>(_ timing: Timing, _ body: () async throws -> T) async rethrows -> T {
         let start = Date()
-        defer {
-            let elapsed = Date().timeIntervalSince(start)
-            lock.withLock { timings[timing, default: 0] += elapsed }
-        }
+        defer { add(timing, Date().timeIntervalSince(start)) }
         return try await body()
+    }
+
+    func add(_ timing: Timing, _ seconds: TimeInterval) {
+        lock.withLock { timings[timing, default: 0] += seconds }
     }
 
     /// The build's disk use now, kept if it's the most so far.

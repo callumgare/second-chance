@@ -31,6 +31,20 @@ struct IntegrationOptions: ParsableArguments {
     var ignoreLoad = false
 
     @Option(help: ArgumentHelp(
+        "How many games to build at once. Games still launch one at a time.",
+        discussion: "Builds also wait for disk: each reserves what its game's build took last time (or an estimate), "
+            + "and keeps it until its wrapp is deleted after its launch (docs/testing.md#building-games-side-by-side).",
+        valueName: "count"
+    ))
+    var buildConcurrency = 1
+
+    @Option(help: ArgumentHelp(
+        "Disk to leave free while games build, in GB.",
+        valueName: "GB"
+    ))
+    var diskMargin: Double = 10
+
+    @Option(help: ArgumentHelp(
         "Which builds to test: disk, steam, her-download, or all — comma-separated. Default: disk.",
         discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own. "
             + "her-download builds each game from every installers/<slug>/her-download*.exe or .dmg (docs/her-download.md). "
@@ -74,7 +88,11 @@ struct IntegrationOptions: ParsableArguments {
         }
     }
 
-    func validate() throws { _ = try Self.parseSources(source) }
+    func validate() throws {
+        _ = try Self.parseSources(source)
+        guard buildConcurrency >= 1 else { throw ValidationError("--build-concurrency must be at least 1.") }
+        guard diskMargin >= 0 else { throw ValidationError("--disk-margin can't be negative.") }
+    }
 
     static func parseSources(_ value: String) throws -> [WrappSourceKind] {
         let names = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
@@ -124,7 +142,8 @@ struct TestAllCommand: AsyncParsableCommand {
         let integrationRun = try await integration.withVM(session) { vm in
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-                ignoreLoad: integration.ignoreLoad, vm: vm, stamp: stamp
+                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.buildConcurrency, diskMargin: integration.diskMargin,
+                vm: vm, stamp: stamp
             )
         }
         try await TestCommandSupport.finish([unit, integrationRun], stamp: stamp, policy: report.openReport, session: session)
@@ -180,7 +199,8 @@ struct TestIntegrationCommand: AsyncParsableCommand {
         let run = try await integration.withVM(session) { vm in
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-                ignoreLoad: integration.ignoreLoad, vm: vm, stamp: stamp
+                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.buildConcurrency, diskMargin: integration.diskMargin,
+                vm: vm, stamp: stamp
             )
         }
         try await TestCommandSupport.finish([run], stamp: stamp, policy: report.openReport, session: session)

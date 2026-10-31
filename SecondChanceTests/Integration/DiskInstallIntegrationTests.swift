@@ -15,7 +15,8 @@
 //      missing ISO fails instead.
 //    - Tests are SLOW (minutes per game — real Wine install). Run deliberately:
 //        ./sc test integration <slug>
-//    - Tests are SERIALIZED (.serialized) to avoid concurrent Wine prefixes.
+//    - Games build side by side, as many as `IntegrationStages.build` lets
+//      in, and launch one at a time.
 //
 //  What these tests verify that test-games.sh does not:
 //    - The detected game slug matches the expected game
@@ -30,7 +31,6 @@ import Foundation
 
 @Suite(
     "Disk install — per game",
-    .serialized,
     .disabled(if: !InstallersPresent.shouldRun(), "No installer ISOs found in installers/")
 )
 struct DiskInstallIntegrationTests {
@@ -55,7 +55,7 @@ struct DiskInstallIntegrationTests {
         arguments: TestGameFilter.selectedGames
     )
     func wrappCreationForGame(game: GameInfo) async throws {
-        try await IntegrationSerial.shared.run { try await testGame(game) }
+        try await testGame(game)
     }
 
     private func testGame(_ game: GameInfo) async throws {
@@ -79,6 +79,7 @@ struct DiskInstallIntegrationTests {
             }
             return IntegrationGameRun.Build(
                 expectedEngine: game.gameEngine,
+                installers: [disk1] + (disk2.map { [$0] } ?? []),
                 makeInput: { outputDir, viewModel in
                     WrappBuildInput(disk1: disk1, disk2: disk2, outputDir: outputDir, viewModel: viewModel)
                 },

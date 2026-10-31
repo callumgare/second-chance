@@ -504,7 +504,11 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
   include. A slow or environment-dependent suite needs adding to that list.
 - **Integration tests** need real ISOs in `installers/<slug>/disk-1.iso` and run
   the actual build flow; they disable themselves when the ISOs are absent.
-  Prefer unit tests for fast feedback.
+  Prefer unit tests for fast feedback. Games build side by side
+  (`--build-concurrency`, as far as the disk has room) and launch one at a
+  time; each source's suite goes through `IntegrationGameRun` and the gates in
+  `IntegrationStages`, so a change to the per-game flow is made once there
+  ([docs/testing.md](docs/testing.md#building-games-side-by-side)).
 - **Only the integration test can catch a dropped bus event.** A build with a
   missing `bus.publish` still produces a correct `.app`, so it passes the build
   and the unit tests. Run it after touching orchestration.

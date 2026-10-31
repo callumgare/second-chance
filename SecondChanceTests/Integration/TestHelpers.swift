@@ -326,38 +326,6 @@ enum WrappInfo {
     }
 }
 
-/// One integration game at a time, across suites. Each suite is `.serialized`,
-/// but Swift Testing runs separate suites side by side, so `--source disk,steam`
-/// built and launched two games at once: two wrapps on screen confuse
-/// WrappPuppeteer, and the two builds starve each other's Wine.
-actor IntegrationSerial {
-    static let shared = IntegrationSerial()
-
-    private var busy = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    nonisolated func run<T: Sendable>(_ body: () async throws -> T) async throws -> T {
-        await acquire()
-        do {
-            let result = try await body()
-            await release()
-            return result
-        } catch {
-            await release()
-            throw error
-        }
-    }
-
-    private func acquire() async {
-        guard busy else { busy = true; return }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    private func release() {
-        if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
-    }
-}
-
 /// Points a disk build at the game a wrapp has installed, as someone might
 /// choose an installed game's folder instead of its disc, and expects it
 /// turned down with `installedGameNotInstaller` before anything is copied.

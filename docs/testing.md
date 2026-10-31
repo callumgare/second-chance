@@ -44,6 +44,9 @@ build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 # Integration tests — all games (hours)
 ./sc test integration
 
+# Build three games at a time (they still launch one at a time)
+./sc test integration --build-concurrency 3
+
 # Everything: unit, then integration (hours)
 ./sc test
 
@@ -127,10 +130,40 @@ there would report a pass having tested nothing.
 `DiskInstallIntegrationTests` (`disk`, the default),
 `SteamInstallIntegrationTests` (`steam`) and
 `HerDownloadInstallIntegrationTests` (`her-download`). A game tested more than
-one way is a row per source in the table, with a Source column. Swift Testing
-would run the suites side by side, so each per-game test runs inside
-`IntegrationSerial`, which lets one game build and launch at a time across
-them all.
+one way is a row per source in the table, with a Source column. All three go
+through one per-game flow, `IntegrationGameRun`, which waits for its turn to
+build and then to launch ([below](#building-games-side-by-side)).
+
+#### Building games side by side
+
+Swift Testing runs every game's test at once, across the suites, and
+`IntegrationStages` (`SecondChanceTests/Integration/`) decides when each may
+go on:
+
+- **Builds** go through `BuildGate`, first come, first served. It lets in as
+  many at once as `--build-concurrency` says (`TEST_RUNNER_BUILD_CONCURRENCY`,
+  default 1), and only as many as the disk has room for. Each build reserves
+  a quarter more than its game's build took last time
+  (`test-results/integration-sizes.json`), or before it has been measured,
+  the engine and four times its installers' size (8 GB for a Steam game). It
+  keeps the reservation until its output is deleted after its launch, so built
+  wrapps waiting for their turn on screen hold back new builds. Builds
+  reserve no more between them than was free when the first asked, less
+  `--disk-margin` (10 GB), and none is let in unless what's free now also
+  covers it and what the running builds have still to write. A build is
+  always let in when nothing else is under way, so a run never does worse
+  than one game at a time; one the disk can't hold even then fails at once.
+- **Launches** take `IntegrationStages.launch`, one at a time: a game runs
+  full screen and must be in front.
+- **Steam** games go one at a time, build and launch together
+  (`IntegrationStages.steam`): a wrapp holds Steam's one-wrapp-at-a-time lock
+  while it runs, and a build signing in to Steam meanwhile would fail with
+  `steamInUse`. Other sources' games build alongside.
+
+Each build reports on a bus of its own and tags its log entries with its own
+id ([logging.md](logging.md#which-build-an-entry-is-from)), so its events
+and its log attachment are its own. The table's **Waited** column is the time
+a game spent waiting for either turn ([Filtering games](#filtering-games)).
 
 The Her suite tests each download in `installers/<slug>/` named
 `her-download*.exe` or `her-download*.dmg`, once per file (a Mac download's
@@ -272,7 +305,9 @@ Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
 | 2 | forced quit |
 
 **A game the Mac was too busy to test is `overloaded`, not failed.** Before
-each game the test checks `SystemLoad`; while other programs keep all but one
+a game's build, and again before its launch, the test checks `SystemLoad`,
+leaving out the test host and everything it started, so the run's own
+builds don't count; while other programs keep all but one
 performance core busy it waits up to a minute (ten seconds after a game
 already held back) for that to ease, and if it doesn't, records why and moves
 on rather than spending half an hour on a build Wine can't start. The table
@@ -284,9 +319,10 @@ went untested.
 **A game the screen kept from the front is `locked`, not failed.** No app can
 come to the front while the screen is locked (the frontmost app is then
 `loginwindow`) or the display asleep, so a game launched then only times out
-waiting for focus. Before each game the test asks `ScreenState`
+waiting for focus. Before each launch the test asks `ScreenState`
 (`Shared/ScreenState.swift`), and if nothing can come to the front, records
-why and moves on without building it. The table shows those games as `locked`,
+why and moves on without launching it; the build, which needs no screen, has
+still been tested. The table shows those games as `locked`,
 and `sc` says to keep the Mac awake and unlocked (`caffeinate -d`) and rerun
 them. If the screen locks during a game, WrappPuppeteer's wait for focus stops
 at once with "Game window couldn't become active: the screen is locked". As
@@ -703,8 +739,10 @@ time, so don't play a Steam game elsewhere while one is tested.
 
 ## Reading the output
 
-Suites run **concurrently**, so their lines interleave: the tests printed after
-`Suite "X" started` mostly belong to other suites. Don't read a block of output
+Suites run **concurrently**, and so do games within a suite while they
+build, so their lines interleave: the tests printed after
+`Suite "X" started` mostly belong to other suites, and one game's build log
+lines sit among another's. Each game's own log is in its attachment. Don't read a block of output
 as one suite's results, and don't conclude a suite ran from its `started` line
 alone — match on the test names, or on `Suite "X" passed`.
 
