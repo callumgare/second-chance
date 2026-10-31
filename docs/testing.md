@@ -181,6 +181,13 @@ copies — and asserts on the events the flow publishes:
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#mode-scaling)),
   and `[Helpers] Quit watch armed`
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#quit-watch))
+- Once the launch is done or skipped, and before the wrapp is deleted, a
+  disk build pointed at the game the wrapp installed is turned down with
+  `installedGameNotInstaller` (`InstalledGameCheck`), as for someone who
+  chooses an installed game's folder instead of its disc
+  ([wrapp-build.md](wrapp-build.md#the-disk-build-step-by-step)). The Her
+  download and Steam suites check the same. A ScummVM wrapp skips it: it
+  holds only the copied disc, which is an installer
 
 `RecordingEventSubscriber` captures the bus events; the assertions read it.
 **The bus events are the integration contract** — when moving orchestration

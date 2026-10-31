@@ -131,12 +131,14 @@ struct SteamInstallIntegrationTests {
 
         guard WrappInfo.wrappPuppeteerBundle() != nil else {
             Attachment.record("WrappPuppeteer not built — skipped the launch", named: "launch-skipped-\(game.id).txt")
+            await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
             outcome.completed = true
             return
         }
         // A VM can't render Direct3D; the build above was still tested.
         if let reason = VMTarget.launchSkipReason(wrappURL: wrapp) {
             outcome.skipped = "\(game.title) \(reason)"
+            await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
             outcome.completed = true
             return
         }
@@ -145,6 +147,7 @@ struct SteamInstallIntegrationTests {
         let exitCode = try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: 300)
         outcome.puppeteerExit = exitCode
         outcome.expect(exitCode == 0, "WrappPuppeteer exited \(exitCode)")
+        await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
         outcome.completed = true
     }
 }

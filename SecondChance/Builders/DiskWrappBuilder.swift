@@ -54,7 +54,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         // ── Resolve disk 1 and detect the game ONCE ──────────────────────
         // GameInfo threads through from here.
-        let (disk1Root, gameSlug, gameInfo) = try await resolveGame(input: input)
+        let (disk1Root, gameSlug, gameInfo, installerName) = try await resolveGame(input: input)
 
         // ── Build ──────────────────────────────────────────────────────
         // The builder owns the temp wrapp lifecycle: removed on both the
@@ -84,7 +84,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 (gameExePath, installerDir) = try await installerRunner.installGameWithWine(
                     wrappPath: wrappPath,
                     gameInfo: gameInfo,
-                    source: .disk
+                    source: .disk,
+                    installerName: installerName
                 )
             case .scummvm:
                 await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
@@ -161,12 +162,17 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         return disk2Root
     }
 
-    /// Disk 1, mounted if it's an image, and the game on it. A disc whose
-    /// game isn't recognised can be swapped for another, which is then
-    /// detected in turn. Everything from the first mount to the temp wrapp:
-    /// a failure here (an unreadable disc, the wrong game) still unmounts
-    /// what it mounted and reports itself, like a failure in the build.
-    private func resolveGame(input: WrappBuildInput) async throws -> (disk1Root: URL, gameSlug: String, gameInfo: GameInfo) {
+    /// Disk 1, mounted if it's an image, the game on it, and the program to
+    /// install it with when that isn't an installer by name (nil when it is,
+    /// or the game needs no installer). A disc whose game or installer isn't
+    /// recognised can be swapped for another, which is then detected in turn;
+    /// an installed game chosen instead of a disc is turned down. Everything
+    /// from the first mount to the temp wrapp: a failure here (an unreadable
+    /// disc, the wrong game) still unmounts what it mounted and reports
+    /// itself, like a failure in the build.
+    private func resolveGame(
+        input: WrappBuildInput
+    ) async throws -> (disk1Root: URL, gameSlug: String, gameInfo: GameInfo, installerName: String?) {
         var disk1 = try await input.getDisk1Path()
         do {
             while true {
@@ -178,6 +184,11 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 let disk1Root = disk1Mounted ?? disk1
 
                 await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
+                // Before detection, so an installed game whose folder name
+                // doesn't say which it is isn't asked about as unrecognised.
+                if try GameDetector.isInstalledGame(at: disk1Root, games: gameInfoProvider.allGames()) {
+                    throw WrappBuildError.installedGameNotInstaller
+                }
                 let gameSlug = try await gameDetector.detectGame(fromDisk: disk1Root)
                 let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
                 logger.notice("Detected game: \(gameInfo.title)")
@@ -187,9 +198,29 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     disk1 = try await input.getDisk1Path()
                     continue
                 }
+                // Asked about before the disc is copied, so choosing another
+                // costs nothing. ScummVM runs a game from the disc's files.
+                var installerName: String?
+                if gameInfo.gameEngine == .wine {
+                    switch try GameDetector.installerLookup(in: disk1Root) {
+                    case .recognised:
+                        break
+                    case .none:
+                        throw WrappBuildError.installerNotFound
+                    case .unrecognised(let programs):
+                        switch try await input.askAboutUnidentifiedInstaller(programs: programs) {
+                        case .tryProgram(let program):
+                            installerName = program
+                        case .chooseAnother:
+                            await isoMounter.unmountAll()
+                            disk1 = try await input.getDisk1Path()
+                            continue
+                        }
+                    }
+                }
                 await bus.publishWrappBuild(.gameDetected(gameInfo))
                 try await input.onGameDetected(gameInfo)
-                return (disk1Root, gameSlug, gameInfo)
+                return (disk1Root, gameSlug, gameInfo, installerName)
             }
         } catch {
             await isoMounter.unmountAll()

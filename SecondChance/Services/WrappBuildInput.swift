@@ -414,6 +414,63 @@ class WrappBuildInput {
         }
     }
 
+    enum UnidentifiedInstallerChoice: Equatable {
+        /// Try installing the game with this program from the disc.
+        case tryProgram(String)
+        /// Choose another disc, and start again with it.
+        case chooseAnother
+    }
+
+    /// The disc has no installer by any name Second Chance knows, only other
+    /// programs (`GameDetector.installerLookup`): perhaps a special edition, or
+    /// one in another language. The person can try one of them, choosing which
+    /// when there are several, or another disc; cancelling goes back to the
+    /// welcome screen. A headless run tries the first, as one always has.
+    @MainActor
+    func askAboutUnidentifiedInstaller(programs: [String]) throws -> UnidentifiedInstallerChoice {
+        guard let first = programs.first else { throw WrappBuildError.installerNotFound }
+        if isHeadlessRun {
+            logger.warning("No installer recognised on the disc: trying \(first)")
+            return .tryProgram(first)
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Second Chance couldn't find this disc's installer"
+        alert.informativeText = "It may be a disc Second Chance doesn't know, such as a special edition "
+            + "or one in another language. You can choose another disc, or try a program on it "
+            + "to install the game, though it may not work."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Try It")
+        alert.addButton(withTitle: "Choose Another Disc…")
+        alert.addButton(withTitle: "Cancel")
+
+        var picker: NSPopUpButton?
+        if programs.count > 1 {
+            let label = NSTextField(labelWithString: "Which program should it try?")
+            let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
+            popUp.addItems(withTitles: programs)
+            let stack = NSStackView(views: [label, popUp])
+            stack.orientation = .vertical
+            stack.alignment = .leading
+            stack.frame = NSRect(x: 0, y: 0, width: 300, height: 52)
+            alert.accessoryView = stack
+            picker = popUp
+        }
+
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            let program = picker?.titleOfSelectedItem ?? first
+            logger.notice("No installer recognised: trying \(program)")
+            return .tryProgram(program)
+        case .alertSecondButtonReturn:
+            logger.notice("No installer recognised: choosing another disc")
+            return .chooseAnother
+        default:
+            logger.notice("No installer recognised: cancelled")
+            throw WrappBuildError.userCancelledBeforeStart
+        }
+    }
+
     /// Make sure this Mac can run Wine before the build asks for anything:
     /// without Rosetta every Wine program fails. When it's missing, the
     /// person is offered it (macOS then asks for an administrator's

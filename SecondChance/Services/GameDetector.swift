@@ -13,7 +13,8 @@ class GameDetector {
     static let shared = GameDetector()
 
     private let exiftool: ExiftoolService
-    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameDetector")
+    private nonisolated static let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameDetector")
+    private nonisolated var logger: Logger { Self.logger }
 
     init(exiftool: ExiftoolService = .shared) {
         self.exiftool = exiftool
@@ -195,6 +196,63 @@ class GameDetector {
         }
 
         return result
+    }
+
+    // MARK: - Installer or Installed Game
+
+    /// What a disc offers to install the game with, from its top level.
+    enum InstallerLookup: Equatable {
+        /// An installer by its usual name: an `.msi`, `setup.exe` or `install.exe`.
+        case recognised(String)
+        /// No installer by name, but programs that might be one, sorted.
+        case unrecognised([String])
+        /// No program at all.
+        case none
+    }
+
+    /// The installer on a disc, looked for in the order
+    /// `GameInstallerRunner` takes them: the first `.msi`, then `setup.exe`,
+    /// then `install.exe`. Every Nancy Drew disc has one of these at its top
+    /// level; a disc without could be one Second Chance doesn't know (a
+    /// special edition, another language), so its other programs are given.
+    nonisolated static func installerLookup(in folder: URL) throws -> InstallerLookup {
+        let names = try topLevelFileNames(in: folder)
+        if let msi = names.first(where: { $0.lowercased().hasSuffix(".msi") }) {
+            return .recognised(msi)
+        }
+        for installer in ["setup.exe", "install.exe"] {
+            if let name = names.first(where: { $0.lowercased() == installer }) {
+                return .recognised(name)
+            }
+        }
+        let programs = names.filter { $0.lowercased().hasSuffix(".exe") }
+        return programs.isEmpty ? .none : .unrecognised(programs)
+    }
+
+    /// Whether `folder` is a game that's already installed rather than its
+    /// installer: no installer at its top level, and one of the games' own
+    /// programs (`internalGameExePath`, `steamExePath`) instead. Game files
+    /// alone don't tell the two apart, since many discs carry them too —
+    /// Phantom of Venice's even holds a whole installed copy — but every disc
+    /// has an installer beside them.
+    nonisolated static func isInstalledGame(at folder: URL, games: [GameInfo]) throws -> Bool {
+        guard case .unrecognised(let programs) = try installerLookup(in: folder) else { return false }
+        let gamePrograms = Set(games.flatMap { game in
+            [game.internalGameExePath, game.steamExePath].compactMap { path in
+                path?.split(separator: "/").last.map { $0.lowercased() }
+            }
+        })
+        guard let match = programs.first(where: { gamePrograms.contains($0.lowercased()) }) else { return false }
+        logger.notice("\(folder.lastPathComponent) is an installed game (\(match)), not an installer")
+        return true
+    }
+
+    nonisolated private static func topLevelFileNames(in folder: URL) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ).map(\.lastPathComponent).sorted()
     }
 
     // MARK: - Private Detection Methods

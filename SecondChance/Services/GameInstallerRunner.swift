@@ -57,7 +57,8 @@ class GameInstallerRunner {
         wrappPath: URL,
         gameInfo: GameInfo,
         source: WrappSource,
-        installerPath: URL? = nil
+        installerPath: URL? = nil,
+        installerName: String? = nil
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
 
@@ -69,7 +70,7 @@ class GameInstallerRunner {
         } else {
             // Find setup.exe in disk directories
             let installerDir = try findInstallerDirectory(in: driveCPath)
-            installerExe = try findInstallerExecutable(in: installerDir)
+            installerExe = try findInstallerExecutable(in: installerDir, preferring: installerName)
         }
 
         // Get list of exe files before installation
@@ -1279,8 +1280,18 @@ class GameInstallerRunner {
 
     // MARK: - Executable Discovery
 
-    /// Find installer executable in directory
-    private func findInstallerExecutable(in directory: URL) throws -> String {
+    /// Find installer executable in directory: `preferred`, the program the
+    /// person chose when the disc had no installer by name, when it's there.
+    private func findInstallerExecutable(in directory: URL, preferring preferred: String? = nil) throws -> String {
+        if let preferred {
+            let chosen = directory.appendingPathComponent(preferred)
+            if fileManager.fileExists(atPath: chosen.path) {
+                logger.notice("Using the installer chosen for this disc: \(preferred)")
+                return chosen.path
+            }
+            logger.warning("The installer chosen for this disc, \(preferred), isn't in \(directory.path)")
+        }
+
         let contents = try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil,

@@ -348,6 +348,46 @@ actor IntegrationSerial {
     }
 }
 
+/// Points a disk build at the game a wrapp has installed, as someone might
+/// choose an installed game's folder instead of its disc, and expects it
+/// turned down with `installedGameNotInstaller` before anything is copied.
+/// Run on a built wrapp before it is deleted, for every source: its
+/// installed game is what such a folder holds. A ScummVM wrapp holds only
+/// the copied disc, which is an installer, so it has nothing to check.
+enum InstalledGameCheck {
+    static func run(wrapp: URL, game: GameInfo, outcome: GameOutcome) async {
+        guard WrappInfo.gameEngine(at: wrapp) != GameInfo.GameEngine.scummvm.rawValue,
+              let installedGame = WrappInfo.gameExe(at: wrapp)?.deletingLastPathComponent() else {
+            return
+        }
+        outcome.phase("checking installed game")
+
+        let outputDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sc-installed-game-check-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: outputDir) }
+
+        let recorder = RecordingEventSubscriber()
+        await recorder.subscribe(to: EventBus.app)
+        let viewModel = await MainActor.run {
+            WrappBuildViewModel(makeInput: {
+                WrappBuildInput(disk1: installedGame, outputDir: outputDir, viewModel: $0)
+            })
+        }
+        Task { await MainActor.run { Task { await viewModel.buildFromDisk() } } }
+        // It's turned down before the copy, so in moments.
+        let completed = await recorder.waitForCompletion(timeout: 120)
+        await recorder.unsubscribe(from: EventBus.app)
+
+        let eventTrace = recorder.events.map { "\($0)" }.joined(separator: "\n")
+        Attachment.record(Data(eventTrace.utf8), named: "installed-game-check-events-\(game.id).txt")
+
+        outcome.expect(!completed && recorder.completedWrapp == nil,
+                       "A build from \(game.id)'s installed game (\(installedGame.path)) made a wrapp")
+        outcome.expect(recorder.failedError == .installedGameNotInstaller,
+                       "A build from \(game.id)'s installed game failed with \(String(describing: recorder.failedError)), not installedGameNotInstaller")
+    }
+}
+
 /// Invokes WrappPuppeteer as a subprocess to launch a wrapp and verify the
 /// game quits cleanly. Returns the exit code from WrappPuppeteer.
 enum AppPuppetRunner {

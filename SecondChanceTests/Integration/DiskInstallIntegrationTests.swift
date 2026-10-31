@@ -280,6 +280,7 @@ struct DiskInstallIntegrationTests {
         guard WrappInfo.wrappPuppeteerBundle() != nil else {
             Attachment.record(Data("WrappPuppeteer.app not found — skipping launch test".utf8),
                               named: "wrapp-puppeteer-skipped.txt")
+            await InstalledGameCheck.run(wrapp: wrappPath, game: game, outcome: outcome)
             outcome.completed = true
             return
         }
@@ -287,6 +288,7 @@ struct DiskInstallIntegrationTests {
         // A VM can't render Direct3D; the build above was still tested.
         if let reason = VMTarget.launchSkipReason(wrappURL: wrappPath) {
             outcome.skipped = "\(game.title) \(reason)"
+            await InstalledGameCheck.run(wrapp: wrappPath, game: game, outcome: outcome)
             outcome.completed = true
             return
         }
@@ -297,6 +299,7 @@ struct DiskInstallIntegrationTests {
         // 0 = clean quit
         outcome.expect(exitCode == 0,
                 "WrappPuppeteer exited with \(exitCode) for \(game.id)")
+        await InstalledGameCheck.run(wrapp: wrappPath, game: game, outcome: outcome)
         outcome.completed = true
 
     }

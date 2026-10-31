@@ -59,7 +59,7 @@ other builders are the same shape with less in the middle.
 | --- | --- | --- |
 | 1 | — | `.started(source: .disk)` |
 | 2 | `input.getDisk1Path()`; mount it if it's an ISO | `.isoMounted` |
-| 3 | `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo` | `.progress(.detectingGame)`, `.gameDetected` |
+| 3 | Turn down an installed game (`GameDetector.isInstalledGame`), then `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo`, then, for a Wine game, find its installer (`GameDetector.installerLookup`) | `.progress(.detectingGame)`, `.gameDetected` |
 | 4 | `helper.createTemporaryWrappPath()`, then `createBaseWrapp` copies `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1`, stripping extended attributes and making the copy writable (a CD's directories are read-only, which left copies nothing could delete) | `.progress(.copyingInstaller)` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
@@ -87,6 +87,26 @@ another disc or download, which unmounts this one and goes back to step 2;
 install it anyway, as Other; or cancel, back to the welcome screen. Only the
 game that is finally chosen publishes `.gameDetected`. A headless run never
 asks, and installs it as Other, as it always has.
+
+**An installed game isn't a disc.** Someone may choose the folder of a game
+already installed, from an old PC or a copy found online, rather than its
+disc. Step 3 turns that down first, before detection, with
+`installedGameNotInstaller`: a folder with no installer at its top level
+(no `.msi`, `setup.exe` or `install.exe`) and one of the games' own programs
+(the last part of `internalGameExePath`, or `steamExePath`) instead. Game
+files alone don't decide it, since many discs carry them too — Phantom of
+Venice's holds a whole installed copy — but every Nancy Drew disc has an
+installer at its top level.
+
+**A disc with no installer by name** might be one Second Chance doesn't
+know: a special edition, or one in another language. For a Wine game, step 3
+finds the installer before anything is copied. With none by name, but other
+programs, it asks (`input.askAboutUnidentifiedInstaller`): try one of them,
+picked from a list when there are several, which `installGameWithWine` then
+runs as the installer (`installerName`); choose another disc, back to step 2;
+or cancel. A headless run tries the first, as it always has. A disc with no
+program at all fails there with `installerNotFound`. A ScummVM game needs no
+installer, so isn't asked about.
 
 Step 9 is skipped when `DebugSettings.shared.skipInstaller` is set — Wine may
 still be needed to run the installer later.

@@ -27,6 +27,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// offers to quit it, as a fallback.
     case steamInUse(SteamLockHolder)
     case installerNotFound
+    /// The folder chosen holds a game that's already installed, with no
+    /// installer beside it (`GameDetector.isInstalledGame`).
+    case installedGameNotInstaller
     case gameExecutableNotFound
     case userCancelled
     case userCancelledBeforeStart
@@ -84,6 +87,9 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "\(name) is using Steam, and only one game can use it at a time. Save your game in \(name) and quit it, then click Try Again."
         case .installerNotFound:
             return "Couldn't find the game's installer. Check that it's the first disc of a Nancy Drew game, or the file you downloaded from Her Interactive."
+        case .installedGameNotInstaller:
+            return "This is a game that's already installed, not its installer. Second Chance needs to install the game itself: "
+                + "choose the game's disc, or the installer you downloaded from Her Interactive."
         case .gameExecutableNotFound:
             return "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests."
         case .userCancelled:
