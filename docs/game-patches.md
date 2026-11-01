@@ -206,11 +206,18 @@ ends a Windows process — and the patch is reported as failed.
 
 ### Failure is not fatal
 
-A patch that fails routes through `confirmPatchFailure`, the same seam described
-in [wrapp-build.md](wrapp-build.md): the GUI asks whether to continue, and
-headless runs continue without prompting, because a modal alert under a
-`.prohibited` activation policy would be invisible and hang the build. Only an
-explicit "don't continue" turns a patch failure into a cancelled build.
+A patch that fails is reported (`FailureReporter.sendWithoutAsking`, tagged
+with the patch's id, when the reporting setting sends without asking) and then
+routes through the build's `WrappBuildInput.confirmPatchFailure`, the seam
+described in [wrapp-build.md](wrapp-build.md), which each builder passes to
+`applyGamePatches` (it isn't state on the shared runner, since builds run side
+by side). `PATCH_FAILURE_POLICY=continue|cancel` answers it; otherwise the GUI
+asks whether to carry on without the fix, naming what it fixes rather than why
+it failed, and headless runs continue without prompting, because a modal alert
+under a `.prohibited` activation policy would be invisible and hang the build.
+Only an explicit "don't continue" turns a patch failure into a cancelled
+build. Cancelling the build while a patcher runs stops the build there; it
+isn't counted as the patch failing.
 
 Each patch publishes `.patchApplied` or `.patchFailed` on the bus (and a
 `patch-failed` record in the headless progress file). The integration test

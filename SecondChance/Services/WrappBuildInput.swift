@@ -340,8 +340,10 @@ class WrappBuildInput {
     /// A modal alert under a `.prohibited` activation policy (non-interactive
     /// mode) is invisible and unfocusable — and would hang the build forever —
     /// so headless runs never prompt.
+    /// The error itself is only logged: the person is told what the patch
+    /// would have fixed, in Her Interactive's words, not why it failed.
     @MainActor
-    func confirmPatchFailure(patchName: String, error: Error) async -> Bool {
+    func confirmPatchFailure(_ patch: GamePatch, error: Error) async -> Bool {
         switch environment["PATCH_FAILURE_POLICY"]?.lowercased() {
         case "continue": return true
         case "cancel": return false
@@ -351,11 +353,17 @@ class WrappBuildInput {
         if isHeadlessRun { return true }
 
         let alert = NSAlert()
-        alert.messageText = "Game patch failed"
-        alert.informativeText = "The patch \"\(patchName)\" failed to apply:\n\n\(error.localizedDescription)\n\nDo you want to continue installing without the patch?"
+        alert.messageText = "A fix for the game couldn't be added"
+        alert.informativeText = """
+            Her Interactive made a fix for this game, "\(patch.title)", and Second Chance couldn't add it. \
+            The game will still work without it. What it fixes:
+
+            \(patch.fixes)
+            """
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Continue Without Patch")
-        alert.addButton(withTitle: "Cancel Installation")
+        alert.addButton(withTitle: "Continue Without It")
+        alert.addButton(withTitle: "Stop Installing")
+        NSApp.requestUserAttention(.criticalRequest)
         return alert.runModal() == .alertFirstButtonReturn
     }
 

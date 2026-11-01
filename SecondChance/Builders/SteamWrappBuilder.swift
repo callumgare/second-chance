@@ -259,13 +259,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
 
             await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Applying game patches")))
-            do {
-                try await installerRunner.applyGamePatches(wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameDir, source: .steam)
-            } catch WrappBuildError.userCancelled {
-                throw WrappBuildError.userCancelled
-            } catch {
-                logger.warning("⚠️  Failed to apply patches: \(error)")
-            }
+            try await installerRunner.applyGamePatches(wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameDir,
+                                                       source: .steam, confirmFailure: input.confirmPatchFailure)
 
             if runsWithoutSteam { try removeSteam(from: prefix) }
             try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: engine)

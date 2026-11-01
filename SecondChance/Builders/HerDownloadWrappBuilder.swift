@@ -134,7 +134,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 source: .herDownload,
-                installerPath: unpacked ? nil : installer
+                installerPath: unpacked ? nil : installer,
+                confirmPatchFailure: input.confirmPatchFailure
             )
 
             // Unlike a disc, nothing reads the installer once the game is in.

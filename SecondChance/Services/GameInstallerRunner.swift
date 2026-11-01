@@ -11,6 +11,7 @@
 import Foundation
 import Logging
 import SecondChanceKit
+import SecondChanceReporting
 import GameCatalog
 
 private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.Wine")
@@ -24,14 +25,11 @@ private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-
 class GameInstallerRunner {
     static let shared = GameInstallerRunner()
 
-    /// Ask the user whether to continue after a patch failed.
-    ///
-    /// Confirmation is injected via `patchFailureConfirmation` (default:
-    /// continue without prompting). The GUI supplies an NSAlert-based
-    /// handler through `WrappBuildInput.confirmPatchFailure`; headless runs
-    /// default to continuing (a modal alert under a `.prohibited` activation
-    /// policy is invisible and would hang the build forever).
-    var patchFailureConfirmation: (@MainActor (String, Error) async -> Bool)?
+    /// Asked whether to carry on without a patch that failed: true to go on,
+    /// false to stop the build. Each build passes its own input's
+    /// (`WrappBuildInput.confirmPatchFailure`), which answers from
+    /// `PATCH_FAILURE_POLICY`, carries on in a headless run and asks in the GUI.
+    typealias PatchFailureConfirmation = @MainActor (GamePatch, Error) async -> Bool
 
     private let fileManager = FileManager.default
     private let catalog: GamePatchCatalog
@@ -54,7 +52,8 @@ class GameInstallerRunner {
         gameInfo: GameInfo,
         source: WrappSource,
         installerPath: URL? = nil,
-        installerName: String? = nil
+        installerName: String? = nil,
+        confirmPatchFailure: PatchFailureConfirmation
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
@@ -159,10 +158,13 @@ class GameInstallerRunner {
                 } catch let error as WrappBuildError where error.isIncompleteInstall {
                     throw error
                 } catch {
+                    try Task.checkCancellation()
                     // Game executable not found
                     if installAttempt + 1 < maxAttempts {
                         logger.warning("Game exe not found after silent install — retrying with interactive mode...")
                         installAttempt += 1
+                        await bus.publishWrappBuild(.progress(.installingGame(substep: Self.retryingInstallSubstep)))
+                        await Wine(wrapp: wrappPath).server.stop()
                     } else {
                         // Strict mode or second attempt failed, throw the error
                         if strictInstall {
@@ -175,6 +177,9 @@ class GameInstallerRunner {
                 }
             } catch {
                 await bus.publishWrappBuild(.instructions(nil))
+                // A cancelled build stops here: it is not a failed attempt
+                // to retry with the installer's own wizard.
+                if Task.isCancelled || error is CancellationError { throw CancellationError() }
                 installAttempt += 1
                 if installAttempt >= maxAttempts {
                     if strictInstall {
@@ -190,9 +195,11 @@ class GameInstallerRunner {
                     throw error
                 }
 
-                if case WineError.stalled = error {
-                    await bus.publishWrappBuild(.progress(.installingGame(substep: Self.stalledInstallSubstep)))
-                }
+                // Say why the installer's own wizard is about to appear.
+                let isStall: Bool
+                if case WineError.stalled = error { isStall = true } else { isStall = false }
+                await bus.publishWrappBuild(.progress(.installingGame(
+                    substep: isStall ? Self.stalledInstallSubstep : Self.retryingInstallSubstep)))
                 logger.warning("Silent install failed: \(error) — retrying with interactive mode...")
                 // Start the next attempt in a fresh Wine session: what the
                 // failed one left running is no use to it, and its desktop
@@ -219,18 +226,13 @@ class GameInstallerRunner {
         await bus.publishWrappBuild(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
 
         // Apply any available game patches
-        do {
-            try await applyGamePatches(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameInstallDir: gameExe.deletingLastPathComponent(),
-                source: source
-            )
-        } catch WrappBuildError.userCancelled {
-            throw WrappBuildError.userCancelled
-        } catch {
-            logger.warning("⚠️  Failed to apply patches: \(error)")
-        }
+        try await applyGamePatches(
+            wrappPath: wrappPath,
+            gameInfo: gameInfo,
+            gameInstallDir: gameExe.deletingLastPathComponent(),
+            source: source,
+            confirmFailure: confirmPatchFailure
+        )
 
         // Only logged: it says why a launch will likely fail, and which
         // editions of a game carry it.
@@ -316,7 +318,8 @@ class GameInstallerRunner {
     func installGameWithScummVM(
         wrappPath: URL,
         gameInfo: GameInfo,
-        source: WrappSource
+        source: WrappSource,
+        confirmPatchFailure: PatchFailureConfirmation
     ) async throws -> (gameExePath: String, installerDir: String) {
         // For ScummVM games, the "installation" is simply having the disk files available
         // The disk files were already copied by wrappBuilder.copyGameDisks()
@@ -338,18 +341,13 @@ class GameInstallerRunner {
         // still Windows installers that rewrite the game's data files. Wine is
         // still in the wrapp at this point — `cleanupUnusedEngine` strips it
         // one step later — so the patches can be applied here and nowhere else.
-        do {
-            try await applyGamePatches(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameInstallDir: gameDir,
-                source: source
-            )
-        } catch WrappBuildError.userCancelled {
-            throw WrappBuildError.userCancelled
-        } catch {
-            logger.warning("⚠️  Failed to apply patches: \(error)")
-        }
+        try await applyGamePatches(
+            wrappPath: wrappPath,
+            gameInfo: gameInfo,
+            gameInstallDir: gameDir,
+            source: source,
+            confirmFailure: confirmPatchFailure
+        )
 
         return ("/" + relativePath, "/" + relativeInstallerDir)
     }
@@ -441,13 +439,16 @@ class GameInstallerRunner {
     /// solvers, difficulty tweaks, superseded updaters) are logged but never
     /// applied. See `docs/game-patches.md`.
     ///
-    /// A failing patch never fails the build on its own: it routes through
-    /// `confirmPatchFailure`, which continues by default.
+    /// A failing patch never fails the build on its own: it is reported, and
+    /// `confirmFailure` decides whether to carry on without it. So this only
+    /// throws to stop the build: `userCancelled` when the person chose to,
+    /// or `CancellationError` when the build was cancelled.
     func applyGamePatches(
         wrappPath: URL,
         gameInfo: GameInfo,
         gameInstallDir: URL,
-        source: WrappSource
+        source: WrappSource,
+        confirmFailure: PatchFailureConfirmation
     ) async throws {
         let gameSlug = gameInfo.id
         let patches = catalog.automaticPatches(forGame: gameSlug, source: source)
@@ -466,6 +467,7 @@ class GameInstallerRunner {
         logger.notice("🔧 Applying \(patches.count) patch(es) for '\(gameSlug)' (\(source.rawValue))...")
 
         for patch in patches {
+            try Task.checkCancellation()
             logger.notice("📦 Patch: \(patch.id) — \(patch.title)")
             do {
                 // A walk over every file of the game, off the main thread.
@@ -490,9 +492,17 @@ class GameInstallerRunner {
                 logger.notice("✅ Applied patch: \(patch.id)")
                 await bus.publishWrappBuild(.patchApplied(id: patch.id))
             } catch {
+                // Cancelling the build stops a patcher part way; that isn't
+                // the patch failing.
+                if Task.isCancelled || error is CancellationError { throw CancellationError() }
                 logger.error("❌ Patch failed: \(patch.id): \(error.localizedDescription)")
                 await bus.publishWrappBuild(.patchFailed(id: patch.id, message: error.localizedDescription))
-                let continueInstall = await confirmPatchFailure(patchName: patch.title, error: error)
+                _ = FailureReporter.sendWithoutAsking(FailureReport(
+                    what: "Applying a game patch", kind: ErrorChain.identifier(error),
+                    game: gameInfo.id, source: source.rawValue, engine: gameInfo.gameEngine.rawValue,
+                    tags: ["patch": patch.id]
+                ))
+                let continueInstall = await confirmFailure(patch, error)
                 if continueInstall {
                     logger.notice("⚠️  Continuing without patch: \(patch.id)")
                 } else {
@@ -745,19 +755,6 @@ class GameInstallerRunner {
         case .unknown:
             return []
         }
-    }
-
-    /// Route a patch-failure confirmation through the injected handler when
-    /// present, otherwise continue without prompting (headless default —
-    /// a modal alert under a `.prohibited` activation policy would be
-    /// invisible and hang the build forever).
-    @MainActor
-    private func confirmPatchFailure(patchName: String, error: Error) async -> Bool {
-        if let confirmation = patchFailureConfirmation {
-            return await confirmation(patchName, error)
-        }
-        logger.notice("No patch-failure handler installed — continuing without patch '\(patchName)'")
-        return true
     }
 
     // MARK: - AutoIt Automation
@@ -1022,9 +1019,21 @@ class GameInstallerRunner {
             }
         }
 
-        // Setup AutoIt if needed
-        if command.underlyingCommandDescription != nil {
+        // Setup AutoIt if needed. Removed however this attempt ends, so a
+        // failed one doesn't leave it in the wrapp (an interactive retry
+        // doesn't use it), except in debug mode, to allow manual re-runs.
+        let usesAutoIt = command.underlyingCommandDescription != nil
+        if usesAutoIt {
             try await setupAutoItForInstall(in: wrappPath)
+        }
+        defer {
+            if usesAutoIt {
+                if DebugSettings.shared.debugMode {
+                    logger.notice("DEBUG: Keeping AutoIt files for manual re-run")
+                } else {
+                    cleanupAutoItAfterInstall(in: wrappPath)
+                }
+            }
         }
 
         // An installer nothing drives shows its own wizard, for the person
@@ -1059,15 +1068,6 @@ class GameInstallerRunner {
         // installer's own log says it did.
         if let installerLog {
             try checkInstallerLog(installerLog, failure: { WrappBuildError.installIncomplete(reason: $0) })
-        }
-
-        // Cleanup AutoIt if it was used (skip in debug mode to allow manual re-runs)
-        if command.underlyingCommandDescription != nil {
-            if DebugSettings.shared.debugMode {
-                logger.notice("DEBUG: Keeping AutoIt files for manual re-run")
-            } else {
-                cleanupAutoItAfterInstall(in: wrappPath)
-            }
         }
         return installerType
     }
@@ -1183,6 +1183,8 @@ class GameInstallerRunner {
     /// The progress screen's step while the stalled unattended install gives
     /// way to the installer's own window.
     static let stalledInstallSubstep = "The install got stuck, so the installer is opening for you to finish it"
+    /// Shown when installing by itself didn't work for any other reason.
+    static let retryingInstallSubstep = "Installing by itself didn't work, so the installer is opening for you to finish it"
 
     static func interactiveInstallInstructions(for gameInfo: GameInfo) -> String {
         let tips = gameInfo.installInstructions ?? GameInfo.defaultInstallInstructions

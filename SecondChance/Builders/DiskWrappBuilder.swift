@@ -90,14 +90,16 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     wrappPath: wrappPath,
                     gameInfo: gameInfo,
                     source: .disk,
-                    installerName: installerName
+                    installerName: installerName,
+                    confirmPatchFailure: input.confirmPatchFailure
                 )
             case .scummvm:
                 await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithScummVM(
                     wrappPath: wrappPath,
                     gameInfo: gameInfo,
-                    source: .disk
+                    source: .disk,
+                    confirmPatchFailure: input.confirmPatchFailure
                 )
             default:
                 throw WrappBuildError.unsupportedEngine
