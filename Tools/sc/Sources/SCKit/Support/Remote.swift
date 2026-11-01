@@ -74,9 +74,10 @@ enum Remote {
     }
 
     /// Not synced. `.env` holds each Mac's own settings, such as whether
-    /// tests hide their windows there.
+    /// tests hide their windows there. Agents' worktrees are other
+    /// checkouts, each with its own build, and come and go mid-sync.
     static let excludes = [
-        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build",
+        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build", ".claude/worktrees",
     ]
 
     /// Of `DerivedData`, only what was built, `Build/Products`, is synced.
