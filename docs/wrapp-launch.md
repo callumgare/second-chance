@@ -104,9 +104,10 @@ whatever the load.
 
 The same window says when a wrapp is taking a moment to quit, whether
 someone quit it or the game ended by itself: the wrapp waits for Wine to
-finish before it exits, which takes about 4 s. Once a quit has run for 2 s
-(`QuitStep.showAfter`), so that a quick one shows nothing, the window comes
-up with a spinner and "Closing *Title*…", without taking the focus. Its
+finish before it exits, which takes about 4 s. Once a quit has run for 6 s
+(`QuitStep.showAfter`), so that a usual one shows nothing, the window comes
+up with a spinner, "Closing *Title*…" and that it's taking a little longer
+than usual, without taking the focus. Its
 line beneath follows how firmly the game is being ended, from
 `WineServer.shutDown`'s steps: waiting for it to finish, Steam closing (and
 saving its sign-in), asking it to stop (`wineserver -k`), and making it stop

@@ -50,7 +50,7 @@ class InfoWindowViewModel: ObservableObject {
         /// How long a quit runs before the window says so: most finish
         /// sooner, and a window flashing up as the game closes would only
         /// puzzle.
-        static let showAfter: TimeInterval = 2
+        static let showAfter: TimeInterval = 6
 
         func message(gameTitle: String) -> String {
             switch self {
@@ -61,7 +61,7 @@ class InfoWindowViewModel: ObservableObject {
 
         var detail: String {
             switch self {
-            case .closing: return "Waiting for the game to finish closing. This usually takes a few seconds."
+            case .closing: return "It's taking a little longer than usual to close."
             case .closingSteam: return "Steam is saving your sign-in for next time."
             case .stopping: return "It's taking longer than usual to close, so it's being asked to stop."
             case .forcing: return "It isn't closing by itself, so it's being made to stop."
