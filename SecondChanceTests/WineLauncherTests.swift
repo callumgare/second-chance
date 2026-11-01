@@ -65,6 +65,27 @@ struct WineLauncherTests {
         #expect(fake.recorded("wineserver") == ["[-k]"])
     }
 
+    @Test("A program whose background child keeps its pipes open still ends, and lets them go safely")
+    func pipesHeldOpen() async throws {
+        // Wine's services inherit a program's stdout and stderr and hold
+        // them open after it exits: the wait for its last lines gives up,
+        // and what tracked the pipes is freed with them still open.
+        let fake = try FakeWine(wine: "sleep 20 & echo started")
+        defer { fake.remove() }
+        let started = Date()
+        try await fake.wine.run(.program("setup.exe"))
+        #expect(Date().timeIntervalSince(started) < 15)
+    }
+
+    @Test("Output with bytes that aren't UTF-8 keeps the rest of what was said")
+    func outputNotUTF8() async throws {
+        let fake = try FakeWine(wine: #"printf 'before \377 after\n'"#)
+        defer { fake.remove() }
+        let text = try await fake.wine.output(of: .wine(["reg", "query", #"HKLM\X"#]))
+        #expect(text.contains("before"))
+        #expect(text.contains("after"))
+    }
+
     @Test("Output is captured from stdout and stderr together")
     func output() async throws {
         let fake = try FakeWine(wine: "echo out; echo err >&2")

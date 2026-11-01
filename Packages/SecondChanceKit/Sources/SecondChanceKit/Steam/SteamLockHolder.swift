@@ -62,33 +62,34 @@ nonisolated public struct SteamLockHolder: Sendable, Equatable {
     /// Quit the wrapp, as Cmd-Q would; then SIGTERM; then SIGKILL — each
     /// once the one before has had its time. A wrapp that didn't quit itself
     /// leaves its Wine session (the game, Steam signed in) running, which
-    /// would keep the account busy, so that is stopped too. Blocks; call it
-    /// off the main thread. Returns whether the wrapp has gone.
-    public func quit(patience: Patience = Patience()) -> Bool {
+    /// would keep the account busy, so that is stopped too. The waits for
+    /// it to exit run on a GCD thread (`Blocking.run`). Returns whether the
+    /// wrapp has gone.
+    public func quit(patience: Patience = Patience()) async -> Bool {
         guard let app = runningApp, let pid else { return true }
         let name = app.localizedName ?? bundleID ?? "the wrapp"
         let appURL = app.bundleURL
         logger.notice("[Steam] Quitting \(name) (pid \(pid)), which holds Steam")
 
         app.terminate()
-        if Self.waitForExit(of: pid, timeout: patience.quit) {
+        if await Blocking.run({ Self.waitForExit(of: pid, timeout: patience.quit) }) {
             logger.notice("[Steam] \(name) quit")
             return true
         }
         logger.warning("[Steam] \(name) didn't quit within \(Int(patience.quit))s; sending it SIGTERM")
         kill(pid, SIGTERM)
-        var gone = Self.waitForExit(of: pid, timeout: patience.terminate)
+        var gone = await Blocking.run { Self.waitForExit(of: pid, timeout: patience.terminate) }
         if !gone {
             logger.warning("[Steam] \(name) didn't end within \(Int(patience.terminate))s of SIGTERM; killing it")
             kill(pid, SIGKILL)
-            gone = Self.waitForExit(of: pid, timeout: patience.kill)
+            gone = await Blocking.run { Self.waitForExit(of: pid, timeout: patience.kill) }
         }
         if let appURL {
             for wine in Self.wines(of: appURL, bundleID: bundleID) {
                 let server = wine.server
-                if Blocking.wait({ await server.isRunning }) {
+                if await server.isRunning {
                     logger.notice("[Steam] Stopping the Wine session \(name) left running in \(wine.prefix.path)")
-                    Blocking.wait { await server.stop() }
+                    await server.stop()
                 }
             }
         }

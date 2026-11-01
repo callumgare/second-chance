@@ -12,6 +12,7 @@
 //    background services inherit its pipes and hold them open.
 
 import Foundation
+import Synchronization
 import Logging
 
 /// Second Chance's lines about the Wine programs it runs. A fixed label:
@@ -102,7 +103,15 @@ nonisolated extension Wine {
         let watch = SubprocessWatch(name: command.displayName, logger: launcherLogger, level: .debug)
         let launched = try launch(command, environment: [:], output: .discard, watch: watch, capturingTo: handle)
         let ending = await wait(for: launched, timeout: timeout, onTimeout: onTimeout, watchdog: nil, watch: watch)
-        let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        // Decoded leniently: Windows programs print in their code page, and
+        // one byte that isn't UTF-8 mustn't lose everything else they said.
+        let text: String
+        do {
+            text = String(decoding: try Data(contentsOf: file), as: UTF8.self)
+        } catch {
+            launcherLogger.warning("Couldn't read what \(command.displayName) printed: \(error.localizedDescription)")
+            text = ""
+        }
         let noDisplay = NoDisplaySignal()
         text.split(separator: "\n").forEach { noDisplay.check(String($0)) }
         try finish(launched, ending: ending, timeout: timeout, noDisplay: noDisplay, watch: watch)
@@ -122,11 +131,37 @@ nonisolated extension Wine {
 
     // MARK: - Launching
 
+    /// How many of a program's pipes are still open, to wait (briefly) for
+    /// their last lines. Unlike a `DispatchGroup`, it can be let go with
+    /// pipes still open, which Wine's background services make routine: a
+    /// group freed while entered crashes the process.
+    final class OpenPipes: Sendable {
+        private let open: Mutex<Int>
+        private let allClosed = DispatchSemaphore(value: 0)
+
+        init(_ count: Int) {
+            open = Mutex(count)
+            if count == 0 { allClosed.signal() }
+        }
+
+        func closed() {
+            let last = open.withLock { open in
+                open -= 1
+                return open == 0
+            }
+            if last { allClosed.signal() }
+        }
+
+        func wait(timeout: DispatchTime) -> DispatchTimeoutResult {
+            allClosed.wait(timeout: timeout)
+        }
+    }
+
     private struct Launched {
         let process: WineProcess
         let name: String
-        /// Left once per pipe, at its EOF.
-        let eofs: DispatchGroup
+        /// Counts down once per pipe, at its EOF.
+        let eofs: OpenPipes
         let pipes: [Pipe]
     }
 
@@ -180,7 +215,7 @@ nonisolated extension Wine {
 
         // Attached once the pid is known, so every line carries it; the pipes
         // hold anything written in the meantime.
-        let eofs = DispatchGroup()
+        let eofs = OpenPipes(pipes.count)
         if case .log(let logger, let onLine) = output {
             let metadata: Logger.Metadata = ["pid": "\(process.processIdentifier)", "program": "\(command.displayName)"]
             let seeLine: @Sendable (String) -> Void = { line in
@@ -189,9 +224,8 @@ nonisolated extension Wine {
                 onLine?(line)
             }
             for (pipe, level) in zip(pipes, [Logger.Level.notice, .warning]) {
-                eofs.enter()
                 ProcessLineLogger.attach(to: pipe, logger: logger, level: level, metadata: metadata,
-                                         onLine: seeLine, onEOF: { eofs.leave() })
+                                         onLine: seeLine, onEOF: { eofs.closed() })
             }
         }
         return Launched(process: wineProcess, name: command.displayName, eofs: eofs, pipes: pipes)
@@ -255,7 +289,9 @@ nonisolated extension Wine {
         } onCancel: {
             launcherLogger.log(level: onTimeout == .stopSession ? .notice : .debug,
                                "Cancelled: stopping \(name)\(onTimeout == .stopSession ? " and its Wine session" : "")")
-            stop()
+            // Not on the cancelling thread, which is often the main one:
+            // stopping the session waits for `wineserver -k`, up to 10 s.
+            DispatchQueue.global(qos: .userInitiated).async { stop() }
         }
 
         // Let the last lines through, but don't wait long for EOF: Wine's

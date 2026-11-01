@@ -122,6 +122,21 @@ struct LogStoreTests {
         #expect(entry!.message.contains("[truncated"), "truncation marker missing")
     }
 
+    @Test("Truncation counts bytes, not characters, and doesn't split a character")
+    func truncationByBytes() throws {
+        let store = LogStore.shared
+        let label = "au.gare.callum.second-chance.Test.TruncateWide"
+        // Four bytes each: 16 KB of Characters would be 64 KB.
+        let long = String(repeating: "🔍", count: 8_192)
+        store.append(level: "notice", label: label, message: long)
+
+        let (entries, _) = store.snapshot()
+        let entry = try #require(entries.last { $0.label == label })
+        #expect(entry.message.utf8.count <= 16_400)
+        let kept = try #require(entry.message.split(separator: "…").first)
+        #expect(kept.allSatisfy { $0 == "🔍" })
+    }
+
     @Test("Empty messages with no error are not stored")
     func emptyAppendSkipped() {
         let store = LogStore.shared

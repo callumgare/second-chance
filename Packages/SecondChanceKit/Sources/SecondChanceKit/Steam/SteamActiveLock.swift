@@ -74,7 +74,7 @@ nonisolated public final class SteamActiveLock: @unchecked Sendable {
                 case .cancel:
                     return .cancelled(holder)
                 case .quitHolder:
-                    let gone = await Task.detached { holder.quit() }.value
+                    let gone = await holder.quit()
                     if !gone { return .held(holder) }
                 }
             }

@@ -17,23 +17,33 @@ import Foundation
 
 nonisolated public enum Blocking {
     /// Run `work` on a background thread and wait for it there, leaving the
-    /// calling thread (usually the main one) free. A detached task, so it
-    /// doesn't inherit the caller's actor.
-    /// The caller's build goes with it (`LogContext.build`), which a
-    /// detached task wouldn't otherwise inherit, so what `work` logs is
-    /// still that build's.
+    /// calling thread (usually the main one) free.
+    ///
+    /// On a GCD thread, not in a task: Swift concurrency's pool has about
+    /// one thread per core, and blocking one of them for the length of a
+    /// `cp` of the engine or a `codesign` (seconds to minutes, several at
+    /// once when builds run side by side) would starve every other task,
+    /// the bus and cancellation included. GCD makes more threads as they
+    /// block.
+    /// The caller's build goes with it (`LogContext.build`), which a GCD
+    /// thread wouldn't otherwise have, so what `work` logs is still that
+    /// build's.
     public static func run<T>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         let build = LogContext.build
-        return try await Task.detached(priority: .userInitiated) {
-            try LogContext.$build.withValue(build) { try work() }
-        }.value
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result { try LogContext.$build.withValue(build) { try work() } })
+            }
+        }
     }
 
     public static func run<T>(_ work: @escaping @Sendable () -> T) async -> T {
         let build = LogContext.build
-        return await Task.detached(priority: .userInitiated) {
-            LogContext.$build.withValue(build) { work() }
-        }.value
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: LogContext.$build.withValue(build) { work() })
+            }
+        }
     }
 
     /// Run async `work` and block this thread until it finishes.

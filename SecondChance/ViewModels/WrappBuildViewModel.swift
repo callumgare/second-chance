@@ -448,7 +448,7 @@ class WrappBuildViewModel: ObservableObject {
         isQuittingSteamHolder = true
         steamHolderDidNotQuit = false
         Task {
-            let gone = await Task.detached { holder.quit() }.value
+            let gone = await holder.quit()
             isQuittingSteamHolder = false
             if gone {
                 retrySteamBuild()

@@ -220,9 +220,16 @@ nonisolated public final class LogStore: @unchecked Sendable {
         metadata: [String: String] = [:], stage: String? = nil, build: String? = nil
     ) -> Entry? {
         var truncatedMessage = message
-        if message.utf8.count > Self.maxEntryBytes {
-            let truncatedBytes = message.prefix(Self.maxEntryBytes - 50)
-            truncatedMessage = String(truncatedBytes) + "…[truncated \(message.utf8.count - Self.maxEntryBytes + 50) bytes]"
+        let messageBytes = message.utf8.count
+        if messageBytes > Self.maxEntryBytes {
+            // Cut by bytes, not Characters (a Character can be several
+            // bytes), backing off to a character boundary.
+            var end = message.utf8.index(message.utf8.startIndex, offsetBy: Self.maxEntryBytes - 50)
+            while end > message.startIndex && end.samePosition(in: message.unicodeScalars) == nil {
+                end = message.utf8.index(before: end)
+            }
+            let kept = message[..<end]
+            truncatedMessage = String(kept) + "…[truncated \(messageBytes - kept.utf8.count) bytes]"
         }
 
         // Flatten to strings per plan: store descriptions, not objects
@@ -246,6 +253,9 @@ nonisolated public final class LogStore: @unchecked Sendable {
         return entry
     }
 
+    /// What an evicted slot holds until it is reused.
+    private static let evicted = Entry(seq: 0, timestamp: .distantPast, level: "", label: "", message: "", error: nil)
+
     /// Append an entry to the ring buffer under lock.
     private func appendInternal(state: inout State, entry: Entry) {
         var mutableEntry = entry
@@ -262,16 +272,18 @@ nonisolated public final class LogStore: @unchecked Sendable {
         )
         state.nextSeq &+= 1
 
-        // Evict if at capacity
-        if state.count >= Self.maxEntries || state.totalMessageBytes >= Self.maxMessageBytes {
-            // Remove oldest entry
-            if state.count > 0 {
-                let oldEntry = state.ring[state.head]
-                state.totalMessageBytes -= oldEntry.message.utf8.count
-                state.head = (state.head + 1) % Self.maxEntries
-                state.count -= 1
-                state.dropped &+= 1
-            }
+        // Evict the oldest until there's room under both caps. The slot is
+        // emptied, not just skipped: until the ring has grown to its full
+        // length, a skipped slot would keep its message alive, so the byte
+        // cap wouldn't bound the memory it is there to bound.
+        while state.count > 0
+            && (state.count >= Self.maxEntries
+                || state.totalMessageBytes + mutableEntry.message.utf8.count > Self.maxMessageBytes) {
+            state.totalMessageBytes -= state.ring[state.head].message.utf8.count
+            state.ring[state.head] = Self.evicted
+            state.head = (state.head + 1) % Self.maxEntries
+            state.count -= 1
+            state.dropped &+= 1
         }
 
         // Add new entry
@@ -488,11 +500,11 @@ nonisolated public final class LogStore: @unchecked Sendable {
             if let level = Logging.Logger.Level(rawValue: entry.level), level < Self.minimumStderrLevel {
                 continue
             }
-            let line = LogFormatter.compact(entry: entry) + "\n"
-            if let data = line.data(using: .utf8) {
-                var bytesToWrite = data.count
-                var ptr = data.withUnsafeBytes { $0.baseAddress }
-
+            let data = Data((LogFormatter.compact(entry: entry) + "\n").utf8)
+            // The pointer is only valid inside the closure.
+            data.withUnsafeBytes { buffer in
+                guard var ptr = buffer.baseAddress else { return }
+                var bytesToWrite = buffer.count
                 while bytesToWrite > 0 {
                     let written = write(STDERR_FILENO, ptr, bytesToWrite)
                     if written < 0 {
@@ -502,7 +514,7 @@ nonisolated public final class LogStore: @unchecked Sendable {
                         break  // Give up on other errors
                     }
                     bytesToWrite -= written
-                    ptr = ptr?.advanced(by: written)
+                    ptr = ptr.advanced(by: written)
                 }
             }
         }
@@ -514,8 +526,9 @@ nonisolated public final class LogStore: @unchecked Sendable {
         formatter.formatOptions = [.withFullDate, .withTime, .withFractionalSeconds]
         let timestamp = formatter.string(from: Date())
         let fileName = "second-chance-mirror-\(timestamp).log"
-        return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-            .appendingPathComponent(fileName)
+        let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads")
+        return downloads.appendingPathComponent(fileName)
     }
 
     /// Internal fault reporting - goes straight to os_log + fputs, bypassing LogStore.
