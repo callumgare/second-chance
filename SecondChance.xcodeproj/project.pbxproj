@@ -84,12 +84,17 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				AlertHelper.swift,
+				AppDelegate.swift,
+				AppMenu.swift,
 				Configuration.swift,
+				DebugTools.swift,
 				GameLauncher.swift,
 				GameMonitor.swift,
 				InfoWindowController.swift,
+				LastSession.swift,
 				main.swift,
 				MainLogger.swift,
+				ProcessSignals.swift,
 				PuppetServer.swift,
 				Resources/Assets.xcassets,
 				Resources/scummvm-files,

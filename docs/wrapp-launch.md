@@ -3,7 +3,9 @@
 What a wrapp does between being opened and the game's window appearing,
 what its loading window says meanwhile, and when it says the launch may
 have failed. The code is `WrappTemplate/main.swift` and `GameLauncher`
-(the steps), `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingStage.swift` and `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingClock.swift`
+(the steps), `LastSession.swift` (the first of them), `AppDelegate.swift`
+(quitting, and opening the game again with the arguments in
+`WrappLaunchOptions`), `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingStage.swift` and `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingClock.swift`
 (what the window says, and when), and `Packages/SecondChanceKit/Sources/SecondChanceKit/LaunchActivityMonitor.swift`
 (the signs it watches for).
 
