@@ -367,15 +367,17 @@ class GameLauncher {
         let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
         let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
         logger.error("■ Gave up waiting for the launch after \(ran)\(window): the player quit while it seemed stuck")
+        // From `startupDiagnostics`, not `diagnostics`: a launch stuck before
+        // the game started (Wine's desktop, say) has a `stalled` bundle too.
         var files: [(String, String)] = []
-        if let bundle = diagnostics?.lastBundle {
+        if let bundle = startupDiagnostics?.lastBundle {
             files.append(("Diagnostics", bundle.path))
         }
         let summary = FailureSummary.log(logger, what: "Starting \(config.gameTitle)", files: files)
         let stuck = FailureReport(
             what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.gameEngine.rawValue,
             tags: failureTags(exitCode: nil, signal: nil), summary: summary,
-            diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
+            diagnostics: startupDiagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
         )
         recordLaunch(outcome: stuck.kind)
         report(stuck)
@@ -407,7 +409,7 @@ class GameLauncher {
         var tags: [String: String] = [:]
         if let exitCode { tags["exit_code"] = String(exitCode) }
         if let signal { tags["signal"] = SubprocessWatch.signalName(signal) }
-        if let reason = diagnostics?.lastReason { tags["diagnostics"] = reason.rawValue }
+        if let reason = startupDiagnostics?.lastReason { tags["diagnostics"] = reason.rawValue }
         if let copyProtection { tags["copy_protection"] = copyProtection.rawValue }
         return tags
     }
