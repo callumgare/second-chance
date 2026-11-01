@@ -99,6 +99,7 @@ struct NancyDrewQuitScenario {
         CGWarpMouseCursorPosition(CGPoint(x: screen.minX + 2, y: screen.midY))
 
         let environment = ["SECOND_CHANCE_PUPPET_DIR": directory, "SECOND_CHANCE_DATA_DIR": directory + "/data"]
+        let launchedAt = Date()
         guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : [],
                                               environment: environment) else {
             return .failed("Failed to launch game")
@@ -118,7 +119,7 @@ struct NancyDrewQuitScenario {
         }
 
         let gamePid: Int32
-        switch waitForGameWindow() {
+        switch waitForGameWindow(launchedAt: launchedAt) {
         case .found(let pid, _):
             gamePid = pid
         case .failed(let reason):
@@ -403,16 +404,17 @@ struct NancyDrewQuitScenario {
         case failed(String)
     }
 
-    /// Wait for the game's process, then its window. Found: the game
-    /// process's PID and its windows.
-    private func waitForGameWindow() -> GameWindowWait {
+    /// Wait for the game's process, one started since `launchedAt`, then
+    /// its window. Found: the game process's PID and its windows.
+    private func waitForGameWindow(launchedAt: Date) -> GameWindowWait {
         let processName = wrapp.gameProcessName
         logger.notice("⏳ Waiting for game process (timeout: \(Int(options.processDetectTimeout))s), then its window...")
         let start = Date()
         let timedOut = "Game process or window did not appear in time"
 
         logger.notice("[Step 1] Monitoring for \(processName) process...")
-        guard let process = ProcessFinder.waitForProcess(named: processName, timeout: options.processDetectTimeout) else {
+        guard let process = ProcessFinder.waitForProcess(named: processName, startedSince: launchedAt,
+                                                                timeout: options.processDetectTimeout) else {
             return .failed(timedOut)
         }
         var pid = process.pid

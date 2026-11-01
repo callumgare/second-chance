@@ -526,7 +526,8 @@ direct assignment.
   `au.gare.callum.SecondChance.nancy-drew.<slug>`. Because
   `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's executable is
   `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't depend on that name: it
-  finds the wrapp by the PID it launched and the game by its own process name.
+  finds the wrapp by the PID it launched and the game by its own process name,
+  taking only one started since that launch.
 - **Failures are reported to Sentry, and Sentry stays static in wrapps.**
   A failure someone sees goes through `FailureReporter.report` with a
   `FailureReport` whose `what` and `kind` are fixed words or identifiers,

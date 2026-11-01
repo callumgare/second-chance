@@ -96,11 +96,20 @@ enum ProcessFinder {
     }
 
     /// Poll until a process with this executable name (case-insensitive) is running.
-    static func waitForProcess(named name: String, timeout: TimeInterval) -> RunningProcess? {
+    ///
+    /// Only one started since `since`, when given: one by the same name left
+    /// over from something else (a process stuck exiting can't be killed)
+    /// would otherwise be watched in place of the one just launched.
+    /// `ps` gives start times to the second, hence the second's leeway.
+    static func waitForProcess(named name: String, startedSince since: Date? = nil, timeout: TimeInterval) -> RunningProcess? {
         let start = Date()
         var lastLog = Date()
         while Date().timeIntervalSince(start) < timeout {
-            if let match = allProcesses().first(where: { $0.name.lowercased() == name.lowercased() }) {
+            let isNew = { (process: RunningProcess) in
+                guard let since else { return true }
+                return Date().addingTimeInterval(-process.elapsedSeconds) >= since.addingTimeInterval(-2)
+            }
+            if let match = allProcesses().first(where: { $0.name.lowercased() == name.lowercased() && isNew($0) }) {
                 logger.notice("✅ \(name) process detected (PID: \(match.pid))")
                 return match
             }
