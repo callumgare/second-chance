@@ -967,12 +967,6 @@ func main() {
         }
     }
 
-    // Record game engine on first run
-    let gameEngineFile = config.appSupportPath.appendingPathComponent("game-engine")
-    if !FileManager.default.fileExists(atPath: gameEngineFile.path) {
-        try? config.gameEngine.rawValue.write(to: gameEngineFile, atomically: true, encoding: .utf8)
-    }
-
     // The save warning holds back only the game itself: Wine, and Steam for
     // a game that needs it, get going behind it, so the game starts sooner
     // once the player has read it.

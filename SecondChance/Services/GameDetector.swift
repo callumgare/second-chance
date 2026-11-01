@@ -171,30 +171,6 @@ class GameDetector {
         return Array(signals.prefix(limit))
     }
 
-    /// Detect game from Steam installation
-    func detectGame(fromSteamExe exePath: URL) async throws -> String {
-        logger.notice("🔍 GameDetector: Starting detection from Steam exe: \(exePath.path)")
-
-        // Use parent directory name as fingerprint
-        let parentDir = exePath.deletingLastPathComponent().lastPathComponent
-        let fingerprint = " \(parentDir) "
-
-        logger.notice("🔍 GameDetector: Steam fingerprint: '\(fingerprint)'")
-        let result = getGameSlugFromFingerprint(fingerprint)
-
-        if result == "unknown" {
-            logger.critical("❌ GameDetector: DETECTION FAILED")
-            logger.critical("   Steam exe path: \(exePath.path)")
-            logger.critical("   Parent directory: \(parentDir)")
-            logger.critical("   Fingerprint: \(fingerprint)")
-            logger.critical("   No matching patterns found")
-        } else {
-            logger.notice("✅ GameDetector: Detected game from Steam: \(result)")
-        }
-
-        return result
-    }
-
     // MARK: - Installer or Installed Game
 
     /// What a disc offers to install the game with, from its top level.

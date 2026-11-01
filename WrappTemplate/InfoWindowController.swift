@@ -193,11 +193,6 @@ class InfoWindowController: NSWindowController {
         }
     }
 
-    func hideWarning() {
-        viewModel.phase = .loading
-        viewModel.startStageTimers()
-    }
-
     /// The wrapp is quitting, and has got as far as `step`. Safe from any
     /// thread. The window shows once the quit has run for
     /// `QuitStep.showAfter`, so a quick one shows nothing, and then follows

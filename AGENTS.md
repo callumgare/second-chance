@@ -164,7 +164,7 @@ Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)  ←  CLIBuilder (headles
                                                  ↓
                     WrappBuildHelper · GameInstallerRunner · ISOMounter
                                                  ↓
-        WineManager · CacheManager · GameDetector · AutoItService · ScummVMService
+        WineManager · CacheManager · GameDetector · AutoItService
                                                  ↓
                   Models (GameInfo, WrappBuildState, WrappSource, AppEvent, …)
 ```

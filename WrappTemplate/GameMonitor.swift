@@ -12,16 +12,9 @@ import GameCatalog
 
 // MARK: - Game Monitor Delegate
 
-protocol GameMonitorDelegate: AnyObject {
-    func gameMonitorDidDetectGameStart(pid: Int32)
-    func gameMonitorDidDetectWindow()
-    func gameMonitorGameDidTerminate(exitCode: Int32?)
-}
-
 // MARK: - Game Monitor
 
 class GameMonitor {
-    weak var delegate: GameMonitorDelegate?
     private let config: GameConfig
     private let gameEngine: GameInfo.GameEngine
     private var isMonitoring = false
@@ -155,7 +148,6 @@ class GameMonitor {
                 logger.debug("[Game Monitor]   parent pid \(process.parent), path \(process.command)")
 
                 gamePid = process.pid
-                self.delegate?.gameMonitorDidDetectGameStart(pid: process.pid)
 
                 // Log all related wine processes
                 let list = processes.sorted(by: { $0.name < $1.name })
@@ -183,7 +175,6 @@ class GameMonitor {
     /// Wait for ScummVM game to start (ScummVM starts immediately)
     private func waitForScummVMGameToStart(gamePid: Int32) -> Int32? {
         logger.notice("[Game Monitor] ScummVM game started with PID \(gamePid)")
-        self.delegate?.gameMonitorDidDetectGameStart(pid: gamePid)
         return gamePid
     }
 
@@ -241,9 +232,6 @@ class GameMonitor {
                         infoWindow.notifyGameLoaded()
                     }
                 }
-
-                // Notify delegate
-                self.delegate?.gameMonitorDidDetectWindow()
 
                 // Activate the game process
                 if let gameApp = NSRunningApplication(processIdentifier: pid_t(pid)) {
@@ -319,7 +307,6 @@ class GameMonitor {
 
         logger.notice("[Process Monitor] Wine process \(winePid) has ended")
         self.isMonitoring = false
-        self.delegate?.gameMonitorGameDidTerminate(exitCode: self.exitCode)
     }
 
     /// Whether a process with this pid exists (`kill(pid, 0)`).
@@ -370,7 +357,6 @@ class GameMonitor {
         }
 
         self.isMonitoring = false
-        self.delegate?.gameMonitorGameDidTerminate(exitCode: self.exitCode)
         logger.notice("[Process Monitor] Monitoring stopped")
     }
 
