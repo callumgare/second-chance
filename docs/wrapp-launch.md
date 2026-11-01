@@ -52,7 +52,9 @@ save warning, when the warning is confirmed:
   launch that is merely slow keeps showing signs, so it is left be; one that
   is stuck stops, and the window says so as soon as the stage's time is up,
   so that a player who quits then sends a report. It stays up until the
-  next stage.
+  next stage. A Wine game's wrapp captures a diagnostics bundle (`stalled`)
+  as the note appears, while whatever is stuck still is, so the report
+  carries its stacks.
 - **A busy Mac** (`SystemLoadReading.isHeavy`) gets a note saying so, and a
   stage whose speed depends on the CPU (`slowsUnderLoad`) gets
   `heavyLoadFactor` times as long before it may count as failed. Past that

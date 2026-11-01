@@ -365,7 +365,10 @@ direct assignment.
   stops Wine seeing a notched display without its notch strip),
   `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet), and
   `SECOND_CHANCE_MODE_SCALING=0` leaves a Direct3D game's picture unscaled
-  when Wine emulates the display mode it switched to.
+  when Wine emulates the display mode it switched to, and
+  `SECOND_CHANCE_WINE_SYNC=esync` or `none` turns off Wine's msync, or msync
+  and esync both, so every wait goes through wineserver — for every Wine
+  program, the build's too.
   `SECOND_CHANCE_UPDATES=1` turns on the update checks a Debug build leaves
   off — Second Chance's own, and a wrapp's look for a newer Second Chance
   when its launch fails ([docs/updates.md](docs/updates.md)) — and
@@ -459,12 +462,17 @@ direct assignment.
   (`slow-start`), Wine's unhandled-exception line (`crash`), still no window at
   25 s (`hang`), an exit before any window (`exited-before-window`), Wine's
   launcher exiting before the game's exe appears (`exited-before-game`), or the
-  game quitting within 15 s of its window (`quit-early`). Each holds a `sample` of the game
+  game quitting within 15 s of its window (`quit-early`) — and, at any stage,
+  Wine's desktop included, when the loading window says the launch may have
+  failed (`stalled`), or whenever the wrapp gets SIGUSR1 (`manual`; sent twice
+  a minute apart, the same stacks tell stuck from slow). Each holds a `sample` of the game
   process's thread stacks and of every other Wine process (`explorer.exe`,
   `wineserver`, …) taken at the same moment, `top`, the process list (taken
   first, before a crashing game can exit), display/lock/screen-sharing
   state, the game's system log, the last 300 Wine output lines and the wrapp's
-  whole log so far; the newest 10 are kept and the wrapp log names the folder.
+  whole log so far, then `winedbg`'s `bt all`: every Wine thread's backtrace
+  as Windows sees it, which a `sample` stops short of; the newest 10 are kept
+  and the wrapp log names the folder.
   Every launch also keeps its log in
   `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` (newest 10). `SECOND_CHANCE_DIAGNOSTICS=0`
   turns it off and `SECOND_CHANCE_DIAG_SLOW_SECONDS` moves the threshold — set

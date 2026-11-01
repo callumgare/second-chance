@@ -81,12 +81,25 @@ nonisolated public struct Wine: Sendable {
             // GPU listings per launch. Warnings and errors still come through.
             "MVK_CONFIG_LOG_LEVEL": "2",
             "MVK_CONFIG_FULL_IMAGE_VIEW_SWIZZLE": "1",
-            "WINEESYNC": "1",
-            "WINEMSYNC": "1",
             "MTL_HUD_ENABLED": "0",
             "MVK_CONFIG_FAST_MATH_ENABLED": "0",
             "DOTNET_EnableWriteXorExecute": "0"
-        ]
+        ].merging(Self.syncVariables()) { $1 }
+    }
+
+    /// `WINEMSYNC` and `WINEESYNC`: how Wine's programs wait on each other
+    /// without a round trip to wineserver. Both on, unless
+    /// `SECOND_CHANCE_WINE_SYNC` picks `esync` (Wine's msync off) or `none`
+    /// (both off, every wait through wineserver) — a debug switch, for telling
+    /// a hang in them apart from other causes.
+    static func syncVariables(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        switch environment["SECOND_CHANCE_WINE_SYNC"] {
+        case "esync": ["WINEESYNC": "1", "WINEMSYNC": "0"]
+        case "none": ["WINEESYNC": "0", "WINEMSYNC": "0"]
+        default: ["WINEESYNC": "1", "WINEMSYNC": "1"]
+        }
     }
 
     /// What a Wine program runs with: ours over the parent's, less the

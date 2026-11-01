@@ -16,6 +16,12 @@
 //  Costs nothing on a normal launch: the only work before a trigger is a timer
 //  and a ring buffer of recent Wine output lines.
 //
+//  It also captures whenever the wrapp asks: when the loading window says the
+//  launch may have failed (`stalled`, at any stage, Wine's desktop included),
+//  and when the wrapp is sent SIGUSR1 (`manual`) — which, sent twice a minute
+//  apart, tells a launch that is stuck (the same stacks both times) from one
+//  that is only slow.
+//
 //  Bundles land in ~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/
 //  and the newest `maxBundles` are kept. SECOND_CHANCE_DIAGNOSTICS=0 turns this
 //  off; SECOND_CHANCE_DIAG_SLOW_SECONDS changes the slow-start threshold.
@@ -43,10 +49,17 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
         /// The game quit within `quickQuitSeconds` of its window appearing,
         /// as a game missing its data files does.
         case quitEarly = "quit-early"
+        /// The loading window says the launch may have failed: no sign of
+        /// progress for the stage's `stallAfter` (`LoadingClock`).
+        case stalled
+        /// Asked for, with SIGUSR1. Captured every time it is asked.
+        case manual
     }
 
     private let gameSlug: String
     private let gameTitle: String
+    /// For `winedbg`'s backtraces.
+    private let wine: Wine
     private let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Diagnostics")
     private let queue = DispatchQueue(label: "au.gare.callum.second-chance.WrappTemplate.Diagnostics")
 
@@ -71,9 +84,10 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
     /// Entered while a bundle's slow part (samples, top, the system log) runs.
     private let capturing = DispatchGroup()
 
-    init(gameSlug: String, gameTitle: String) {
+    init(gameSlug: String, gameTitle: String, wine: Wine) {
         self.gameSlug = gameSlug
         self.gameTitle = gameTitle
+        self.wine = wine
         let env = ProcessInfo.processInfo.environment
         enabled = env["SECOND_CHANCE_DIAGNOSTICS"] != "0"
         slowSeconds = env["SECOND_CHANCE_DIAG_SLOW_SECONDS"].flatMap(Double.init) ?? 8
@@ -101,6 +115,12 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
                 self.capture(.crash)
             }
         }
+    }
+
+    /// Capture a bundle now, for `reason`: `.stalled` or `.manual`.
+    func captureNow(_ reason: Reason) {
+        guard enabled else { return }
+        queue.async { self.capture(reason) }
     }
 
     /// Call once the game's own process (not the wine launcher) is found.
@@ -182,9 +202,10 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
 
     // MARK: - Capture
 
-    /// Runs on `queue`. Each reason is captured at most once per launch.
+    /// Runs on `queue`. Each reason is captured at most once per launch,
+    /// except `.manual`, captured whenever asked.
     private func capture(_ reason: Reason) {
-        guard !captured.contains(reason) else { return }
+        guard reason == .manual || !captured.contains(reason) else { return }
         captured.insert(reason)
 
         let now = Date()
@@ -220,7 +241,8 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             (every other Wine process, sampled at the same moment), top.txt (CPU/memory),
             processes.txt, session.txt (display/lock/screen-sharing), log.txt (system
             log for the game process), wine-output.txt (last \(recentLineLimit) Wine lines),
-            wrapp-log.txt (this launch's whole log so far, every level).
+            wrapp-log.txt (this launch's whole log so far, every level), winedbg.txt
+            (every Wine thread's Windows-side backtrace, which the samples stop short of).
 
             """
         write(summary, to: dir.appendingPathComponent("summary.txt"))
@@ -228,9 +250,11 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
         let wrappLog = LogStore.shared.snapshot().entries.map { LogFormatter.full(entry: $0) }
         write(wrappLog.joined(separator: "\n") + "\n", to: dir.appendingPathComponent("wrapp-log.txt"))
 
-        // The slow part runs off `queue` so later lines and triggers still get in.
+        // The slow part runs off `queue` so later lines and triggers still get in,
+        // at .userInitiated: on a Mac with every core busy, which is when a
+        // capture matters most, .utility work waits for seconds at a time.
         capturing.enter()
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .userInitiated).async {
             defer { self.capturing.leave() }
             // The process list first: sampling takes seconds once symbolication
             // is counted, long enough for a crashing game to be gone by the end.
@@ -248,17 +272,20 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             }
             let group = DispatchGroup()
             for target in targets {
-                DispatchQueue.global(qos: .utility).async(group: group) {
+                DispatchQueue.global(qos: .userInitiated).async(group: group) {
                     self.run("/usr/bin/sample", [String(target.pid), "2", "-mayDie", "-file", dir.appendingPathComponent(target.file).path],
                              timeout: 30, into: dir.appendingPathComponent("sample-stdout-\(target.pid).txt"))
                 }
             }
-            DispatchQueue.global(qos: .utility).async(group: group) {
+            DispatchQueue.global(qos: .userInitiated).async(group: group) {
                 self.run("/usr/bin/top", ["-l", "2", "-s", "1", "-o", "cpu", "-n", "25", "-stats", "pid,command,cpu,mem,state"],
                          timeout: 15, into: dir.appendingPathComponent("top.txt"))
             }
             group.wait()
 
+            // After the samples, which it would disturb: winedbg attaches to
+            // each Wine process in turn, stopping it while it reads its stacks.
+            self.captureWineBacktraces(into: dir.appendingPathComponent("winedbg.txt"))
             self.captureSession(into: dir.appendingPathComponent("session.txt"))
             if let pid {
                 self.run("/usr/bin/log", ["show", "--last", "60s", "--style", "compact", "--predicate", "processIdentifier == \(pid)"],
@@ -266,6 +293,22 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             }
             self.logger.error("[Diagnostics] \(reason.rawValue) bundle complete: \(dir.path)")
         }
+    }
+
+    /// Every Wine thread's backtrace as Windows sees it (`winedbg`'s `bt all`),
+    /// naming the Windows calls a stuck thread is waiting in. A Wine program
+    /// itself, so it may hang with the rest: it gets 90 s, and is then stopped
+    /// on its own, leaving the session alone.
+    private func captureWineBacktraces(into file: URL) {
+        let text: String
+        do {
+            text = try Blocking.wait { [wine] in
+                try await wine.output(of: .wine(["winedbg", "--command", "bt all"]), timeout: 90, onTimeout: .stopProgram)
+            }
+        } catch {
+            text = "winedbg failed: \(error)\n"
+        }
+        write(text, to: file)
     }
 
     private func captureSession(into file: URL) {

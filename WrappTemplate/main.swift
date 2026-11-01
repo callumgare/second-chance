@@ -444,6 +444,25 @@ private var terminationSignalSources: [DispatchSourceSignal] = []
 /// when the wrapp has to exit without its cleanup having finished.
 private var killWineBeforeForcedExit: (() -> Void)?
 
+/// Capture a diagnostics bundle on SIGUSR1, whatever the launch or the game
+/// is doing: `kill -USR1 <wrapp pid>`, for a game that seems stuck. See
+/// `StartupDiagnostics`.
+private func installDiagnosticsSignalHandler(_ gameLauncher: GameLauncher) {
+    var set = sigset_t()
+    sigemptyset(&set)
+    sigaddset(&set, SIGUSR1)
+    pthread_sigmask(SIG_UNBLOCK, &set, nil)
+    signal(SIGUSR1, SIG_IGN)
+    // Not on the main queue, which may be what is stuck.
+    let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .global(qos: .userInitiated))
+    source.setEventHandler {
+        mainLogger.notice("Received SIGUSR1: capturing diagnostics")
+        gameLauncher.captureDiagnostics(.manual)
+    }
+    source.resume()
+    terminationSignalSources.append(source)
+}
+
 /// Quit like Cmd-Q on SIGTERM, SIGINT or SIGHUP: end the game and its Wine
 /// session and log that it happened, instead of dying silently or (when the
 /// signal arrived masked) not at all.
@@ -669,6 +688,7 @@ func main() {
 
     // Create game launcher
     let gameLauncher = GameLauncher(config: config, gameMonitor: gameMonitor)
+    installDiagnosticsSignalHandler(gameLauncher)
 
     // Set the process name BEFORE initializing NSApplication
     ProcessInfo.processInfo.processName = "Nancy Drew"
@@ -757,6 +777,7 @@ func main() {
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
     infoWindow.reportStuckLaunch = { gameLauncher.reportStuckLaunch() }
+    infoWindow.onPossibleFailure = { gameLauncher.captureDiagnostics(.stalled) }
     gameLauncher.onQuitStep = { step in infoWindow.quitting(step) }
     if config.canLaunchWithoutSteam {
         infoWindow.onLaunchWithoutSteam = {

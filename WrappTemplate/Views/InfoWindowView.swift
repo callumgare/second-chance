@@ -97,6 +97,9 @@ class InfoWindowViewModel: ObservableObject {
     var onLastSessionChoice: ((LastSessionChoice) -> Void)?
     /// Sign in to Steam afresh, offered once Steam is stuck signing in.
     var onSignInToSteamAfresh: (() -> Void)?
+    /// Told when the window starts saying the launch may have failed, so a
+    /// diagnostics bundle catches what is stuck while it still is.
+    var onPossibleFailure: (() -> Void)?
 
     enum LastSessionChoice {
         case stopItAndContinue, continueAnyway, dontStart
@@ -184,6 +187,7 @@ class InfoWindowViewModel: ObservableObject {
             let quiet = Int(Date().timeIntervalSince(clock.lastProgress))
             let load = clock.heavyLoad ? " (the Mac is heavily loaded)" : ""
             infoWindowLogger.warning("[Loading] Possible launch failure: \(ran)s into \(stage.logName), no sign of progress for \(quiet)s\(load)")
+            onPossibleFailure?()
             if stage != .lastSessionClosing {
                 checkForNewerRelease()
             }

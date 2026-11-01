@@ -88,7 +88,11 @@ class GameLauncher {
     private let gameMonitor: GameMonitor
     private var currentProcess: Process?
     private var cleanupCompleted = false
-    /// Captures a diagnostics bundle if a Wine game starts badly; nil for ScummVM.
+    /// Captures a diagnostics bundle if a Wine game starts badly; nil for
+    /// ScummVM. Made with the launcher, so a launch that stalls before the
+    /// game starts (`captureDiagnostics`) can be captured too.
+    private let startupDiagnostics: StartupDiagnostics?
+    /// `startupDiagnostics`, once the game has been launched; nil before.
     private var diagnostics: StartupDiagnostics?
     /// The desktop `prepareDesktop` started, if it did. See `releaseDesktop`.
     private var desktop: WineDesktop?
@@ -123,6 +127,16 @@ class GameLauncher {
     init(config: GameConfig, gameMonitor: GameMonitor) {
         self.config = config
         self.gameMonitor = gameMonitor
+        startupDiagnostics = config.gameEngine.runsInWine
+            ? StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle, wine: config.wine)
+            : nil
+    }
+
+    /// Capture a diagnostics bundle now, whatever the launch is doing: when
+    /// the loading window says it may have failed (`.stalled`), or when the
+    /// wrapp is sent SIGUSR1 (`.manual`). Nothing for ScummVM.
+    func captureDiagnostics(_ reason: StartupDiagnostics.Reason) {
+        startupDiagnostics?.captureNow(reason)
     }
 
     // MARK: - Bringing the game forward
@@ -574,7 +588,10 @@ class GameLauncher {
         // Wine's output is logged line by line (reaching the terminal, the
         // log window and the export). Diagnostics sees the same lines, to keep
         // recent context and spot crashes.
-        let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
+        guard let diagnostics = startupDiagnostics else {
+            logger.critical("ERROR: no diagnostics for a Wine game")
+            return (nil, -1, nil)
+        }
         let helperReport = helperReport
         let quitCheck = quitCheck
         let observe: @Sendable (String) -> Void = { line in
@@ -619,9 +636,8 @@ class GameLauncher {
             logger.critical("ERROR: Couldn't ask Steam to launch the game: \(error.localizedDescription)")
             return (nil, -1, nil)
         }
-        let diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
-        diagnostics.wineLaunched()
-        self.diagnostics = diagnostics
+        startupDiagnostics?.wineLaunched()
+        diagnostics = startupDiagnostics
         return (nil, 0, launchInfo.gameExeName)
     }
 

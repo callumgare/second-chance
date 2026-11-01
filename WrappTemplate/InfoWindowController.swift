@@ -61,6 +61,11 @@ class InfoWindowController: NSWindowController {
         set { viewModel.onSignInToSteamAfresh = newValue }
     }
 
+    var onPossibleFailure: (() -> Void)? {
+        get { viewModel.onPossibleFailure }
+        set { viewModel.onPossibleFailure = newValue }
+    }
+
     /// Say Steam is slow or stuck signing in, or no longer. Any thread.
     func setSteamNotice(_ notice: SteamSignInNotice?) {
         DispatchQueue.main.async {

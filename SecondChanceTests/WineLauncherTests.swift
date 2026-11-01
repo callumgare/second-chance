@@ -172,3 +172,17 @@ struct WineNotBundledTests {
         }
     }
 }
+
+@Suite("Wine's sync switch")
+struct WineSyncSwitchTests {
+    @Test("msync and esync are on unless SECOND_CHANCE_WINE_SYNC turns them off", arguments: [
+        (nil, "1", "1"),
+        ("msync", "1", "1"),
+        ("esync", "1", "0"),
+        ("none", "0", "0"),
+    ] as [(String?, String, String)])
+    func sync(_ setting: String?, esync: String, msync: String) {
+        let variables = Wine.syncVariables(environment: setting.map { ["SECOND_CHANCE_WINE_SYNC": $0] } ?? [:])
+        #expect(variables == ["WINEESYNC": esync, "WINEMSYNC": msync])
+    }
+}
