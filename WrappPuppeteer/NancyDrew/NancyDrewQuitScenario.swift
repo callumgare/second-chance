@@ -308,8 +308,9 @@ struct NancyDrewQuitScenario {
         InputControl.showClick(at: CGPoint(x: window.bounds.minX + point.x, y: window.bounds.minY + point.y))
     }
 
+    /// End the wrapp, then its engine, each firmly only if it won't go.
     private func forceQuit(_ app: NSRunningApplication) {
-        ProcessControl.forceQuit(app, cleanupCommands: wrapp.cleanupCommands)
+        ProcessControl.forceQuit(app) { wrapp.endEngine() }
     }
 
     private enum GameWindowWait {

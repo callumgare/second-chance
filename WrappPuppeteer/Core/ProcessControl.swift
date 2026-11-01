@@ -192,13 +192,15 @@ enum ProcessControl {
         return appRunning || helperRunning
     }
 
-    /// How long a force-quit app gets to clean up before SIGKILL. A wrapp
-    /// stops its Steam and Wine on the way out, and gives itself 15 s.
+    /// How long a force-quit app gets to clean up before SIGKILL.
+    /// `forceTerminate` sends SIGTERM, which a wrapp takes as Cmd-Q: it ends
+    /// its game, waits for Wine to finish, and kills it itself after 15 s.
     static let forceQuitGrace: TimeInterval = 20
 
-    /// Force-terminate the app, then run each cleanup command (see
-    /// `ProcessCleanup.install`) to catch helper processes that outlive it.
-    static func forceQuit(_ app: NSRunningApplication, cleanupCommands: [[String]] = []) {
+    /// Force-terminate the app (SIGTERM), SIGKILL it only if it is still
+    /// running `forceQuitGrace` later, then run `cleanup`, for helper
+    /// processes that can outlive it.
+    static func forceQuit(_ app: NSRunningApplication, cleanup: () -> Void = {}) {
         logger.warning("⚠️  Force quitting \(app.localizedName ?? "app")...")
         // forceTerminate doesn't always end the process (a wrapp once outlived
         // it by an hour), so check, and kill it outright if it is still there.
@@ -211,19 +213,43 @@ enum ProcessControl {
                 logger.error("❌ PID \(pid) is still running after SIGKILL")
             }
         }
+        cleanup()
+    }
 
-        for argv in cleanupCommands {
-            guard let path = argv.first else { continue }
-            let command = Process()
-            command.executableURL = URL(fileURLWithPath: path)
-            command.arguments = Array(argv.dropFirst())
-            do {
-                try command.run()
-                command.waitUntilExit()
-            } catch {
-                logger.warning("⚠️  \(argv.joined(separator: " ")) failed: \(error)")
-            }
+    /// Whether any process's command line matches `pattern` (`pgrep -f`).
+    static func anyRunning(matching pattern: String) -> Bool {
+        run("/usr/bin/pgrep", ["-f", "--", pattern]) == 0
+    }
+
+    /// Signal every process whose command line matches `pattern`
+    /// (`pkill -f`), and wait up to `timeout` for them all to go. Whether
+    /// they did.
+    static func end(matching pattern: String, signal: Int32, timeout: TimeInterval) -> Bool {
+        _ = run("/usr/bin/pkill", ["-\(signal)", "-f", "--", pattern])
+        let deadline = Date().addingTimeInterval(timeout)
+        while anyRunning(matching: pattern) {
+            if Date() >= deadline { return false }
+            Thread.sleep(forTimeInterval: 0.2)
         }
+        return true
+    }
+
+    /// Run a program and return its exit status, or -1 if it couldn't start.
+    @discardableResult
+    static func run(_ path: String, _ arguments: [String]) -> Int32 {
+        let command = Process()
+        command.executableURL = URL(fileURLWithPath: path)
+        command.arguments = arguments
+        command.standardOutput = FileHandle.nullDevice
+        command.standardError = FileHandle.nullDevice
+        do {
+            try command.run()
+        } catch {
+            logger.warning("⚠️  \(([path] + arguments).joined(separator: " ")) failed: \(error)")
+            return -1
+        }
+        command.waitUntilExit()
+        return command.terminationStatus
     }
 
     /// Wait until neither the app nor the helper process is running.

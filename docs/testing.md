@@ -413,8 +413,18 @@ WrappPuppeteer always starts a new instance of the wrapp, and kills any
 instance of the same bundle ID still running first. LaunchServices would
 otherwise hand back that one: a wrapp left on its "Game Crashed" window by an
 earlier run was once "launched" again an hour later, and the run timed out
-waiting for a game it never started. Its force-quit checks that the process
-really went and sends SIGKILL when `forceTerminate()` didn't do it.
+waiting for a game it never started.
+
+Its force-quit is firm only when it has to be. `forceTerminate()` sends
+SIGTERM, which a wrapp takes as Cmd-Q: it ends the game, waits for Wine to
+finish, and kills Wine itself after 15 s. WrappPuppeteer gives it 20 s, then
+sends SIGKILL. It then ends what the wrapp left of its engine, which is
+usually nothing: Wine's session gets 5 s to finish, then `wineserver -k`,
+then `-k9`, and ScummVM gets SIGTERM, then SIGKILL after 5 s. Anything still
+running from the wrapp's own engine is then killed. All of this touches only
+that wrapp's processes, never other Wine or ScummVM on the Mac, because other
+games may be building alongside. Only when WrappPuppeteer is itself stopped
+does it kill straight away.
 
 **It goes when the test that started it goes.** Started through
 LaunchServices, WrappPuppeteer's parent is launchd, not the test, so stopping

@@ -8,6 +8,9 @@
 import Foundation
 import GameCatalog
 import SecondChanceKit
+import Logging
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.Wrapp")
 
 struct Wrapp {
     let appPath: String
@@ -81,7 +84,9 @@ struct Wrapp {
 
 extension Wrapp {
     /// Commands that end the engine processes that can outlive the wrapp
-    /// (see `ProcessCleanup.install`), and only this wrapp's: the integration
+    /// when WrappPuppeteer itself is stopped, from its signal handler, which
+    /// can't wait to see whether anything ends more gently (`endEngine` does,
+    /// otherwise; see `ProcessCleanup.install`). Only this wrapp's: the integration
     /// tests build other games beside a launch, and a machine-wide
     /// `pkill -f wine` once killed their installers and patchers. For Wine,
     /// the wrapp's own `wineserver -k` ends everything in its prefix — Steam
@@ -103,6 +108,40 @@ extension Wrapp {
             return [["/usr/bin/pkill", "-9", "-f", "^" + Self.extendedRegexEscaped(layout.scummvm.path)]]
         case nil:
             return []
+        }
+    }
+
+    /// End what the wrapp left of its engine once it has gone, firmly only if
+    /// it won't end: a force-quit wrapp gets SIGTERM and ends its Wine itself,
+    /// so this usually finds nothing; it matters when the wrapp had to be
+    /// killed. Wine's session gets a few seconds to finish,
+    /// then `wineserver -k`, then `-k9` (`WineServer.shutDown`); ScummVM gets
+    /// SIGTERM before SIGKILL. Last, anything still running from the wrapp's
+    /// own engine is killed. Only this wrapp's: other games may be building.
+    func endEngine() {
+        let layout = WrappLayout(app: URL(fileURLWithPath: appPath))
+        let leftovers: String
+        switch engine {
+        case .wine, .wineSteam, .wineSteamSilent:
+            let wine = Wine(wrapp: layout.app, prefix: winePrefix)
+            if !Blocking.wait({ await wine.server.shutDown() }) {
+                logger.error("❌ The wrapp's Wine session didn't end")
+            }
+            leftovers = "^" + Self.extendedRegexEscaped(layout.wine.path + "/")
+        case .scummvm:
+            leftovers = "^" + Self.extendedRegexEscaped(layout.scummvm.path)
+            if ProcessControl.anyRunning(matching: leftovers),
+               ProcessControl.end(matching: leftovers, signal: SIGTERM, timeout: 5) {
+                logger.notice("   ScummVM ended when asked")
+                return
+            }
+        case nil:
+            return
+        }
+        guard ProcessControl.anyRunning(matching: leftovers) else { return }
+        logger.warning("⚠️  The wrapp's engine is still running: killing it")
+        if !ProcessControl.end(matching: leftovers, signal: SIGKILL, timeout: 3) {
+            logger.error("❌ The wrapp's engine is still running after SIGKILL")
         }
     }
 
