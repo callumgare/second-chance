@@ -21,7 +21,8 @@ nearest command's help.
 ./sc test unit                         # Unit tests (seconds) + sc's own tests
 ./sc test integration stay-tuned       # Install, launch and quit one game for real
 ./sc test integration ghost-dogs --vm sc-sequoia  # …launching it in a tart VM
-./sc test                              # Everything — hours
+./sc test                              # The unit tests, as sc test unit
+./sc test all                          # Unit, then integration: hours
 ./sc release --dry-run                 # What the next release would contain
 ./sc release --plain-notes             # Release with the commit-message notes as they are
 ./sc release --notes-model opus        # Rewrite the notes with a model other than Sonnet
@@ -29,6 +30,7 @@ nearest command's help.
 ./sc lint                              # SwiftLint and markdownlint, as CI runs them
 ./sc setup                             # Once per clone: tools, commit hook, completions
 ./sc clean wine-prefixes               # Start the next build from a fresh Wine prefix
+./sc clean downloads                   # Fetch (and check) Wine, AutoIt, ScummVM and the patches afresh
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
 ./sc --on <host> attach                # Pick up a remote run after the connection dropped
 ```
@@ -240,7 +242,9 @@ which forces that copy on (`0` forces it off).
 `TestRunner.unitExclusions`: the integration suites for discs, Steam and Her
 downloads — so **a new suite runs by default**. It then runs `Tools/sc`'s
 own Swift tests. `sc test integration [<slug>…]` runs the per-game integration
-suite with one worker; `sc test` runs both, as two separate xcodebuild runs.
+suite with one worker; `sc test all` runs both, as two separate xcodebuild
+runs. A bare `sc test` is `sc test unit`, so the hours-long run is never had by
+accident.
 Each run writes `test-results/<time>-<suite>.xcresult`, and an HTML report goes
 in `test-results/<time>/`. `--open-report` opens it on `failures` (the default),
 `always` or `never` — the terminal table covers a passing run.
@@ -306,9 +310,10 @@ pipe is held open by the job itself, so it survives the sc that started it.
 The newest 10 finished runs are kept.
 
 **`--on <host>[:<path>]` runs a command on another Mac.** It rsyncs the repo
-there (excluding `.git`, `.env`, `built-apps`, `test-results`, `tmp`, sc's own
-`.build`, and all of `DerivedData`, or all but what was built, `Build/Products`,
-with `--skip-app-build`) and runs `./sc` with the same
+there (excluding `.git`, `.env`, `built-apps`, `test-results`, `tmp`, `build`,
+the packages' and sc's own `.build` and `.swiftpm`, and all of `DerivedData`,
+or all but what was built, `Build/Products`, with `--skip-app-build`) and runs
+`./sc` with the same
 arguments over `ssh` (`-t` when interactive). Output stays there: a test run's
 results and report are in the remote Mac's `test-results/`, and the terminal
 shows the summary table. `<path>` defaults to this repo's path relative to
@@ -323,7 +328,9 @@ this Mac's build there, so only then are its products sent: any other
 command builds the app there anyway, and products copied while something
 here was rebuilding them arrived half-copied. `.env` stays behind because it holds each Mac's own
 settings, such as whether tests hide their windows there
-([testing.md](testing.md)). On the remote Mac, the GUI-session re-run applies as
+([testing.md](testing.md)). `installers/` is sent but protected from
+`--delete` (`Remote.protects`), so the other Mac keeps installers this one
+doesn't have. On the remote Mac, the GUI-session re-run applies as
 usual.
 
 - **The sync is macOS's own rsync at both ends** (`/usr/bin/rsync -aE

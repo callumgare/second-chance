@@ -75,10 +75,18 @@ enum Remote {
 
     /// Not synced. `.env` holds each Mac's own settings, such as whether
     /// tests hide their windows there. Agents' worktrees are other
-    /// checkouts, each with its own build, and come and go mid-sync.
+    /// checkouts, each with its own build, and come and go mid-sync. A
+    /// package's `.build` and `.swiftpm`, like `DerivedData`'s
+    /// intermediates, record this checkout's absolute path; `build/` is
+    /// release artifacts.
     static let excludes = [
-        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build", ".claude/worktrees",
+        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build", "Tools/sc/.swiftpm", ".claude/worktrees",
+        "Packages/*/.build", "Packages/*/.swiftpm", "/build", ".DS_Store",
     ]
+
+    /// Sent, but never deleted there: the other Mac may hold installers
+    /// this one doesn't have, which `--delete` would otherwise remove.
+    static let protects = ["/installers/***"]
 
     /// Of `DerivedData`, only what was built, `Build/Products`, is synced.
     /// The rest records this checkout's absolute path (Swift packages' state,
@@ -162,7 +170,9 @@ enum Remote {
             // on the flag: Apple's (openrsync, or 2.6.9 before macOS 15.4)
             // spells it -E and rejects -X, while rsync 3.x reads -E as
             // --executability and would drop them without a word.
-            let rsyncArgs = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + excludes.flatMap { ["--exclude", $0] }
+            let protectRules: [String] = protects.flatMap { ["--filter", "P " + $0] }
+            let excludeRules: [String] = excludes.flatMap { ["--exclude", $0] }
+            let rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + protectRules + excludeRules
                 + derivedDataFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in

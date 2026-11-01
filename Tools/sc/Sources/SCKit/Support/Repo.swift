@@ -75,6 +75,18 @@ struct Repo: Sendable {
             .appendingPathComponent("SecondChance/Steam/session")
     }
 
+    /// What the build downloads into `~/Library/Caches/SecondChance` (Wine,
+    /// Wineskin, AutoIt, ScummVM, the game patches, Steam's installer): every
+    /// entry there but the caches `sc clean` has targets of its own for, and
+    /// the app's wrapp cache.
+    static var downloads: [URL] {
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance")
+        let kept: Set = ["wine-prefix-cache", "steam-client", "wrapp-cache", "wrapper-cache"]
+        let entries = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
+        return entries.filter { !kept.contains($0.lastPathComponent) }
+    }
+
     /// The updated Steam client Steam builds reuse (`SteamClientCache`).
     static var steamClientCache: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]

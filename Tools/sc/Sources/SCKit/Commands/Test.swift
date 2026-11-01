@@ -5,13 +5,13 @@ import Noora
 struct TestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test",
-        abstract: "Run the tests. With no subcommand: unit tests, then integration tests.",
+        abstract: "Run the tests. With no subcommand: the unit tests.",
         discussion: """
-        Bare `sc test` runs everything, including the integration suite, which \
-        installs every game for real and takes hours. `sc test unit` is the fast loop.
+        Bare `sc test` runs the unit tests, the fast loop. `sc test integration` installs \
+        games for real and takes hours for all of them; `sc test all` runs both.
         """,
         subcommands: [TestAllCommand.self, TestUnitCommand.self, TestIntegrationCommand.self],
-        defaultSubcommand: TestAllCommand.self
+        defaultSubcommand: TestUnitCommand.self
     )
 }
 
