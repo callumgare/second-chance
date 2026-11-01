@@ -161,6 +161,47 @@ enum ProcessControl {
         return app
     }
 
+    /// Open an app that is already running, as clicking its Dock icon does:
+    /// LaunchServices sends it a reopen and makes it active. Whether
+    /// LaunchServices took the request.
+    @discardableResult
+    static func reopen(appPath: String) -> Bool {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.createsNewApplicationInstance = false
+        var opened = false
+        let semaphore = DispatchSemaphore(value: 0)
+        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: appPath), configuration: configuration) { runningApp, error in
+            if let error {
+                logger.warning("⚠️  Couldn't reopen \(appPath): \(error.localizedDescription)")
+            }
+            opened = runningApp != nil
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return opened
+    }
+
+    private static var finishedLaunching = false
+
+    /// Make this process the active app, once another has handed it
+    /// activation (since macOS 14 an app can't take it otherwise), and wait
+    /// up to `timeout` for macOS to say it is. Whether it did.
+    static func activateSelf(timeout: TimeInterval = 5) -> Bool {
+        // A process that never ran NSApp's event loop hasn't finished
+        // launching as far as macOS is concerned, and isn't made active.
+        if !finishedLaunching {
+            NSApp.finishLaunching()
+            finishedLaunching = true
+        }
+        NSApp.activate()
+        let deadline = Date().addingTimeInterval(timeout)
+        while !NSApp.isActive, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return NSApp.isActive
+    }
+
     /// Poll until `pid` has exited; false if it is still alive at `timeout`.
     static func waitForExit(_ pid: Int32, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)

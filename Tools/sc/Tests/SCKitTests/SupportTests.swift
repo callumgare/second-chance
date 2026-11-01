@@ -764,6 +764,16 @@ struct TestVMTests {
         #expect(TestRunner.gameTable(unwaited, showSource: false).headers == ["Game", "Engine", "Result", "Build", "Launch"])
     }
 
+    @Test("A finished game's warnings are kept on its row")
+    func gameWarnings() throws {
+        let board = GameBoard(games: ["stay-tuned"].compactMap { Catalog.game(slug: $0) })
+        board.apply(try #require(ProgressRecord.decode(
+            #"{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":20,"warnings":["No splash screen was clicked past"]}"#
+        )))
+        #expect(board.rows[0].warnings == ["No splash screen was clicked past"])
+        #expect(board.rows[0].status == "passed")
+    }
+
     @Test("Each game's largest build size is kept between runs")
     func integrationSizesKeepTheLargest() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-sizes-\(UUID().uuidString)")

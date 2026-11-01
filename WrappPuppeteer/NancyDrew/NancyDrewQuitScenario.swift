@@ -238,6 +238,58 @@ struct NancyDrewQuitScenario {
         }
     }
 
+    /// A warning for the integration test, which records it without failing
+    /// the game (`AppPuppetRunner.judge`): something that slows the run or
+    /// may stop working, rather than the game not working.
+    private func warnForTest(_ text: String) {
+        logger.warning("WRAPP_PUPPETEER: warning: \(text)")
+    }
+
+    /// Switch away from the game and back as a player would, and say why
+    /// that went wrong, or nil. The game hands activation to WrappPuppeteer,
+    /// which makes itself active, as Cmd-Tab away does; then WrappPuppeteer
+    /// opens the wrapp as a click on its Dock icon does. The game has to be
+    /// active again within `switchBackSeconds`: a Wine game's process has no
+    /// Dock icon of its own, so the wrapp brings it forward. A Direct3D game
+    /// whose mode Wine emulates once came back with its picture half a screen
+    /// up; the caller checks the frame again once this returns. Not being
+    /// able to switch away at all is the test's problem, not the game's, so
+    /// it's only warned about.
+    private func switchAwayAndBackFailure(_ context: Context, gamePid: Int32) -> String? {
+        logger.notice("🔀 Switching away from the game, then back by opening the game's app as its Dock icon would...")
+        // What counts is the game no longer being active, whether or not
+        // macOS then says WrappPuppeteer is: once the game has gone to the
+        // background, it has to come back.
+        if context.game.yieldActivation(to: getpid()), !ProcessControl.activateSelf() {
+            logger.notice("   macOS didn't say WrappPuppeteer is active; going by the game")
+        }
+        let away = Date().addingTimeInterval(Self.switchBackSeconds)
+        while context.game.state()?.active == true, Date() < away {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard context.game.state()?.active == false else {
+            warnForTest("Couldn't switch away from the game, so coming back to it through the Dock wasn't checked")
+            return nil
+        }
+        logger.notice("   Switched away; opening the game's app...")
+        ProcessControl.reopen(appPath: wrapp.appPath)
+        let back = Date().addingTimeInterval(Self.switchBackSeconds)
+        while context.game.state()?.active != true, Date() < back {
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        guard context.game.state()?.active == true else {
+            logger.error("❌ Opening the game's app, as its Dock icon does, didn't bring the game back within \(Int(Self.switchBackSeconds))s")
+            diagnosticCapture(context, prefix: "switch-back")
+            optionalScreenshot(prefix: "switch-back")
+            return "Clicking the game's app in the Dock didn't bring the game back after switching away"
+        }
+        logger.notice("   ✓ The game is back in front")
+        return nil
+    }
+
+    /// How long switching away from the game, or back to it, may take.
+    private static let switchBackSeconds: TimeInterval = 15
+
     /// Light in a bar that comes and goes isn't the picture's framing. The
     /// corner Steam's overlay notice shows in is left out for a game started
     /// through Steam, so it doesn't hold the check up; for anything else
@@ -554,6 +606,9 @@ struct NancyDrewQuitScenario {
         let splashScreens = SplashScreen.screens(forGame: wrapp.gameSlug)
         let splashNames = splashScreens.isEmpty ? "" : ": " + splashScreens.map(\.name).joined(separator: ", ")
         logger.notice("  ℹ️  \(splashScreens.count) splash screen(s) known for \(wrapp.gameSlug)\(splashNames)")
+        /// The splash screens clicked past, by name: none at all, when some
+        /// are known for the game, is warned about once the menu is up.
+        var splashesClicked: Set<String> = []
         /// The screen last clicked as a splash screen, and when.
         var lastSplashClicked: ImageFingerprint?
         var lastSplashClick = Date.distantPast
@@ -561,6 +616,8 @@ struct NancyDrewQuitScenario {
 
         var clickedInteractive = false
         var clickedExitButton = false
+        var reachedMenu = false
+        var switchedAway = false
         // Where Exit was last found (in window points), and when it was last
         // clicked: on a loaded machine the game can miss the click, and with
         // its own cursor then drawn over the label OCR may never find it again.
@@ -624,6 +681,7 @@ struct NancyDrewQuitScenario {
                         forceQuit(app)
                         return failure
                     }
+                    splashesClicked.insert(splash.screen.name)
                     lastSplashClicked = fingerprint
                     lastSplashClick = Date()
                     continue
@@ -643,11 +701,30 @@ struct NancyDrewQuitScenario {
             let analysis = MainMenuScreen.analyze(screenshotPath: shotPath, app: app)
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
             // The menu, fully drawn, is what every run reaches: its frame is
-            // checked once, the first time Exit is found on it.
-            if analysis.quitButton != nil, !clickedExitButton,
-               let failure = pictureFrameFailure(context, capturePath: shotPath, windowSize: state.size) {
-                forceQuit(app)
-                return failure
+            // checked the first time Exit is found on it, and again after
+            // switching away from the game and back.
+            if analysis.quitButton != nil, !clickedExitButton {
+                if !reachedMenu {
+                    reachedMenu = true
+                    if !splashScreens.isEmpty, splashesClicked.isEmpty {
+                        warnForTest("No splash screen was clicked past: none of the \(splashScreens.count) recorded for \(wrapp.gameSlug) "
+                            + "was recognised, so the recordings may no longer match the game (docs/testing.md#splash-screens)")
+                    }
+                }
+                if let failure = pictureFrameFailure(context, capturePath: shotPath, windowSize: state.size) {
+                    forceQuit(app)
+                    return failure
+                }
+                if !switchedAway {
+                    switchedAway = true
+                    try? FileManager.default.removeItem(atPath: shotPath)
+                    if let failure = switchAwayAndBackFailure(context, gamePid: gamePid) {
+                        forceQuit(app)
+                        return failure
+                    }
+                    // The menu again, to check its frame as it is now.
+                    continue
+                }
             }
             try? FileManager.default.removeItem(atPath: shotPath)
 

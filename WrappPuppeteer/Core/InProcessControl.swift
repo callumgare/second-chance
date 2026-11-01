@@ -99,7 +99,7 @@ struct ControlledWindowState {
 
 /// A window served over a control socket: `state`, `capture <path>`,
 /// `click <x> <y>` and `move <x> <y>`, in window points with a top-left
-/// origin — a capture's pixels divided by its scale.
+/// origin — a capture's pixels divided by its scale — and `yield <pid>`.
 struct WindowControl {
     let socket: ControlSocket
 
@@ -141,6 +141,14 @@ struct WindowControl {
     @discardableResult
     func move(to point: CGPoint) -> Bool {
         report(socket.request("move \(point.x) \(point.y)"), for: "move")
+    }
+
+    /// Hand activation from the window's app to the app with `pid`, which
+    /// can then make itself active: since macOS 14 only the active app may
+    /// hand it on.
+    @discardableResult
+    func yieldActivation(to pid: pid_t) -> Bool {
+        report(socket.request("yield \(pid)"), for: "yield")
     }
 
     private func report(_ reply: String?, for request: String) -> Bool {

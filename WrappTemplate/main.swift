@@ -315,11 +315,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
+    /// Chosen in Cmd-Tab while the game runs: the game's process isn't
+    /// there (dock_icon.m), so the wrapp passes it on. Not while one of the
+    /// wrapp's own windows is up (the log window, in debug mode), which the
+    /// person may have clicked to get to.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard !isCleaningUp, !isClosing, !NSApp.windows.contains(where: { $0.isVisible }) else { return }
+        _ = gameLauncher?.bringGameForward()
+    }
+
+    /// While the game runs, its process has no Dock icon of its own
+    /// (dock_icon.m), so clicking the wrapp's brings the game forward.
+    ///
     /// Opening the game while this copy is closing down reaches this copy
     /// (macOS reactivates a running app rather than starting another), which
     /// would do nothing. Remember it, and start again once Wine has finished.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        guard isCleaningUp || isClosing else { return true }
+        guard isCleaningUp || isClosing else {
+            guard gameLauncher?.hasGameWindow == true else { return true }
+            // A click in the Dock sends the reopen before the wrapp is made
+            // active, and only an active app can hand activation on: then
+            // applicationDidBecomeActive, which follows, does it.
+            if NSApp.isActive { _ = gameLauncher?.bringGameForward() }
+            return false
+        }
         mainLogger.notice("Opened again while the game is closing: it starts again once Wine has finished")
         closingState.withLock { $0.openAgain = true }
         return false

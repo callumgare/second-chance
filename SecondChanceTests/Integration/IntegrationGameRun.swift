@@ -116,7 +116,7 @@ struct IntegrationGameRun {
             guard screenAllows(outcome), await loadAllows(outcome) else { return }
             outcome.phase("launching")
             let exitCode = try await outcome.timed(.launch) {
-                try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout)
+                try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout) { outcome.warn($0) }
             }
             outcome.puppeteerExit = exitCode
             outcome.expect(exitCode == 0, "WrappPuppeteer exited with \(exitCode) for \(label)")
@@ -330,6 +330,8 @@ final class GameOutcome: @unchecked Sendable {
     /// doesn't own the game).
     var skipped: String?
     private var failedExpectations = 0
+    /// What to look into that didn't fail the game (`warn`).
+    private var warnings: [String] = []
 
     /// What the time went on, so a game that waited for others isn't
     /// charged for it: building, launching, and waiting its turn for either.
@@ -350,6 +352,14 @@ final class GameOutcome: @unchecked Sendable {
     func expect(_ condition: Bool, _ comment: Comment, sourceLocation: SourceLocation = #_sourceLocation) {
         #expect(condition, comment, sourceLocation: sourceLocation)
         if !condition { failedExpectations += 1 }
+    }
+
+    /// Something to look into that doesn't fail the game: attached to the
+    /// test, and listed under `sc`'s table. (Not an issue, which would fail
+    /// it: this Swift Testing has no warning issues.)
+    func warn(_ text: String) {
+        Attachment.record(Data("\(text)\n".utf8), named: "warning-\(source)-\(slug).txt")
+        lock.withLock { warnings.append(text) }
     }
 
     /// Run `body`, adding the time it takes to `timing`.
@@ -393,6 +403,7 @@ final class GameOutcome: @unchecked Sendable {
         lock.withLock {
             for (timing, seconds) in timings { record["\(timing.rawValue)Seconds"] = seconds }
             if peakBytes > 0 { record["peakBytes"] = peakBytes }
+            if !warnings.isEmpty { record["warnings"] = warnings }
         }
         if let skipped { record["message"] = skipped }
         progress?.write(record)

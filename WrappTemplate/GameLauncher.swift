@@ -7,6 +7,7 @@
 import Foundation
 import AppKit
 import Logging
+import os
 import SecondChanceKit
 import SecondChanceReporting
 import GameCatalog
@@ -93,6 +94,9 @@ class GameLauncher {
     private var desktop: WineDesktop?
     /// Steam, for a game that needs it running (`wine-steam*`).
     private var steam: WrappSteam?
+    /// The process whose window is the game's, from when that window appears
+    /// until the game ends: what `bringGameForward` brings forward.
+    private let gameWindowPid = OSAllocatedUnfairLock<pid_t?>(initialState: nil)
     /// Told how far a quit has got, for the window that says the game is
     /// closing. Called from the cleanup's background queue.
     var onQuitStep: (@Sendable (InfoWindowViewModel.QuitStep) -> Void)?
@@ -119,6 +123,25 @@ class GameLauncher {
     init(config: GameConfig, gameMonitor: GameMonitor) {
         self.config = config
         self.gameMonitor = gameMonitor
+    }
+
+    // MARK: - Bringing the game forward
+
+    /// Whether the game's window is up, for `bringGameForward`.
+    var hasGameWindow: Bool { gameWindowPid.withLock { $0 != nil } }
+
+    /// Bring the game's window forward, for the wrapp being clicked in the
+    /// Dock or chosen in Cmd-Tab: the game's own process has no Dock icon
+    /// (dock_icon.m), so the wrapp's stands for the game. Whether there was a
+    /// game window to bring forward. Main thread, from the wrapp's own
+    /// activation: only an app that is active may hand activation on.
+    func bringGameForward() -> Bool {
+        guard let pid = gameWindowPid.withLock({ $0 }),
+              let game = NSRunningApplication(processIdentifier: pid), !game.isTerminated else { return false }
+        NSApp.yieldActivation(to: game)
+        let activated = game.activate(options: [.activateAllWindows])
+        logger.notice("[Game Monitor] Bringing the game forward (PID \(pid)): \(activated ? "done" : "macOS refused")")
+        return true
     }
 
     // MARK: - Cleanup and Shutdown
@@ -451,6 +474,7 @@ class GameLauncher {
                 if config.gameEngine.runsInWine {
                     logger.notice("[Game Launch] Activating game window...")
                     if gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) {
+                        gameWindowPid.withLock { $0 = detectedPid }
                         diagnostics?.gameWindowAppeared()
                         quitCheck?.windowDidAppear()
                         helperReport?.gameWindowAppeared()
@@ -473,12 +497,12 @@ class GameLauncher {
             _ = gameMonitor.waitForGameToStart(gameExeName: "scummvm", gamePid: gamePid)
             logger.notice("[Game Launch] Waiting for ScummVM's window...")
             if gameMonitor.activateGameWindow(gamePid: gamePid, infoWindow: infoWindow) {
+                let pid = gamePid
+                gameWindowPid.withLock { $0 = pid }
                 helperReport?.gameWindowAppeared()
             }
+            gameMonitor.hideWrapperFromDock()
         }
-
-        // Hide wrapper app from dock now that game has started
-        gameMonitor.hideWrapperFromDock()
 
         // Hide info window now that game has started
         infoWindow?.notifyGameLoaded()
@@ -496,6 +520,7 @@ class GameLauncher {
         // Wait for game to stop
         logger.notice("[Game Launch] Waiting for game to stop...")
         gameMonitor.waitForGameToStop(gamePid: gamePid, process: launchResult.process)
+        gameWindowPid.withLock { $0 = nil }
         // Judged straight away: how soon after a Wine error it came matters.
         // A wrapp that is quitting stopped the game itself, and a game killed
         // by a signal is already reported as one.

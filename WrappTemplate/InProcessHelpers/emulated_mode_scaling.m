@@ -139,6 +139,8 @@ static CGFloat wineScale(void) {
 // table in win32u.so's __DATA,__data, which ntdll keeps a pointer to; the
 // two entries are replaced there.
 
+#if defined(__x86_64__)
+
 typedef int32_t (*ChangeDisplaySettingsFn)(void *device, void *mode, void *hwnd, uint32_t flags, void *lparam);
 typedef int32_t (*ShowWindowFn)(void *hwnd, int32_t cmd);
 static ChangeDisplaySettingsFn gChangeDisplaySettings;
@@ -208,6 +210,8 @@ static BOOL keepPictureInBackground(void) {
                     usingBlock:^(NSNotification *note) { (void)note; gInBackground = NO; }];
     return YES;
 }
+
+#endif
 
 // MARK: - WineOpenGLContext
 

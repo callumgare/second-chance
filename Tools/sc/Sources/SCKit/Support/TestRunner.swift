@@ -201,6 +201,12 @@ struct TestRunner {
         }
         let table = Self.gameTable(board, showSource: showSource)
         await ui.table(headers: table.headers, rows: table.rows)
+        let warned = board.rows.filter { !$0.warnings.isEmpty }
+        if !warned.isEmpty {
+            let lines = warned.flatMap { row in row.warnings.map { "\(row.slug)\(showSource ? " (\(row.source))" : ""): \($0)" } }
+            let listed = lines.map { "  ▸ \($0)" }.joined(separator: "\n")
+            ui.warning("Passing or not, these games had something to look into:\n\(listed)")
+        }
         if board.hasOverloadedGames {
             ui.warning("Some games weren't tested: the Mac was heavily loaded, so Wine would have taken minutes to start, or never started.",
                        next: "Quit the busy programs and run those games again, or pass --ignore-load to test them anyway.")
@@ -335,6 +341,7 @@ final class GameBoard: @unchecked Sendable {
         var launchSeconds: Double?
         var queuedSeconds: Double?
         var peakBytes: Int64?
+        var warnings: [String] = []
     }
 
     private let lock = NSLock()
@@ -388,6 +395,7 @@ final class GameBoard: @unchecked Sendable {
                     row.launchSeconds = record.launchSeconds
                     row.queuedSeconds = record.queuedSeconds
                     row.peakBytes = record.peakBytes
+                    row.warnings = record.warnings ?? []
                     row.stage = nil
                     running.removeAll { $0 == key }
                 default:

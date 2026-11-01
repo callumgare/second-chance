@@ -12,6 +12,7 @@ wrapp does not have:
 | Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, unless the game draws with Direct3D ([below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Mode scaling | `WrappTemplate/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `WrappTemplate/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
+| One Dock icon | `WrappTemplate/InProcessHelpers/dock_icon.m` | Keeps the game's process out of the Dock and Cmd-Tab, so the wrapp's icon is the game's only one | `DOCK_ICON_EXE`, for every Wine game ([below](#one-dock-icon)) | `SECOND_CHANCE_ONE_DOCK_ICON=0` |
 | Puppet control | `WrappTemplate/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 
 ## How they get into the game process
@@ -500,6 +501,42 @@ A game that quits unexpectedly logs, after the usual `■ Game exited …` line:
 A healthy launch that gets reported this way has met a Wine error that's
 routine after all: the line it names belongs in `GameQuitCheck.routineErrors`.
 
+## One Dock icon
+
+Wine's Mac driver makes the process it runs in a regular app the first time
+it shows a window (`-[WineApplicationController
+transformProcessToForeground:]`), which gave the game a Dock icon of its own,
+named after Wine, beside the wrapp's. The wrapp used to hide itself from the
+Dock once the game's window appeared, which left the game's icon, but then
+clicking the wrapp's icon (kept in the Dock, say) did nothing.
+
+The helper lets Wine's method run once, building its menu, but turns its
+request for a regular app into one for an accessory app (by replacing
+`-[NSApplication setActivationPolicy:]` while it runs). An accessory app can
+still be active, take the keyboard and go fullscreen; it just has no Dock icon
+and no place in Cmd-Tab. Later calls are skipped, since an accessory never
+counts as regular and Wine would otherwise build its menu and try to activate
+the app at every window shown.
+
+The wrapp stays in the Dock and stands for the game. Clicked there, or chosen
+in Cmd-Tab, it brings the game forward (`GameLauncher.bringGameForward`, from
+`applicationDidBecomeActive`): it yields activation to the game's process and
+activates it, which only an active app may do, so a Dock click's reopen,
+which arrives before the wrapp is active, leaves it to the activation that
+follows. It doesn't while one of its own windows is up, such as the log
+window in debug mode.
+
+ScummVM games are left as they were: the helper isn't loaded into `scummvm`
+for a player's launch, so `scummvm` keeps its Dock icon and the wrapp hides
+itself once the game's window appears (`GameMonitor.hideWrapperFromDock`).
+
+The wrapp's log says, from the game's process:
+
+```text
+[Helpers] One Dock icon armed (armed in Game.exe)
+[Helpers] One Dock icon: the game has no Dock icon of its own
+```
+
 ## Puppet control
 
 The integration tests drive a wrapp with WrappPuppeteer
@@ -545,6 +582,7 @@ capture's pixels divided by `scale` — so no screen geometry is involved.
 | `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
 | `click <x> <y>` | `ok`: a mouse move, 150 ms for the game to see it, then the left button held for 100 ms |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
+| `yield <pid>` | `ok`: the game's app hands activation to that app, which may then make itself active: WrappPuppeteer switching away from the game, as Cmd-Tab would, since macOS 14 only lets the active app hand activation on |
 
 The wrapp answers for its own window the same way, on
 `$SECOND_CHANCE_PUPPET_DIR/wrapp.sock` (`WrappTemplate/PuppetServer.swift`):

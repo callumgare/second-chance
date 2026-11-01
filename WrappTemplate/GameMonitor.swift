@@ -259,20 +259,15 @@ class GameMonitor {
         return windowDetected
     }
 
-    /// Hide wrapper app from dock
+    /// Hide the wrapp from the Dock, for a ScummVM game: scummvm has a Dock
+    /// icon of its own, which then stands for the game. A Wine game's process
+    /// has none (dock_icon.m), so the wrapp's stays.
     func hideWrapperFromDock() {
         // Don't hide dock icon in debug mode so log window stays accessible
         guard !debugMode else {
             logger.notice("[Game Monitor] Skipping dock hide (debug mode enabled)")
             return
         }
-        // Debug switch for isolating startup problems: the activation-policy
-        // change hands activation to the Wine process mid-launch.
-        guard ProcessInfo.processInfo.environment["SECOND_CHANCE_KEEP_IN_DOCK"] != "1" else {
-            logger.notice("[Game Monitor] Skipping dock hide (SECOND_CHANCE_KEEP_IN_DOCK=1)")
-            return
-        }
-
         DispatchQueue.main.async {
             Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameMonitor").notice("[Game Monitor] Hiding wrapper app from dock...")
             NSApp.setActivationPolicy(.accessory)

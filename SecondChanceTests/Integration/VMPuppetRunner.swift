@@ -74,7 +74,7 @@ enum VMPuppetRunner {
     /// Launch `wrappURL` with WrappPuppeteer in `vm` and judge the result as
     /// `AppPuppetRunner` judges a local run. Returns WrappPuppeteer's exit code.
     static func run(in vm: VMTarget, puppeteer: URL, wrappURL: URL, gameSlug: String, timeout: TimeInterval,
-                    requiredHelpers: [InProcessHelperReport.Helper]) async throws -> Int32 {
+                    requiredHelpers: [InProcessHelperReport.Helper], onWarning: (String) -> Void) async throws -> Int32 {
         // The SSH work blocks, so it's off the test's task; what it brings
         // back is recorded and judged here, where attachments reach the test.
         let outcome = try await Task.detached(priority: .userInitiated) {
@@ -86,7 +86,7 @@ enum VMPuppetRunner {
         }
         for note in outcome.notes { console(note) }
         try AppPuppetRunner.judge(puppeteerLog: outcome.puppeteerLog, gameLog: outcome.gameLog, exitCode: outcome.exitCode,
-                                  gameSlug: gameSlug, attemptLabel: label, requiredHelpers: requiredHelpers)
+                                  gameSlug: gameSlug, attemptLabel: label, requiredHelpers: requiredHelpers, onWarning: onWarning)
         return outcome.exitCode
     }
 

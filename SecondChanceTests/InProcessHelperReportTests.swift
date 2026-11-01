@@ -36,6 +36,7 @@ struct InProcessHelperReportTests {
         report.observe(line: "second-chance-helper[NativeFullscreen] notice: entering native fullscreen: 'x' 640x480")
         report.observe(line: "second-chance-helper[EmulatedMode] notice: armed in Game.exe")
         report.observe(line: "second-chance-helper[QuitWatch] notice: armed in Game.exe")
+        report.observe(line: "second-chance-helper[DockIcon] notice: armed in Game.exe")
         #expect(report.check() == [.nativeFullscreen])
         // Once only: the deadline's check and a later one don't both report.
         #expect(report.check() == [])
@@ -49,7 +50,7 @@ struct InProcessHelperReportTests {
         let puppeteer = Wine.inProcessHelperVariables(
             gameExe: unreadableExe, environment: ["SECOND_CHANCE_PUPPET_DIR": "/tmp/wrapp-puppeteer-1"])
         #expect(puppeteer["PUPPET_CONTROL_EXE"] == "Game.exe")
-        #expect(InProcessHelperReport(armingVariables: puppeteer, logger: logger).check() == [.nativeFullscreen, .cursorLock, .modeScaling, .quitWatch, .puppetControl])
+        #expect(InProcessHelperReport(armingVariables: puppeteer, logger: logger).check() == [.nativeFullscreen, .cursorLock, .modeScaling, .quitWatch, .dockIcon, .puppetControl])
     }
 
     @Test("A wrapp shows Wine the display below the notch unless native fullscreen is off")

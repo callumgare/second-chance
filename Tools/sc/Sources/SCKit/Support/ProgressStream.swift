@@ -10,7 +10,7 @@ import Foundation
 /// `{"event":"failed","message":"…"}`
 /// `{"event":"game","source":"disk","slug":"stay-tuned","phase":"launching"}` (`source` defaults to disk)
 /// `{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":81.2,`
-/// ` "buildSeconds":60.1,"launchSeconds":20.3,"queuedSeconds":0.8,"peakBytes":3500000000}`
+/// ` "buildSeconds":60.1,"launchSeconds":20.3,"queuedSeconds":0.8,"peakBytes":3500000000,"warnings":["…"]}`
 /// A game's build's own `stage` lines carry its `source` and `slug` too.
 struct ProgressRecord: Decodable, Equatable, Sendable {
     let event: String
@@ -33,6 +33,8 @@ struct ProgressRecord: Decodable, Equatable, Sendable {
     var queuedSeconds: Double?
     /// The most disk the game's build took at once.
     var peakBytes: Int64?
+    /// What to look into that didn't fail the game.
+    var warnings: [String]?
 
     static func decode(_ line: String) -> ProgressRecord? {
         try? JSONDecoder().decode(ProgressRecord.self, from: Data(line.utf8))

@@ -544,6 +544,15 @@ screen still has its Exit found. The Her Interactive logo is also still
 clicked where OCR reads "interactive", which catches it in a game with no
 references.
 
+Clicking past them only saves time: a game whose splash screens go
+unrecognised still reaches its menu once they've played, so that doesn't fail
+it. But a run that reaches the menu without having clicked past any of the
+game's recorded splash screens says so, as a warning
+(`WRAPP_PUPPETEER: warning: No splash screen was clicked past…`): the
+references may no longer match the game. The test attaches each warning
+(`warning-<source>-<slug>.txt`) and `sc` lists them under its table, passed
+or not, so one that starts appearing gets noticed.
+
 **In a DirectDraw game the cursor lock decides how soon that is.** The first
 click must not come before the wrapp's cursor lock has finished (see above),
 a quarter of a second after the window reaches its fullscreen Space — about
@@ -612,6 +621,23 @@ it. `--record` also works on a normal run
 record directory's path must not contain spaces: the game's control socket
 takes the path a capture is saved to as one word.
 
+### Switching away and back
+
+The first time Exit is found, before clicking it, the scenario switches
+away from the game and back, as a player would. The game's helper hands
+activation to WrappPuppeteer (`yield`, [puppet
+control](wine-in-process-helpers.md#puppet-control)), which makes itself the
+active app, as Cmd-Tab away does. Once the game says it is no longer active,
+WrappPuppeteer opens the wrapp as a click on its Dock icon does
+(`ProcessControl.reopen`), and the game has to be active again within 15 s:
+a Wine game's process has no Dock icon of its own
+([one Dock icon](wine-in-process-helpers.md#one-dock-icon)), so the wrapp
+brings it forward. The menu's frame is then checked again, below: a Direct3D
+game whose mode Wine emulates once came back with its picture half a screen
+up. A game that doesn't come back fails the run. A switch away that doesn't
+happen at all is the test's problem rather than the game's, so it's only a
+warning.
+
 ### The picture's bars and shape
 
 On a display of another shape than the game's, the wrapp shows the game's
@@ -621,7 +647,8 @@ Direct3D game, cnc-ddraw for a DirectDraw one, ScummVM for its own). Nothing
 else in the run would notice a bar left light grey, or a picture stretched to
 the display's shape: the game still plays. So the first capture Exit is found
 in — the menu, fully drawn, which every run reaches — is checked for it
-(`PictureFrameCheck`).
+(`PictureFrameCheck`), and the first after [switching away and
+back](#switching-away-and-back).
 
 Every game draws a 4:3 picture (`Wrapp.pictureAspect`), so everything
 outside a 4:3 area centred in the capture must be dark. A bar fails once 2%

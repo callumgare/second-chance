@@ -24,6 +24,7 @@
 //    capture <path>   -> ok <w>x<h>     PNG of the game window
 //    click <x> <y>    -> ok             mouse moved, a pause, then left button down and up
 //    move <x> <y>     -> ok             mouse moved only
+//    yield <pid>      -> ok             hand activation to that app, as Cmd-Tab away would
 //
 //  `cursor` is whether cnc-ddraw holds the mouse right now, and `cursorlock`
 //  how cursor_lock.m got on (helper_common.h). WrappPuppeteer compares
@@ -330,6 +331,25 @@ static NSString *mouseCommand(double x, double y, BOOL click) {
     return postMouseEvents(@[@(NSEventTypeLeftMouseUp)], x, y) ?: @"ok";
 }
 
+/// Hand activation to the app with `pid`, so it can make itself active:
+/// WrappPuppeteer switching away from the game, as Cmd-Tab would. Since
+/// macOS 14 only the active app may hand it on; the game is.
+static NSString *yieldCommand(pid_t pid) {
+    if (@available(macOS 14.0, *)) {
+        __block BOOL found = NO;
+        BOOL ran = onMainThread(^BOOL {
+            NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+            if (!app) return NO;
+            [NSApp yieldActivationToApplication:app];
+            found = YES;
+            return YES;
+        });
+        if (!ran) return found ? @"error timed out" : @"error no such app";
+        return @"ok";
+    }
+    return @"error needs macOS 14";
+}
+
 #pragma mark - Serving
 
 static NSString *handle(NSString *line) {
@@ -340,6 +360,7 @@ static NSString *handle(NSString *line) {
     if (([command isEqualToString:@"click"] || [command isEqualToString:@"move"]) && parts.count == 3) {
         return mouseCommand(parts[1].doubleValue, parts[2].doubleValue, [command isEqualToString:@"click"]);
     }
+    if ([command isEqualToString:@"yield"] && parts.count == 2) return yieldCommand((pid_t)parts[1].intValue);
     return [@"error unknown request: " stringByAppendingString:line];
 }
 

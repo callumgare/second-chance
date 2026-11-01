@@ -387,10 +387,14 @@ enum InstalledGameCheck {
 /// game quits cleanly. Returns the exit code from WrappPuppeteer.
 enum AppPuppetRunner {
     @discardableResult
+    /// `onWarning` hears each warning WrappPuppeteer gave
+    /// (`WRAPP_PUPPETEER: warning:`): something to look into that doesn't
+    /// fail the game, such as a splash screen it no longer recognises.
     static func run(
         wrappURL: URL,
         game: GameInfo,
-        timeout: TimeInterval = 90
+        timeout: TimeInterval = 90,
+        onWarning: @escaping (String) -> Void = { _ in }
     ) async throws -> Int32 {
         guard let bundle = WrappInfo.wrappPuppeteerBundle() else {
             throw TestError.wrappPuppeteerNotFound
@@ -401,7 +405,8 @@ enum AppPuppetRunner {
         // draws with Direct3D (so never through cnc-ddraw), and mode scaling
         // unless it draws through cnc-ddraw; nothing else would notice if they
         // didn't (the game still plays, in a window, or in a corner of the
-        // screen). Every game arms puppet control, which WrappPuppeteer drives
+        // screen), nor one Dock icon (the game would just have two). Every
+        // game arms puppet control, which WrappPuppeteer drives
         // it through; naming it here says so when it didn't, rather than
         // leaving WrappPuppeteer's failure to explain it.
         let requiredHelpers: [InProcessHelperReport.Helper]
@@ -410,7 +415,7 @@ enum AppPuppetRunner {
             requiredHelpers = [.nativeFullscreen]
                 + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
                 + (graphicsAPI.mayUseDirect3D ? [.modeScaling] : [])
-                + [.quitWatch, .puppetControl]
+                + [.quitWatch, .dockIcon, .puppetControl]
         } else {
             requiredHelpers = [.puppetControl]
         }
@@ -418,7 +423,7 @@ enum AppPuppetRunner {
         // `sc test integration --vm`: launch it in the VM instead.
         if let vm = VMTarget.current {
             return try await VMPuppetRunner.run(in: vm, puppeteer: bundle, wrappURL: wrappURL, gameSlug: slug,
-                                                timeout: timeout, requiredHelpers: requiredHelpers)
+                                                timeout: timeout, requiredHelpers: requiredHelpers, onWarning: onWarning)
         }
 
         let attempt = try await Self.launchAndCollect(
@@ -427,7 +432,8 @@ enum AppPuppetRunner {
             timeout: timeout,
             gameSlug: slug,
             attemptLabel: "initial",
-            requiredHelpers: requiredHelpers
+            requiredHelpers: requiredHelpers,
+            onWarning: onWarning
         )
 
         return attempt.exitCode
@@ -439,7 +445,8 @@ enum AppPuppetRunner {
         timeout: TimeInterval,
         gameSlug: String,
         attemptLabel: String,
-        requiredHelpers: [InProcessHelperReport.Helper]
+        requiredHelpers: [InProcessHelperReport.Helper],
+        onWarning: (String) -> Void
     ) async throws -> (exitCode: Int32, pid: Int32) {
         let launchTime = Date()
         let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
@@ -455,7 +462,7 @@ enum AppPuppetRunner {
         let gameLogData = SystemLogReader.fetchGame(since: launchTime)
         attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
         try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
-                  attemptLabel: attemptLabel, requiredHelpers: requiredHelpers)
+                  attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, onWarning: onWarning)
         return (exitCode: observedExitCode, pid: pid)
     }
 
@@ -469,7 +476,8 @@ enum AppPuppetRunner {
         exitCode observedExitCode: Int32,
         gameSlug: String,
         attemptLabel: String,
-        requiredHelpers: [InProcessHelperReport.Helper]
+        requiredHelpers: [InProcessHelperReport.Helper],
+        onWarning: (String) -> Void = { _ in }
     ) throws {
         guard !logData.isEmpty else {
             throw NSError(
@@ -482,6 +490,7 @@ enum AppPuppetRunner {
         }
 
         Attachment.record(logData, named: "wrapp-puppeteer-\(attemptLabel)-\(gameSlug).txt")
+        for warning in warnings(in: String(decoding: logData, as: UTF8.self)) { onWarning(warning) }
         TestConsole.echo(logData, title: "WrappPuppeteer log (\(attemptLabel)) — \(gameSlug)")
 
         if !gameLogData.isEmpty {
@@ -555,6 +564,15 @@ enum AppPuppetRunner {
             Data(exitCodeSummary.utf8),
             named: "wrapp-puppeteer-exit-code-\(attemptLabel)-\(gameSlug).txt"
         )
+    }
+
+    /// What WrappPuppeteer warned about, from its `WRAPP_PUPPETEER: warning:`
+    /// lines, in order.
+    static func warnings(in log: String) -> [String] {
+        let marker = "WRAPP_PUPPETEER: warning: "
+        return log.components(separatedBy: "\n").compactMap { line in
+            line.range(of: marker).map { String(line[$0.upperBound...]).trimmingCharacters(in: .whitespaces) }
+        }
     }
 
     /// The paths of the screenshots WrappPuppeteer logs, with 📸, when a run
