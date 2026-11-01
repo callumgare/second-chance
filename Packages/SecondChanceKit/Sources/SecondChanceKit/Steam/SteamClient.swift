@@ -167,7 +167,7 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
     /// Whether `steam.exe` is running. Only one wrapp or build runs Steam at
     /// a time (`SteamActiveLock`), so any running is this prefix's.
     public static func isSteamRunning() -> Bool {
-        ProcessName.isRunning("steam.exe")
+        ProcessList.isRunning("steam.exe")
     }
 
     public func isRunning() -> Bool { Self.isSteamRunning() }

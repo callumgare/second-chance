@@ -12,19 +12,19 @@ import Testing
 @Suite("System load")
 struct SystemLoadTests {
     private let ps = """
-      1   0.1 /sbin/launchd
-    100  97.5 /usr/bin/yes
-    101  96.0 /usr/bin/yes
-    200  45.0 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-    300  80.0 /private/var/folders/xx/T/NancyDrew-1.app/Contents/SharedSupport/wine/bin/wineserver
-    301  60.0 /var/folders/xx/T//winetemp-1-2-3/explorer.exe
-    302  30.0 /var/folders/xx/T//winetemp-1-2-3/winedevice.exe
-    400  99.0 /Applications/Second Chance.app/Contents/MacOS/Second Chance
+      1     1  0.1 0:00.00 00:01 /sbin/launchd
+    100     1  97.5 0:00.00 00:01 /usr/bin/yes
+    101     1  96.0 0:00.00 00:01 /usr/bin/yes
+    200     1  45.0 0:00.00 00:01 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+    300     1  80.0 0:00.00 00:01 /private/var/folders/xx/T/NancyDrew-1.app/Contents/SharedSupport/wine/bin/wineserver
+    301     1  60.0 0:00.00 00:01 /var/folders/xx/T//winetemp-1-2-3/explorer.exe
+    302     1  30.0 0:00.00 00:01 /var/folders/xx/T//winetemp-1-2-3/winedevice.exe
+    400     1  99.0 0:00.00 00:01 /Applications/Second Chance.app/Contents/MacOS/Second Chance
     """
 
     @Test("Counts other programs' CPU in cores, leaving out Wine and the caller")
     func countsOthers() {
-        let reading = SystemLoad.reading(fromPS: ps, excludingPid: 400, fastCores: 8)
+        let reading = SystemLoad.reading(from: ProcessList(psOutput: ps), excluding: 400, andDescendants: false, fastCores: 8)
         #expect(abs(reading.otherCores - 2.386) < 0.001)
         #expect(reading.topPrograms.map(\.name) == ["yes"])
         #expect(abs((reading.topPrograms.first?.cores ?? 0) - 1.935) < 0.001)
@@ -33,13 +33,13 @@ struct SystemLoadTests {
     @Test("Leaves out what the caller started, and what that started, when asked")
     func leavesOutTheCallersTree() {
         let ps = """
-          100     1  97.5 /usr/bin/yes
-          400     1  99.0 /Applications/Second Chance.app/Contents/MacOS/Second Chance
-          500   400  80.0 /bin/cp
-          501   500  70.0 /usr/bin/ditto
-          600     1  50.0 /usr/bin/hdiutil
+          100     1  97.5 0:00.00 00:01 /usr/bin/yes
+          400     1  99.0 0:00.00 00:01 /Applications/Second Chance.app/Contents/MacOS/Second Chance
+          500   400  80.0 0:00.00 00:01 /bin/cp
+          501   500  70.0 0:00.00 00:01 /usr/bin/ditto
+          600     1  50.0 0:00.00 00:01 /usr/bin/hdiutil
         """
-        let reading = SystemLoad.reading(fromPSWithParents: ps, excludingTreeOf: 400, fastCores: 8)
+        let reading = SystemLoad.reading(from: ProcessList(psOutput: ps), excluding: 400, andDescendants: true, fastCores: 8)
         #expect(abs(reading.otherCores - 1.475) < 0.001)
         #expect(Set(reading.topPrograms.map(\.name)) == ["yes", "hdiutil"])
     }
@@ -70,7 +70,7 @@ struct SystemLoadTests {
         ("/Applications/Firefox.app/Contents/MacOS/firefox", false),
     ])
     func wineProcesses(command: String, isWine: Bool) {
-        #expect(SystemLoad.isWine(command: command) == isWine)
+        #expect(ProcessList.isWine(command: command) == isWine)
     }
 
     @Test("Sums up the recent readings for a failure summary")

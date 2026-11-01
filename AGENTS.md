@@ -305,6 +305,10 @@ direct assignment.
   `wineserver` or winetricks: the launcher is what clears Sentry's exception
   ports, nulls stdin, logs each line with its pid and never waits on a pipe
   for EOF ([docs/wrapp-build.md](docs/wrapp-build.md#running-wine)).
+- **What is running comes from `ProcessList`** (`SecondChanceKit`), one
+  `ps` listing with each process's parent, CPU and command; don't run and
+  parse `ps` yourself. `ProcessList.isWine` is the one test for which
+  processes are Wine's, so the build, the wrapp and WrappPuppeteer agree.
 - **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
 
 ## Gotchas

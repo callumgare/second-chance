@@ -75,8 +75,8 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
     private func sample() {
         var signs: [LaunchProgressSign] = []
         var cores: Double?
-        if let output = Self.psOutput() {
-            let snapshot = Snapshot(psOutput: output)
+        if let processes = ProcessList.current() {
+            let snapshot = Snapshot(processes)
             let now = Date()
             if let previous {
                 // As a rate: on a busy Mac the samples come further apart.
@@ -139,20 +139,15 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
         /// Their executables' names, lowercased: "explorer.exe", "game.exe".
         let names: Set<String>
 
-        /// From `ps -A -o pid=,time=,comm=`.
-        init(psOutput: String) {
+        init(_ processes: ProcessList) {
             var cpu: [Int32: Double] = [:]
             var steamPids: Set<Int32> = []
             var names: Set<String> = []
-            for line in psOutput.split(whereSeparator: \.isNewline) {
-                let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
-                guard fields.count == 3, let pid = Int32(fields[0]),
-                      let seconds = Self.seconds(fromPSTime: String(fields[1])) else { continue }
-                let command = String(fields[2])
-                let name = ProcessName.executable(fromPSCommand: command).lowercased()
-                guard SystemLoad.isWine(command: command) || name == "scummvm", !Self.ignored.contains(name) else { continue }
-                cpu[pid] = seconds
-                if Self.steam.contains(name) { steamPids.insert(pid) }
+            for process in processes.entries {
+                let name = process.name.lowercased()
+                guard process.isWine || name == "scummvm", !Self.ignored.contains(name) else { continue }
+                cpu[process.pid] = process.cpuSeconds
+                if Self.steam.contains(name) { steamPids.insert(process.pid) }
                 names.insert(name)
             }
             self.cpu = cpu
@@ -169,41 +164,6 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
                 return total + max(0, entry.value - (previous.cpu[entry.key] ?? 0))
             }
         }
-
-        /// `ps`'s `time`: "[[dd-]hh:]mm:ss.cc".
-        static func seconds(fromPSTime text: String) -> Double? {
-            var rest = Substring(text)
-            var days = 0.0
-            if let dash = rest.firstIndex(of: "-") {
-                guard let value = Double(rest[..<dash]) else { return nil }
-                days = value
-                rest = rest[rest.index(after: dash)...]
-            }
-            var seconds = 0.0
-            for part in rest.split(separator: ":") {
-                guard let value = Double(part) else { return nil }
-                seconds = seconds * 60 + value
-            }
-            return days * 86_400 + seconds
-        }
-    }
-
-    private static func psOutput() -> String? {
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-A", "-o", "pid=,time=,comm="]
-        let pipe = Pipe()
-        ps.standardOutput = pipe
-        ps.standardError = FileHandle.nullDevice
-        do {
-            try ps.run()
-        } catch {
-            return nil
-        }
-        // Read before waiting: the list can be bigger than the pipe's buffer.
-        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        ps.waitUntilExit()
-        return output
     }
 
     private static func bytes(in directory: URL) -> UInt64 {

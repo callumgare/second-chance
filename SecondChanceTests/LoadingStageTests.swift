@@ -152,18 +152,18 @@ struct LaunchActivityTests {
         ("0:00.19", 0.19), ("1:02.50", 62.5), ("1:00:00.00", 3600), ("2-01:00:00.00", 2 * 86_400 + 3600),
     ])
     func psTime(text: String, seconds: Double) throws {
-        #expect(abs(try #require(Snapshot.seconds(fromPSTime: text)) - seconds) < 0.001)
+        #expect(abs(try #require(ProcessList.seconds(fromPSTime: text)) - seconds) < 0.001)
     }
 
     @Test("Only Wine's programs and ScummVM are watched, by name")
     func whatIsWatched() {
-        let snapshot = Snapshot(psOutput: """
-          101   0:01.00 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
-          202   0:00.30 /tmp/X.app/Contents/SharedSupport/wine/bin/wineserver
-          203   0:00.14 C:\\windows\\system32\\explorer.exe
-          204   0:02.00 C:\\Program Files (x86)\\Nancy Drew SCK\\Secrets.exe
-          305   0:03.00 /tmp/Y.app/Contents/MacOS/scummvm
-        """)
+        let snapshot = Snapshot(ProcessList(psOutput: """
+          101     1   0.0 0:01.00 00:01 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+          202     1   0.0 0:00.30 00:01 /tmp/X.app/Contents/SharedSupport/wine/bin/wineserver
+          203     1   0.0 0:00.14 00:01 C:\\windows\\system32\\explorer.exe
+          204     1   0.0 0:02.00 00:01 C:\\Program Files (x86)\\Nancy Drew SCK\\Secrets.exe
+          305     1   0.0 0:03.00 00:01 /tmp/Y.app/Contents/MacOS/scummvm
+        """))
         // Not the server, whose CPU is mostly its work for the wrapp's own checks.
         #expect(snapshot.names == ["explorer.exe", "secrets.exe", "scummvm"])
         #expect(snapshot.cpu[101] == nil)
@@ -171,25 +171,25 @@ struct LaunchActivityTests {
 
     @Test("The wrapp's own checks on Wine's desktop aren't signs of progress")
     func ownChecksIgnored() {
-        let snapshot = Snapshot(psOutput: """
-          210   0:00.40 C:\\windows\\system32\\reg.exe
-          211   0:00.10 C:\\windows\\system32\\conhost.exe
-          212   0:00.19 /tmp/X.app/Contents/SharedSupport/wine/bin/wine
-        """)
+        let snapshot = Snapshot(ProcessList(psOutput: """
+          210     1   0.0 0:00.40 00:01 C:\\windows\\system32\\reg.exe
+          211     1   0.0 0:00.10 00:01 C:\\windows\\system32\\conhost.exe
+          212     1   0.0 0:00.19 00:01 /tmp/X.app/Contents/SharedSupport/wine/bin/wine
+        """))
         #expect(snapshot.names.isEmpty)
     }
 
     @Test("Steam's own programs' CPU is counted apart from the game's")
     func steamApart() {
-        let before = Snapshot(psOutput: """
-          301   0:10.00 C:\\Program Files (x86)\\Steam\\steam.exe
-          302   0:20.00 C:\\Program Files (x86)\\Steam\\bin\\cef\\cef.win64\\steamwebhelper.exe
-        """)
-        let after = Snapshot(psOutput: """
-          301   0:10.50 C:\\Program Files (x86)\\Steam\\steam.exe
-          302   0:20.30 C:\\Program Files (x86)\\Steam\\bin\\cef\\cef.win64\\steamwebhelper.exe
-          303   0:00.20 C:\\Program Files (x86)\\Steam\\steamapps\\common\\Nancy Drew\\Game.exe
-        """)
+        let before = Snapshot(ProcessList(psOutput: """
+          301     1   0.0 0:10.00 00:01 C:\\Program Files (x86)\\Steam\\steam.exe
+          302     1   0.0 0:20.00 00:01 C:\\Program Files (x86)\\Steam\\bin\\cef\\cef.win64\\steamwebhelper.exe
+        """))
+        let after = Snapshot(ProcessList(psOutput: """
+          301     1   0.0 0:10.50 00:01 C:\\Program Files (x86)\\Steam\\steam.exe
+          302     1   0.0 0:20.30 00:01 C:\\Program Files (x86)\\Steam\\bin\\cef\\cef.win64\\steamwebhelper.exe
+          303     1   0.0 0:00.20 00:01 C:\\Program Files (x86)\\Steam\\steamapps\\common\\Nancy Drew\\Game.exe
+        """))
         #expect(abs(after.cpuUsed(since: before) - 0.2) < 0.001)
         #expect(abs(after.cpuUsed(since: before, steam: true) - 0.8) < 0.001)
         // Steam busy on its own is no sign the game is getting anywhere.
@@ -199,15 +199,15 @@ struct LaunchActivityTests {
 
     @Test("CPU used between samples counts what each program added, and all of a new one's")
     func cpuUsed() {
-        let before = Snapshot(psOutput: """
-          202   0:00.30 C:\\windows\\system32\\winedevice.exe
-          203   0:00.14 C:\\windows\\system32\\explorer.exe
-        """)
-        let after = Snapshot(psOutput: """
-          202   0:00.40 C:\\windows\\system32\\winedevice.exe
-          203   0:00.14 C:\\windows\\system32\\explorer.exe
-          204   0:00.25 C:\\Program Files (x86)\\Nancy Drew SCK\\Secrets.exe
-        """)
+        let before = Snapshot(ProcessList(psOutput: """
+          202     1   0.0 0:00.30 00:01 C:\\windows\\system32\\winedevice.exe
+          203     1   0.0 0:00.14 00:01 C:\\windows\\system32\\explorer.exe
+        """))
+        let after = Snapshot(ProcessList(psOutput: """
+          202     1   0.0 0:00.40 00:01 C:\\windows\\system32\\winedevice.exe
+          203     1   0.0 0:00.14 00:01 C:\\windows\\system32\\explorer.exe
+          204     1   0.0 0:00.25 00:01 C:\\Program Files (x86)\\Nancy Drew SCK\\Secrets.exe
+        """))
         #expect(abs(after.cpuUsed(since: before) - 0.35) < 0.001)
         // An idle session uses nothing; a program that went doesn't count against it.
         #expect(before.cpuUsed(since: after) == 0)

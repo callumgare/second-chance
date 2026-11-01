@@ -173,26 +173,10 @@ nonisolated final class InstallStallWatch: WineWatchdog, @unchecked Sendable {
     }
 
     private static func wineProcessIDs() -> Set<pid_t> {
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-A", "-o", "pid=,comm="]
-        let pipe = Pipe()
-        ps.standardOutput = pipe
-        ps.standardError = FileHandle.nullDevice
-        do {
-            try ps.run()
-        } catch {
-            logger.warning("[Install] Couldn't list processes to look for the installer's window: \(error)")
+        guard let processes = ProcessList.current() else {
+            logger.warning("[Install] Couldn't list processes to look for the installer's window")
             return []
         }
-        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        ps.waitUntilExit()
-        var pids: Set<pid_t> = []
-        for line in output.split(whereSeparator: \.isNewline) {
-            let fields = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-            guard fields.count == 2, let pid = pid_t(fields[0]), SystemLoad.isWine(command: String(fields[1])) else { continue }
-            pids.insert(pid)
-        }
-        return pids
+        return Set(processes.wine.map(\.pid))
     }
 }

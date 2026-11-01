@@ -77,67 +77,23 @@ nonisolated public enum SystemLoad {
     /// builds (their copies, disc mounts and signing) aren't other programs
     /// the Mac is busy with.
     public static func read(excludingDescendants: Bool = false) -> SystemLoadReading? {
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-A", "-o", excludingDescendants ? "pid=,ppid=,pcpu=,comm=" : "pid=,pcpu=,comm="]
-        let pipe = Pipe()
-        ps.standardOutput = pipe
-        ps.standardError = FileHandle.nullDevice
-        do {
-            try ps.run()
-        } catch {
-            return nil
-        }
-        // Read before waiting: the list can be bigger than the pipe's buffer.
-        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        ps.waitUntilExit()
-        let me = ProcessInfo.processInfo.processIdentifier
-        if excludingDescendants {
-            return reading(fromPSWithParents: output, excludingTreeOf: me, fastCores: fastCoreCount)
-        }
-        return reading(fromPS: output, excludingPid: me, fastCores: fastCoreCount)
+        guard let processes = ProcessList.current() else { return nil }
+        return reading(from: processes, excluding: ProcessInfo.processInfo.processIdentifier,
+                       andDescendants: excludingDescendants, fastCores: fastCoreCount)
     }
 
-    /// The reading `ps -A -o pid=,ppid=,pcpu=,comm=` output gives, leaving
-    /// out `root`, everything descended from it, and every Wine process.
-    static func reading(fromPSWithParents output: String, excludingTreeOf root: Int32, fastCores: Int) -> SystemLoadReading {
-        var parent: [Int32: Int32] = [:]
-        var rest: [(pid: Int32, line: String)] = []
-        for line in output.split(separator: "\n") {
-            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
-            guard fields.count == 3, let pid = Int32(fields[0]), let ppid = Int32(fields[1]) else { continue }
-            parent[pid] = ppid
-            rest.append((pid, String(fields[2])))
-        }
-        func descends(_ pid: Int32) -> Bool {
-            var next: Int32? = pid
-            var steps = 0
-            while let current = next, current > 1, steps < 64 {
-                if current == root { return true }
-                next = parent[current]
-                steps += 1
-            }
-            return false
-        }
-        // What's left is `ps`'s other format, with the tree already taken out.
-        let others = rest.filter { !descends($0.pid) }.map { "\($0.pid) \($0.line)" }.joined(separator: "\n")
-        return reading(fromPS: others, excludingPid: root, fastCores: fastCores)
-    }
-
-    /// The reading `ps -A -o pid=,pcpu=,comm=` output gives, leaving out
-    /// `excludingPid` and every Wine process.
-    static func reading(fromPS output: String, excludingPid: Int32, fastCores: Int) -> SystemLoadReading {
+    /// The reading `processes` give, leaving out `excluded`, everything it
+    /// started when `andDescendants`, and every Wine process.
+    static func reading(from processes: ProcessList, excluding excluded: pid_t, andDescendants: Bool,
+                        fastCores: Int) -> SystemLoadReading {
         var total = 0.0
         var byName: [String: Double] = [:]
-        for line in output.split(separator: "\n") {
-            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
-            guard fields.count == 3, let pid = Int32(fields[0]), let percent = Double(fields[1]) else { continue }
-            let command = String(fields[2])
-            guard pid != excludingPid, !isWine(command: command) else { continue }
-            let cores = percent / 100
+        for process in processes.entries {
+            guard process.pid != excluded, !process.isWine,
+                  !(andDescendants && processes.descends(process.pid, from: excluded)) else { continue }
+            let cores = process.cpuPercent / 100
             total += cores
-            let name = ProcessName.executable(fromPSCommand: command)
-            byName[name, default: 0] += cores
+            byName[process.name, default: 0] += cores
         }
         let top = byName
             .filter { $0.value >= 0.5 }
@@ -145,14 +101,5 @@ nonisolated public enum SystemLoad {
             .prefix(3)
             .map { SystemLoadReading.Program(name: $0.key, cores: $0.value) }
         return SystemLoadReading(otherCores: total, fastCores: fastCores, topPrograms: Array(top))
-    }
-
-    /// Wine's own processes: the loader and server, and every Windows program
-    /// it runs (named by its `.exe`, from a `winetemp-` directory).
-    public static func isWine(command: String) -> Bool {
-        ProcessName.executable(fromPSCommand: command).lowercased().hasSuffix(".exe")
-            || command.contains("/winetemp-")
-            || command.contains("/wine/bin/")
-            || command.contains("/wine/lib/")
     }
 }

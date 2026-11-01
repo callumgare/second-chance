@@ -596,10 +596,10 @@ class GameLauncher {
     /// so the wait for the game ends when Steam has gone: `steam.exe` missing
     /// from three checks in a row (a second and a half), since it restarts
     /// itself after an update.
-    private static func steamGone() -> (Set<WineProcessInfo>) -> String? {
+    private static func steamGone() -> (Set<ProcessList.Entry>) -> String? {
         var missing = 0
         return { processes in
-            let running = processes.contains { $0.basename.lowercased() == "steam.exe" }
+            let running = processes.contains { $0.name.lowercased() == "steam.exe" }
             missing = running ? 0 : missing + 1
             return missing >= 3 ? "Steam has exited without starting the game" : nil
         }

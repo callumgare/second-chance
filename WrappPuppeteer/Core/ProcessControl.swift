@@ -80,44 +80,19 @@ enum ProcessCleanup {
 
 // MARK: - Finding processes
 
-/// Named to avoid shadowing Foundation.ProcessInfo — this target also links
-/// SecondChanceKit, whose sources use the Foundation type.
-struct RunningProcess {
-    let pid: Int32
-    /// Executable basename.
-    let name: String
-    /// Full command path as `ps` reports it.
-    let command: String
-}
+/// A process `ProcessFinder` found: its pid, executable `name` and
+/// `command` as `ps` reports it.
+typealias RunningProcess = ProcessList.Entry
 
 enum ProcessFinder {
     /// Every process on the system, via `ps`. Sees processes that
     /// NSWorkspace doesn't, such as Wine's.
     static func allProcesses() -> [RunningProcess] {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/bin/ps")
-        task.arguments = ["-A", "-o", "pid,comm"]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = Pipe()
-
-        do {
-            try task.run()
-        } catch {
-            logger.error("  ⚠️  Error listing processes: \(error)")
+        guard let processes = ProcessList.current() else {
+            logger.error("  ⚠️  Couldn't list processes")
             return []
         }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-
-        guard let output = String(data: data, encoding: .utf8) else { return [] }
-        return output.split(separator: "\n").dropFirst().compactMap { line in
-            let parts = line.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-            guard parts.count == 2, let pid = Int32(parts[0]) else { return nil }
-            let command = String(parts[1]).trimmingCharacters(in: .whitespaces)
-            return RunningProcess(pid: pid, name: ProcessName.executable(fromPSCommand: command), command: command)
-        }
+        return processes.entries
     }
 
     /// Poll until a process with this executable name (case-insensitive) is running.

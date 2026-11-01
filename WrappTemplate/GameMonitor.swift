@@ -10,18 +10,6 @@ import Logging
 import SecondChanceKit
 import GameCatalog
 
-// MARK: - Wine Process Info
-
-struct WineProcessInfo: Hashable {
-    let pid: String
-    let ppid: String
-    let command: String
-
-    var basename: String {
-        return ProcessName.executable(fromPSCommand: command)
-    }
-}
-
 // MARK: - Game Monitor Delegate
 
 protocol GameMonitorDelegate: AnyObject {
@@ -85,7 +73,7 @@ class GameMonitor {
     /// returns why when the game can no longer start. There is no time limit:
     /// a launch that may still work is waited for until the player gives up.
     func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil,
-                            abandonIf: ((Set<WineProcessInfo>) -> String?)? = nil,
+                            abandonIf: ((Set<ProcessList.Entry>) -> String?)? = nil,
                             whileWaiting: (() -> Void)? = nil) -> Int32? {
         switch gameEngine {
         case .wine, .wineSteam, .wineSteamSilent:
@@ -122,56 +110,23 @@ class GameMonitor {
 
     // MARK: - Process Detection (Wine Games)
 
-    /// Get all Wine-related processes
-    func getAllWineProcesses() -> Set<WineProcessInfo> {
-
-        let psProcess = Process()
-        psProcess.executableURL = URL(fileURLWithPath: "/bin/ps")
-        psProcess.arguments = ["-A", "-o", "pid,ppid,comm"]
-
-        let pipe = Pipe()
-        psProcess.standardOutput = pipe
-        psProcess.standardError = Pipe()
-
-        var processes = Set<WineProcessInfo>()
-
-        do {
-            try psProcess.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            psProcess.waitUntilExit()
-
-            if let output = String(data: data, encoding: .utf8) {
-                let lines = output.split(separator: "\n")
-
-                for line in lines {
-                    let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-                    if parts.count >= 3 {
-                        let pid = String(parts[0])
-                        let ppid = String(parts[1])
-                        let command = parts[2...].joined(separator: " ")
-
-                        // Check if this is a wine-related process
-                        if command.contains("wine") || command.contains(".exe") {
-                            processes.insert(WineProcessInfo(pid: pid, ppid: ppid, command: command))
-                        }
-                    }
-                }
-
-                let pids = processes.map { $0.pid }.sorted().joined(separator: ", ")
-                logger.debug("[Wine Processes] Found \(processes.count) wine-related processes: \(pids)")
-            }
-        } catch {
-            logger.error("[Wine Processes] Error checking processes: \(error)")
+    /// Wine's processes, the game among them.
+    func getAllWineProcesses() -> Set<ProcessList.Entry> {
+        guard let processes = ProcessList.current() else {
+            logger.error("[Wine Processes] Couldn't list processes")
+            return []
         }
-
-        return processes
+        let wine = Set(processes.wine)
+        let pids = wine.map { String($0.pid) }.sorted().joined(separator: ", ")
+        logger.debug("[Wine Processes] Found \(wine.count) wine-related processes: \(pids)")
+        return wine
     }
 
     /// Wait for Wine game executable to start
     /// `whileWaiting` runs on every check (about twice a second) until the
     /// game appears: what else the launcher wants to watch meanwhile.
     private func waitForWineGameToStart(gameExeName: String, launcher: Process?,
-                                        abandonIf: ((Set<WineProcessInfo>) -> String?)?,
+                                        abandonIf: ((Set<ProcessList.Entry>) -> String?)?,
                                         whileWaiting: (() -> Void)? = nil) -> Int32? {
         logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName)")
         logger.debug("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
@@ -191,18 +146,16 @@ class GameMonitor {
             }
             let processes = self.getAllWineProcesses()
 
-            for process in processes where process.basename.lowercased() == gameExeName.lowercased() {
-                logger.notice("[Game Monitor] ✅ \(process.basename) started (pid \(process.pid)) after \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s")
-                logger.debug("[Game Monitor]   parent pid \(process.ppid), path \(process.command)")
+            for process in processes where process.name.lowercased() == gameExeName.lowercased() {
+                logger.notice("[Game Monitor] ✅ \(process.name) started (pid \(process.pid)) after \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s")
+                logger.debug("[Game Monitor]   parent pid \(process.parent), path \(process.command)")
 
-                if let pid = Int32(process.pid) {
-                    gamePid = pid
-                    self.delegate?.gameMonitorDidDetectGameStart(pid: pid)
-                }
+                gamePid = process.pid
+                self.delegate?.gameMonitorDidDetectGameStart(pid: process.pid)
 
                 // Log all related wine processes
-                let list = processes.sorted(by: { $0.basename < $1.basename })
-                    .map { "  - \($0.basename) (PID \($0.pid))\($0.basename.lowercased() == gameExeName.lowercased() ? " 🎮" : "")" }
+                let list = processes.sorted(by: { $0.name < $1.name })
+                    .map { "  - \($0.name) (PID \($0.pid))\($0.name.lowercased() == gameExeName.lowercased() ? " 🎮" : "")" }
                     .joined(separator: "\n")
                 logger.debug("[Game Monitor] All Wine processes in this session:\n\(list)")
 
@@ -421,47 +374,13 @@ class GameMonitor {
         logger.notice("[Process Monitor] Monitoring stopped")
     }
 
-    /// Get detailed Wine process information for monitoring
+    /// Wine's processes, for the log of what is running.
     private func getAllWineProcessesDetailed() -> [(pid: String, ppid: String, name: String)] {
-        let psProcess = Process()
-        psProcess.executableURL = URL(fileURLWithPath: "/bin/ps")
-        psProcess.arguments = ["-A", "-o", "pid,ppid,comm"]
-
-        let pipe = Pipe()
-        psProcess.standardOutput = pipe
-        psProcess.standardError = Pipe()
-
-        var wineProcesses: [(pid: String, ppid: String, name: String)] = []
-
-        do {
-            try psProcess.run()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-
-            psProcess.waitUntilExit()
-
-            if let output = String(data: data, encoding: .utf8) {
-                let lines = output.split(separator: "\n")
-
-                for line in lines {
-                    let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-                    if parts.count >= 3 {
-                        let pid = String(parts[0])
-                        let ppid = String(parts[1])
-                        let name = parts[2...].joined(separator: " ")
-
-                        // Check if this is a wine-related process
-                        if name.contains("wine") || name.contains("Game.exe") || name.contains(".exe") {
-                            wineProcesses.append((pid: pid, ppid: ppid, name: name))
-                        }
-                    }
-                }
-            }
-        } catch {
-            logger.error("[Process Monitor] Error checking processes: \(error)")
+        guard let processes = ProcessList.current() else {
+            logger.error("[Process Monitor] Couldn't list processes")
+            return []
         }
-
-        return wineProcesses
+        return processes.wine.map { (pid: String($0.pid), ppid: String($0.parent), name: $0.command) }
     }
 
     /// Log Wine processes (with change detection)

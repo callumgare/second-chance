@@ -242,8 +242,9 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             // another one (explorer.exe, a child it launched, wineserver).
             var targets: [(pid: Int32, file: String)] = []
             if let pid { targets.append((pid, "sample.txt")) }
-            for process in Self.wineProcesses(in: processList) where process.pid != pid {
-                targets.append((process.pid, "sample-\(process.name)-\(process.pid).txt"))
+            for process in ProcessList.current()?.wine ?? [] where process.pid != pid {
+                let name = process.name.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
+                targets.append((process.pid, "sample-\(name)-\(process.pid).txt"))
             }
             let group = DispatchGroup()
             for target in targets {
@@ -281,20 +282,6 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
     }
 
     // MARK: - Helpers
-
-    /// Windows processes (`*.exe`) and `wineserver` from a
-    /// `ps -o pid,ppid,pcpu,pmem,etime,comm` listing. The comm column is a path
-    /// and may contain spaces, so only the first five fields are split off.
-    static func wineProcesses(in processList: String) -> [(pid: Int32, name: String)] {
-        processList.split(separator: "\n").compactMap { line in
-            let fields = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
-            guard fields.count == 6, let pid = Int32(fields[0]) else { return nil }
-            let name = ProcessName.executable(fromPSCommand: String(fields[5]))
-            guard name.lowercased().hasSuffix(".exe") || name == "wineserver" else { return nil }
-            let safeName = name.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
-            return (pid, safeName)
-        }
-    }
 
     private func makeBundleDirectory(reason: Reason, at date: Date) throws -> URL {
         let base = FileManager.default.homeDirectoryForCurrentUser

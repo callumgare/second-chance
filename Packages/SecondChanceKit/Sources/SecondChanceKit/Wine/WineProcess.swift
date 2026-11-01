@@ -330,27 +330,15 @@ nonisolated extension Wine {
         }
     }
 
-    /// `ps` lines for every Wine-related process: pid, parent, CPU, elapsed
-    /// time and command.
+    /// A line for every Wine process: pid, parent, CPU, how long it has run
+    /// and its command.
     static func wineProcessSnapshot() -> String {
-        let ps = Process()
-        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-A", "-o", "pid,ppid,pcpu,etime,command"]
-        let pipe = Pipe()
-        ps.standardOutput = pipe
-        ps.standardError = FileHandle.nullDevice
-        do {
-            // swiftlint:disable:next wine_without_crash_handler
-            try ps.run()  // ps, not Wine
-        } catch {
-            return "(couldn't run ps: \(error.localizedDescription))"
+        guard let processes = ProcessList.current() else { return "(couldn't run ps)" }
+        let lines = processes.wine.map { process in
+            "  \(process.pid) \(process.parent) \(String(format: "%.1f", process.cpuPercent))% "
+                + "\(SubprocessWatch.duration(process.elapsedSeconds)) \(process.command.prefix(200))"
         }
-        // Read before waiting: the list can be bigger than the pipe's buffer.
-        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        ps.waitUntilExit()
-        let lines = output.split(separator: "\n")
-        let wine = lines.dropFirst().filter { $0.contains("wine") || $0.lowercased().contains(".exe") }
-        return ([lines.first.map(String.init) ?? ""] + wine.map { "  " + String($0.prefix(240)) }).joined(separator: "\n")
+        return (["  PID PARENT CPU RUNNING COMMAND"] + lines).joined(separator: "\n")
     }
 }
 
