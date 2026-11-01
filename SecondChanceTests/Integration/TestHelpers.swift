@@ -405,8 +405,7 @@ enum AppPuppetRunner {
         // draws with Direct3D (so never through cnc-ddraw), and mode scaling
         // unless it draws through cnc-ddraw; nothing else would notice if they
         // didn't (the game still plays, in a window, or in a corner of the
-        // screen), nor one Dock icon (the game would just have two). Every
-        // game arms puppet control, which WrappPuppeteer drives
+        // screen). Every game arms puppet control, which WrappPuppeteer drives
         // it through; naming it here says so when it didn't, rather than
         // leaving WrappPuppeteer's failure to explain it.
         let requiredHelpers: [InProcessHelperReport.Helper]
@@ -415,7 +414,7 @@ enum AppPuppetRunner {
             requiredHelpers = [.nativeFullscreen]
                 + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
                 + (graphicsAPI.mayUseDirect3D ? [.modeScaling] : [])
-                + [.quitWatch, .dockIcon, .puppetControl]
+                + [.quitWatch, .puppetControl]
         } else {
             requiredHelpers = [.puppetControl]
         }

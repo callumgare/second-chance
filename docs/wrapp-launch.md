@@ -100,6 +100,23 @@ one, and "Steam is starting *Title*…". An update's download is reported
 about four times a second, so 30 s without a new line is a stalled update,
 whatever the load.
 
+## The Dock
+
+A Wine game runs in a process of its own, which Wine's Mac driver makes a
+regular app with its own Dock icon and menu bar. The wrapp stays in the Dock
+beside it, and clicked there, or chosen in Cmd-Tab, brings the game forward
+(`GameLauncher.bringGameForward`, from `applicationDidBecomeActive`): it hands
+activation to the game's process and activates it, which only an active app
+may do, so a Dock click's reopen, which arrives before the wrapp is active,
+leaves it to the activation that follows. It doesn't while one of its own
+windows is up, such as the log window in debug mode. A ScummVM game's wrapp
+still hides itself from the Dock once the game's window appears, leaving
+`scummvm`'s icon.
+
+Taking the game's own icon away, by making its process an accessory app,
+was tried and undone: Wine's Quit (⌘⌥Q, its menu) then hung White Wolf for
+good, where with the icon and menu bar it quits cleanly.
+
 ## Closing
 
 The same window says when a wrapp is taking a moment to quit, whether

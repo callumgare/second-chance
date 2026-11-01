@@ -41,9 +41,7 @@ nonisolated extension Wine {
     /// mode scaling scales a Direct3D game's picture up to the display when
     /// Wine is emulating the display mode the game switched to (only in a game
     /// that may draw with Direct3D), quit watch tells the wrapp when the game
-    /// first drew and whether it was asked to quit, one Dock icon keeps the
-    /// game's process out of the Dock and Cmd-Tab, leaving the wrapp's icon,
-    /// and puppet control (only when WrappPuppeteer
+    /// first drew and whether it was asked to quit, and puppet control (only when WrappPuppeteer
     /// started the wrapp) lets it see and click the game. Every Mac-driver
     /// process loads them, so each is told which one is the game (by the
     /// .exe's name, which Wine puts in the process's argv[0]), and a Wine
@@ -78,11 +76,6 @@ nonisolated extension Wine {
         // lets the wrapp tell a game that quit before it drew anything from
         // a player quitting (GameQuitCheck).
         env["QUIT_WATCH_EXE"] = gameExe
-        // SECOND_CHANCE_ONE_DOCK_ICON=0 leaves the game its own Dock icon
-        // beside the wrapp's, as Wine gives it — for comparison.
-        if environment["SECOND_CHANCE_ONE_DOCK_ICON"] != "0" {
-            env["DOCK_ICON_EXE"] = gameExe
-        }
         // Puppet control arms only when WrappPuppeteer started the wrapp,
         // which it marks by passing the directory for the helper's socket.
         if puppetDirectory(in: environment) != nil {

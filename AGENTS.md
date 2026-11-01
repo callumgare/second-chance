@@ -83,8 +83,8 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
-| [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers |
-| [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen, the cnc-ddraw cursor lock or the game's Dock icon in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
+| [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits |
+| [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Packages/SecondChanceKit/Sources/SecondChanceReporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, adding a failure that should be reported, or the success reports that count builds and launches |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
 | [docs/historical-plans/2026-11-01-shared-wrapp-contract.md](docs/historical-plans/2026-11-01-shared-wrapp-contract.md) | You want to know why the game database is a package of its own, why a wrapp's settings, layout, drives, processes and Steam waits are shared types, and what the review behind them chose to leave alone |
@@ -360,9 +360,7 @@ direct assignment.
   Wrapp output lands in the wrapp's log, so `SECOND_CHANCE_WINEDEBUG=+seh,+d3d9
   open -n "<wrapp>.app"` traces a single launch — `open` passes the shell's
   environment through. Channels like `+d3d9` log per frame, so keep runs short.
-  More debug switches read the same way: `SECOND_CHANCE_ONE_DOCK_ICON=0`
-  leaves the game's process its own Dock icon beside the wrapp's
-  ([one Dock icon](docs/wine-in-process-helpers.md#one-dock-icon)),
+  More debug switches read the same way:
   `SECOND_CHANCE_NATIVE_FULLSCREEN=0` leaves native fullscreen unarmed (and
   stops Wine seeing a notched display without its notch strip),
   `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet), and

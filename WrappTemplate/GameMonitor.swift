@@ -259,9 +259,10 @@ class GameMonitor {
         return windowDetected
     }
 
-    /// Hide the wrapp from the Dock, for a ScummVM game: scummvm has a Dock
-    /// icon of its own, which then stands for the game. A Wine game's process
-    /// has none (dock_icon.m), so the wrapp's stays.
+    /// Hide the wrapp from the Dock, for a ScummVM game, as it always has:
+    /// scummvm's own icon stands for the game. A Wine game's wrapp stays in
+    /// the Dock beside Wine's icon for the game, and brings the game forward
+    /// when clicked (`GameLauncher.bringGameForward`).
     func hideWrapperFromDock() {
         // Don't hide dock icon in debug mode so log window stays accessible
         guard !debugMode else {

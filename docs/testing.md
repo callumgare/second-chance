@@ -637,13 +637,10 @@ the game's Space would stay up, and only which app is active would change.
 Once the game says it is no longer active and its window is off the screen
 (`onspace=0`), WrappPuppeteer opens the wrapp as a click on its Dock icon does
 (`ProcessControl.reopen`), and closes its window once the game is back. The
-game has to be active again, with its window back on screen, within 15 s.
-Active alone isn't enough: an accessory app made active stays off its Space
-unless the [Dock icon helper](wine-in-process-helpers.md#one-dock-icon)
-brings its window forward, and that is what the test first caught.
-a Wine game's process has no Dock icon of its own
-([one Dock icon](wine-in-process-helpers.md#one-dock-icon)), so the wrapp
-brings it forward. The menu's frame is then checked again, below: a Direct3D
+game has to be active again, with its window back on screen, within 15 s:
+the wrapp brings it forward ([the Dock](wrapp-launch.md#the-dock)). Active
+alone isn't enough, as an app made active needn't take the screen to its
+window's Space. The menu's frame is then checked again, below: a Direct3D
 game whose mode Wine emulates once came back with its picture half a screen
 up. A game that doesn't come back fails the run. A switch away that doesn't
 happen at all is the test's problem rather than the game's, so it's only a

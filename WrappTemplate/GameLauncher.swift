@@ -131,9 +131,9 @@ class GameLauncher {
     var hasGameWindow: Bool { gameWindowPid.withLock { $0 != nil } }
 
     /// Bring the game's window forward, for the wrapp being clicked in the
-    /// Dock or chosen in Cmd-Tab: the game's own process has no Dock icon
-    /// (dock_icon.m), so the wrapp's stands for the game. Whether there was a
-    /// game window to bring forward. Main thread, from the wrapp's own
+    /// Dock or chosen in Cmd-Tab: the wrapp is the game's app, though the
+    /// game runs in a process of its own, with an icon of its own. Whether
+    /// there was a game window to bring forward. Main thread, from the wrapp's own
     /// activation: only an app that is active may hand activation on.
     func bringGameForward() -> Bool {
         guard let pid = gameWindowPid.withLock({ $0 }),

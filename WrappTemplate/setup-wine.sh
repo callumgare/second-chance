@@ -92,8 +92,7 @@ chmod +x "${TEMP_DIR}/Resources/winetricks"
 # cursor_lock.m (cnc-ddraw's cursor lock), emulated_mode_scaling.m (scales a
 # Direct3D game's picture up when Wine emulates the display mode it asked for),
 # quit_watch.m (tells the wrapp when the game first drew and whether it was
-# asked to quit, so an exit before then reads as a failure), dock_icon.m
-# (keeps the game's process out of the Dock, leaving the wrapp's icon) and
+# asked to quit, so an exit before then reads as a failure) and
 # puppet_control.m (lets the integration tests' WrappPuppeteer see and click
 # the game). ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
@@ -109,7 +108,6 @@ clang -dynamiclib \
     "${HELPERS_DIR}/emulated_mode_scaling.m" \
     "${HELPERS_DIR}/puppet_control.m" \
     "${HELPERS_DIR}/quit_watch.m" \
-    "${HELPERS_DIR}/dock_icon.m" \
     -framework Cocoa \
     -framework OpenGL \
     -framework ImageIO \

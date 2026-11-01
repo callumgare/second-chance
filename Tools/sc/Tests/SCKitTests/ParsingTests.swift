@@ -36,7 +36,7 @@ struct ParsingTests {
         ["app", "run", "--debug", "bogus"],
         ["app", "run", "--debug", "settings-dialog"],
         ["wrapp", "run", "x", "--debug", "wine"],
-        ["wrapp", "run", "x", "--debug", "no-one-dock-icon=1"],
+        ["wrapp", "run", "x", "--debug", "no-cursor-lock=1"],
         ["release", "--dry-run", "--notes-only"],
         ["release", "--version", "1.2"],
         ["test", "unit", "--logs", "pretty"],

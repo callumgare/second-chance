@@ -523,7 +523,6 @@
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/cursor_lock.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/emulated_mode_scaling.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/quit_watch.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/dock_icon.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/puppet_control.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/helper_common.h",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/patch-winemac.swift",

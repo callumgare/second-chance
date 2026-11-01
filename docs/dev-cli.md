@@ -125,7 +125,6 @@ They map onto the app's and wrapp's own switches:
 | `install-stall=<seconds>` | `SECOND_CHANCE_INSTALL_STALL_SECONDS` | ✓         | ✓             |             |
 | `settings-dialog`         | `--debug-options`                     |           |               | ✓           |
 | `wine=<channels>`         | `SECOND_CHANCE_WINEDEBUG=<channels>`  | ✓         | ✓             | ✓           |
-| `no-one-dock-icon`        | `SECOND_CHANCE_ONE_DOCK_ICON=0`       |           |               | ✓           |
 | `no-native-fullscreen`    | `SECOND_CHANCE_NATIVE_FULLSCREEN=0`   |           |               | ✓           |
 | `no-cursor-lock`          | `SECOND_CHANCE_CURSOR_LOCK=0`         |           |               | ✓           |
 | `no-mode-scaling`         | `SECOND_CHANCE_MODE_SCALING=0`        |           |               | ✓           |

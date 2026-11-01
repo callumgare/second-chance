@@ -315,8 +315,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         super.init()
     }
 
-    /// Chosen in Cmd-Tab while the game runs: the game's process isn't
-    /// there (dock_icon.m), so the wrapp passes it on. Not while one of the
+    /// Chosen in Cmd-Tab while the game runs: the game is in a process of
+    /// its own, so the wrapp passes it on. Not while one of the
     /// wrapp's own windows is up (the log window, in debug mode), which the
     /// person may have clicked to get to.
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -324,8 +324,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = gameLauncher?.bringGameForward()
     }
 
-    /// While the game runs, its process has no Dock icon of its own
-    /// (dock_icon.m), so clicking the wrapp's brings the game forward.
+    /// While the game runs, clicking the wrapp in the Dock brings the game,
+    /// which runs in a process of its own, forward.
     ///
     /// Opening the game while this copy is closing down reaches this copy
     /// (macOS reactivates a running app rather than starting another), which

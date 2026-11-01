@@ -3,7 +3,7 @@
 //  Shared
 //
 //  What the in-process helpers (native fullscreen, cursor lock, mode
-//  scaling, quit watch, one Dock icon, puppet control) say about
+//  scaling, quit watch, puppet control) say about
 //  themselves, gathered from the game's output, and a check that the ones the
 //  wrapp armed did arm. A helper that never arms is otherwise silent — the
 //  game just runs in a window, or swallows its first click — which is how
@@ -19,7 +19,6 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
         case cursorLock = "CursorLock"
         case modeScaling = "EmulatedMode"
         case quitWatch = "QuitWatch"
-        case dockIcon = "DockIcon"
         case puppetControl = "PuppetControl"
 
         var name: String {
@@ -28,7 +27,6 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .cursorLock: return "Cursor lock"
             case .modeScaling: return "Mode scaling"
             case .quitWatch: return "Quit watch"
-            case .dockIcon: return "One Dock icon"
             case .puppetControl: return "Puppet control"
             }
         }
@@ -40,7 +38,6 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .cursorLock: return "CURSOR_LOCK_EXE"
             case .modeScaling: return "EMULATED_MODE_SCALING_EXE"
             case .quitWatch: return "QUIT_WATCH_EXE"
-            case .dockIcon: return "DOCK_ICON_EXE"
             case .puppetControl: return "PUPPET_CONTROL_EXE"
             }
         }
@@ -52,7 +49,6 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
             case .cursorLock: return "the game's first click will be swallowed"
             case .modeScaling: return "a game that switches the display mode will draw into a corner of the screen"
             case .quitWatch: return "a game that quits before it has drawn anything won't be reported as failing"
-            case .dockIcon: return "the game has a Dock icon of its own beside the game's app"
             case .puppetControl: return "WrappPuppeteer can't see or click the game"
             }
         }
