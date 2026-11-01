@@ -7,6 +7,7 @@
 
 import Foundation
 import Testing
+@testable import SecondChance
 @testable import SecondChanceKit
 
 @Suite("Steam sign-in watch")

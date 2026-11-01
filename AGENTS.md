@@ -507,7 +507,11 @@ more self-explanatory.
 **[docs/testing.md](docs/testing.md) is the detailed guide** — suites,
 filtering, how WrappPuppeteer drives a game and its exit codes, reports. In short:
 
-- **Unit tests** live in `SecondChanceTests/`, using Swift Testing.
+- **Unit tests** live in `SecondChanceTests/`, using Swift Testing, except
+  those that need neither app, which live in the package beside the code
+  (`Packages/SecondChanceKit/Tests/SecondChanceKitTests/`: parsers, process
+  listings, line handling) and run with `swift test`, in seconds and with no
+  Xcode build; `sc test unit` runs both. Put a new test there when it can.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new
   suite runs in `sc test unit` automatically — the unit run excludes a short
   list (`TestRunner.unitExclusions` in `Tools/sc`) rather than listing what to

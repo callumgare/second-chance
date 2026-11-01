@@ -85,6 +85,15 @@ in `installers/` doesn't skip, and takes hours.
 
 ## Test structure
 
+### Package tests (`Packages/SecondChanceKit/Tests/SecondChanceKitTests/`)
+
+What needs neither app: the VDF, Windows-program and MSI readers, process
+listings and names, the subprocess line reader and watch, load measurement,
+the quit check, loading stages, shell quoting and the wrapp's settings. They
+run with `swift test --package-path Packages/SecondChanceKit`, which needs no
+Xcode build, in well under a second; `sc test unit` runs them as a step of its
+own, and CI with it.
+
 ### Unit tests (`SecondChanceTests/*.swift`)
 
 Fast, no installer ISOs required:

@@ -1,6 +1,5 @@
 import Testing
 import Foundation
-@testable import SecondChance
 @testable import SecondChanceKit
 
 @Suite("Subprocess watch and Wine run naming")

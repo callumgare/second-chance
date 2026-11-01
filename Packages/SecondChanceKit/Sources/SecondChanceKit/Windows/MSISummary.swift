@@ -1,6 +1,6 @@
 //
 //  MSISummary.swift
-//  SecondChance
+//  SecondChanceKit
 //
 //  The subject of an MSI's summary information: the game's name, and on
 //  Castle Malloy's disc the only place it appears. An MSI is an OLE compound
@@ -10,20 +10,19 @@
 //  a crash or a hang.
 
 import Foundation
-import SecondChanceKit
 
-nonisolated struct MSISummary: Sendable {
+nonisolated public struct MSISummary: Sendable {
     /// PIDSI_SUBJECT, which an MSI sets to the product's name.
-    let subject: String?
+    public let subject: String?
 
     /// Mapped rather than read in, since an MSI can be large. Nil if it isn't
     /// a compound file with summary information.
-    init?(contentsOf url: URL) {
+    public init?(contentsOf url: URL) {
         guard let data = try? Data(contentsOf: url, options: .alwaysMapped) else { return nil }
         self.init(data: data)
     }
 
-    init?(data: Data) {
+    public init?(data: Data) {
         guard let file = CompoundFile(data),
               let stream = file.stream(named: "\u{5}SummaryInformation"),
               let properties = PropertySet(summaryInformation: stream) else { return nil }

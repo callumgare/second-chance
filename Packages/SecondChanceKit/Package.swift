@@ -61,5 +61,17 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
+        // Tests of SecondChanceKit alone, which need neither app: parsers,
+        // the log's line handling, process listings and the like. They run
+        // with `swift test` in seconds, with no Xcode build (sc test unit
+        // runs them too). Tests that need an app stay in SecondChanceTests.
+        .testTarget(
+            name: "SecondChanceKitTests",
+            dependencies: [
+                "SecondChanceKit",
+                .product(name: "Logging", package: "swift-log"),
+            ],
+            swiftSettings: swiftSettings
+        ),
     ]
 )

@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-@testable import SecondChance
 @testable import SecondChanceKit
 
 @Suite("Wrapp loading stages")
