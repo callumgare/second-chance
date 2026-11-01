@@ -263,29 +263,39 @@ struct NancyDrewQuitScenario {
         // the background, it has to come back. WrappPuppeteer's window, shown
         // until then, takes the screen off the game's fullscreen Space, as
         // Cmd-Tab to another app's window does.
-        var window: NSWindow?
-        if context.game.yieldActivation(to: getpid()) {
-            window = ProcessControl.takeOverScreen(title: "WrappPuppeteer: switched away from the game")
+        let window = ProcessControl.takeOverScreen(title: "WrappPuppeteer: switched away from the game") {
+            context.game.yieldActivation(to: getpid())
         }
         defer { ProcessControl.giveBackScreen(window) }
         if window != nil {
             logger.notice("   WrappPuppeteer's window is on screen, off the game's Space")
         }
         let away = Date().addingTimeInterval(Self.switchBackSeconds)
-        while context.game.state()?.active == true, Date() < away {
-            Thread.sleep(forTimeInterval: 0.2)
+        // Away means inactive and, once WrappPuppeteer's window is up, off
+        // the screen: the slide to the desktop takes a moment.
+        let isAway = { (state: ControlledWindowState?) in
+            state?.active == false && (window == nil || state?.onActiveSpace != true)
+        }
+        while !isAway(context.game.state()), Date() < away {
+            ProcessControl.handleEvents(for: 0.2)
         }
         guard context.game.state()?.active == false else {
             warnForTest("Couldn't switch away from the game, so coming back to it through the Dock wasn't checked")
             return nil
         }
+        if window != nil, context.game.state()?.onActiveSpace == true {
+            warnForTest("The screen stayed on the game's Space after switching away, so coming back to it wasn't really checked")
+        }
         logger.notice("   Switched away; opening the game's app...")
         ProcessControl.reopen(appPath: wrapp.appPath)
+        // Back means active and on screen: an app made active needn't take
+        // the screen to the Space its window is in.
+        let isBack = { (state: ControlledWindowState?) in state?.active == true && state?.onActiveSpace != false }
         let back = Date().addingTimeInterval(Self.switchBackSeconds)
-        while context.game.state()?.active != true, Date() < back {
-            Thread.sleep(forTimeInterval: 0.2)
+        while !isBack(context.game.state()), Date() < back {
+            ProcessControl.handleEvents(for: 0.2)
         }
-        guard context.game.state()?.active == true else {
+        guard isBack(context.game.state()) else {
             logger.error("❌ Opening the game's app, as its Dock icon does, didn't bring the game back within \(Int(Self.switchBackSeconds))s")
             diagnosticCapture(context, prefix: "switch-back")
             optionalScreenshot(prefix: "switch-back")

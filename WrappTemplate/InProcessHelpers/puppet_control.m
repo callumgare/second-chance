@@ -19,7 +19,7 @@
 //  each way; replies start `ok` or `error`. Coordinates are points in the game
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //
-//    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1
+//    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
 //    capture <path>   -> ok <w>x<h>     PNG of the game window
 //    click <x> <y>    -> ok             mouse moved, a pause, then left button down and up
@@ -128,9 +128,10 @@ static NSString *stateCommand(void) {
         // window fullscreen as the move begins.
         BOOL native = (window.styleMask & NSWindowStyleMaskFullScreen) != 0 && !windowIsEnteringFullscreen(window);
         BOOL coversScreen = window.screen && NSEqualRects(window.frame, window.screen.frame);
-        reply = [NSString stringWithFormat:@"ok window=%ld size=%.0fx%.0f scale=%.2f fullscreen=%d native=%d key=%d active=%d cursor=%s cursorlock=%s",
+        reply = [NSString stringWithFormat:@"ok window=%ld size=%.0fx%.0f scale=%.2f fullscreen=%d native=%d key=%d active=%d onspace=%d cursor=%s cursorlock=%s",
                  (long)window.windowNumber, window.frame.size.width, window.frame.size.height,
                  window.backingScaleFactor, native || coversScreen, native, window.isKeyWindow, NSApp.isActive,
+                 window.isOnActiveSpace,
                  cursorLockHeld() ? "held" : "free", cursorLockStatus()];
         return YES;
     });

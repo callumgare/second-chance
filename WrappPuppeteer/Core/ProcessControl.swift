@@ -185,13 +185,14 @@ enum ProcessControl {
     private static var finishedLaunching = false
 
     /// Take the screen from the app in front, as Cmd-Tab to another app
-    /// does: become a regular app with a window, once the app in front has
-    /// handed this one activation. macOS can't show a regular app's window
-    /// in another app's fullscreen Space, so it slides over to the
-    /// desktop's. Waits until the window is on screen. Returns the window,
-    /// for `giveBackScreen`, or nil if it never showed (and then gives the
+    /// does: become a regular app with a window, then have the app in front
+    /// hand this one activation (`handOver`; since macOS 14 an app can't take
+    /// it otherwise) and take it. macOS can't show a regular app's window in
+    /// another app's fullscreen Space, so it slides over to the desktop's.
+    /// Waits until the window is on screen. Returns the window, for
+    /// `giveBackScreen`, or nil if it never showed (and then gives the
     /// screen back itself).
-    static func takeOverScreen(title: String, timeout: TimeInterval = 15) -> NSWindow? {
+    static func takeOverScreen(title: String, timeout: TimeInterval = 15, handOver: () -> Bool) -> NSWindow? {
         if !finishedLaunching {
             NSApp.finishLaunching()
             finishedLaunching = true
@@ -203,10 +204,16 @@ enum ProcessControl {
         window.isReleasedWhenClosed = false
         window.center()
         window.makeKeyAndOrderFront(nil)
+        handleEvents(for: 0.2)
+        guard handOver() else {
+            logger.warning("⚠️  The app in front didn't hand over activation")
+            giveBackScreen(window)
+            return nil
+        }
         NSApp.activate()
         let deadline = Date().addingTimeInterval(timeout)
         while !window.occlusionState.contains(.visible), Date() < deadline {
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            handleEvents(for: 0.1)
         }
         guard window.occlusionState.contains(.visible) else {
             logger.warning("⚠️  WrappPuppeteer's window never came on screen within \(Int(timeout))s")
@@ -222,7 +229,18 @@ enum ProcessControl {
     static func giveBackScreen(_ window: NSWindow?) {
         window?.close()
         NSApp.setActivationPolicy(.accessory)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        handleEvents(for: 0.1)
+    }
+
+    /// Take AppKit's events off the queue and handle them for `seconds`.
+    /// WrappPuppeteer never runs NSApp's event loop, and becoming active or
+    /// a window coming on screen arrives as events: left on the queue,
+    /// neither happens.
+    static func handleEvents(for seconds: TimeInterval) {
+        let until = Date().addingTimeInterval(seconds)
+        while let event = NSApp.nextEvent(matching: .any, until: until, inMode: .default, dequeue: true) {
+            NSApp.sendEvent(event)
+        }
     }
 
     /// Poll until `pid` has exited; false if it is still alive at `timeout`.

@@ -526,6 +526,15 @@ which arrives before the wrapp is active, leaves it to the activation that
 follows. It doesn't while one of its own windows is up, such as the log
 window in debug mode.
 
+Activating an accessory app doesn't take the screen to the Space its window
+is in, as activating a regular app does. Clicking the wrapp's icon made the
+game active while the screen stayed on the desktop. So once the game's app is
+active, the helper brings a game window that isn't on the Space on screen to
+the front (`makeKeyAndOrderFront:`), which takes macOS to its fullscreen
+Space. The game's process logs `[DockIcon] active, but the game's window
+isn't on the Space on screen: bringing it forward` to the system log when it
+does.
+
 ScummVM games are left as they were: the helper isn't loaded into `scummvm`
 for a player's launch, so `scummvm` keeps its Dock icon and the wrapp hides
 itself once the game's window appears (`GameMonitor.hideWrapperFromDock`).
@@ -578,7 +587,7 @@ capture's pixels divided by `scale` — so no screen geometry is involved.
 
 | Request | Reply |
 | --- | --- |
-| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
+| `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
 | `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
 | `click <x> <y>` | `ok`: a mouse move, 150 ms for the game to see it, then the left button held for 100 ms |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |

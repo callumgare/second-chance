@@ -13,6 +13,12 @@
 //  The wrapp stays in the Dock, and brings the game forward when it is
 //  clicked there or chosen in Cmd-Tab (WrappTemplate's AppDelegate).
 //
+//  Activating an accessory app doesn't take the screen to the Space its
+//  window is in, as activating a regular one does: the game became active
+//  but stayed on its fullscreen Space while the player looked at the
+//  desktop. So once the app is active, a game window that isn't on the Space
+//  on screen is brought to the front, which takes macOS there.
+//
 //  Armed by DOCK_ICON_EXE, in the process running that .exe.
 //
 //  Built into in_process_helpers.dylib by WrappTemplate/setup-wine.sh; see
@@ -54,6 +60,25 @@ static void transformProcessToForegroundOnce(id self, SEL _cmd, BOOL activateIfT
     helperReport("DockIcon", "notice", "the game has no Dock icon of its own");
 }
 
+/// The biggest visible window Wine has: the game's.
+static NSWindow *gameWindow(void) {
+    NSWindow *best = nil;
+    CGFloat bestArea = 0;
+    for (NSWindow *window in NSApp.windows) {
+        if (!window.isVisible || ![window isKindOfClass:NSClassFromString(@"WineWindow")]) continue;
+        CGFloat area = window.frame.size.width * window.frame.size.height;
+        if (area > bestArea) { best = window; bestArea = area; }
+    }
+    return best;
+}
+
+static void bringWindowToItsSpace(void) {
+    NSWindow *window = gameWindow();
+    if (!window || window.isOnActiveSpace) return;
+    os_log(gLog, "[DockIcon] active, but the game's window isn't on the Space on screen: bringing it forward");
+    [window makeKeyAndOrderFront:nil];
+}
+
 __attribute__((constructor))
 static void dockIconInit(void) {
     gLog = os_log_create("com.secondchance.gamewrapper", "DockIcon");
@@ -68,5 +93,7 @@ static void dockIconInit(void) {
     }
     gSetActivationPolicy = method_setImplementation(setPolicy, (IMP)accessoryActivationPolicy);
     gWineTransformProcessToForeground = method_setImplementation(transform, (IMP)transformProcessToForegroundOnce);
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidBecomeActiveNotification object:nil queue:nil
+                                                  usingBlock:^(NSNotification *note) { (void)note; bringWindowToItsSpace(); }];
     helperReport("DockIcon", "notice", "armed in %s", getenv("DOCK_ICON_EXE"));
 }

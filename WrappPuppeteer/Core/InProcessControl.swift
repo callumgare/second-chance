@@ -90,6 +90,8 @@ struct ControlledWindowState {
     let native: Bool
     let key: Bool
     let active: Bool
+    /// On the Space on screen; nil when the window doesn't say.
+    let onActiveSpace: Bool?
     /// The app has hidden the cursor and confined it to its window.
     let cursorHeld: Bool
     /// What the app's own cursor-locking, if it has any, says it is doing;
@@ -112,7 +114,7 @@ struct WindowControl {
         return ControlledWindowState(
             windowNumber: window, size: CGSize(width: width, height: height), scale: CGFloat(scale),
             fullscreen: fields["fullscreen"] == "1", native: fields["native"] == "1",
-            key: fields["key"] == "1", active: fields["active"] == "1",
+            key: fields["key"] == "1", active: fields["active"] == "1", onActiveSpace: fields["onspace"].map { $0 == "1" },
             cursorHeld: fields["cursor"] == "held", cursorLock: fields["cursorlock"])
     }
 

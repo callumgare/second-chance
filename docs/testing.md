@@ -630,12 +630,17 @@ control](wine-in-process-helpers.md#puppet-control)), which becomes a regular
 app for the moment and shows a window (`ProcessControl.takeOverScreen`).
 macOS can't show it in the game's fullscreen Space, so the screen slides over
 to the desktop, as Cmd-Tab to another app's window does; WrappPuppeteer waits
-until its window is on screen. Without a window of its own nothing would show
-the switch: the game's Space would stay up, and only which app is active
-would change. Once the game says it is no longer active, WrappPuppeteer opens
-the wrapp as a click on its Dock icon does (`ProcessControl.reopen`), and
-closes its window once the game is back. The game has to be active again
-within 15 s:
+until its window is on screen, handling AppKit's events meanwhile, since it
+never runs NSApp's event loop and neither the activation nor the window would
+happen otherwise. Without a window of its own nothing would show the switch:
+the game's Space would stay up, and only which app is active would change.
+Once the game says it is no longer active and its window is off the screen
+(`onspace=0`), WrappPuppeteer opens the wrapp as a click on its Dock icon does
+(`ProcessControl.reopen`), and closes its window once the game is back. The
+game has to be active again, with its window back on screen, within 15 s.
+Active alone isn't enough: an accessory app made active stays off its Space
+unless the [Dock icon helper](wine-in-process-helpers.md#one-dock-icon)
+brings its window forward, and that is what the test first caught.
 a Wine game's process has no Dock icon of its own
 ([one Dock icon](wine-in-process-helpers.md#one-dock-icon)), so the wrapp
 brings it forward. The menu's frame is then checked again, below: a Direct3D
