@@ -48,7 +48,8 @@ struct SteamSignInWatchTests {
         let start = Date()
         var watch = SteamSignInWatch(client: client, exitedChecks: 1, runningCheckInterval: 5)
         #expect(!watch.check(now: start.addingTimeInterval(1)).contains(.exited))
-        #expect(watch.check(now: start.addingTimeInterval(5)).contains(.exited))
+        // Well past 5 s: the watch starts its clock a moment after `start`.
+        #expect(watch.check(now: start.addingTimeInterval(6)).contains(.exited))
     }
 }
 
