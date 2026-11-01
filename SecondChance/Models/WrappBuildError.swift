@@ -80,7 +80,7 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .steamSignInTimedOut:
             return "Steam waited for you to sign in, but nobody did. Try again when you're ready, and sign in when Steam's window appears."
         case .steamStoppedResponding:
-            return "Steam kept getting stuck while it was signing in, even after it was started again. "
+            return "Steam kept getting stuck while it was signing in. "
                 + "Check that this Mac is connected to the internet. Trying again signs you out of Steam to start afresh: "
                 + "you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too."
         case .steamExited:
