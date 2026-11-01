@@ -245,7 +245,7 @@ enum TestCommandSupport {
 
     static func requireTools() throws {
         try Proc.require("xcbeautify", brew: "xcbeautify")
-        try Proc.require("xchtmlreport", brew: "xctest-html-report")
+        try Proc.require("xchtmlreport", brew: "xctesthtmlreport")
     }
 
     /// sc's own Swift tests (Tools/sc).

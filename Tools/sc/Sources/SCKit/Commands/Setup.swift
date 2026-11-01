@@ -17,7 +17,7 @@ struct SetupCommand: AsyncParsableCommand {
 
     static let tools: [(name: String, formula: String, purpose: String)] = [
         ("xcbeautify", "xcbeautify", "formats xcodebuild output"),
-        ("xchtmlreport", "xctest-html-report", "HTML test reports"),
+        ("xchtmlreport", "xctesthtmlreport", "HTML test reports"),
         ("cog", "cocogitto", "versions, changelog, commit lint"),
         ("swiftlint", "swiftlint", "lints the Swift code (sc lint)"),
         ("npx", "node", "runs markdownlint on the docs (sc lint)"),
