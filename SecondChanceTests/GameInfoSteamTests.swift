@@ -63,4 +63,16 @@ struct GameInfoSteamTests {
                             steam: .init(appID: 1, installDir: "X", exe: "Game.exe"))
         #expect(game.steamEngine(launchMode: choice) == expected)
     }
+
+    @Test("What each engine needs to start a game", arguments: [
+        (GameInfo.GameEngine.wine, true, false, false),
+        (.wineSteamSilent, true, true, false),
+        (.wineSteam, true, true, true),
+        (.scummvm, false, false, false),
+    ])
+    func engineNeeds(engine: GameInfo.GameEngine, wine: Bool, steam: Bool, launchedBySteam: Bool) {
+        #expect(engine.runsInWine == wine)
+        #expect(engine.needsSteam == steam)
+        #expect(engine.launchedBySteam == launchedBySteam)
+    }
 }

@@ -8,6 +8,7 @@ import Foundation
 import AppKit
 import Logging
 import SecondChanceKit
+import GameCatalog
 
 // MARK: - Wine Process Info
 
@@ -34,7 +35,7 @@ protocol GameMonitorDelegate: AnyObject {
 class GameMonitor {
     weak var delegate: GameMonitorDelegate?
     private let config: GameConfig
-    private let gameEngine: String
+    private let gameEngine: GameInfo.GameEngine
     private var isMonitoring = false
     private let debugMode: Bool
     private let exitCodeLock = NSLock()
@@ -87,13 +88,10 @@ class GameMonitor {
                             abandonIf: ((Set<WineProcessInfo>) -> String?)? = nil,
                             whileWaiting: (() -> Void)? = nil) -> Int32? {
         switch gameEngine {
-        case _ where gameEngine == "wine" || gameEngine.hasPrefix("wine-"):
+        case .wine, .wineSteam, .wineSteamSilent:
             return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, abandonIf: abandonIf, whileWaiting: whileWaiting)
-        case "scummvm":
+        case .scummvm:
             return waitForScummVMGameToStart(gamePid: gamePid)
-        default:
-            logger.error("[Game Monitor] Unknown game engine: \(self.gameEngine)")
-            return nil
         }
     }
 
@@ -107,13 +105,10 @@ class GameMonitor {
         isMonitoring = true
 
         switch gameEngine {
-        case _ where gameEngine == "wine" || gameEngine.hasPrefix("wine-"):
+        case .wine, .wineSteam, .wineSteamSilent:
             waitForWineGameToStop(winePid: gamePid, process: process)
-        case "scummvm":
+        case .scummvm:
             waitForScummVMGameToStop(gamePid: gamePid, process: process)
-        default:
-            logger.error("[Game Monitor] Unknown game engine: \(self.gameEngine)")
-            isMonitoring = false
         }
     }
 

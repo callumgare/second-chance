@@ -10,6 +10,7 @@ import Logging
 import os
 import SecondChanceKit
 import SecondChanceReporting
+import GameCatalog
 
 // NOTE: no top-level Logger in main.swift — top-level code here is eager and
 // runs in source order, so a logger declared at file scope would be
@@ -33,7 +34,7 @@ func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldC
         let alert = NSAlert()
         alert.messageText = "Debug Settings"
         let debugStatus = initialDebugMode ? "Enabled" : "Disabled"
-        alert.informativeText = "Game: \(config.appPath.lastPathComponent)\nEngine: \(config.gameEngine)\nPrefix: \(config.winePrefix.path)\n\n"
+        alert.informativeText = "Game: \(config.appPath.lastPathComponent)\nEngine: \(config.gameEngine.rawValue)\nPrefix: \(config.winePrefix.path)\n\n"
             + "Launch Command: \(getGameLaunchInfo(config).formatLaunchCommand())\n\nDebug Mode: \(debugStatus)"
         alert.alertStyle = .informational
 
@@ -213,13 +214,9 @@ func launchScummvmShell(_ config: GameConfig) {
 
 func launchShell(_ config: GameConfig) {
     switch config.gameEngine {
-    case "scummvm":
+    case .scummvm:
         launchScummvmShell(config)
-        // launchWineShell(config)
-    case "wine", "wine-steam", "wine-steam-silent":
-        launchWineShell(config)
-    default:
-        mainLogger.warning("Warning: Unknown game engine \(config.gameEngine), attempting Wine shell")
+    case .wine, .wineSteam, .wineSteamSilent:
         launchWineShell(config)
     }
 }
@@ -588,7 +585,7 @@ func main() {
     // ScummVM. An install that was cut short shows up here as too small.
     let driveC = config.winePrefix.appendingPathComponent("drive_c")
     let gamePath = driveC.appendingPathComponent(String(config.gameExePath.drop(while: { $0 == "/" })))
-    let gameDir = config.gameEngine == "scummvm" ? gamePath : gamePath.deletingLastPathComponent()
+    let gameDir = config.gameEngine == .scummvm ? gamePath : gamePath.deletingLastPathComponent()
     // Every launch keeps its own log, since a wrapp opened from Finder has no
     // terminal to show it. Started before the header; it backfills anyway.
     let gameLogs = FileManager.default.homeDirectoryForCurrentUser
@@ -596,14 +593,14 @@ func main() {
     let launchLog = RotatingLogFile.start(in: gameLogs, prefix: "launch", logger: mainLogger)
     RunContext.logHeader(mainLogger, extra: [
         ("log", launchLog?.path ?? "none"),
-        ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.gameEngine)"),
+        ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.gameEngine.rawValue)"),
         ("game files", "\(DirectorySize.measure(gameDir).description) in \(gameDir.path)"),
         ("game exe", config.gameExePath),
         ("app", config.appPath.path),
         ("prefix", config.winePrefix.path),
         ("saves", config.appSupportPath.path),
     ])
-    FailureReporter.setGame(config.gameSlug, engine: config.gameEngine)
+    FailureReporter.setGame(config.gameSlug, engine: config.gameEngine.rawValue)
     FailureReporter.setRunLogs(in: gameLogs, prefix: "launch")
     CrashMarker.install(in: gameLogs, logger: mainLogger)
     // For the whole run: a game that crashes an hour in may have been
@@ -732,13 +729,13 @@ func main() {
     // Only show save warning for Wine games (ScummVM games are more stable),
     // and not again to someone who saw it moments ago, on the launch through
     // Steam they've given up on.
-    let saveWarningEnabled = (config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-")) && !launchingWithoutSteam
+    let saveWarningEnabled = config.gameEngine.runsInWine && !launchingWithoutSteam
     let infoWindow = InfoWindowController(
-        stage: config.gameEngine.hasPrefix("wine-steam") ? .startingSteam : .startingGame(title: config.gameTitle),
+        stage: config.gameEngine.needsSteam ? .startingSteam : .startingGame(title: config.gameTitle),
         appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
         saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor,
-        activity: LaunchActivityMonitor(steamLogsDir: config.gameEngine.hasPrefix("wine-steam")
+        activity: LaunchActivityMonitor(steamLogsDir: config.gameEngine.needsSteam
             ? config.winePrefix.appendingPathComponent(SteamClient.steamDirInPrefix).appendingPathComponent("logs") : nil))
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
@@ -772,7 +769,7 @@ func main() {
     mainLogger.notice("Starting game...")
 
     // Setup Wine environment (only for Wine games)
-    if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-steam") {
+    if config.gameEngine.runsInWine {
         do {
             try mountDirectoryIntoWine(config, hostPath: config.appSupportPath, driveLetter: "a")
         } catch {
@@ -780,7 +777,7 @@ func main() {
             showAlert(message: "Couldn't Open Your Saved Games",
                       informativeText: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)")
             FailureReporter.reportAndWait(FailureReport(what: "Mounting the saves folder", error: error,
-                                                        game: config.gameSlug, engine: config.gameEngine))
+                                                        game: config.gameSlug, engine: config.gameEngine.rawValue))
             exit(1)
         }
 
@@ -847,7 +844,7 @@ func main() {
             showAlert(message: "Couldn't Open Your Saved Games",
                       informativeText: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)")
             FailureReporter.reportAndWait(FailureReport(what: "Linking the saves folder", error: error,
-                                                        game: config.gameSlug, engine: config.gameEngine))
+                                                        game: config.gameSlug, engine: config.gameEngine.rawValue))
             exit(1)
         }
     }
@@ -855,7 +852,7 @@ func main() {
     // Record game engine on first run
     let gameEngineFile = config.appSupportPath.appendingPathComponent("game-engine")
     if !FileManager.default.fileExists(atPath: gameEngineFile.path) {
-        try? config.gameEngine.write(to: gameEngineFile, atomically: true, encoding: .utf8)
+        try? config.gameEngine.rawValue.write(to: gameEngineFile, atomically: true, encoding: .utf8)
     }
 
     // The save warning holds back only the game itself: Wine, and Steam for
@@ -876,7 +873,7 @@ func main() {
     // Launch based on engine type
     func launchGameAsync() {
         DispatchQueue.global(qos: .userInitiated).async {
-            waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.hasPrefix("wine-steam")
+            waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.needsSteam
                 ? .startingSteam : .startingGame(title: config.gameTitle))
             let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode) {
                 if warningConfirmed.wait(timeout: .now()) == .timedOut {
@@ -931,22 +928,16 @@ func main() {
     }
 
     switch config.gameEngine {
-    case "wine":
+    case .wine:
         launchGameAsync()
 
-    case "wine-steam", "wine-steam-silent":
+    case .wineSteam, .wineSteamSilent:
         mainLogger.notice("Launching through Steam...")
         launchGameAsync()
 
-    case "scummvm":
+    case .scummvm:
         mainLogger.notice("Launching ScummVM game...")
         launchGameAsync()
-
-    default:
-        mainLogger.critical("ERROR: Unknown game engine: \(config.gameEngine)")
-        FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "unknown-engine",
-                                                    game: config.gameSlug, engine: config.gameEngine))
-        exit(1)
     }
 
     NSApp.run()

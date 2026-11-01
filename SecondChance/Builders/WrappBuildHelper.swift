@@ -342,18 +342,7 @@ class WrappBuildHelper {
             try fileManager.createDirectory(at: resourcesPath, withIntermediateDirectories: true)
         }
 
-        // Convert GameEngine enum to string for config
-        let gameEngine: String
-        switch engine {
-        case .wine:
-            gameEngine = "wine"
-        case .scummvm:
-            gameEngine = "scummvm"
-        case .wineSteam:
-            gameEngine = "wine-steam"
-        case .wineSteamSilent:
-            gameEngine = "wine-steam-silent"
-        }
+        let gameEngine = engine.rawValue
 
         // Create settings dictionary
         var settings: [String: Any] = [

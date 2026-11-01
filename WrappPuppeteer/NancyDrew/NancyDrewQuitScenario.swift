@@ -60,7 +60,7 @@ struct NancyDrewQuitScenario {
         logger.notice("   App: \(wrapp.appPath)")
         logger.notice("   Engine: \(wrapp.engineSetting)")
         logger.notice("   Executable: \(wrapp.gameExeName)")
-        if wrapp.engine == .wine {
+        if wrapp.runsInWine {
             logger.notice("   Wine prefix: \(wrapp.winePrefix.path)")
         }
         logger.notice("   Max runtime: \(Int(options.maxRuntime))s")
@@ -102,7 +102,7 @@ struct NancyDrewQuitScenario {
         let appName = app.localizedName ?? "WrappTemplate"
         logger.notice("ℹ️  Game process: \(appName) (PID: \(app.processIdentifier))")
 
-        if wrapp.engine == .wine {
+        if wrapp.runsInWine {
             logger.notice("ℹ️  Wine game - checking for info window...")
             Thread.sleep(forTimeInterval: 1)
             guard InfoWindow.dismiss(wrapp: wrappSocket, timeout: options.infoWindowTimeout) else {
@@ -211,7 +211,7 @@ struct NancyDrewQuitScenario {
     }
 
     private func focusStrategy(_ context: Context) -> FocusStrategy {
-        wrapp.engine.judgesFocusByFullscreen ? .reportsFullscreen({ context.game.state()?.fullscreen == true }) : .frontmost
+        wrapp.judgesFocusByFullscreen ? .reportsFullscreen({ context.game.state()?.fullscreen == true }) : .frontmost
     }
 
     /// Capture the game window, through the game, into /tmp for diagnosing a
@@ -320,7 +320,7 @@ struct NancyDrewQuitScenario {
     /// Wait for the game's process, then its window. Found: the game
     /// process's PID and its windows.
     private func waitForGameWindow() -> GameWindowWait {
-        let processName = wrapp.engine.gameProcessName(gameExeName: wrapp.gameExeName)
+        let processName = wrapp.gameProcessName
         logger.notice("⏳ Waiting for game process (timeout: \(Int(options.processDetectTimeout))s), then its window...")
         let start = Date()
         let timedOut = "Game process or window did not appear in time"
@@ -388,7 +388,7 @@ struct NancyDrewQuitScenario {
         // Thornton Hall's has stayed behind the wrapp for over 10s). No
         // settling once it's focused: everything after polls the screen, and
         // a game's splash screens are only skipped if they're still up.
-        let result = FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy(context), activate: wrapp.engine.activatesForFocus,
+        let result = FocusDetector.waitForFocus(pid: pid, strategy: focusStrategy(context), activate: wrapp.activatesForFocus,
                                                 timeout: 120, settleDelay: 0)
         switch result {
         case .focused:
@@ -524,8 +524,8 @@ struct NancyDrewQuitScenario {
         /// have finished appearing. A different one is clicked at once.
         let splashRetryInterval: TimeInterval = 2
 
-        var firstClickToCheck = wrapp.engine == .wine && wrapp.graphics.mayUseCncDdraw
-        if wrapp.engine == .wine && !firstClickToCheck {
+        var firstClickToCheck = wrapp.runsInWine && wrapp.graphics.mayUseCncDdraw
+        if wrapp.runsInWine && !firstClickToCheck {
             logger.notice("  ℹ️  \(wrapp.gameExeName) draws with \(wrapp.graphics.logDescription): no cnc-ddraw to swallow its first click")
         }
         /// Click a window point, checking the first click wasn't swallowed;

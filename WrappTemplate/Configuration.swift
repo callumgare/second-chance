@@ -5,6 +5,7 @@
 //  Configuration management for Nancy Drew game wrappers
 
 import Foundation
+import GameCatalog
 import Logging
 import SecondChanceKit
 
@@ -17,11 +18,11 @@ struct GameConfig {
     let winePrefix: URL
     let gameExePath: String
     let gameInstallerDir: String
-    let gameEngine: String
+    let gameEngine: GameInfo.GameEngine
     let steamGameId: String?
-    /// The user's choice, at build time, of how a DRM-free Steam game starts
-    /// (`steam` or `direct`); nil for a game that offered no choice.
-    let steamLaunchMode: String?
+    /// The user's choice, at build time, of how a DRM-free Steam game starts;
+    /// nil for a game that offered no choice.
+    let steamLaunchMode: GameInfo.SteamLaunchMode?
     let gameTitle: String
     let gameSlug: String
     /// Where the game came from: `disk`, `her-download` or `steam`, or
@@ -38,7 +39,7 @@ struct GameConfig {
     /// DRM-free game the user chose to launch through Steam. Its files are
     /// still in Steam's library, where Wine runs them just as well.
     var canLaunchWithoutSteam: Bool {
-        gameEngine == "wine-steam" && steamLaunchMode == "steam"
+        gameEngine == .wineSteam && steamLaunchMode == .steam
     }
 
     /// This configuration, launching the game's exe directly rather than
@@ -46,7 +47,7 @@ struct GameConfig {
     func withoutSteam() -> GameConfig {
         GameConfig(
             appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
-            gameInstallerDir: gameInstallerDir, gameEngine: "wine", steamGameId: nil,
+            gameInstallerDir: gameInstallerDir, gameEngine: .wine, steamGameId: nil,
             steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
             gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, scummvmConfigPath: scummvmConfigPath
         )
@@ -218,15 +219,19 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     // Read plists
     guard let gameExePath = readPlist(at: settingsPlistPath, key: "GameExePath"),
           let gameInstallerDir = readPlist(at: settingsPlistPath, key: "GameInstallerDir"),
-          let gameEngine = readPlist(at: settingsPlistPath, key: "GameEngine"),
+          let engineSetting = readPlist(at: settingsPlistPath, key: "GameEngine"),
           let gameTitle = readPlist(at: infoPlistPath, key: "CFBundleName"),
           let bundleId = readPlist(at: infoPlistPath, key: "CFBundleIdentifier") else {
         configLogger.critical("ERROR: Could not read required configuration from plists")
         return nil
     }
 
+    guard let gameEngine = GameInfo.GameEngine(rawValue: engineSetting) else {
+        configLogger.critical("ERROR: Unknown game engine: \(engineSetting)")
+        return nil
+    }
     let steamGameId = readPlist(at: settingsPlistPath, key: "SteamGameId")
-    let steamLaunchMode = readPlist(at: settingsPlistPath, key: "SteamLaunchMode")
+    let steamLaunchMode = readPlist(at: settingsPlistPath, key: "SteamLaunchMode").flatMap(GameInfo.SteamLaunchMode.init)
     let gameSlug = readPlist(at: settingsPlistPath, key: "GameSlug") ?? "unknown"
     let gameSource = readPlist(at: settingsPlistPath, key: "GameSource") ?? "unknown"
 

@@ -336,7 +336,7 @@ enum WrappInfo {
 /// the copied disc, which is an installer, so it has nothing to check.
 enum InstalledGameCheck {
     static func run(wrapp: URL, game: GameInfo, outcome: GameOutcome) async {
-        guard WrappInfo.gameEngine(at: wrapp) != GameInfo.GameEngine.scummvm.rawValue,
+        guard WrappInfo.gameEngine(at: wrapp) != .scummvm,
               let installedGame = WrappInfo.gameExe(at: wrapp)?.deletingLastPathComponent() else {
             return
         }
@@ -404,9 +404,8 @@ enum AppPuppetRunner {
         // screen). Every game arms puppet control, which WrappPuppeteer drives
         // it through; naming it here says so when it didn't, rather than
         // leaving WrappPuppeteer's failure to explain it.
-        let engine = WrappInfo.gameEngine(at: wrappURL) ?? ""
         let requiredHelpers: [InProcessHelperReport.Helper]
-        if engine == "wine" || engine.hasPrefix("wine-") {
+        if WrappInfo.gameEngine(at: wrappURL)?.runsInWine == true {
             let graphicsAPI = WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0) } ?? .unknown
             requiredHelpers = [.nativeFullscreen]
                 + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
@@ -775,10 +774,9 @@ extension WrappInfo {
             .appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path)
     }
 
-    /// The `GameEngine` value from the wrapp's AppSettings.plist
-    /// (`wine`, `wine-steam`, `scummvm`, …).
-    static func gameEngine(at wrappPath: URL) -> String? {
-        appSetting("GameEngine", at: wrappPath)
+    /// The `GameEngine` value from the wrapp's AppSettings.plist.
+    static func gameEngine(at wrappPath: URL) -> GameInfo.GameEngine? {
+        appSetting("GameEngine", at: wrappPath).flatMap(GameInfo.GameEngine.init)
     }
 
     private static func appSetting(_ key: String, at wrappPath: URL) -> String? {

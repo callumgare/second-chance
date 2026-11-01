@@ -13,6 +13,7 @@ import Foundation
 import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
+import GameCatalog
 
 /// The VM `sc` prepared: running, reachable over SSH, someone logged in at
 /// its console, Rosetta installed (`TestVM` in Tools/sc).
@@ -37,8 +38,7 @@ struct VMTarget: Sendable {
     /// result about the VM, not the game. The build was still tested.
     static func launchSkipReason(wrappURL: URL) -> String? {
         guard let vm = current else { return nil }
-        let engine = WrappInfo.gameEngine(at: wrappURL) ?? ""
-        guard engine == "wine" || engine.hasPrefix("wine-"),
+        guard WrappInfo.gameEngine(at: wrappURL)?.runsInWine == true,
               let exe = WrappInfo.gameExe(at: wrappURL),
               GameGraphicsAPI(exeAt: exe) == .direct3D else { return nil }
         return "draws with Direct3D, which a VM can't render (no hardware OpenGL in VM \(vm.name)); the build was tested, the launch wasn't"
@@ -109,7 +109,7 @@ enum VMPuppetRunner {
         // whatever it was running, in the VM.
         _ = try? shell.run(cleanupScript(agentPattern: "au.gare.callum.second-chance.vm-test.", jobPattern: "/tmp/sc-vm-tes[t]-"))
 
-        let usesSteam = (WrappInfo.gameEngine(at: wrappURL) ?? "").hasPrefix("wine-steam")
+        let usesSteam = WrappInfo.gameEngine(at: wrappURL)?.needsSteam == true
         defer {
             if usesSteam { _ = try? shell.run("rm -rf \(quoted("~/" + steamStoreInHome))") }
             _ = try? shell.run(cleanupScript(agentPattern: agent, jobPattern: job))

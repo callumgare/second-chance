@@ -29,6 +29,15 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         case scummvm
         case wineSteam = "wine-steam"
         case wineSteamSilent = "wine-steam-silent"
+
+        /// Wine runs the game: every engine but ScummVM.
+        public var runsInWine: Bool { self != .scummvm }
+
+        /// Steam has to be running, and signed in, before the game starts.
+        public var needsSteam: Bool { self == .wineSteam || self == .wineSteamSilent }
+
+        /// Steam starts the game (`-applaunch`), rather than the wrapp.
+        public var launchedBySteam: Bool { self == .wineSteam }
     }
 
     public enum SteamDRM: String, Codable, Sendable {

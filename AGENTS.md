@@ -246,8 +246,10 @@ The rules that keep it working:
 - **`GameInfoProvider`** (`GameCatalog`): static database of all 30+ Nancy
   Drew games with metadata (engine, disk count, exe paths, Steam DRM). Add new
   games here.
-- **`GameEngine` enum** (`wine`, `scummvm`, `wineSteam`, `wineSteamSilent`):
-  determines which engine the wrapp uses.
+- **`GameInfo.GameEngine`** (`wine`, `scummvm`, `wineSteam`, `wineSteamSilent`,
+  in `GameCatalog`): determines which engine the wrapp uses. The app, the
+  wrapp and WrappPuppeteer all use it, and ask it `runsInWine`, `needsSteam`
+  and `launchedBySteam` rather than comparing its raw values.
 
 ### Wrapp build state machine
 

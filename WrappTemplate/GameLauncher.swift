@@ -9,6 +9,7 @@ import AppKit
 import Logging
 import SecondChanceKit
 import SecondChanceReporting
+import GameCatalog
 
 // MARK: - Directory Mounting
 
@@ -64,7 +65,7 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
     let gameExeName = (gameExeUnixPath as NSString).lastPathComponent
     let gameExeDir = (gameExeUnixPath as NSString).deletingLastPathComponent
     switch config.gameEngine {
-    case _ where config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-"):
+    case .wine, .wineSteam, .wineSteamSilent:
         // By name, from its own folder: games look for their files beside them.
         let command = WineCommand.start(gameExeName, unixPath: false, in: URL(fileURLWithPath: gameExeDir))
         let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
@@ -77,7 +78,7 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
             wineCommand: command
         )
 
-    case "scummvm":
+    case .scummvm:
         // ScummVM game launch info
         let resourcesPath = config.appPath.appendingPathComponent("Contents/Resources")
         let scummvmBinary = config.appPath.appendingPathComponent("Contents/MacOS/scummvm").path
@@ -101,9 +102,6 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
             gameExeName: nil,  // ScummVM doesn't have a separate game exe
             gameExePath: nil
         )
-
-    default:
-        fatalError("Unknown game engine: \(config.gameEngine)")
     }
 }
 
@@ -174,7 +172,7 @@ class GameLauncher {
         }
 
         // For Wine games, we need to ensure wineserver is stopped
-        if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") {
+        if config.gameEngine.runsInWine {
             logger.debug("[Cleanup/performCleanup] Dispatching Wine server cleanup to background queue...")
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 self?.logger.debug("[Cleanup/performCleanup] Inside Wine cleanup async block")
@@ -216,7 +214,7 @@ class GameLauncher {
     /// wrapp never quits leaving Wine running in the prefix. Nothing to wait
     /// for with ScummVM.
     func waitForWineToEnd() {
-        guard config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") else { return }
+        guard config.gameEngine.runsInWine else { return }
         // Generous: it ends by itself in seconds, more on a loaded Mac, and
         // only a session that is stuck reaches the kill.
         let server = Wine(wrapp: config.appPath, prefix: config.winePrefix).server
@@ -292,7 +290,7 @@ class GameLauncher {
             recordLaunch(outcome: kind)
             report(FailureReport(
                 what: "Running the game", kind: kind,
-                game: config.gameSlug, engine: config.gameEngine,
+                game: config.gameSlug, engine: config.gameEngine.rawValue,
                 tags: failureTags(exitCode: exitCode, signal: signal), summary: summary,
                 diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
             ))
@@ -320,7 +318,7 @@ class GameLauncher {
         }
         let summary = FailureSummary.log(logger, what: "Starting \(config.gameTitle)", files: files)
         let stuck = FailureReport(
-            what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.gameEngine,
+            what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.gameEngine.rawValue,
             tags: failureTags(exitCode: nil, signal: nil), summary: summary,
             diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
         )
@@ -336,7 +334,7 @@ class GameLauncher {
         launchCounted = true
         SuccessReporter.record(SuccessReport(
             event: .launch, outcome: outcome, game: config.gameSlug,
-            source: config.gameSource, engine: config.gameEngine
+            source: config.gameSource, engine: config.gameEngine.rawValue
         ))
     }
 
@@ -377,22 +375,22 @@ class GameLauncher {
         launchedAt = Date()
         gameStarted = false
         LogContext.enterStage("Starting the game")
-        if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-"),
+        if config.gameEngine.runsInWine,
            let gameExePath = getGameLaunchInfo(config).gameExePath {
             let gameExe = URL(fileURLWithPath: gameExePath)
             let graphics = GameGraphicsAPI(exeAt: gameExe)
             logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
             helperReport = InProcessHelperReport(
                 armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe), logger: logger)
-            quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.gameEngine.hasPrefix("wine-steam"))
+            quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.gameEngine.needsSteam)
             copyProtection = CopyProtection(exeAt: gameExe)
             if let copyProtection {
                 logger.warning("[Game Launch] \(gameExe.lastPathComponent) is wrapped in \(copyProtection.name) copy protection, which may not run under Wine")
             }
-        } else if config.gameEngine == "scummvm", !scummvmPuppetVariables.isEmpty {
+        } else if config.gameEngine == .scummvm, !scummvmPuppetVariables.isEmpty {
             helperReport = InProcessHelperReport(armingVariables: scummvmPuppetVariables, logger: logger)
         }
-        if config.gameEngine.hasPrefix("wine-steam") {
+        if config.gameEngine.needsSteam {
             LogContext.enterStage("Starting Steam")
             do {
                 let helperReport = helperReport
@@ -420,7 +418,7 @@ class GameLauncher {
                 reportSteamFailure(error)
                 return -1
             }
-        } else if config.gameEngine.hasPrefix("wine") {
+        } else if config.gameEngine.runsInWine {
             prepareDesktop(Wine(wrapp: config.appPath, prefix: config.winePrefix))
         }
         beforeTheGame()
@@ -436,20 +434,15 @@ class GameLauncher {
         let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
         // Steam starts the game itself, so there's no launcher process of
         // ours to watch: the game is found, and watched, by its exe.
-        let launchedBySteam = config.gameEngine == "wine-steam"
+        let launchedBySteam = config.gameEngine.launchedBySteam
 
         switch config.gameEngine {
-        case "wine":
+        case .wine, .wineSteamSilent:
             launchResult = launchWineProcess(activity: infoWindow?.activity)
-        case "wine-steam":
+        case .wineSteam:
             launchResult = launchViaSteam()
-        case _ where config.gameEngine.hasPrefix("wine-"):
-            launchResult = launchWineProcess(activity: infoWindow?.activity)
-        case "scummvm":
+        case .scummvm:
             launchResult = launchScummVMProcess(activity: infoWindow?.activity)
-        default:
-            logger.critical("ERROR: Unknown game engine: \(self.config.gameEngine)")
-            return -1
         }
 
         guard launchResult.gamePid > 0 || (launchedBySteam && launchResult.gameExeName != nil) else {
@@ -473,7 +466,7 @@ class GameLauncher {
                 diagnostics?.gameStarted(pid: detectedPid)
 
                 // Activate game window (Wine games only)
-                if config.gameEngine == "wine" || config.gameEngine.hasPrefix("wine-") {
+                if config.gameEngine.runsInWine {
                     logger.notice("[Game Launch] Activating game window...")
                     if gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) {
                         diagnostics?.gameWindowAppeared()
@@ -679,7 +672,7 @@ class GameLauncher {
         logger.critical("[Steam] \(title): \(detail)")
         let summary = FailureSummary.log(logger, what: "Starting Steam for \(config.gameTitle)", files: [])
         report(FailureReport(what: "Starting Steam", error: error, game: config.gameSlug,
-                             engine: config.gameEngine, summary: summary))
+                             engine: config.gameEngine.rawValue, summary: summary))
         DispatchQueue.main.sync { showAlert(message: title, informativeText: detail) }
     }
 
@@ -740,7 +733,7 @@ class GameLauncher {
 
     private func steamStatusHandler(_ infoWindow: InfoWindowController?) -> (WrappSteam.Status) -> Void {
         let title = config.gameTitle
-        let launchedBySteam = config.gameEngine == "wine-steam"
+        let launchedBySteam = config.gameEngine.launchedBySteam
         return { status in
             switch status {
             case .startup(let stage): infoWindow?.setStage(LoadingStage(steam: stage))

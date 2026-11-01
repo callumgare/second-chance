@@ -6,46 +6,15 @@
 //  read from its AppSettings.plist, and how its engine behaves under test.
 
 import Foundation
+import GameCatalog
 import SecondChanceKit
-
-/// The engine running the game inside a wrapp. Maps the wrapp's `GameEngine`
-/// setting (`wine`, `wineSteam`, `wineSteamSilent`, `scummvm`) to the
-/// behaviour that matters when driving it.
-enum WrappEngine {
-    case wine
-    case scummvm
-    case other
-
-    init(settingValue: String?) {
-        let value = settingValue?.lowercased() ?? ""
-        if value.contains("wine") {
-            self = .wine
-        } else if value.contains("scummvm") {
-            self = .scummvm
-        } else {
-            self = .other
-        }
-    }
-
-    /// The process that owns the game's window. Wine runs the game's own
-    /// `.exe`; ScummVM is a single native process.
-    func gameProcessName(gameExeName: String) -> String {
-        self == .scummvm ? "scummvm" : gameExeName
-    }
-
-    /// ScummVM goes full screen without reliably becoming the active app, so
-    /// it's judged by its window being fullscreen, and activating it would
-    /// fight its own full-screen handling.
-    var judgesFocusByFullscreen: Bool { self == .scummvm }
-
-    var activatesForFocus: Bool { self != .scummvm }
-}
 
 struct Wrapp {
     let appPath: String
     /// The raw `GameEngine` setting, for logging.
     let engineSetting: String
-    let engine: WrappEngine
+    /// The engine running the game; nil for a setting this doesn't know.
+    let engine: GameInfo.GameEngine?
     /// The game's slug (`GameInfoProvider`'s id), which names its splash
     /// screens' reference images.
     let gameSlug: String
@@ -60,10 +29,24 @@ struct Wrapp {
     /// shape the wrapp shows it at this shape, with black bars beside it.
     static let pictureAspect = 4.0 / 3.0
 
+    /// Whether Wine runs the game, Steam or not.
+    var runsInWine: Bool { engine?.runsInWine ?? false }
+
+    /// The process that owns the game's window. Wine runs the game's own
+    /// `.exe`; ScummVM is a single native process.
+    var gameProcessName: String { engine == .scummvm ? "scummvm" : gameExeName }
+
+    /// ScummVM goes full screen without reliably becoming the active app, so
+    /// it's judged by its window being fullscreen, and activating it would
+    /// fight its own full-screen handling.
+    var judgesFocusByFullscreen: Bool { engine == .scummvm }
+
+    var activatesForFocus: Bool { engine != .scummvm }
+
     /// Whether the game starts through Steam, whose overlay shows a notice
     /// ("Press Shift+Tab to begin") in the window's bottom-right corner for
     /// a few seconds after it starts.
-    var showsSteamOverlay: Bool { engineSetting.lowercased().contains("steam") }
+    var showsSteamOverlay: Bool { engine?.needsSteam ?? false }
 
     /// The corner Steam's overlay notice takes, in points: it is about 285
     /// by 90 points, and this leaves room around it.
@@ -80,12 +63,12 @@ struct Wrapp {
         self.appPath = appPath
         let settings = Wrapp.readSettings(appPath: appPath)
         engineSetting = settings["GameEngine"] as? String ?? "unknown"
-        engine = WrappEngine(settingValue: engineSetting)
+        engine = GameInfo.GameEngine(rawValue: engineSetting)
         gameSlug = settings["GameSlug"] as? String ?? "unknown"
         let exePath = settings["GameExePath"] as? String ?? "/Game.exe"
         gameExeName = (exePath as NSString).lastPathComponent
         winePrefix = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/SharedSupport/prefix")
-        graphics = engine == .wine
+        graphics = engine?.runsInWine == true
             ? GameGraphicsAPI(exeAt: winePrefix.appendingPathComponent("drive_c").appendingPathComponent(exePath))
             : .unknown
     }
@@ -110,7 +93,7 @@ extension Wrapp {
     /// the old `pkill -f wine` never matched.
     var cleanupCommands: [[String]] {
         switch engine {
-        case .wine:
+        case .wine, .wineSteam, .wineSteamSilent:
             let wineserver = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/SharedSupport/wine/bin/wineserver").path
             return [
                 ["/usr/bin/env", "WINEPREFIX=\(winePrefix.path)", wineserver, "-k"],
@@ -118,7 +101,7 @@ extension Wrapp {
             ]
         case .scummvm:
             return [["/usr/bin/pkill", "-9", "scummvm"]]
-        case .other:
+        case nil:
             return []
         }
     }
