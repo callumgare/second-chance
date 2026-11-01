@@ -232,6 +232,16 @@ public class LogWindow: ObservableObject {
     var displayedTextForTesting: String {
         display.rows.map(\.compactLine).joined(separator: "\n")
     }
+
+    /// Wait until everything logged so far is shown, for a test to look at
+    /// rather than sleeping out the coalesced flush: the store hands its
+    /// pending entries to this window's subscription (which hops onto the
+    /// main actor), those hops run, and what they queued is drawn now.
+    func waitUntilShownForTesting() async {
+        await Blocking.run { LogStore.shared.flush() }
+        for _ in 0..<20 { await Task.yield() }
+        flush()
+    }
 }
 
 // MARK: - Log Window Controller

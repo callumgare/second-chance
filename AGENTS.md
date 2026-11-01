@@ -615,9 +615,15 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
   [docs/testing.md](docs/testing.md#wrapppuppeteer) has the details.
 - **Test fixtures** are in `TestFixtures/` and `installers/`. Make skips
   explicit rather than returning early, so a skipped test reads as skipped.
-- **Priority test targets** (untested but high-value): `CacheManager`,
-  `WrappBuildInput`'s env-var resolution and validation, `WrappBuildHelper` path
-  helpers.
+- **Priority test targets** (untested but high-value): `WineDesktop`,
+  `HerDownloadWrappBuilder`, `AutoItService`, `AppUpdater`, the installer's
+  silent→interactive retry and its AutoIt decision, the rest of
+  `WrappBuildInput`'s env-var resolution (`INSTALLATION_SOURCE`,
+  `DISK_2_PATH`, `LAUNCH_GAME`), WrappTemplate's launch logic, which lives in
+  an executable target, and WrappPuppeteer's matching (`TemplateMatcher`,
+  `SplashScreen`). A test that waits waits on a signal: poll for the
+  condition with a deadline, or use a hook such as
+  `LogWindow.waitUntilShownForTesting`, never a fixed sleep.
 
 ## Releasing
 
