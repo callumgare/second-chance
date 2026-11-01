@@ -505,10 +505,9 @@ struct InfoWindowView: View {
     /// before anyone answers.
     private var lastSessionNote: some View {
         VStack(alignment: .leading, spacing: 8) {
-            caution("The game is still closing")
-
-            informative("Part of the game from last time is still running in the background, which can stop it starting properly. "
-                + "You can stop it and carry on, or keep waiting.")
+            informative("Part of the game is still running in the background from the last time it was played, "
+                + "which can stop it starting again properly. If the game window is not still up allowing you to save "
+                + "(if you didn't save when it last quit) then pressing \"Stop Previous and Continue\" is probably your best bet.")
 
             // On one row when they fit, Quit apart at the leading edge;
             // newer macOS draws buttons wider, and a row too wide would push

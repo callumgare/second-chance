@@ -60,7 +60,7 @@ public enum LoadingStage: Equatable {
         case .steamStartingGame(let title): return "Steam is starting \(title)…"
         case .steamPlayingElsewhere: return "Your Steam account is playing on another computer"
         case .steamWaitingForPlayer: return "Steam is waiting for you"
-        case .lastSessionClosing: return "Waiting for the game to finish closing…"
+        case .lastSessionClosing: return "Waiting for the previous copy of the game to finish closing…"
         }
     }
 
@@ -79,9 +79,7 @@ public enum LoadingStage: Equatable {
             return "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here."
         case .steamWaitingForPlayer:
             return "Answer the question in Steam's window, and the game will carry on starting."
-        case .lastSessionClosing:
-            return "It's still closing from the last time it was played. That usually takes a few seconds."
-        case .startingGame, .steamStartingGame:
+        case .lastSessionClosing, .startingGame, .steamStartingGame:
             return nil
         }
     }
