@@ -19,7 +19,7 @@ public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable
         case .disk:
             return "Game Discs"
         case .herDownload:
-            return "Her Download"
+            return "Her Interactive Download"
         case .steam:
             return "Steam"
         }

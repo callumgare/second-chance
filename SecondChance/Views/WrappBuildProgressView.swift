@@ -42,7 +42,10 @@ struct WrappBuildProgressView: View {
             } leading: {
                 EmptyView()
             } trailing: {
+                // Esc: the answer that sends nothing, so the question can
+                // be answered from the keyboard without leaning towards yes.
                 Button("Don't Send") { viewModel.answerSuccessReports(false) }
+                    .keyboardShortcut(.cancelAction)
                 Button("Send") { viewModel.answerSuccessReports(true) }
             }
             .accessibilityIdentifier("success-reports-question")

@@ -3,7 +3,7 @@
 Her Interactive's store sells most of the classic games as a Windows download,
 and some as a Mac download too. It is the only place some of them can still be
 bought (Stay Tuned for Danger isn't on Steam). Second Chance builds a wrapp
-from either: `HerDownloadWrappBuilder`, the **Her Download** source.
+from either: `HerDownloadWrappBuilder`, the **Her Interactive Download** source.
 
 The two arrive as quite different files, and the builder takes a separate path
 for each:

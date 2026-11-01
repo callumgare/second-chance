@@ -288,8 +288,13 @@ class GameMonitor {
         exitSource.resume()
         defer { exitSource.cancel() }
 
+        // The process tree is checked often while the game starts, when it
+        // changes and when a launch goes wrong, then once a minute: each
+        // check is a `ps`, for as long as the game runs.
+        let watchStarted = Date()
         while process?.isRunning ?? isProcessRunning(pid: winePid) {
-            if ended.wait(timeout: .now() + 3) == .success { break }
+            let interval: TimeInterval = Date().timeIntervalSince(watchStarted) < 120 ? 3 : 60
+            if ended.wait(timeout: .now() + interval) == .success { break }
             // Log the session's process tree when it changes.
             let wineProcesses = self.getAllWineProcessesDetailed()
             lastProcessList = self.logWineProcesses(wineProcesses, mainWinePid: winePid, lastProcessList: lastProcessList)
@@ -327,33 +332,15 @@ class GameMonitor {
             self.setExit(from: process)
             logger.notice("[Process Monitor] ScummVM process \(gamePid) has ended")
         } else {
-            // Fallback: poll using ps if we don't have the process object
-            while true {
-                let checkProcess = Process()
-                checkProcess.executableURL = URL(fileURLWithPath: "/bin/ps")
-                checkProcess.arguments = ["-p", String(gamePid)]
-                checkProcess.standardOutput = Pipe()
-                checkProcess.standardError = Pipe()
-
-                do {
-                    try checkProcess.run()
-                    checkProcess.waitUntilExit()
-
-                    if checkProcess.terminationStatus != 0 {
-                        logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
-                        self.setExitCode(nil)  // Process is gone; its status is unknown
-                        break
-                    }
-
-                } catch {
-                    logger.error("[Process Monitor] Error checking ScummVM process: \(error)")
-                    self.setExitCode(-1)
-                    break
-                }
-
-                // Check every 3 seconds
-                Thread.sleep(forTimeInterval: 3)
-            }
+            // No Process to wait on: watch the pid exit instead.
+            let ended = DispatchSemaphore(value: 0)
+            let exitSource = DispatchSource.makeProcessSource(identifier: gamePid, eventMask: .exit, queue: .global())
+            exitSource.setEventHandler { ended.signal() }
+            exitSource.resume()
+            while isProcessRunning(pid: gamePid), ended.wait(timeout: .now() + 60) == .timedOut {}
+            exitSource.cancel()
+            logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
+            self.setExitCode(nil)  // Process is gone; its status is unknown
         }
 
         self.isMonitoring = false

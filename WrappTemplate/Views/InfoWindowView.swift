@@ -344,7 +344,6 @@ struct InfoWindowView: View {
     private var icon: some View {
         Image(nsImage: NSApplication.shared.applicationIconImage)
             .resizable()
-            .accessibilityHidden(true)
             .frame(width: Self.iconSize, height: Self.iconSize)
             .overlay(alignment: .bottomTrailing) {
                 if viewModel.phase.isFailure {
@@ -355,6 +354,9 @@ struct InfoWindowView: View {
                         .offset(x: 4, y: 4)
                 }
             }
+            // After the overlay, so the badge is hidden too: the window's
+            // text says what went wrong.
+            .accessibilityHidden(true)
     }
 
     private func message(_ text: String) -> some View {
