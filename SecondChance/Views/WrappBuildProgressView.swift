@@ -5,6 +5,7 @@
 //  Shows wrapp build progress, and the summary once it has finished
 
 import SwiftUI
+import GameCatalog
 
 struct WrappBuildProgressView: View {
     @EnvironmentObject var viewModel: WrappBuildViewModel

@@ -28,6 +28,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 @Suite(
     "Disk install — per game",

@@ -15,6 +15,7 @@ import os
 import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
+import GameCatalog
 
 @Suite("Steam install — per game",
        .enabled(if: SteamSessionStore().hasSession, "No saved Steam sign-in on this Mac: build a Steam game from the app once"))

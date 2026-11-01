@@ -1,5 +1,4 @@
 import Foundation
-import GameCatalog
 import Noora
 
 /// One finished xcodebuild test run.

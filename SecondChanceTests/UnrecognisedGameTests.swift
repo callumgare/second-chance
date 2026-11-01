@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 /// A disc or download whose game isn't recognised: someone at the app is
 /// asked what to do, and a headless run carries on as it always has.

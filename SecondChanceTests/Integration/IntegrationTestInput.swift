@@ -8,6 +8,7 @@
 
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 extension WrappBuildInput {
     /// A headless input carrying fixed paths.

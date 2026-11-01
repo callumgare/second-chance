@@ -1,6 +1,5 @@
 import ArgumentParser
 import Foundation
-import GameCatalog
 import Testing
 @testable import SCKit
 

@@ -15,6 +15,9 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", .upToNextMinor(from: "1.8.2")),
         .package(url: "https://github.com/swiftlang/swift-subprocess", .upToNextMinor(from: "1.0.1")),
         .package(url: "https://github.com/tuist/Noora", .upToNextMinor(from: "0.57.5")),
+        // The app's own game database, so slugs and titles can never drift
+        // from the app.
+        .package(path: "../../Packages/GameCatalog"),
     ],
     targets: [
         .executableTarget(
@@ -24,25 +27,15 @@ let package = Package(
         .target(
             name: "SCKit",
             dependencies: [
-                "GameCatalog",
+                .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Subprocess", package: "swift-subprocess"),
                 .product(name: "Noora", package: "Noora"),
             ]
         ),
-        // The app's own game database, compiled from symlinks to
-        // SecondChance/Models/GameInfo.swift and
-        // SecondChance/Services/GameInfoProvider.swift so slugs and titles
-        // can never drift from the app. Swift 5 mode because those files
-        // belong to the app (Swift 5) and aren't Sendable-clean; Catalog.swift
-        // is the public, Sendable face the rest of the tool uses.
-        .target(
-            name: "GameCatalog",
-            swiftSettings: [.swiftLanguageMode(.v5)]
-        ),
         .testTarget(
             name: "SCKitTests",
-            dependencies: ["SCKit", "GameCatalog"],
+            dependencies: ["SCKit"],
             resources: [.copy("Fixtures")]
         ),
     ]

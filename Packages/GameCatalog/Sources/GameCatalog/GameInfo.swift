@@ -1,52 +1,58 @@
 //
 //  GameInfo.swift
-//  SecondChance
+//  GameCatalog
 //
 //  Model representing a Nancy Drew game with all its metadata
 
 import Foundation
 
 /// Represents a Nancy Drew game with all its metadata and installation requirements
-nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
-    let id: String  // Game slug
-    let title: String
-    let diskCount: Int
-    let gameEngine: GameEngine
-    let steamDRM: SteamDRM?
+public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
+    public let id: String  // Game slug
+    public let title: String
+    public let diskCount: Int
+    public let gameEngine: GameEngine
+    public let steamDRM: SteamDRM?
     /// The game's Steam app ID, when it is sold (or was) on Steam.
-    let steamAppID: Int?
+    public let steamAppID: Int?
     /// The folder Steam installs it into, under `steamapps/common/`.
-    let steamInstallDir: String?
+    public let steamInstallDir: String?
     /// The Windows executable Steam launches, relative to `steamInstallDir`.
-    let steamExePath: String?
-    let internalGameExePath: String?
-    let doesNotExitInNonInteractiveMode: Bool
-    let installInstructions: String?
-    let failedInstallInfo: String?
+    public let steamExePath: String?
+    public let internalGameExePath: String?
+    public let doesNotExitInNonInteractiveMode: Bool
+    public let installInstructions: String?
+    public let failedInstallInfo: String?
 
-    enum GameEngine: String, Codable {
+    public enum GameEngine: String, Codable, Sendable {
         case wine
         case scummvm
         case wineSteam = "wine-steam"
         case wineSteamSilent = "wine-steam-silent"
     }
 
-    enum SteamDRM: String, Codable {
+    public enum SteamDRM: String, Codable, Sendable {
         case no
         case yesLaunchWhenSteamRunning = "yes-launch-when-steam-running"
         case yesLaunchViaSteamOnly = "yes-launch-via-steam-only"
     }
 
     /// Where a game lives on Steam, from its app info.
-    struct SteamApp: Hashable {
-        let appID: Int
-        let installDir: String
-        let exe: String
+    public struct SteamApp: Hashable, Sendable {
+        public let appID: Int
+        public let installDir: String
+        public let exe: String
+
+        public init(appID: Int, installDir: String, exe: String) {
+            self.appID = appID
+            self.installDir = installDir
+            self.exe = exe
+        }
     }
 
     /// How a Steam-sourced wrapp starts its game, when the game lets the
     /// user choose (`offersSteamLaunchChoice`).
-    enum SteamLaunchMode: String, Codable, CaseIterable {
+    public enum SteamLaunchMode: String, Codable, CaseIterable, Sendable {
         /// Through Steam: slower, but Steam Cloud keeps the saves.
         case steam
         /// Without Steam, which is removed from the wrapp: quicker and more
@@ -54,11 +60,11 @@ nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         case direct
     }
 
-    var isOnSteam: Bool { steamAppID != nil }
+    public var isOnSteam: Bool { steamAppID != nil }
 
     /// Only a game known to have no DRM can run without Steam — and the games
     /// ScummVM runs always do (see `steamEngine`), so they offer no choice.
-    var offersSteamLaunchChoice: Bool { isOnSteam && steamDRM == .no && gameEngine != .scummvm }
+    public var offersSteamLaunchChoice: Bool { isOnSteam && steamDRM == .no && gameEngine != .scummvm }
 
     /// The engine a Steam-sourced wrapp of this game uses.
     ///
@@ -71,13 +77,13 @@ nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     /// Steam release running with no window, though its DRM is meant to need
     /// only Steam running. Only a DRM-free game the user chose to launch
     /// directly runs without Steam.
-    func steamEngine(launchMode: SteamLaunchMode?) -> GameEngine {
+    public func steamEngine(launchMode: SteamLaunchMode?) -> GameEngine {
         if gameEngine == .scummvm { return .scummvm }
         if steamDRM == .no && launchMode == .direct { return gameEngine }
         return .wineSteam
     }
 
-    init(
+    public init(
         id: String,
         title: String,
         diskCount: Int = 1,
@@ -106,12 +112,12 @@ nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
 nonisolated extension GameInfo {
     /// What to tell someone clicking through a game's installer themselves,
     /// for a game with no instructions of its own.
-    static let defaultInstallInstructions = """
+    public static let defaultInstallInstructions = """
     Accept the options it suggests, with two exceptions: if it offers to install DirectX, \
     choose not to, and if it asks whether to play the game when it's done, choose No.
     """
 
-    static let unknownGame = GameInfo(
+    public static let unknownGame = GameInfo(
         id: "unknown",
         title: "Other",
         installInstructions: defaultInstallInstructions

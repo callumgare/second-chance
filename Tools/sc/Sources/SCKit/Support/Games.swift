@@ -1,5 +1,4 @@
 import Foundation
-import GameCatalog
 
 /// A game as offered in a prompt.
 struct GameChoice: Equatable, CustomStringConvertible {

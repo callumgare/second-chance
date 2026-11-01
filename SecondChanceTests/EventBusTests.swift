@@ -9,6 +9,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 @Suite("EventBus")
 struct EventBusTests {

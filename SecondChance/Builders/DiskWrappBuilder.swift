@@ -15,6 +15,7 @@
 
 import Foundation
 import Logging
+import GameCatalog
 
 /// Builds a wrapp from game disks.
 ///

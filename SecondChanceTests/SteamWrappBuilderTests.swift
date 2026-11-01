@@ -9,6 +9,7 @@ import Foundation
 import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
+import GameCatalog
 
 /// Steam as the builder sees it, without Wine. Its "install" puts the game's
 /// exe where Steam would, and its shutdown leaves a sign-in behind in the

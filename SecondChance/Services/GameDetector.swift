@@ -8,6 +8,7 @@ import Foundation
 import Logging
 import UniformTypeIdentifiers
 import SecondChanceKit
+import GameCatalog
 
 /// Detects Nancy Drew games from various installation sources
 class GameDetector {

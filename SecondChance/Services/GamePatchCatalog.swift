@@ -8,6 +8,7 @@
 
 import Foundation
 import Logging
+import GameCatalog
 
 /// One official Her Interactive patch, as described by `game-patches.json`.
 ///

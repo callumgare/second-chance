@@ -12,6 +12,7 @@
 //  define events when a consumer needs them.
 
 import Foundation
+import GameCatalog
 
 /// Top-level event type for the entire Second Chance app.
 enum AppEvent {

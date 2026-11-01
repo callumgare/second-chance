@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 /// Telling a disc from a game that's already installed, and finding the
 /// installer on a disc. The disc layouts are the top levels of the real

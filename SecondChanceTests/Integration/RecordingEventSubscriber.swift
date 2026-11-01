@@ -12,6 +12,7 @@
 
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 /// Records `WrappBuildEvent`s published to a bus. Thread-safe via a lock;
 /// tests read the recorded values after the build completes.

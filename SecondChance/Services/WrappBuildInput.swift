@@ -19,6 +19,7 @@ import UniformTypeIdentifiers
 import Logging
 import SecondChanceKit
 import SecondChanceReporting
+import GameCatalog
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildInput")
 

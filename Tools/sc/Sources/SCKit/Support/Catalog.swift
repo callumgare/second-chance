@@ -1,9 +1,8 @@
-// The public face of the app's game database for the CLI. GameInfo.swift and
-// GameInfoProvider.swift in this directory are symlinks into the app's
-// sources, so their types are internal; this file copies out what the CLI
-// needs into Sendable values.
+// What the CLI needs of the app's game database (Packages/GameCatalog),
+// copied out into plain values.
 
 import Foundation
+import GameCatalog
 
 public struct CatalogGame: Sendable, Hashable {
     /// The slug, e.g. `haunted-carousel`.

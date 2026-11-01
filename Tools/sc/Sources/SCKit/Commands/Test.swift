@@ -1,6 +1,5 @@
 import ArgumentParser
 import Foundation
-import GameCatalog
 import Noora
 
 struct TestCommand: AsyncParsableCommand {

@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 @Suite("Game Installer")
 struct GameInstallerTests {

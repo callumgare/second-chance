@@ -1,19 +1,21 @@
 //
 //  GameInfoProvider.swift
-//  SecondChance
+//  GameCatalog
 //
 //  Provides game metadata for all Nancy Drew titles
 
 import Foundation
 
 /// Provides game information for all supported Nancy Drew titles
-class GameInfoProvider {
-    static let shared = GameInfoProvider()
+public nonisolated final class GameInfoProvider: Sendable {
+    public static let shared = GameInfoProvider()
 
-    private init() {}
+    private init() {
+        games = Dictionary(uniqueKeysWithValues: gamesList.map { ($0.id, $0) })
+    }
 
     /// All known Nancy Drew games with their metadata, in chronological order
-    private lazy var gamesList: [GameInfo] = [
+    private let gamesList: [GameInfo] = [
         GameInfo(
             id: "secrets-can-kill",
             title: "Secrets Can Kill",
@@ -260,17 +262,15 @@ class GameInfoProvider {
     ]
 
     /// Dictionary for fast lookup by slug
-    private lazy var games: [String: GameInfo] = {
-        Dictionary(uniqueKeysWithValues: gamesList.map { ($0.id, $0) })
-    }()
+    private let games: [String: GameInfo]
 
     /// Retrieve game information by slug
-    func gameInfo(for slug: String) -> GameInfo {
+    public func gameInfo(for slug: String) -> GameInfo {
         return games[slug] ?? GameInfo.unknownGame
     }
 
     /// Get all known games in their canonical order
-    func allGames() -> [GameInfo] {
+    public func allGames() -> [GameInfo] {
         return gamesList
     }
 }

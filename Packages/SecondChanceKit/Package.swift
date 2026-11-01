@@ -37,6 +37,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
         .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.30.2"),
+        .package(path: "../GameCatalog"),
     ],
     targets: [
         // Logging, Wine, Steam and the rest. No Sentry, so WrappPuppeteer
@@ -44,6 +45,7 @@ let package = Package(
         .target(
             name: "SecondChanceKit",
             dependencies: [
+                .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],
             swiftSettings: swiftSettings

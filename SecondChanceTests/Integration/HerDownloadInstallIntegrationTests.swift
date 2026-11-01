@@ -13,6 +13,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+import GameCatalog
 
 /// One download of one game.
 struct HerDownloadCase: Sendable, CustomTestStringConvertible {

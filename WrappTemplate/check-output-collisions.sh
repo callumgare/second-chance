@@ -73,18 +73,18 @@ fi
 
 echo "✅ swift-log is statically linked"
 
-# The same for the shared package's modules (Packages/SecondChanceKit).
-for MODULE in SecondChanceKit SecondChanceReporting; do
+# The same for the shared packages' modules (Packages/).
+for MODULE in SecondChanceKit SecondChanceReporting GameCatalog; do
     if otool -L "${GAMEWRAPPER_BINARY}" | grep -i "${MODULE}.framework" \
         || [ -d "${BUILD_DIR}/PackageFrameworks/${MODULE}.framework" ]; then
         echo "❌ ERROR: ${MODULE} is dynamically linked!"
         echo ""
-        echo "Leave its library product's type unset in Packages/SecondChanceKit/Package.swift,"
+        echo "Leave its library product's type unset in its Package.swift under Packages/,"
         echo "so Xcode links it statically."
         exit 1
     fi
 done
-echo "✅ The shared package is statically linked"
+echo "✅ The shared packages are statically linked"
 
 touch "${DERIVED_FILE_DIR}/check-output-collisions-last-run"
 echo "🔍 Verifying Sentry static linking (no dynamic framework)..."

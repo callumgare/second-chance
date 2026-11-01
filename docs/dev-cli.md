@@ -318,10 +318,10 @@ Its code is in `Tools/sc/`:
 
 - `Sources/SCKit/Commands/` — one file per top-level command.
 - `Sources/SCKit/Support/` — the pieces they share.
-- `Sources/GameCatalog/` — symlinks to the app's `GameInfo.swift` and
-  `GameInfoProvider.swift`, so slugs and titles come from the app's own
-  database, plus `Catalog.swift`, the public face the rest of the tool uses.
-  It builds in Swift 5 mode because those files are the app's.
+- `Sources/SCKit/Support/Catalog.swift` — what the tool needs of the app's
+  own game database, the `GameCatalog` package in `Packages/GameCatalog/`, so
+  slugs and titles never drift from the app's. `./sc` rebuilds when that
+  package changes too.
 - `Tests/SCKitTests/` — Swift Testing; `swift test --package-path Tools/sc`,
   also run by `sc test unit` and CI.
 

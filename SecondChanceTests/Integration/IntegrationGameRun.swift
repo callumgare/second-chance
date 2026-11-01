@@ -10,6 +10,7 @@ import Foundation
 import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
+import GameCatalog
 
 struct IntegrationGameRun {
     let game: GameInfo

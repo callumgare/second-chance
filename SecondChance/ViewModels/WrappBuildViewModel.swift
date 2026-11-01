@@ -10,6 +10,7 @@ import Combine
 import Logging
 import SecondChanceKit
 import SecondChanceReporting
+import GameCatalog
 
 /// Builds the I/O for one wrapp build.
 ///

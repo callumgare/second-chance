@@ -140,7 +140,7 @@ when it applies across the repo. Link between them rather than repeating.
 ## Tech Stack
 
 - **Swift 5.0** / **SwiftUI**, deployment target **macOS 15.0** (some targets 15.6)
-- Xcode project (`SecondChance.xcodeproj`), with the shared code in a local Swift package (`Packages/SecondChanceKit/`)
+- Xcode project (`SecondChance.xcodeproj`), with the shared code in local Swift packages (`Packages/`)
 - Uses Swift Testing framework (`@Test`, `#expect`) — not XCTest
 - Unsandboxed app (required for Wine); entitlements enable dyld env vars, unsigned executable memory, and disable library validation
 
@@ -175,8 +175,8 @@ step by step, including the resource-ownership rules and both injection seams.
 
 ### Shared code is a local package
 
-Code more than one app uses lives in `Packages/SecondChanceKit/`, a local
-Swift package the Xcode project depends on, in two modules:
+Code more than one app uses lives in `Packages/`, in local Swift packages
+the Xcode project depends on. `Packages/SecondChanceKit/` has two modules:
 
 - **`SecondChanceKit`** (`Packages/SecondChanceKit/Sources/SecondChanceKit/`): logging, Wine,
   Steam, the loading window's stages and the rest. Second Chance,
@@ -184,6 +184,11 @@ Swift package the Xcode project depends on, in two modules:
 - **`SecondChanceReporting`** (`Packages/SecondChanceKit/Sources/SecondChanceReporting/`):
   failure and success reports, and the only code that imports Sentry.
   Second Chance and WrappTemplate link it; WrappPuppeteer doesn't.
+
+`Packages/GameCatalog/` is a package of its own: `GameInfo`, the engine and
+`GameInfoProvider`, with nothing but Foundation. Every app links it, and
+`SecondChanceKit` depends on it, as does `sc` (`Tools/sc`), which a package
+needing swift-log and Sentry would have made fetch both.
 
 The rules that keep it working:
 
@@ -195,10 +200,10 @@ The rules that keep it working:
 - **`SecondChanceKit` never depends on reporting.** When it needs to know
   something only reporting knows, reporting tells it (as
   `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
-- **`Package.swift` mirrors the app targets' Swift settings** — Swift 5
+- **Each `Package.swift` mirrors the app targets' Swift settings** — Swift 5
   mode, `MainActor` default isolation, approachable concurrency,
   `MemberImportVisibility`, bare `/regex/` literals. Change a target's Swift
-  settings and the package's together, or the same code means different
+  settings and the packages' together, or the same code means different
   things in each.
 - **A new file is picked up by being in the folder**; nothing to tick in
   Xcode. A file in an app's folder can't be used by the package.
@@ -238,8 +243,9 @@ The rules that keep it working:
 - **Services are singletons** (`XxxManager.shared`) but the build path takes them
   by constructor injection with `.shared` defaults. Keep that pattern for new
   services: injectable for tests, convenient in production.
-- **`GameInfoProvider`**: static database of all 30+ Nancy Drew games with
-  metadata (engine, disk count, exe paths, Steam DRM). Add new games here.
+- **`GameInfoProvider`** (`GameCatalog`): static database of all 30+ Nancy
+  Drew games with metadata (engine, disk count, exe paths, Steam DRM). Add new
+  games here.
 - **`GameEngine` enum** (`wine`, `scummvm`, `wineSteam`, `wineSteamSilent`):
   determines which engine the wrapp uses.
 
@@ -524,7 +530,7 @@ The Nancy Drew games have a set of common abbrevations use for each game
 (<https://nancydrew.fandom.com/wiki/User_blog:BanaBerry/Nancy_Drew_Game_Abbreviations>). For example
 `Treasure in the Royal Tower` is `TRT` and `The Haunted Carousal` is `CAR`. These abbreviations are hard for me to
 remember so Second Chance avoids these whenever possible and instead uses our shortenings. The full list can be found in
-SecondChance/Services/GameInfoProvider.swift where the id property is the shortening we use for each game. For us
+Packages/GameCatalog/Sources/GameCatalog/GameInfoProvider.swift where the id property is the shortening we use for each game. For us
 `Treasure in the Royal Tower` is `royal-tower` and `The Haunted Carousal` is `haunted-carousel`. Not as short but much
 more self-explanatory.
 

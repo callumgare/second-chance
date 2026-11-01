@@ -8,8 +8,10 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$root/Tools/sc"
 binary="$package/.build/release/sc"
+# The game catalog sc shares with the app, a local package of its own.
+catalog="$root/Packages/GameCatalog"
 
-if [[ ! -x "$binary" ]] || [[ -n "$(find -L "$package/Sources" "$package/Package.swift" "$package/Package.resolved" -newer "$binary" -print -quit 2>/dev/null)" ]]; then
+if [[ ! -x "$binary" ]] || [[ -n "$(find -L "$package/Sources" "$catalog" "$package/Package.swift" "$package/Package.resolved" -newer "$binary" -print -quit 2>/dev/null)" ]]; then
     # Rebuilding takes ~10 s (longer the first time), so say so. In a
     # terminal: a spinner with the elapsed time, cleared once it's done.
     message="Building sc (Tools/sc has changed)"

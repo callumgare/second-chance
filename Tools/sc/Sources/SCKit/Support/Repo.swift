@@ -1,5 +1,4 @@
 import Foundation
-import GameCatalog
 
 /// Every path the CLI reads or writes, resolved from the repo root.
 ///

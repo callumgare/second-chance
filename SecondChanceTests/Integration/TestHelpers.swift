@@ -12,6 +12,7 @@ import AppKit
 import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
+import GameCatalog
 
 // Rename the kevent C syscall so it doesn't collide with Swift's kevent struct init.
 @_silgen_name("kevent")
