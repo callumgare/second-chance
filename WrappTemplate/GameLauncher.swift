@@ -456,8 +456,10 @@ class GameLauncher {
             recordLaunch(outcome: noDisplay.kind)
             report(noDisplay)
         } else if let sending = FailureReporter.sendWithoutAsking(noDisplay) {
-            failureReport = noDisplay
-            reportTask = sending
+            shared.withLock {
+                $0.failureReport = noDisplay
+                $0.reportTask = sending
+            }
         }
     }
 
