@@ -225,6 +225,16 @@ struct IntegrationGameRun {
         let viewModel = await MainActor.run {
             WrappBuildViewModel(makeInput: { build.makeInput(outputDir, $0) }, bus: bus)
         }
+        // The build's screens, as a person building the game would see them
+        // (none with SECOND_CHANCE_HIDE_TEST_UI). Closed when the build is
+        // done, unless it failed: that one stays on the screen saying why.
+        let window = await BuildWindow.show(viewModel, title: "\(game.title) (\(source))")
+        defer {
+            Task { @MainActor in
+                if case .error = viewModel.currentState { return }
+                window?.close()
+            }
+        }
         // The build takes the log context it starts in, so its entries carry
         // this test's id.
         LogContext.$build.withValue(buildLog) {

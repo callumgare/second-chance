@@ -11,9 +11,10 @@ code is shaped this way, see
 ## The shape
 
 ```text
-WrappBuildViewModel (GUI)          CLIBuilder (headless)
-         │                                  │
-         └──────── WrappBuildStrategy ──────┘
+WrappBuildViewModel (GUI)  ←  CLIBuilder (headless)
+          │
+          └───────────────┐
+                  WrappBuildStrategy
                           │
     ┌─────────────────────┼──────────────────────┐
 DiskWrappBuilder   HerDownloadWrappBuilder   SteamWrappBuilder
@@ -28,8 +29,9 @@ One builder per source. `WrappBuildStrategy` is a single method:
 func build(input: WrappBuildInput) async throws -> URL
 ```
 
-Both entry points dispatch through the protocol, so **adding a source means
-adding a builder, not adding a branch.** Neither call site changes.
+The ViewModel dispatches through the protocol, and a headless run builds
+through the same ViewModel, so **adding a source means adding a builder, not
+adding a branch.** Neither the ViewModel nor `CLIBuilder` changes.
 
 ## Before any build: Rosetta
 
@@ -369,10 +371,17 @@ headless build failed with `installStalled` about a minute after the freeze.
 
 `CLIBuilder` (not the ViewModel) owns headless mode. `NON_INTERACTIVE=true`
 enables it; `validatedSource()` checks the environment *before* the UI starts
-and exits 1 with a logged reason if it's misconfigured. **Every `exit()` in the
-build path lives in `CLIBuilder`** — no code path in `WrappBuildViewModel`
-terminates the process, which is what makes the ViewModel safe to instantiate in
-a unit test.
+and exits 1 with a logged reason if it's misconfigured. It then starts the
+build on the app window's own `WrappBuildViewModel`, as the welcome screen
+would, so a headless build takes the same path as a person's, and exits with
+what the ViewModel ended on. **Every `exit()` in the build path lives in
+`CLIBuilder`** — no code path in `WrappBuildViewModel` terminates the process,
+which is what makes the ViewModel safe to instantiate in a unit test.
+
+The window stays hidden (the app's activation policy is `.prohibited`) unless
+`SECOND_CHANCE_SHOW_UI=1` (`sc wrapp build --debug show-ui`), which shows it
+going through the screens a person building the game would see. Either way
+nothing asks: every answer still comes from the environment.
 
 Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`, `her-download` needs
@@ -421,8 +430,8 @@ run's output shows nothing — unless `SECOND_CHANCE_LOG_STDERR=1` forces the
 mirror on (`0` forces it off).
 
 **Progress for whoever started the build.** When `SECOND_CHANCE_PROGRESS_PATH`
-is set, `CLIBuilder` attaches a `ProgressFileWriter`: an `EventBus.app`
-subscriber like any other, which appends one JSON object per line to that file —
+is set, `CLIBuilder` attaches a `ProgressFileWriter`: a subscriber to the
+ViewModel's bus (`EventBus.app`) like any other, which appends one JSON object per line to that file —
 
 ```json
 {"event":"stage","stage":"installingGame","text":"Game installing","fraction":0.5}

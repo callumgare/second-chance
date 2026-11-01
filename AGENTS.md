@@ -152,10 +152,9 @@ it. Building one is a _wrapp build_; the thing it is built from is a _source_
 (disk, Her download, Steam).
 
 ```text
-Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)      CLIBuilder (headless)
-                                    │                            │
-                                    └────────── both via ────────┘
-                                          WrappBuildStrategy
+Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)  ←  CLIBuilder (headless)
+                                         │
+                                 WrappBuildStrategy
                                                  │
              ┌───────────────────────────────────┼───────────────────────────┐
     DiskWrappBuilder              HerDownloadWrappBuilder          SteamWrappBuilder
@@ -217,8 +216,8 @@ The rules that keep it working:
 - **`WrappBuildStrategy`** (`Builders/WrappBuildStrategy.swift`): one method,
   `build(input:) async throws -> URL`. **Adding a source means adding a builder
   that conforms to this**, not adding a branch to an existing one. The ViewModel
-  and `CLIBuilder` both dispatch through the protocol, so a new source needs no
-  changes at either call site.
+  dispatches through the protocol, and a headless run (`CLIBuilder`) builds
+  through the ViewModel too, so a new source needs no changes at either.
 - **A builder owns its flow and its resources.** Whatever it creates — mounted
   ISOs, the temp wrapp — it tears down on the success _and_ error paths.
   `WrappBuildHelper` supplies cleanup _primitives_ (`removeTempWrapp`); it never
@@ -325,7 +324,9 @@ direct assignment.
   `WrappBuildInput` when the corresponding prompt would appear. **`CLIBuilder`
   owns every `exit()`** — no code path in `WrappBuildViewModel` terminates the
   process, so the ViewModel is safe to instantiate in tests regardless of
-  environment.
+  environment. The build itself runs on the app window's ViewModel, so
+  `SECOND_CHANCE_SHOW_UI=1` (`--debug show-ui`) shows its screens as a person
+  would see them; otherwise the window stays hidden.
 - **Headless stderr is TTY-gated.** `LogStore` only mirrors to stderr when
   `isatty`, so piping or redirecting a headless run's output shows nothing —
   unless `SECOND_CHANCE_LOG_STDERR=1` forces it (`0` forces it off), which is

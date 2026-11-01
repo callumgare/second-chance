@@ -3,9 +3,10 @@
 //  SecondChance
 //
 //  Second Chance is the host the unit and integration tests run in. Under
-//  test it keeps nothing a real run would. Where `.env` sets
-//  SECOND_CHANCE_HIDE_TEST_UI (`sc test` passes it on), it also shows no
-//  window (a log window a test opens is built but kept off screen) and
+//  test it keeps nothing a real run would, and opens no main window: each
+//  integration-test build has a window of its own. Where `.env` sets
+//  SECOND_CHANCE_HIDE_TEST_UI (`sc test` passes it on), it shows no window
+//  at all (a log window a test opens is built but kept off screen) and
 //  doesn't come to the front, so a test run leaves the Mac free to use;
 //  without it the windows show, which helps explain a failure.
 

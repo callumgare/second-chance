@@ -68,7 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct SecondChanceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var wrappBuildViewModel = WrappBuildViewModel()
+    @StateObject private var wrappBuildViewModel: WrappBuildViewModel
     @AppStorage(DebugCommands.settingKey) private var showDebugMenu = false
 
     private let appStartTime = Date()
@@ -112,15 +112,21 @@ struct SecondChanceApp: App {
 
         let debugMode = CommandLine.arguments.contains("--debug")
 
+        // The window's view model, which a headless run builds with too.
+        let viewModel = WrappBuildViewModel()
+        _wrappBuildViewModel = StateObject(wrappedValue: viewModel)
+
         if CLIBuilder.isEnabled {
-            // NSApp may not exist yet during init; defer to first run loop cycle
-            DispatchQueue.main.async {
-                NSApp?.setActivationPolicy(.prohibited)
+            if !CLIBuilder.showsUI {
+                // NSApp may not exist yet during init; defer to first run loop cycle
+                DispatchQueue.main.async {
+                    NSApp?.setActivationPolicy(.prohibited)
+                }
             }
             // Validate synchronously so misconfigured runs fail before the UI
             // starts, then run the build detached so it can drive termination.
             let source = CLIBuilder.validatedSource()
-            Task { await CLIBuilder.run(source: source) }
+            Task { await CLIBuilder.run(source: source, viewModel: viewModel) }
         }
 
         Task { await AutomationBridge.shared.startIfConfigured() }
@@ -169,7 +175,9 @@ struct SecondChanceApp: App {
                 .environmentObject(wrappBuildViewModel)
         }
         .windowResizability(.contentSize)
-        .defaultLaunchBehavior(TestHost.hidesUI ? .suppressed : .automatic)
+        // Under test, each integration-test build has a window of its own
+        // (`BuildWindow`), so this one would only show the welcome screen.
+        .defaultLaunchBehavior(TestHost.isRunning ? .suppressed : .automatic)
         .restorationBehavior(TestHost.isRunning ? .disabled : .automatic)
         .commands {
             InstallCommands(viewModel: wrappBuildViewModel)

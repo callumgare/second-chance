@@ -10,11 +10,15 @@ does not work for it — everything goes through `xcodebuild` against the
 own tests; `sc test unit` runs those too.)
 
 The tests run inside `Second Chance.app`, their test host. Under test it keeps
-no run log and leaves the welcome screen's first-launch greeting alone
-(`TestHost`). Where the repo's `.env` sets `SECOND_CHANCE_HIDE_TEST_UI=1`,
+no run log, leaves the welcome screen's first-launch greeting alone and opens
+no main window (`TestHost`). Each integration-test build has a window of its
+own instead (`BuildWindow`), showing that build's screens as a person building
+the game would see them. It opens without coming to the front, and closes when
+the build is done unless the build failed: that one stays on the screen saying
+why. Where the repo's `.env` sets `SECOND_CHANCE_HIDE_TEST_UI=1`,
 `sc test unit` and `sc test integration` pass it on and the host also opens no
-window and stays out of the Dock and the foreground — a log window a test
-opens is built but never put on screen — so a run doesn't take over a Mac
+build windows and stays out of the Dock and the foreground — a log window a
+test opens is built but never put on screen — so a run doesn't take over a Mac
 someone is using. Leave it unset on a test Mac: there the windows show, which
 helps explain a failure. `.env` isn't synced by `--on`, so each Mac keeps its
 own. A game an integration test launches still comes to the front either way.

@@ -151,6 +151,7 @@ They map onto the app's and wrapp's own switches:
 | `--debug` value           | Becomes                               | `app run` | `wrapp build` | `wrapp run` |
 | ------------------------- | ------------------------------------- | :-------: | :-----------: | :---------: |
 | `log-window`              | `--debug`                             | ✓         | ✓             | ✓           |
+| `show-ui`                 | `SECOND_CHANCE_SHOW_UI=1`             |           | ✓             |             |
 | `skip-installer`          | `--skip-installer`                    | ✓         | ✓             |             |
 | `strict-install`          | `STRICT_INSTALL=true`                 |           | ✓             |             |
 | `install-stall=<seconds>` | `SECOND_CHANCE_INSTALL_STALL_SECONDS` | ✓         | ✓             |             |

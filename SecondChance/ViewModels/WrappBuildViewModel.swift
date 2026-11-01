@@ -45,6 +45,9 @@ class WrappBuildViewModel: ObservableObject {
     @Published var detectedGame: GameInfo?
     /// Where the finished wrapp was saved, for Show in Finder.
     @Published var builtWrappURL: URL?
+    /// What the last build failed with, for a headless run's exit
+    /// (`CLIBuilder`). Nil once a build succeeds, or starts.
+    private(set) var lastBuildError: Error?
     /// What the person has to do for the build to go on, if anything: the
     /// latest `.instructions` event.
     @Published var instructions: String?
@@ -115,7 +118,7 @@ class WrappBuildViewModel: ObservableObject {
         cacheManager.stagesToRestore = stagesToRestore
 
         // Subscribe to the build's bus so wrapp-build events drive our @Published properties.
-        // (Headless runs are driven by CLIBuilder, which was extracted from here.)
+        // (A headless run is this view model too: CLIBuilder starts its build.)
         Task { @MainActor in
             let token = await bus.subscribe { [weak self] event in
                 await self?.handleBusEvent(event)
@@ -342,6 +345,7 @@ class WrappBuildViewModel: ObservableObject {
         // A new build: none of the last one's stage carries over to it.
         LogContext.clearStage()
         lastProgressState = nil
+        lastBuildError = nil
         let input = makeInput(self)
         let loadMonitor = SystemLoadMonitor()
         loadMonitor.start()
@@ -352,6 +356,7 @@ class WrappBuildViewModel: ObservableObject {
             currentState = .completed
             recordBuild(outcome: SuccessReport.ok)
         } catch {
+            lastBuildError = error
             if isCancelling { return }
             if !Self.isCancellation(error) {
                 let summary = FailureSummary.log(logger, what: "Building the wrapp", error: error)

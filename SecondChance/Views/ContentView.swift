@@ -5,6 +5,7 @@
 //  Main content view that orchestrates the UI
 
 import SwiftUI
+import SecondChanceKit
 
 struct ContentView: View {
     @EnvironmentObject var viewModel: WrappBuildViewModel
@@ -38,7 +39,9 @@ struct ContentView: View {
             if let step = InstallerStep(newState) {
                 lastStep = step
             }
-            if case .error = newState {
+            // Not under test: a failed build's window (`BuildWindow`) must
+            // not take the front from a game another test is launching.
+            if case .error = newState, !TestHost.isRunning {
                 NSApplication.shared.activate(ignoringOtherApps: true)
             }
         }

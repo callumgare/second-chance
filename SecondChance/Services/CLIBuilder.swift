@@ -3,12 +3,14 @@
 //  SecondChance
 //
 //  Headless (non-interactive) build driver. Validates the environment,
-//  runs the requested build, and terminates the process with the right
-//  exit code.
+//  starts the requested build on the app's WrappBuildViewModel, as the
+//  welcome screen would, and terminates the process with the right exit
+//  code. The window stays hidden unless SECOND_CHANCE_SHOW_UI=1, which shows
+//  it going through the screens a person would see.
 //
-//  Kept out of WrappBuildViewModel so the ViewModel stays pure UI state and
-//  is safe to instantiate in tests regardless of environment variables — no
-//  code path in the ViewModel terminates the process.
+//  The exits live here, not in WrappBuildViewModel, so the ViewModel is safe
+//  to instantiate in tests regardless of environment variables — no code
+//  path in the ViewModel terminates the process.
 //
 //  The exit sequencing is deliberate and must be preserved:
 //
@@ -39,23 +41,30 @@ enum CLIBuilder {
         environment["NON_INTERACTIVE"] == "true"
     }
 
+    /// Whether a headless run shows its window (`SECOND_CHANCE_SHOW_UI=1`),
+    /// for watching the build. It still asks nothing: every answer comes
+    /// from the environment, as without the window.
+    static var showsUI: Bool {
+        environment["SECOND_CHANCE_SHOW_UI"] == "1"
+    }
+
     /// Validate the headless environment synchronously.
     ///
     /// Exits the process (code 1) with a logged reason when required
     /// variables are missing or invalid — call this before the UI starts so
     /// misconfigured runs fail fast. Returns the validated source on success.
-    static func validatedSource() -> String {
-        guard let source = environment["INSTALLATION_SOURCE"] else {
+    static func validatedSource() -> WrappSource {
+        guard let name = environment["INSTALLATION_SOURCE"] else {
             failValidation("INSTALLATION_SOURCE environment variable is required (disk, her-download, steam)")
         }
 
-        guard source == "disk" || source == "her-download" || source == "steam" else {
-            failValidation("Invalid INSTALLATION_SOURCE '\(source)' (disk, her-download, steam)")
+        guard let source = WrappSource(rawValue: name) else {
+            failValidation("Invalid INSTALLATION_SOURCE '\(name)' (disk, her-download, steam)")
         }
 
-        logger.notice("NON-INTERACTIVE MODE: Auto-starting installation — source: \(source)")
+        logger.notice("NON-INTERACTIVE MODE: Auto-starting installation — source: \(name)")
 
-        if source == "disk" {
+        if source == .disk {
             guard let disk1 = environment["DISK_1_PATH"] else {
                 failValidation("DISK_1_PATH environment variable is required for disk installation")
             }
@@ -65,7 +74,7 @@ enum CLIBuilder {
             }
         }
 
-        if source == "her-download" {
+        if source == .herDownload {
             guard let download = environment["HER_INSTALLER_PATH"] else {
                 failValidation("HER_INSTALLER_PATH environment variable is required for a Her download (the .exe or .dmg)")
             }
@@ -81,53 +90,35 @@ enum CLIBuilder {
         return source
     }
 
-    /// Run the build for a validated source, then terminate the process.
-    /// Never returns.
-    static func run(source: String) async -> Never {
-        let builder: WrappBuildStrategy
-        switch source {
-        case "disk":
-            builder = DiskWrappBuilder()
-        case "her-download":
-            builder = HerDownloadWrappBuilder()
-        case "steam":
-            builder = SteamWrappBuilder()
-        default:
-            logger.critical("NON-INTERACTIVE MODE: Unknown installation source '\(source)'")
-            exitWithFailure(WrappBuildError.internalError("Unknown installation source '\(source)'"))
-        }
-
-        let input = WrappBuildInput(viewModel: nil)
-
+    /// Run the build for a validated source through the app's view model,
+    /// then terminate the process. Never returns.
+    ///
+    /// The view model is the window's, so a run with `SECOND_CHANCE_SHOW_UI=1`
+    /// shows the screens a person building that game would see.
+    static func run(source: WrappSource, viewModel: WrappBuildViewModel) async -> Never {
         // Machine-readable progress for whoever started the build (sc wrapp
         // build). Kept alive for the rest of the process, which ends below.
         if let progress = ProgressFileWriter.fromEnvironment("SECOND_CHANCE_PROGRESS_PATH") {
-            await progress.subscribe(to: EventBus.app)
+            await progress.subscribe(to: viewModel.bus)
         }
 
-        // Runs until the process exits below.
-        SystemLoadMonitor().start()
+        viewModel.selectedWrappSource = source
+        await viewModel.build(from: source)
 
-        do {
-            try await input.ensureRosetta(bus: .app)
-            _ = try await builder.build(input: input)
-
-            logger.notice("NON-INTERACTIVE MODE: Exiting with success")
-            fflush(stdout)
-            AutomationBridge.shared.stop()
-            LogStore.shared.flush()
-            _exit(0)
-        } catch {
-            exitWithFailure(error)
+        guard viewModel.builtWrappURL != nil else {
+            exitWithFailure(viewModel.lastBuildError ?? WrappBuildError.internalError("The build ended without an app or an error"))
         }
+        logger.notice("NON-INTERACTIVE MODE: Exiting with success")
+        fflush(stdout)
+        AutomationBridge.shared.stop()
+        LogStore.shared.flush()
+        _exit(0)
     }
 
     /// Log, flush, and terminate with a failure exit code. Never returns.
     private static func exitWithFailure(_ error: Error) -> Never {
+        // The view model has already logged the failure's summary.
         logger.critical("NON-INTERACTIVE MODE: Exiting with error — \(error.localizedDescription)")
-        if !WrappBuildViewModel.isCancellation(error) {
-            FailureSummary.log(logger, what: "Building the wrapp", error: error)
-        }
         fflush(stdout)
         fflush(stderr)
         LogStore.shared.flush()
