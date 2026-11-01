@@ -54,7 +54,7 @@ struct HerDownloadInstallIntegrationTests {
                 makeInput: { outputDir, viewModel in
                     WrappBuildInput(herDownload: download.file, outputDir: outputDir, viewModel: viewModel)
                 },
-                start: { await $0.buildFromHerDownload() }
+                start: { await $0.build(from: .herDownload) }
             )
         } check: { recorder, wrapp, outcome in
             // A Mac download's game lands where the disc's installer puts it;

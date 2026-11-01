@@ -248,9 +248,9 @@ class WrappBuildViewModel: ObservableObject {
     /// Start a build from `source`.
     func build(from source: WrappSource) async {
         switch source {
-        case .disk: await buildFromDisk()
-        case .herDownload: await buildFromHerDownload()
-        case .steam: await buildFromSteam()
+        case .disk: await runBuild(diskBuilder, from: source)
+        case .herDownload: await runBuild(herDownloadBuilder, from: source)
+        case .steam: await runBuild(steamBuilder, from: source)
         }
     }
 
@@ -295,29 +295,17 @@ class WrappBuildViewModel: ObservableObject {
         successReportsAnswered = nil
     }
 
-    /// Start a build from disk (interactive mode)
-    func buildFromDisk() async {
-        await runBuild(diskBuilder)
-    }
-
-    /// Start a build from a Her Interactive download
-    func buildFromHerDownload() async {
-        await runBuild(herDownloadBuilder)
-    }
-
-    /// Start a build from Steam
-    func buildFromSteam() async {
-        await runBuild(steamBuilder)
-    }
-
     /// Drive any builder: build → completed, or route the failure. The bus
     /// already routed `.failed` to `handleBusEvent`; the local catch mirrors
     /// the same early-cancel rule for throws that bypassed it.
-    private func runBuild(_ builder: WrappBuildStrategy) async {
+    private func runBuild(_ builder: WrappBuildStrategy, from source: WrappSource) async {
         // The source's prompts are sheets, which leave the menu bar's
         // Install commands free to start a second build.
         guard !isBuilding else { return }
         isBuilding = true
+        // What the progress screen's hints and every report of this build
+        // say it was built from.
+        selectedWrappSource = source
         instructions = nil
         // Its own task, so that Cancel can cancel just the build.
         let task = Task { await self.performBuild(builder) }
@@ -454,7 +442,6 @@ class WrappBuildViewModel: ObservableObject {
         } else {
             logger.notice("Trying the Steam build again")
         }
-        selectedWrappSource = .steam
         Task { await build(from: .steam) }
     }
 

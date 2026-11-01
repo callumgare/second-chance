@@ -31,7 +31,7 @@ struct IntegrationGameRun {
         var installers: [URL] = []
         /// The input for its view model, given the test's output directory.
         let makeInput: @MainActor (URL, WrappBuildViewModel) -> WrappBuildInput
-        /// Starts the build: `buildFromDisk()` and the like.
+        /// Starts the build: `build(from: .disk)` and the like.
         let start: @MainActor (WrappBuildViewModel) async -> Void
     }
 

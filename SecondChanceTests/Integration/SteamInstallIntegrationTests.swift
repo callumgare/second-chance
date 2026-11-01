@@ -68,7 +68,7 @@ struct SteamInstallIntegrationTests {
                 makeInput: { outputDir, viewModel in
                     WrappBuildInput(steamGame: game.id, launchMode: launchMode, outputDir: outputDir, viewModel: viewModel)
                 },
-                start: { await $0.buildFromSteam() }
+                start: { await $0.build(from: .steam) }
             )
         } afterBuild: { recorder, outcome in
             if let owned = recorder.steamGamesOwned {
