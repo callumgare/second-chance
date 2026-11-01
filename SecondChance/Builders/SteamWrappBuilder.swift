@@ -265,25 +265,13 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if runsWithoutSteam { try removeSteam(from: prefix) }
             try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: engine)
 
-            try await helper.configureWrapp(
-                at: wrappPath,
-                gameInfo: gameInfo,
-                source: .steam,
-                gameExePath: gameExePath,
-                installerDir: gameDirPath,
-                steamID: runsWithoutSteam ? nil : String(appID),
-                gameEngine: engine,
-                steamLaunchMode: launchMode
+            let finalPath = try await helper.completeBuild(
+                wrapp: wrappPath, gameInfo: gameInfo, source: .steam,
+                gameExePath: gameExePath, installerDir: gameDirPath,
+                steamID: runsWithoutSteam ? nil : String(appID), gameEngine: engine, steamLaunchMode: launchMode,
+                input: input
             )
-            await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: gameDirPath, gameInfo: gameInfo))
-
-            let finalPath = try await helper.finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
-            helper.unregisterTemporaryWrapp(wrappPath)
-
-            let (shouldLaunch, args) = await input.shouldLaunchGame()
-            if shouldLaunch {
-                try await helper.launchGame(at: finalPath, with: args)
-            }
+            await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
             if run.claimStop() {

@@ -36,8 +36,12 @@ struct BuildPipelineReliabilityTests {
             if value == 0 { await bus.publish(1) }
         }
         await bus.publish(0)
-        // The nested publish is queued behind the one that made it.
-        try? await Task.sleep(for: .milliseconds(100))
+        // The nested publish is queued behind the one that made it, so it is
+        // handled after this returns: wait for it, rather than a fixed time.
+        let deadline = ContinuousClock.now + .seconds(5)
+        while seen.withLock({ $0.count }) < 2 && ContinuousClock.now < deadline {
+            await Task.yield()
+        }
         #expect(seen.withLock { $0 } == [0, 1])
     }
 

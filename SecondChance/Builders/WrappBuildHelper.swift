@@ -496,6 +496,43 @@ class WrappBuildHelper {
         return finalPath
     }
 
+    /// The tail every builder ends with: configure the wrapp, publish that,
+    /// then sign and save it (`finalize`), after which it is no longer
+    /// temporary. One place, so no builder can drop one of its events.
+    func completeBuild(
+        wrapp wrappPath: URL,
+        gameInfo: GameInfo,
+        source: WrappSource,
+        gameExePath: String,
+        installerDir: String,
+        steamID: String? = nil,
+        gameEngine: GameInfo.GameEngine? = nil,
+        steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        input: WrappBuildInput
+    ) async throws -> URL {
+        try await configureWrapp(
+            at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
+            steamID: steamID, gameEngine: gameEngine, steamLaunchMode: steamLaunchMode
+        )
+        await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: installerDir, gameInfo: gameInfo))
+        let finalPath = try await finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
+        unregisterTemporaryWrapp(wrappPath)
+        return finalPath
+    }
+
+    /// Launch the saved wrapp when the run asked for it (`LAUNCH_GAME`). The
+    /// build has already succeeded, so a launch that fails is logged, not
+    /// thrown: it would otherwise fail a build that had completed.
+    func launchIfAsked(_ finalPath: URL, input: WrappBuildInput) async {
+        let (shouldLaunch, args) = await input.shouldLaunchGame()
+        guard shouldLaunch else { return }
+        do {
+            try await launchGame(at: finalPath, with: args)
+        } catch {
+            logger.error("The game was built, but launching it failed: \(ErrorChain.describe(error))")
+        }
+    }
+
     /// Sign the wrapp app (ad-hoc codesign).
     func signWrapp(at path: URL) async throws {
         logger.notice("Signing wrapp...")

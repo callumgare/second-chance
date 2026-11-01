@@ -23,6 +23,12 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     public let doesNotExitInNonInteractiveMode: Bool
     public let installInstructions: String?
     public let failedInstallInfo: String?
+    /// Other names a disc or download calls the game by, besides its title,
+    /// matched as the title is: case aside, anywhere in its fingerprint.
+    public let detectionAliases: [String]
+    /// Short codes a disc calls it by ("STFD"), matched in capitals, as a
+    /// whole word: in lower case they could be anything.
+    public let detectionCodes: [String]
 
     /// The name of the game's app, as Finder and the Dock show it.
     public var appName: String { "Nancy Drew - \(title)" }
@@ -107,7 +113,9 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         steam: SteamApp? = nil,
         doesNotExitInNonInteractiveMode: Bool = false,
         installInstructions: String? = nil,
-        failedInstallInfo: String? = nil
+        failedInstallInfo: String? = nil,
+        detectionAliases: [String] = [],
+        detectionCodes: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -121,6 +129,8 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         self.doesNotExitInNonInteractiveMode = doesNotExitInNonInteractiveMode
         self.installInstructions = installInstructions
         self.failedInstallInfo = failedInstallInfo
+        self.detectionAliases = detectionAliases
+        self.detectionCodes = detectionCodes
     }
 }
 nonisolated extension GameInfo {

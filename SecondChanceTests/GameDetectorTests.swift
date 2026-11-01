@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 @testable import SecondChance
+import GameCatalog
 
 @Suite("Game Detection")
 struct GameDetectorTests {
@@ -112,6 +113,24 @@ struct GameDetectorTests {
             let slug = detector.getGameSlugFromFingerprint(fingerprint)
             #expect(slug == expectedSlug, "Partial match failed for '\(fingerprint)'")
         }
+    }
+}
+
+@Suite("Game Detection - the catalogue")
+struct GameDetectorCatalogueTests {
+    @Test("Every game in the catalogue is recognised by its own title")
+    func everyTitle() {
+        for game in GameInfoProvider.shared.allGames() where game.id != GameInfo.unknownGame.id {
+            #expect(GameDetector.slug(forFingerprint: "Nancy Drew: \(game.title)", among: GameInfoProvider.shared.allGames()) == game.id,
+                    "\(game.title) isn't recognised")
+        }
+    }
+
+    @Test("A fingerprint naming both Secrets Can Kill games is the Remastered one")
+    func mostSpecific() {
+        let games = GameInfoProvider.shared.allGames()
+        #expect(GameDetector.slug(forFingerprint: "Nancy Drew SCK Secrets Can Kill", among: games) == "secrets-can-kill-remastered")
+        #expect(GameDetector.slug(forFingerprint: "nothing like a game", among: games) == GameInfo.unknownGame.id)
     }
 }
 

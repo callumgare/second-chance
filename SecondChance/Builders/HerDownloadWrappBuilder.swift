@@ -115,7 +115,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             try await helper.ensureRoomToBuild(from: installer, copies: 3)
             try await helper.createBaseWrapp(at: wrappPath)
             let driveCPath = WrappLayout(app: wrappPath).driveC
-            let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
+            let installerBaseDir = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
 
             // An InstallShield launcher unpacks into the layout a disc has,
             // and then installs silently from an answer file as a disc does.
@@ -272,26 +272,11 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         input: WrappBuildInput
     ) async throws -> URL {
         let gameDir = (gameExePath as NSString).deletingLastPathComponent
-        try await helper.configureWrapp(
-            at: wrappPath,
-            gameInfo: gameInfo,
-            source: .herDownload,
-            gameExePath: gameExePath,
-            installerDir: gameDir
+        let finalPath = try await helper.completeBuild(
+            wrapp: wrappPath, gameInfo: gameInfo, source: .herDownload,
+            gameExePath: gameExePath, installerDir: gameDir, input: input
         )
-        await bus.publishWrappBuild(.wrappConfigured(
-            exePath: gameExePath,
-            installerDir: gameDir,
-            gameInfo: gameInfo
-        ))
-
-        let finalPath = try await helper.finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
-        helper.unregisterTemporaryWrapp(wrappPath)
-
-        let (shouldLaunch, args) = await input.shouldLaunchGame()
-        if shouldLaunch {
-            try await helper.launchGame(at: finalPath, with: args)
-        }
+        await helper.launchIfAsked(finalPath, input: input)
         return finalPath
     }
 

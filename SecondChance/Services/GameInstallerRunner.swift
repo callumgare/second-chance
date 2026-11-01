@@ -354,39 +354,29 @@ class GameInstallerRunner {
 
     // MARK: - Disk Directory Resolution
 
-    /// Find the directory containing the installer: prefer disk-combined, else
-    /// disk-1, else fail. Centralizes a lookup that was previously duplicated.
-    private func findInstallerDirectory(in driveCPath: URL) throws -> URL {
-        let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
-        let combinedDir = installerBaseDir.appendingPathComponent("disk-combined")
-        let disk1Dir = installerBaseDir.appendingPathComponent("disk-1")
+    /// The folder the game installs from: `disk-combined` for a game on two
+    /// discs, else `disk-1`; nil if neither is there.
+    private func installerDirectory(in driveCPath: URL) -> URL? {
+        let base = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
+        return ["disk-combined", "disk-1"].map { base.appendingPathComponent($0) }
+            .first { fileManager.fileExists(atPath: $0.path) }
+    }
 
-        if fileManager.fileExists(atPath: combinedDir.path) {
-            logger.notice("Using combined disk directory")
-            return combinedDir
-        } else if fileManager.fileExists(atPath: disk1Dir.path) {
-            logger.notice("Using disk-1 directory")
-            return disk1Dir
-        } else {
-            logger.critical("Could not find disk directory — expected at \(disk1Dir.path) or \(combinedDir.path)")
+    /// `installerDirectory`, or `diskNotFound`.
+    private func findInstallerDirectory(in driveCPath: URL) throws -> URL {
+        guard let directory = installerDirectory(in: driveCPath) else {
+            logger.critical("Could not find disk directory — expected disk-1 or disk-combined in \(driveCPath.appendingPathComponent(WrappLayout.installersFolder).path)")
             throw WrappBuildError.diskNotFound
         }
+        logger.notice("Installing from \(directory.lastPathComponent)")
+        return directory
     }
 
     /// The installer directory as a Windows-style path relative to drive_c
     /// (e.g. "/nancy-drew-installer/disk-1").
     private func installerDirectoryPath(in driveCPath: URL) -> String {
-        let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
-        let combinedDir = installerBaseDir.appendingPathComponent("disk-combined")
-        let disk1Dir = installerBaseDir.appendingPathComponent("disk-1")
-
-        if fileManager.fileExists(atPath: combinedDir.path) {
-            return "/nancy-drew-installer/disk-combined"
-        } else if fileManager.fileExists(atPath: disk1Dir.path) {
-            return "/nancy-drew-installer/disk-1"
-        } else {
-            return "/nancy-drew-installer"
-        }
+        guard let directory = installerDirectory(in: driveCPath) else { return "/" + WrappLayout.installersFolder }
+        return "/\(WrappLayout.installersFolder)/\(directory.lastPathComponent)"
     }
 
     // MARK: - Game Patches
@@ -882,7 +872,7 @@ class GameInstallerRunner {
 
         // Check if we need to use AutoIt for this installer
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
+        let setupIssPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder).appendingPathComponent("setup.iss")
         let useAutoIt = installerType == .installShield &&
                        attemptNumber == 0 &&
                        fileManager.fileExists(atPath: setupIssPath.path) &&
@@ -972,7 +962,7 @@ class GameInstallerRunner {
         // made once, inside buildInstallerCommand).
         logger.debug("Attempt number: \(attemptNumber)")
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
+        let setupIssPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder).appendingPathComponent("setup.iss")
         let setupIssExists = fileManager.fileExists(atPath: setupIssPath.path)
         logger.debug("Setup.iss path: \(setupIssPath.path), exists: \(setupIssExists)")
         logger.debug("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
@@ -1214,7 +1204,7 @@ class GameInstallerRunner {
         case .installShield:
             // Check for setup.iss file for silent install
             let driveCPath = WrappLayout(app: wrappPath).driveC
-            let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
+            let setupIssPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder).appendingPathComponent("setup.iss")
 
             if attemptNumber == 0 && fileManager.fileExists(atPath: setupIssPath.path) {
                 // Use AutoIt for games that don't exit properly in non-interactive mode

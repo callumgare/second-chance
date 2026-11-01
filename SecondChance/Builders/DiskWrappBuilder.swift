@@ -113,33 +113,16 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
             }
 
-            try await helper.configureWrapp(
-                at: wrappPath,
-                gameInfo: gameInfo,
-                source: .disk,
-                gameExePath: gameExePath,
-                installerDir: installerDir
+            // ── Shared tail: configure → sign → save → notify ──────────────
+            let finalPath = try await helper.completeBuild(
+                wrapp: wrappPath, gameInfo: gameInfo, source: .disk,
+                gameExePath: gameExePath, installerDir: installerDir, input: input
             )
-            await bus.publishWrappBuild(.wrappConfigured(
-                exePath: gameExePath,
-                installerDir: installerDir,
-                gameInfo: gameInfo
-            ))
-
-            // ── Shared tail: sign → save → notify. The move in here makes ──
-            // the temp wrapp non-temporary, so unregister on success.
-            let finalPath = try await helper.finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
-            helper.unregisterTemporaryWrapp(wrappPath)
 
             // Builder-owned resources: unmount now the build is complete.
             await isoMounter.unmountAll()
 
-            // Launch if requested (headless automation).
-            let (shouldLaunch, args) = await input.shouldLaunchGame()
-            if shouldLaunch {
-                try await helper.launchGame(at: finalPath, with: args)
-            }
-
+            await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
             // Tear down builder-owned resources before rethrowing.
@@ -280,7 +263,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         await bus.publishWrappBuild(.progress(.copyingInstaller(substep: nil)))
 
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
+        let installerPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
 
         try fileManager.createDirectory(at: installerPath, withIntermediateDirectories: true)
 
@@ -333,7 +316,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// Mount game disk directories as CD-ROM drives
     private func mountGameDisksIntoWine(wrappPath: URL) async throws {
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
+        let installerPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
 
         // Find all disk-* directories and sort them
         guard let contents = try? fileManager.contentsOfDirectory(at: installerPath, includingPropertiesForKeys: [.isDirectoryKey]) else {

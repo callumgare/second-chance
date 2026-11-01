@@ -36,7 +36,9 @@ nonisolated public struct WrappLayout: Sendable, Hashable {
     public var driveC: URL { prefix.appendingPathComponent("drive_c") }
     /// Where a build puts the game's installer: one `disk-N` folder per disc,
     /// and `disk-combined` for a game on more than one.
-    public var installers: URL { driveC.appendingPathComponent("nancy-drew-installer") }
+    public var installers: URL { driveC.appendingPathComponent(Self.installersFolder) }
+    /// The folder in drive_c a build copies the discs or installer into.
+    public static let installersFolder = "nancy-drew-installer"
 
     /// The file at `windowsPath` on the C: drive, a path from its root with
     /// forward slashes as `WrappSettings.gameExePath` has it
