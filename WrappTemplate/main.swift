@@ -298,6 +298,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set when the player chose "Launch Directly": once this launch is
     /// cleaned up, the wrapp opens again with `--launch-without-steam`.
     var relaunchWithoutSteam = false
+    /// The player chose Try Again on a launch that seemed stuck: once Wine
+    /// has finished, a fresh copy starts.
+    var tryAgain = false
     /// The game has ended and the wrapp is closing down: waiting for Wine,
     /// hidden from the Dock. Set from the game's thread, read on main.
     private let closingState = OSAllocatedUnfairLock(initialState: (closing: false, openAgain: false))
@@ -390,6 +393,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 // Drain pending entries so the disk mirror / stderr keep the last lines.
                 if self.relaunchWithoutSteam {
                     self.openAgain(arguments: [launchWithoutSteamArgument], why: "to start without Steam")
+                } else if self.tryAgain {
+                    self.openAgain(arguments: [], why: "to try the launch again")
                 } else if self.openAgainWhenClosed {
                     self.openAgain(arguments: [], why: "as it was opened while closing")
                 }
@@ -795,6 +800,13 @@ func main() {
     PuppetServer.startIfRequested()
     infoWindow.reportStuckLaunch = { gameLauncher.reportStuckLaunch() }
     infoWindow.reportStuckLaunchWithoutQuitting = { gameLauncher.reportStuckLaunchWithoutQuitting() }
+    infoWindow.onTryAgain = {
+        // Quitting reports the launch as stuck, if it hasn't been already,
+        // and opens the game again once Wine has finished.
+        mainLogger.notice("Player chose to try the launch again: stopping this launch, then opening the game again")
+        appDelegate.tryAgain = true
+        NSApp.terminate(nil)
+    }
     infoWindow.onPossibleFailure = { gameLauncher.captureDiagnostics(.stalled) }
     gameLauncher.onQuitStep = { step in infoWindow.quitting(step) }
     if config.canLaunchWithoutSteam {

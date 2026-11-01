@@ -36,6 +36,11 @@ enum UIStateCatalog {
             window("starting-game-slow", .startingGame(title: "Stay Tuned for Danger")) { $0.showSlowLoadingNote = true },
             window("heavy-load", .startingGame(title: "Stay Tuned for Danger")) { $0.heavyLoad = busyMac },
             window("possible-launch-failure", .startingGame(title: "Stay Tuned for Danger")) { $0.showSuspectedHang = true },
+            window("possible-launch-failure-try-again", .startingGame(title: "Stay Tuned for Danger")) {
+                $0.onTryAgain = {}
+                $0.offerTryAgain = true
+                $0.showSuspectedHang = true
+            },
             window("possible-launch-failure-steam", .steamStartingGame(title: "Danger on Deception Island"), title: "Danger on Deception Island") {
                 $0.onLaunchWithoutSteam = {}
                 $0.showSuspectedHang = true

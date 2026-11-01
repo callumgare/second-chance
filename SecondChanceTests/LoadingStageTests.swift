@@ -111,6 +111,15 @@ struct LoadingClockTests {
         #expect(stage.possibleFailureText.contains("internet"))
     }
 
+    @Test("The possible-failure text offers to start again only when it can", arguments: [
+        LoadingStage.startingGame(title: "x"), .connectingToSteam, .updatingSteam(.downloading(doneKB: 1, totalKB: 2)),
+    ])
+    func possibleFailureTryAgain(stage: LoadingStage) {
+        #expect(stage.possibleFailureText(canTryAgain: true).contains("start it again"))
+        #expect(!stage.possibleFailureText(canTryAgain: false).contains("again"))
+        #expect(stage.possibleFailureText == stage.possibleFailureText(canTryAgain: false))
+    }
+
     @Test("A busy Mac gives a stage that needs the CPU longer, and leaves a download's 30 s alone")
     func heavyLoad() throws {
         let stage = LoadingStage.startingGame(title: "x")

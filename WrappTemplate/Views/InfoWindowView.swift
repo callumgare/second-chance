@@ -97,6 +97,10 @@ class InfoWindowViewModel: ObservableObject {
     var onLastSessionChoice: ((LastSessionChoice) -> Void)?
     /// Sign in to Steam afresh, offered once Steam is stuck signing in.
     var onSignInToSteamAfresh: (() -> Void)?
+    /// Stop this launch and start the game again, offered from
+    /// `stuckReportAfter` while the launch may have failed.
+    var onTryAgain: (() -> Void)?
+    @Published var offerTryAgain = false
     /// Told when the window starts saying the launch may have failed, so a
     /// diagnostics bundle catches what is stuck while it still is.
     var onPossibleFailure: (() -> Void)?
@@ -206,10 +210,16 @@ class InfoWindowViewModel: ObservableObject {
         }
         // Reported by itself after a while, as most people who meet a stuck
         // launch walk away rather than quit it while it says so.
+        // Then, too, a way to start again that doesn't mean opening the
+        // game a second time by hand.
         if showSuspectedHang, !stuckReportTried, let since = loadingSince,
            Date().timeIntervalSince(since) >= Self.stuckReportAfter {
             stuckReportTried = true
             stuckLaunchReported = reportStuckLaunchWithoutQuitting?() ?? false
+            if onTryAgain != nil {
+                infoWindowLogger.notice("[Loading] Offering to try again")
+                offerTryAgain = true
+            }
         }
     }
 
@@ -505,7 +515,7 @@ struct InfoWindowView: View {
         VStack(alignment: .leading, spacing: 8) {
             caution("Possible launch failure")
 
-            informative(viewModel.stage.possibleFailureText)
+            informative(viewModel.stage.possibleFailureText(canTryAgain: viewModel.offerTryAgain && viewModel.onTryAgain != nil))
                 .textSelection(.enabled)
 
             newerReleaseNote
@@ -605,6 +615,11 @@ struct InfoWindowView: View {
         }
         // The default only as the one way on from a launch that has failed.
         .keyboardShortcut(!stillTrying && viewModel.onLaunchWithoutSteam == nil ? .defaultAction : .cancelAction)
+        if stillTrying, viewModel.offerTryAgain, let tryAgain = viewModel.onTryAgain {
+            Button("Try Again", action: tryAgain)
+                .keyboardShortcut(viewModel.onLaunchWithoutSteam == nil ? .defaultAction : nil)
+                .accessibilityIdentifier("try-again")
+        }
         if let launchWithoutSteam = viewModel.onLaunchWithoutSteam {
             Button("Launch Directly", action: launchWithoutSteam)
                 .keyboardShortcut(.defaultAction)

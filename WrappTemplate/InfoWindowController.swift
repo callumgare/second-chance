@@ -61,6 +61,11 @@ class InfoWindowController: NSWindowController {
         set { viewModel.onSignInToSteamAfresh = newValue }
     }
 
+    var onTryAgain: (() -> Void)? {
+        get { viewModel.onTryAgain }
+        set { viewModel.onTryAgain = newValue }
+    }
+
     var reportStuckLaunchWithoutQuitting: (() -> Bool)? {
         get { viewModel.reportStuckLaunchWithoutQuitting }
         set { viewModel.reportStuckLaunchWithoutQuitting = newValue }

@@ -140,8 +140,14 @@ public enum LoadingStage: Equatable {
     }
 
     /// What the window says when the launch may have failed in this stage.
-    public var possibleFailureText: String {
-        let options = "It's still trying, so you can keep waiting — or look at the log, or quit."
+    public var possibleFailureText: String { possibleFailureText(canTryAgain: false) }
+
+    /// `possibleFailureText`, offering to start again when `canTryAgain`
+    /// (the loading window's Try Again).
+    public func possibleFailureText(canTryAgain: Bool) -> String {
+        let options = canTryAgain
+            ? "It's still trying, so you can keep waiting — or start it again, look at the log, or quit."
+            : "It's still trying, so you can keep waiting — or look at the log, or quit."
         switch self {
         case .connectingToSteam:
             return "Steam can't reach its servers. Check that this Mac is connected to the internet. \(options)"
