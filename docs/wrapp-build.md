@@ -343,6 +343,18 @@ each builder cleans up as it does after any failure. The ViewModel ignores the
 resulting `.failed` and goes back to the welcome screen once the build has
 returned; a build that had already saved its app finishes normally.
 
+## How an installer is run
+
+Each attempt at a game's installer is decided before it starts, by
+`InstallerPlan`, from the installer's type, which attempt it is, whether the
+disc's InstallShield answer file (`setup.iss`) was copied in, and the game.
+What runs, its arguments, whether AutoIt drives it and whether the person
+sees its wizard all come from the plan, so they can't disagree, and
+`InstallerPlanTests` covers them without running anything. The first attempt
+is unattended where it can be; the second, after a failure, is the
+installer's own wizard. The patches applied after the install are in
+`GameInstallerRunner+Patches.swift` ([game-patches.md](game-patches.md)).
+
 ## A stalled install
 
 An unattended install (silent, or driven by AutoIt) gets a timeout,
