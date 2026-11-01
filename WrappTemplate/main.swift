@@ -440,6 +440,9 @@ let launchWithoutSteamArgument = "--launch-without-steam"
 /// Kept alive for the life of the process.
 private var terminationSignalSources: [DispatchSourceSignal] = []
 
+/// Keeps App Nap off for the life of the process (`main`).
+private var appNapOff: NSObjectProtocol?
+
 /// Kills the game's Wine session, once the configuration is known: called
 /// when the wrapp has to exit without its cleanup having finished.
 private var killWineBeforeForcedExit: (() -> Void)?
@@ -579,6 +582,13 @@ func main() {
     FailureReporter.start(process: .wrapp)
     CrashMarker.arm()
     installTerminationHandlers()
+    // The wrapp is in the background behind the game for as long as it
+    // runs, where macOS naps it within a minute: every thread down to
+    // priority 4, which on a Mac with every core busy never gets the CPU.
+    // It then can't see the game end, quit when asked, or end Wine, until
+    // the load goes. It sleeps, as the game does, when the Mac does.
+    appNapOff = ProcessInfo.processInfo.beginActivity(
+        options: .userInitiatedAllowingIdleSystemSleep, reason: "Watching over the game while it runs")
     // Before any Wine process starts, so that every one inherits them.
     for (name, value) in Wine.wrappSessionVariables() {
         setenv(name, value, 1)

@@ -81,7 +81,9 @@ nonisolated public final class LogStore: @unchecked Sendable {
 
     /// Dedicated serial drain queue. All subscriber delivery, mirror writes and
     /// stderr writes happen here, giving one global ordering shared by every sink.
-    private nonisolated let drainQueue = DispatchQueue(label: "au.gare.callum.second-chance.logstore.drain", qos: .utility)
+    /// .userInitiated: on a Mac with every core busy, .utility work waits for
+    /// a minute at a time, and the log with it.
+    private nonisolated let drainQueue = DispatchQueue(label: "au.gare.callum.second-chance.logstore.drain", qos: .userInitiated)
 
     /// Queue-specific marker for re-entrancy detection on the drain queue.
     private nonisolated static let drainQueueKey = DispatchSpecificKey<Bool>()
@@ -99,10 +101,15 @@ nonisolated public final class LogStore: @unchecked Sendable {
     /// Synchronously drain any pending entries. Call from exit paths
     /// (`exit()`, `applicationShouldTerminate`) so the disk mirror and
     /// stderr don't lose the last lines.
+    /// Waits at most `timeout` for the drain queue, so a starved one can't
+    /// hold up the exit that called it.
     nonisolated public func flush(timeout: TimeInterval = 2.0) {
-        drainQueue.sync {
+        let drained = DispatchSemaphore(value: 0)
+        drainQueue.async {
             self.drain()
+            drained.signal()
         }
+        _ = drained.wait(timeout: .now() + timeout)
     }
 
     // MARK: - Public API

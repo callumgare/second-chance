@@ -121,6 +121,13 @@ windows is up, such as the log window in debug mode. A ScummVM game's wrapp
 still hides itself from the Dock once the game's window appears, leaving
 `scummvm`'s icon.
 
+The wrapp keeps App Nap off for as long as it runs
+(`ProcessInfo.beginActivity`, in `main`). Behind the game, macOS napped it
+within a minute, every thread down to priority 4, and with every core busy
+a napped wrapp never got the CPU: it couldn't see the game end, quit when
+asked (a SIGTERM went unhandled for minutes), end Wine or write its log
+until the load went.
+
 Taking the game's own icon away, by making its process an accessory app,
 was tried and undone: Wine's Quit (⌘⌥Q, its menu) then hung White Wolf for
 good, where with the icon and menu bar it quits cleanly.

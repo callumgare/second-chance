@@ -453,7 +453,12 @@ direct assignment.
   waited minutes, or never came up, with Wine almost idle — a wrapp still on
   it should be rebuilt. Load at a lower priority (20, a LaunchAgent with no
   `ProcessType`) doesn't slow Wine at all, which matters when making load
-  to test with ([docs/wrapp-launch.md](docs/wrapp-launch.md#measurements)).
+  to test with ([docs/wrapp-launch.md](docs/wrapp-launch.md#measurements)),
+  as does making it with loops that compute rather than call the kernel.
+  Work that must happen under load can't run at `.utility`, which waits a
+  minute at a time there (the log's drain queue did), and the wrapp keeps
+  App Nap off: napped behind the game, at priority 4, it didn't run at all
+  ([docs/wrapp-launch.md](docs/wrapp-launch.md#the-dock)).
   `SystemLoad` (`SecondChanceKit`) measures it — other programs'
   CPU in cores, against the performance-core count, heavy at all but one;
   the load average is useless here, since starved Wine threads push it past
