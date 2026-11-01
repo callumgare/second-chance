@@ -265,7 +265,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if runsWithoutSteam { try removeSteam(from: prefix) }
             try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: engine)
 
-            try helper.configureWrapp(
+            try await helper.configureWrapp(
                 at: wrappPath,
                 gameInfo: gameInfo,
                 source: .steam,

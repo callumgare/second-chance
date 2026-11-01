@@ -1261,48 +1261,21 @@ class GameInstallerRunner {
             logger.warning("The installer chosen for this disc, \(preferred), isn't in \(directory.path)")
         }
 
-        let contents = try fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil,
-            options: []
-        )
-
+        // The same lookup that recognised the game, so the installer run is
+        // the one detection found (`GameDetector.installerLookup`).
         logger.notice("Searching for installer executable in: \(directory.path)")
-
-        // First look for .msi files
-        for file in contents where file.pathExtension.lowercased() == "msi" {
-            return file.path
+        switch try GameDetector.installerLookup(in: directory) {
+        case .recognised(let name):
+            return directory.appendingPathComponent(name).path
+        case .unrecognised(let programs):
+            guard let first = programs.first else { break }
+            logger.notice("No installer by name; running the first program there: \(first)")
+            return directory.appendingPathComponent(first).path
+        case .none:
+            break
         }
-
-        // Then look for setup.exe
-        for file in contents {
-            let name = file.lastPathComponent.lowercased()
-            if name == "setup.exe" {
-                return file.path
-            }
-        }
-
-        // Then look for install.exe
-        for file in contents {
-            let name = file.lastPathComponent.lowercased()
-            if name == "install.exe" {
-                return file.path
-            }
-        }
-
-        // Look for any other .exe files
-        let exeFiles = contents.filter { $0.pathExtension.lowercased() == "exe" }
-
-        if let exe = exeFiles.first {
-            return exe.path
-        }
-
-        logger.critical("ERROR: No installer executable found!")
+        logger.critical("ERROR: No installer executable found in \(directory.path)")
         logger.notice("Expected to find .msi, setup.exe, install.exe, or any .exe file")
-        logger.notice("Found \(contents.count) files/folders:")
-        for file in contents {
-            logger.notice("  - \(file.lastPathComponent)")
-        }
         throw WrappBuildError.installerNotFound
     }
 
@@ -1380,10 +1353,12 @@ class GameInstallerRunner {
         }
         logger.notice("✗ No 'game.exe' found in new executables")
 
-        // Return first new executable
-        if let first = newExes.first {
-            logger.notice("Using first new executable as fallback: \(first)")
-            return URL(fileURLWithPath: first)
+        // Otherwise the likeliest of what's new: never an uninstaller or a
+        // setup program, and of the rest the largest (a game's exe dwarfs its
+        // helpers), so the choice is the same every time.
+        if let likeliest = Self.likeliestGameExe(among: newExes) {
+            logger.notice("Using the likeliest new executable: \(likeliest.path)")
+            return likeliest
         }
 
         logger.critical("ERROR: Could not determine game executable")
@@ -1393,6 +1368,25 @@ class GameInstallerRunner {
         logger.notice("  - New executables: \(newExes.count)")
 
         throw WrappBuildError.gameExecutableNotFound
+    }
+}
+
+extension GameInstallerRunner {
+    /// Names of the programs an installer leaves beside a game that aren't it.
+    private static let notTheGame = ["unins", "uninst", "setup", "install", "update", "patch", "readme", "dxsetup", "vcredist"]
+
+    /// The new executable most likely to be the game, or nil if every one
+    /// is an uninstaller, a setup program or the like.
+    nonisolated static func likeliestGameExe(among paths: some Collection<String>) -> URL? {
+        let candidates = paths.map { URL(fileURLWithPath: $0) }.filter { url in
+            let name = url.lastPathComponent.lowercased()
+            return !notTheGame.contains { name.hasPrefix($0) }
+        }
+        func size(_ url: URL) -> Int { (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
+        return candidates.max { lhs, rhs in
+            let (left, right) = (size(lhs), size(rhs))
+            return left != right ? left < right : lhs.path > rhs.path
+        }
     }
 }
 

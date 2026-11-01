@@ -36,7 +36,12 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
 
     private var serverFD: Int32 = -1
     private var clientFD: Int32 = -1
+    /// Guards both descriptors: the accept loop's thread and the bus's
+    /// handler reach them.
     private let fdLock = NSLock()
+    /// Writes to the client go out on this queue, in order, so a client that
+    /// stops reading holds up neither the bus nor the build.
+    private let writes = DispatchQueue(label: "au.gare.callum.second-chance.AutomationBridge.writes")
     private var socketPath: String?
     private var busToken: EventBus<AppEvent>.Token?
 
@@ -63,10 +68,12 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
     /// Call synchronously before _exit().
     func stop() {
         broadcastRaw(["kind": "event", "type": "lifecycle.terminating"])
+        // Let that, and anything before it, go out first.
+        writes.sync {}
         fdLock.withLock {
             if clientFD >= 0 { Darwin.close(clientFD); clientFD = -1 }
+            if serverFD >= 0 { Darwin.close(serverFD); serverFD = -1 }
         }
-        if serverFD >= 0 { Darwin.close(serverFD); serverFD = -1 }
         if let path = socketPath { try? FileManager.default.removeItem(atPath: path) }
     }
 
@@ -94,15 +101,21 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
         }
         guard bound else { Darwin.close(fd); return false }
         Darwin.listen(fd, 1)
-        serverFD = fd
+        fdLock.withLock { serverFD = fd }
         return true
     }
 
     // Runs on a dedicated thread; accept() blocks until a client connects.
     private func acceptLoop() {
-        while serverFD >= 0 {
-            let fd = Darwin.accept(serverFD, nil, nil)
+        while true {
+            let server = fdLock.withLock { serverFD }
+            guard server >= 0 else { break }
+            let fd = Darwin.accept(server, nil, nil)
             guard fd >= 0 else { break }
+            // A client that goes away mid-write is an EPIPE, not a SIGPIPE
+            // that would kill Second Chance.
+            var on: Int32 = 1
+            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
             fdLock.withLock {
                 if clientFD >= 0 { Darwin.close(clientFD) }
                 clientFD = fd
@@ -125,8 +138,18 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
         payload["t"] = ISO8601DateFormatter().string(from: Date())
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else { return }
-        let line = json + "\n"
-        _ = line.withCString { Darwin.write(fd, $0, strlen($0)) }
+        let line = Data((json + "\n").utf8)
+        writes.async { [weak self] in
+            guard let self else { return }
+            let written = line.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+            // Gone: forget it, rather than write to a closed descriptor that
+            // may since have been reused.
+            if written < 0 {
+                self.fdLock.withLock {
+                    if self.clientFD == fd { Darwin.close(fd); self.clientFD = -1 }
+                }
+            }
+        }
     }
 
     // MARK: - Serialisation

@@ -219,7 +219,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let bus = self.bus
             let wineDLLs = WrappLayout(app: wrappPath).wine.appendingPathComponent("lib/wine/i386-windows")
             let gameExe = try await package.extractGame(into: driveCPath, staging: staging, wineDLLs: wineDLLs) { percent in
-                await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game (\(percent)%)")))
+                // On the progress bar: a substep changing every percent
+                // would start the step's clock again each time.
+                await bus.publishWrappBuild(.stepProgress(StepProgress(fraction: Double(percent) / 100, text: "\(percent)% unpacked")))
             }
             await removeQuietly(staging, what: "the rest of the Cider app")
             await isoMounter.unmountAll()
@@ -270,7 +272,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         input: WrappBuildInput
     ) async throws -> URL {
         let gameDir = (gameExePath as NSString).deletingLastPathComponent
-        try helper.configureWrapp(
+        try await helper.configureWrapp(
             at: wrappPath,
             gameInfo: gameInfo,
             source: .herDownload,

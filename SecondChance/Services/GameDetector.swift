@@ -48,7 +48,7 @@ class GameDetector {
         }
 
         if let setupIni = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.ini" }) {
-            if let iniContent = try? String(contentsOf: setupIni, encoding: .utf8) {
+            if let iniContent = TextFile.text(of: setupIni) {
                 if let appName = getPropertyFromIni(iniContent, property: "AppName") {
                     stepLogger.notice("AppName: \(appName)")
                     fingerprint += " \(appName)"
@@ -61,7 +61,7 @@ class GameDetector {
         }
 
         if let autorunInf = contents.first(where: { $0.lastPathComponent.lowercased() == "autorun.inf" }) {
-            if let autorunContent = try? String(contentsOf: autorunInf, encoding: .utf8) {
+            if let autorunContent = TextFile.text(of: autorunInf) {
                 if let label = getAutorunLabel(autorunContent) {
                     stepLogger.notice("Autorun label: \(label)")
                     fingerprint += " \(label)"

@@ -203,29 +203,39 @@ class WineManager {
         // Wine 10 reads this from the X11 Driver key whatever the driver. The
         // wrapp's mode scaling helper scales what Direct3D draws to match.
         // See docs/wine-in-process-helpers.md#mode-scaling.
-        Task { await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's display"))) }
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's display")))
         try await wine.registry.set(.string("Y"), for: "EmulateModeset", in: .x11Driver)
 
         // Install cnc-ddraw for better DirectDraw compatibility
-        Task { await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's graphics"))) }
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's graphics")))
         try await winetricks.install(.cncDdraw)
 
         // Configure cnc-ddraw to maintain aspect ratio. windowed=true is what lets
         // native fullscreen adopt the window, but it also makes cnc-ddraw swallow
         // the first click; the wrapp's cursor-lock helper works around that.
         // See docs/wine-in-process-helpers.md before changing these settings.
+        // Without them, every game drawn through cnc-ddraw runs fullscreen and
+        // stretched, so a prefix that couldn't be set up is never cached for
+        // the builds after this one (`configured`).
         let ddrawIniPath = wine.driveC.appendingPathComponent("windows/syswow64/ddraw.ini")
-            if fileManager.fileExists(atPath: ddrawIniPath.path) {
-                if let contents = try? String(contentsOf: ddrawIniPath, encoding: .utf8) {
-                    var updated = contents.replacingOccurrences(of: "maintas=false", with: "maintas=true")
-                    updated = updated.replacingOccurrences(of: "windowed=false", with: "windowed=true")
-                    try? updated.write(to: ddrawIniPath, atomically: true, encoding: .utf8)
-                    logger.notice("✓ Configured cnc-ddraw to maintain aspect ratio and run in windowed mode")
-                }
+        var configured = false
+        do {
+            let contents = try String(contentsOf: ddrawIniPath, encoding: .utf8)
+            var updated = contents.replacingOccurrences(of: "maintas=false", with: "maintas=true")
+            updated = updated.replacingOccurrences(of: "windowed=false", with: "windowed=true")
+            try updated.write(to: ddrawIniPath, atomically: true, encoding: .utf8)
+            configured = updated.contains("windowed=true") && updated.contains("maintas=true")
+            if configured {
+                logger.notice("✓ Configured cnc-ddraw to maintain aspect ratio and run in windowed mode")
+            } else {
+                logger.error("cnc-ddraw's ddraw.ini doesn't have the windowed and maintas settings to change: is this another cnc-ddraw?")
             }
+        } catch {
+            logger.error("Couldn't configure cnc-ddraw (\(ddrawIniPath.path)): \(error.localizedDescription)")
+        }
 
         // Install isolate_home to remove unnecessary mounts
-        Task { await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc"))) }
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc")))
         try await winetricks.install(.isolateHome)
 
         // Only the drives a game needs (WineDrives has what each is for).
@@ -244,6 +254,10 @@ class WineManager {
 
         // Cache the prefix for future use. Only a saving for the next build:
         // this one has its prefix, so it carries on if caching fails.
+        guard configured else {
+            logger.warning("Not caching this Wine prefix, as cnc-ddraw isn't set up in it: the next build makes its own")
+            return
+        }
         do {
             try await cachePrefix(from: prefixPath, buildId: buildId)
         } catch {

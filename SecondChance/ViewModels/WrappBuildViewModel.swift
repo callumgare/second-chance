@@ -279,6 +279,9 @@ class WrappBuildViewModel: ObservableObject {
     /// answered (and a yes thanked) or the build is cancelled.
     func askAboutSuccessReports() async {
         await withCheckedContinuation { continuation in
+            // Never two builds waiting on one question: the first would
+            // otherwise wait for good.
+            successReportsAnswered?.resume()
             successReportsAnswered = continuation
             successReportsQuestion = .asking
             // The build may have been left running in the background.

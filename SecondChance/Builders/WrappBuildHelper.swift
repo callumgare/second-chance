@@ -260,8 +260,8 @@ class WrappBuildHelper {
         steamID: String? = nil,
         gameEngine: GameInfo.GameEngine? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil
-    ) throws {
-        Task { await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Adjusting the game's settings"))) }
+    ) async throws {
+        await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Adjusting the game's settings")))
 
         let infoPlistPath = WrappLayout(app: wrappPath).infoPlist
 
@@ -361,7 +361,8 @@ class WrappBuildHelper {
         for iniFile in iniFiles {
             logger.notice("  Processing: \(iniFile.lastPathComponent)")
 
-            guard let originalContent = try? String(contentsOf: iniFile, encoding: .utf8) else {
+            // Written back in the encoding it came in: the game reads it.
+            guard let (originalContent, encoding) = TextFile.read(iniFile) else {
                 logger.warning("    ⚠️ Failed to read file")
                 continue
             }
@@ -383,15 +384,9 @@ class WrappBuildHelper {
 
             // Set save path to Documents
             let savePath = "LoadSavePath=\\\\users\\\\crossover\\\\Documents"
-            let savePathPattern = #"LoadSavePath=.*"#
-            if let regex = try? NSRegularExpression(pattern: savePathPattern, options: []),
-               let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)) {
-                let oldValue = String(content[Range(match.range, in: content)!])
-                content = regex.stringByReplacingMatches(
-                    in: content,
-                    range: NSRange(content.startIndex..., in: content),
-                    withTemplate: savePath
-                )
+            if let match = content.firstMatch(of: /LoadSavePath=.*/) {
+                let oldValue = String(match.output)
+                content = content.replacing(/LoadSavePath=.*/) { _ in savePath }
                 logger.notice("    ✅ Updated LoadSavePath")
                 logger.notice("       Old: \(oldValue)")
                 logger.notice("       New: \(savePath)")
@@ -403,7 +398,7 @@ class WrappBuildHelper {
             // Write back if modified
             if modified {
                 do {
-                    try content.write(to: iniFile, atomically: true, encoding: .utf8)
+                    try content.write(to: iniFile, atomically: true, encoding: encoding)
                     logger.notice("    ✅ Saved changes to \(iniFile.lastPathComponent)")
                 } catch {
                     logger.warning("    ⚠️ Failed to save changes: \(error)")

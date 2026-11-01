@@ -113,7 +113,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
             }
 
-            try helper.configureWrapp(
+            try await helper.configureWrapp(
                 at: wrappPath,
                 gameInfo: gameInfo,
                 source: .disk,
@@ -284,27 +284,14 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         try fileManager.createDirectory(at: installerPath, withIntermediateDirectories: true)
 
-        // Copy disk 1 on background queue
         let disk1Dest = installerPath.appendingPathComponent("disk-1")
-        try await Task.detached {
-            try FileManager.default.copyItem(at: disk1, to: disk1Dest)
-        }.value
-
-        // Remove extended attributes, resource forks, and Finder info that would cause codesign to fail
-        try await removeExtendedAttributes(from: disk1Dest)
-        await makeWritable(disk1Dest)
+        try await copyDisc(disk1, to: disk1Dest)
 
         // Copy disk 2 if present
         if let disk2 = try await resolveDisk2() {
             await bus.publishWrappBuild(.progress(.copyingInstaller(substep: "Copying disc 2")))
             let disk2Dest = installerPath.appendingPathComponent("disk-2")
-            try await Task.detached {
-                try FileManager.default.copyItem(at: disk2, to: disk2Dest)
-            }.value
-
-            // Remove extended attributes from disk 2 as well
-            try await removeExtendedAttributes(from: disk2Dest)
-            await makeWritable(disk2Dest)
+            try await copyDisc(disk2, to: disk2Dest)
 
             // Create combined disk directory with symlinks
             let combinedDest = installerPath.appendingPathComponent("disk-combined")
@@ -400,25 +387,19 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// delete the copy afterwards: not a failed build's cleanup, not the
     /// integration test's, and not a user deleting the wrapp. Each such copy
     /// left behind is gigabytes, and they had filled a test machine's disk.
-    private func makeWritable(_ path: URL) async {
-        do {
-            let chmod = try await Process.output(of: "/bin/chmod", ["-R", "u+w", path.path])
-            if !chmod.succeeded {
-                logger.warning("⚠️ Could not make \(path.lastPathComponent) writable: \(chmod.errorOutput)")
-            }
-        } catch {
-            logger.warning("⚠️ Could not run chmod on \(path.lastPathComponent): \(error.localizedDescription)")
-        }
-    }
-
-    /// Remove extended attributes, resource forks, and Finder info that
-    /// would cause codesign to fail.
-    private func removeExtendedAttributes(from path: URL) async throws {
-        logger.notice("Removing extended attributes from \(path.lastPathComponent)...")
-        let xattr = try await Process.output(of: "/usr/bin/xattr", ["-cr", path.path])
-        if !xattr.succeeded {
-            logger.warning("⚠️ Failed to remove extended attributes: \(xattr.errorOutput)")
-            // Don't throw - this is not critical, codesign will just fail later with a better message
+    /// Copy a disc into the wrapp (`DiscCopy`): contents only, writable,
+    /// cancellable, with how much is done on the progress screen.
+    private func copyDisc(_ disc: URL, to destination: URL) async throws {
+        let total = await Blocking.run { FreeSpace.size(of: disc) }
+        logger.notice("Copying \(disc.path) (\(total.map(FreeSpace.describe) ?? "size unknown"))")
+        let bus = bus
+        try await DiscCopy.copy(from: disc, to: destination, total: total) { progress in
+            let copied = FreeSpace.describe(progress.copied)
+            let measured = StepProgress(
+                fraction: progress.total.map { min(1, Double(progress.copied) / Double(max($0, 1))) },
+                text: progress.total.map { "\(copied) of \(FreeSpace.describe($0))" } ?? "\(copied) copied"
+            )
+            Task { await bus.publishWrappBuild(.stepProgress(measured)) }
         }
     }
 }

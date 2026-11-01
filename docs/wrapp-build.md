@@ -63,7 +63,7 @@ other builders are the same shape with less in the middle.
 | 2 | `input.getDisk1Path()`; mount it if it's a file rather than a folder | `.isoMounted` |
 | 3 | Turn down an installed game (`GameDetector.isInstalledGame`), then `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo`, then, for a Wine game, find its installer (`GameDetector.installerLookup`) | `.progress(.detectingGame)`, `.gameDetected` |
 | 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
-| 5 | `copyGameDisks` copies `disk-1`, stripping extended attributes and making the copy writable (a CD's directories are read-only, which left copies nothing could delete) | `.progress(.copyingInstaller)` |
+| 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). Cancelling stops it, and the bytes copied show on the progress bar | `.progress(.copyingInstaller)`, `.stepProgress` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
 | 7 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 8 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
