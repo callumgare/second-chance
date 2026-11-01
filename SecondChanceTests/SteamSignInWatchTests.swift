@@ -57,6 +57,32 @@ struct SteamSignInWatchTests {
         #expect(watch.lastLogActivity == later)
     }
 
+    @Test("Quiet logs warn at half the limit, a write takes the warning back, and the limit is stuck")
+    func quietActiveStuck() async throws {
+        let client = try await startedClient()
+        client.login = .pending
+        var watch = SteamSignInWatch(client: client, quietLimit: 100, isHeavilyLoaded: { false })
+        let start = watch.lastLogActivity
+        #expect(watch.check(now: start.addingTimeInterval(49)).isEmpty)
+        #expect(watch.check(now: start.addingTimeInterval(50)) == [.quiet(stuckAt: start.addingTimeInterval(100))])
+        client.logWrite = Date()
+        let written = start.addingTimeInterval(60)
+        #expect(watch.check(now: written) == [.active])
+        #expect(watch.check(now: written.addingTimeInterval(50)) == [.quiet(stuckAt: written.addingTimeInterval(100))])
+        #expect(watch.check(now: written.addingTimeInterval(100)) == [.stuck(quietFor: 100)])
+        #expect(watch.check(now: written.addingTimeInterval(200)).isEmpty)
+    }
+
+    @Test("On a heavily loaded Mac, Steam gets three times as long to be quiet")
+    func quietUnderLoad() async throws {
+        let client = try await startedClient()
+        client.login = .pending
+        var watch = SteamSignInWatch(client: client, quietLimit: 100, isHeavilyLoaded: { true })
+        let start = watch.lastLogActivity
+        #expect(watch.check(now: start.addingTimeInterval(100)).isEmpty)
+        #expect(watch.check(now: start.addingTimeInterval(150)) == [.quiet(stuckAt: start.addingTimeInterval(300))])
+    }
+
     @Test("Whether Steam is running is checked no more often than asked")
     func runningCheckInterval() {
         let client = FakeSteamClient(wrappPath: URL(fileURLWithPath: "/tmp/SteamSignInWatchTests.app"))
@@ -65,6 +91,51 @@ struct SteamSignInWatchTests {
         #expect(!watch.check(now: start.addingTimeInterval(1)).contains(.exited))
         // Well past 5 s: the watch starts its clock a moment after `start`.
         #expect(watch.check(now: start.addingTimeInterval(6)).contains(.exited))
+    }
+}
+
+@Suite("What to do while Steam is slow or stuck signing in")
+struct SteamStallPolicyTests {
+    let stuckAt = Date(timeIntervalSinceReferenceDate: 1000)
+
+    @Test("Slow says when Steam starts again, a write takes it back, and stuck starts Steam again")
+    func firstStall() {
+        var policy = SteamStallPolicy(canOfferFreshSignIn: true)
+        #expect(policy.handle(.quiet(stuckAt: stuckAt)) == [.notice(.slow(restartAt: stuckAt))])
+        #expect(policy.handle(.active) == [.notice(nil)])
+        _ = policy.handle(.quiet(stuckAt: stuckAt))
+        #expect(policy.handle(.stuck(quietFor: 240)) == [.notice(nil), .restart])
+    }
+
+    @Test("Stuck again, Steam is left running with the offer to sign in afresh, which goes once it signs in")
+    func secondStall() {
+        var policy = SteamStallPolicy(canOfferFreshSignIn: true)
+        _ = policy.handle(.stuck(quietFor: 240))
+        // No countdown: Steam won't be started again by itself.
+        #expect(policy.handle(.quiet(stuckAt: stuckAt)) == [.notice(.slow(restartAt: nil))])
+        #expect(policy.handle(.stuck(quietFor: 240)) == [.notice(.stuck)])
+        #expect(policy.handle(.active).isEmpty)
+        #expect(policy.handle(.signedIn) == [.notice(nil)])
+    }
+
+    @Test("Stuck after signing in afresh, or a second time with nobody to offer it to, fails")
+    func gives_up() {
+        var policy = SteamStallPolicy(canOfferFreshSignIn: true)
+        _ = policy.handle(.stuck(quietFor: 240))
+        _ = policy.handle(.stuck(quietFor: 240))
+        #expect(policy.signingInAfresh() == [.notice(nil)])
+        #expect(policy.handle(.stuck(quietFor: 240)) == [.fail])
+
+        var headless = SteamStallPolicy(canOfferFreshSignIn: false)
+        _ = headless.handle(.stuck(quietFor: 240))
+        #expect(headless.handle(.stuck(quietFor: 240)) == [.fail])
+    }
+
+    @Test("The notice counts down to Steam starting again")
+    func countdown() {
+        let notice = SteamSignInNotice.slow(restartAt: stuckAt)
+        #expect(notice.detail(now: stuckAt.addingTimeInterval(-100)).contains("in 1m 40s"))
+        #expect(notice.detail(now: stuckAt.addingTimeInterval(-9.5)).contains("in 10s"))
     }
 }
 

@@ -408,6 +408,7 @@ class GameLauncher {
                     logger.notice("[Steam] Not starting: another game has Steam, and the player chose to leave it")
                     return -1
                 }
+                infoWindow?.onSignInToSteamAfresh = { [weak self] in self?.steam?.signInAfresh() }
                 let started = try WrappSteam(lock: lock, config: config, status: status,
                                              onOutputLine: {
                                                  helperReport?.observe(line: $0)
@@ -669,6 +670,9 @@ class GameLauncher {
                                "Only one game can use Steam at a time. Quit \(name ?? "it"), then open \(SteamLockHolder.quoted(config.gameTitle)) again.")
         case WrappSteam.Failure.exited:
             (title, detail) = ("Steam closed before it signed in", "\(config.gameTitle) needs Steam signed in to start. Open it again to have another go.")
+        case WrappSteam.Failure.stuck:
+            (title, detail) = ("Steam got stuck signing in", "\(config.gameTitle) needs Steam signed in to start. "
+                + "Check that this Mac is connected to the internet, then open it again to have another go.")
         default:
             (title, detail) = ("Couldn't start Steam", error.localizedDescription)
         }
@@ -742,6 +746,7 @@ class GameLauncher {
             case .startup(let stage): infoWindow?.setStage(LoadingStage(steam: stage))
             case .waitingForSignIn: infoWindow?.setStage(.signingInToSteam)
             case .signedIn: infoWindow?.setStage(launchedBySteam ? .steamStartingGame(title: title) : .startingGame(title: title))
+            case .notice(let notice): infoWindow?.setSteamNotice(notice)
             }
         }
     }

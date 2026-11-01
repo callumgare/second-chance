@@ -28,18 +28,25 @@ public nonisolated struct SteamSignInWatch: Sendable {
         /// exits and starts again when it has updated itself, so one check
         /// that finds it missing proves nothing.
         case exited
-        /// Steam has written nothing to its logs for `quietLimit` (longer
-        /// while the Mac is heavily loaded), and has neither signed in nor
-        /// asked for credentials. Once per start.
+        /// Steam has written nothing to its logs for half of `quietLimit`,
+        /// and has neither signed in nor asked for credentials: it counts as
+        /// stuck at `stuckAt` unless it writes something first.
+        case quiet(stuckAt: Date)
+        /// Steam wrote to its logs again after `quiet`, before it was stuck.
+        case active
+        /// Steam has written nothing to its logs for `quietLimit`, and has
+        /// neither signed in nor asked for credentials. Once per start.
         case stuck(quietFor: TimeInterval)
     }
 
     /// How long Steam may write nothing to its logs, before it has signed in
-    /// or asked for credentials, before it counts as stuck. Any write shows
-    /// it's still getting somewhere, an update's progress included. A
-    /// healthy start on a fully loaded Mac once went 83 s without any sign
-    /// at all (`LoadingStage.stallAfter`).
-    public static let quietLimit: TimeInterval = 120
+    /// or asked for credentials, before it counts as stuck; it's `quiet` at
+    /// half that. Both are three times as long while the Mac is heavily
+    /// loaded (`LoadingStage.heavyLoadFactor`). Any write shows it's still
+    /// getting somewhere, an update's progress included. A healthy start on
+    /// a fully loaded Mac once went 83 s without any sign at all
+    /// (`LoadingStage.stallAfter`).
+    public static let quietLimit: TimeInterval = 240
     /// How often a "still waiting" line is logged while nothing changes.
     static let waitingLogInterval: TimeInterval = 60
     /// Logged as a watch starts, and once Steam has signed in: the
@@ -65,6 +72,7 @@ public nonisolated struct SteamSignInWatch: Sendable {
     private var lastLogWrite: Date?
     private var startedAt: Date
     private var lastWaitingLog: Date
+    private var reportedQuiet = false
     private var reportedStuck = false
     /// Whether the Mac was heavily loaded when last read, and when.
     private var heavyLoad: (heavy: Bool, at: Date)?
@@ -96,6 +104,11 @@ public nonisolated struct SteamSignInWatch: Sendable {
         if write != lastLogWrite {
             lastLogWrite = write
             lastLogActivity = now
+            if reportedQuiet, !reportedStuck {
+                reportedQuiet = false
+                logger.notice("[Sign-in] Steam is writing to its logs again")
+                events.append(.active)
+            }
         }
         switch client.loginState() {
         case .signedIn:
@@ -134,10 +147,19 @@ public nonisolated struct SteamSignInWatch: Sendable {
             let doing = askedForSignIn ? "waiting for someone to sign in" : (stage?.message ?? "Starting Steam")
             logger.notice("[Sign-in] Still waiting after \(Self.duration(now.timeIntervalSince(startedAt))): \(doing); Steam's logs last changed \(Self.duration(quiet)) ago")
         }
-        if !askedForSignIn, !reportedStuck, let limit = quietLimit, quiet >= limit, quiet >= limit * loadFactor(now: now) {
-            reportedStuck = true
-            logger.warning("[Sign-in] Steam looks stuck: nothing in its logs for \(Self.duration(quiet)), and it has neither signed in nor asked for credentials")
-            events.append(.stuck(quietFor: quiet))
+        if !askedForSignIn, !reportedStuck, let limit = quietLimit, quiet >= limit / 2 {
+            let factor = loadFactor(now: now)
+            if !reportedQuiet, quiet >= limit / 2 * factor {
+                reportedQuiet = true
+                let stuckAt = lastLogActivity.addingTimeInterval(limit * factor)
+                logger.notice("[Sign-in] Nothing in Steam's logs for \(Self.duration(quiet)): it counts as stuck in \(Self.duration(stuckAt.timeIntervalSince(now))) unless it writes something")
+                events.append(.quiet(stuckAt: stuckAt))
+            }
+            if quiet >= limit * factor {
+                reportedStuck = true
+                logger.warning("[Sign-in] Steam looks stuck: nothing in its logs for \(Self.duration(quiet)), and it has neither signed in nor asked for credentials")
+                events.append(.stuck(quietFor: quiet))
+            }
         }
         return events
     }
@@ -152,6 +174,7 @@ public nonisolated struct SteamSignInWatch: Sendable {
         lastLogActivity = now
         startedAt = now
         lastWaitingLog = now
+        reportedQuiet = false
         reportedStuck = false
         logger.notice("[Sign-in] Steam started again")
     }

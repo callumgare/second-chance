@@ -417,11 +417,16 @@ struct SteamWrappBuilderTests {
         })
     }
 
-    @Test("Steam that writes nothing to its logs, and neither signs in nor asks, is stuck")
+    @Test("Steam that goes quiet is warned about, started again once stuck, and stuck again fails a headless build")
     func quietSteamIsStuck() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
         let run = await build(game: "thornton-hall", quietLimit: 0.2) { $0.login = .pending }
         #expect(throws: WrappBuildError.steamStoppedResponding) { try run.result.get() }
+        #expect(run.client?.calls.filter { $0 == "start" }.count == 2)
+        #expect(run.events.contains {
+            if case .steamSignInNotice(.slow(restartAt: .some)) = $0 { return true }
+            return false
+        })
     }
 
     @Test("Steam writing to its logs, as an update does, isn't stuck however long it takes")

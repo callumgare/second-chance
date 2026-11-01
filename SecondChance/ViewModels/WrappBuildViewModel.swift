@@ -34,12 +34,11 @@ class WrappBuildViewModel: ObservableObject {
     /// A Steam build failed in a way trying again may fix: Steam got stuck
     /// signing in, or nobody signed in. The error screen offers Try Again.
     @Published var steamBuildCanRetry = false
-    /// Steam got stuck signing in twice in a row, so Try Again signs out of
-    /// Steam first, in case the saved sign-in is what it's stuck on.
-    @Published var steamRetrySignsOut = false
-    /// How many builds in a row Steam got stuck signing in. Start Over, a
-    /// fresh sign-in, or any other outcome, starts the count again.
-    private var steamStuckCount = 0
+    /// Steam is slow or stuck signing in, as the progress screen says.
+    @Published var steamSignInNotice: SteamSignInNotice?
+    /// The person chose to sign in to Steam afresh, from the notice that it's
+    /// stuck; the build takes it (`WrappBuildInput.takeSteamSignInAfreshRequest`).
+    var steamSignInAfreshRequested = false
     @Published var detectedGame: GameInfo?
     /// Where the finished wrapp was saved, for Show in Finder.
     @Published var builtWrappURL: URL?
@@ -135,6 +134,8 @@ class WrappBuildViewModel: ObservableObject {
                 instructions = text
             case .stepProgress(let measured):
                 stepProgress = measured
+            case .steamSignInNotice(let notice):
+                steamSignInNotice = notice
             case .progress(let state):
                 // Error presentation is owned by the `.failed` event, which
                 // carries the typed error. A `.progress(.error)` only has the
@@ -147,12 +148,14 @@ class WrappBuildViewModel: ObservableObject {
                 FailureReporter.setGame(info.id, source: selectedWrappSource?.rawValue, engine: info.gameEngine.rawValue)
             case .failed(let error):
                 instructions = nil
+                steamSignInNotice = nil
                 stopStepTimer()
                 // A cancelled build goes back to the start once it has wound
                 // down (`runBuild`), whatever error it stopped with.
                 if !isCancelling { handleBuildFailure(error) }
             case .completed:
                 instructions = nil
+                steamSignInNotice = nil
                 currentState = .completed
                 stopStepTimer()
             default:
@@ -390,22 +393,13 @@ class WrappBuildViewModel: ObservableObject {
         if case .steamInUse(let holder) = buildError {
             steamInUseHolder = holder
         }
-        steamStuckCount = buildError == .steamStoppedResponding ? steamStuckCount + 1 : 0
         steamBuildCanRetry = buildError == .steamStoppedResponding || buildError == .steamSignInTimedOut
-        steamRetrySignsOut = steamStuckCount >= 2
         if buildError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
-        } else if steamRetrySignsOut {
-            currentState = .error(Self.steamStuckAgainMessage)
         } else {
             handleError(error)
         }
     }
-
-    /// The error screen's text when Steam got stuck signing in a second time
-    /// in a row, and Try Again will sign out of Steam first.
-    static let steamStuckAgainMessage = "Steam got stuck signing in again. Try again to sign in to Steam afresh: "
-        + "you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too."
 
     /// Reset to initial state
     func reset() {
@@ -423,27 +417,22 @@ class WrappBuildViewModel: ObservableObject {
         isQuittingSteamHolder = false
         steamHolderDidNotQuit = false
         steamBuildCanRetry = false
-        steamRetrySignsOut = false
-        steamStuckCount = 0
+        steamSignInNotice = nil
+        steamSignInAfreshRequested = false
     }
 
-    /// Start the Steam build again, from the error screen: after signing out
-    /// of Steam, when it got stuck signing in twice in a row.
+    /// Sign in to Steam afresh, from the progress screen's notice that it's
+    /// stuck signing in: the build signs out and starts Steam again.
+    func signInToSteamAfresh() {
+        logger.notice("The person chose to sign in to Steam afresh")
+        steamSignInAfreshRequested = true
+        steamSignInNotice = nil
+    }
+
+    /// Start the Steam build again, from the error screen.
     func retrySteamBuild() {
-        let stuckCount = steamStuckCount
-        let signOut = steamRetrySignsOut
+        logger.notice("Trying the Steam build again")
         reset()
-        if signOut {
-            logger.notice("Trying the Steam build again, signed out of Steam: it got stuck signing in \(stuckCount) times in a row")
-            do {
-                try SteamSessionStore().signOut()
-            } catch {
-                logger.error("Couldn't sign out of Steam before trying again: \(error)")
-            }
-        } else {
-            logger.notice("Trying the Steam build again")
-            steamStuckCount = stuckCount
-        }
         selectedWrappSource = .steam
         Task { await build(from: .steam) }
     }

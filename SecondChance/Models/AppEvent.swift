@@ -52,6 +52,9 @@ enum WrappBuildEvent {
     /// `.stepProgress(nil)`. Publish it after the step's `.progress`, which
     /// clears it.
     case stepProgress(StepProgress?)
+    /// Steam is slow or stuck signing in: a notice on the progress screen
+    /// until `.steamSignInNotice(nil)`.
+    case steamSignInNotice(SteamSignInNotice?)
 
     // Intermediate results — the things tests assert on and the UI/logs can show.
     /// The temporary wrapp the build works in, as it starts making it: what

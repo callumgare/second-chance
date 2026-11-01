@@ -94,7 +94,7 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             failedPatches.append((id, message))
         case .steamGamesOwned(let games):
             steamGamesOwned = games
-        case .started, .instructions, .stepProgress:
+        case .started, .instructions, .stepProgress, .steamSignInNotice:
             break
         }
     }

@@ -189,7 +189,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             try await client.start(silent: true)
             run.started()
 
-            run.signedIn = try await signIn(client: client, input: input)
+            run.signedIn = try await signIn(client: client, prefix: prefix, input: input)
             await bus.publishWrappBuild(.instructions(nil))
 
             // ── Pick the game ──────────────────────────────────────────
@@ -228,7 +228,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 try client.queueInstall(appID: appID, installDir: installDir)
                 try await client.start(silent: true)
                 run.started()
-                run.signedIn = try await signIn(client: client, input: input)
+                run.signedIn = try await signIn(client: client, prefix: prefix, input: input)
             }
 
             try await waitForInstall(client: client, appID: appID)
@@ -314,8 +314,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     static let signInInstructions = "Steam opens in its own window. Sign in there, or scan its QR code with the Steam app on your phone. "
         + "You'll stay signed in for your other Nancy Drew games, until you choose Second Chance ▸ Sign Out of Steam."
 
-    /// Wait for Steam to sign in, asking the user when it shows its sign-in
-    /// window, and saying meanwhile whether it's updating itself or
+    /// Wait for Steam to sign in, asking the user when it shows its
+    /// sign-in window, and saying meanwhile whether it's updating itself or
     /// connecting (`SteamStartupWatch`). True once signed in.
     ///
     /// A Steam that exits first is started once more: its first start
@@ -323,15 +323,55 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// for the whole timeout before, then updated and signed in on the next
     /// build. Exiting again fails the build.
     ///
-    /// A Steam the watch finds stuck, its logs quiet, fails the build at
-    /// once; so does one that keeps writing but neither signs in nor asks
-    /// within `startTimeout`.
-    private func signIn(client: SteamClientDriving, input: WrappBuildInput) async throws -> Bool {
+    /// Steam slow or stuck signing in is handled as `SteamStallPolicy`
+    /// decides, its notices shown on the progress screen
+    /// (`.steamSignInNotice`). Taking up its offer to sign in afresh signs
+    /// out of Steam, takes the sign-in out of the prefix, and starts Steam
+    /// again to ask for one. A Steam that keeps writing but neither signs in
+    /// nor asks within `startTimeout` fails too.
+    private func signIn(client: SteamClientDriving, prefix: URL, input: WrappBuildInput) async throws -> Bool {
         var deadline = Date().addingTimeInterval(Self.startTimeout)
         var restarted = false
+        var policy = SteamStallPolicy(canOfferFreshSignIn: input.canSignInToSteam)
         var watch = SteamSignInWatch(client: client, exitedChecks: steamExitedChecks, quietLimit: signInQuietLimit)
+        func startAgain(_ substep: String) async throws {
+            await bus.publishWrappBuild(.progress(.installingGame(substep: substep)))
+            await client.shutdown(timeout: 30)
+            watch.restarted()
+            try await client.start(silent: true)
+            deadline = Date().addingTimeInterval(Self.startTimeout)
+        }
+        func carryOut(_ actions: [SteamStallPolicy.Action]) async throws {
+            for action in actions {
+                switch action {
+                case .notice(let notice):
+                    await bus.publishWrappBuild(.steamSignInNotice(notice))
+                    // As long as someone signing in gets, once it's up to them.
+                    if notice == .stuck { deadline = Date().addingTimeInterval(Self.signInTimeout) }
+                case .restart:
+                    logger.warning("Steam got stuck signing in; starting it again")
+                    try await startAgain("Steam got stuck, so it's being started again")
+                case .fail:
+                    throw WrappBuildError.steamStoppedResponding
+                }
+            }
+        }
         while Date() < deadline {
+            if policy.notice == .stuck, await input.takeSteamSignInAfreshRequest() {
+                logger.notice("Signing out of Steam and starting it again, as the person asked")
+                try await carryOut(policy.signingInAfresh())
+                await client.shutdown(timeout: 30)
+                do {
+                    try sessionStore.signOut()
+                } catch {
+                    logger.error("Couldn't sign out of Steam: \(error)")
+                }
+                SteamSessionStore.strip(from: prefix)
+                await bus.publishWrappBuild(.instructions(Self.signInInstructions))
+                try await startAgain(SteamStartupStage.starting.message)
+            }
             for event in watch.check() {
+                try await carryOut(policy.handle(event))
                 switch event {
                 case .signedIn:
                     return true
@@ -347,8 +387,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                         await bus.publishWrappBuild(.stepProgress(StepProgress(
                             fraction: Double(download.doneKB) / Double(download.totalKB), text: text)))
                     }
-                case .stuck:
-                    throw WrappBuildError.steamStoppedResponding
+                case .quiet, .active, .stuck:
+                    break
                 case .exited:
                     guard !restarted else {
                         logger.error("Steam exited again before it signed in")
@@ -364,11 +404,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             }
             try await Task.sleep(for: signInPollInterval)
         }
+        try await carryOut([.notice(nil)])
         if watch.askedForSignIn {
             logger.warning("Nobody signed in to Steam within \(Int(Self.signInTimeout))s")
             throw WrappBuildError.steamSignInTimedOut
         }
-        logger.warning("Steam neither signed in nor asked for credentials within \(Int(Self.startTimeout))s")
+        logger.warning("Steam neither signed in nor asked for credentials in time")
         throw WrappBuildError.steamStoppedResponding
     }
 

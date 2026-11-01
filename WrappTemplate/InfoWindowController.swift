@@ -56,6 +56,18 @@ class InfoWindowController: NSWindowController {
         set { viewModel.onLastSessionChoice = newValue }
     }
 
+    var onSignInToSteamAfresh: (() -> Void)? {
+        get { viewModel.onSignInToSteamAfresh }
+        set { viewModel.onSignInToSteamAfresh = newValue }
+    }
+
+    /// Say Steam is slow or stuck signing in, or no longer. Any thread.
+    func setSteamNotice(_ notice: SteamSignInNotice?) {
+        DispatchQueue.main.async {
+            self.viewModel.steamNotice = notice
+        }
+    }
+
     /// Whether the save warning is currently visible.
     var isShowingWarning: Bool {
         if case .warning = viewModel.phase { return true }

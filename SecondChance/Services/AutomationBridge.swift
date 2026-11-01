@@ -186,6 +186,9 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
                 d["text"] = progress.text
                 if let fraction = progress.fraction { d["fraction"] = fraction }
             }
+        case .steamSignInNotice(let notice):
+            d["type"] = "wrappBuild.steamSignInNotice"
+            if let notice { d["notice"] = "\(notice)" }
         case .progress(let state):
             d["type"] = "wrappBuild.progress"; d["state"] = "\(state)"
             if let sub = state.substep { d["substep"] = sub }

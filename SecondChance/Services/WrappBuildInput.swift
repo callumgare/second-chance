@@ -38,6 +38,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
+/// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
 /// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
@@ -262,6 +263,16 @@ class WrappBuildInput {
     func askAboutSteamInUse(_ holder: SteamLockHolder) async -> SteamLockHolder.Choice? {
         if isHeadlessRun { return nil }
         return holder.ask(blocked: "the game you're adding can't be installed until it quits.")
+    }
+
+    /// Whether the person has asked, from the progress screen's notice that
+    /// Steam is stuck signing in, to sign in to Steam afresh. Taking it
+    /// clears it, so the next call says no. Never in a headless run.
+    @MainActor
+    func takeSteamSignInAfreshRequest() -> Bool {
+        guard let viewModel, !isHeadlessRun else { return false }
+        defer { viewModel.steamSignInAfreshRequested = false }
+        return viewModel.steamSignInAfreshRequested
     }
 
     // MARK: - Output Choices

@@ -81,6 +81,12 @@ struct WrappBuildProgressView: View {
                 .background(.tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
             }
 
+            if let notice = viewModel.steamSignInNotice {
+                SteamSignInNoticeBox(notice: notice) {
+                    viewModel.signInToSteamAfresh()
+                }
+            }
+
             Spacer()
 
             VStack(alignment: .leading, spacing: 8) {
@@ -199,6 +205,39 @@ struct WrappBuildProgressView: View {
             }
             .keyboardShortcut(.defaultAction)
         }
+    }
+}
+
+/// Steam slow or stuck signing in (`SteamSignInNotice`): what's happening,
+/// a countdown while Steam will be started again by itself, and once it's
+/// stuck the offer to sign in afresh.
+struct SteamSignInNoticeBox: View {
+    let notice: SteamSignInNotice
+    let signInAgain: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(notice.title).fontWeight(.semibold)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+            }
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(notice.detail(now: context.date))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if notice == .stuck {
+                Button(SteamSignInNotice.signInAgainButton, action: signInAgain)
+            }
+        }
+        .font(.callout)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityIdentifier("steam-sign-in-notice")
     }
 }
 

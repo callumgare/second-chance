@@ -74,6 +74,9 @@ class InfoWindowViewModel: ObservableObject {
     @Published var showSlowLoadingNote = false
     @Published var showSuspectedHang = false
     @Published var dontShowAgain = false
+    /// Steam slow or stuck signing in (`SteamStallPolicy`): shown in place of
+    /// the stage's own slow and possible-failure notes.
+    @Published var steamNotice: SteamSignInNotice?
 
     let saveWarningEnabled: Bool
     let gameSlug: String
@@ -92,6 +95,8 @@ class InfoWindowViewModel: ObservableObject {
     /// What to do about the last session's Wine, still running: offered once
     /// `.lastSessionClosing` has taken longer than usual.
     var onLastSessionChoice: ((LastSessionChoice) -> Void)?
+    /// Sign in to Steam afresh, offered once Steam is stuck signing in.
+    var onSignInToSteamAfresh: (() -> Void)?
 
     enum LastSessionChoice {
         case stopItAndContinue, continueAnyway, dontStart
@@ -417,7 +422,9 @@ struct InfoWindowView: View {
 
             // On a heavily loaded Mac a long wait is expected, not a sign the
             // launch failed: say why instead.
-            if viewModel.stage == .lastSessionClosing {
+            if let notice = viewModel.steamNotice {
+                steamNoticeView(notice)
+            } else if viewModel.stage == .lastSessionClosing {
                 if viewModel.showSuspectedHang {
                     lastSessionNote
                 }
@@ -445,6 +452,30 @@ struct InfoWindowView: View {
                 .foregroundStyle(.yellow)
         }
         .font(.callout)
+    }
+
+    /// What `SteamSignInNotice` says, as Second Chance's progress screen
+    /// does: a countdown while Steam will be started again by itself, and
+    /// once it's stuck the offer to sign in afresh.
+    private func steamNoticeView(_ notice: SteamSignInNotice) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            caution(notice.title)
+
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                informative(notice.detail(now: context.date))
+                    .monospacedDigit()
+            }
+
+            if notice == .stuck {
+                buttonBar {
+                    Button(SteamSignInNotice.signInAgainButton) {
+                        viewModel.steamNotice = nil
+                        viewModel.onSignInToSteamAfresh?()
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("steam-sign-in-notice")
     }
 
     private var possibleFailureNote: some View {
