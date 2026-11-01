@@ -317,6 +317,21 @@ build's blocking work goes the other way through `Blocking.run`, and a
 SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
 `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`.
 
+## The prefix cache
+
+`WineManager` caches prefixes in
+`~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or
+`"dev"` in DEBUG) plus the bundled Wine engine's version
+(`Contents/SharedSupport/wine/version`), so a Wine upgrade starts a fresh
+prefix by itself. Caching a prefix removes every other key's. Builds in one
+process that find the cache empty make the prefix one at a time
+(`WineManager.prefixCreation`): the first makes and caches it, and the rest
+then copy it; a prefix is renamed into the cache whole, so none is ever taken
+half-copied. Other changes to how the prefix is set up (winetricks verbs,
+`ddraw.ini`, registry settings such as `EmulateModeset`) don't change the key:
+run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after
+those, or if Wine setup misbehaves after code changes.
+
 ## Cancelling
 
 The progress screen's **Cancel** asks for confirmation, then cancels the

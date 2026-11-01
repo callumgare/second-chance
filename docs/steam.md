@@ -388,7 +388,7 @@ since a title's own dashes and colons otherwise run into the sentence.
 runs `C:\Program Files (x86)\Steam\steam.exe` in the prefix:
 
 - **`start(silent:)`** starts Wine's desktop first, as every Wine program does
-  (AGENTS.md, "Wrapps start Wine's desktop before the game"). The bootstrapper
+  ([wrapp-launch.md](wrapp-launch.md#wines-desktop)). The bootstrapper
   exits **42** when it hands over to an updated client — not a failure.
 - **Signed in or not** comes from Steam's logs, not its files:
   `logs/connection_log.txt` (`RecvMsgClientLogOnResponse() : … 'OK'`) and
