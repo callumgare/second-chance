@@ -422,11 +422,16 @@ enum AppPuppetRunner {
         } else {
             requiredHelpers = [.puppetControl]
         }
+        // A game that starts Steam logs how far its sign-in got, so a stalled
+        // one can be followed in the log.
+        let requiredLines = WrappInfo.gameEngine(at: wrappURL)?.needsSteam == true
+            ? [SteamSignInWatch.waitingMarker, SteamSignInWatch.signedInMarker] : []
 
         // `sc test integration --vm`: launch it in the VM instead.
         if let vm = VMTarget.current {
             return try await VMPuppetRunner.run(in: vm, puppeteer: bundle, wrappURL: wrappURL, gameSlug: slug,
-                                                timeout: timeout, requiredHelpers: requiredHelpers, onWarning: onWarning)
+                                                timeout: timeout, requiredHelpers: requiredHelpers, requiredLines: requiredLines,
+                                                onWarning: onWarning)
         }
 
         let attempt = try await Self.launchAndCollect(
@@ -437,6 +442,7 @@ enum AppPuppetRunner {
             attemptLabel: quitFromMenu ? "menu-quit" : "initial",
             extraArguments: quitFromMenu ? ["--quit-from-menu"] : [],
             requiredHelpers: requiredHelpers,
+            requiredLines: requiredLines,
             onWarning: onWarning
         )
 
@@ -451,6 +457,7 @@ enum AppPuppetRunner {
         attemptLabel: String,
         extraArguments: [String] = [],
         requiredHelpers: [InProcessHelperReport.Helper],
+        requiredLines: [String],
         onWarning: (String) -> Void
     ) async throws -> (exitCode: Int32, pid: Int32) {
         let launchTime = Date()
@@ -467,7 +474,7 @@ enum AppPuppetRunner {
         let gameLogData = SystemLogReader.fetchGame(since: launchTime)
         attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
         try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
-                  attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, onWarning: onWarning)
+                  attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, requiredLines: requiredLines, onWarning: onWarning)
         return (exitCode: observedExitCode, pid: pid)
     }
 
@@ -482,6 +489,7 @@ enum AppPuppetRunner {
         gameSlug: String,
         attemptLabel: String,
         requiredHelpers: [InProcessHelperReport.Helper],
+        requiredLines: [String] = [],
         onWarning: (String) -> Void = { _ in }
     ) throws {
         guard !logData.isEmpty else {
@@ -561,6 +569,14 @@ enum AppPuppetRunner {
                 code: Int(observedExitCode),
                 userInfo: [NSLocalizedDescriptionKey: "\(unarmed.map(\.name).joined(separator: " and ")) never armed in the game "
                     + "(no \"\(unarmed[0].armedMarker)\" in the wrapp's log, attempt: \(attemptLabel))"]
+            )
+        }
+
+        if let missing = requiredLines.first(where: { !gameLog.contains($0) }) {
+            throw NSError(
+                domain: "AppPuppetRunner",
+                code: Int(observedExitCode),
+                userInfo: [NSLocalizedDescriptionKey: "The wrapp's log has no \"\(missing)\" line (attempt: \(attemptLabel))"]
             )
         }
 

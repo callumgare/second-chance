@@ -270,6 +270,10 @@ struct IntegrationGameRun {
         let wrapp = try #require(recorder.completedWrapp, "completed event not emitted")
         outcome.expect(try WrappInfo.gameSlug(at: wrapp) == game.id, "Wrapp plist GameSlug isn't \(game.id)")
 
+        LogStore.shared.flush()
+        outcome.buildLog = LogStore.shared.snapshot().entries
+            .filter { $0.seq >= logStart && $0.build == buildLog.id }
+            .map(\.message)
         try await check(recorder, wrapp, outcome)
         return wrapp
     }
@@ -343,6 +347,9 @@ final class GameOutcome: @unchecked Sendable {
     private var failedExpectations = 0
     /// What to look into that didn't fail the game (`warn`).
     private var warnings: [String] = []
+    /// The messages of the build's own log entries, as the build finished,
+    /// for a suite's checks to look for what it should have logged.
+    var buildLog: [String] = []
 
     /// What the time went on, so a game that waited for others isn't
     /// charged for it: building, launching, and waiting its turn for either.

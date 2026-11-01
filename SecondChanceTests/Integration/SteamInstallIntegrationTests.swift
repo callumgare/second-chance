@@ -80,6 +80,12 @@ struct SteamInstallIntegrationTests {
             }
             return true
         } check: { recorder, wrapp, outcome in
+            // How far Steam got is logged as it goes, so a stalled sign-in
+            // can be followed in the log.
+            for marker in [SteamSignInWatch.waitingMarker, SteamSignInWatch.signedInMarker] {
+                outcome.expect(outcome.buildLog.contains { $0.contains(marker) }, "The build's log has no \"\(marker)\" line")
+            }
+
             let expectedExe = Self.expectedExePath(game, engine: engine)
             outcome.expect(recorder.detectedExePath == expectedExe, "Exe \(recorder.detectedExePath ?? "nil"), expected \(expectedExe ?? "nil")")
 

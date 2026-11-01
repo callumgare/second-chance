@@ -225,6 +225,10 @@ The Steam suite:
   rest of the run skips the others without building: signing in for every game
   in a full run once got Steam's sign-ins stalled for an hour and a half;
 - checks the finished wrapp carries none of the sign-in;
+- checks the build's log, and a launch's that starts Steam, have Steam's
+  sign-in in them (`SteamSignInWatch.waitingMarker` and `.signedInMarker`),
+  so a log keeps saying how far a stalled sign-in got
+  ([steam.md](steam.md#building));
 - always builds: `--refresh-wrapp` applies to the disk suite's wrapps only;
 - downloads every game it tests, so it's slow, and run often could trip
   Steam's rate limits. It is in `TestRunner.unitExclusions`.
