@@ -510,15 +510,18 @@ struct InfoWindowView: View {
             informative("Part of the game from last time is still running in the background, which can stop it starting properly. "
                 + "You can stop it and carry on, or keep waiting.")
 
-            // On one row when they fit; newer macOS draws buttons wider, and
-            // a row too wide would push the window's text out of it.
+            // On one row when they fit, Quit apart at the leading edge;
+            // newer macOS draws buttons wider, and a row too wide would push
+            // the window's text out of it.
             ViewThatFits(in: .horizontal) {
                 HStack {
+                    lastSessionQuitButton
                     Spacer()
-                    lastSessionButtons
+                    lastSessionCarryOnButtons
                 }
                 VStack(alignment: .trailing) {
-                    lastSessionButtons
+                    lastSessionQuitButton
+                    lastSessionCarryOnButtons
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -527,11 +530,14 @@ struct InfoWindowView: View {
         .accessibilityIdentifier("last-session-closing")
     }
 
-    @ViewBuilder
-    private var lastSessionButtons: some View {
+    private var lastSessionQuitButton: some View {
         Button("Quit") { viewModel.onLastSessionChoice?(.dontStart) }
             .keyboardShortcut(.cancelAction)
             .fixedSize()
+    }
+
+    @ViewBuilder
+    private var lastSessionCarryOnButtons: some View {
         Button("Continue Anyway") { viewModel.onLastSessionChoice?(.continueAnyway) }
             .fixedSize()
         Button("Stop Previous and Continue") { viewModel.onLastSessionChoice?(.stopItAndContinue) }
