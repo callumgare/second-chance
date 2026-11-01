@@ -37,6 +37,15 @@ still stop for review before any of that starts.
 - **`build/release/RELEASE_NOTES.md`** and **`build/release/SecondChance.zip`**,
   after running the unit tests and a Release build (`--notes-only` stops before
   those, `--skip-tests` skips the tests).
+- **The README's pictures**, `docs/app-welcome-light.png` and `-dark.png`,
+  retaken from the Release build (`sc screenshot app --on-screen --state
+  welcome`, [dev-cli.md](dev-cli.md#screenshots)), which puts the app's
+  window on screen for a moment. Each goes into the release commit only when
+  it looks different from the committed one (`ImageComparison`: more than
+  0.1% of its pixels changed noticeably), so a picture that was only encoded
+  again isn't committed; nor is one taken on a display of a lower scale than
+  the committed one's, which is warned about. A picture that can't be taken
+  is warned about too, and the release goes on. `--build-only` skips this.
 - **A check that the build has a Sentry DSN.** It comes from `SENTRY_DSN` in
   `.env`. Without it the release would send no failure reports, so the
   release stops ([failure-reports.md](failure-reports.md#the-dsn)).
@@ -118,7 +127,7 @@ so it works on a dirty tree, building whatever is uncommitted.
 
 ## Publishing
 
-Once the build is packaged it commits the project file and `CHANGELOG.md` as
+Once the build is packaged it commits the project file, `CHANGELOG.md` and any README picture that changed as
 `chore(release): vX.Y.Z` and tags the commit `vX.Y.Z`, both locally — the
 rollback above takes them back out if either fails. Unless you said at the
 start to publish once built, it then asks whether to push the branch and tag to `origin` and create the GitHub release with `gh`,

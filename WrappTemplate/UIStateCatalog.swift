@@ -2,8 +2,8 @@
 //  UIStateCatalog.swift
 //  WrappTemplate
 //
-//  The states of a wrapp's loading window that `sc app states` draws for
-//  review (`UIStateShots`). Add one for a screen or notice worth looking at
+//  The states of a wrapp's loading window that `sc screenshot wrapp` draws
+//  (`UIStateShots`). Add one for a screen or notice worth looking at
 //  without making it happen for real.
 
 import SecondChanceKit
@@ -18,7 +18,7 @@ enum UIStateCatalog {
                     _ setUp: @escaping @MainActor (InfoWindowViewModel) -> Void = { _ in }) -> UIStateShot {
             let viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: warning, gameTitle: title)
             setUp(viewModel)
-            return UIStateShot(name, width: InfoWindowView.width, afterAppearing: {
+            return UIStateShot(name, title: title, style: [.titled], width: InfoWindowView.width, afterAppearing: {
                 viewModel.stopTimer()
                 setUp(viewModel)
             }, view: {

@@ -80,8 +80,8 @@ struct SecondChanceApp: App {
         // (Stored-property initialisers that run before init()'s body — e.g.
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
-        // `sc app states`: draw the catalogued screens and quit, before any window.
-        UIStateShots.runIfConfigured(app: "second-chance") { UIStateCatalog.shots }
+        // `sc screenshot`: draw the catalogued screens and quit, before any window.
+        UIStateShots.runIfConfigured(app: "app") { UIStateCatalog.shots }
         MainThreadWatchdog.start()
         // A log per run, for a crash report to carry the run that crashed.
         // Not under test: every test run would push a real run's log out.
@@ -124,7 +124,6 @@ struct SecondChanceApp: App {
         }
 
         Task { await AutomationBridge.shared.startIfConfigured() }
-        ReadmeScreenshot.startIfConfigured()
 
         // Starts the scheduled update checks (off in headless runs).
         _ = AppUpdater.shared
@@ -216,10 +215,8 @@ enum LaunchHistory {
     private(set) static var isReturning = false
 
     static func record() {
-        // Neither a test nor a headless run is someone opening the app, and
-        // the README's screenshot shows the first-time greeting.
-        let environment = ProcessInfo.processInfo.environment
-        guard !TestHost.isRunning, !CLIBuilder.isEnabled, environment[ReadmeScreenshot.pathEnvVar] == nil else { return }
+        // Neither a test nor a headless run is someone opening the app.
+        guard !TestHost.isRunning, !CLIBuilder.isEnabled else { return }
         isReturning = UserDefaults.standard.bool(forKey: key)
         UserDefaults.standard.set(true, forKey: key)
     }

@@ -2,9 +2,9 @@
 //  UIStateCatalog.swift
 //  SecondChance
 //
-//  The states of Second Chance's main window that `sc app states` draws for
-//  review (`UIStateShots`). Add one for a screen or notice worth looking at
-//  without making it happen for real.
+//  The states of Second Chance's main window that `sc screenshot app` draws
+//  (`UIStateShots`). Add one for a screen or notice worth looking at without
+//  making it happen for real. `welcome` is the README's picture.
 
 import SecondChanceKit
 import SwiftUI
@@ -15,7 +15,7 @@ enum UIStateCatalog {
     static var shots: [UIStateShot] {
         let size = ContentView.size
         func window(_ name: String, _ setUp: @escaping @MainActor (WrappBuildViewModel) -> Void) -> UIStateShot {
-            UIStateShot(name, width: size.width, height: size.height) {
+            UIStateShot(name, title: "Second Chance", width: size.width, height: size.height) {
                 let viewModel = WrappBuildViewModel(bus: EventBus<AppEvent>())
                 setUp(viewModel)
                 return ContentView().environmentObject(viewModel)

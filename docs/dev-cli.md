@@ -12,8 +12,8 @@ nearest command's help.
 ```bash
 ./sc app build                         # Build Second Chance.app (Debug)
 ./sc app run                           # …and run it, logs in this terminal
-./sc app screenshot                    # Retake the README's screenshots of the app, light and dark
-./sc app states                        # Draw the app's and a wrapp's catalogued screens for review
+./sc screenshot                        # Picture the app's and a wrapp's screens for review, light and dark
+./sc screenshot app --on-screen --state welcome --out docs/   # Retake the README's pictures
 ./sc wrapp build stay-tuned            # Build a wrapp headlessly from installers/stay-tuned/
 ./sc wrapp run stay-tuned              # Launch it (building it first if there's none)
 ./sc wrapp update stay-tuned           # Put the latest WrappTemplate into it
@@ -98,40 +98,48 @@ the app. [steam.md](steam.md) has the details.
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`
 works.
 
-## README screenshots
+## Screenshots
 
-`sc app screenshot` retakes `docs/main-screen-light.png` and
-`docs/main-screen-dark.png`, the README's pictures of the main window, so they
-can follow the app's design. It runs the app once per appearance with
-`SECOND_CHANCE_SCREENSHOT=<path>` and `SECOND_CHANCE_SCREENSHOT_APPEARANCE`
-(`light` or `dark`). The app (`ReadmeScreenshot`) sets that appearance before
-any window draws, sets its window to its fixed 680×460, waits for it to
-come on screen, and captures it with ScreenCaptureKit, shadow included. Then it
-writes the PNG and quits. A process may capture its own windows, so this needs
-no Screen Recording permission. The README shows whichever picture matches the
-reader's GitHub theme.
-
-## Screens for review
-
-`sc app states` draws the screens worth looking at without making them
-happen for real — Second Chance's window part-way through a Steam build, a
-wrapp's loading window with a notice up, their error screens — light and
-dark, into `DerivedData/ui-states/` (`--out` elsewhere), with an
-`index.html` showing each state's two pictures side by side. `--only steam-,error-`
-draws only the states whose names start with those.
+`sc screenshot [app|wrapp]` pictures the screens worth looking at without
+making them happen for real — Second Chance's window part-way through a
+Steam build, a wrapp's loading window with a notice up, their error screens
+— each light and dark, as `<app|wrapp>-<state>-<light|dark>.png`. Left out,
+the target is both. `--list` prints the states' names; `--state` takes some
+of them (repeatable or comma-separated, `steam-*` for a prefix). By default
+they go into `DerivedData/screenshots/`, with an `index.html` showing each
+state's two pictures side by side; `--out` writes them somewhere else,
+without the page.
 
 Each app keeps its own catalogue of states, `UIStateCatalog`
-(`SecondChance/Utilities/` and `WrappTemplate/`), each a name, a window size
-and a view set up as it would be then. Run with `SECOND_CHANCE_UI_STATES=<folder>`
-(and `SECOND_CHANCE_UI_STATES_ONLY`), an app draws them (`UIStateShots`,
-`SecondChanceKit`) and quits before making any window of its own. Each is
-drawn in a window that is never shown, so nothing comes on screen, nothing
-takes the focus and no permission is needed: it's safe on a Mac someone is
-using. The pictures have no title bar, and a default button isn't in the
-accent colour, as the window is never key. A state the view resets as it
-appears (the loading window's notes start their clocks afresh) is set again
-in its `afterAppearing`. To review a new screen or notice, add a state to the
-catalogue of the app it's in.
+(`SecondChance/Utilities/` and `WrappTemplate/`): a name, its window's title,
+style and size, and a view set up as it would be then. Run with
+`SECOND_CHANCE_UI_STATES=<folder>` (`SECOND_CHANCE_UI_STATES_ONLY` for
+`--state`, `SECOND_CHANCE_UI_STATES_LIST=1` for `--list`), an app draws them
+(`UIStateShots`, `SecondChanceKit`) and quits before making any window of
+its own. A state the view resets as it appears (the loading window's notes
+start their clocks afresh) is set again in its `afterAppearing`. To review a
+new screen or notice, add a state to the catalogue of the app it's in.
+
+**Off screen**, the default, each is drawn in a window that is never shown,
+so nothing comes on screen, nothing takes the focus and no permission is
+needed: it's safe on a Mac someone is using. The pictures have only the
+window's contents: macOS's window server adds the title bar and shadow, and
+only to a window on screen. A default button isn't in the accent colour, as
+the window is never key.
+
+**`--on-screen`** shows each in a real window with its title bar and style,
+makes the app active, and captures it with its shadow (ScreenCaptureKit; a
+process may capture its own windows without Screen Recording). The README's
+pictures are the `welcome` state taken this way: `sc screenshot app
+--on-screen --state welcome --out docs/` writes `docs/app-welcome-light.png`
+and `-dark.png`. They were taken on a Retina display, and each version of
+macOS draws a window's frame its own way, so retake them on a Mac like the
+one that took them. `sc release` retakes them from the release's build and
+commits a picture only when it looks different
+([releasing.md](releasing.md)). The app activates itself with
+`activate(ignoringOtherApps:)`: the plain `activate()` is only a request
+since macOS 14, and it's turned down for an app that hasn't finished
+launching through its own run loop, leaving the window drawn inactive.
 
 ## Debug options
 

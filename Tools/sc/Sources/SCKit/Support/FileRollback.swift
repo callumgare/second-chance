@@ -39,10 +39,15 @@ actor FileRollback {
     /// Write `string` to `url`, one of the files given to `init`, and
     /// remember it as what this command wrote.
     func write(_ string: String, to url: URL) throws {
+        try write(Data(string.utf8), to: url)
+    }
+
+    /// Write `data` to `url`, as above. A file that isn't text can't be
+    /// merged, so one changed by someone else after this is left as it is.
+    func write(_ data: Data, to url: URL) throws {
         guard entries[url] != nil else {
             throw SCError("FileRollback isn't tracking \(url.path).")
         }
-        let data = Data(string.utf8)
         try data.write(to: url, options: .atomic)
         entries[url]?.written = data
     }

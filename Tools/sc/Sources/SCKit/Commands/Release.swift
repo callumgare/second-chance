@@ -110,7 +110,7 @@ private struct Release {
         // it wrote: anything else changed in those files, before or during
         // the run, stays. The zip and appcast are only removed: packaging
         // deletes the previous ones before writing.
-        let rollback = FileRollback([repo.pbxproj, repo.changelog, notesFile])
+        let rollback = FileRollback([repo.pbxproj, repo.changelog, notesFile] + readmeScreenshots)
         let created = [zip, appcast].filter { !FileManager.default.fileExists(atPath: $0.path) }
         let committed: (version: String, branch: String, publishWhenBuilt: Bool)?
         do {
@@ -316,6 +316,9 @@ private struct Release {
 
         if buildOnly { return (version, branch, false) }
 
+        // The README's pictures of the app, retaken from this build.
+        let screenshots = await retakeReadmeScreenshots(app: app, rollback: rollback)
+
         // 7. Debug symbols, so crash reports from this version can be read.
         try await uploadDebugSymbols()
 
@@ -325,7 +328,7 @@ private struct Release {
 
         // 9. Commit and tag locally — still undoable, so the rollback covers
         // them too. Pushing is what other people see, so `run` asks first.
-        try await commitAndTag(version: version)
+        try await commitAndTag(version: version, also: screenshots)
         return (version, branch, publishWhenBuilt)
     }
 
@@ -524,11 +527,51 @@ private struct Release {
         }
     }
 
+    /// The README's pictures of the app (`sc screenshot app --on-screen
+    /// --state welcome --out docs/`).
+    private var readmeScreenshots: [URL] {
+        ["light", "dark"].map { repo.root.appendingPathComponent("docs/app-welcome-\($0).png") }
+    }
+
+    /// Retake the README's pictures from the release's `app`, keeping each
+    /// only where it looks different from the committed one
+    /// (`ImageComparison`): the files changed, for the release commit. A
+    /// failure is only warned about: a release doesn't stop for a picture.
+    private func retakeReadmeScreenshots(app: URL, rollback: FileRollback) async -> [URL] {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sc-release-screenshots-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var changed: [URL] = []
+        do {
+            let pictures = try await Screenshots(session: session, app: app)
+                .take(targets: [.app], states: ["welcome"], onScreen: true, into: folder)
+            for picture in pictures {
+                let committed = repo.root.appendingPathComponent("docs").appendingPathComponent(picture.lastPathComponent)
+                guard readmeScreenshots.contains(committed) else { continue }
+                let new = try Data(contentsOf: picture)
+                let verdict = (try? Data(contentsOf: committed)).map { ImageComparison.compare($0, new) } ?? .different
+                switch verdict {
+                case .same:
+                    continue
+                case .lowerResolution:
+                    ui.warning("\(repo.display(committed)) came out at a lower resolution on this Mac's display — keeping the committed one.")
+                case .different:
+                    try await rollback.write(new, to: committed)
+                    changed.append(committed)
+                }
+            }
+        } catch {
+            ui.warning("Couldn't retake the README's screenshots, so they're left as they are: \(error.localizedDescription)")
+            return []
+        }
+        ui.line(ui.format("\(.success(changed.isEmpty ? "✔︎ README screenshots unchanged" : "✔︎ README screenshots updated: \(changed.map(repo.display).joined(separator: ", "))"))"))
+        return changed
+    }
+
     /// The release commit and its tag. If either fails, whatever was done is
     /// taken back out of git, leaving the files for `run`'s rollback.
-    private func commitAndTag(version: String) async throws {
+    private func commitAndTag(version: String, also extra: [URL] = []) async throws {
         let tag = "v\(version)"
-        let files = [repo.pbxproj.path, repo.changelog.path]
+        let files = [repo.pbxproj.path, repo.changelog.path] + extra.map(\.path)
         try await ui.progressStep("Commit and tag", success: "Committed and tagged \(tag)") { _ in
             let add = try await git(["add", "--"] + files)
             guard add.succeeded else { throw SCError("git add failed: \(add.error)") }

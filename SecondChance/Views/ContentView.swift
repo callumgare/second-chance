@@ -11,8 +11,8 @@ struct ContentView: View {
     /// The step the build last reached, so a failure can mark it.
     @State private var lastStep: InstallerStep = .source
 
-    /// The window's fixed content size. `ReadmeScreenshot` takes the
-    /// README's screenshots at it too.
+    /// The window's fixed content size, which `UIStateCatalog` draws its
+    /// states at too.
     static let size = CGSize(width: 680, height: 460)
 
     var body: some View {

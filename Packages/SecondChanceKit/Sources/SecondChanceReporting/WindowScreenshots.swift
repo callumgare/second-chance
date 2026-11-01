@@ -5,7 +5,7 @@
 //  Pictures of this process's own windows, for a detailed failure report:
 //  what the person was looking at when it failed. A process may capture its
 //  own windows without Screen Recording permission (ScreenCaptureKit's
-//  current-process content, as ReadmeScreenshot and puppet control do), so
+//  current-process content, as UIStateShots and puppet control do), so
 //  this asks for nothing. A wrapp's game draws in Wine's process, not the
 //  wrapp's, so a wrapp's pictures are of its own windows only.
 //

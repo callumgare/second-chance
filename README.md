@@ -18,8 +18,8 @@ It works with copies of the games from the original CDs, games from Steam, and b
 Interactive store (although this is the least tested of the 3, let me know if you find any issues with it).
 
 <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/main-screen-dark.png">
-    <img alt="Second Chance's main screen, asking where to install the game from" src="docs/main-screen-light.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/app-welcome-dark.png">
+    <img alt="Second Chance's main screen, asking where to install the game from" src="docs/app-welcome-light.png">
 </picture>
 
 > [!NOTE]
