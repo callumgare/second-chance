@@ -76,12 +76,10 @@ public final class FailureReportModel: ObservableObject {
     }
 
     /// The answer to the first-failure question: send this report at
-    /// `detail`, and send later ones the same way.
-    func choose(_ detail: ReportDetail) {
-        ReportingPreferences.update(in: preferencesDirectory) {
-            $0.level = detail == .detailed ? .detailed : .basic
-            $0.promptShown = true
-        }
+    /// `detail`, and send later ones the same way; or (nil) send nothing,
+    /// and ask each time from now on.
+    func choose(_ detail: ReportDetail?) {
+        ReportingPreferences.update(in: preferencesDirectory) { $0.answerFirstQuestion(detail) }
         send(detail)
     }
 

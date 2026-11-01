@@ -446,10 +446,7 @@ nonisolated public enum FailureReporter {
             logger.notice("Nobody to ask about the previous run's crash: going by the setting (\(preferences.level))")
         } else if !preferences.promptShown {
             let answer = CrashReportPrompt.askHowDetailed(process: process)
-            ReportingPreferences.update {
-                $0.level = answer == .detailed ? .detailed : .basic
-                $0.promptShown = true
-            }
+            ReportingPreferences.update { $0.answerFirstQuestion(answer) }
             detail = answer
         } else if let fixed = defaultCrashDetail(for: preferences.level) {
             detail = fixed
@@ -541,7 +538,10 @@ nonisolated public enum FailureReporter {
             event.message = SentryMessage(formatted: redactor.redact(message))
         }
         for exception in event.exceptions ?? [] {
-            exception.value = exception.value.map { redactor.redact($0) }
+            // A basic report says what kind of crash it was (the exception's
+            // type and mechanism) and where (its stack), but carries no
+            // message text, which can say anything.
+            exception.value = detail == .basic ? nil : exception.value.map { redactor.redact($0) }
             redact(exception.stacktrace, with: redactor)
         }
         for thread in event.threads ?? [] {

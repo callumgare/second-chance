@@ -52,6 +52,38 @@ struct ReportRedactorTests {
         #expect(redactor.redact("steamid 76561198012345678.") == "steamid <steam-id>.")
     }
 
+    @Test("Steam3 IDs, Wine's view of the home folder and a name on its own are taken out")
+    func moreIdentifiers() {
+        #expect(redactor.redact("account [U:1:52079950] signed in") == "account [<steam-id>] signed in")
+        #expect(redactor.redact(#"Z:\Users\nancy\Library\x"#) == #"Z:~\Library\x"#)
+        #expect(redactor.redact(#"C:\users\george\Saves"#) == #"C:\Users\<user>\Saves"#)
+        #expect(redactor.redact("/Volumes/Drew Backup") == "/Volumes/<user> Backup")
+        // Lower case, a name part may be an ordinary word.
+        #expect(redactor.redact("drew a window") == "drew a window")
+    }
+
+    @Test("A home folder named differently from the account is taken out too")
+    func homeFolderName() {
+        let renamed = ReportRedactor(identity: .init(homePath: "/Users/ndrew", userName: "nancy", fullName: "",
+                                                     computerNames: [], steamNames: []))
+        #expect(renamed.redact("users/ndrew/Temp") == "users/<user>/Temp")
+    }
+
+    @Test("A crash report loses what identifies this Mac")
+    func crashReport() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ips-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("a.ips")
+        try Data(#"{"crashReporterKey" : "ABC-123","sleepWakeUUID":"DEF","procPath":"/Users/nancy/x"}"#.utf8).write(to: source)
+        let destination = directory.appendingPathComponent("b.ips")
+        try redactor.redactCrashReport(at: source, to: destination)
+        let text = try String(contentsOf: destination, encoding: .utf8)
+        #expect(!text.contains("ABC-123"))
+        #expect(!text.contains("DEF"))
+        #expect(text.contains("~/x"))
+    }
+
     @Test("Redacting a JSON-like value reaches nested strings")
     func nested() throws {
         let value = redactor.redact(value: ["a": ["/Users/nancy/x", 3], "b": ["c": "nancy"]] as [String: Any])
@@ -136,13 +168,25 @@ struct ReportingPreferencesTests {
         #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .manual, promptShown: true))
     }
 
-    @Test("A file that can't be read gives the defaults")
+    @Test("A file that can't be read asks before sending anything, in case that was the choice")
     func corrupt() throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try Data("{ not json".utf8).write(to: directory.appendingPathComponent(ReportingPreferences.fileName))
-        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences())
+        let loaded = ReportingPreferences.load(from: directory)
+        #expect(loaded == ReportingPreferences.mostPrivate)
+        #expect(loaded.detailWithoutAsking == nil)
+        #expect(loaded.successReports == false)
+    }
+
+    @Test("A file missing a setting keeps the ones it has")
+    func missingKey() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(#"{"level": "manual"}"#.utf8).write(to: directory.appendingPathComponent(ReportingPreferences.fileName))
+        #expect(ReportingPreferences.load(from: directory).level == .manual)
     }
 
     @Test("A file saved before success reports existed reads as not asked yet")
@@ -478,6 +522,19 @@ struct FailureReportModelTests {
         await settle(model)
         model.choose(.basic)
         #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .basic, promptShown: true))
+    }
+
+    @Test("Answering Don't Send sends nothing, and asks each time from then on")
+    func answersDontSend() async {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let model = FailureReportModel(preferencesDirectory: directory)
+        model.track(report, sending: Task { .askingHowDetailed })
+        await settle(model)
+        model.choose(nil)
+        #expect(model.outcome == .declined)
+        #expect(!model.holdsBackWayOut)
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .manual, promptShown: true))
     }
 
     @Test("A report that was sent, or is asking whether to be, holds nothing back")

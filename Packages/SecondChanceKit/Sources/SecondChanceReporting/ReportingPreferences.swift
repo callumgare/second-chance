@@ -44,20 +44,52 @@ nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
         }
     }
 
+    public init(level: ReportLevel = .basic, promptShown: Bool = false, successReports: Bool? = nil) {
+        self.level = level
+        self.promptShown = promptShown
+        self.successReports = successReports
+    }
+
+    /// Read key by key, so a file missing one (an older or newer version's)
+    /// keeps what it does say rather than failing whole.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        level = try container.decodeIfPresent(ReportLevel.self, forKey: .level) ?? .basic
+        promptShown = try container.decodeIfPresent(Bool.self, forKey: .promptShown) ?? false
+        successReports = try container.decodeIfPresent(Bool.self, forKey: .successReports)
+    }
+
+    /// The most private setting: ask before sending anything, and count
+    /// nothing. What a settings file that can't be read stands for, since
+    /// the person may have chosen exactly that.
+    static let mostPrivate = ReportingPreferences(level: .manual, promptShown: true, successReports: false)
+
+    /// The answer to the first-failure question: send at `detail` from now
+    /// on, or (nil, Don't Send) ask each time.
+    mutating func answerFirstQuestion(_ detail: ReportDetail?) {
+        level = switch detail {
+        case .detailed: .detailed
+        case .basic: .basic
+        case nil: .manual
+        }
+        promptShown = true
+    }
+
     public static let defaultDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/SecondChance", isDirectory: true)
     static let fileName = "failure-reporting.json"
 
-    /// The saved preferences, or the defaults when there are none or they
-    /// can't be read.
+    /// The saved preferences; the defaults when there are none; and the
+    /// most private setting when they can't be read, since sending on the
+    /// defaults could override someone's choice to be asked first.
     public static func load(from directory: URL = defaultDirectory) -> ReportingPreferences {
         let file = directory.appendingPathComponent(fileName)
         guard FileManager.default.fileExists(atPath: file.path) else { return ReportingPreferences() }
         do {
             return try JSONDecoder().decode(ReportingPreferences.self, from: Data(contentsOf: file))
         } catch {
-            logger.warning("Can't read the failure report settings in \(file.path), using the defaults: \(error.localizedDescription)")
-            return ReportingPreferences()
+            logger.warning("Can't read the failure report settings in \(file.path), so asking before sending anything: \(error.localizedDescription)")
+            return mostPrivate
         }
     }
 

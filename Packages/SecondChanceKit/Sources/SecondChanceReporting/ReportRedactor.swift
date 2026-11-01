@@ -37,6 +37,10 @@ nonisolated struct ReportRedactor: Sendable {
                 pairs.append((encoded, "~"))
             }
             pairs.append((home, "~"))
+            // As Wine shows it, through its Z: drive.
+            let windows = home.replacingOccurrences(of: "/", with: "\\")
+            pairs.append(("Z:" + windows, "Z:~"))
+            pairs.append(("z:" + windows, "z:~"))
         }
         pairs += identity.computerNames.filter { $0.count >= 3 }.map { ($0, "<computer>") }
         // Longest first, so a name that contains another goes whole.
@@ -44,13 +48,15 @@ nonisolated struct ReportRedactor: Sendable {
     }
 
     /// This Mac's identity, with the Steam names from the saved sign-in.
-    static let current = ReportRedactor(identity: Identity(
+    /// Read afresh for each report: a Steam sign-in made since the last one
+    /// (a first Steam build) has names of its own to take out.
+    static var current: ReportRedactor { ReportRedactor(identity: Identity(
         homePath: FileManager.default.homeDirectoryForCurrentUser.path,
         userName: NSUserName(),
         fullName: NSFullUserName(),
         computerNames: currentComputerNames(),
         steamNames: currentSteamNames()
-    ))
+    )) }
 
     func redact(_ text: String) -> String {
         var result = text
@@ -62,18 +68,53 @@ nonisolated struct ReportRedactor: Sendable {
         result = result.replacingOccurrences(
             of: #"/Users/(?!Shared/)[^/\s"':]+"#, with: "/Users/<user>", options: .regularExpression
         )
+        result = result.replacingOccurrences(
+            of: #"\\Users\\(?!Shared\\)[^\\\s"':]+"#, with: #"\\Users\\<user>"#, options: [.regularExpression, .caseInsensitive]
+        )
         // Names stand alone as words. A name too short to be distinctive
         // ("al") would take letters out of ordinary words, so it stays.
-        for name in [identity.fullName, identity.userName] + identity.steamNames where name.count >= 3 {
-            result = result.replacingOccurrences(
-                of: #"(?<![\p{L}\p{N}_])"# + NSRegularExpression.escapedPattern(for: name) + #"(?![\p{L}\p{N}_])"#,
-                with: "<user>",
-                options: [.regularExpression, .caseInsensitive]
-            )
+        let homeFolder = (identity.homePath as NSString).lastPathComponent
+        for name in [identity.fullName, identity.userName, homeFolder] + identity.steamNames where name.count >= 3 {
+            result = Self.replaceWord(name, in: result, caseInsensitive: true)
         }
-        // A SteamID64 names an account as surely as its name does.
+        // A given or family name on its own ("/Volumes/Drew Backup"), only as
+        // it is capitalised, since in lower case it may well be a word.
+        let parts = identity.fullName.split(whereSeparator: \.isWhitespace).map(String.init)
+        if parts.count > 1 {
+            for part in parts where part.count >= 3 {
+                result = Self.replaceWord(part, in: result, caseInsensitive: false)
+            }
+        }
+        // A SteamID64, or the [U:1:…] Steam3 form of it in Steam's logs, names
+        // an account as surely as its name does.
         result = result.replacingOccurrences(of: #"\b7656119\d{10}\b"#, with: "<steam-id>", options: .regularExpression)
+        result = result.replacingOccurrences(of: #"\[U:1:\d+\]"#, with: "[<steam-id>]", options: .regularExpression)
         return result
+    }
+
+    /// `word` where it stands alone, not inside another word, as `<user>`.
+    private static func replaceWord(_ word: String, in text: String, caseInsensitive: Bool) -> String {
+        text.replacingOccurrences(
+            of: #"(?<![\p{L}\p{N}_])"# + NSRegularExpression.escapedPattern(for: word) + #"(?![\p{L}\p{N}_])"#,
+            with: "<user>",
+            options: caseInsensitive ? [.regularExpression, .caseInsensitive] : [.regularExpression]
+        )
+    }
+
+    /// Keys in macOS's crash report (`.ips`) that identify this Mac or this
+    /// boot rather than the crash.
+    static let crashReportIdentifiers = ["crashReporterKey", "sleepWakeUUID", "bootSessionUUID", "deviceIdentifierForVendor"]
+
+    /// Copy macOS's crash report to `destination`, redacted, with the values
+    /// that identify this Mac taken out.
+    func redactCrashReport(at source: URL, to destination: URL) throws {
+        let data = try Data(contentsOf: source)
+        guard var text = String(data: data, encoding: .utf8) else { return }
+        for key in Self.crashReportIdentifiers {
+            text = text.replacingOccurrences(of: #""\#(key)"\s*:\s*"[^"]*""#, with: #""\#(key)":"<removed>""#,
+                                             options: .regularExpression)
+        }
+        try Data(redact(text).utf8).write(to: destination, options: .atomic)
     }
 
     /// Redact every string in a JSON-like value: dictionaries, arrays, strings.

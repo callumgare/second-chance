@@ -13,14 +13,20 @@ import SecondChanceKit
 @MainActor
 enum CrashReportPrompt {
 
-    /// The first failure: how detailed a report to send, now and later.
-    static func askHowDetailed(process: FailureReporter.Process) -> ReportDetail {
+    /// The first failure: how detailed a report to send, now and later, or
+    /// nil to send nothing (and be asked each time from then on).
+    static func askHowDetailed(process: FailureReporter.Process) -> ReportDetail? {
         let alert = alert(process: process)
         alert.informativeText = "How much should the report include? \(FailureReportCallout.detailedIsWhatHelps)\n\n"
             + "Later reports are sent the same way. You can change that in Second Chance's Settings."
         alert.addButton(withTitle: "Send Detailed Report")
         alert.addButton(withTitle: "Send Basic Report")
-        return alert.runModal() == .alertFirstButtonReturn ? .detailed : .basic
+        alert.addButton(withTitle: "Don't Send")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return .detailed
+        case .alertSecondButtonReturn: return .basic
+        default: return nil
+        }
     }
 
     /// Reports are set to ask: what to send of this crash, or nil for nothing.
