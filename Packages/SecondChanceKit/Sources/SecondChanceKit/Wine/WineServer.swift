@@ -188,6 +188,10 @@ nonisolated public struct WineServer: Sendable {
                          onStep: @Sendable (ShutdownStep) -> Void = { _ in }) async -> Bool {
         guard hasWine else { return true }
         let started = Date()
+        // However it ended: a server that has gone can leave programs behind
+        // (`kill`), even after `wineserver -k` on a heavily loaded Mac.
+        let server = self
+        defer { server.killPrograms("after Wine ended") }
         logger.notice("[Wine Cleanup] Waiting for Wine to finish (wineserver -w)...")
         onStep(.waiting)
         if await waitUntilStopped(timeout: gracePeriod) {

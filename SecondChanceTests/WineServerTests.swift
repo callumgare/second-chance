@@ -204,6 +204,18 @@ struct WineLeftoverTests {
         #expect(elsewhere.isRunning)
     }
 
+    @Test("A shutdown leaves none of the prefix's programs, however Wine ended")
+    func shutDownSweeps() async throws {
+        // A session already over (-w returns at once), with a program left.
+        let fake = try FakeWine(wineserver: "exit 0")
+        defer { fake.remove() }
+        let left = try Self.startProgram(fake, in: fake.wine.prefix)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(await fake.wine.server.shutDown())
+        left.waitUntilExit()
+        #expect(left.terminationStatus == SIGKILL)
+    }
+
     @Test("A launch clears what a killed session left, but not a running session's programs")
     func clearLeftovers() async throws {
         let dead = try FakeWine(wineserver: "exit 1")
