@@ -17,6 +17,7 @@ let swiftSettings: [SwiftSetting] = [
     .enableUpcomingFeature("MemberImportVisibility"),
     .enableUpcomingFeature("InferIsolatedConformances"),
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .unsafeFlags(["-Xfrontend", "-disable-dynamic-actor-isolation"]),
 ]
 
 let package = Package(

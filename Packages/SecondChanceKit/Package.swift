@@ -13,12 +13,21 @@ import PackageDescription
 /// SWIFT_APPROACHABLE_CONCURRENCY and
 /// SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY turn on beyond what Swift
 /// 6 does by itself.
+///
+/// Swift 6 also checks at run time that main-actor code, closures
+/// included, really is on the main thread, and traps when it isn't. The
+/// Swift 5 targets aren't held to the packages' isolation when they compile,
+/// and WrappTemplate's launch thread calls into them from a background
+/// queue throughout, so those checks crashed every wrapp at launch. They
+/// stay off until those targets are Swift 6 too, and the compiler checks
+/// their calls instead.
 let swiftSettings: [SwiftSetting] = [
     .swiftLanguageMode(.v6),
     .defaultIsolation(MainActor.self),
     .enableUpcomingFeature("MemberImportVisibility"),
     .enableUpcomingFeature("InferIsolatedConformances"),
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .unsafeFlags(["-Xfrontend", "-disable-dynamic-actor-isolation"]),
 ]
 
 let package = Package(
