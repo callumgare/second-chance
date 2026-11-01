@@ -483,9 +483,11 @@ direct assignment.
   `wineserver`, …) taken at the same moment, `top`, the process list (taken
   first, before a crashing game can exit), display/lock/screen-sharing
   state, the game's system log, the last 300 Wine output lines and the wrapp's
-  whole log so far, then `winedbg`'s `bt all`: every Wine thread's backtrace
-  as Windows sees it, which a `sample` stops short of; the newest 10 are kept
-  and the wrapp log names the folder.
+  whole log so far; the newest 10 are kept (none under 15 minutes old, which
+  may be another game's still being written) and the wrapp log names the
+  folder. **No `winedbg` in a capture:** it attaches to every program in the
+  session, and one stopped while attached (it took minutes on a loaded Mac)
+  ended the game it was looking at, or left it suspended.
   Every launch also keeps its log in
   `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` (newest 10). `SECOND_CHANCE_DIAGNOSTICS=0`
   turns it off and `SECOND_CHANCE_DIAG_SLOW_SECONDS` moves the threshold — set

@@ -128,7 +128,7 @@ class GameLauncher {
         self.config = config
         self.gameMonitor = gameMonitor
         startupDiagnostics = config.gameEngine.runsInWine
-            ? StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle, wine: config.wine)
+            ? StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
             : nil
     }
 

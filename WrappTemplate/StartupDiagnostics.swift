@@ -58,8 +58,6 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
 
     private let gameSlug: String
     private let gameTitle: String
-    /// For `winedbg`'s backtraces.
-    private let wine: Wine
     private let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Diagnostics")
     private let queue = DispatchQueue(label: "au.gare.callum.second-chance.WrappTemplate.Diagnostics")
 
@@ -84,10 +82,9 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
     /// Entered while a bundle's slow part (samples, top, the system log) runs.
     private let capturing = DispatchGroup()
 
-    init(gameSlug: String, gameTitle: String, wine: Wine) {
+    init(gameSlug: String, gameTitle: String) {
         self.gameSlug = gameSlug
         self.gameTitle = gameTitle
-        self.wine = wine
         let env = ProcessInfo.processInfo.environment
         enabled = env["SECOND_CHANCE_DIAGNOSTICS"] != "0"
         slowSeconds = env["SECOND_CHANCE_DIAG_SLOW_SECONDS"].flatMap(Double.init) ?? 8
@@ -241,8 +238,7 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             (every other Wine process, sampled at the same moment), top.txt (CPU/memory),
             processes.txt, session.txt (display/lock/screen-sharing), log.txt (system
             log for the game process), wine-output.txt (last \(recentLineLimit) Wine lines),
-            wrapp-log.txt (this launch's whole log so far, every level), winedbg.txt
-            (every Wine thread's Windows-side backtrace, which the samples stop short of).
+            wrapp-log.txt (this launch's whole log so far, every level).
 
             """
         write(summary, to: dir.appendingPathComponent("summary.txt"))
@@ -283,9 +279,6 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             }
             group.wait()
 
-            // After the samples, which it would disturb: winedbg attaches to
-            // each Wine process in turn, stopping it while it reads its stacks.
-            self.captureWineBacktraces(into: dir.appendingPathComponent("winedbg.txt"))
             self.captureSession(into: dir.appendingPathComponent("session.txt"))
             if let pid {
                 self.run("/usr/bin/log", ["show", "--last", "60s", "--style", "compact", "--predicate", "processIdentifier == \(pid)"],
@@ -293,22 +286,6 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             }
             self.logger.error("[Diagnostics] \(reason.rawValue) bundle complete: \(dir.path)")
         }
-    }
-
-    /// Every Wine thread's backtrace as Windows sees it (`winedbg`'s `bt all`),
-    /// naming the Windows calls a stuck thread is waiting in. A Wine program
-    /// itself, so it may hang with the rest: it gets 90 s, and is then stopped
-    /// on its own, leaving the session alone.
-    private func captureWineBacktraces(into file: URL) {
-        let text: String
-        do {
-            text = try Blocking.wait { [wine] in
-                try await wine.output(of: .wine(["winedbg", "--command", "bt all"]), timeout: 90, onTimeout: .stopProgram)
-            }
-        } catch {
-            text = "winedbg failed: \(error)\n"
-        }
-        write(text, to: file)
     }
 
     private func captureSession(into file: URL) {
@@ -339,16 +316,16 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
         return dir
     }
 
-    /// Keep the newest `maxBundles - 1`, making room for the one about to be written.
+    /// Keep the newest `maxBundles - 1`, making room for the one about to be
+    /// written — but none from the last 15 minutes, which may be another
+    /// game's, still being written while several start at once.
     private func prune(_ base: URL) {
         let fm = FileManager.default
         guard let entries = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: [.creationDateKey]) else { return }
-        let sorted = entries.sorted {
-            let a = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-            let b = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-            return a > b
-        }
-        for old in sorted.dropFirst(maxBundles - 1) {
+        let created = { (url: URL) in (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast }
+        let sorted = entries.sorted { created($0) > created($1) }
+        let recent = Date().addingTimeInterval(-15 * 60)
+        for old in sorted.dropFirst(maxBundles - 1) where created(old) < recent {
             do {
                 try fm.removeItem(at: old)
             } catch {
