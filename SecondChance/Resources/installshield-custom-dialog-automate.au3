@@ -11,8 +11,17 @@ LogInfo("Launching installer")
 Local $iPID = Run('"' & $gameInstallerPath & '" /s /sms /f1C:\nancy-drew-installer\setup.iss')
 LogInfo("Installer PID=" & $iPID)
 
+; Wait for as long as the installer is running rather than a fixed time: on a busy Mac the window has taken longer
+; than 20 s to appear, and giving up then left the installer waiting for ever on a click that never came.
 LogInfo("Waiting for Install window to appear")
-Local $hWnd = WinWait("[REGEXPTITLE:^Install ]", "", 20)
+Local $hWnd = 0
+While $hWnd = 0
+    $hWnd = WinWait("[REGEXPTITLE:^Install ]", "", 5)
+    If $hWnd = 0 And Not ProcessExists($iPID) Then
+        LogInfo("ERROR: installer exited before its Install window appeared")
+        Exit (1)
+    EndIf
+WEnd
 Local $windowTitle = WinGetTitle($hWnd)
 LogInfo("Window found: " & $windowTitle)
 
@@ -22,8 +31,9 @@ LogInfo("Clicking install button: " & $installButtonText)
 $result = ControlClick($hWnd, "", $installButtonText)
 LogInfo("ControlClick install returned: " & $result)
 If $result = 0 Then
-    LogInfo("ERROR: failed to click install button, aborting")
-    ProcessWaitClose($iPID)
+    ; The installer is waiting on the click that failed, so it would never close by itself.
+    LogInfo("ERROR: failed to click install button, closing the installer")
+    ProcessClose($iPID)
     Exit (1)
 EndIf
 
