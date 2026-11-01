@@ -4,6 +4,7 @@
 //
 //  Every process running at one moment, as `ps` lists it.
 
+import Darwin
 import Foundation
 
 /// Every process running at one moment, as `ps` lists it: where Second
@@ -135,5 +136,20 @@ nonisolated public struct ProcessList: Sendable {
             seconds = seconds * 60 + value
         }
         return days * 86_400 + seconds
+    }
+}
+
+nonisolated extension ProcessList {
+    /// The folder `pid` is working in, as the kernel has it (symlinks
+    /// resolved); nil when it can't be read: gone, or another user's.
+    public static func workingDirectory(of pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        return withUnsafeBytes(of: info.pvi_cdir.vip_path) { raw -> String? in
+            guard let base = raw.bindMemory(to: CChar.self).baseAddress else { return nil }
+            let path = String(cString: base)
+            return path.isEmpty ? nil : path
+        }
     }
 }

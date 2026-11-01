@@ -191,7 +191,9 @@ class GameLauncher {
         // For Wine games, we need to ensure wineserver is stopped
         if config.gameEngine.runsInWine {
             logger.debug("[Cleanup/performCleanup] Dispatching Wine server cleanup to background queue...")
-            DispatchQueue.global(qos: .utility).async { [weak self] in
+            // .userInitiated: on a Mac with every core busy, .utility work
+            // waits for seconds at a time, and the quit with it.
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 self?.logger.debug("[Cleanup/performCleanup] Inside Wine cleanup async block")
                 guard let self = self else {
                     self?.logger.debug("[Cleanup/performCleanup] self is nil, calling completion handler")
@@ -209,7 +211,10 @@ class GameLauncher {
                 }
                 let server = self.config.wine.server
                 self.logger.debug("[Cleanup/performCleanup] Shutting down Wine...")
-                Blocking.wait { await server.shutDown { onQuitStep?(.init($0)) } }
+                let periods = Self.quitPeriods()
+                Blocking.wait {
+                    await server.shutDown(gracePeriod: periods.grace, stopPeriod: periods.stop) { onQuitStep?(.init($0)) }
+                }
                 self.logger.debug("[Cleanup/performCleanup] Wine shut down")
                 self.logger.debug("[Cleanup/performCleanup] About to call completion handler")
                 completion()
@@ -239,7 +244,33 @@ class GameLauncher {
         // only a session that is stuck reaches the kill.
         let server = config.wine.server
         let onQuitStep = onQuitStep
-        Blocking.wait { await server.shutDown(gracePeriod: 30) { onQuitStep?(.init($0)) } }
+        let periods = Self.quitPeriods(grace: 30)
+        Blocking.wait { await server.shutDown(gracePeriod: periods.grace, stopPeriod: periods.stop) { onQuitStep?(.init($0)) } }
+    }
+
+    /// How long a quit waits at each step of `WineServer.shutDown`, and when
+    /// the wrapp exits regardless after a signal (main.swift).
+    struct QuitPeriods {
+        let grace: TimeInterval
+        let stop: TimeInterval
+        let heavyLoad: Bool
+        /// Long enough for every step and the kill; 15 s on a Mac that isn't busy.
+        var forcedExitAfter: TimeInterval { heavyLoad ? grace + 2 * stop + 5 : 15 }
+    }
+
+    /// Wine takes 4–5 s to end by itself with every core busy, against
+    /// moments otherwise, so while the Mac is heavily loaded each of a quit's
+    /// waits is `LoadingStage.heavyLoadFactor` times as long: fewer quits
+    /// come to a kill, which can leave Wine's programs behind
+    /// (`WineServer.kill`).
+    nonisolated static func quitPeriods(grace: TimeInterval = 5, stop: TimeInterval = 5) -> QuitPeriods {
+        guard let load = SystemLoad.read(), load.isHeavy else {
+            return QuitPeriods(grace: grace, stop: stop, heavyLoad: false)
+        }
+        let factor = LoadingStage.heavyLoadFactor
+        Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
+            .notice("[Wine Cleanup] The Mac is heavily loaded (\(load.summary)): giving Wine \(Int(grace * factor)) s to finish")
+        return QuitPeriods(grace: grace * factor, stop: stop * factor, heavyLoad: true)
     }
 
     // MARK: - Common Cleanup

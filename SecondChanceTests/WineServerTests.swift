@@ -135,3 +135,91 @@ private nonisolated final class Counter: @unchecked Sendable {
     func increment() { lock.withLock { count += 1 } }
     var value: Int { lock.withLock { count } }
 }
+
+/// A prefix's programs found by the folder they work in, as they are when
+/// `wineserver -k9` has left them running with no server.
+@Suite("Wine programs left behind")
+struct WineLeftoverTests {
+    /// A stand-in Wine program: `sleep`, started through a link in the fake
+    /// Wine's bin, which `ps` names it by (so `ProcessList.isWine` counts it),
+    /// working in `directory`. A link, as a copy of a system program is
+    /// killed as it starts.
+    private static func startProgram(_ fake: FakeWine, in directory: URL) throws -> Process {
+        let program = fake.wrapp.appendingPathComponent("Contents/SharedSupport/wine/bin/sleep")
+        if !FileManager.default.fileExists(atPath: program.path) {
+            try FileManager.default.createSymbolicLink(at: program, withDestinationURL: URL(fileURLWithPath: "/bin/sleep"))
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let process = Process()
+        process.executableURL = program
+        process.arguments = ["60"]
+        process.currentDirectoryURL = directory
+        try process.run()
+        return process
+    }
+
+    @Test("A process's working folder is read with symlinks resolved")
+    func workingDirectory() throws {
+        let cwd = try #require(ProcessList.workingDirectory(of: getpid()))
+        #expect(cwd == URL(fileURLWithPath: FileManager.default.currentDirectoryPath).resolvingSymlinksInPath().path
+            || cwd.hasPrefix("/private") && cwd.hasSuffix(FileManager.default.currentDirectoryPath))
+    }
+
+    @Test("Programs working in the prefix, or beside it, are its; others are elsewhere")
+    func programsByFolder() async throws {
+        let fake = try FakeWine()
+        defer { fake.remove() }
+        let other = try FakeWine()
+        defer { other.remove() }
+        let inPrefix = try Self.startProgram(fake, in: fake.wine.prefix.appendingPathComponent("drive_c/Game"))
+        let beside = try Self.startProgram(fake, in: fake.wine.prefix.deletingLastPathComponent())
+        let elsewhere = try Self.startProgram(other, in: other.wine.prefix)
+        defer { [inPrefix, beside, elsewhere].forEach { $0.terminate() } }
+        try await Task.sleep(for: .milliseconds(200))
+
+        let server = fake.wine.server
+        let found = Set(server.programs().map(\.pid))
+        #expect(found == [inPrefix.processIdentifier, beside.processIdentifier])
+        #expect(!server.isElsewhere(inPrefix.processIdentifier))
+        #expect(server.isElsewhere(elsewhere.processIdentifier))
+        // Gone, or never there: can't be told, so not counted as elsewhere.
+        #expect(!server.isElsewhere(0))
+    }
+
+    @Test("A kill leaves none of the prefix's programs, and only the prefix's")
+    func killLeavesNothing() async throws {
+        let fake = try FakeWine()
+        defer { fake.remove() }
+        let other = try FakeWine()
+        defer { other.remove() }
+        let left = try Self.startProgram(fake, in: fake.wine.prefix)
+        let elsewhere = try Self.startProgram(other, in: other.wine.prefix)
+        defer { elsewhere.terminate() }
+        try await Task.sleep(for: .milliseconds(200))
+
+        await fake.wine.server.kill()
+        left.waitUntilExit()
+        #expect(left.terminationReason == .uncaughtSignal && left.terminationStatus == SIGKILL)
+        #expect(fake.recorded("wineserver") == ["[-k9]"])
+        #expect(elsewhere.isRunning)
+    }
+
+    @Test("A launch clears what a killed session left, but not a running session's programs")
+    func clearLeftovers() async throws {
+        let dead = try FakeWine(wineserver: "exit 1")
+        defer { dead.remove() }
+        let leftover = try Self.startProgram(dead, in: dead.wine.prefix)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(await dead.wine.server.clearLeftovers() == 1)
+        leftover.waitUntilExit()
+        #expect(leftover.terminationStatus == SIGKILL)
+
+        let running = try FakeWine(wineserver: "exit 0")
+        defer { running.remove() }
+        let program = try Self.startProgram(running, in: running.wine.prefix)
+        defer { program.terminate() }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(await running.wine.server.clearLeftovers() == 0)
+        #expect(program.isRunning)
+    }
+}

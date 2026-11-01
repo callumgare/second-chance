@@ -427,8 +427,16 @@ direct assignment.
   `wineserver -w`, which would otherwise wait for ever, and so does a wrapp,
   which then waits for the session to end before it quits — whether the game
   ended or the player quit — and kills Wine only if it won't end
-  (`wine.server.shutDown`); even its 15 s quit fallback
-  kills Wine before exiting. A launch that still finds Wine running in the
+  (`wine.server.shutDown`), with three times as long at each step while the
+  Mac is heavily loaded; even its 15 s quit fallback (later on a busy Mac)
+  kills Wine before exiting. **Killing Wine means killing its programs too:**
+  `wineserver -k9` kills the server alone, and Wine's programs, waiting on
+  it, are left running for good — so `wine.server.kill()` then kills every
+  Wine program working in the prefix's folder (`WineServer.programs`), and a
+  launch first clears any a killed session left behind
+  (`clearLeftovers`), as the game monitor would otherwise take that
+  session's game for its own and wait for ever for its window. Never run
+  `wineserver -k9` by hand without doing the same. A launch that still finds Wine running in the
   prefix waits for it in the loading window (`LoadingStage.lastSessionClosing`),
   which after 3 s also offers to stop it, and drops that offer and carries on
   if Wine finishes first; opening a

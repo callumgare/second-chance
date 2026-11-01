@@ -31,6 +31,12 @@ have failed. The code is `WrappTemplate/main.swift` and `GameLauncher`
    window closes and the game is brought to the front. For ScummVM too: it
    used to close after a fixed two seconds.
 
+Before any of them, a launch kills Wine programs left in the prefix by a
+session that was killed (`WineServer.clearLeftovers`): with no server they
+never finish, and the game among them would pass for this launch's, whose
+window never comes. The game is also taken only among the programs working
+in this prefix's folder.
+
 None of these waits has a time limit. A launch that may still work is
 waited for until it does, or until the player gives up — and if they give up
 while the window says the launch may have failed, that is reported
@@ -130,7 +136,10 @@ than usual, without taking the focus. Its
 line beneath follows how firmly the game is being ended, from
 `WineServer.shutDown`'s steps: waiting for it to finish, Steam closing (and
 saving its sign-in), asking it to stop (`wineserver -k`), and making it stop
-(`-k9`). It never replaces the error window: someone reading why the game
+(`-k9`, and then each of its programs, which outlive the server). While
+the Mac is heavily loaded each step waits three times as long
+(`GameLauncher.quitPeriods`), since there Wine takes 4–5 s to end by itself
+against 5 s before it is asked to stop. It never replaces the error window: someone reading why the game
 failed keeps that. Quitting from the error window still waits for Wine, but
 says nothing more.
 

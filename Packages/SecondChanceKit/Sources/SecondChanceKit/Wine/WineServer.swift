@@ -6,7 +6,14 @@
 //  waiting for it to end, and ending it. `wineserver -w` returns once every
 //  Wine process in the prefix has exited and the server itself has gone, so
 //  that is the signal waited on throughout.
+//
+//  `wineserver -k9` kills the server alone. A Wine program waiting on it
+//  doesn't always notice it has gone, msync or not, and is then left running
+//  for good with nothing to end it; so a kill also kills the prefix's
+//  programs itself (`programs`), and a launch clears any a kill left behind
+//  (`clearLeftovers`).
 
+import Darwin
 import Foundation
 import Logging
 
@@ -59,12 +66,68 @@ nonisolated public struct WineServer: Sendable {
         }
     }
 
-    /// Kill every Wine process in the prefix (`wineserver -k9`, SIGKILL): for a
-    /// wrapp that has to exit now, and mustn't leave Wine behind.
+    /// Kill every Wine process in the prefix: the server (`wineserver -k9`),
+    /// then the programs it leaves running (`programs`). For a wrapp that has
+    /// to exit now, and mustn't leave Wine behind.
     public func kill() async {
         guard hasWine else { return }
         logger.warning("[Wine Cleanup] Killing Wine (wineserver -k9)")
         _ = try? await wine.output(of: .wineserver(["-k9"]))
+        let server = self
+        await Blocking.run { server.killPrograms("after wineserver -k9") }
+    }
+
+    /// The Wine programs running in this prefix, found by the folder each is
+    /// working in rather than by asking the server: the prefix, or for Wine's
+    /// services the folder the prefix is in. So it finds them too when the
+    /// server has gone. Blocks while it lists them.
+    public func programs(in processes: ProcessList? = ProcessList.current()) -> [ProcessList.Entry] {
+        guard let processes else { return [] }
+        let folder = Self.realPath(wine.prefix.deletingLastPathComponent())
+        return processes.wine.filter { entry in
+            guard let cwd = ProcessList.workingDirectory(of: entry.pid) else { return false }
+            return cwd == folder || cwd.hasPrefix(folder + "/")
+        }
+    }
+
+    /// Whether `pid` is known to be working in another folder than this
+    /// prefix's: a Wine program of some other session. False when it can't
+    /// be told.
+    public func isElsewhere(_ pid: pid_t) -> Bool {
+        guard let cwd = ProcessList.workingDirectory(of: pid) else { return false }
+        let folder = Self.realPath(wine.prefix.deletingLastPathComponent())
+        return cwd != folder && !cwd.hasPrefix(folder + "/")
+    }
+
+    /// Kill the programs left running in the prefix by a session whose server
+    /// has gone — a `wineserver -k9`, or a server that crashed. They never
+    /// finish, nothing waits for them (`isRunning` asks the server), and a
+    /// launch would take the game among them for its own and wait for ever
+    /// for its window. Nothing while the session is running. How many.
+    @discardableResult
+    public func clearLeftovers() async -> Int {
+        guard hasWine, await !isRunning else { return 0 }
+        let server = self
+        return await Blocking.run { server.killPrograms("with no wineserver, left from a session that was killed") }
+    }
+
+    /// SIGKILL the prefix's programs (`programs`); `why` says when, for the log.
+    @discardableResult
+    func killPrograms(_ why: String) -> Int {
+        let left = programs()
+        guard !left.isEmpty else { return 0 }
+        let names = left.map { "\($0.name) (\($0.pid))" }.joined(separator: ", ")
+        logger.warning("[Wine Cleanup] \(left.count) Wine programs still running \(why): killing them: \(names)")
+        for entry in left { Darwin.kill(entry.pid, SIGKILL) }
+        return left.count
+    }
+
+    /// `url`'s path with every symlink resolved, as the kernel reports a
+    /// working directory: /private/var, not /var.
+    private static func realPath(_ url: URL) -> String {
+        guard let resolved = realpath(url.path, nil) else { return url.standardizedFileURL.path }
+        defer { free(resolved) }
+        return String(cString: resolved)
     }
 
     /// Wait for the session to end, for at most `timeout`. Whether it did: at

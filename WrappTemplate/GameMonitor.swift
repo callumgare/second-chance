@@ -146,7 +146,11 @@ class GameMonitor {
             }
             let processes = self.getAllWineProcesses()
 
-            for process in processes where process.name.lowercased() == gameExeName.lowercased() {
+            // Not another session's copy of the game: one a killed session
+            // left behind, or another copy of this wrapp's.
+            let server = config.wine.server
+            for process in processes where process.name.lowercased() == gameExeName.lowercased()
+                && !server.isElsewhere(process.pid) {
                 logger.notice("[Game Monitor] ✅ \(process.name) started (pid \(process.pid)) after \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s")
                 logger.debug("[Game Monitor]   parent pid \(process.parent), path \(process.command)")
 

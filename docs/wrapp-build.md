@@ -305,7 +305,9 @@ line with its pid. Facades on `Wine` cover the rest: `wine.registry` sets,
 imports and reads registry values with named keys (`.x11Driver`,
 `.wineDrives`, `.videoDeviceMap`), `wine.server` checks on, waits for and ends
 the prefix's session (`shutDown(gracePeriod:)` escalates from waiting to
-`-k` to `-k9`, telling an `onStep` callback as it goes), and `Winetricks` (app only, as only Second Chance bundles it)
+`-k` to `-k9`, telling an `onStep` callback as it goes; `kill()` follows
+`-k9` by killing the programs working in the prefix's folder, which `-k9`,
+killing the server alone, leaves running for good), and `Winetricks` (app only, as only Second Chance bundles it)
 installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,
 which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
 GCD queues call it through `Blocking.wait` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`), the

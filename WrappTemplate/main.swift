@@ -479,13 +479,17 @@ private func installTerminationHandlers() {
         let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
         source.setEventHandler {
             mainLogger.notice("Received \(SubprocessWatch.signalName(sig)): quitting the game")
-            // Off the main queue, so it fires even if the main thread is stuck.
-            DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
-                mainLogger.error("Cleanup didn't finish within 15 s of \(SubprocessWatch.signalName(sig)); exiting anyway")
-                // Not with Wine still running in the prefix, though.
-                killWineBeforeForcedExit?()
-                LogStore.shared.flush()
-                exit(code)
+            // Off the main queue, so it fires even if the main thread is stuck;
+            // later on a busy Mac, whose quit gets longer (`quitPeriods`).
+            DispatchQueue.global(qos: .userInitiated).async {
+                let after = GameLauncher.quitPeriods().forcedExitAfter
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + after) {
+                    mainLogger.error("Cleanup didn't finish within \(Int(after)) s of \(SubprocessWatch.signalName(sig)); exiting anyway")
+                    // Not with Wine still running in the prefix, though.
+                    killWineBeforeForcedExit?()
+                    LogStore.shared.flush()
+                    exit(code)
+                }
             }
             // Not called here: this handler is a block on the main queue, and
             // terminate (via .terminateLater) waits in a nested event loop for
@@ -512,6 +516,9 @@ private func installTerminationHandlers() {
 /// the game starts; "Quit" exits the wrapp, leaving it be.
 private func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nextStage: LoadingStage) {
     let server = wine.server
+    // Programs a killed session left behind never finish, and the game among
+    // them would be taken for this launch's (`WineServer.clearLeftovers`).
+    Blocking.wait { await server.clearLeftovers() }
     guard Blocking.wait({ await server.isRunning }) else { return }
     mainLogger.notice("Wine is still running in this game's prefix, probably from the last time it was played: waiting for it to finish")
     let started = Date()
