@@ -41,9 +41,10 @@ still stop for review before any of that starts.
   retaken from the Release build (`sc screenshot app --on-screen --state
   welcome`, [dev-cli.md](dev-cli.md#screenshots)), which puts the app's
   window on screen for a moment. Each goes into the release commit only when
-  it looks different from the committed one (`ImageComparison`: more than
-  0.1% of its pixels changed noticeably), so a picture that was only encoded
-  again isn't committed; nor is one taken on a display of a lower scale than
+  it looks different from the committed one (`ImageComparison`: more than 8
+  pixels changed noticeably, where one changed character is over a hundred
+  and a capture of the same window changes none), so a picture that was only
+  encoded again isn't committed; nor is one taken on a display of a lower scale than
   the committed one's, which is warned about. A picture that can't be taken
   is warned about too, and the release goes on. `--build-only` skips this.
 - **A check that the build has a Sentry DSN.** It comes from `SENTRY_DSN` in

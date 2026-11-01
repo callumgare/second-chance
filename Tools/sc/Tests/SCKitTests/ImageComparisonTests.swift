@@ -27,13 +27,13 @@ struct ImageComparisonTests {
     @Test("The same picture, or one changed by a few shades, is the same")
     func same() {
         #expect(ImageComparison.compare(png(), png()) == .same)
-        #expect(ImageComparison.compare(png(), png(changed: 10_000, value: 136)) == .same)
+        #expect(ImageComparison.compare(png(), png(changed: 10_000, value: 144)) == .same)
     }
 
-    @Test("A few pixels changed a lot pass; more than a tenth of a percent don't")
-    func changedShare() {
-        #expect(ImageComparison.compare(png(), png(changed: 10, value: 0)) == .same)
-        #expect(ImageComparison.compare(png(), png(changed: 11, value: 0)) == .different)
+    @Test("A stray few pixels changed a lot pass; a character's worth doesn't")
+    func changedPixels() {
+        #expect(ImageComparison.compare(png(), png(changed: 8, value: 0)) == .same)
+        #expect(ImageComparison.compare(png(), png(changed: 9, value: 0)) == .different)
     }
 
     @Test("A smaller picture is a lower resolution, a larger one different")

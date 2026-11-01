@@ -14,10 +14,14 @@ enum ImageComparison {
     }
 
     /// How much a channel may differ before a pixel counts as changed, and
-    /// what share of the pixels may change before the pictures differ:
-    /// enough to pass anti-aliasing noise, not a word or a colour.
+    /// how many pixels may change before the pictures differ. Measured: two
+    /// captures of the same window, on the same Mac, a macOS update apart,
+    /// differed by at most 13 in any channel and in no pixel past 16; two
+    /// digits of a countdown changing ("1m 34s" to "1m 40s") changed 313
+    /// pixels, a 0.025% share. So a handful of pixels, not a share of the
+    /// picture: a single changed character is well over a hundred.
     static let channelTolerance = 16
-    static let changedShare = 0.001
+    static let changedPixelsAllowed = 8
 
     static func compare(_ old: Data, _ new: Data) -> Verdict {
         guard let oldImage = image(old), let newImage = image(new) else { return .different }
@@ -31,7 +35,7 @@ enum ImageComparison {
                 break
             }
         }
-        return Double(changed) <= Double(oldImage.width * oldImage.height) * changedShare ? .same : .different
+        return changed <= changedPixelsAllowed ? .same : .different
     }
 
     private static func image(_ data: Data) -> CGImage? {
