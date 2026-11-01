@@ -143,7 +143,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         do {
             preselected = try input.steamGameFromEnvironment(among: gameInfoProvider.allGames())
         } catch {
-            await bus.publishWrappBuild(.failed((error as? WrappBuildError) ?? .internalError(error.localizedDescription)))
+            await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }
 
@@ -152,7 +152,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         do {
             lock = try await takeSteamLock(input: input)
         } catch {
-            await bus.publishWrappBuild(.failed((error as? WrappBuildError) ?? .internalError(error.localizedDescription)))
+            await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }
         defer { lock.release() }
@@ -291,7 +291,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             }
             await helper.removeTempWrapp(wrappPath)
 
-            let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            let buildError = WrappBuildError(error)
             await bus.publishWrappBuild(.failed(buildError))
             throw error
         }
@@ -432,6 +432,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                     if stalled { await bus.publishWrappBuild(.instructions(nil)) }
                     return
                 }
+            case .failed(let reason) where reason == "Not enough disk space":
+                throw WrappBuildError.notEnoughSpace(needed: nil, available: nil)
             case .failed(let reason):
                 throw WrappBuildError.steamInstallFailed(reason: reason)
             case .waiting, .updating:

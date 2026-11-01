@@ -110,6 +110,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
+            // Unpacked, then installed: the installer's own size each time,
+            // and as much again for what it was compressed from.
+            try await helper.ensureRoomToBuild(from: installer, copies: 3)
             try await helper.createBaseWrapp(at: wrappPath)
             let driveCPath = WrappLayout(app: wrappPath).driveC
             let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
@@ -203,6 +206,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
+            try await helper.ensureRoomToBuild(from: image, copies: 3)
             try await helper.createBaseWrapp(at: wrappPath)
             let driveCPath = WrappLayout(app: wrappPath).driveC
 
@@ -292,7 +296,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     private func publishFailure(_ error: Error) async {
         // Not a failure: the build carries on with another download.
         guard !(error is ChooseAnotherDownload) else { return }
-        let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+        let buildError = WrappBuildError(error)
         await bus.publishWrappBuild(.failed(buildError))
     }
 

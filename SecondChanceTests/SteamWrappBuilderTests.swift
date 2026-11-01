@@ -389,8 +389,9 @@ struct SteamWrappBuilderTests {
 
     @Test("Not enough disk space says so in everyday words")
     func diskFull() {
-        let message = WrappBuildError.steamInstallFailed(reason: "Not enough disk space").errorDescription ?? ""
-        #expect(message.contains("free space on your Mac"))
+        let message = WrappBuildError.notEnoughSpace(needed: nil, available: nil).playerMessage
+        #expect(message.contains("space"))
+        #expect(message.contains("Free up some space"))
     }
 
     @Test("Steam exiting before it signs in is started again, and the build carries on")

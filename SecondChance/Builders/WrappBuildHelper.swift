@@ -46,16 +46,31 @@ class WrappBuildHelper {
 
     // MARK: - Base Wrapp Construction
 
-    /// Copy directory using shell command with symlink preservation.
-    /// This works around VirtualBuddy shared folder symlink issues.
-    private func copyItemDerefencingSymlinks(at source: URL, to destination: URL) async throws {
+    /// Copy the template to `destination` with `cp`, which keeps its
+    /// symlinks as links (FileManager's copy works around a VirtualBuddy
+    /// shared-folder symlink problem less well) and its extended attributes,
+    /// where the template's files keep their code signatures.
+    ///
+    /// `-c` clones each file (APFS `clonefile`) rather than copying its
+    /// bytes, which makes the copy near instant and takes no space until a
+    /// file changes. On a volume that can't clone, the copy is made in full.
+    private func copyTemplate(at source: URL, to destination: URL) async throws {
         let executable = "/bin/cp"
-        // -a: recursive, preserving symlinks (not following them) and attributes
+        let clone = try await Process.output(of: executable, ["-ac", source.path, destination.path])
+        if clone.succeeded { return }
+        logger.notice("Couldn't clone the template (\(clone.errorOutput.trimmingCharacters(in: .whitespacesAndNewlines))); copying it in full")
+        await Blocking.run { try? FileManager.default.removeItem(at: destination) }
+
         let arguments = ["-a", source.path, destination.path]
         let copy = try await Process.output(of: executable, arguments)
         if !copy.succeeded {
             let command = formatShellCommand(executable: executable, arguments: arguments)
-            throw WrappError.copyFailed(message: "cp command failed", command: command, output: copy.errorOutput)
+            logger.notice("   Command: \(command)")
+            logger.notice("   Output: \(copy.errorOutput)")
+            if copy.errorOutput.contains("No space left on device") {
+                throw WrappBuildError.notEnoughSpace(needed: nil, available: nil)
+            }
+            throw WrappBuildError.copyFailed("\(command): \(copy.errorOutput)")
         }
     }
 
@@ -63,7 +78,7 @@ class WrappBuildHelper {
     func createBaseWrapp(at path: URL) async throws {
         // Find the pre-built unified template
         guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
-            throw WrappError.templateNotFound("WrappTemplate.app not found in Second Chance.app bundle")
+            throw WrappBuildError.templateDamaged("WrappTemplate.app not found in Second Chance.app bundle")
         }
         // Before the cache too: a cached base wrapp came from this template.
         try await verifyTemplateSignatures(templatePath)
@@ -79,15 +94,9 @@ class WrappBuildHelper {
 
         // Copy the entire template (includes both Wine and ScummVM)
         do {
-            try await copyItemDerefencingSymlinks(at: templatePath, to: path)
+            try await copyTemplate(at: templatePath, to: path)
         } catch {
-            if let wrappError = error as? WrappError, let output = wrappError.copyOutput {
-                logger.notice("Copy output: \(output)")
-            }
             logger.critical("❌ Failed to copy wrapp template: \(error.localizedDescription)")
-            if let wrappError = error as? WrappError, let command = wrappError.copyCommand {
-                logger.notice("   Command: \(command)")
-            }
             throw error
         }
 
@@ -121,7 +130,7 @@ class WrappBuildHelper {
         let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
         if detail.contains("code object is not signed at all") {
             logger.critical("❌ The wrapp template has files without their code signatures: \(detail)")
-            throw WrappError.templateSignaturesLost(detail)
+            throw WrappBuildError.templateSignaturesLost(detail)
         }
         logger.warning("codesign --verify reports a problem with the wrapp template, carrying on: \(detail)")
     }
@@ -258,22 +267,22 @@ class WrappBuildHelper {
         // Update Info.plist
         guard let plistData = try? Data(contentsOf: infoPlistPath),
               var plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any] else {
-            throw WrappError.invalidInfoPlist
+            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
         // Update bundle identifier by replacing WrappTemplate with game ID
         guard let currentBundleID = plist["CFBundleIdentifier"] as? String else {
-            throw WrappError.invalidInfoPlist
+            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
         guard currentBundleID.contains("WrappTemplate") else {
-            throw WrappError.invalidInfoPlist
+            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
         let newBundleID = currentBundleID.replacingOccurrences(of: "WrappTemplate", with: "nancy-drew." + gameInfo.id)
         plist["CFBundleIdentifier"] = newBundleID
-        plist["CFBundleName"] = "Nancy Drew - \(gameInfo.title)"
-        plist["CFBundleDisplayName"] = "Nancy Drew - \(gameInfo.title)"
+        plist["CFBundleName"] = gameInfo.appName
+        plist["CFBundleDisplayName"] = gameInfo.appName
         plist["GameExePath"] = gameExePath
         plist["Program Name and Path"] = gameExePath
         // Where a failed launch looks for a newer Second Chance (NewerRelease).
@@ -481,13 +490,9 @@ class WrappBuildHelper {
         await input.askAboutSuccessReports()
         try Task.checkCancellation()
         await bus.publishWrappBuild(.progress(.savingApp(substep: nil)))
-        let outputDir = try await input.getOutputPath(gameName: gameInfo.title)
+        let finalPath = try await input.getSaveLocation(for: gameInfo)
         try Task.checkCancellation()
-        let finalPath = try await saveWrapp(
-            from: wrappPath,
-            to: outputDir,
-            gameName: gameInfo.title
-        )
+        try await saveWrapp(from: wrappPath, to: finalPath)
 
         await input.onWrappBuildComplete(finalPath)
         await bus.publishWrappBuild(.completed(wrappPath: finalPath))
@@ -509,41 +514,56 @@ class WrappBuildHelper {
             let command = "\(codesignPath) \(arguments.joined(separator: " "))"
             logger.error("⚠️ Code signing failed: \(sign.errorOutput)")
             logger.notice("   Command: \(command)")
-            throw WrappError.signingFailed(sign.errorOutput)
+            throw WrappBuildError.signingFailed(sign.errorOutput)
         }
     }
 
-    /// Move the finished wrapp to its output location and unregister it from
-    /// cleanup tracking (it's no longer temporary).
-    func saveWrapp(
-        from wrappPath: URL,
-        to outputPath: URL,
-        gameName: String
-    ) async throws -> URL {
-        let finalPath = outputPath.appendingPathComponent("Nancy Drew - \(gameName).app")
-
+    /// Move the finished wrapp to `finalPath`, replacing an app already
+    /// there only once the new one is in place beside it.
+    ///
+    /// The new app is first moved in under a hidden name in the same folder
+    /// (a copy, when the folder is on another volume, and the step most
+    /// likely to fail), then swapped in with `replaceItemAt`. So a failure
+    /// leaves any earlier copy of the game's app as it was, rather than
+    /// having deleted it first.
+    func saveWrapp(from wrappPath: URL, to finalPath: URL) async throws {
         logger.notice("Saving wrapp: \(finalPath.path)")
+        let staged = finalPath.deletingLastPathComponent()
+            .appendingPathComponent(".\(finalPath.lastPathComponent).saving-\(UUID().uuidString)")
 
         // Name the destination in any failure: Foundation's own message names
         // the temp bundle ("NancyDrew-<UUID>.app couldn't be moved…"), which
         // says nothing about where it was going.
-        // A copy, not a rename, when the destination is on another volume.
         do {
             try await Blocking.run {
-                // Remove existing if present
-                if FileManager.default.fileExists(atPath: finalPath.path) {
-                    try FileManager.default.removeItem(at: finalPath)
+                let fileManager = FileManager.default
+                do {
+                    try fileManager.moveItem(at: wrappPath, to: staged)
+                    if fileManager.fileExists(atPath: finalPath.path) {
+                        _ = try fileManager.replaceItemAt(finalPath, withItemAt: staged)
+                    } else {
+                        try fileManager.moveItem(at: staged, to: finalPath)
+                    }
+                } catch {
+                    if fileManager.fileExists(atPath: staged.path) {
+                        do {
+                            try fileManager.removeItem(at: staged)
+                        } catch {
+                            logger.warning("Couldn't remove the half-saved app at \(staged.path): \(error.localizedDescription)")
+                        }
+                    }
+                    throw error
                 }
-                try FileManager.default.moveItem(at: wrappPath, to: finalPath)
             }
         } catch {
             logger.error("Couldn't save the wrapp to \(finalPath.path): \(ErrorChain.describe(error))")
+            if ErrorChain.isOutOfSpace(error) {
+                throw WrappBuildError.notEnoughSpace(needed: nil, available: nil)
+            }
             throw WrappBuildError.saveFailed(destination: finalPath.path, reason: error.localizedDescription)
         }
 
         logger.notice("Wrapp saved: \(finalPath.path)")
-
-        return finalPath
     }
 
     // MARK: - Temp Wrapp Tracking (cleanup primitives)
@@ -552,6 +572,17 @@ class WrappBuildHelper {
     // its own bus), and the app's quit cleans up through `.shared`.
     private static var temporaryWrapps: Set<URL> = []
     private static let wrappsLock = NSLock()
+
+    /// Fail at the start, in plain words, unless there looks to be room for
+    /// a build from `source` (a disc, or a download) where temporary wrapps
+    /// are made: `copies` of it (what is copied and unpacked, and the game
+    /// it installs) plus the engine and prefix (`FreeSpace.buildOverhead`).
+    /// An estimate, so it only catches a build sure to run out of space.
+    func ensureRoomToBuild(from source: URL, copies: Int) async throws {
+        guard let size = await Blocking.run({ FreeSpace.size(of: source) }) else { return }
+        let needed = size * Int64(copies) + FreeSpace.buildOverhead
+        try FreeSpace.ensure(needed, at: fileManager.temporaryDirectory)
+    }
 
     /// Create a fresh temporary wrapp path and register it for cleanup.
     func createTemporaryWrappPath() -> URL {
@@ -722,50 +753,5 @@ class WrappBuildHelper {
                 NSLocalizedDescriptionKey: "Failed to launch game: open command exited with status \(open.status)"
             ])
         }
-    }
-}
-
-// MARK: - Errors
-
-enum WrappError: LocalizedError {
-    case cachedGameMismatch
-    case invalidInfoPlist
-    case wineNotFound
-    case templateNotFound(String)
-    case copyFailed(message: String, command: String?, output: String?)
-    case signingFailed(String)
-    /// Files in the template have lost the code signatures they keep in
-    /// extended attributes (`verifyTemplateSignatures`).
-    case templateSignaturesLost(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .cachedGameMismatch:
-            return "Cached wrapp belongs to a different game"
-        case .invalidInfoPlist:
-            return "Part of Second Chance is damaged (the game app template). Download Second Chance again and try once more."
-        case .wineNotFound:
-            return "Part of Second Chance is missing (Wine). Download Second Chance again and try once more."
-        case .templateNotFound(let message):
-            return message
-        case .copyFailed(let message, _, _):
-            return message
-        case .signingFailed(let message):
-            return "Code signing failed: \(message)"
-        case .templateSignaturesLost:
-            return "Second Chance's copy of the game template is damaged: some of its files have lost their code signatures, "
-                + "so no game could be signed. This happens when Second Chance is copied with a tool that leaves out "
-                + "extended attributes. Download Second Chance again, or copy it with Finder."
-        }
-    }
-
-    var copyCommand: String? {
-        if case let .copyFailed(_, command, _) = self { return command }
-        return nil
-    }
-
-    var copyOutput: String? {
-        if case let .copyFailed(_, _, output) = self { return output }
-        return nil
     }
 }

@@ -4,8 +4,14 @@
 //
 //  Errors thrown while building a wrapp.
 //
+//  Two texts for each: `playerMessage` is what the error screen shows, in
+//  plain words with nothing technical in it, and `errorDescription` is what
+//  the log, `sc` and a headless run print, which may say more. Any error at
+//  all becomes one of these through `WrappBuildError(_:)`, so nothing reaches
+//  the error screen without a plain message.
 
 import Foundation
+import GameCatalog
 import SecondChanceKit
 
 enum WrappBuildError: LocalizedError, Equatable {
@@ -29,7 +35,7 @@ enum WrappBuildError: LocalizedError, Equatable {
     case steamExitedWhileInstalling
     /// Steam's download of the game got nowhere for too long.
     case steamDownloadStalled
-    /// Steam's own install of the game failed.
+    /// Steam's own install of the game failed, for `reason` (in Steam's words).
     case steamInstallFailed(reason: String)
     /// Another wrapp, or another build, is running Steam. The error screen
     /// offers to quit it, as a fallback.
@@ -44,8 +50,11 @@ enum WrappBuildError: LocalizedError, Equatable {
     case diskNotFound
     case autoItNotAvailable
     case autoItScriptNotFound
+    /// A headless run left out a setting it needs (an environment variable).
     case missingRequiredParameter(String)
     case invalidPath(String)
+    /// Something that shouldn't happen, or an error of a kind with no plain
+    /// explanation: `detail` is for the log only.
     case internalError(String)
     /// The installer exited cleanly but its own record of finishing is
     /// missing (`InstallCompletion`), so the install was cut short.
@@ -56,7 +65,7 @@ enum WrappBuildError: LocalizedError, Equatable {
     case installStalled
     /// The finished wrapp couldn't be moved to where it was meant to go.
     case saveFailed(destination: String, reason: String)
-    /// The disc is a different game from the one asked for.
+    /// The disc is a different game from the one asked for (game slugs).
     case wrongGame(expected: String, detected: String)
     /// A Her Interactive Mac download Second Chance can't take the game
     /// from: not a Cider installer, or one that isn't laid out as expected.
@@ -66,6 +75,71 @@ enum WrappBuildError: LocalizedError, Equatable {
     case rosettaMissing
     /// The person agreed to install Rosetta, but it didn't install.
     case rosettaInstallFailed
+    /// A disc image that wouldn't mount, and why (`ISOMounter.diagnoseImage`).
+    case discImage(DiscImageError)
+    /// The Mac ran out of space, or would have: `needed` and `available`
+    /// in bytes when the build checked beforehand (`FreeSpace`).
+    case notEnoughSpace(needed: Int64?, available: Int64?)
+    /// Part of Second Chance itself, the game app template, is missing or
+    /// damaged: `detail` says what, for the log.
+    case templateDamaged(String)
+    /// Files in the template have lost the code signatures they keep in
+    /// extended attributes (`verifyTemplateSignatures`).
+    case templateSignaturesLost(String)
+    /// Copying files into the game's app failed; `detail` holds the command
+    /// and its output, for the log.
+    case copyFailed(String)
+    /// Signing the finished app failed, with codesign's output.
+    case signingFailed(String)
+    /// A cached build (a developer aid) is of a different game.
+    case cachedGameMismatch
+
+    /// `error` as a build error: itself if it is one, or what it means.
+    init(_ error: Error) {
+        switch error {
+        case let buildError as WrappBuildError:
+            self = buildError
+        case is CancellationError:
+            self = .userCancelled
+        case let discImage as DiscImageError:
+            self = .discImage(discImage)
+        default:
+            self = ErrorChain.isOutOfSpace(error)
+                ? .notEnoughSpace(needed: nil, available: nil)
+                : .internalError(ErrorChain.describe(error))
+        }
+    }
+
+    private static let tryAgain =
+        "Something went wrong while installing the game. Try again, and if it happens again, the failure report helps get it fixed."
+    private static let damaged = "Part of Second Chance is damaged. Download Second Chance again and try once more."
+
+    /// What the error screen says: plain words, nothing technical.
+    var playerMessage: String {
+        switch self {
+        case .internalError, .missingRequiredParameter, .copyFailed, .signingFailed, .cachedGameMismatch:
+            return Self.tryAgain
+        case .invalidPath:
+            return "Second Chance can't install the game from that. Choose the game's disc, or the file you downloaded from Her Interactive."
+        case .installIncomplete:
+            return "The game didn't install completely. Try again."
+        case .steamInstallFailed:
+            return "Steam couldn't install the game. Try again."
+        case .unsupportedMacDownload:
+            return "Second Chance can't use this Mac download. It may not have finished downloading: download it again, "
+                + "or download the Windows version from Her Interactive instead."
+        case .saveFailed(let destination, _):
+            let folder = URL(fileURLWithPath: destination).deletingLastPathComponent().lastPathComponent
+            return "Couldn't save the game's app in \(folder). Try again, and choose another folder, such as Applications."
+        case .wrongGame(let expected, let detected):
+            let provider = GameInfoProvider.shared
+            return "This disc is \(provider.gameInfo(for: detected).title), not \(provider.gameInfo(for: expected).title)."
+        case .templateDamaged, .templateSignaturesLost:
+            return Self.damaged
+        default:
+            return errorDescription ?? Self.tryAgain
+        }
+    }
 
     var errorDescription: String? {
         switch self {
@@ -89,8 +163,6 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "Steam closed unexpectedly while it was downloading the game. Try again."
         case .steamDownloadStalled:
             return "Steam stopped downloading the game. Check that this Mac is connected to the internet, then try again."
-        case .steamInstallFailed(let reason) where reason == "Not enough disk space":
-            return "There isn't enough free space on your Mac for Steam to install the game. Free up some space, then try again."
         case .steamInstallFailed(let reason):
             return "Steam couldn't install the game: \(reason)"
         case .steamInUse(let holder):
@@ -115,15 +187,15 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .diskNotFound:
             return "Couldn't find the files copied from the game disc. Try again."
         case .autoItNotAvailable:
-            return "Part of Second Chance is missing (AutoIt). Download Second Chance again and try once more."
+            return "Part of Second Chance is missing. Download Second Chance again and try once more."
         case .autoItScriptNotFound:
-            return "Part of Second Chance is missing (an AutoIt script). Download Second Chance again and try once more."
+            return "Part of Second Chance is missing. Download Second Chance again and try once more."
         case .missingRequiredParameter(let param):
             return "Missing required parameter: \(param)"
         case .invalidPath(let message):
             return "Second Chance can't install from that: \(message)"
-        case .internalError(let message):
-            return message
+        case .internalError(let detail):
+            return detail
         case .saveFailed(let destination, let reason):
             return "Couldn't save the game's app to \(destination): \(reason)"
         case .wrongGame(let expected, let detected):
@@ -138,11 +210,28 @@ enum WrappBuildError: LocalizedError, Equatable {
             return "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license"
         case .rosettaInstallFailed:
             return "Rosetta, which the games need, couldn't be installed. Check that your Mac is connected to the internet, then try again."
-
+        case .discImage(let error):
+            return error.errorDescription
+        case .notEnoughSpace(let needed, let available):
+            guard let needed, let available else {
+                return "Your Mac ran out of space while installing the game. Free up some space, then try again."
+            }
+            return "There isn't enough free space on your Mac to install the game. It needs about \(FreeSpace.describe(needed)), "
+                + "and \(FreeSpace.describe(available)) is free. Free up some space, then try again."
+        case .templateDamaged(let detail):
+            return "Part of Second Chance (the game app template) is damaged: \(detail)"
+        case .templateSignaturesLost:
+            return "Second Chance's copy of the game template is damaged: some of its files have lost their code signatures, "
+                + "so no game could be signed. This happens when Second Chance is copied with a tool that leaves out "
+                + "extended attributes. Download Second Chance again, or copy it with Finder."
+        case .copyFailed(let detail):
+            return "Copying files into the game's app failed: \(detail)"
+        case .signingFailed(let output):
+            return "Code signing failed: \(output)"
+        case .cachedGameMismatch:
+            return "Cached wrapp belongs to a different game"
         }
     }
-
-    static let cancelled = WrappBuildError.userCancelled
 
     var isIncompleteInstall: Bool {
         if case .installIncomplete = self { return true }

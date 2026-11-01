@@ -62,13 +62,13 @@ other builders are the same shape with less in the middle.
 | 1 | — | `.started(source: .disk)` |
 | 2 | `input.getDisk1Path()`; mount it if it's a file rather than a folder | `.isoMounted` |
 | 3 | Turn down an installed game (`GameDetector.isInstalledGame`), then `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo`, then, for a Wine game, find its installer (`GameDetector.installerLookup`) | `.progress(.detectingGame)`, `.gameDetected` |
-| 4 | `helper.createTemporaryWrappPath()`, then `createBaseWrapp` copies `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
+| 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1`, stripping extended attributes and making the copy writable (a CD's directories are read-only, which left copies nothing could delete) | `.progress(.copyingInstaller)` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
 | 7 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 8 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
 | 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` / game INI | `.progress(.configuringWrapp)`, `.wrappConfigured` |
-| 10 | `helper.finalize` — take the quarantine off, sign, resolve output dir, move | `.signed`, `.progress(.savingApp)`, `.completed` |
+| 10 | `helper.finalize` — take the quarantine off, sign, ask where to save (`getSaveLocation`), move it there (`saveWrapp`) | `.signed`, `.progress(.savingApp)`, `.completed` |
 | 11 | Unmount ISOs; launch if requested | — |
 
 **`finalize` takes `com.apple.quarantine` off the wrapp.** A Second Chance
@@ -188,7 +188,7 @@ user is prompted.
 | `getDisk1Path()` | `DISK_1_PATH` | NSOpenPanel (disk/ISO) |
 | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: an alert to swap it for disc 2, with Eject Disc 1, taking a disc that then appears; else NSOpenPanel |
 | `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe, .dmg, or the installer .app in an opened .dmg) |
-| `getOutputPath(gameName:)` | `OUTPUT_PATH` | NSOpenPanel save dialog, opening in `/Applications`, or `~/Applications` for someone who can't write there; it turns down a folder that can't be written to while it is still open |
+| `getSaveLocation(for:)` | `OUTPUT_PATH` (an app already there is replaced) | NSOpenPanel save dialog, opening in `/Applications`, or `~/Applications` for someone who can't write there; it turns down a folder that can't be written to while it is still open. Cancelling it doesn't throw the install away: the person is asked whether to choose a place again or start over. A folder that already has the game's app asks before replacing it, and while that copy is open, asks them to quit it first |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
 | `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | NSAlert |
 
@@ -461,7 +461,20 @@ so the stderr mirror still fires) and pass back the output and exit code;
 `WrappTemplate.app` is built as its own target and embedded at
 `Second Chance.app/Contents/Resources/WrappTemplate.app`. `createBaseWrapp`
 copies it wholesale — both engines included — and `cleanupUnusedEngine` later
-strips whichever one this game doesn't need.
+strips whichever one this game doesn't need. The copy is `cp -ac`: each file is
+an APFS clone, so it is near instant and takes no space until a file changes;
+on a volume that can't clone, a full `cp -a` is made instead.
+
+`saveWrapp` never deletes an earlier copy of the game's app before the new one
+is safely beside it: it moves the new app into the destination folder under a
+hidden name (the step that copies, when the folder is on another volume, and
+so the one most likely to fail) and then swaps it in with `replaceItemAt`.
+
+Errors reach the error screen as `WrappBuildError.playerMessage`, never as a
+raw `localizedDescription`. Builders publish `.failed(WrappBuildError(error))`,
+which keeps a build error as it is, turns a full disk (`ErrorChain.isOutOfSpace`)
+into `notEnoughSpace` and anything else unexpected into `internalError`, whose
+detail goes to the log while the screen says plainly that something went wrong.
 
 Before that, `verifyTemplateSignatures` runs `codesign --verify` on the
 template (under a second). The template's files that aren't Mach-O, such as the
@@ -470,7 +483,7 @@ extended attributes, so a copy of Second Chance made with something that drops
 them (rsync without `-E`/`-X`, scp, a zip not made with `ditto`) leaves them
 unsigned, and the build would otherwise only fail at signing, minutes later,
 with "code object is not signed at all". That failure stops the build at once
-as `WrappError.templateSignaturesLost`; anything else `--verify` reports is only
+as `WrappBuildError.templateSignaturesLost`; anything else `--verify` reports is only
 logged, since the finished wrapp is signed whole anyway.
 
 `configureWrapp` rewrites the copy's bundle identifier from

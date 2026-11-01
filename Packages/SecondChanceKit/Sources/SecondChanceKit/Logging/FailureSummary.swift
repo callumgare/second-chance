@@ -110,6 +110,21 @@ nonisolated public enum ErrorChain {
         return parts.joined(separator: "\n  ")
     }
 
+    /// Whether `error`, or one it was caused by, is the disk being full:
+    /// Foundation's out-of-space error or POSIX's `ENOSPC`.
+    public static func isOutOfSpace(_ error: Error) -> Bool {
+        var next: Error? = error
+        var depth = 0
+        while let current = next, depth < 6 {
+            let ns = current as NSError
+            if ns.domain == NSCocoaErrorDomain && ns.code == NSFileWriteOutOfSpaceError { return true }
+            if ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOSPC) { return true }
+            next = ns.userInfo[NSUnderlyingErrorKey] as? Error
+            depth += 1
+        }
+        return false
+    }
+
     /// The error's type and case and nothing else — `WrappBuildError.installIncomplete`,
     /// `NSCocoaErrorDomain 513` — safe to send where a message is not, since
     /// messages and associated values can hold paths.

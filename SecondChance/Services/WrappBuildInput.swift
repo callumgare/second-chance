@@ -40,7 +40,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
-/// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
+/// | `getSaveLocation(for:)`       | `OUTPUT_PATH` (replaces an older app)    | NSOpenPanel; cancelling asks to choose again or start over; asks before replacing |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
 /// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
 /// | `askAboutUnrecognisedGame(_:)` | — (headless: installs it anyway)       | NSAlert: choose another, install anyway, cancel |
@@ -277,18 +277,44 @@ class WrappBuildInput {
 
     // MARK: - Output Choices
 
-    /// Where to save the finished wrapp.
+    /// Where to save the finished wrapp: the app's full path. An app already
+    /// there is replaced (`saveWrapp`), after asking, in the GUI.
+    ///
+    /// This is asked once the game is installed, so cancelling the panel
+    /// doesn't throw the install away at once: the person is asked whether
+    /// to choose a place again or start over.
     @MainActor
-    func getOutputPath(gameName: String) async throws -> URL {
+    func getSaveLocation(for gameInfo: GameInfo) async throws -> URL {
         if let path = environment["OUTPUT_PATH"] {
             let url = URL(fileURLWithPath: path)
-            // Create directory if it doesn't exist
-            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            return url
+            do {
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            } catch {
+                logger.error("Couldn't make the output folder \(url.path): \(error.localizedDescription)")
+                throw WrappBuildError.saveFailed(destination: url.path, reason: error.localizedDescription)
+            }
+            return url.appendingPathComponent(gameInfo.appBundleName)
         }
 
+        // The build may have been left running in the background.
+        NSApp.requestUserAttention(.criticalRequest)
+        while true {
+            guard let folder = await chooseOutputFolder(for: gameInfo) else {
+                if askChooseAgainOrStartOver(gameInfo) { continue }
+                throw WrappBuildError.userCancelled
+            }
+            let destination = folder.appendingPathComponent(gameInfo.appBundleName)
+            if FileManager.default.fileExists(atPath: destination.path), !askToReplace(destination, gameInfo) {
+                continue
+            }
+            return destination
+        }
+    }
+
+    @MainActor
+    private func chooseOutputFolder(for gameInfo: GameInfo) async -> URL? {
         let panel = NSOpenPanel()
-        panel.message = "Choose where to save the app for \(gameName). Your Applications folder is a good place: you'll find it there with your other apps."
+        panel.message = "Choose where to save the app for \(gameInfo.title). Your Applications folder is a good place: you'll find it there with your other apps."
         panel.prompt = "Save Here"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -300,10 +326,44 @@ class WrappBuildInput {
 
         let url = await runOpenPanel(panel)
         withExtendedLifetime(validator) {}
-        guard let url else {
-            throw WrappBuildError.userCancelled
-        }
         return url
+    }
+
+    /// The save panel was cancelled with the game installed: true to choose
+    /// a place again, false to start over and throw the install away.
+    @MainActor
+    private func askChooseAgainOrStartOver(_ gameInfo: GameInfo) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "\(gameInfo.title) is installed, but not saved yet"
+        alert.informativeText = "Choose where to save the game's app to keep it. Starting over throws away the game that was just installed."
+        alert.addButton(withTitle: "Choose Where to Save")
+        alert.addButton(withTitle: "Start Over")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    /// The game's app is already at `destination`: true to replace it,
+    /// false to choose somewhere else. A copy that's open is asked about
+    /// until it has been quit, since replacing it would pull the game out
+    /// from under the player.
+    @MainActor
+    private func askToReplace(_ destination: URL, _ gameInfo: GameInfo) -> Bool {
+        while true {
+            let isOpen = NSWorkspace.shared.runningApplications.contains {
+                $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL
+            }
+            let alert = NSAlert()
+            alert.messageText = "\(gameInfo.appName) is already in \(FileManager.default.displayName(atPath: destination.deletingLastPathComponent().path))"
+            alert.informativeText = isOpen
+                ? "It's open right now. Quit it, then click Replace to put the new one in its place. Your saved games are kept."
+                : "Replace it with the one just installed? Your saved games are kept."
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Choose Another Place")
+            guard alert.runModal() == .alertFirstButtonReturn else { return false }
+            let stillOpen = NSWorkspace.shared.runningApplications.contains {
+                $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL
+            }
+            if !stillOpen { return true }
+        }
     }
 
     /// /Applications, or for someone who isn't an administrator, and so can't

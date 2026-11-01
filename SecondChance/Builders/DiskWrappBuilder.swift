@@ -68,6 +68,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
+            // Each disc is copied, and the game installed from the copies.
+            try await helper.ensureRoomToBuild(from: disk1Root, copies: 2 * max(gameInfo.diskCount, 1))
             try await helper.createBaseWrapp(at: wrappPath)
 
             // Disk-specific layout + CD-ROM mounting stays in the builder —
@@ -144,7 +146,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             await helper.removeTempWrapp(wrappPath)
             await isoMounter.unmountAll()
 
-            let installError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            let installError = WrappBuildError(error)
             await bus.publishWrappBuild(.failed(installError))
             throw error
         }
@@ -231,7 +233,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             }
         } catch {
             await isoMounter.unmountAll()
-            let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            let buildError = WrappBuildError(error)
             await bus.publishWrappBuild(.failed(buildError))
             throw error
         }
@@ -271,7 +273,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 await bus.publishWrappBuild(.disksResolved(disk1: disk1, disk2: nil))
                 return
             } else {
-                throw WrappError.cachedGameMismatch
+                throw WrappBuildError.cachedGameMismatch
             }
         }
 

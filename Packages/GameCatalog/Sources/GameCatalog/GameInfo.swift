@@ -24,6 +24,11 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     public let installInstructions: String?
     public let failedInstallInfo: String?
 
+    /// The name of the game's app, as Finder and the Dock show it.
+    public var appName: String { "Nancy Drew - \(title)" }
+    /// The game's app's file name.
+    public var appBundleName: String { appName + ".app" }
+
     public enum GameEngine: String, Codable, Sendable {
         case wine
         case scummvm

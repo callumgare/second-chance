@@ -375,11 +375,6 @@ class WrappBuildViewModel: ObservableObject {
         return buildError == .userCancelled || buildError == .userCancelledBeforeStart
     }
 
-    /// Handle errors
-    private func handleError(_ error: Error) {
-        currentState = .error(error.localizedDescription)
-    }
-
     /// Route build failures. Cancelling the initial disk-selection
     /// dialog means the user never really started — quietly return to the
     /// welcome screen. Cancelling any later prompt (disk 2, save location)
@@ -394,7 +389,8 @@ class WrappBuildViewModel: ObservableObject {
         if buildError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
         } else {
-            handleError(error)
+            // Plain words only: what went wrong in detail is in the log.
+            currentState = .error(WrappBuildError(error).playerMessage)
         }
     }
 

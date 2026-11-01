@@ -283,8 +283,12 @@ direct assignment.
 - **File paths**: Never hardcode absolute user paths (e.g. `/Users/...`). Use `Bundle.main.url(forResource:)`, `FileManager` search paths, or environment variables.
 - **Text people see is plain and friendly.** Anything shown to the person
   using the app — window and alert text, open and save panels, progress
-  steps, error messages (`errorDescription`s reach the error screen), the
-  wrapp's windows — is written for someone who isn't into computers. Say what
+  steps, error messages, the wrapp's windows — is written for someone who
+  isn't into computers. The build's error screen shows
+  `WrappBuildError.playerMessage`, and every error becomes a `WrappBuildError`
+  through `WrappBuildError(_:)`, which gives anything unexpected a plain
+  "something went wrong" message; `errorDescription` may carry detail for the
+  log and `sc`. Say what
   is happening and what they can do, in everyday words: "disc", not "disk";
   "the game's app", not "wrapp"; no "Wine", "prefix", "cnc-ddraw", "ISO",
   "executable", "headless" or bare exit codes. Disc images stay a hidden
