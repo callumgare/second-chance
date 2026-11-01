@@ -58,11 +58,11 @@ save warning, when the warning is confirmed:
   launch that is merely slow keeps showing signs, so it is left be; one that
   is stuck stops, and the window says so as soon as the stage's time is up,
   so that a player who quits then sends a report. It stays up until the
-  next stage. Its buttons are Quit (and Launch Directly, for a Steam game
-  that can go without), and from 5 minutes after the loading window first
-  showed, Try Again too: the quit a give-up is, then the game opened
-  afresh once Wine has finished. The launch is reported by itself at that
-  point too ([failure-reports.md](failure-reports.md)). A Wine game's wrapp captures a diagnostics bundle (`stalled`)
+  next stage. Its buttons are Quit, Try Again — the quit a give-up is,
+  then the game opened afresh once Wine has finished — and Launch
+  Directly, for a Steam game that can go without. A launch still saying
+  so 5 minutes after the loading window first showed is reported by
+  itself ([failure-reports.md](failure-reports.md)). A Wine game's wrapp captures a diagnostics bundle (`stalled`)
   as the note appears, while whatever is stuck still is, so the report
   carries its stacks.
 - **A busy Mac** (`SystemLoadReading.isHeavy`) gets a note saying so, and a
