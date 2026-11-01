@@ -40,6 +40,7 @@ enum UIStateCatalog {
                 $0.onLaunchWithoutSteam = {}
                 $0.showSuspectedHang = true
             },
+            window("last-session-closing-waiting", .lastSessionClosing),
             window("last-session-closing", .lastSessionClosing) { $0.showSuspectedHang = true },
             window("steam-starting", .startingSteam, title: steamGame),
             window("steam-updating", .updatingSteam(.downloading(doneKB: 109_568, totalKB: 261_120)), title: steamGame),

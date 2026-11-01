@@ -60,7 +60,16 @@ public enum LoadingStage: Equatable {
         case .steamStartingGame(let title): return "Steam is starting \(title)…"
         case .steamPlayingElsewhere: return "Your Steam account is playing on another computer"
         case .steamWaitingForPlayer: return "Steam is waiting for you"
-        case .lastSessionClosing: return "Waiting for the previous copy of the game to finish closing…"
+        case .lastSessionClosing: return "Waiting for a previous copy of the game to finish closing…"
+        }
+    }
+
+    /// The message once the stage may have failed (`LoadingClock.mayHaveFailed`),
+    /// where that needs the player to do something: nil to keep `message`.
+    public var messageOnceStalled: String? {
+        switch self {
+        case .lastSessionClosing: return "A previous copy of the game is still running…"
+        default: return nil
         }
     }
 

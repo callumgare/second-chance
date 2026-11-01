@@ -403,7 +403,7 @@ struct InfoWindowView: View {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
-                message(viewModel.stage.message)
+                message(viewModel.showSuspectedHang ? viewModel.stage.messageOnceStalled ?? viewModel.stage.message : viewModel.stage.message)
                     .accessibilityIdentifier("loading-message")
             }
 
