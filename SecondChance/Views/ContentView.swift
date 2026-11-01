@@ -8,7 +8,7 @@ import SwiftUI
 import SecondChanceKit
 
 struct ContentView: View {
-    @EnvironmentObject var viewModel: WrappBuildViewModel
+    @Environment(WrappBuildViewModel.self) var viewModel
 
     /// The window's fixed content size, which `UIStateCatalog` draws its
     /// states at too.
@@ -67,5 +67,5 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .environmentObject(WrappBuildViewModel())
+        .environment(WrappBuildViewModel())
 }

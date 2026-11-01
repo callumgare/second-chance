@@ -18,7 +18,7 @@ enum UIStateCatalog {
             UIStateShot(name, title: "Second Chance", width: size.width, height: size.height) {
                 let viewModel = WrappBuildViewModel(bus: EventBus<AppEvent>())
                 setUp(viewModel)
-                return ContentView().environmentObject(viewModel)
+                return ContentView().environment(viewModel)
             }
         }
         // A Steam build of Ghost Dogs, a minute and a quarter into signing in.

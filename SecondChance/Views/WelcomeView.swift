@@ -8,7 +8,7 @@ import SwiftUI
 import SecondChanceKit
 
 struct WelcomeView: View {
-    @EnvironmentObject var viewModel: WrappBuildViewModel
+    @Environment(WrappBuildViewModel.self) var viewModel
     @State private var selection: WrappSource? = .disk
 
     private let sources: [WrappSource] = [.disk, .steam, .herDownload]
@@ -137,6 +137,6 @@ private extension WrappSource {
 
 #Preview {
     WelcomeView()
-        .environmentObject(WrappBuildViewModel())
+        .environment(WrappBuildViewModel())
         .frame(width: 500, height: 460)
 }

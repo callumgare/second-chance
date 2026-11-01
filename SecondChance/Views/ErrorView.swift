@@ -11,7 +11,7 @@ import SecondChanceReporting
 
 struct ErrorView: View {
     let message: String
-    @EnvironmentObject var viewModel: WrappBuildViewModel
+    @Environment(WrappBuildViewModel.self) var viewModel
 
     var body: some View {
         InstallerPage(title: "Installation failed") {
@@ -65,7 +65,7 @@ struct ErrorView: View {
 /// Try Again, stays the suggestion; this sits below it, plainly worded.
 private struct SteamHolderFallback: View {
     let name: String
-    @EnvironmentObject var viewModel: WrappBuildViewModel
+    @Environment(WrappBuildViewModel.self) var viewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -96,6 +96,6 @@ private struct SteamHolderFallback: View {
 
 #Preview("Error") {
     ErrorView(message: "Could not find the game installer executable")
-        .environmentObject(WrappBuildViewModel())
+        .environment(WrappBuildViewModel())
         .frame(width: 500, height: 460)
 }

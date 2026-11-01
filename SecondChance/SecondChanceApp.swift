@@ -88,7 +88,7 @@ struct SecondChanceApp: App {
     static let mainWindowID = "main"
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var wrappBuildViewModel: WrappBuildViewModel
+    @State private var wrappBuildViewModel: WrappBuildViewModel
     @AppStorage(DebugCommands.settingKey) private var showDebugMenu = false
 
     private let appStartTime = Date()
@@ -134,7 +134,7 @@ struct SecondChanceApp: App {
 
         // The window's view model, which a headless run builds with too.
         let viewModel = WrappBuildViewModel()
-        _wrappBuildViewModel = StateObject(wrappedValue: viewModel)
+        _wrappBuildViewModel = State(initialValue: viewModel)
 
         if CLIBuilder.isEnabled {
             if !CLIBuilder.showsUI {
@@ -194,7 +194,7 @@ struct SecondChanceApp: App {
         // closing it mid-build would leave the build running out of sight.
         Window("Second Chance", id: Self.mainWindowID) {
             ContentView()
-                .environmentObject(wrappBuildViewModel)
+                .environment(wrappBuildViewModel)
         }
         .windowResizability(.contentSize)
         // Under test, each integration-test build has a window of its own

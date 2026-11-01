@@ -9,7 +9,7 @@ import GameCatalog
 import SecondChanceKit
 
 struct WrappBuildProgressView: View {
-    @EnvironmentObject var viewModel: WrappBuildViewModel
+    @Environment(WrappBuildViewModel.self) var viewModel
 
     var body: some View {
         if case .completed = viewModel.currentState {
@@ -268,7 +268,7 @@ struct SteamSignInNoticeBox: View {
 
 #Preview("Progress") {
     WrappBuildProgressView()
-        .environmentObject({
+        .environment({
             let vm = WrappBuildViewModel()
             vm.currentState = .installingGame(substep: "Running the installer", elapsedSeconds: 42)
             vm.detectedGame = GameInfo(id: "blackmoor-manor", title: "Curse of Blackmoor Manor")
@@ -279,7 +279,7 @@ struct SteamSignInNoticeBox: View {
 
 #Preview("Completed") {
     WrappBuildProgressView()
-        .environmentObject({
+        .environment({
             let vm = WrappBuildViewModel()
             vm.currentState = .completed
             vm.detectedGame = GameInfo(id: "blackmoor-manor", title: "Curse of Blackmoor Manor")

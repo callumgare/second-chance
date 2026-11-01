@@ -8,7 +8,7 @@ import SwiftUI
 import SecondChanceKit
 
 struct InstallCommands: Commands {
-    @ObservedObject var viewModel: WrappBuildViewModel
+    var viewModel: WrappBuildViewModel
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -16,7 +16,7 @@ struct InstallCommands: Commands {
                 Button("Install from Game Discs…") { start(.disk) }
                     .keyboardShortcut("o")
                 Button("Install from Steam…") { start(.steam) }
-                Button("Install from Her Download…") { start(.herDownload) }
+                Button("Install from Her Interactive Download…") { start(.herDownload) }
             }
             .disabled(InstallerStep(viewModel.currentState) != .source)
         }
