@@ -3,12 +3,17 @@
 
 included:
   - SecondChance
-  - Shared
+  - Packages
   - WrappTemplate
   - WrappPuppeteer
   - SecondChanceTests
   - Tools/sc/Sources
   - Tools/sc/Tests
+
+excluded:
+  # SwiftPM's checkouts and build products when a package is built on its own.
+  - Packages/*/.build
+  - Tools/sc/.build
 
 disabled_rules:
   # Size and complexity metrics: much of the existing code is over them, and
