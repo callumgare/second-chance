@@ -650,15 +650,6 @@ up. A game that doesn't come back fails the run. A switch away that doesn't
 happen at all is the test's problem rather than the game's, so it's only a
 warning.
 
-Then it switches away and straight back, as a quick tap of Cmd-Tab does
-(`ProcessControl.takeScreenBriefly`): as soon as WrappPuppeteer is active, it
-hands activation back to the game without waiting for anything to move, and
-the frame is checked once more. The game hears that it has lost focus after
-its app does, so on a quick tap its app is back in front before the game has
-handled losing focus, which a slow switch never shows. A fix for the
-half-screen picture that held only while the app was in the background
-missed exactly that.
-
 ### Quitting from the menu
 
 Once a game has passed, the test launches it again and quits it the other way
@@ -681,7 +672,7 @@ Direct3D game, cnc-ddraw for a DirectDraw one, ScummVM for its own). Nothing
 else in the run would notice a bar left light grey, or a picture stretched to
 the display's shape: the game still plays. So the first capture Exit is found
 in — the menu, fully drawn, which every run reaches — is checked for it
-(`PictureFrameCheck`), and the first after each [switch away and
+(`PictureFrameCheck`), and the first after [switching away and
 back](#switching-away-and-back).
 
 Every game draws a 4:3 picture (`Wrapp.pictureAspect`), so everything

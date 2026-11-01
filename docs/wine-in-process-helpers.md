@@ -386,7 +386,10 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   has handled it. So the helper keeps doing this until the game asks for its
   own mode again, as wined3d does when it handles the return, not until the
   app is back in front. The wrapp's log says `keeping the game's display mode and
-  window while it's in the background` the first time it does.
+  window while it's in the background` the first time it does. The
+  integration test's [switch away and back](testing.md#switching-away-and-back)
+  covers the slow case only: a quick switch there didn't reproduce the
+  timing, even without the fix, so the quick case was checked by hand.
 
 Once Wine's window covers the display, [native fullscreen](#native-fullscreen)
 puts it into a Space as for any other Direct3D game. The Space is the size the
