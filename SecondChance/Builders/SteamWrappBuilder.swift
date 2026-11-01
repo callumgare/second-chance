@@ -36,7 +36,7 @@ struct SteamWrappPreparer: SteamWrappPreparing {
         try await helper.installSteamClient(in: path)
         // Hundreds of MB of Steam, so off the main thread.
         let clientCache = self.clientCache
-        let prefix = path.appendingPathComponent("Contents/SharedSupport/prefix")
+        let prefix = WrappLayout(app: path).prefix
         _ = await Blocking.run { clientCache.restore(into: prefix) }
     }
 }
@@ -164,7 +164,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
         // ── Build ──────────────────────────────────────────────────────
         let wrappPath = helper.createTemporaryWrappPath()
-        let prefix = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
+        let prefix = WrappLayout(app: wrappPath).prefix
         logger.notice("Temporary wrapp: \(wrappPath.path)")
         let client = makeClient(wrappPath)
         // Quitting the app stops this build's Steam: it would otherwise keep
@@ -256,9 +256,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.gameExecutableNotFound
             }
 
-            let runsWithoutSteam = engine == .wine || engine == .scummvm
+            let runsWithoutSteam = !engine.needsSteam
             let gameDir = runsWithoutSteam ? try moveOutOfSteam(steamGameDir, prefix: prefix, installDir: installDir) : steamGameDir
-            let driveC = prefix.appendingPathComponent("drive_c")
+            let driveC = WrappLayout(app: wrappPath).driveC
             let gameDirPath = "/" + gameDir.path(relativeTo: driveC)
             let gameExePath = engine == .scummvm ? gameDirPath : gameDirPath + "/" + exe
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))

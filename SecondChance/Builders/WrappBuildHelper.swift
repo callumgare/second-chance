@@ -130,7 +130,7 @@ class WrappBuildHelper {
     func cleanupUnusedEngine(at wrappPath: URL, gameEngine: GameInfo.GameEngine) async throws {
         logger.notice("Cleaning up unused game engine from wrapp...")
 
-        let resourcesPath = wrappPath.appendingPathComponent("Contents/Resources")
+        let resourcesPath = WrappLayout(app: wrappPath).resources
 
         switch gameEngine {
         case .wine, .wineSteam, .wineSteamSilent:
@@ -253,7 +253,7 @@ class WrappBuildHelper {
     ) throws {
         Task { await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Adjusting the game's settings"))) }
 
-        let infoPlistPath = wrappPath.appendingPathComponent("Contents/Info.plist")
+        let infoPlistPath = WrappLayout(app: wrappPath).infoPlist
 
         // Update Info.plist
         guard let plistData = try? Data(contentsOf: infoPlistPath),
@@ -287,97 +287,31 @@ class WrappBuildHelper {
         let updatedData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try updatedData.write(to: infoPlistPath)
 
-        // Create AppSettings.plist for runtime script
-        try createAppSettingsPlist(
-            at: wrappPath,
-            gameInfo: gameInfo,
-            source: source,
-            gameExePath: gameExePath,
-            installerDir: installerDir,
-            steamID: steamID,
-            gameEngine: gameEngine ?? gameInfo.gameEngine,
-            steamLaunchMode: steamLaunchMode
+        // What the wrapp reads about its game when it starts.
+        let settings = WrappSettings(
+            gameExePath: gameExePath, engine: gameEngine ?? gameInfo.gameEngine, gameSlug: gameInfo.id,
+            source: source, installerDir: installerDir, steamAppID: steamID, steamLaunchMode: steamLaunchMode
         )
+        try settings.write(to: WrappLayout(app: wrappPath))
+        logger.notice("Created AppSettings.plist with engine: \(settings.engine.rawValue)")
 
-        // Remap documents folder to point to a namespaced dir in the user's Application Support
-        // dir on the host computer. This documents symlink will likely be replaced with a more direct link when running
-        // the game wrapp but we set this one up in case it's run on a read-only system.
-        let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
-        let driveCPath = prefixPath.appendingPathComponent("drive_c")
-        let documentsPath = driveCPath.appendingPathComponent("/users/\(Wine.username)/Documents")
-
-        // Remove existing Documents directory/symlink if it exists
-        try? FileManager.default.removeItem(at: documentsPath)
-
-        // Get where the a: drive symlink points to
-        let dosdeviceAPath = prefixPath.appendingPathComponent("dosdevices/a:")
-        let aDestination = try FileManager.default.destinationOfSymbolicLink(atPath: dosdeviceAPath.path)
-
-        // Create symlink from Documents to the same destination as a: drive
+        // Documents leads where the A: drive does (WineDrives has why). The
+        // wrapp points both at the player's saves each time it starts.
+        let wine = Wine(wrapp: wrappPath)
+        try? FileManager.default.removeItem(at: wine.documents)
         try FileManager.default.createSymbolicLink(
-            atPath: documentsPath.path,
-            withDestinationPath: aDestination
+            atPath: wine.documents.path,
+            withDestinationPath: try wine.drives.target(of: "a")
         )
 
         // Configure game INI files for LCD mode and save path
         try configureGameINI(at: wrappPath, gameExePath: gameExePath)
     }
 
-    /// Create AppSettings.plist for the runtime script to read
-    private func createAppSettingsPlist(
-        at wrappPath: URL,
-        gameInfo: GameInfo,
-        source: WrappSource,
-        gameExePath: String,
-        installerDir: String,
-        steamID: String?,
-        gameEngine engine: GameInfo.GameEngine,
-        steamLaunchMode: GameInfo.SteamLaunchMode?
-    ) throws {
-        let resourcesPath = wrappPath.appendingPathComponent("Contents/Resources")
-        let appSettingsPath = resourcesPath.appendingPathComponent("AppSettings.plist")
-
-        // Ensure Resources directory exists
-        if !fileManager.fileExists(atPath: resourcesPath.path) {
-            try fileManager.createDirectory(at: resourcesPath, withIntermediateDirectories: true)
-        }
-
-        let gameEngine = engine.rawValue
-
-        // Create settings dictionary
-        var settings: [String: Any] = [
-            "GameExePath": gameExePath,
-            "GameEngine": gameEngine,
-            "GameSlug": gameInfo.id,
-            "GameSource": source.rawValue,
-            "GameInstallerDir": installerDir
-        ]
-
-        // Add Steam ID if present
-        if let steamID = steamID {
-            settings["SteamGameId"] = steamID
-        }
-        if let steamLaunchMode {
-            settings["SteamLaunchMode"] = steamLaunchMode.rawValue
-        }
-
-        // Write plist
-        let data = try PropertyListSerialization.data(fromPropertyList: settings, format: .xml, options: 0)
-        try data.write(to: appSettingsPath)
-
-        logger.notice("Created AppSettings.plist with engine: \(gameEngine)")
-    }
-
     /// Configure game INI files
     private func configureGameINI(at wrappPath: URL, gameExePath: String) throws {
         // Build the full path to the game directory within the wrapp
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
-
-        // gameExePath is a Windows path like "/Program Files (x86)/Nancy Drew/Game/game.exe"
-        // Remove leading slash and append to drive_c
-        let cleanGameExePath = gameExePath.hasPrefix("/") ? String(gameExePath.dropFirst()) : gameExePath
-        let gameExeURL = driveCPath.appendingPathComponent(cleanGameExePath)
-        let gameDir = gameExeURL.deletingLastPathComponent()
+        let gameDir = WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent()
 
         logger.notice("Configuring game INI files in: \(gameDir.path)")
 

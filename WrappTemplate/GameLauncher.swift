@@ -11,21 +11,6 @@ import SecondChanceKit
 import SecondChanceReporting
 import GameCatalog
 
-// MARK: - Directory Mounting
-
-func mountDirectoryIntoWine(_ config: GameConfig, hostPath: URL, driveLetter: String) throws {
-    let dosdevicesPath = config.winePrefix.appendingPathComponent("dosdevices")
-    let linkPath = dosdevicesPath.appendingPathComponent("\(driveLetter):")
-
-    try? FileManager.default.createDirectory(at: dosdevicesPath, withIntermediateDirectories: true)
-
-    // Remove existing link if present
-    try? FileManager.default.removeItem(at: linkPath)
-
-    // Create symlink
-    try FileManager.default.createSymbolicLink(at: linkPath, withDestinationURL: hostPath)
-}
-
 // MARK: - Game Launch Info
 
 struct GameLaunchInfo {
@@ -47,20 +32,9 @@ struct GameLaunchInfo {
 }
 
 nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
-    // Wine game launch info
-    let gameExePathClean = config.gameExePath.hasPrefix("/")
-        ? String(config.gameExePath.dropFirst())
-        : config.gameExePath
-
-    let gameExeUnixPath = config.winePrefix
-        .appendingPathComponent("drive_c")
-        .appendingPathComponent(gameExePathClean)
-        .path
-
-    let gameInstallerDirUnixPath = config.winePrefix
-        .appendingPathComponent("drive_c")
-        .appendingPathComponent(config.gameInstallerDir)
-        .path
+    let driveC = config.wine.driveC
+    let gameExeUnixPath = WrappLayout.onDriveC(config.gameExePath, in: driveC).path
+    let gameInstallerDirUnixPath = WrappLayout.onDriveC(config.gameInstallerDir, in: driveC).path
 
     let gameExeName = (gameExeUnixPath as NSString).lastPathComponent
     let gameExeDir = (gameExeUnixPath as NSString).deletingLastPathComponent
@@ -68,7 +42,7 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
     case .wine, .wineSteam, .wineSteamSilent:
         // By name, from its own folder: games look for their files beside them.
         let command = WineCommand.start(gameExeName, unixPath: false, in: URL(fileURLWithPath: gameExeDir))
-        let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
+        let wine = config.wine
         return GameLaunchInfo(
             executable: command.executable(in: wine).path,
             arguments: command.processArguments,
@@ -80,8 +54,9 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
 
     case .scummvm:
         // ScummVM game launch info
-        let resourcesPath = config.appPath.appendingPathComponent("Contents/Resources")
-        let scummvmBinary = config.appPath.appendingPathComponent("Contents/MacOS/scummvm").path
+        let layout = WrappLayout(app: config.appPath)
+        let resourcesPath = layout.resources
+        let scummvmBinary = layout.scummvm.path
         let scummvmIni = resourcesPath.appendingPathComponent("scummvm.ini").path
         let savePath = config.appSupportPath.path
         let configPath = config.scummvmConfigPath.path
@@ -187,7 +162,7 @@ class GameLauncher {
                 // Briefly: the quit fallback kills everything after 15s, and
                 // Steam has been seen to ignore -shutdown when it's stuck.
                 self.steam?.finish(timeout: 8)
-                let server = Wine(wrapp: self.config.appPath, prefix: self.config.winePrefix).server
+                let server = self.config.wine.server
                 self.logger.debug("[Cleanup/performCleanup] Shutting down Wine...")
                 Blocking.wait { await server.shutDown() }
                 self.logger.debug("[Cleanup/performCleanup] Wine shut down")
@@ -217,7 +192,7 @@ class GameLauncher {
         guard config.gameEngine.runsInWine else { return }
         // Generous: it ends by itself in seconds, more on a loaded Mac, and
         // only a session that is stuck reaches the kill.
-        let server = Wine(wrapp: config.appPath, prefix: config.winePrefix).server
+        let server = config.wine.server
         Blocking.wait { await server.shutDown(gracePeriod: 30) }
     }
 
@@ -232,7 +207,7 @@ class GameLauncher {
     /// The prefix's Documents, where the games keep their folders (a link to
     /// the wrapp's saves).
     private var documentsDirectory: URL {
-        config.winePrefix.appendingPathComponent("drive_c/users/\(Wine.username)/Documents")
+        config.wine.documents
     }
 
     private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
@@ -419,7 +394,7 @@ class GameLauncher {
                 return -1
             }
         } else if config.gameEngine.runsInWine {
-            prepareDesktop(Wine(wrapp: config.appPath, prefix: config.winePrefix))
+            prepareDesktop(config.wine)
         }
         beforeTheGame()
         if isQuitting {
@@ -545,7 +520,7 @@ class GameLauncher {
             logger.notice("Game executable name: \(gameExeName)")
         }
 
-        let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
+        let wine = config.wine
 
         // Export commands for running Wine by hand against this prefix, as one
         // entry at debug: needed when reproducing, noise otherwise.

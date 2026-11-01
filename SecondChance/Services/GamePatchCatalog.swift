@@ -9,6 +9,7 @@
 import Foundation
 import Logging
 import GameCatalog
+import SecondChanceKit
 
 /// One official Her Interactive patch, as described by `game-patches.json`.
 ///

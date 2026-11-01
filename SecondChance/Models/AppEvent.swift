@@ -13,6 +13,7 @@
 
 import Foundation
 import GameCatalog
+import SecondChanceKit
 
 /// Top-level event type for the entire Second Chance app.
 enum AppEvent {

@@ -56,7 +56,7 @@ class GameInstallerRunner {
         installerPath: URL? = nil,
         installerName: String? = nil
     ) async throws -> (gameExePath: String, installerDir: String) {
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
 
         // Find installer executable
         let installerExe: String
@@ -259,7 +259,7 @@ class GameInstallerRunner {
             logger.notice("\(launcher.lastPathComponent) isn't an InstallShield launcher — running it as it is")
             return false
         }
-        let installerBaseDir = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c/nancy-drew-installer")
+        let installerBaseDir = WrappLayout(app: wrappPath).installers
         let unpacked = installerBaseDir.appendingPathComponent("unpacked")
         let disk1 = installerBaseDir.appendingPathComponent("disk-1")
         try fileManager.createDirectory(at: unpacked, withIntermediateDirectories: true)
@@ -324,7 +324,7 @@ class GameInstallerRunner {
         // ScummVM games don't need installation - they run directly from the disk files
         // The game files are located in SharedSupport/nancy-drew-installer/disk-1 (or disk-combined)
 
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let gameDir = try findInstallerDirectory(in: driveCPath)
 
         // Return the path relative to drive_c
@@ -460,7 +460,7 @@ class GameInstallerRunner {
             return
         }
 
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
 
         logger.notice("🔧 Applying \(patches.count) patch(es) for '\(gameSlug)' (\(source.rawValue))...")
 
@@ -664,7 +664,7 @@ class GameInstallerRunner {
         at wrappPath: URL,
         winePath: String
     ) async throws {
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let scriptPath = try await stageAutoIt(script: script, inDriveC: driveCPath)
         defer { removeAutoIt(script: scriptPath, inDriveC: driveCPath) }
 
@@ -763,7 +763,7 @@ class GameInstallerRunner {
 
     /// Copy AutoIt and automation script to Wine prefix for installer automation
     private func setupAutoItForInstall(in wrappPath: URL) async throws {
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
 
         // Check if AutoIt is available
         guard AutoItService.shared.isAvailable else {
@@ -801,7 +801,7 @@ class GameInstallerRunner {
 
     /// Remove AutoIt files from Wine prefix after installation
     private func cleanupAutoItAfterInstall(in wrappPath: URL) {
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let autoitDir = driveCPath.appendingPathComponent("autoit")
         let scriptPath = driveCPath.appendingPathComponent("installshield-custom-dialog-automate.au3")
 
@@ -840,7 +840,7 @@ class GameInstallerRunner {
 
     /// Build a unique installer log file path in the Wine prefix temp directory.
     private func prepareInstallerLog(in wrappPath: URL, format: InstallerLogFormat) throws -> InstallerLogFile {
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let windowsTempDir = driveCPath.appendingPathComponent("windows/temp")
         try fileManager.createDirectory(at: windowsTempDir, withIntermediateDirectories: true)
 
@@ -883,7 +883,7 @@ class GameInstallerRunner {
         )
 
         // Check if we need to use AutoIt for this installer
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
         let useAutoIt = installerType == .installShield &&
                        attemptNumber == 0 &&
@@ -973,7 +973,7 @@ class GameInstallerRunner {
         // Diagnostic logging for the AutoIt decision (the decision itself is
         // made once, inside buildInstallerCommand).
         logger.debug("Attempt number: \(attemptNumber)")
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
         let setupIssExists = fileManager.fileExists(atPath: setupIssPath.path)
         logger.debug("Setup.iss path: \(setupIssPath.path), exists: \(setupIssExists)")
@@ -1210,7 +1210,7 @@ class GameInstallerRunner {
 
         case .installShield:
             // Check for setup.iss file for silent install
-            let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+            let driveCPath = WrappLayout(app: wrappPath).driveC
             let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
 
             if attemptNumber == 0 && fileManager.fileExists(atPath: setupIssPath.path) {

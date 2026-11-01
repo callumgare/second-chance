@@ -459,6 +459,33 @@ logged, since the finished wrapp is signed whole anyway.
 `au.gare.callum.SecondChance.WrappTemplate` to
 `au.gare.callum.SecondChance.nancy-drew.<slug>`.
 
+### What a wrapp holds
+
+Where things are inside a wrapp is `WrappLayout` (`SecondChanceKit`): its
+`Info.plist`, `Resources`, the engines, the prefix and its C: drive, and
+`drive_c/nancy-drew-installer`, where the installer is copied. The build, the
+wrapp and WrappPuppeteer all find them through it rather than spelling out
+the paths. The prefix there is the wrapp's own; a wrapp run from somewhere
+it can't write runs in a copy (`getWinePrefix`), so what is inside the prefix
+the game runs in is asked of its `Wine`: `driveC`, `documents` and `drives`.
+
+What the build records about the game is `WrappSettings`, in
+`Resources/AppSettings.plist`: the `.exe`, the engine, the slug, the source,
+where the installer is, and, from Steam, the app ID and the launch mode the
+person chose. `configureWrapp` writes it; the wrapp's `loadConfig` and
+WrappPuppeteer read it. Its keys are the ones wrapps have always had, so a
+new Second Chance or WrappPuppeteer still reads a wrapp built before it; the
+slug and source are optional for that reason.
+
+A prefix's drive letters are links in its `dosdevices` folder, made through
+`wine.drives` (`WineDrives`). A prefix has only A:, C: and Z:, every other
+letter blocked so Wine can't add the Mac's disks; a disc build mounts each
+copied disc from D: on, as a CD-ROM drive. A: is the player's saves: each
+launch points it at the wrapp's folder in Application Support, and the
+Windows user's Documents links to the same place, so a game saving to either
+reaches it. A build points both at a folder in `/tmp` that may not exist, so
+a wrapp that can't write its prefix still has somewhere they lead.
+
 Because the target sets `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's
 executable is `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't rely on that
 name — it tracks the wrapp by the PID it launched and finds the game by the

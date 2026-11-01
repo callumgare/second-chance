@@ -23,6 +23,7 @@
 import Foundation
 import Darwin
 import GameCatalog
+import SecondChanceKit
 
 /// Env var that enables the automation bridge. Value: absolute Unix socket path.
 nonisolated let automationSocketEnvVar = "SC_AUTOMATION_SOCKET"

@@ -6,6 +6,7 @@
 
 import SwiftUI
 import GameCatalog
+import SecondChanceKit
 
 struct WrappBuildProgressView: View {
     @EnvironmentObject var viewModel: WrappBuildViewModel

@@ -30,10 +30,11 @@ nonisolated public struct Wine: Sendable {
     /// The Wine bundled in `wrapp`, running in `prefix`: the wrapp's own
     /// unless given another.
     public init(wrapp: URL, prefix: URL? = nil) {
-        self.wineDir = wrapp.appendingPathComponent("Contents/SharedSupport/wine")
+        let layout = WrappLayout(app: wrapp)
+        self.wineDir = layout.wine
         self.binDir = wineDir.appendingPathComponent("bin")
-        self.prefix = prefix ?? wrapp.appendingPathComponent("Contents/SharedSupport/prefix")
-        self.frameworksDir = wrapp.appendingPathComponent("Contents/Frameworks")
+        self.prefix = prefix ?? layout.prefix
+        self.frameworksDir = layout.frameworks
     }
 
     /// The variables Second Chance sets for Wine, and only those.

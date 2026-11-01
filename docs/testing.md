@@ -440,7 +440,7 @@ dependency only runs one way:
   (`InputAutomation`), the optional full-screen screenshot (`ScreenCapture`)
   and exit codes.
 - **`WrappPuppeteer/NancyDrew/`** — everything specific to driving a game: reading
-  the wrapp's `AppSettings.plist` and mapping its engine to process names, kill
+  the wrapp's `AppSettings.plist` (`WrappSettings`) and mapping its engine to process names, kill
   commands and a focus strategy (`Wrapp`); the wrapp's "save regularly" window
   (`InfoWindow`); where the Exit button and Her Interactive logo are and how to
   recognise them (`MainMenuScreen`); each game's splash screens

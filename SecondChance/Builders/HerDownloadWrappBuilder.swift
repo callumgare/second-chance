@@ -111,7 +111,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
         do {
             try await helper.createBaseWrapp(at: wrappPath)
-            let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+            let driveCPath = WrappLayout(app: wrappPath).driveC
             let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
 
             // An InstallShield launcher unpacks into the layout a disc has,
@@ -203,7 +203,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
         do {
             try await helper.createBaseWrapp(at: wrappPath)
-            let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+            let driveCPath = WrappLayout(app: wrappPath).driveC
 
             await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game")))
             try await publishEngineRoute(for: gameInfo)
@@ -212,7 +212,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             // drive_c is a rename rather than a copy.
             let staging = wrappPath.appendingPathComponent("Contents/SharedSupport/cider-staging")
             let bus = self.bus
-            let wineDLLs = wrappPath.appendingPathComponent("Contents/SharedSupport/wine/lib/wine/i386-windows")
+            let wineDLLs = WrappLayout(app: wrappPath).wine.appendingPathComponent("lib/wine/i386-windows")
             let gameExe = try await package.extractGame(into: driveCPath, staging: staging, wineDLLs: wineDLLs) { percent in
                 await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game (\(percent)%)")))
             }

@@ -739,7 +739,7 @@ enum TestError: Error, LocalizedError {
 extension WrappInfo {
     /// Read the raw Info.plist dictionary from a wrapp `.app`.
     static func readPlist(at wrappPath: URL) throws -> [String: Any] {
-        let plistPath = wrappPath.appendingPathComponent("Contents/Info.plist")
+        let plistPath = WrappLayout(app: wrappPath).infoPlist
         guard FileManager.default.fileExists(atPath: plistPath.path) else {
             throw NSError(domain: "WrappInfo", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Info.plist not found at \(plistPath.path)"
@@ -761,31 +761,24 @@ extension WrappInfo {
         return plist["GameExePath"] as? String
     }
 
-    /// The `GameSlug` value from the wrapp's AppSettings.plist.
+    /// The wrapp's AppSettings.plist; nil when it has none it can read.
+    static func settings(at wrappPath: URL) -> WrappSettings? {
+        try? WrappSettings(of: WrappLayout(app: wrappPath))
+    }
+
+    /// The game's slug from the wrapp's AppSettings.plist.
     static func gameSlug(at wrappPath: URL) throws -> String? {
-        appSetting("GameSlug", at: wrappPath)
+        settings(at: wrappPath)?.gameSlug
     }
 
     /// The game's .exe inside the wrapp's own prefix, from the `GameExePath`
     /// in its AppSettings.plist; nil for a wrapp without one (ScummVM).
     static func gameExe(at wrappPath: URL) -> URL? {
-        guard let path = appSetting("GameExePath", at: wrappPath) else { return nil }
-        return wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
-            .appendingPathComponent(path.hasPrefix("/") ? String(path.dropFirst()) : path)
+        settings(at: wrappPath).map { WrappLayout(app: wrappPath).onDriveC($0.gameExePath) }
     }
 
-    /// The `GameEngine` value from the wrapp's AppSettings.plist.
+    /// The game's engine from the wrapp's AppSettings.plist.
     static func gameEngine(at wrappPath: URL) -> GameInfo.GameEngine? {
-        appSetting("GameEngine", at: wrappPath).flatMap(GameInfo.GameEngine.init)
-    }
-
-    private static func appSetting(_ key: String, at wrappPath: URL) -> String? {
-        let settingsPath = wrappPath.appendingPathComponent("Contents/Resources/AppSettings.plist")
-        guard FileManager.default.fileExists(atPath: settingsPath.path),
-              let data = try? Data(contentsOf: settingsPath),
-              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any] else {
-            return nil
-        }
-        return plist[key] as? String
+        settings(at: wrappPath)?.engine
     }
 }

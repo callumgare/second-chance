@@ -11,7 +11,7 @@ import SecondChanceKit
 
 struct Wrapp {
     let appPath: String
-    /// The raw `GameEngine` setting, for logging.
+    /// The engine setting, for logging.
     let engineSetting: String
     /// The engine running the game; nil for a setting this doesn't know.
     let engine: GameInfo.GameEngine?
@@ -61,26 +61,21 @@ struct Wrapp {
 
     init(appPath: String) {
         self.appPath = appPath
-        let settings = Wrapp.readSettings(appPath: appPath)
-        engineSetting = settings["GameEngine"] as? String ?? "unknown"
-        engine = GameInfo.GameEngine(rawValue: engineSetting)
-        gameSlug = settings["GameSlug"] as? String ?? "unknown"
-        let exePath = settings["GameExePath"] as? String ?? "/Game.exe"
-        gameExeName = (exePath as NSString).lastPathComponent
-        winePrefix = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/SharedSupport/prefix")
-        graphics = engine?.runsInWine == true
-            ? GameGraphicsAPI(exeAt: winePrefix.appendingPathComponent("drive_c").appendingPathComponent(exePath))
-            : .unknown
-    }
-
-    private static func readSettings(appPath: String) -> [String: Any] {
-        let url = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/Resources/AppSettings.plist")
+        let layout = WrappLayout(app: URL(fileURLWithPath: appPath))
+        let settings: WrappSettings?
         do {
-            let data = try Data(contentsOf: url)
-            return try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] ?? [:]
+            settings = try WrappSettings(of: layout)
+            engineSetting = settings?.engine.rawValue ?? "unknown"
         } catch {
-            return [:]
+            settings = nil
+            engineSetting = "unreadable (\(error.localizedDescription))"
         }
+        engine = settings?.engine
+        gameSlug = settings?.gameSlug ?? "unknown"
+        let exePath = settings?.gameExePath ?? "/Game.exe"
+        gameExeName = (exePath as NSString).lastPathComponent
+        winePrefix = layout.prefix
+        graphics = engine?.runsInWine == true ? GameGraphicsAPI(exeAt: layout.onDriveC(exePath)) : .unknown
     }
 }
 
@@ -94,7 +89,7 @@ extension Wrapp {
     var cleanupCommands: [[String]] {
         switch engine {
         case .wine, .wineSteam, .wineSteamSilent:
-            let wineserver = URL(fileURLWithPath: appPath).appendingPathComponent("Contents/SharedSupport/wine/bin/wineserver").path
+            let wineserver = WrappLayout(app: URL(fileURLWithPath: appPath)).wine.appendingPathComponent("bin/wineserver").path
             return [
                 ["/usr/bin/env", "WINEPREFIX=\(winePrefix.path)", wineserver, "-k"],
                 ["/usr/bin/pkill", "-9", "-f", "wine"],

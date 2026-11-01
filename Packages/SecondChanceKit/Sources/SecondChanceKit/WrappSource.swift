@@ -1,20 +1,20 @@
 //
 //  WrappSource.swift
-//  SecondChance
+//  SecondChanceKit
 //
 //  The installation sources a wrapp can be built from
 
 import Foundation
 
 /// The source a Nancy Drew game wrapp is built from
-enum WrappSource: String, CaseIterable, Identifiable, Codable {
+public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable, Sendable {
     case disk = "disk"
     case herDownload = "her-download"
     case steam = "steam"
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .disk:
             return "Game Discs"
@@ -25,7 +25,7 @@ enum WrappSource: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    var description: String {
+    public var description: String {
         switch self {
         case .disk:
             return "The original CDs"

@@ -6,6 +6,7 @@
 
 import Foundation
 import Logging
+import SecondChanceKit
 
 /// Manages the caching system for wrapp creation stages
 class CacheManager {

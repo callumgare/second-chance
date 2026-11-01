@@ -5,6 +5,7 @@
 //  The File menu's ways to start a build, the same as the welcome screen's.
 
 import SwiftUI
+import SecondChanceKit
 
 struct InstallCommands: Commands {
     @ObservedObject var viewModel: WrappBuildViewModel

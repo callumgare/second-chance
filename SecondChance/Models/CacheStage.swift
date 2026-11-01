@@ -5,6 +5,7 @@
 //  Defines the different stages of wrapp creation that can be cached
 
 import Foundation
+import SecondChanceKit
 
 /// Represents a stage in the wrapp creation process that can be cached for debugging
 enum CacheStage: String, Codable, CaseIterable {

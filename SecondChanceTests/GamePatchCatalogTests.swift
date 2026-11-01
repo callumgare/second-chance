@@ -13,6 +13,7 @@ import Testing
 import Foundation
 @testable import SecondChance
 import GameCatalog
+import SecondChanceKit
 
 @Suite("Game patch catalog")
 struct GamePatchCatalogTests {

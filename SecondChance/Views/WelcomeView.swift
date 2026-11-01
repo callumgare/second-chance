@@ -5,6 +5,7 @@
 //  Welcome screen: choosing where to install the game from
 
 import SwiftUI
+import SecondChanceKit
 
 struct WelcomeView: View {
     @EnvironmentObject var viewModel: WrappBuildViewModel

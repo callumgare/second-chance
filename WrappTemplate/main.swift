@@ -76,7 +76,7 @@ func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldC
 func launchWineShell(_ config: GameConfig) {
     mainLogger.notice("Opening Wine shell...")
 
-    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
+    let wine = config.wine
 
     mainLogger.notice("Wine prefix: \(config.winePrefix)")
     mainLogger.notice("Wine environment variables: \(wine.variables)")
@@ -116,7 +116,7 @@ func launchWineShell(_ config: GameConfig) {
     script += "echo 'Wine binaries are now in PATH'\n"
 
     // CD to drive_c directory
-    let driveCPath = config.winePrefix.path + "/drive_c"
+    let driveCPath = wine.driveC.path
     let escapedDriveCPath = driveCPath.replacingOccurrences(of: "'", with: "'\\''")
     script += "cd '\(escapedDriveCPath)'\n"
     script += "echo 'Current directory: '\n"
@@ -223,13 +223,13 @@ func launchShell(_ config: GameConfig) {
 
 func launchWineControlPanel(_ config: GameConfig) {
     mainLogger.notice("Launching Wine control panel...")
-    runInTerminal(.wine(["control"]), with: Wine(wrapp: config.appPath, prefix: config.winePrefix))
+    runInTerminal(.wine(["control"]), with: config.wine)
 }
 
 func launchWineConfig(_ config: GameConfig) {
     mainLogger.notice("Launching Wine config...")
     // winecfg is a Windows program, run through wine: Wine has no bin/winecfg.
-    runInTerminal(.wine(["winecfg"]), with: Wine(wrapp: config.appPath, prefix: config.winePrefix))
+    runInTerminal(.wine(["winecfg"]), with: config.wine)
 }
 
 /// Run `command` with our own stdin, stdout and stderr, and wait for it:
@@ -547,10 +547,8 @@ func main() {
 
     let executableURL = URL(fileURLWithPath: executablePath)
     let appPath = executableURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    let infoPlistPath = appPath.appendingPathComponent("Contents/Info.plist")
-
     // Get bundle ID for prefix path
-    guard let bundleId = readPlist(at: infoPlistPath, key: "CFBundleIdentifier") else {
+    guard let bundleId = readPlist(at: WrappLayout(app: appPath).infoPlist, key: "CFBundleIdentifier") else {
         showAlert(message: "This Game's App Is Damaged", informativeText: "Something in it is missing. Make the game's app again with Second Chance.")
         FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "no-bundle-identifier"))
         exit(1)
@@ -583,8 +581,7 @@ func main() {
 
     // The game's files: the exe's folder for Wine, the data folder itself for
     // ScummVM. An install that was cut short shows up here as too small.
-    let driveC = config.winePrefix.appendingPathComponent("drive_c")
-    let gamePath = driveC.appendingPathComponent(String(config.gameExePath.drop(while: { $0 == "/" })))
+    let gamePath = WrappLayout.onDriveC(config.gameExePath, in: config.wine.driveC)
     let gameDir = config.gameEngine == .scummvm ? gamePath : gamePath.deletingLastPathComponent()
     // Every launch keeps its own log, since a wrapp opened from Finder has no
     // terminal to show it. Started before the header; it backfills anyway.
@@ -612,7 +609,7 @@ func main() {
         mainLogger.notice("Starting the game without Steam this time (\(launchWithoutSteamArgument)), after a launch through Steam failed")
     }
 
-    let wine = Wine(wrapp: config.appPath, prefix: config.winePrefix)
+    let wine = config.wine
     killWineBeforeForcedExit = { Blocking.wait { await wine.server.kill() } }
 
     // Check for debug mode
@@ -771,7 +768,7 @@ func main() {
     // Setup Wine environment (only for Wine games)
     if config.gameEngine.runsInWine {
         do {
-            try mountDirectoryIntoWine(config, hostPath: config.appSupportPath, driveLetter: "a")
+            try config.wine.drives.mount(config.appSupportPath, as: "a")
         } catch {
             mainLogger.critical("ERROR: Failed to mount directory into Wine: \(error)")
             showAlert(message: "Couldn't Open Your Saved Games",
@@ -782,7 +779,7 @@ func main() {
         }
 
         // Link save directory
-        let documentsPath = config.winePrefix.appendingPathComponent("drive_c/users/\(Wine.username)/Documents")
+        let documentsPath = config.wine.documents
         do {
             var targetPath: URL? = documentsPath
 

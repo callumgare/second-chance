@@ -35,6 +35,9 @@ struct GameConfig {
     /// ScummVM's settings for this game.
     let scummvmConfigPath: URL
 
+    /// The wrapp's Wine, running in the prefix the game runs in.
+    nonisolated var wine: Wine { Wine(wrapp: appPath, prefix: winePrefix) }
+
     /// Whether this launch could start the game without Steam instead: only a
     /// DRM-free game the user chose to launch through Steam. Its files are
     /// still in Steam's library, where Wine runs them just as well.
@@ -86,7 +89,7 @@ func readPlist(at path: URL, key: String) -> String? {
 }
 
 func getWinePrefix(appPath: URL, bundleId: String) -> URL {
-    let originalPrefixPath = appPath.appendingPathComponent("Contents/SharedSupport/prefix")
+    let originalPrefixPath = WrappLayout(app: appPath).prefix
     let fileManager = FileManager.default
 
     // Test if prefix is writable
@@ -213,29 +216,21 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     let executableURL = URL(fileURLWithPath: executablePath)
     let appPath = executableURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    let settingsPlistPath = appPath.appendingPathComponent("Contents/Resources/AppSettings.plist")
-    let infoPlistPath = appPath.appendingPathComponent("Contents/Info.plist")
-
-    // Read plists
-    guard let gameExePath = readPlist(at: settingsPlistPath, key: "GameExePath"),
-          let gameInstallerDir = readPlist(at: settingsPlistPath, key: "GameInstallerDir"),
-          let engineSetting = readPlist(at: settingsPlistPath, key: "GameEngine"),
-          let gameTitle = readPlist(at: infoPlistPath, key: "CFBundleName"),
-          let bundleId = readPlist(at: infoPlistPath, key: "CFBundleIdentifier") else {
-        configLogger.critical("ERROR: Could not read required configuration from plists")
+    let layout = WrappLayout(app: appPath)
+    let settings: WrappSettings
+    do {
+        settings = try WrappSettings(of: layout)
+    } catch {
+        configLogger.critical("ERROR: Could not read the game's settings from \(layout.settingsFile.path): \(error)")
+        return nil
+    }
+    guard let gameTitle = readPlist(at: layout.infoPlist, key: "CFBundleName"),
+          let bundleId = readPlist(at: layout.infoPlist, key: "CFBundleIdentifier") else {
+        configLogger.critical("ERROR: Could not read the game's name and bundle identifier from Info.plist")
         return nil
     }
 
-    guard let gameEngine = GameInfo.GameEngine(rawValue: engineSetting) else {
-        configLogger.critical("ERROR: Unknown game engine: \(engineSetting)")
-        return nil
-    }
-    let steamGameId = readPlist(at: settingsPlistPath, key: "SteamGameId")
-    let steamLaunchMode = readPlist(at: settingsPlistPath, key: "SteamLaunchMode").flatMap(GameInfo.SteamLaunchMode.init)
-    let gameSlug = readPlist(at: settingsPlistPath, key: "GameSlug") ?? "unknown"
-    let gameSource = readPlist(at: settingsPlistPath, key: "GameSource") ?? "unknown"
-
-    let winePrefix = customWinePrefix ?? appPath.appendingPathComponent("Contents/SharedSupport/prefix")
+    let winePrefix = customWinePrefix ?? layout.prefix
 
     // Setup app support directory. SECOND_CHANCE_DATA_DIR stands in for it,
     // and for ScummVM's settings: WrappPuppeteer gives each test launch an
@@ -260,14 +255,14 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     return GameConfig(
         appPath: appPath,
         winePrefix: winePrefix,
-        gameExePath: gameExePath,
-        gameInstallerDir: gameInstallerDir,
-        gameEngine: gameEngine,
-        steamGameId: steamGameId,
-        steamLaunchMode: steamLaunchMode,
+        gameExePath: settings.gameExePath,
+        gameInstallerDir: settings.installerDir,
+        gameEngine: settings.engine,
+        steamGameId: settings.steamAppID,
+        steamLaunchMode: settings.steamLaunchMode,
         gameTitle: gameTitle,
-        gameSlug: gameSlug,
-        gameSource: gameSource,
+        gameSlug: settings.gameSlug ?? "unknown",
+        gameSource: settings.source?.rawValue ?? "unknown",
         bundleId: bundleId,
         appSupportPath: appSupportPath,
         scummvmConfigPath: scummvmConfigPath

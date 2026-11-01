@@ -16,6 +16,7 @@
 import Foundation
 import Logging
 import GameCatalog
+import SecondChanceKit
 
 /// Builds a wrapp from game disks.
 ///
@@ -274,7 +275,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         await bus.publishWrappBuild(.progress(.copyingInstaller(substep: nil)))
 
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
 
         try fileManager.createDirectory(at: installerPath, withIntermediateDirectories: true)
@@ -340,7 +341,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
     /// Mount game disk directories as CD-ROM drives
     private func mountGameDisksIntoWine(wrappPath: URL) async throws {
-        let driveCPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix/drive_c")
+        let driveCPath = WrappLayout(app: wrappPath).driveC
         let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
 
         // Find all disk-* directories and sort them
@@ -378,18 +379,15 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 break
             }
 
-            let letter = String(Character(UnicodeScalar(UInt8(97 + letterIndex)))) // 'a' = 97
+            let letter = Character(UnicodeScalar(UInt8(97 + letterIndex))) // 'a' = 97
 
             // Use relative path from prefix directory
             let relativePath = "../drive_c/nancy-drew-installer/disk-\(disk.number)"
 
             logger.notice("Mounting disk-\(disk.number) as \(letter): (cdrom)")
-            try await wineManager.mountDirectory(
-                relativePath,
-                asDrive: letter,
-                type: "cdrom",
-                in: wrappPath
-            )
+            let drives = Wine(wrapp: wrappPath).drives
+            try drives.mount(relativePath, as: letter)
+            try await drives.setKind(.cdrom, of: letter)
         }
     }
 

@@ -43,7 +43,7 @@ class WineManager {
         // In release mode, use the bundle version to invalidate cache on updates
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         #endif
-        let versionFile = wrappPath.appendingPathComponent("Contents/SharedSupport/wine/version")
+        let versionFile = WrappLayout(app: wrappPath).wine.appendingPathComponent("version")
         let engine: String?
         do {
             engine = try String(contentsOf: versionFile, encoding: .utf8)
@@ -164,7 +164,7 @@ class WineManager {
     /// Create a new Wine prefix at the specified path, reporting its steps on
     /// the build's `bus`.
     func createWinePrefix(at wrappPath: URL, bus: EventBus<AppEvent>) async throws {
-        let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
+        let prefixPath = WrappLayout(app: wrappPath).prefix
         let buildId = getBuildIdentifier(for: wrappPath)
 
         // A build that finds the cache empty makes the prefix while any
@@ -214,7 +214,7 @@ class WineManager {
         // native fullscreen adopt the window, but it also makes cnc-ddraw swallow
         // the first click; the wrapp's cursor-lock helper works around that.
         // See docs/wine-in-process-helpers.md before changing these settings.
-        let ddrawIniPath = prefixPath.appendingPathComponent("drive_c/windows/syswow64/ddraw.ini")
+        let ddrawIniPath = wine.driveC.appendingPathComponent("windows/syswow64/ddraw.ini")
             if fileManager.fileExists(atPath: ddrawIniPath.path) {
                 if let contents = try? String(contentsOf: ddrawIniPath, encoding: .utf8) {
                     var updated = contents.replacingOccurrences(of: "maintas=false", with: "maintas=true")
@@ -228,41 +228,15 @@ class WineManager {
         Task { await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc"))) }
         try await winetricks.install(.isolateHome)
 
-        // Remove all drive mounts and recreate only the ones we need
-        let dosdevicesPath = prefixPath.appendingPathComponent("dosdevices")
-            if let existingMounts = try? fileManager.contentsOfDirectory(atPath: dosdevicesPath.path) {
-                for mount in existingMounts {
-                    try? fileManager.removeItem(at: dosdevicesPath.appendingPathComponent(mount))
-                }
-            }
-
-            // Create A: drive - This will be used for saving game data and hopefully will be overridden on game launch
-            // to point to a user's Application Support directory instead but in case the game is started in a read-only
-            // context we point it to a dir we can write. Then at launch we add a symlink at that location to point to
-            // Application Support dir.
-            let uuid = UUID().uuidString
-            try fileManager.createSymbolicLink(
-                atPath: dosdevicesPath.appendingPathComponent("a:").path,
-                withDestinationPath: "/tmp/second-chance-nancy-drew-\(uuid)"
-            )
-
-            // Create C: drive (points to drive_c)
-            try fileManager.createSymbolicLink(
-                atPath: dosdevicesPath.appendingPathComponent("c:").path,
-                withDestinationPath: "../drive_c"
-            )
-
-            // Create Z: drive (points to root filesystem)
-            try fileManager.createSymbolicLink(
-                atPath: dosdevicesPath.appendingPathComponent("z:").path,
-                withDestinationPath: "/"
-            )
-
-            // Create dummy files for d: through y: to prevent Wine from auto-mounting
-            for letter in "bdefghijklmnopqrstuvwxy" {
-                let dummyPath = dosdevicesPath.appendingPathComponent("\(letter):")
-                fileManager.createFile(atPath: dummyPath.path, contents: nil)
-            }
+        // Only the drives a game needs (WineDrives has what each is for).
+        // The A: drive's place in /tmp stands in for the saves until the
+        // wrapp points it at them, and C: is relative so the prefix still
+        // works copied into a wrapp.
+        wine.drives.removeAll()
+        try wine.drives.mount("/tmp/second-chance-nancy-drew-\(UUID().uuidString)", as: "a")
+        try wine.drives.mount("../drive_c", as: "c")
+        try wine.drives.mount("/", as: "z")
+        wine.drives.block("bdefghijklmnopqrstuvwxy")
 
         // Ensure Wine server is fully shut down before caching
         // This ensures all registry changes and file writes are flushed to disk
@@ -274,34 +248,6 @@ class WineManager {
             try await cachePrefix(from: prefixPath, buildId: buildId)
         } catch {
             logger.warning("Couldn't cache the Wine prefix, so the next build will make its own: \(error.localizedDescription)")
-        }
-    }
-    /// Mount a directory as a drive in Wine
-    func mountDirectory(
-        _ sourcePath: String,
-        asDrive driveLetter: String,
-        type driveType: String = "hd",
-        in wrappPath: URL
-    ) async throws {
-        let prefixPath = wrappPath.appendingPathComponent("Contents/SharedSupport/prefix")
-        let dosdevicesPath = prefixPath.appendingPathComponent("dosdevices")
-
-        // Create symlink for drive
-        let driveLink = dosdevicesPath.appendingPathComponent("\(driveLetter):")
-
-        // Remove existing link if present
-        try? fileManager.removeItem(at: driveLink)
-
-        // Create new symlink using the path directly (preserves relative paths)
-        try fileManager.createSymbolicLink(
-            atPath: driveLink.path,
-            withDestinationPath: sourcePath
-        )
-
-        // Set drive type in Wine registry if specified
-        if !driveType.isEmpty {
-            logger.notice("Setting drive \(driveLetter): type to \(driveType) in Wine registry")
-            try await Wine(wrapp: wrappPath).registry.set(.string(driveType), for: "\(driveLetter):", in: .wineDrives)
         }
     }
 }
