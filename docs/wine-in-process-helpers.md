@@ -365,6 +365,25 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   (An ordinary titled window's OpenGL view fills it, so it has no bars to
   paint.)
 
+- keeps the game's mode and window while the game is in the background.
+  When a fullscreen Direct3D game loses focus, wined3d puts the desktop mode
+  back and minimizes the game's window, as Windows does. A window in a
+  fullscreen Space can't be minimized, so Wine restores it at once, and its
+  Mac driver gives the restored window the Mac window's frame
+  (`macdrv_ShowWindow`), which is in the display's points rather than the
+  emulated mode's. The game's 800×600 window became 1512×945 in an 800×600
+  world. Restoring the window also made it active again inside Wine, so when
+  the player really came back nothing put it right, and the game reset its
+  device while the desktop mode was still set. White Wolf came back from
+  Cmd-Tab with its picture half a screen up and black below. Neither step does
+  anything for the real display while the mode is emulated, so while the
+  game's app is in the background the helper answers a request to restore the
+  desktop's mode, and one to minimize a window, as done without doing them. It
+  swaps `NtUserChangeDisplaySettings` and `NtUserShowWindow` in win32u.so's
+  syscall table (its `__DATA,__data`), which is how the game's Windows side
+  reaches them. The wrapp's log says `keeping the game's display mode and
+  window while it's in the background` the first time it does.
+
 Once Wine's window covers the display, [native fullscreen](#native-fullscreen)
 puts it into a Space as for any other Direct3D game. The Space is the size the
 window already is, so nothing is resized. Nothing happens in a game that never

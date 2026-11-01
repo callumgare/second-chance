@@ -33,7 +33,9 @@
 //  Two more replacements get the scaled window to cover the display and look
 //  right there (each explained at its MARK below): a game's borderless window
 //  isn't pushed below the menu bar, which would stop Wine treating it as
-//  fullscreen, and the bars beside a picture of another shape are black.
+//  fullscreen, and the bars beside a picture of another shape are black. And
+//  two win32u calls are skipped while the game is in the background, so its
+//  picture is still right when the player comes back to it.
 //
 //  Armed by EMULATED_MODE_SCALING_EXE, in the process running that .exe.
 //
@@ -49,6 +51,8 @@
 #import <objc/runtime.h>
 #import <os/log.h>
 #include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
 #include <math.h>
 
 #include "helper_common.h"
@@ -103,6 +107,106 @@ static CGFloat wineScale(void) {
     CGSize display = wineMainDisplaySize();
     if (display.width <= 0 || display.height <= 0) return 1.0;
     return fmin(display.width / mode.width, display.height / mode.height);
+}
+
+// MARK: - Keeping the picture while the game is in the background
+//
+// When a fullscreen Direct3D game loses focus, wined3d puts the desktop mode
+// back and minimizes the game's window (wined3d_swapchain_activate), as
+// Windows does. Here that goes wrong twice over:
+//
+// - The window is restored at once, while the game is still behind other
+//   apps: a window in a fullscreen Space can't be minimized, and Wine then
+//   restores it. Wine's Mac driver gives the restored window the Mac window's
+//   frame (macdrv_ShowWindow), which is in the display's points, not the
+//   emulated mode's, so the game's 800x600 window becomes 1512x945 in an
+//   800x600 world, scaled up off the screen. Restoring it also makes it the
+//   active window again, so when the player really comes back nothing is
+//   left to put it right, and wined3d never moves it back to 800x600.
+// - With the desktop mode back, Wine stops scaling the window, and the game
+//   resets its device as soon as it is restored, before it is in front, so
+//   the game's own mode isn't asked for again.
+//
+// Either way the picture comes back half a screen up with black below. With
+// the mode emulated, neither step does anything for the real display, so
+// while the game's app is in the background a request to restore the
+// desktop's mode (a NULL mode) and one to minimize a window are answered as
+// done without doing them. The window stays in its Space, scaled, and on the
+// player's return wined3d activates it as normal, and the game's reset finds
+// the mode it asks for already set.
+//
+// The game's Windows side reaches win32u.so's functions through the syscall
+// table in win32u.so's __DATA,__data, which ntdll keeps a pointer to; the
+// two entries are replaced there.
+
+typedef int32_t (*ChangeDisplaySettingsFn)(void *device, void *mode, void *hwnd, uint32_t flags, void *lparam);
+typedef int32_t (*ShowWindowFn)(void *hwnd, int32_t cmd);
+static ChangeDisplaySettingsFn gChangeDisplaySettings;
+static ShowWindowFn gShowWindow;
+/// Whether the game's app is in the background: set on the main thread as
+/// the app resigns and regains active, read on the game's threads.
+static _Atomic BOOL gInBackground;
+static _Atomic BOOL gReportedKept;
+
+static BOOL keepingInBackground(const char *what) {
+    if (!gInBackground || fabs(wineScale() - 1.0) < 0.01) return NO;
+    os_log(gLog, "[EmulatedMode] in the background, so not %{public}s", what);
+    if (!gReportedKept) {
+        gReportedKept = YES;
+        helperReport("EmulatedMode", "notice", "keeping the game's display mode and window while it's in the background");
+    }
+    return YES;
+}
+
+static int32_t changeDisplaySettingsKeepingMode(void *device, void *mode, void *hwnd, uint32_t flags, void *lparam) {
+    if (!mode && keepingInBackground("restoring the desktop's display mode")) return 0;   // DISP_CHANGE_SUCCESSFUL
+    return gChangeDisplaySettings(device, mode, hwnd, flags, lparam);
+}
+
+static int32_t showWindowKeepingWindow(void *hwnd, int32_t cmd) {
+    enum { SW_MINIMIZE = 6 };
+    if (cmd == SW_MINIMIZE && keepingInBackground("minimizing the game's window")) return 1;   // it was visible
+    return gShowWindow(hwnd, cmd);
+}
+
+/// Point win32u's syscall table entry for `name` at `replacement`, returning
+/// the original, or NULL if the entry wasn't found.
+static void *replaceWin32uSyscall(const struct mach_header_64 *win32u, const char *name, void *replacement) {
+    void *original = dlsym(RTLD_DEFAULT, name);
+    if (!original) return NULL;
+    unsigned long size = 0;
+    void **entries = (void **)getsectiondata(win32u, "__DATA", "__data", &size);
+    BOOL replaced = NO;
+    for (unsigned long i = 0; entries && i < size / sizeof(void *); i++) {
+        if (entries[i] != original) continue;
+        entries[i] = replacement;
+        replaced = YES;
+    }
+    return replaced ? original : NULL;
+}
+
+/// Whether both entries were replaced; neither is unless both are found.
+static BOOL keepPictureInBackground(void) {
+    const struct mach_header_64 *win32u = NULL;
+    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+        if (strcmp(processIdentityBasename(_dyld_get_image_name(i)), "win32u.so") == 0) {
+            win32u = (const struct mach_header_64 *)_dyld_get_image_header(i);
+        }
+    }
+    if (!win32u) return NO;
+    gChangeDisplaySettings = replaceWin32uSyscall(win32u, "NtUserChangeDisplaySettings", (void *)changeDisplaySettingsKeepingMode);
+    if (!gChangeDisplaySettings) return NO;
+    gShowWindow = replaceWin32uSyscall(win32u, "NtUserShowWindow", (void *)showWindowKeepingWindow);
+    if (!gShowWindow) {
+        replaceWin32uSyscall(win32u, "NtUserChangeDisplaySettings", (void *)gChangeDisplaySettings);
+        return NO;
+    }
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+    [center addObserverForName:NSApplicationDidResignActiveNotification object:nil queue:nil
+                    usingBlock:^(NSNotification *note) { (void)note; gInBackground = YES; }];
+    [center addObserverForName:NSApplicationWillBecomeActiveNotification object:nil queue:nil
+                    usingBlock:^(NSNotification *note) { (void)note; gInBackground = NO; }];
+    return YES;
 }
 
 // MARK: - WineOpenGLContext
@@ -301,5 +405,11 @@ static void emulatedModeScalingInit(void) {
     } else {
         helperReport("EmulatedMode", "warning", "no -[WineWindow constrainFrameRect:toScreen:]; a game's window may start below the menu bar");
     }
+#if defined(__x86_64__)
+    if (!keepPictureInBackground()) {
+        helperReport("EmulatedMode", "warning", "win32u's syscall table not as expected; "
+                     "a game switched away from may come back with its picture misplaced");
+    }
+#endif
     helperReport("EmulatedMode", "notice", "armed in %s", getenv("EMULATED_MODE_SCALING_EXE"));
 }
