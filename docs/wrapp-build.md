@@ -408,9 +408,11 @@ for this: both say success seconds into an install that is then killed. An
 installer of unknown type gets no check. Either way, the size and file count
 of the game exe's folder are logged (`Installed: …`).
 
-A headless build makes one install attempt. The GUI's fallback, retrying with
-the installer's interactive wizard when the silent install fails, would wait
-for a click that never comes, so headless runs fail instead and say why.
+A headless build makes one install attempt, and so does one under test
+(`TestHost.isRunning`, the integration tests). The GUI's fallback, retrying
+with the installer's interactive wizard when the silent install fails, would
+wait for a click that never comes, so these fail instead and say why. Under
+test it once held a build slot for 50 minutes before the build timed out.
 
 Note that `LogStore` mirrors to stderr only when `isatty`, so piping a headless
 run's output shows nothing — unless `SECOND_CHANCE_LOG_STDERR=1` forces the

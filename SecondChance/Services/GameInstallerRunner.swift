@@ -103,13 +103,14 @@ class GameInstallerRunner {
         }
 
         // The fallback is the installer's own wizard, so it needs someone to
-        // click through it: never in strict mode, and never headless, where
-        // it would wait for ever.
+        // click through it: never in strict mode, and never headless or under
+        // test, where it would wait for ever (an integration run's builds
+        // held a build slot for 50 minutes on a wizard nobody clicked).
         let strictInstall = ProcessInfo.processInfo.environment["STRICT_INSTALL"] == "true"
-        let headless = ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true"
-        let maxAttempts = (strictInstall || headless) ? 1 : 2
-        if headless && !strictInstall {
-            logger.notice("Headless build: no interactive installer retry if the silent install fails")
+        let unattended = ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" || TestHost.isRunning
+        let maxAttempts = (strictInstall || unattended) ? 1 : 2
+        if unattended && !strictInstall {
+            logger.notice("Unattended build: no interactive installer retry if the silent install fails")
         }
 
         // Try installation with automatic/silent mode first
@@ -166,8 +167,8 @@ class GameInstallerRunner {
                         // Strict mode or second attempt failed, throw the error
                         if strictInstall {
                             logger.critical("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
-                        } else if headless {
-                            logger.critical("❌ Silent installation failed, and a headless build can't fall back to the interactive installer")
+                        } else if unattended {
+                            logger.critical("❌ Silent installation failed, and an unattended build can't fall back to the interactive installer")
                         }
                         throw error
                     }
@@ -178,8 +179,8 @@ class GameInstallerRunner {
                 if installAttempt >= maxAttempts {
                     if strictInstall {
                         logger.critical("❌ STRICT_INSTALL mode: Silent installation failed, not falling back to interactive mode")
-                    } else if headless {
-                        logger.critical("❌ Silent installation failed, and a headless build can't fall back to the interactive installer")
+                    } else if unattended {
+                        logger.critical("❌ Silent installation failed, and an unattended build can't fall back to the interactive installer")
                     } else {
                         logger.critical("❌ Installation failed after \(installAttempt) attempts")
                     }
