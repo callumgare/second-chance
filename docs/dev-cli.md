@@ -13,6 +13,7 @@ nearest command's help.
 ./sc app build                         # Build Second Chance.app (Debug)
 ./sc app run                           # …and run it, logs in this terminal
 ./sc app screenshot                    # Retake the README's screenshots of the app, light and dark
+./sc app states                        # Draw the app's and a wrapp's catalogued screens for review
 ./sc wrapp build stay-tuned            # Build a wrapp headlessly from installers/stay-tuned/
 ./sc wrapp run stay-tuned              # Launch it (building it first if there's none)
 ./sc wrapp update stay-tuned           # Put the latest WrappTemplate into it
@@ -109,6 +110,28 @@ come on screen, and captures it with ScreenCaptureKit, shadow included. Then it
 writes the PNG and quits. A process may capture its own windows, so this needs
 no Screen Recording permission. The README shows whichever picture matches the
 reader's GitHub theme.
+
+## Screens for review
+
+`sc app states` draws the screens worth looking at without making them
+happen for real — Second Chance's window part-way through a Steam build, a
+wrapp's loading window with a notice up, their error screens — light and
+dark, into `DerivedData/ui-states/` (`--out` elsewhere), with an
+`index.html` showing each state's two pictures side by side. `--only steam-,error-`
+draws only the states whose names start with those.
+
+Each app keeps its own catalogue of states, `UIStateCatalog`
+(`SecondChance/Utilities/` and `WrappTemplate/`), each a name, a window size
+and a view set up as it would be then. Run with `SECOND_CHANCE_UI_STATES=<folder>`
+(and `SECOND_CHANCE_UI_STATES_ONLY`), an app draws them (`UIStateShots`,
+`SecondChanceKit`) and quits before making any window of its own. Each is
+drawn in a window that is never shown, so nothing comes on screen, nothing
+takes the focus and no permission is needed: it's safe on a Mac someone is
+using. The pictures have no title bar, and a default button isn't in the
+accent colour, as the window is never key. A state the view resets as it
+appears (the loading window's notes start their clocks afresh) is set again
+in its `afterAppearing`. To review a new screen or notice, add a state to the
+catalogue of the app it's in.
 
 ## Debug options
 

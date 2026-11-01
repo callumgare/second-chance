@@ -51,7 +51,7 @@ class WrappBuildViewModel: ObservableObject {
     @Published var progress: Double = 0.0
     /// How far the current step has got, when the build can measure it
     /// (`WrappBuildEvent.stepProgress`). Cleared at each new step.
-    @Published private(set) var stepProgress: StepProgress?
+    @Published var stepProgress: StepProgress?
 
     /// Where the success reports question is, while a build waits on it:
     /// the main window shows it in place of the build's progress.

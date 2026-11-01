@@ -80,6 +80,8 @@ struct SecondChanceApp: App {
         // (Stored-property initialisers that run before init()'s body — e.g.
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
+        // `sc app states`: draw the catalogued screens and quit, before any window.
+        UIStateShots.runIfConfigured(app: "second-chance") { UIStateCatalog.shots }
         MainThreadWatchdog.start()
         // A log per run, for a crash report to carry the run that crashed.
         // Not under test: every test run would push a real run's log out.

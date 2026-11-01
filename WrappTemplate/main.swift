@@ -546,7 +546,8 @@ private func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, 
 func main() {
     // Bootstrap logging before anything else can construct a Logger.
     AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.WrappTemplate")
-    if let dir = ProcessInfo.processInfo.environment["SC_TMP_RENDER_DIR"] { renderInfoWindowShots(to: dir); exit(0) }
+    // `sc app states`: draw the catalogued windows and quit, before any window.
+    UIStateShots.runIfConfigured(app: "wrapp") { UIStateCatalog.shots }
     // Before anything can fail. CrashMarker after it: when Sentry handles
     // crashes, CrashMarker installs no handler of its own.
     FailureReporter.start(process: .wrapp)

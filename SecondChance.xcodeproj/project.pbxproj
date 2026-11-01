@@ -95,6 +95,7 @@
 				Resources/wine-files,
 				StartupDiagnostics.swift,
 				Subcommands.swift,
+				UIStateCatalog.swift,
 				WrappSteam.swift,
 				Views/InfoWindowView.swift,
 			);
