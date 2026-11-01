@@ -388,8 +388,13 @@ window ends early if the game's process exits first: after 10 s more to see
 whether the same exe starts again (a launcher stub, such as Steam's DRM, can
 re-launch it), the run fails with `<exe> exited before showing a window`
 rather than waiting out the 300 s. A zombie (exited, not yet reaped) counts as
-exited (`ProcessControl.isAlive`). The `--timeout` that
-`AppPuppetRunner.run(timeout:)` passes is only logged. The wrapp's "save
+exited (`ProcessControl.isAlive`). The phases' limits are bounded together
+by `--max-runtime` (2700 s, `AppPuppetRunner.maxRuntime`): a run still going
+then fails, killing the wrapp, so a wedged game can't hold up the whole
+integration run, and the test gives up waiting for WrappPuppeteer two minutes
+after that. WrappPuppeteer writes its exit code to the file the test names
+(`--exit-code-file`), as the test, which launched it through LaunchServices,
+isn't its parent and can't read its exit status; no file reads as a failure. The wrapp's "save
 regularly" warning counts as dismissed only once the wrapp says it has gone
 (the window itself stays up, showing a loading message, until the game has
 loaded); if the wrapp's click on the button doesn't take, it confirms the

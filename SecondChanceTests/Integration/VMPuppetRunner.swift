@@ -73,13 +73,13 @@ enum VMPuppetRunner {
 
     /// Launch `wrappURL` with WrappPuppeteer in `vm` and judge the result as
     /// `AppPuppetRunner` judges a local run. Returns WrappPuppeteer's exit code.
-    static func run(in vm: VMTarget, puppeteer: URL, wrappURL: URL, gameSlug: String, timeout: TimeInterval,
+    static func run(in vm: VMTarget, puppeteer: URL, wrappURL: URL, gameSlug: String,
                     requiredHelpers: [InProcessHelperReport.Helper], requiredLines: [String] = [],
                     onWarning: (String) -> Void) async throws -> Int32 {
         // The SSH work blocks, so it's off the test's task; what it brings
         // back is recorded and judged here, where attachments reach the test.
         let outcome = try await Task.detached(priority: .userInitiated) {
-            try runBlocking(in: vm, puppeteer: puppeteer, wrappURL: wrappURL, timeout: timeout)
+            try runBlocking(in: vm, puppeteer: puppeteer, wrappURL: wrappURL)
         }.value
         let label = "vm-\(vm.name)"
         if let diagnostics = outcome.diagnostics {
@@ -101,7 +101,7 @@ enum VMPuppetRunner {
         var notes: [String] = []
     }
 
-    private static func runBlocking(in vm: VMTarget, puppeteer: URL, wrappURL: URL, timeout: TimeInterval) throws -> Outcome {
+    private static func runBlocking(in vm: VMTarget, puppeteer: URL, wrappURL: URL) throws -> Outcome {
         let id = UUID().uuidString.prefix(8).lowercased()
         let job = "/tmp/sc-vm-test-\(id)"
         let agent = "au.gare.callum.second-chance.vm-test.\(id)"
@@ -125,7 +125,7 @@ enum VMPuppetRunner {
 
         let bundleID = (try? WrappInfo.readPlist(at: wrappURL))?["CFBundleIdentifier"] as? String ?? ""
         let slug = (try? WrappInfo.gameSlug(at: wrappURL)) ?? nil
-        try shell.write(jobScript(job: job, bundleID: bundleID, gameSlug: slug ?? "", timeout: timeout), to: "\(job)/run.sh")
+        try shell.write(jobScript(job: job, bundleID: bundleID, gameSlug: slug ?? ""), to: "\(job)/run.sh")
         try shell.write(agentPlist(label: agent, script: "\(job)/run.sh"), to: "\(job)/agent.plist")
         try shell.check("chmod +x \(job)/run.sh && launchctl bootstrap gui/$(id -u) \(job)/agent.plist")
         console("Launching \(wrappURL.lastPathComponent) in VM \(vm.name)…")
@@ -158,7 +158,7 @@ enum VMPuppetRunner {
 
     /// Run in the VM's GUI session as a one-off LaunchAgent: WrappPuppeteer
     /// needs a WindowServer, which an SSH session doesn't have.
-    static func jobScript(job: String, bundleID: String, gameSlug: String, timeout: TimeInterval) -> String {
+    static func jobScript(job: String, bundleID: String, gameSlug: String) -> String {
         """
         #!/bin/bash
         # Written by VMPuppetRunner (SecondChanceTests): one game's launch-and-quit.
@@ -181,7 +181,7 @@ enum VMPuppetRunner {
         for i in $(seq 1 30); do pgrep -f "$wrapp/Contents/" >/dev/null || break; sleep 1; done
         pkill -9 -f "$wrapp/Contents/"
         start=$(date -v-5S "+%Y-%m-%d %H:%M:%S")
-        "$J/WrappPuppeteer.app/Contents/MacOS/WrappPuppeteer" "$wrapp" --timeout \(Int(timeout)) > "$J/puppeteer.out" 2>&1 &
+        "$J/WrappPuppeteer.app/Contents/MacOS/WrappPuppeteer" "$wrapp" --max-runtime \(Int(AppPuppetRunner.maxRuntime)) > "$J/puppeteer.out" 2>&1 &
         pid=$!
         wait "$pid"
         code=$?

@@ -26,7 +26,10 @@ func printUsage() {
         WrappPuppeteer --make-splash-reference <frame.png> <out.png>
 
     Options:
-        --timeout <seconds>    Maximum runtime (default: 60)
+        --max-runtime <s>      Fail, killing the wrapp, if the run is still going
+                               after <s> seconds (default: 2700)
+        --exit-code-file <f>   Write the exit code to <f> as the run ends, for a
+                               caller that launched this through LaunchServices
         --debug                Launch the wrapp in debug mode
         --parent-pid <pid>     Stop, killing the wrapp, once this process exits
         --analyze <path>       Analyze a screenshot for quit buttons (no launch)
@@ -64,11 +67,20 @@ while i < CommandLine.arguments.count {
     case "--help", "-h":
         printUsage()
         exit(0)
-    case "--timeout":
+    case "--max-runtime":
         i += 1
-        if i < CommandLine.arguments.count {
-            options.maxRuntime = TimeInterval(CommandLine.arguments[i]) ?? 60
+        guard i < CommandLine.arguments.count, let seconds = TimeInterval(CommandLine.arguments[i]), seconds > 0 else {
+            logger.critical("--max-runtime needs a number of seconds")
+            exit(1)
         }
+        options.maxRuntime = seconds
+    case "--exit-code-file":
+        i += 1
+        guard i < CommandLine.arguments.count else {
+            logger.critical("--exit-code-file needs a path")
+            exit(1)
+        }
+        ExitCodeFile.set(CommandLine.arguments[i])
     case "--debug":
         options.debugMode = true
     case "--parent-pid":
@@ -100,9 +112,13 @@ while i < CommandLine.arguments.count {
             analyzePath = CommandLine.arguments[i]
         }
     default:
-        if appPath == nil && !arg.hasPrefix("-") {
-            appPath = arg
+        // A mistyped option fails, rather than running without it.
+        guard appPath == nil, !arg.hasPrefix("-") else {
+            logger.critical("Unknown argument: \(arg)")
+            printUsage()
+            exit(1)
         }
+        appPath = arg
     }
 
     i += 1
@@ -201,6 +217,7 @@ guard let path = appPath else {
 // fullscreen game.
 NSApplication.shared.setActivationPolicy(.accessory)
 
+ProcessCleanup.limitRuntime(to: options.maxRuntime)
 let scenario = NancyDrewQuitScenario(wrapp: Wrapp(appPath: path), options: options)
 let result = scenario.run()
 switch result {
@@ -213,5 +230,6 @@ case .failed(let reason):
 case .forcedQuit:
     break
 }
+ExitCodeFile.write(result.exitCode)
 LogStore.shared.flush()
 exit(result.exitCode)

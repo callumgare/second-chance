@@ -396,7 +396,6 @@ enum AppPuppetRunner {
     static func run(
         wrappURL: URL,
         game: GameInfo,
-        timeout: TimeInterval = 90,
         quitFromMenu: Bool = false,
         onWarning: @escaping (String) -> Void = { _ in }
     ) async throws -> Int32 {
@@ -430,14 +429,13 @@ enum AppPuppetRunner {
         // `sc test integration --vm`: launch it in the VM instead.
         if let vm = VMTarget.current {
             return try await VMPuppetRunner.run(in: vm, puppeteer: bundle, wrappURL: wrappURL, gameSlug: slug,
-                                                timeout: timeout, requiredHelpers: requiredHelpers, requiredLines: requiredLines,
+                                                requiredHelpers: requiredHelpers, requiredLines: requiredLines,
                                                 onWarning: onWarning)
         }
 
         let attempt = try await Self.launchAndCollect(
             appBundle: bundle,
             wrappURL: wrappURL,
-            timeout: timeout,
             gameSlug: slug,
             attemptLabel: quitFromMenu ? "menu-quit" : "initial",
             extraArguments: quitFromMenu ? ["--quit-from-menu"] : [],
@@ -452,7 +450,6 @@ enum AppPuppetRunner {
     private static func launchAndCollect(
         appBundle: URL,
         wrappURL: URL,
-        timeout: TimeInterval,
         gameSlug: String,
         attemptLabel: String,
         extraArguments: [String] = [],
@@ -461,11 +458,18 @@ enum AppPuppetRunner {
         onWarning: (String) -> Void
     ) async throws -> (exitCode: Int32, pid: Int32) {
         let launchTime = Date()
+        // WrappPuppeteer isn't this process's child, so its exit status can't
+        // be read from here: it writes it to this file instead.
+        let exitCodeFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrapp-puppeteer-exit-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: exitCodeFile) }
         let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
             appBundle: appBundle,
             // So a stopped or crashed test run takes the puppeteer, and the
             // wrapp it's driving, down with it.
-            arguments: [wrappURL.path, "--timeout", String(Int(timeout)), "--parent-pid", String(getpid())] + extraArguments
+            arguments: [wrappURL.path, "--max-runtime", String(Int(Self.maxRuntime)), "--exit-code-file", exitCodeFile.path,
+                        "--parent-pid", String(getpid())] + extraArguments,
+            exitCodeFile: exitCodeFile
         )
 
         let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
@@ -624,25 +628,27 @@ enum AppPuppetRunner {
         }
     }
 
-    private static func decodeExitCode(fromKqueueStatus status: Int32) -> Int32 {
-        // NOTE_EXIT status representation can vary; accept either direct exit code
-        // or waitpid-style encoded status.
-        if status >= 0 && status <= 255 {
-            return status
-        }
+    /// The most a WrappPuppeteer run may take (`--max-runtime`), above its
+    /// phases' own limits added up; the test gives up on it a little after.
+    static let maxRuntime: TimeInterval = 2700
 
-        if (status & 0x7f) == 0 {
-            return (status >> 8) & 0xff
-        }
-
-        return 1
-    }
-
-    private static func waitForProcessExitCode(pid: Int32) -> Int32 {
-        let kqueueDescriptor = Darwin.kqueue()
-        guard kqueueDescriptor >= 0 else {
+    /// Wait for `pid` to exit, then read the exit code it wrote to
+    /// `exitCodeFile`. 1 when it wrote none (it was killed), or when it is
+    /// still running well past `maxRuntime`, in which case it is killed.
+    private static func waitForProcessExitCode(pid: Int32, exitCodeFile: URL) -> Int32 {
+        guard waitForProcessExit(pid: pid, timeout: maxRuntime + 120) else {
+            kill(pid, SIGTERM)
             return 1
         }
+        guard let text = try? String(contentsOf: exitCodeFile, encoding: .utf8),
+              let code = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)) else { return 1 }
+        return code
+    }
+
+    /// Whether `pid` exited within `timeout`; true too if it had already gone.
+    private static func waitForProcessExit(pid: Int32, timeout: TimeInterval) -> Bool {
+        let kqueueDescriptor = Darwin.kqueue()
+        guard kqueueDescriptor >= 0 else { return true }
         defer { Darwin.close(kqueueDescriptor) }
 
         var exitEventRegistration = kevent()
@@ -654,26 +660,21 @@ enum AppPuppetRunner {
         let registerResult = withUnsafePointer(to: exitEventRegistration) {
             keventCall(kqueueDescriptor, $0, 1, nil, 0, nil)
         }
-        // Registration-only kevent calls (no eventlist) return 0 on success.
-        guard registerResult >= 0 else {
-            return 1
-        }
+        // ESRCH: it exited before the registration.
+        guard registerResult >= 0 else { return true }
 
+        let deadline = Date().addingTimeInterval(timeout)
         var exitEvent = kevent()
         while true {
-            let waitResult = withUnsafeMutablePointer(to: &exitEvent) {
-                keventCall(kqueueDescriptor, nil, 0, $0, 1, nil)
+            let remaining = max(0, deadline.timeIntervalSinceNow)
+            var wait = timespec(tv_sec: Int(remaining), tv_nsec: 0)
+            let waitResult = withUnsafeMutablePointer(to: &exitEvent) { event in
+                withUnsafePointer(to: &wait) { keventCall(kqueueDescriptor, nil, 0, event, 1, $0) }
             }
-
-            if waitResult == 1 {
-                return decodeExitCode(fromKqueueStatus: Int32(exitEvent.data))
-            }
-
-            if waitResult == -1 && Darwin.errno == EINTR {
-                continue
-            }
-
-            return 1
+            if waitResult == 1 { return true }
+            if waitResult == -1 && Darwin.errno == EINTR { continue }
+            if waitResult == 0 { return false }
+            return true
         }
     }
 
@@ -681,7 +682,8 @@ enum AppPuppetRunner {
     /// needs no permissions (the wrapp and the game capture and click their
     /// own windows), so this is only how it has always run: its own process,
     /// found by pid for its log, and stopped with the test by `--parent-pid`.
-    private static func launchViaLaunchServices(appBundle: URL, arguments: [String]) async throws -> (exitCode: Int32, pid: Int32) {
+    private static func launchViaLaunchServices(appBundle: URL, arguments: [String],
+                                                exitCodeFile: URL) async throws -> (exitCode: Int32, pid: Int32) {
         let launchRequestTime = Date()
         let config = NSWorkspace.OpenConfiguration()
         config.arguments = arguments
@@ -707,10 +709,11 @@ enum AppPuppetRunner {
         )
 
         // waitpid only works on child processes; NSWorkspace parents to launchd so we
-        // use kqueue NOTE_EXIT instead, which works on any process we can observe.
-        let exitCode = await Task.detached(priority: .userInitiated) {
-            waitForProcessExitCode(pid: pid)
-        }.value
+        // use kqueue NOTE_EXIT instead, which works on any process we can observe,
+        // but says nothing of its exit status: that comes from the file.
+        let exitCode = await Blocking.run {
+            waitForProcessExitCode(pid: pid, exitCodeFile: exitCodeFile)
+        }
         return (exitCode: exitCode, pid: pid)
     }
 

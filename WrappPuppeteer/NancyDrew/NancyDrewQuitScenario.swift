@@ -39,8 +39,9 @@ struct NancyDrewQuitScenario {
         /// first click. It waits up to 100 s for the window to settle, then
         /// spends up to ~35 s on middle clicks.
         var cursorLockSettleTimeout: TimeInterval = 180
-        /// Only logged — nothing enforces it yet.
-        var maxRuntime: TimeInterval = 60
+        /// The most the whole run may take (`ProcessCleanup.limitRuntime`):
+        /// above the phases' own limits added up, so only a wedged run meets it.
+        var maxRuntime: TimeInterval = 2700
         /// Launch the wrapp with `--debug`
         var debugMode = false
         /// Record the game window into this directory from when it appears

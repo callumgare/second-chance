@@ -13,26 +13,80 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 
 // MARK: - Cleanup on termination
 
-// Read from the signal handler, so they are plain globals prepared up front:
-// nothing in the handler allocates.
-private var cleanupAppPid: Int32 = 0
-private var cleanupHelperPid: Int32 = 0
-private var cleanupCommandArgvs: [[UnsafeMutablePointer<CChar>?]] = []
+// Read from the signal handler, so they are plain C memory prepared up
+// front: nothing in the handler allocates, retains or checks exclusivity,
+// none of which is safe in a signal handler.
+private nonisolated(unsafe) var cleanupAppPid: Int32 = 0
+private nonisolated(unsafe) var cleanupHelperPid: Int32 = 0
+/// Each cleanup command as a NULL-terminated C argv.
+private nonisolated(unsafe) var cleanupArgvs: UnsafeMutablePointer<UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>>?
+private nonisolated(unsafe) var cleanupArgvCount = 0
+/// Where to write the exit code (`--exit-code-file`), as a C string.
+private nonisolated(unsafe) var exitCodePath: UnsafeMutablePointer<CChar>?
+private let terminationMessage = strdup("\n⚠️  Received termination signal - killing processes under test...\n")
 
 private func handleTermination(_ sig: Int32) {
-    let message = "\n⚠️  Received termination signal - killing processes under test...\n"
-    _ = message.withCString { write(STDERR_FILENO, $0, strlen($0)) }
+    killTestedProcessesAndExit(143, message: terminationMessage)
+}
+
+/// Kill what's under test, run the cleanup commands, record `status` and
+/// exit with it. Async-signal-safe: called from the signal handler too.
+private func killTestedProcessesAndExit(_ status: Int32, message: UnsafeMutablePointer<CChar>?) -> Never {
+    if let message { _ = write(STDERR_FILENO, message, strlen(message)) }
 
     if cleanupAppPid > 0 { kill(cleanupAppPid, SIGKILL) }
     if cleanupHelperPid > 0 { kill(cleanupHelperPid, SIGKILL) }
 
-    for index in cleanupCommandArgvs.indices {
-        guard let path = cleanupCommandArgvs[index].first ?? nil else { continue }
-        var pid: pid_t = 0
-        posix_spawn(&pid, path, nil, nil, &cleanupCommandArgvs[index], nil)
+    if let argvs = cleanupArgvs {
+        for index in 0..<cleanupArgvCount {
+            let argv = argvs[index]
+            guard let path = argv[0] else { continue }
+            var pid: pid_t = 0
+            posix_spawn(&pid, path, nil, nil, argv, nil)
+        }
     }
 
-    _exit(143)
+    ExitCodeFile.writeFromSignalHandler(status)
+    _exit(status)
+}
+
+/// The run's exit code, written to a file for whoever launched
+/// WrappPuppeteer through LaunchServices: it isn't WrappPuppeteer's parent,
+/// so it can't read the exit status (kqueue's NOTE_EXITSTATUS is only for a
+/// process's own children).
+enum ExitCodeFile {
+    static func set(_ path: String) {
+        exitCodePath = strdup(path)
+    }
+
+    /// Record `status`, from ordinary code.
+    static func write(_ status: Int32) {
+        guard let path = exitCodePath else { return }
+        do {
+            try Data("\(status)\n".utf8).write(to: URL(fileURLWithPath: String(cString: path)), options: .atomic)
+        } catch {
+            logger.error("Couldn't write the exit code to \(String(cString: path)): \(error.localizedDescription)")
+        }
+    }
+
+    /// Record `status` with nothing but async-signal-safe calls.
+    static func writeFromSignalHandler(_ status: Int32) {
+        guard let path = exitCodePath else { return }
+        let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
+        guard fd >= 0 else { return }
+        // At most three digits and a newline.
+        var digits: (CChar, CChar, CChar, CChar) = (0, 0, 0, 0)
+        let value = Int(max(0, min(status, 255)))
+        withUnsafeMutableBytes(of: &digits) { buffer in
+            var count = 0
+            if value >= 100 { buffer[count] = UInt8(48 + value / 100); count += 1 }
+            if value >= 10 { buffer[count] = UInt8(48 + (value / 10) % 10); count += 1 }
+            buffer[count] = UInt8(48 + value % 10); count += 1
+            buffer[count] = 10; count += 1
+            _ = Darwin.write(fd, buffer.baseAddress, count)
+        }
+        close(fd)
+    }
 }
 
 /// Kills the app under test (and anything it spawned) if WrappPuppeteer is
@@ -42,9 +96,17 @@ enum ProcessCleanup {
     /// after the app is killed, for helper processes that outlive it: each a
     /// whole argv with an absolute path first, e.g. `["/usr/bin/pkill", "-9", "scummvm"]`.
     static func install(cleanupCommands: [[String]]) {
-        cleanupCommandArgvs = cleanupCommands.map { argv in
-            argv.map { strdup($0) } + [nil]
+        let argvs = UnsafeMutablePointer<UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>>.allocate(capacity: max(cleanupCommands.count, 1))
+        for (index, command) in cleanupCommands.enumerated() {
+            let argv = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: command.count + 1)
+            for (position, argument) in command.enumerated() {
+                argv[position] = strdup(argument)
+            }
+            argv[command.count] = nil
+            argvs[index] = argv
         }
+        cleanupArgvs = argvs
+        cleanupArgvCount = cleanupCommands.count
         signal(SIGINT, handleTermination)
         signal(SIGTERM, handleTermination)
         signal(SIGHUP, handleTermination)
@@ -62,11 +124,26 @@ enum ProcessCleanup {
                 Thread.sleep(forTimeInterval: 1)
             }
             logger.warning("The process that started WrappPuppeteer (pid \(pid)) has gone; stopping what it was testing")
-            handleTermination(SIGHUP)
+            killTestedProcessesAndExit(143, message: nil)
         }
         watcher.name = "parent watcher"
         watcher.start()
         logger.notice("  → Watching the process that started WrappPuppeteer (pid \(pid))")
+    }
+
+    /// Fail the run, killing what's under test, if it is still going after
+    /// `seconds`: a game that wedges must not hold up a whole integration run
+    /// (each phase has a limit of its own; this bounds them all together).
+    static func limitRuntime(to seconds: TimeInterval) {
+        let watchdog = Thread {
+            Thread.sleep(forTimeInterval: seconds)
+            logger.error("WRAPP_PUPPETEER: run_failed: still running after \(Int(seconds)) s, the most a run may take (--max-runtime)")
+            LogStore.shared.flush()
+            killTestedProcessesAndExit(1, message: nil)
+        }
+        watchdog.name = "runtime limit"
+        watchdog.start()
+        logger.notice("  → A run may take at most \(Int(seconds)) s")
     }
 
     /// Record the processes to kill. `helperPid` is a second process that
