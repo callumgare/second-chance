@@ -223,6 +223,44 @@ enum ProcessControl {
         return window
     }
 
+    /// Take the screen from the app in front and give it straight back to
+    /// `pid`, as a quick tap of Cmd-Tab does: become a regular app with a
+    /// window, have the app in front hand over activation (`handOver`), and
+    /// as soon as this app is active, hand activation back and activate
+    /// `pid`'s app, without waiting for anything to have moved. False if
+    /// this app never became active within `timeout`.
+    static func takeScreenBriefly(title: String, handBackTo pid: pid_t, timeout: TimeInterval = 15, handOver: () -> Bool) -> Bool {
+        if !finishedLaunching {
+            NSApp.finishLaunching()
+            finishedLaunching = true
+        }
+        NSApp.setActivationPolicy(.regular)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 160),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = title
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        handleEvents(for: 0.2)
+        defer { giveBackScreen(window) }
+        guard handOver() else {
+            logger.warning("⚠️  The app in front didn't hand over activation")
+            return false
+        }
+        NSApp.activate()
+        let deadline = Date().addingTimeInterval(timeout)
+        while !NSApp.isActive, Date() < deadline {
+            handleEvents(for: 0.01)
+        }
+        guard NSApp.isActive, let app = NSRunningApplication(processIdentifier: pid) else {
+            logger.warning("⚠️  WrappPuppeteer never became active within \(Int(timeout))s")
+            return false
+        }
+        NSApp.yieldActivation(to: app)
+        app.activate(options: [.activateAllWindows])
+        return true
+    }
+
     /// Close the window `takeOverScreen` showed, and go back to being an
     /// accessory app, whose windows (the click ring) can show over another
     /// app's fullscreen Space.

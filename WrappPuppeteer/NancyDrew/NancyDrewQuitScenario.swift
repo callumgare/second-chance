@@ -320,6 +320,36 @@ struct NancyDrewQuitScenario {
         return nil
     }
 
+    /// Switch away from the game and straight back, as a quick tap of
+    /// Cmd-Tab does, and say why that went wrong, or nil. The game hears
+    /// that it has lost focus after its app does, so on a quick tap its app
+    /// is back in front before the game has handled losing focus; a fix for
+    /// the picture coming back half a screen up once held only while the
+    /// app was in the background, and missed this. The caller checks the
+    /// frame again once this returns.
+    private func quickSwitchAwayAndBackFailure(_ context: Context, gamePid: Int32) -> String? {
+        logger.notice("🔀 Switching away from the game and straight back, as a quick Cmd-Tab does...")
+        let switched = ProcessControl.takeScreenBriefly(title: "WrappPuppeteer: switched away from the game", handBackTo: gamePid) {
+            context.game.yieldActivation(to: getpid())
+        }
+        guard switched else {
+            warnForTest("Couldn't switch away from the game, so a quick switch back to it wasn't checked")
+            return nil
+        }
+        let back = Date().addingTimeInterval(Self.switchBackSeconds)
+        while context.game.state()?.active != true, Date() < back {
+            ProcessControl.handleEvents(for: 0.2)
+        }
+        guard context.game.state()?.active == true else {
+            logger.error("❌ The game didn't come back within \(Int(Self.switchBackSeconds))s of a quick switch away and back")
+            diagnosticCapture(context, prefix: "quick-switch")
+            optionalScreenshot(prefix: "quick-switch")
+            return "The game didn't come back to the front after a quick Cmd-Tab away and back"
+        }
+        logger.notice("   ✓ The game is back in front")
+        return nil
+    }
+
     /// How long switching away from the game, or back to it, may take.
     private static let switchBackSeconds: TimeInterval = 15
 
@@ -650,7 +680,9 @@ struct NancyDrewQuitScenario {
         var clickedInteractive = false
         var clickedExitButton = false
         var reachedMenu = false
-        var switchedAway = false
+        /// Switches away and back done so far: the first a slow one, back
+        /// through the Dock, the second a quick Cmd-Tab.
+        var switchesDone = 0
         // Where Exit was last found (in window points), and when it was last
         // clicked: on a loaded machine the game can miss the click, and with
         // its own cursor then drawn over the label OCR may never find it again.
@@ -757,10 +789,13 @@ struct NancyDrewQuitScenario {
                     forceQuit(app)
                     return failure
                 }
-                if !switchedAway {
-                    switchedAway = true
+                if switchesDone < 2 {
+                    switchesDone += 1
                     try? FileManager.default.removeItem(atPath: shotPath)
-                    if let failure = switchAwayAndBackFailure(context, gamePid: gamePid) {
+                    let failure = switchesDone == 1
+                        ? switchAwayAndBackFailure(context, gamePid: gamePid)
+                        : quickSwitchAwayAndBackFailure(context, gamePid: gamePid)
+                    if let failure {
                         forceQuit(app)
                         return failure
                     }
