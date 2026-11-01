@@ -42,6 +42,21 @@ struct SteamSignInWatchTests {
         #expect(!watch.check().contains(.exited))
     }
 
+    @Test("A write to Steam's logs is activity, and none leaves the last one standing")
+    func logActivity() async throws {
+        let client = try await startedClient()
+        var watch = SteamSignInWatch(client: client)
+        let started = watch.lastLogActivity
+        let later = started.addingTimeInterval(10)
+        _ = watch.check(now: later)
+        #expect(watch.lastLogActivity == started)
+        client.logWrite = Date()
+        _ = watch.check(now: later)
+        #expect(watch.lastLogActivity == later)
+        _ = watch.check(now: later.addingTimeInterval(10))
+        #expect(watch.lastLogActivity == later)
+    }
+
     @Test("Whether Steam is running is checked no more often than asked")
     func runningCheckInterval() {
         let client = FakeSteamClient(wrappPath: URL(fileURLWithPath: "/tmp/SteamSignInWatchTests.app"))

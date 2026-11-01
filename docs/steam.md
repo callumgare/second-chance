@@ -70,8 +70,26 @@ the test host under xcodebuild — can still meet the prompts; answer them
    "Starting Steam", "Updating Steam", "Connecting to Steam". What Steam is
    doing comes from `SteamSignInWatch`, which a wrapp uses too (see
    [Running](#running)): each check returns what has happened since the
-   last (a new start-up stage, a request to sign in, signed in, exited),
-   and the build acts on it with its own deadlines and restart.
+   last (a new start-up stage, a request to sign in, signed in, exited,
+   stuck), and the build acts on it with its own deadlines and restart.
+   The watch logs each of those as `[Sign-in]` lines, and while nothing
+   changes, a line a minute saying what Steam is doing and how long ago its
+   logs last changed, so a log shows how far a stalled Steam got.
+
+   **A Steam that writes nothing to its logs for 2 minutes**, before it has
+   signed in or asked for credentials, is stuck (`SteamSignInWatch.quietLimit`;
+   6 minutes while the Mac is heavily loaded, `LoadingStage.heavyLoadFactor`).
+   Any write to any of its logs counts, an update's progress included. Once
+   one sat for the whole 20 minutes having written nothing since it found
+   its files up to date, when the next game's Steam, with the same sign-in,
+   signed in within a minute. The 20-minute limit stays for a Steam that
+   keeps writing but gets nowhere. Either fails the build with
+   `steamStoppedResponding`, whose error screen offers **Try Again**; if
+   Steam gets stuck again, the screen says so and Try Again signs out of
+   Steam first (as *Sign Out of Steam* does), in case the saved sign-in is
+   what it's stuck on, and the person signs in afresh. Nobody signing in to
+   Steam's window within the 30 minutes is `steamSignInTimedOut`, which
+   offers Try Again too.
 4. **Pick the game from the ones the account owns** (`ownedAppIDs`), so
    nobody is offered a game Steam won't install. From the app,
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
@@ -173,7 +191,10 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
    no time limit, and a Steam that exits ends the wait
    (`WrappSteam.Failure.exited`). It follows Steam with the build's
    `SteamSignInWatch`, checking every second and whether Steam is still
-   running every five. Steam's sign-in window is brought
+   running every five, and logging the same `[Sign-in]` lines. A Steam the
+   watch finds stuck is only logged: the loading window already says the
+   launch may have failed once Steam has been connecting for a minute, and
+   the player decides whether to keep waiting. Steam's sign-in window is brought
    to the front as soon as Steam asks (`SteamSignInWindow`): Steam may have
    spent minutes installing and updating itself first, and the player has
    likely gone to another app meanwhile. A build from the app does the same.

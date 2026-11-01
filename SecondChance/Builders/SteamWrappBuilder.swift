@@ -66,6 +66,10 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// exited: it restarts itself after an update (exit 42), which leaves a
     /// moment with no steam.exe.
     private let steamExitedChecks: Int
+    /// How long Steam may write nothing to its logs, before it has signed
+    /// in or asked for credentials, before it counts as stuck
+    /// (`SteamSignInWatch.quietLimit`).
+    private let signInQuietLimit: TimeInterval
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.SteamWrappBuilder")
 
@@ -94,6 +98,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         downloadStallNote: TimeInterval = 60,
         downloadStallLimit: TimeInterval = 30 * 60,
         steamExitedChecks: Int = 8,
+        signInQuietLimit: TimeInterval = SteamSignInWatch.quietLimit,
         bus: EventBus<AppEvent> = .app
     ) {
         self.signInPollInterval = signInPollInterval
@@ -102,6 +107,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         self.downloadStallNote = downloadStallNote
         self.downloadStallLimit = downloadStallLimit
         self.steamExitedChecks = steamExitedChecks
+        self.signInQuietLimit = signInQuietLimit
         self.helper = helper
         self.installerRunner = installerRunner
         self.gameInfoProvider = gameInfoProvider
@@ -316,18 +322,20 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// updates it, and one that crashed part-way through the download sat
     /// for the whole timeout before, then updated and signed in on the next
     /// build. Exiting again fails the build.
+    ///
+    /// A Steam the watch finds stuck, its logs quiet, fails the build at
+    /// once; so does one that keeps writing but neither signs in nor asks
+    /// within `startTimeout`.
     private func signIn(client: SteamClientDriving, input: WrappBuildInput) async throws -> Bool {
         var deadline = Date().addingTimeInterval(Self.startTimeout)
         var restarted = false
-        var watch = SteamSignInWatch(client: client, exitedChecks: steamExitedChecks)
+        var watch = SteamSignInWatch(client: client, exitedChecks: steamExitedChecks, quietLimit: signInQuietLimit)
         while Date() < deadline {
             for event in watch.check() {
                 switch event {
                 case .signedIn:
-                    logger.notice("Steam signed in")
                     return true
-                case .needsSignIn(let reason):
-                    logger.notice("Steam wants a sign-in\(reason.map { " (\($0))" } ?? "")")
+                case .needsSignIn:
                     guard input.canSignInToSteam else { throw WrappBuildError.steamSignInRequired }
                     await bus.publishWrappBuild(.progress(.installingGame(substep: "Waiting for you to sign in to Steam")))
                     await bus.publishWrappBuild(.instructions(Self.signInInstructions))
@@ -339,6 +347,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                         await bus.publishWrappBuild(.stepProgress(StepProgress(
                             fraction: Double(download.doneKB) / Double(download.totalKB), text: text)))
                     }
+                case .stuck:
+                    throw WrappBuildError.steamStoppedResponding
                 case .exited:
                     guard !restarted else {
                         logger.error("Steam exited again before it signed in")
@@ -356,10 +366,10 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         }
         if watch.askedForSignIn {
             logger.warning("Nobody signed in to Steam within \(Int(Self.signInTimeout))s")
-        } else {
-            logger.warning("Steam neither signed in nor asked for credentials within \(Int(Self.startTimeout))s")
+            throw WrappBuildError.steamSignInTimedOut
         }
-        throw WrappBuildError.steamSignInTimedOut
+        logger.warning("Steam neither signed in nor asked for credentials within \(Int(Self.startTimeout))s")
+        throw WrappBuildError.steamStoppedResponding
     }
 
     /// Wait for Steam to install the game, showing how far its download has

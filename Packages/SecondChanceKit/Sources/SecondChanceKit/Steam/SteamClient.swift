@@ -40,6 +40,8 @@ nonisolated public protocol SteamClientDriving: Sendable {
     /// Whether Steam is running. It exits and starts again when it has
     /// updated itself, so one check that finds it missing proves nothing.
     func isRunning() -> Bool
+    /// When Steam last wrote to any of its logs, or nil if it has none yet.
+    func lastLogWrite() -> Date?
     /// Bring Steam's sign-in window to the front, once it's asking for one:
     /// it may be minutes since the player last looked (`SteamSignInWindow`).
     func bringSignInWindowForward() async
@@ -125,6 +127,13 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
         }
         try run(silent ? ["-silent"] : [])
         logger.notice("Started Steam\(silent ? " (silent)" : "")")
+    }
+
+    public func lastLogWrite() -> Date? {
+        let files = (try? FileManager.default.contentsOfDirectory(at: logsDir, includingPropertiesForKeys: nil)) ?? []
+        return files.compactMap { file in
+            try? file.resolvingSymlinksInPath().resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        }.max()
     }
 
     public func bringSignInWindowForward() async {

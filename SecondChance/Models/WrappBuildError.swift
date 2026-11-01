@@ -17,9 +17,11 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// Steam needs someone to sign in, and nobody can: a headless build
     /// with no saved session.
     case steamSignInRequired
-    /// Steam neither signed in nor asked for credentials in time, or nobody
-    /// signed in to the window it showed.
+    /// Nobody signed in to the window Steam showed, in time.
     case steamSignInTimedOut
+    /// Steam neither signed in nor asked for credentials: it went quiet, or
+    /// kept at it for too long without getting anywhere.
+    case steamStoppedResponding
     /// Steam exited before it signed in, twice: once is started again.
     case steamExited
     /// Steam exited while it was installing the game.
@@ -75,7 +77,9 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .steamSignInRequired:
             return "Steam needs you to sign in, which a headless build can't do. Build once from the app to sign in."
         case .steamSignInTimedOut:
-            return "Steam didn't finish signing in. Try again, and sign in when Steam's window appears."
+            return "Steam waited for you to sign in, but nobody did. Try again when you're ready, and sign in when Steam's window appears."
+        case .steamStoppedResponding:
+            return "Steam got stuck while it was signing in. Try again: it usually works the second time."
         case .steamExited:
             return "Steam closed unexpectedly while it was starting up. Try again."
         case .steamExitedWhileInstalling:

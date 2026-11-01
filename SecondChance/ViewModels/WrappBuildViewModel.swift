@@ -31,6 +31,15 @@ class WrappBuildViewModel: ObservableObject {
     @Published var isQuittingSteamHolder = false
     /// It was asked to quit, and didn't.
     @Published var steamHolderDidNotQuit = false
+    /// A Steam build failed in a way trying again may fix: Steam got stuck
+    /// signing in, or nobody signed in. The error screen offers Try Again.
+    @Published var steamBuildCanRetry = false
+    /// Steam got stuck signing in twice in a row, so Try Again signs out of
+    /// Steam first, in case the saved sign-in is what it's stuck on.
+    @Published var steamRetrySignsOut = false
+    /// How many builds in a row Steam got stuck signing in. Start Over, a
+    /// fresh sign-in, or any other outcome, starts the count again.
+    private var steamStuckCount = 0
     @Published var detectedGame: GameInfo?
     /// Where the finished wrapp was saved, for Show in Finder.
     @Published var builtWrappURL: URL?
@@ -168,7 +177,10 @@ class WrappBuildViewModel: ObservableObject {
 
         guard isNewStep else { return }
 
-        logger.notice("━━━ \(state.displayText) ━━━")
+        // The substep too: the screen hides it for the first 5 s, but it's
+        // what says how far a step got (Steam's "Connecting to Steam").
+        let substep = state.substep.map { " - \($0)" } ?? ""
+        logger.notice("━━━ \(state.displayText)\(state.elapsedSeconds == nil ? substep : "") ━━━")
         LogContext.enterStage(state.displayText)
 
         stepStartTime = Date()
@@ -374,15 +386,26 @@ class WrappBuildViewModel: ObservableObject {
     /// welcome screen. Cancelling any later prompt (disk 2, save location)
     /// abandons work already done, so it shows the error screen.
     private func handleBuildFailure(_ error: Error) {
-        if case .steamInUse(let holder) = error as? WrappBuildError {
+        let buildError = error as? WrappBuildError
+        if case .steamInUse(let holder) = buildError {
             steamInUseHolder = holder
         }
-        if let installError = error as? WrappBuildError, installError == WrappBuildError.userCancelledBeforeStart {
+        steamStuckCount = buildError == .steamStoppedResponding ? steamStuckCount + 1 : 0
+        steamBuildCanRetry = buildError == .steamStoppedResponding || buildError == .steamSignInTimedOut
+        steamRetrySignsOut = steamStuckCount >= 2
+        if buildError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
+        } else if steamRetrySignsOut {
+            currentState = .error(Self.steamStuckAgainMessage)
         } else {
             handleError(error)
         }
     }
+
+    /// The error screen's text when Steam got stuck signing in a second time
+    /// in a row, and Try Again will sign out of Steam first.
+    static let steamStuckAgainMessage = "Steam got stuck signing in again. Try again to sign in to Steam afresh: "
+        + "you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too."
 
     /// Reset to initial state
     func reset() {
@@ -399,11 +422,28 @@ class WrappBuildViewModel: ObservableObject {
         steamInUseHolder = nil
         isQuittingSteamHolder = false
         steamHolderDidNotQuit = false
+        steamBuildCanRetry = false
+        steamRetrySignsOut = false
+        steamStuckCount = 0
     }
 
-    /// Start the Steam build again, from the error screen.
+    /// Start the Steam build again, from the error screen: after signing out
+    /// of Steam, when it got stuck signing in twice in a row.
     func retrySteamBuild() {
+        let stuckCount = steamStuckCount
+        let signOut = steamRetrySignsOut
         reset()
+        if signOut {
+            logger.notice("Trying the Steam build again, signed out of Steam: it got stuck signing in \(stuckCount) times in a row")
+            do {
+                try SteamSessionStore().signOut()
+            } catch {
+                logger.error("Couldn't sign out of Steam before trying again: \(error)")
+            }
+        } else {
+            logger.notice("Trying the Steam build again")
+            steamStuckCount = stuckCount
+        }
         selectedWrappSource = .steam
         Task { await build(from: .steam) }
     }

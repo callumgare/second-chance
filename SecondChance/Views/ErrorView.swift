@@ -41,7 +41,7 @@ struct ErrorView: View {
             LogActionButtons(logWindowTitle: "Installation Log")
         } trailing: {
             HiddenUntilReportAnswered(model: viewModel.failureReport) {
-                if viewModel.steamInUseHolder != nil {
+                if viewModel.steamInUseHolder != nil || viewModel.steamBuildCanRetry {
                     HStack {
                         Button("Start Over") {
                             viewModel.reset()

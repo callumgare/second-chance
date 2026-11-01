@@ -28,6 +28,9 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
     var exitsWhileInstalling = false
     /// How many install checks find Steam still downloading a 1 MB game.
     var downloadingChecks = 0
+    /// When Steam last wrote to its logs while it isn't updating itself;
+    /// while it is, every check finds a new write.
+    var logWrite: Date?
     private var starts = 0
     private(set) var calls: [String] = []
     private(set) var savedSignedIn: Bool?
@@ -66,6 +69,7 @@ final class FakeSteamClient: SteamClientDriving, @unchecked Sendable {
         lock.withLock { updatingChecks > 0 ? .downloading(doneKB: 51_200, totalKB: 102_400) : .verified }
     }
     func isConnecting() -> Bool { false }
+    func lastLogWrite() -> Date? { lock.withLock { updatingChecks > 0 ? Date() : logWrite } }
     func isRunning() -> Bool { lock.withLock { starts > exitsBeforeSignIn && !(exitsWhileInstalling && installing) } }
     private var installing = false
     /// The player signs in once the sign-in window is in front of them.
@@ -187,6 +191,7 @@ struct SteamWrappBuilderTests {
     /// `picking`, as the app does, choosing it once Steam has signed in.
     func build(game: String, mode: String? = nil, picking: PickingInput? = nil,
                network: [Int64]? = [0], stallNote: TimeInterval = 60, stallLimit: TimeInterval = 60,
+               quietLimit: TimeInterval = 120,
                configure: @escaping (FakeSteamClient) -> Void = { _ in }) async -> Run {
         let bus = EventBus<AppEvent>()
         let events = Events()
@@ -221,6 +226,7 @@ struct SteamWrappBuilderTests {
             downloadStallNote: stallNote,
             downloadStallLimit: stallLimit,
             steamExitedChecks: 3,
+            signInQuietLimit: quietLimit,
             bus: bus
         )
         let result: Result<URL, Error>
@@ -409,6 +415,21 @@ struct SteamWrappBuilderTests {
             if case .stepProgress(StepProgress(fraction: 0.5, text: "50 of 100 MB")) = $0 { return true }
             return false
         })
+    }
+
+    @Test("Steam that writes nothing to its logs, and neither signs in nor asks, is stuck")
+    func quietSteamIsStuck() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let run = await build(game: "thornton-hall", quietLimit: 0.2) { $0.login = .pending }
+        #expect(throws: WrappBuildError.steamStoppedResponding) { try run.result.get() }
+    }
+
+    @Test("Steam writing to its logs, as an update does, isn't stuck however long it takes")
+    func busySteamIsNotStuck() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        // 60 checks 10 ms apart: three times the limit.
+        let run = await build(game: "thornton-hall", quietLimit: 0.2) { $0.updatingChecks = 60 }
+        _ = try run.result.get()
     }
 
     @Test("Steam exiting twice before it signs in fails the build")

@@ -94,16 +94,19 @@ nonisolated final class WrappSteam: @unchecked Sendable {
             for event in watch.check() {
                 switch event {
                 case .signedIn:
-                    logger.notice("Steam signed in")
                     state.withLock { signedIn = true }
                     status(.signedIn)
                     return
-                case .needsSignIn(let reason):
-                    logger.notice("Steam is asking for credentials\(reason.map { " (\($0))" } ?? "")")
+                case .needsSignIn:
                     status(.waitingForSignIn)
                     Blocking.wait { await client.bringSignInWindowForward() }
                 case .startup(let stage):
                     status(.startup(stage))
+                case .stuck:
+                    // The watch logs it; the loading window already says the
+                    // launch may have failed once Steam has been connecting
+                    // for a minute, and the player decides whether to wait.
+                    break
                 case .exited:
                     logger.error("Steam exited before it signed in")
                     finish(timeout: 30)
