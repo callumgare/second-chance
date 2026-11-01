@@ -162,7 +162,7 @@ func launchScummvmShell(_ config: GameConfig) {
     script += "clear\n"
     script += "echo 'ScummVM Debug Shell'\n"
     script += "echo '==================='\n"
-    script += "echo 'ScummVM binary: \(launchInfo.executable)'\n"
+    script += "echo \(shellQuote("ScummVM binary: \(launchInfo.executable)"))\n"
     script += "echo ''\n"
     script += "echo 'Arguments:'\n"
     for arg in launchInfo.arguments {
@@ -176,8 +176,8 @@ func launchScummvmShell(_ config: GameConfig) {
     script += "echo '  \(escapedCommand)'\n"
     script += "echo ''\n"
     script += "echo 'Useful commands:'\n"
-    script += "echo '  \"\(launchInfo.executable)\" --help'\n"
-    script += "echo '  \"\(launchInfo.executable)\" --list-games'\n"
+    script += "echo \(shellQuote("  \(shellQuote(launchInfo.executable)) --help"))\n"
+    script += "echo \(shellQuote("  \(shellQuote(launchInfo.executable)) --list-games"))\n"
     script += "echo ''\n"
 
     // CD to directory containing the binary (if there's a working directory, use that)
