@@ -6,6 +6,7 @@
 
 import Darwin
 import Foundation
+import Synchronization
 
 /// Every process running at one moment, as `ps` lists it: where Second
 /// Chance, the wrapp and WrappPuppeteer ask what is running, and the one
@@ -52,7 +53,24 @@ nonisolated public struct ProcessList: Sendable {
 
     /// What's running now; nil when `ps` couldn't be run. Blocks for as long
     /// as `ps` takes, well under a second.
+    /// The last listing taken, and when: what `recent(maxAge:)` reuses.
+    private static let latest = Mutex<(list: ProcessList, at: ContinuousClock.Instant)?>(nil)
+
+    /// A listing no older than `maxAge`: the last one taken, if it's new
+    /// enough, else a fresh one. For what samples every few seconds (the
+    /// load, the game's process tree, an install's stall watch): while a
+    /// launch's activity monitor lists every second, they share its
+    /// listings rather than each running `ps` on a Mac that is often busy.
+    public static func recent(maxAge: Duration) -> ProcessList? {
+        if let latest = latest.withLock({ $0 }), ContinuousClock.now - latest.at <= maxAge {
+            return latest.list
+        }
+        return current()
+    }
+
+    /// A fresh listing, from `ps`.
     public static func current() -> ProcessList? {
+        let taken = ContinuousClock.now
         let ps = Process()
         ps.executableURL = URL(fileURLWithPath: "/bin/ps")
         ps.arguments = ["-A", "-o", "pid=,ppid=,pcpu=,time=,etime=,comm="]
@@ -67,7 +85,9 @@ nonisolated public struct ProcessList: Sendable {
         // Read before waiting: the list can be bigger than the pipe's buffer.
         let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         ps.waitUntilExit()
-        return ProcessList(psOutput: output)
+        let list = ProcessList(psOutput: output)
+        latest.withLock { $0 = (list, taken) }
+        return list
     }
 
     /// From `ps -A -o pid=,ppid=,pcpu=,time=,etime=,comm=`. The command is

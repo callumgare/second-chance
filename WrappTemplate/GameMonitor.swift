@@ -105,7 +105,8 @@ class GameMonitor {
 
     /// Wine's processes, the game among them.
     func getAllWineProcesses() -> Set<ProcessList.Entry> {
-        guard let processes = ProcessList.current() else {
+        // Checked twice a second while waiting for the game: no staler.
+        guard let processes = ProcessList.recent(maxAge: .milliseconds(500)) else {
             logger.error("[Wine Processes] Couldn't list processes")
             return []
         }
@@ -349,7 +350,7 @@ class GameMonitor {
 
     /// Wine's processes, for the log of what is running.
     private func getAllWineProcessesDetailed() -> [(pid: String, ppid: String, name: String)] {
-        guard let processes = ProcessList.current() else {
+        guard let processes = ProcessList.recent(maxAge: .seconds(2)) else {
             logger.error("[Process Monitor] Couldn't list processes")
             return []
         }
