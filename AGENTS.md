@@ -309,6 +309,16 @@ direct assignment.
   extra that is never offered in text. Internal names are fine in code and
   in logs, which are for us. Keep a step's progress text short; what the
   person must _do_ goes in an `.instructions` event, shown at once.
+- **Text people see can be translated.** The app is English only, but write
+  it so it needn't stay so: whole sentences for each case, never one built
+  from fragments, a noun dropped in, `.capitalized` or a plural `s`
+  (`SteamDownloadMeter.text`), and `String(localized:)` for text that isn't a
+  SwiftUI literal. Second Chance's strings collect in
+  `SecondChance/Localizable.xcstrings` when Xcode builds it
+  (`xcrun xcstringstool sync` from the build's `.stringsdata` does the same
+  from the command line). Text built in plain `String` helpers, such as
+  `WrappBuildError.playerMessage` and the loading window's stages, isn't
+  converted yet.
 - **Lint passes.** `./sc lint` runs SwiftLint (`--strict`, `.swiftlint.yml`)
   and markdownlint (`.markdownlint.jsonc`), CI fails on either, and
   `sc release` asks before releasing with failures. Fix what they find

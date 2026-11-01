@@ -68,13 +68,13 @@ struct SteamDownloadMeterTests {
     }
 
     @Test("Time left in round figures", arguments: [
-        (30.0, "less than a minute left"),
-        (70.0, "about a minute left"),
-        (200.0, "about 3 minutes left"),
-        (4_000.0, "about an hour left"),
-        (9_000.0, "about 3 hours left"),
+        (30.0, "1 GB of 2 GB, less than a minute left"),
+        (70.0, "1 GB of 2 GB, about a minute left"),
+        (200.0, "1 GB of 2 GB, about 3 minutes left"),
+        (4_000.0, "1 GB of 2 GB, about an hour left"),
+        (9_000.0, "1 GB of 2 GB, about 3 hours left"),
     ])
     func timeLeft(seconds: TimeInterval, expected: String) {
-        #expect(SteamDownloadMeter.timeLeft(seconds) == expected)
+        #expect(SteamDownloadMeter.text(done: "1 GB", of: "2 GB", secondsLeft: seconds) == expected)
     }
 }

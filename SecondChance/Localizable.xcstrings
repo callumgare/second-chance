@@ -1,0 +1,267 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "%@ didn't quit." : {
+
+    },
+    "%@ is ready to play." : {
+
+    },
+    "%@ of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "%@ of %@, about %lld hours left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about %3$lld hours left"
+          }
+        }
+      }
+    },
+    "%@ of %@, about %lld minutes left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about %3$lld minutes left"
+          }
+        }
+      }
+    },
+    "%@ of %@, about a minute left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about a minute left"
+          }
+        }
+      }
+    },
+    "%@ of %@, about an hour left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about an hour left"
+          }
+        }
+      }
+    },
+    "%@ of %@, less than a minute left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, less than a minute left"
+          }
+        }
+      }
+    },
+    "Adds a menu with the log of what Second Chance is doing, and settings for testing it." : {
+
+    },
+    "Advanced" : {
+
+    },
+    "Ask me each time" : {
+
+    },
+    "Basic" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Check for Updates…" : {
+
+    },
+    "Choose Another Disc…" : {
+
+    },
+    "Choose Another Download…" : {
+
+    },
+    "Continue" : {
+
+    },
+    "Copy the game's files but don't run its installer, for testing a wrapp's set-up without waiting for an install." : {
+
+    },
+    "Crash Now…" : {
+
+    },
+    "Current step" : {
+
+    },
+    "Debug" : {
+
+    },
+    "Detailed" : {
+
+    },
+    "Don't Send" : {
+
+    },
+    "Done" : {
+
+    },
+    "Failed" : {
+
+    },
+    "Failure Reports" : {
+
+    },
+    "If %@ won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost." : {
+
+    },
+    "In a basic report" : {
+
+    },
+    "In a detailed report" : {
+
+    },
+    "Install from" : {
+
+    },
+    "Install from Game Discs…" : {
+
+    },
+    "Install from Her Interactive Download…" : {
+
+    },
+    "Install from Steam…" : {
+
+    },
+    "Installation steps" : {
+
+    },
+    "Installing %@" : {
+
+    },
+    "It may be the wrong disc, or a game Second Chance doesn't know. You can choose another disc, or install it anyway, though it may not work." : {
+
+    },
+    "It may be the wrong download, or a game Second Chance doesn't know. You can choose another download, or install it anyway, though it may not work." : {
+
+    },
+    "Keep Installing" : {
+
+    },
+    "Not in a basic report" : {
+
+    },
+    "Nothing will be saved, and you can start again from the beginning." : {
+
+    },
+    "Play Now" : {
+
+    },
+    "Quit It Without Saving" : {
+
+    },
+    "Quitting %@…" : {
+
+    },
+    "Reports go to the developer, through Sentry, a service that collects reports like these." : {
+
+    },
+    "Reset Debug Settings" : {
+
+    },
+    "Save Log…" : {
+
+    },
+    "Second Chance" : {
+
+    },
+    "Second Chance doesn't recognise this game" : {
+
+    },
+    "Second Chance makes a Nancy Drew game playable on this Mac. Choose where to install it from." : {
+
+    },
+    "Send" : {
+
+    },
+    "Send a basic report" : {
+
+    },
+    "Send a detailed report" : {
+
+    },
+    "Send success reports" : {
+
+    },
+    "Show Debug menu" : {
+
+    },
+    "Show Log Window" : {
+
+    },
+    "Show Run Log in Finder" : {
+
+    },
+    "Show in Finder" : {
+
+    },
+    "Sign Out of Steam" : {
+
+    },
+    "Skip Installer" : {
+
+    },
+    "Start Over" : {
+
+    },
+    "Stop Installing" : {
+
+    },
+    "Stop installing the game?" : {
+
+    },
+    "Success Reports" : {
+
+    },
+    "This copy of Second Chance always shows the Debug menu." : {
+
+    },
+    "This copy of Second Chance doesn't send reports (%@)." : {
+
+    },
+    "To help identify which games run correctly and which need work Second Chance can notify the developer on a successful run. Only very basic info is sent like the title of the game and macOS version. Nothing about you or your files will ever be sent." : {
+
+    },
+    "Try Again" : {
+
+    },
+    "What's in a report?" : {
+
+    },
+    "When a build or a game fails" : {
+
+    },
+    "When a game is set up or played, say whether it worked: which game, where it came from, and the Second Chance and macOS versions. Nothing about you or your files is sent. It shows which games are known to work." : {
+
+    },
+    "You can change this any time in Settings." : {
+
+    },
+    "Your success reports will help show which games work." : {
+
+    }
+  },
+  "version" : "1.0"
+}

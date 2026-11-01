@@ -487,11 +487,22 @@ class WrappBuildInput {
 
         let what = source == .disk ? "disc" : "download"
         let alert = NSAlert()
-        alert.messageText = "Second Chance doesn't recognise this game"
-        alert.informativeText = "It may be the wrong \(what), or a game Second Chance doesn't know. "
-            + "You can choose another \(what), or install it anyway, though it may not work."
+        alert.messageText = String(localized: "Second Chance doesn't recognise this game")
+        // Whole sentences for each, so each translates whole.
+        if source == .disk {
+            alert.informativeText = String(localized: """
+                It may be the wrong disc, or a game Second Chance doesn't know. \
+                You can choose another disc, or install it anyway, though it may not work.
+                """)
+        } else {
+            alert.informativeText = String(localized: """
+                It may be the wrong download, or a game Second Chance doesn't know. \
+                You can choose another download, or install it anyway, though it may not work.
+                """)
+        }
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Choose Another \(what.capitalized)…")
+        alert.addButton(withTitle: source == .disk
+                        ? String(localized: "Choose Another Disc…") : String(localized: "Choose Another Download…"))
         alert.addButton(withTitle: "Install Anyway")
         alert.addButton(withTitle: "Cancel")
         switch alert.runModalAskingForAttention() {
