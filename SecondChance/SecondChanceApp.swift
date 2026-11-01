@@ -28,6 +28,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Keep running with no window open. SwiftUI quits an app whose only
+    /// scene is a `Window` once its last window closes, which under test
+    /// (where each build has a window of its own, `BuildWindow`) quit the
+    /// test host as soon as a build's window closed; and for anyone else,
+    /// closing the window isn't a request to quit.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Quitting part way through installing a game throws the install
         // away: check that's meant. (An update's relaunch waits for the
