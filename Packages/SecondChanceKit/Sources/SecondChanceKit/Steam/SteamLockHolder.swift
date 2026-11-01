@@ -125,7 +125,7 @@ nonisolated public struct SteamLockHolder: Sendable, Equatable {
 
     // MARK: Asking
 
-    public enum Choice {
+    public enum Choice: Sendable {
         case quitHolder
         case tryAgain
         case cancel

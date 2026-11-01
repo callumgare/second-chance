@@ -7,6 +7,9 @@
 //  they quit, racing each other.
 
 import Foundation
+import Logging
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.Steam")
 
 nonisolated public final class SteamActiveLock: @unchecked Sendable {
     public enum Outcome {
@@ -41,6 +44,41 @@ nonisolated public final class SteamActiveLock: @unchecked Sendable {
         let record = "\(getpid())\n\(bundleID)\n"
         _ = record.withCString { pwrite(fd, $0, strlen($0), 0) }
         return .acquired(SteamActiveLock(fd: fd))
+    }
+
+    /// What came of waiting for the lock (`take`).
+    public enum Taking {
+        case acquired(SteamActiveLock)
+        /// The person chose to leave the holder be.
+        case cancelled(SteamLockHolder)
+        /// Still held: there was nobody to ask, or the holder wouldn't quit.
+        case held(SteamLockHolder)
+    }
+
+    /// Take the lock, asking `ask` what to do each time another process
+    /// holds it: try again once they've quit it themselves, have it quit
+    /// for them, or give up. `ask` gives nil when there's nobody to ask.
+    public static func take(root: URL = SteamSessionStore.defaultRoot, bundleID: String,
+                            ask: (SteamLockHolder) async -> SteamLockHolder.Choice?) async throws -> Taking {
+        while true {
+            switch try acquire(root: root, bundleID: bundleID) {
+            case .acquired(let lock):
+                return .acquired(lock)
+            case .heldBy(let holder):
+                logger.notice("Steam is in use by \(holder.name ?? "another process") (\(holder.bundleID ?? "unknown"), pid \(holder.pid.map(String.init) ?? "unknown"))")
+                switch await ask(holder) {
+                case nil:
+                    return .held(holder)
+                case .tryAgain:
+                    continue
+                case .cancel:
+                    return .cancelled(holder)
+                case .quitHolder:
+                    let gone = await Task.detached { holder.quit() }.value
+                    if !gone { return .held(holder) }
+                }
+            }
+        }
     }
 
     /// Give it up before the process exits. Safe to call more than once.

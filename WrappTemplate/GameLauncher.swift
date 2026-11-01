@@ -372,18 +372,16 @@ class GameLauncher {
                 let quitCheck = quitCheck
                 let activity = infoWindow?.activity
                 let status = steamStatusHandler(infoWindow)
-                let made = try takeSteam {
-                    try WrappSteam(config: config, status: status,
-                                   onOutputLine: {
-                                       helperReport?.observe(line: $0)
-                                       quitCheck?.observe(line: $0)
-                                       activity?.noteOutput()
-                                   })
-                }
-                guard let started = made else {
+                guard let lock = try takeSteam() else {
                     logger.notice("[Steam] Not starting: another game has Steam, and the player chose to leave it")
                     return -1
                 }
+                let started = try WrappSteam(lock: lock, config: config, status: status,
+                                             onOutputLine: {
+                                                 helperReport?.observe(line: $0)
+                                                 quitCheck?.observe(line: $0)
+                                                 activity?.noteOutput()
+                                             })
                 steam = started  // from here a quit can stop it
                 try started.waitUntilSignedIn(status: status)
             } catch WrappSteam.Failure.cancelled {
@@ -605,30 +603,26 @@ class GameLauncher {
         }
     }
 
-    /// `make` once Steam is free. While another game holds it, the player
-    /// can quit that game themselves and try again, have it quit for them,
-    /// or leave it be — nil, which is their choice and no failure.
-    private func takeSteam(_ make: () throws -> WrappSteam) throws -> WrappSteam? {
-        while true {
-            do {
-                return try make()
-            } catch WrappSteam.Failure.inUse(let holder) {
-                logger.notice("[Steam] Steam is in use by \(holder.name ?? "another process") (\(holder.bundleID ?? "unknown"), pid \(holder.pid.map(String.init) ?? "unknown"))")
-                let title = config.gameTitle
-                let choice = DispatchQueue.main.sync {
-                    MainActor.assumeIsolated {
-                        NSApp.setActivationPolicy(.regular)
-                        NSApp.activate(ignoringOtherApps: true)
-                        return holder.ask(blocked: "\(SteamLockHolder.quoted(title)) can't start until it quits.")
-                    }
-                }
-                switch choice {
-                case .tryAgain: continue
-                case .cancel: return nil
-                case .quitHolder:
-                    if !holder.quit() { throw WrappSteam.Failure.inUse(holder) }
+    /// The one-Steam-at-a-time lock, once Steam is free. While another
+    /// game holds it, the player can quit that game themselves and try
+    /// again, have it quit for them, or leave it be — nil, which is their
+    /// choice and no failure.
+    private func takeSteam() throws -> SteamActiveLock? {
+        let title = config.gameTitle
+        let bundleID = config.bundleId
+        let taking = try Blocking.wait {
+            try await SteamActiveLock.take(bundleID: bundleID) { holder in
+                await MainActor.run {
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate(ignoringOtherApps: true)
+                    return holder.ask(blocked: "\(SteamLockHolder.quoted(title)) can't start until it quits.")
                 }
             }
+        }
+        switch taking {
+        case .acquired(let lock): return lock
+        case .cancelled: return nil
+        case .held(let holder): throw WrappSteam.Failure.inUse(holder)
         }
     }
 

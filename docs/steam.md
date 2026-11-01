@@ -67,8 +67,11 @@ the test host under xcodebuild — can still meet the prompts; answer them
    `steamExited`. A first start that crashed part-way through its update
    otherwise sat out the whole 20-minute wait for a Steam that was gone.
    Until it signs in or asks, the progress line says what Steam is doing —
-   "Starting Steam", "Updating Steam", "Connecting to Steam" — from the same
-   `SteamStartupWatch` a wrapp's loading window uses (see [Running](#running)).
+   "Starting Steam", "Updating Steam", "Connecting to Steam". What Steam is
+   doing comes from `SteamSignInWatch`, which a wrapp uses too (see
+   [Running](#running)): each check returns what has happened since the
+   last (a new start-up stage, a request to sign in, signed in, exited),
+   and the build acts on it with its own deadlines and restart.
 4. **Pick the game from the ones the account owns** (`ownedAppIDs`), so
    nobody is offered a game Steam won't install. From the app,
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
@@ -158,7 +161,8 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
 
 1. **Take the Steam lock.** While another game has it, ask the player what
    to do about it (`GameLauncher.takeSteam`, below). Choosing not to quit it
-   ends the launch without a failure report.
+   ends the launch without a failure report. `WrappSteam` is then given the
+   lock, and gives it up when it finishes.
 2. **End any Steam left over** from a run that was force-quit or crashed —
    it would still be running in this prefix, signed in.
 3. **Restore the shared sign-in, start Steam silently, wait for it to sign
@@ -167,7 +171,9 @@ A wrapp whose game needs Steam (`wine-steam`, `wine-steam-silent`) does it in
    Understand**. Without a sign-in, the loading window says to sign in in
    Steam's window, and waits for as long as Steam keeps running — there is
    no time limit, and a Steam that exits ends the wait
-   (`WrappSteam.Failure.exited`). Steam's sign-in window is brought
+   (`WrappSteam.Failure.exited`). It follows Steam with the build's
+   `SteamSignInWatch`, checking every second and whether Steam is still
+   running every five. Steam's sign-in window is brought
    to the front as soon as Steam asks (`SteamSignInWindow`): Steam may have
    spent minutes installing and updating itself first, and the player has
    likely gone to another app meanwhile. A build from the app does the same.
@@ -296,7 +302,11 @@ it is released when the holding process exits, however it exits. The file is
 opened close-on-exec, so Wine and Steam, started from the holder, never
 carry the lock on after it.
 
-A second taker gets `.heldBy(SteamLockHolder)`. `SteamLockHolder.name` is
+A second taker gets `.heldBy(SteamLockHolder)`. A build and a wrapp both wait
+for it through `SteamActiveLock.take`, which asks what to do each time it is
+held and acts on the answer, so each only decides what being left without it
+means: a cancel or a failure for a build, a quiet end to a wrapp's launch.
+`SteamLockHolder.name` is
 the holding wrapp's name as the person knows it (its game's title, from the
 running app), found only while the pid in the record is still an app with
 that bundle ID. `ask` shows the choice a build and a wrapp both offer:

@@ -3,8 +3,8 @@
 //  WrappTemplate
 //
 //  Steam for a wrapp whose game needs it running (`wine-steam`,
-//  `wine-steam-silent`): take the one-Steam-at-a-time lock, bring the shared
-//  sign-in in, start Steam and wait for it to sign in — asking the player to
+//  `wine-steam-silent`): holding the one-Steam-at-a-time lock, bring the
+//  shared sign-in in, start Steam and wait for it to sign in — asking the player to
 //  when it can't — and afterwards stop it, save the sign-in back and take it
 //  out of the wrapp again. docs/steam.md has the why.
 //
@@ -43,18 +43,15 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     private var signedIn = false
     private var finished = false
 
-    /// Take the lock and start Steam. `waitUntilSignedIn` then waits for it
-    /// to sign in. Two steps, so the launcher holds this — and can stop
-    /// Steam on quit — while the wait goes on: a wrapp quit mid-wait used to
-    /// leave its Steam running. `status` gets what the loading window should say;
-    /// `onOutputLine` each line Steam and the game it launches print.
-    init(config: GameConfig, status: (Status) -> Void, onOutputLine: (@Sendable (String) -> Void)? = nil) throws {
-        switch try SteamActiveLock.acquire(bundleID: config.bundleId) {
-        case .acquired(let lock):
-            self.lock = lock
-        case .heldBy(let holder):
-            throw Failure.inUse(holder)
-        }
+    /// Start Steam, holding `lock`, which this gives up when it finishes.
+    /// `waitUntilSignedIn` then waits for it to sign in. Two steps, so the
+    /// launcher holds this — and can stop Steam on quit — while the wait
+    /// goes on: a wrapp quit mid-wait used to leave its Steam running.
+    /// `status` gets what the loading window should say; `onOutputLine` each
+    /// line Steam and the game it launches print.
+    init(lock: SteamActiveLock, config: GameConfig, status: (Status) -> Void,
+         onOutputLine: (@Sendable (String) -> Void)? = nil) throws {
+        self.lock = lock
         prefix = config.winePrefix
         client = SteamClient(wrappPath: config.appPath, prefixDir: config.winePrefix,
                              gameExe: getGameLaunchInfo(config).gameExePath.map(URL.init(fileURLWithPath:)),
@@ -91,35 +88,23 @@ nonisolated final class WrappSteam: @unchecked Sendable {
     /// can give up there. The wait ends early only if Steam exits.
     func waitUntilSignedIn(status: (Status) -> Void) throws {
         let client = client
-        var asked = false
-        var startup = SteamStartupWatch()
-        var lastRunningCheck = Date()
-        var missingChecks = 0
+        var watch = SteamSignInWatch(client: client, runningCheckInterval: 5)
         while true {
             if state.withLock({ finished }) { throw Failure.cancelled }
-            switch client.loginState() {
-            case .signedIn:
-                logger.notice("Steam signed in")
-                state.withLock { signedIn = true }
-                status(.signedIn)
-                return
-            case .needsCredentials(let reason) where !asked:
-                asked = true
-                logger.notice("Steam is asking for credentials\(reason.map { " (\($0))" } ?? "")")
-                status(.waitingForSignIn)
-                Blocking.wait { await client.bringSignInWindowForward() }
-            case .pending, .needsCredentials:
-                break
-            }
-            if !asked, let stage = startup.check(client) {
-                status(.startup(stage))
-            }
-            // An exited Steam will never sign in. It restarts itself after
-            // an update, so it has to be missing from a few checks in a row.
-            if Date().timeIntervalSince(lastRunningCheck) >= 5 {
-                lastRunningCheck = Date()
-                missingChecks = SteamClient.isSteamRunning() ? 0 : missingChecks + 1
-                if missingChecks >= 3 {
+            for event in watch.check() {
+                switch event {
+                case .signedIn:
+                    logger.notice("Steam signed in")
+                    state.withLock { signedIn = true }
+                    status(.signedIn)
+                    return
+                case .needsSignIn(let reason):
+                    logger.notice("Steam is asking for credentials\(reason.map { " (\($0))" } ?? "")")
+                    status(.waitingForSignIn)
+                    Blocking.wait { await client.bringSignInWindowForward() }
+                case .startup(let stage):
+                    status(.startup(stage))
+                case .exited:
                     logger.error("Steam exited before it signed in")
                     finish(timeout: 30)
                     throw Failure.exited
