@@ -295,7 +295,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var isCleaningUp = false
     /// Set when the game crashes during loading, so quitting propagates the game's exit code.
     var gameExitCode: Int32 = 0
-    /// Set when the player chose "Launch Directly": once this launch is
+    /// Set when the player chose "Start Without Steam": once this launch is
     /// cleaned up, the wrapp opens again with `--launch-without-steam`.
     var relaunchWithoutSteam = false
     /// The player chose Try Again on a launch that seemed stuck, or the game
@@ -440,7 +440,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Starts a DRM-free game the user chose to launch through Steam directly
 /// instead, for this launch only. Passed by the wrapp to itself when the
-/// player picks "Launch Directly" after a launch through Steam failed.
+/// player picks "Start Without Steam" after a launch through Steam failed.
 let launchWithoutSteamArgument = "--launch-without-steam"
 /// Passed to the copy started afresh after the game had no display driver,
 /// so that a second time shows the error rather than starting it again.
@@ -660,12 +660,17 @@ func main() {
     RunContext.logHeader(mainLogger, extra: [
         ("log", launchLog?.path ?? "none"),
         ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.gameEngine.rawValue)"),
-        ("game files", "\(DirectorySize.measure(gameDir).description) in \(gameDir.path)"),
+        ("game files", gameDir.path),
         ("game exe", config.gameExePath),
         ("app", config.appPath.path),
         ("prefix", config.winePrefix.path),
         ("saves", config.appSupportPath.path),
     ])
+    // How big the game's files are says whether an install was cut short,
+    // but walking them takes seconds on a cold disk: not before the window.
+    DispatchQueue.global(qos: .utility).async {
+        mainLogger.notice("Game files: \(DirectorySize.measure(gameDir).description) in \(gameDir.path)")
+    }
     FailureReporter.setGame(config.gameSlug, engine: config.gameEngine.rawValue)
     FailureReporter.setRunLogs(in: gameLogs, prefix: "launch")
     CrashMarker.install(in: gameLogs, logger: mainLogger)
@@ -906,9 +911,16 @@ func main() {
                 mainLogger.debug("Documents directory does not exist at: \(documentsPath.path)")
             }
 
-            if itemExists {
+            // A real folder, not the link this makes, may hold saves the game
+            // wrote there: move it aside, never delete it.
+            if itemExists, attributes?[.type] as? FileAttributeType == .typeDirectory {
+                let aside = documentsPath.deletingLastPathComponent()
+                    .appendingPathComponent("Documents (kept \(Int(Date().timeIntervalSince1970)))")
+                mainLogger.warning("Documents in the prefix is a folder, not a link to the saves: moving it to \(aside.lastPathComponent)")
+                try FileManager.default.moveItem(at: documentsPath, to: aside)
+            } else if itemExists {
                 do {
-                    // Try to remove it
+                    // Replace the link
                     try FileManager.default.removeItem(at: documentsPath)
                 } catch {
                     // Check if it's a permission error
@@ -981,7 +993,7 @@ func main() {
         DispatchQueue.global(qos: .userInitiated).async {
             waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.needsSteam
                 ? .startingSteam : .startingGame(title: config.gameTitle))
-            let exitCode = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode) {
+            let outcome = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode) {
                 if warningConfirmed.wait(timeout: .now()) == .timedOut {
                     mainLogger.notice("Ready to start the game; waiting for the player to confirm the save warning")
                     warningConfirmed.wait()
@@ -994,32 +1006,43 @@ func main() {
             // cut that short.
             if gameLauncher.isQuitting { return }
 
-            // A game that quit before it had started, or just after Wine
-            // reported an error, failed whatever its exit code says.
-            if let failure = gameLauncher.unexpectedQuit {
-                appDelegate.gameExitCode = exitCode != 0 ? exitCode : 1
-                infoWindow.showError(exitCode: exitCode, explanation: failure.explanation,
-                                     report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
-                return
-            }
-
-            // Only treat non-zero exit as an error if the game never loaded.
-            // Wine games often exit with non-zero codes during normal quit.
-            if exitCode != 0 && !infoWindow.hasGameLoaded {
-                mainLogger.error("Game exited with non-zero status: \(exitCode)")
-                appDelegate.gameExitCode = exitCode
-                infoWindow.showError(exitCode: exitCode,
-                                     report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
-                return
+            switch outcome {
+            case .notStarted, .failedAndTold:
+                // Nothing more to show: the player chose this, or was told.
+                break
+            case .ended(let exitCode, let failed, let windowAppeared):
+                // A game that quit before it had started, or just after Wine
+                // reported an error, failed whatever its exit code says.
+                if let failure = gameLauncher.unexpectedQuit {
+                    appDelegate.gameExitCode = exitCode != 0 ? exitCode : 1
+                    infoWindow.showError(exitCode: exitCode, explanation: failure.explanation,
+                                         report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
+                    gameLauncher.finishSession()
+                    return
+                }
+                // One that ended badly before its window appeared: the player
+                // saw nothing of it, so say so. (Wine games often exit non-zero
+                // from a normal quit; that is judged in `handleGameTermination`.)
+                if failed && !windowAppeared {
+                    mainLogger.error("The game ended before its window appeared (exit \(exitCode))")
+                    appDelegate.gameExitCode = exitCode != 0 ? exitCode : 1
+                    infoWindow.showError(exitCode: exitCode,
+                                         report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
+                    gameLauncher.finishSession()
+                    return
+                }
             }
 
             if !debugMode {
                 mainLogger.notice("[App Lifecycle] Game ended, exiting cleanly...")
+                // From now, opening the game again starts it again once Wine
+                // has finished, rather than being ignored while this waits.
+                appDelegate.isClosing = true
+                gameLauncher.finishSession()
                 // A run can end badly after the game loaded, with no error
                 // window: its report still has to go before the wrapp does.
                 FailureReporter.wait(for: gameLauncher.reportTask, timeout: 120)
                 // The game has gone, but Wine may not have yet.
-                appDelegate.isClosing = true
                 gameLauncher.waitForWineToEnd()
                 if appDelegate.openAgainWhenClosed {
                     appDelegate.openAgain(arguments: [], why: "as it was opened while closing")

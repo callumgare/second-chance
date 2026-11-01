@@ -107,11 +107,6 @@ class InfoWindowController: NSWindowController {
         viewModel.confirm()
     }
 
-    /// Whether the game has successfully loaded (info window was dismissed).
-    var hasGameLoaded: Bool {
-        viewModel.gameHasLoaded
-    }
-
     /// `stage` is what the launch waits on first: Steam, for a game that
     /// needs it, or else the game.
     init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", gameTitle: String = "Nancy Drew",

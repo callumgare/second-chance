@@ -63,7 +63,7 @@ enum UIStateCatalog {
                 $0.newerRelease = newer
             },
             window("error-quit-unexpectedly", .startingGame(title: "The White Wolf of Icicle Creek"), title: "The White Wolf of Icicle Creek") {
-                $0.phase = .error(exitCode: 0, explanation: "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.")
+                $0.phase = .error(exitCode: 0, explanation: "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it.")
             },
             window("gave-up", .startingGame(title: "Stay Tuned for Danger")) { $0.phase = .gaveUp },
             window("quitting", .startingGame(title: "Stay Tuned for Danger")) { $0.phase = .quitting(.closing) },

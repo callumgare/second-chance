@@ -148,11 +148,11 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// game; nil for the rest.
     static func knownCause(of line: String) -> String? {
         if line.contains("NtUserChangeDisplaySettings"), line.contains("DISPLAY") {
-            return "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it."
+            return "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it."
         }
         if line.contains("Unhandled page fault") || line.contains("Unhandled exception")
             || line.contains("Unhandled stack overflow") {
-            return "The game crashed."
+            return "Something went wrong inside the game, and it had to close."
         }
         if line.contains(":err:module:import_dll") {
             return "The game couldn't load a file it needs."

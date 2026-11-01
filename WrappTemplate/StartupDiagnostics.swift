@@ -123,10 +123,14 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
     /// Call once the game's own process (not the wine launcher) is found.
     func gameStarted(pid: Int32) {
         guard enabled else { return }
+        // A game on a heavily loaded Mac takes many times as long to show
+        // its window; sampling every Wine process at the usual 8 s would only
+        // add to the load, so the thresholds stretch as the loading window's do.
+        let factor = SystemLoad.read()?.isHeavy == true ? LoadingStage.heavyLoadFactor : 1
         queue.async {
             self.gamePid = pid
             self.gameStartTime = Date()
-            for (delay, reason) in [(self.slowSeconds, Reason.slowStart), (self.hangSeconds, Reason.hang)] {
+            for (delay, reason) in [(self.slowSeconds * factor, Reason.slowStart), (self.hangSeconds * factor, Reason.hang)] {
                 let item = DispatchWorkItem { [weak self] in
                     guard let self, !self.windowAppeared else { return }
                     self.capture(reason)
@@ -377,9 +381,15 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
         return String(decoding: output, as: UTF8.self)
     }
 
-    private static func timestamp(_ date: Date) -> String {
+    /// Made once: this runs for every line Wine prints. Only used on
+    /// `queue`, so never from two threads at once.
+    nonisolated(unsafe) private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss.SSS"
-        return formatter.string(from: date)
+        return formatter
+    }()
+
+    private static func timestamp(_ date: Date) -> String {
+        timestampFormatter.string(from: date)
     }
 }

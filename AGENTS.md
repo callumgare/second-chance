@@ -481,7 +481,8 @@ direct assignment.
   `overloaded` rather than testing it, unless run with `--ignore-load`.
 - **A badly starting Wine game leaves a diagnostics bundle** in
   `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/`
-  (`StartupDiagnostics`): no window 8 s after the game process appears
+  (`StartupDiagnostics`): no window 8 s after the game process appears (each
+  threshold stretched by `LoadingStage.heavyLoadFactor` on a heavily loaded Mac)
   (`slow-start`), Wine's unhandled-exception line (`crash`), still no window at
   25 s (`hang`), an exit before any window (`exited-before-window`), Wine's
   launcher exiting before the game's exe appears (`exited-before-game`), or the

@@ -32,7 +32,7 @@ struct GameQuitCheckTests {
         check.observe(line: refusedMode, at: start + 1.2)
         let failure = try #require(check.failure(exitedAt: start + 2))
         #expect(failure.summary == "it quit before it drew anything")
-        #expect(failure.explanation.contains("display mode this Mac doesn't have"))
+        #expect(failure.explanation.contains("screen setting this Mac doesn't have"))
         #expect(failure.wineErrors == [refusedMode])
     }
 
@@ -111,7 +111,7 @@ struct GameQuitCheckTests {
     @Test("An unhandled exception reads as a crash")
     func crash() {
         #expect(GameQuitCheck.isWineError("wine: Unhandled page fault on read access to 00000000 at address 0045A1B2"))
-        #expect(GameQuitCheck.knownCause(of: "wine: Unhandled page fault on read access to 00000000") == "The game crashed.")
+        #expect(GameQuitCheck.knownCause(of: "wine: Unhandled page fault on read access to 00000000") == "Something went wrong inside the game, and it had to close.")
         #expect(!GameQuitCheck.isWineError("0130:fixme:d3d:wined3d_check_device_format_conversion"))
     }
 }

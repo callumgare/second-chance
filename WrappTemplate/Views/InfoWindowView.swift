@@ -506,7 +506,7 @@ struct InfoWindowView: View {
 
     private var possibleFailureNote: some View {
         VStack(alignment: .leading, spacing: 8) {
-            caution("Possible launch failure")
+            caution("The game may not be starting")
 
             informative(viewModel.stage.possibleFailureText(canTryAgain: viewModel.onTryAgain != nil))
                 .textSelection(.enabled)
@@ -598,7 +598,7 @@ struct InfoWindowView: View {
         }
     }
 
-    /// Quit, and for a game that can run without Steam, Launch Directly
+    /// Quit, and for a game that can run without Steam, Start Without Steam
     /// as the default. While the launch is `stillTrying` it may yet work, so
     /// Return doesn't quit it: Quit takes Escape instead.
     @ViewBuilder
@@ -614,7 +614,7 @@ struct InfoWindowView: View {
                 .accessibilityIdentifier("try-again")
         }
         if let launchWithoutSteam = viewModel.onLaunchWithoutSteam {
-            Button("Launch Directly", action: launchWithoutSteam)
+            Button("Start Without Steam", action: launchWithoutSteam)
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier("launch-without-steam")
         }
@@ -670,10 +670,13 @@ struct InfoWindowView: View {
 
     private func errorContent(exitCode: Int32, explanation: String?) -> some View {
         Group {
-            message(explanation == nil ? "The game crashed" : "The game quit unexpectedly")
+            // The exit code is for the log and the report, not the player.
+            message(explanation == nil ? "The game stopped unexpectedly" : "The game quit unexpectedly")
                 .textSelection(.enabled)
 
-            informative(explanation ?? "It stopped suddenly while it was running (error code \(exitCode)).")
+            informative(explanation ?? (viewModel.gameHasLoaded
+                ? "It stopped suddenly while it was running."
+                : "It stopped before it could open. Try opening it again."))
                 .textSelection(.enabled)
 
             newerReleaseNote
@@ -784,7 +787,7 @@ struct InfoWindowView: View {
 #Preview("Quit unexpectedly") {
     InfoWindowView(viewModel: {
         let vm = InfoWindowViewModel(stage: .startingGame(title: "The White Wolf of Icicle Creek"), saveWarningEnabled: false)
-        vm.phase = .error(exitCode: 0, explanation: "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it.")
+        vm.phase = .error(exitCode: 0, explanation: "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it.")
         return vm
     }())
     .frame(width: InfoWindowView.width)

@@ -5,6 +5,7 @@
 //  Game launching logic for Nancy Drew game wrappers
 
 import Foundation
+import Synchronization
 import AppKit
 import Logging
 import os
@@ -83,6 +84,20 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
 
 // MARK: - Game Launcher
 
+/// How a launch ended, for the wrapp to decide what to show.
+enum LaunchOutcome: Equatable {
+    /// The game was launched and has ended, with `exitCode`. `failed` when
+    /// it ended badly (`GameLauncher.handleGameTermination`'s judgement),
+    /// and `windowAppeared` whether its window was ever seen.
+    case ended(exitCode: Int32, failed: Bool, windowAppeared: Bool)
+    /// Nothing was started: the player chose to leave another game holding
+    /// Steam, or quit first. No failure, and nothing to show.
+    case notStarted
+    /// Starting it failed, and the player has already been told (Steam's
+    /// alert), so there is nothing more to show.
+    case failedAndTold
+}
+
 class GameLauncher {
     private let config: GameConfig
     private let gameMonitor: GameMonitor
@@ -94,10 +109,28 @@ class GameLauncher {
     private let startupDiagnostics: StartupDiagnostics?
     /// `startupDiagnostics`, once the game has been launched; nil before.
     private var diagnostics: StartupDiagnostics?
+    /// What the launch thread, the main thread (a stuck launch's report)
+    /// and the cleanup queue all reach, so behind a lock.
+    private struct Shared {
+        var desktop: WineDesktop?
+        var steam: WrappSteam?
+        var launchCounted = false
+        var failureReport: FailureReport?
+        var reportTask: Task<ReportOutcome, Never>?
+    }
+    private let shared = Mutex(Shared())
     /// The desktop `prepareDesktop` started, if it did. See `releaseDesktop`.
-    private var desktop: WineDesktop?
+    private var desktop: WineDesktop? {
+        get { shared.withLock { $0.desktop } }
+        set { shared.withLock { $0.desktop = newValue } }
+    }
     /// Steam, for a game that needs it running (`wine-steam*`).
-    private var steam: WrappSteam?
+    private var steam: WrappSteam? {
+        get { shared.withLock { $0.steam } }
+        set { shared.withLock { $0.steam = newValue } }
+    }
+    /// Whether the game's window was ever seen.
+    private var windowAppeared = false
     /// The process whose window is the game's, from when that window appears
     /// until the game ends: what `bringGameForward` brings forward.
     private let gameWindowPid = OSAllocatedUnfairLock<pid_t?>(initialState: nil)
@@ -119,8 +152,8 @@ class GameLauncher {
     private(set) var copyProtection: CopyProtection?
     /// The failure report for a run that ended badly, and its sending — for
     /// the error window to show, and for the wrapp to wait on before it exits.
-    private(set) var failureReport: FailureReport?
-    private(set) var reportTask: Task<ReportOutcome, Never>?
+    var failureReport: FailureReport? { shared.withLock { $0.failureReport } }
+    var reportTask: Task<ReportOutcome, Never>? { shared.withLock { $0.reportTask } }
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
     /// What Wine and the game print, and what ScummVM prints: categories of
@@ -209,10 +242,14 @@ class GameLauncher {
                 // has to be saved and taken out of the wrapp on the way out.
                 // Briefly: the quit fallback kills everything after 15s, and
                 // Steam has been seen to ignore -shutdown when it's stuck.
-                if let steam = self.steam {
+                if let steam = self.claimSteam() {
                     onQuitStep?(.closingSteam)
                     steam.finish(timeout: 8)
                 }
+                // The desktop's start.exe keeps the session going until it is
+                // let go, so the session could never end by itself in its
+                // grace period, and every quit waited it out.
+                self.releaseDesktop()
                 let server = self.config.wine.server
                 self.logger.debug("[Cleanup/performCleanup] Shutting down Wine...")
                 let periods = Self.quitPeriods()
@@ -286,15 +323,15 @@ class GameLauncher {
     private var launchedAt = Date()
     /// Whether the game's own process was ever seen (always, for ScummVM).
     private var gameStarted = false
-    /// Whether this launch has been counted for the success reports.
-    private var launchCounted = false
     /// The prefix's Documents, where the games keep their folders (a link to
     /// the wrapp's saves).
     private var documentsDirectory: URL {
         config.wine.documents
     }
 
-    private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) {
+    /// Log and report how the game ended; whether it ended badly.
+    @discardableResult
+    private func handleGameTermination(exitCode: Int32?, signal: Int32?, infoWindow: InfoWindowController?) -> Bool {
         let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
         // The wrapp stopping the game on its way out (Cmd-Q, a SIGTERM to the
         // wrapp) is a quit, not a failure, whatever signal the game got.
@@ -306,7 +343,7 @@ class GameLauncher {
             }
             infoWindow?.close()
             logger.notice("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
-            return
+            return false
         }
         // Only Wine launches track the window (ScummVM has no diagnostics).
         let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
@@ -361,6 +398,7 @@ class GameLauncher {
         infoWindow?.close()
 
         logger.notice("[Game Launcher] Game has terminated, returning control to app lifecycle manager")
+        return endedBadly
     }
 
     /// The person gave up on a launch that seemed stuck (the info window's
@@ -389,8 +427,10 @@ class GameLauncher {
             return false
         }
         logger.error("[Report] The launch has seemed stuck for \(ran): reporting it, and still waiting")
-        failureReport = stuck
-        reportTask = sending
+        shared.withLock {
+            $0.failureReport = stuck
+            $0.reportTask = sending
+        }
         return true
     }
 
@@ -443,8 +483,11 @@ class GameLauncher {
     /// Count this launch for the success reports, once: a launch given up
     /// on as stuck still ends, and that end is not a second launch.
     private func recordLaunch(outcome: String) {
-        guard !launchCounted else { return }
-        launchCounted = true
+        let first = shared.withLock { shared in
+            defer { shared.launchCounted = true }
+            return !shared.launchCounted
+        }
+        guard first else { return }
         SuccessReporter.record(SuccessReport(
             event: .launch, outcome: outcome, game: config.gameSlug,
             source: config.gameSource, engine: config.gameEngine.rawValue
@@ -473,8 +516,11 @@ class GameLauncher {
     /// Report at the detail the setting asks for, without holding up the
     /// caller: the error window shows the outcome when it comes.
     private func report(_ report: FailureReport) {
-        failureReport = report
-        reportTask = Task.detached { await FailureReporter.report(report) }
+        let sending = Task.detached { await FailureReporter.report(report) }
+        shared.withLock {
+            $0.failureReport = report
+            $0.reportTask = sending
+        }
     }
 
     // MARK: - Game Launching
@@ -484,7 +530,7 @@ class GameLauncher {
     /// itself back, until the player has read the save warning, so that what
     /// can start behind it does.
     func launchGame(infoWindow: InfoWindowController? = nil, debugMode: Bool = false,
-                    beforeTheGame: () -> Void = {}) -> Int32 {
+                    beforeTheGame: () -> Void = {}) -> LaunchOutcome {
         launchedAt = Date()
         gameStarted = false
         LogContext.enterStage("Starting the game")
@@ -513,7 +559,7 @@ class GameLauncher {
                 let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
                 guard let lock = try takeSteam() else {
                     logger.notice("[Steam] Not starting: another game has Steam, and the player chose to leave it")
-                    return -1
+                    return .notStarted
                 }
                 infoWindow?.onSignInToSteamAfresh = { [weak self] in self?.steam?.signInAfresh() }
                 let started = try WrappSteam(lock: lock, config: config, status: status,
@@ -527,10 +573,10 @@ class GameLauncher {
                 try started.waitUntilSignedIn(status: status)
             } catch WrappSteam.Failure.cancelled {
                 logger.notice("[Steam] Quit while waiting for Steam to sign in")
-                return -1
+                return .notStarted
             } catch {
                 reportSteamFailure(error)
-                return -1
+                return .failedAndTold
             }
         } else if config.gameEngine.runsInWine {
             prepareDesktop(config.wine)
@@ -538,7 +584,7 @@ class GameLauncher {
         beforeTheGame()
         if isQuitting {
             logger.notice("[Game Launch] Quit before the game started")
-            return -1
+            return .notStarted
         }
         LogContext.enterStage("Starting the game")
         // The game's own start is timed from here, not from Steam's or the
@@ -560,9 +606,9 @@ class GameLauncher {
         }
 
         guard launchResult.gamePid > 0 || (launchedBySteam && launchResult.gameExeName != nil) else {
-            logger.critical("ERROR: Failed to launch game")
-            steam?.finish(timeout: 90)
-            return -1
+            logger.critical("Failed to launch the game")
+            handleGameTermination(exitCode: nil, signal: nil, infoWindow: nil)
+            return .ended(exitCode: -1, failed: true, windowAppeared: false)
         }
 
         var gamePid = launchResult.gamePid
@@ -583,6 +629,7 @@ class GameLauncher {
                 if config.gameEngine.runsInWine {
                     logger.notice("[Game Launch] Activating game window...")
                     if gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) {
+                        windowAppeared = true
                         gameWindowPid.withLock { $0 = detectedPid }
                         diagnostics?.gameWindowAppeared()
                         quitCheck?.windowDidAppear()
@@ -592,10 +639,8 @@ class GameLauncher {
             } else if launchedBySteam {
                 logger.error("[Game Launch] Steam never started \(gameExeName)")
                 diagnostics?.gameExited(exitCode: -1)
-                steam?.finish(timeout: 90)
-                releaseDesktop()
-                handleGameTermination(exitCode: nil, signal: nil, infoWindow: infoWindow)
-                return -1
+                handleGameTermination(exitCode: nil, signal: nil, infoWindow: nil)
+                return .ended(exitCode: -1, failed: true, windowAppeared: false)
             } else {
                 logger.error("[Game Launch] \(gameExeName) was never seen running; waiting for Wine's launcher to finish")
             }
@@ -606,15 +651,21 @@ class GameLauncher {
             _ = gameMonitor.waitForGameToStart(gameExeName: "scummvm", gamePid: gamePid)
             logger.notice("[Game Launch] Waiting for ScummVM's window...")
             if gameMonitor.activateGameWindow(gamePid: gamePid, infoWindow: infoWindow) {
+                windowAppeared = true
                 let pid = gamePid
                 gameWindowPid.withLock { $0 = pid }
                 helperReport?.gameWindowAppeared()
+                gameMonitor.hideWrapperFromDock()
             }
-            gameMonitor.hideWrapperFromDock()
         }
 
-        // Hide info window now that game has started
-        infoWindow?.notifyGameLoaded()
+        // The loading window goes once the game's own window is up. Without
+        // one, it stays, and is replaced by an error if the game then fails:
+        // a game that dies before its window must not leave the player with
+        // nothing on screen.
+        if windowAppeared {
+            infoWindow?.notifyGameLoaded()
+        }
         if gameStarted {
             LogContext.enterStage("Playing")
         }
@@ -640,13 +691,30 @@ class GameLauncher {
         // Get exit code from GameMonitor which captured it safely
         let exitCode = gameMonitor.exitCode ?? 0
         diagnostics?.gameExited(exitCode: exitCode)
-        steam?.finish(timeout: 90)
+
+        // Judged and reported now; Steam and the desktop are finished after
+        // (`finishSession`), so an error isn't held back while Steam shuts down.
+        let failed = handleGameTermination(exitCode: gameMonitor.exitCode, signal: gameMonitor.exitSignal,
+                                           infoWindow: windowAppeared ? infoWindow : nil)
+
+        return .ended(exitCode: exitCode, failed: failed, windowAppeared: windowAppeared)
+    }
+
+    /// Once the game has ended: let Steam save its sign-in and stop, and
+    /// release the desktop, so the Wine session can end. After whatever is
+    /// to be shown has been: Steam can take a minute and a half.
+    func finishSession() {
+        claimSteam()?.finish(timeout: 90)
         releaseDesktop()
+    }
 
-        // Handle game termination (just cleanup, no app lifecycle management)
-        handleGameTermination(exitCode: gameMonitor.exitCode, signal: gameMonitor.exitSignal, infoWindow: infoWindow)
-
-        return exitCode
+    /// Steam, for whichever of the game's end and a quit gets to it first to
+    /// finish: never both.
+    private func claimSteam() -> WrappSteam? {
+        shared.withLock { shared in
+            defer { shared.steam = nil }
+            return shared.steam
+        }
     }
 
     // MARK: - Wine Game Launching
@@ -883,8 +951,11 @@ class GameLauncher {
     /// Let the pre-started desktop shut down once the game has exited, or it
     /// keeps the whole Wine session alive. See `WineDesktop.release`.
     private func releaseDesktop() {
-        guard let desktop else { return }
-        self.desktop = nil
+        let claimed = shared.withLock { shared in
+            defer { shared.desktop = nil }
+            return shared.desktop
+        }
+        guard let desktop = claimed else { return }
         logger.notice("[Desktop] Game exited")
         desktop.release()
     }

@@ -35,7 +35,7 @@ a basic or a detailed report, or none. The question makes the case that a
 detailed report is usually what it takes to fix the problem. The answer sends
 this report (or not) and becomes the setting: Basic, Detailed, or for Don't
 Send, Manual, so each later failure asks again. The screen's way out (Quit,
-Launch Directly, Start Over) stays hidden until then
+Start Without Steam, Start Over) stays hidden until then
 (`HiddenUntilReportAnswered`). Leaving anyway sends the report basic on the
 way out: `FailureReporter.wait`, which every exit path calls, sends any
 unanswered first failure as basic before it waits. That covers Cmd-Q, a run
@@ -160,7 +160,7 @@ that outcome for `FailureReportCallout`.
   `applicationShouldTerminate` asks `InfoWindowController.giveUpIfStuck`,
   which sends it through `GameLauncher.reportStuckLaunch`, shows it being
   sent or asks about it as the error window would, and quits again once
-  it has gone or been declined. Launch Directly is not a give-up and quits
+  it has gone or been declined. Start Without Steam is not a give-up and quits
   without one. Most people walk away from a stuck launch rather than quit
   it while it says so, so a launch still saying it may have failed 5
   minutes after its loading window first showed

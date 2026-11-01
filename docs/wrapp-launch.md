@@ -52,7 +52,7 @@ clock (`LoadingClock`), which starts when the stage does — or, behind the
 save warning, when the warning is confirmed:
 
 - **"Taking longer than usual"** comes after the stage's `slowNoteAfter`.
-- **"Possible launch failure"** needs two things: the stage has run for its
+- **"The game may not be starting"** needs two things: the stage has run for its
   `possibleFailureAfter`, longer than it takes on a busy Mac, and the launch
   has shown no sign of getting anywhere for the stage's `stallAfter`. A
   launch that is merely slow keeps showing signs, so it is left be; one that
@@ -155,6 +155,26 @@ the Mac is heavily loaded each step waits three times as long
 against 5 s before it is asked to stop. It never replaces the error window: someone reading why the game
 failed keeps that. Quitting from the error window still waits for Wine, but
 says nothing more.
+
+A quit lets the pre-started desktop go first (`releaseDesktop`, as the
+game's own end does): its `start.exe` keeps the Wine session alive, so
+without that a quit could never end by itself in its grace period.
+
+## How a launch ends
+
+`GameLauncher.launchGame` returns a `LaunchOutcome`, and `main` decides from
+it what to show: `.notStarted` (the player left another game holding Steam,
+or quit first) and `.failedAndTold` (Steam's alert already said why) show
+nothing more; `.ended` carries the exit code, whether the run ended badly
+(`handleGameTermination`'s judgement, which also reports it) and whether the
+game's window ever appeared. The loading window closes only once the game's
+window appears, so a game that dies before then (ScummVM included, which has
+no quit check) gets the error window in its place, rather than the wrapp
+vanishing. A game that fails after its window appeared is reported but shows
+nothing, as before. Steam and the desktop are finished (`finishSession`)
+after the error is up, so it isn't held back while Steam closes, and the
+wrapp counts as closing (opening it again starts it again once Wine has
+finished) from the moment the game has gone.
 
 ## Measurements
 
