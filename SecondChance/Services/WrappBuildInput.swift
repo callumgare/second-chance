@@ -647,6 +647,11 @@ class WrappBuildInput {
         environment["DISK_1_PATH"] != nil
     }
 
+    /// Whether nobody is there to answer the installer's own wizard: a
+    /// headless run. The installer runner asks this rather than reading the
+    /// environment itself, so the two never disagree.
+    var isUnattended: Bool { isHeadlessRun }
+
     /// True when running headless (any build input env var set or the
     /// NON_INTERACTIVE flag present).
     private var isHeadlessRun: Bool {

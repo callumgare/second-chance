@@ -93,6 +93,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     gameInfo: gameInfo,
                     source: .disk,
                     installerName: installerName,
+                    unattended: input.isUnattended,
                     confirmPatchFailure: input.confirmPatchFailure
                 )
             case .scummvm:

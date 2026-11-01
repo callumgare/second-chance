@@ -53,6 +53,7 @@ class GameInstallerRunner {
         source: WrappSource,
         installerPath: URL? = nil,
         installerName: String? = nil,
+        unattended: Bool,
         confirmPatchFailure: PatchFailureConfirmation
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
@@ -105,8 +106,10 @@ class GameInstallerRunner {
         // click through it: never in strict mode, and never headless or under
         // test, where it would wait for ever (an integration run's builds
         // held a build slot for 50 minutes on a wizard nobody clicked).
+        // `unattended` is the build's own answer (`WrappBuildInput.isUnattended`),
+        // so the runner and the prompts agree on whether anyone is there.
         let strictInstall = ProcessInfo.processInfo.environment["STRICT_INSTALL"] == "true"
-        let unattended = ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" || TestHost.isRunning
+        let unattended = unattended || TestHost.isRunning
         let maxAttempts = (strictInstall || unattended) ? 1 : 2
         if unattended && !strictInstall {
             logger.notice("Unattended build: no interactive installer retry if the silent install fails")
@@ -1377,155 +1380,5 @@ extension GameInstallerRunner {
             let (left, right) = (size(lhs), size(rhs))
             return left != right ? left < right : lhs.path > rhs.path
         }
-    }
-}
-
-/// Which installer log `InstallerLogStreamer` is following.
-nonisolated enum InstallerLogFormat: Sendable {
-    case msi
-    case inno
-
-    /// Nil for installers whose log Second Chance doesn't read.
-    init?(_ installerType: InstallerType) {
-        switch installerType {
-        case .msi: self = .msi
-        case .innoSetup: self = .inno
-        case .installShield, .unknown: return nil
-        }
-    }
-
-    var name: String {
-        switch self {
-        case .msi: return "MSI"
-        case .inno: return "Inno Setup"
-        }
-    }
-}
-
-/// Follows an installer's own log (`tail -F`) into the log. msiexec writes a
-/// line or two for every file it installs — 97% of the lines in a run that
-/// installed several games — and Inno Setup four, so those go in at debug,
-/// and the lines that say how the install went (failed actions, errors, the
-/// final verdict) at notice or error. `stop()` logs a one-line summary.
-nonisolated final class InstallerLogStreamer: @unchecked Sendable {
-    private let logPath: URL
-    private let format: InstallerLogFormat
-    private let process = Process()
-    private let logger: Logger
-    private let lock = NSLock()
-    private var lines = 0
-    private var files = 0
-    private var errors = 0
-    /// Called with each line too, after it is counted. Set before `start()`.
-    var onLine: (@Sendable (String) -> Void)?
-
-    init(logPath: URL, format: InstallerLogFormat) {
-        self.logPath = logPath
-        self.format = format
-        let suffix = format == .msi ? "msi-log" : "inno-log"
-        self.logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner.\(suffix)")
-    }
-
-    func start() throws {
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/tail")
-        process.arguments = ["-n", "+1", "-F", logPath.path]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        let format = format
-        ProcessLineLogger.attach(
-            to: pipe, logger: logger, level: .debug,
-            levelFor: { Self.notableLevel(of: $0, format: format) ?? .debug },
-            onLine: { [weak self, onLine] line in
-                self?.count(line)
-                onLine?(line)
-            }
-        )
-        try process.run()
-    }
-
-    func stop() {
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-        }
-        let (lines, files, errors) = lock.withLock { (self.lines, self.files, self.errors) }
-        logger.notice("\(format.name) log: \(lines) lines, \(files) files installed, \(errors) error line\(errors == 1 ? "" : "s")")
-    }
-
-    /// The level a line deserves beyond the debug copy it already got.
-    static func notableLevel(of line: String, format: InstallerLogFormat) -> Logger.Level? {
-        switch format {
-        case .msi:
-            if line.contains("Return value 3") || line.hasPrefix("Error ") || line.contains("Installation failed")
-                || line.contains("-- Installation operation failed") {
-                return .error
-            }
-            if line.contains("Installation completed successfully") || line.contains("-- Installation operation completed")
-                || line.hasPrefix("MSI (") && line.contains("Product:") || line.contains(": INSTALL. Return value") {
-                return .notice
-            }
-        case .inno:
-            // Lines start with a timestamp: "2026-10-16 20:25:22.993   …".
-            if line.contains("Exception message:") || line.contains("Installation process failed")
-                || line.contains("Fatal exception") || line.contains("Setup is aborting") {
-                return .error
-            }
-            if line.contains(InstallCompletion.innoSuccessLine) || line.contains("Setup version: ")
-                || line.contains("Original Setup EXE: ") {
-                return .notice
-            }
-        }
-        return nil
-    }
-
-    private func count(_ line: String) {
-        let isFile = switch format {
-        case .msi: line.hasPrefix("File: ") && line.contains("Size:")
-        case .inno: line.contains("Successfully installed the file.")
-        }
-        let isError = Self.notableLevel(of: line, format: format) == .error
-        lock.withLock {
-            lines += 1
-            if isFile { files += 1 }
-            if isError { errors += 1 }
-        }
-    }
-}
-
-/// The files under a game directory, by size and modification date, so a
-/// patch's effect can be logged. Archive extraction keeps a file's original
-/// date, so a file a patch adds shows up as new rather than as newer.
-nonisolated struct GameFileSnapshot: Sendable {
-    private var files: [String: (size: Int, modified: Date)] = [:]
-
-    init(of directory: URL, fileManager: FileManager = .default) {
-        let root = directory.resolvingSymlinksInPath().path
-        guard let walker = fileManager.enumerator(
-            at: directory.resolvingSymlinksInPath(),
-            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
-        ) else { return }
-        for case let url as URL in walker {
-            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]),
-                  values.isRegularFile == true else { continue }
-            let relative = String(url.resolvingSymlinksInPath().path.dropFirst(root.count + 1))
-            files[relative] = (values.fileSize ?? 0, values.contentModificationDate ?? .distantPast)
-        }
-    }
-
-    /// Paths added, changed or removed since `earlier`, each marked `+`, `~` or `-`.
-    func changes(since earlier: GameFileSnapshot) -> [String] {
-        var result: [String] = []
-        for (path, now) in files {
-            if let then = earlier.files[path] {
-                if then.size != now.size || then.modified != now.modified { result.append("~\(path)") }
-            } else {
-                result.append("+\(path)")
-            }
-        }
-        for path in earlier.files.keys where files[path] == nil {
-            result.append("-\(path)")
-        }
-        return result.sorted { $0.dropFirst() < $1.dropFirst() }
     }
 }
