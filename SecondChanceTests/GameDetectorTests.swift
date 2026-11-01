@@ -115,21 +115,13 @@ struct GameDetectorTests {
     }
 }
 
-@Suite("Game Detection - Integration Tests")
-struct GameDetectorIntegrationTests {
+@Suite("Game Detection - Fixtures")
+struct GameDetectorFixtureTests {
 
-    // These tests require mock disk structures
-    // They will be skipped if the test fixtures don't exist
-
-    @Test("Detect game from mock disk with setup.exe")
-    func detectFromMockDiskWithSetupExe() async throws {
-        let testFixturesPath = URL(fileURLWithPath: "/Users/callumgare/repos/second-chance/SecondChance/TestFixtures")
-        let mockDiskPath = testFixturesPath.appendingPathComponent("scarlet-hand-disk")
-
-        guard FileManager.default.fileExists(atPath: mockDiskPath.path) else {
-            // Skip test if fixture not found
-            return
-        }
+    @Test("Detect game from the mock disc in TestFixtures")
+    func detectFromMockDisk() async throws {
+        let mockDiskPath = TestPaths.repoRoot.appendingPathComponent("TestFixtures/scarlet-hand-disk")
+        try #require(FileManager.default.fileExists(atPath: mockDiskPath.path), "TestFixtures/scarlet-hand-disk is committed")
 
         let detector = await GameDetector.shared
         let gameSlug = try await detector.detectGame(fromDisk: mockDiskPath)

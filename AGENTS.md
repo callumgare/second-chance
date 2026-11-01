@@ -310,7 +310,7 @@ direct assignment.
   `ps` listing with each process's parent, CPU and command; don't run and
   parse `ps` yourself. `ProcessList.isWine` is the one test for which
   processes are Wine's, so the build, the wrapp and WrappPuppeteer agree.
-- **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
+- **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. A test that can only run with something it may not have (real installers, a Steam sign-in) says so with a trait — `.enabled(if:)` / `.disabled(if:)` with a comment, as the integration suites do — rather than returning early; a fixture that is committed is `#require`d, so a missing one fails.
 
 ## Gotchas
 

@@ -172,26 +172,24 @@ struct GameInstallerTests {
 @Suite("Installer Integration Tests")
 struct InstallerIntegrationTests {
 
-    // These tests require actual installer files or mocks
-    // They will be skipped if test fixtures don't exist
-
-    @Test("Detect installer type from real setup.exe")
+    @Test("An .msi is an MSI installer, whatever is in it")
     @MainActor
-    func detectInstallerTypeFromFile() async throws {
-        let testFixturesPath = URL(fileURLWithPath: "/Users/callumgare/repos/second-chance/SecondChance/TestFixtures")
-        let mockInstallerPath = testFixturesPath.appendingPathComponent("mock-installer/setup.exe")
+    func detectMSIByExtension() async throws {
+        let msi = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).msi")
+        try Data("not really an MSI".utf8).write(to: msi)
+        defer { try? FileManager.default.removeItem(at: msi) }
 
-        guard FileManager.default.fileExists(atPath: mockInstallerPath.path) else {
-            // Skip test if fixture not found
-            return
-        }
+        #expect(await GameInstallerRunner.shared.detectInstallerType(msi.path) == .msi)
+    }
 
-        let installer = GameInstallerRunner.shared
-        _ = await installer.detectInstallerType(mockInstallerPath.path)
+    @Test("A program with no version info is an unknown installer")
+    @MainActor
+    func detectUnknownInstaller() async throws {
+        let exe = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).exe")
+        try Data("MZ, and nothing a Windows program would have after it".utf8).write(to: exe)
+        defer { try? FileManager.default.removeItem(at: exe) }
 
-        // The type will depend on what mock installer we create
-        // We just check that it doesn't crash - actual type depends on fixture
-        #expect(true, "Should detect installer type without crashing")
+        #expect(await GameInstallerRunner.shared.detectInstallerType(exe.path) == .unknown)
     }
 
     @Test("Patch installers get a C: path, not a Unix-looking one")
