@@ -34,6 +34,9 @@ class WrappBuildViewModel: ObservableObject {
     /// A Steam build failed in a way trying again may fix: Steam got stuck
     /// signing in, or nobody signed in. The error screen offers Try Again.
     @Published var steamBuildCanRetry = false
+    /// Steam kept getting stuck signing in, so Try Again signs out of Steam
+    /// first, in case the saved sign-in is what it's stuck on.
+    @Published var steamRetrySignsOut = false
     /// Steam is slow or stuck signing in, as the progress screen says.
     @Published var steamSignInNotice: SteamSignInNotice?
     /// The person chose to sign in to Steam afresh, from the notice that it's
@@ -394,6 +397,7 @@ class WrappBuildViewModel: ObservableObject {
             steamInUseHolder = holder
         }
         steamBuildCanRetry = buildError == .steamStoppedResponding || buildError == .steamSignInTimedOut
+        steamRetrySignsOut = buildError == .steamStoppedResponding
         if buildError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
         } else {
@@ -417,6 +421,7 @@ class WrappBuildViewModel: ObservableObject {
         isQuittingSteamHolder = false
         steamHolderDidNotQuit = false
         steamBuildCanRetry = false
+        steamRetrySignsOut = false
         steamSignInNotice = nil
         steamSignInAfreshRequested = false
     }
@@ -429,10 +434,21 @@ class WrappBuildViewModel: ObservableObject {
         steamSignInNotice = nil
     }
 
-    /// Start the Steam build again, from the error screen.
+    /// Start the Steam build again, from the error screen: signed out of
+    /// Steam first, when it kept getting stuck signing in.
     func retrySteamBuild() {
-        logger.notice("Trying the Steam build again")
+        let signOut = steamRetrySignsOut
         reset()
+        if signOut {
+            logger.notice("Trying the Steam build again, signed out of Steam, as it kept getting stuck signing in")
+            do {
+                try SteamSessionStore().signOut()
+            } catch {
+                logger.error("Couldn't sign out of Steam before trying again: \(error)")
+            }
+        } else {
+            logger.notice("Trying the Steam build again")
+        }
         selectedWrappSource = .steam
         Task { await build(from: .steam) }
     }

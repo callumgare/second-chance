@@ -100,8 +100,10 @@ the test host under xcodebuild — can still meet the prompts; answer them
    - **Stuck after that**, or a second time in a headless build, which has
      nobody to offer it to, fails with `steamStoppedResponding`, as does a
      Steam that keeps writing but neither signs in nor asks within 20
-     minutes. Nobody signing in to Steam's window within the 30 minutes is
-     `steamSignInTimedOut`. The error screen offers **Try Again** for both.
+     minutes. Its error screen's **Try Again** signs out of Steam first, in
+     case the saved sign-in is what it's stuck on, and says so. Nobody
+     signing in to Steam's window within the 30 minutes is
+     `steamSignInTimedOut`, whose Try Again just starts again.
 
    The notices' words are `SteamSignInNotice`'s, so the build's progress
    screen and a wrapp's loading window say the same.

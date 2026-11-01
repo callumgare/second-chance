@@ -509,7 +509,7 @@ private func installTerminationHandlers() {
 /// in the loading window (`.lastSessionClosing`), which after a few seconds
 /// also offers to stop it; if it closes before anyone answers, the offer goes
 /// and the launch carries on to `nextStage`. Runs off the main thread, before
-/// the game starts; "Don't Start the Game" exits the wrapp, leaving it be.
+/// the game starts; "Quit" exits the wrapp, leaving it be.
 private func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nextStage: LoadingStage) {
     let server = wine.server
     guard Blocking.wait({ await server.isRunning }) else { return }

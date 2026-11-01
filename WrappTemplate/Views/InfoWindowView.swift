@@ -529,12 +529,12 @@ struct InfoWindowView: View {
 
     @ViewBuilder
     private var lastSessionButtons: some View {
-        Button("Don't Start the Game") { viewModel.onLastSessionChoice?(.dontStart) }
+        Button("Quit") { viewModel.onLastSessionChoice?(.dontStart) }
             .keyboardShortcut(.cancelAction)
             .fixedSize()
         Button("Continue Anyway") { viewModel.onLastSessionChoice?(.continueAnyway) }
             .fixedSize()
-        Button("Stop It and Continue") { viewModel.onLastSessionChoice?(.stopItAndContinue) }
+        Button("Stop Previous and Continue") { viewModel.onLastSessionChoice?(.stopItAndContinue) }
             .keyboardShortcut(.defaultAction)
             .fixedSize()
     }
