@@ -129,11 +129,17 @@ static CGFloat wineScale(void) {
 //
 // Either way the picture comes back half a screen up with black below. With
 // the mode emulated, neither step does anything for the real display, so
-// while the game's app is in the background a request to restore the
-// desktop's mode (a NULL mode) and one to minimize a window are answered as
-// done without doing them. The window stays in its Space, scaled, and on the
-// player's return wined3d activates it as normal, and the game's reset finds
-// the mode it asks for already set.
+// from the moment the game's app is put in the background a request to
+// restore the desktop's mode (a NULL mode) and one to minimize a window are
+// answered as done without doing them. The window stays in its Space, scaled,
+// and on the player's return wined3d activates it as normal, and the game's
+// reset finds the mode it asks for already set.
+//
+// The game hears of losing focus through its message queue, after the app
+// has. A quick Cmd-Tab brings the app back before the game has handled
+// losing focus, so coming back to the front doesn't end this: the game asking
+// for its own mode again (a mode that isn't NULL) does, as wined3d does when
+// it handles the return.
 //
 // The game's Windows side reaches win32u.so's functions through the syscall
 // table in win32u.so's __DATA,__data, which ntdll keeps a pointer to; the
@@ -145,8 +151,9 @@ typedef int32_t (*ChangeDisplaySettingsFn)(void *device, void *mode, void *hwnd,
 typedef int32_t (*ShowWindowFn)(void *hwnd, int32_t cmd);
 static ChangeDisplaySettingsFn gChangeDisplaySettings;
 static ShowWindowFn gShowWindow;
-/// Whether the game's app is in the background: set on the main thread as
-/// the app resigns and regains active, read on the game's threads.
+/// Whether the game's app has been in the background since the game last
+/// asked for its own mode: set on the main thread as the app resigns active,
+/// cleared and read on the game's threads.
 static _Atomic BOOL gInBackground;
 static _Atomic BOOL gReportedKept;
 
@@ -162,6 +169,10 @@ static BOOL keepingInBackground(const char *what) {
 
 static int32_t changeDisplaySettingsKeepingMode(void *device, void *mode, void *hwnd, uint32_t flags, void *lparam) {
     if (!mode && keepingInBackground("restoring the desktop's display mode")) return 0;   // DISP_CHANGE_SUCCESSFUL
+    if (mode && gInBackground) {
+        gInBackground = NO;
+        os_log(gLog, "[EmulatedMode] the game asked for its mode again, so it has handled coming back");
+    }
     return gChangeDisplaySettings(device, mode, hwnd, flags, lparam);
 }
 
@@ -206,8 +217,6 @@ static BOOL keepPictureInBackground(void) {
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     [center addObserverForName:NSApplicationDidResignActiveNotification object:nil queue:nil
                     usingBlock:^(NSNotification *note) { (void)note; gInBackground = YES; }];
-    [center addObserverForName:NSApplicationWillBecomeActiveNotification object:nil queue:nil
-                    usingBlock:^(NSNotification *note) { (void)note; gInBackground = NO; }];
     return YES;
 }
 

@@ -381,7 +381,11 @@ blits it up; winemac has nothing like it.) In the game's process the helper:
   desktop's mode, and one to minimize a window, as done without doing them. It
   swaps `NtUserChangeDisplaySettings` and `NtUserShowWindow` in win32u.so's
   syscall table (its `__DATA,__data`), which is how the game's Windows side
-  reaches them. The wrapp's log says `keeping the game's display mode and
+  reaches them. The game hears it has lost focus through its message queue,
+  after the app has, and a quick Cmd-Tab brings the app back before the game
+  has handled it. So the helper keeps doing this until the game asks for its
+  own mode again, as wined3d does when it handles the return, not until the
+  app is back in front. The wrapp's log says `keeping the game's display mode and
   window while it's in the background` the first time it does.
 
 Once Wine's window covers the display, [native fullscreen](#native-fullscreen)
