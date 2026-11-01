@@ -41,22 +41,19 @@ struct ErrorView: View {
             LogActionButtons(logWindowTitle: "Installation Log")
         } trailing: {
             HiddenUntilReportAnswered(model: viewModel.failureReport) {
-                if viewModel.steamInUseHolder != nil || viewModel.steamBuildCanRetry {
-                    HStack {
-                        Button("Start Over") {
-                            viewModel.reset()
-                        }
+                HStack {
+                    Button("Start Over") {
+                        viewModel.reset()
+                    }
+                    if viewModel.selectedWrappSource != nil {
+                        // The same source again, with the same disc or
+                        // download if it's still there.
                         Button("Try Again") {
-                            viewModel.retrySteamBuild()
+                            viewModel.retryBuild()
                         }
                         .keyboardShortcut(.defaultAction)
                         .disabled(viewModel.isQuittingSteamHolder)
                     }
-                } else {
-                    Button("Start Over") {
-                        viewModel.reset()
-                    }
-                    .keyboardShortcut(.defaultAction)
                 }
             }
         }

@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import Synchronization
 import Logging
 import AppKit
 import SecondChanceKit
@@ -570,8 +571,43 @@ class WrappBuildHelper {
 
     // Process-wide, not per helper: each build has a helper of its own (for
     // its own bus), and the app's quit cleans up through `.shared`.
-    private static var temporaryWrapps: Set<URL> = []
-    private static let wrappsLock = NSLock()
+    private struct Tracking {
+        var wrapps: Set<URL> = []
+        /// Run once no build has a temporary wrapp (`whenNoBuildIsRunning`).
+        var whenNone: [@Sendable () -> Void] = []
+    }
+    private static let tracking = Mutex(Tracking())
+
+    /// The file beside a temporary wrapp naming the process building it, so
+    /// a sweep for ones left behind never takes a build that's still going.
+    /// Beside it, not in it, where it would break the wrapp's signature.
+    static func ownerFile(of wrapp: URL) -> URL {
+        URL(fileURLWithPath: wrapp.path + ".owner")
+    }
+
+    /// Run `block` once no build has a temporary wrapp: at once if none
+    /// does. For what mustn't happen mid-build, such as an update's relaunch.
+    static func whenNoBuildIsRunning(_ block: @escaping @Sendable () -> Void) {
+        let now = tracking.withLock { tracking in
+            if tracking.wrapps.isEmpty { return true }
+            tracking.whenNone.append(block)
+            return false
+        }
+        if now { block() }
+    }
+
+    /// Stop tracking `path`, and run what was waiting for no builds if it
+    /// was the last.
+    private static func untrack(_ path: URL) {
+        try? FileManager.default.removeItem(at: ownerFile(of: path))
+        let waiting = tracking.withLock { tracking -> [@Sendable () -> Void] in
+            tracking.wrapps.remove(path)
+            guard tracking.wrapps.isEmpty else { return [] }
+            defer { tracking.whenNone.removeAll() }
+            return tracking.whenNone
+        }
+        waiting.forEach { $0() }
+    }
 
     /// Fail at the start, in plain words, unless there looks to be room for
     /// a build from `source` (a disc, or a download) where temporary wrapps
@@ -595,22 +631,23 @@ class WrappBuildHelper {
 
     /// Register a temporary wrapp for tracking
     private func registerTemporaryWrapp(_ path: URL) {
-        Self.wrappsLock.lock()
-        defer { Self.wrappsLock.unlock() }
-        Self.temporaryWrapps.insert(path)
+        Self.tracking.withLock { _ = $0.wrapps.insert(path) }
+        do {
+            try Data("\(getpid())".utf8).write(to: Self.ownerFile(of: path))
+        } catch {
+            logger.warning("Couldn't mark \(path.lastPathComponent) as this build's: \(error.localizedDescription)")
+        }
     }
 
     /// Unregister a temporary wrapp (call after successful move/save)
     func unregisterTemporaryWrapp(_ path: URL) {
-        Self.wrappsLock.lock()
-        defer { Self.wrappsLock.unlock() }
-        Self.temporaryWrapps.remove(path)
+        Self.untrack(path)
     }
 
     /// Remove one tracked temp wrapp — a cleanup *primitive* the builder
     /// calls on its error path. No-op if already moved or removed.
     func removeTempWrapp(_ path: URL) async {
-        Self.wrappsLock.withLock { _ = Self.temporaryWrapps.remove(path) }
+        defer { Self.untrack(path) }
 
         guard fileManager.fileExists(atPath: path.path) else { return }
 
@@ -667,9 +704,16 @@ class WrappBuildHelper {
         for wrapp in candidates where wrapp.lastPathComponent.hasPrefix("NancyDrew-") && wrapp.pathExtension == "app" {
             guard let modified = (try? wrapp.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
                   modified < cutoff else { continue }
+            // A long build (Steam allows hours) barely touches the folder
+            // itself: one whose builder is still running is still in use.
+            if let owner = try? String(contentsOf: Self.ownerFile(of: wrapp), encoding: .utf8),
+               let pid = pid_t(owner.trimmingCharacters(in: .whitespacesAndNewlines)), kill(pid, 0) == 0 || errno == EPERM {
+                continue
+            }
             let size = DirectorySize.measure(wrapp)
             do {
                 try Self.removeWrappDirectory(wrapp)
+                try? fileManager.removeItem(at: Self.ownerFile(of: wrapp))
                 logger.notice("🧹 Removed a temp wrapp left by an earlier run: \(wrapp.lastPathComponent) (\(size.description), last changed \(modified))")
             } catch {
                 logger.warning("Can't remove the stale temp wrapp \(wrapp.path): \(error.localizedDescription)")
@@ -679,7 +723,7 @@ class WrappBuildHelper {
 
     /// Whether a build has a temporary wrapp that quitting would delete.
     static var hasTemporaryWrapps: Bool {
-        wrappsLock.withLock { !temporaryWrapps.isEmpty }
+        tracking.withLock { !$0.wrapps.isEmpty }
     }
 
     /// End the Wine running in each temporary wrapp, before quitting deletes
@@ -688,7 +732,7 @@ class WrappBuildHelper {
     /// for it. Each session is asked to stop first and forced only if it
     /// won't (`WineServer.shutDown`), all at once.
     static func endWineInTemporaryWrapps() async {
-        let wrapps = wrappsLock.withLock { Array(temporaryWrapps) }
+        let wrapps = tracking.withLock { Array($0.wrapps) }
         await withTaskGroup(of: Void.self) { group in
             for wrapp in wrapps {
                 group.addTask {
@@ -702,10 +746,10 @@ class WrappBuildHelper {
     }
 
     func cleanupTemporaryWrapps() {
-        Self.wrappsLock.lock()
-        let wrapps = Array(Self.temporaryWrapps)
-        Self.temporaryWrapps.removeAll()
-        Self.wrappsLock.unlock()
+        let wrapps = Self.tracking.withLock { tracking in
+            defer { tracking.wrapps.removeAll() }
+            return Array(tracking.wrapps)
+        }
 
         guard !wrapps.isEmpty else { return }
 
@@ -720,6 +764,7 @@ class WrappBuildHelper {
 
         logger.notice("🧹 Cleaning up \(wrapps.count) temporary wrapp(s)...")
         for wrapp in wrapps {
+            try? fileManager.removeItem(at: Self.ownerFile(of: wrapp))
             do {
                 if fileManager.fileExists(atPath: wrapp.path) {
                     logger.notice("   Removing: \(wrapp.path)")

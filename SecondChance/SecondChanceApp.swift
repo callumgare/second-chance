@@ -29,6 +29,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Quitting part way through installing a game throws the install
+        // away: check that's meant. (An update's relaunch waits for the
+        // build instead: `AppUpdater`.)
+        if WrappBuildHelper.hasTemporaryWrapps, !CLIBuilder.isEnabled, !TestHost.isRunning, !Self.confirmQuitDuringBuild() {
+            return .terminateCancel
+        }
         // Quitting with the first-failure question unanswered: send the
         // report basic, the error screen saying so, then quit again.
         if FailureReporter.sendUnansweredBeforeQuitting(then: {
@@ -56,6 +62,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    /// Whether to quit with a game still being installed.
+    private static func confirmQuitDuringBuild() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "A game is still being installed"
+        alert.informativeText = "If you quit now, installing stops, and you'll need to start again from the beginning."
+        alert.addButton(withTitle: "Keep Installing")
+        alert.addButton(withTitle: "Quit")
+        alert.buttons[1].hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
     private func finishTerminating() {
         WrappBuildHelper.shared.cleanupTemporaryWrapps()
         // A failure report sent from the error screen moments ago.
@@ -67,6 +84,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 @main
 struct SecondChanceApp: App {
+    /// The main window's scene id, by which `NSApp.installerWindow` finds it.
+    static let mainWindowID = "main"
+
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var wrappBuildViewModel: WrappBuildViewModel
     @AppStorage(DebugCommands.settingKey) private var showDebugMenu = false
@@ -170,7 +190,9 @@ struct SecondChanceApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // One window, not a group: a second would show the same build, and
+        // closing it mid-build would leave the build running out of sight.
+        Window("Second Chance", id: Self.mainWindowID) {
             ContentView()
                 .environmentObject(wrappBuildViewModel)
         }

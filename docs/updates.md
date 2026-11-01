@@ -12,7 +12,11 @@ A wrapp that fails to launch does say when a newer one is out, though
 standard updater at launch and puts **Check for Updates…** in the app menu.
 Sparkle checks once a day without asking first (`SUEnableAutomaticChecks`).
 When it finds a newer build it shows the release notes and offers to install
-it, skip it or remind later. Installing replaces the app and relaunches it.
+it, skip it or remind later. Installing replaces the app and relaunches it,
+except while a game is being installed: `AppUpdater` is Sparkle's delegate, and
+holds the relaunch back (`shouldPostponeRelaunchForUpdate`) until
+`WrappBuildHelper.whenNoBuildIsRunning` says the build is done, since quitting
+would throw the install away. Quitting by hand during a build asks first.
 
 The updater is off in Debug builds, in headless runs (`NON_INTERACTIVE`) and
 inside the test host. A Debug build would otherwise offer to replace itself with

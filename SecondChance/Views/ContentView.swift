@@ -9,8 +9,6 @@ import SecondChanceKit
 
 struct ContentView: View {
     @EnvironmentObject var viewModel: WrappBuildViewModel
-    /// The step the build last reached, so a failure can mark it.
-    @State private var lastStep: InstallerStep = .source
 
     /// The window's fixed content size, which `UIStateCatalog` draws its
     /// states at too.
@@ -36,13 +34,23 @@ struct ContentView: View {
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .onChange(of: viewModel.currentState) { _, newState in
-            if let step = InstallerStep(newState) {
-                lastStep = step
+            switch newState {
+            case .error(let message):
+                // Not under test: a failed build's window (`BuildWindow`)
+                // must not take the front from a game another test is
+                // launching.
+                if !TestHost.isRunning { NSApp.activate() }
+                AccessibilityNotification.Announcement("Installation failed. \(message)").post()
+            case .completed:
+                AccessibilityNotification.Announcement("Installation complete. The game is ready to play.").post()
+            default:
+                break
             }
-            // Not under test: a failed build's window (`BuildWindow`) must
-            // not take the front from a game another test is launching.
-            if case .error = newState, !TestHost.isRunning {
-                NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+        .onChange(of: viewModel.instructions) { _, instructions in
+            // What the person has to do now, said as soon as it appears.
+            if let instructions {
+                AccessibilityNotification.Announcement(instructions).post()
             }
         }
     }
@@ -53,7 +61,7 @@ struct ContentView: View {
 
     private var failedStep: InstallerStep? {
         guard case .error = viewModel.currentState else { return nil }
-        return lastStep
+        return viewModel.lastStep
     }
 }
 

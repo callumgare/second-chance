@@ -32,7 +32,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | Method                        | Env var override                        | Fallback (no env var)          |
 /// |-------------------------------|-----------------------------------------|--------------------------------|
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
-/// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | NSAlert to swap discs, else NSOpenPanel |
+/// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | Ejects disc 1; NSAlert answered by disc 2 going in, else NSOpenPanel |
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
@@ -70,18 +70,20 @@ class WrappBuildInput {
         if let url = try diskPathFromEnv("DISK_1_PATH", label: "Disk 1") {
             return url
         }
+        if let url = takeRetryInstaller() { return url }
         guard let url = await selectDisc(message: "Put the first game disc in your Mac's disc drive, then select it here.") else {
             // Cancelling the very first dialog means the user never started —
             // distinct from cancelling a later prompt mid-install.
             throw WrappBuildError.userCancelledBeforeStart
         }
+        viewModel?.chosenInstaller = url
         return url
     }
 
     /// Second game disk, only asked for multi-disk games, and only once disk 1
-    /// has been copied. When disk 1 is a disc in the drive, the person is
-    /// asked to swap it for disc 2 (with an Eject button), and a disc that
-    /// then appears is used without asking where it is.
+    /// has been copied. When disk 1 is a disc in the drive, it is ejected
+    /// and the person asked for disc 2; a disc that then goes in is used
+    /// without anyone clicking anything.
     @MainActor
     func getDisk2Path(gameInfo: GameInfo, disk1: URL) async throws -> URL? {
         guard gameInfo.diskCount > 1 else { return nil }
@@ -96,17 +98,35 @@ class WrappBuildInput {
         }
 
         let volumesBefore = Self.ejectableVolumes()
-        var ejectFailed = false
+        // Disc 1 is done with: out it comes, rather than asking for a click.
+        var ejectFailed = !(await Self.eject(disc1Volume))
         while true {
             let alert = NSAlert()
             alert.messageText = "Now put in disc 2"
             alert.informativeText = ejectFailed
-                ? "Disc 1 couldn't be ejected. Eject it from the Finder, put in disc 2, then click Continue."
-                : "\(gameInfo.title) comes on two discs, and disc 1 has been copied. Take it out, put in disc 2, then click Continue."
+                ? "Disc 1 couldn't be ejected. Eject it from the Finder and put in disc 2: installing carries on by itself once it's in."
+                : "\(gameInfo.title) comes on two discs, and disc 1 has been copied. Take it out and put in disc 2: installing carries on by itself once it's in."
             alert.addButton(withTitle: "Continue")
-            alert.addButton(withTitle: "Eject Disc 1")
+            if ejectFailed {
+                alert.addButton(withTitle: "Eject Disc 1")
+            }
             alert.addButton(withTitle: "Cancel")
-            switch alert.runModal() {
+            // A new disc going in answers the alert: Disk Arbitration says
+            // when it has mounted, which is what Continue was waiting for.
+            var inserted: URL?
+            let watcher = DiscMountWatcher { volume in
+                guard volume != disc1Volume, !volumesBefore.contains(volume),
+                      Self.ejectableVolumes().contains(volume) else { return }
+                inserted = volume
+                NSApp.abortModal()
+            }
+            let response = alert.runModalAskingForAttention()
+            watcher.stop()
+            if let inserted {
+                logger.notice("Disc 2 went in: \(inserted.path)")
+                return inserted
+            }
+            switch response {
             case .alertFirstButtonReturn:
                 // A disc that wasn't there before, other than disc 1, is disc 2.
                 let new = Self.ejectableVolumes().filter { $0 != disc1Volume && !volumesBefore.contains($0) }
@@ -116,17 +136,24 @@ class WrappBuildInput {
                 }
                 guard let url = await selectDisc(message: pickerMessage) else { throw WrappBuildError.userCancelled }
                 return url
-            case .alertSecondButtonReturn:
-                do {
-                    try NSWorkspace.shared.unmountAndEjectDevice(at: disc1Volume)
-                    ejectFailed = false
-                } catch {
-                    logger.warning("Couldn't eject disc 1 (\(disc1Volume.path)): \(error.localizedDescription)")
-                    ejectFailed = true
-                }
+            case .alertSecondButtonReturn where ejectFailed:
+                ejectFailed = !(await Self.eject(disc1Volume))
             default:
                 throw WrappBuildError.userCancelled
             }
+        }
+    }
+
+    /// Eject the disc at `volume`, off the main thread (it can take a few
+    /// seconds); whether it went.
+    private static func eject(_ volume: URL) async -> Bool {
+        do {
+            try await Blocking.run { try NSWorkspace.shared.unmountAndEjectDevice(at: volume) }
+            logger.notice("Ejected disc 1 (\(volume.path))")
+            return true
+        } catch {
+            logger.warning("Couldn't eject disc 1 (\(volume.path)): \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -148,6 +175,21 @@ class WrappBuildInput {
         return volumes.filter {
             (try? $0.resourceValues(forKeys: Set(keys)))?.volumeIsEjectable == true && !ISOMounter.isDiskImageVolume($0)
         }.map(\.standardizedFileURL)
+    }
+
+    /// What Try Again started this build from (`WrappBuildViewModel.retryBuild`),
+    /// if it's still there: the disc or download the failed build used.
+    @MainActor
+    func takeRetryInstaller() -> URL? {
+        guard let viewModel, let url = viewModel.retryInstaller else { return nil }
+        viewModel.retryInstaller = nil
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            logger.notice("Trying again, but \(url.path) has gone: asking for it again")
+            return nil
+        }
+        logger.notice("Trying again from \(url.path)")
+        viewModel.chosenInstaller = url
+        return url
     }
 
     /// The extensions a Her Interactive download comes as: a Windows
@@ -172,6 +214,8 @@ class WrappBuildInput {
             return url
         }
 
+        if let url = takeRetryInstaller() { return url }
+
         let panel = NSOpenPanel()
         panel.message = "Select the game you downloaded from Her Interactive: the .exe file for Windows, or for Mac the .dmg file or the installer app inside it."
         panel.canChooseFiles = true
@@ -183,6 +227,7 @@ class WrappBuildInput {
             // The first question asked: back to the welcome screen.
             throw WrappBuildError.userCancelledBeforeStart
         }
+        viewModel?.chosenInstaller = url
         return url
     }
 
@@ -217,7 +262,7 @@ class WrappBuildInput {
         alert.accessoryView = menu
         alert.addButton(withTitle: "Continue")
         alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
             // The first question the user is asked: back to the welcome screen.
             throw WrappBuildError.userCancelledBeforeStart
         }
@@ -247,7 +292,7 @@ class WrappBuildInput {
         alert.addButton(withTitle: "Launch Directly")
         alert.addButton(withTitle: "Launch via Steam")
         alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
+        switch alert.runModalAskingForAttention() {
         case .alertFirstButtonReturn: return .direct
         case .alertSecondButtonReturn: return .steam
         default: throw WrappBuildError.userCancelled
@@ -296,8 +341,6 @@ class WrappBuildInput {
             return url.appendingPathComponent(gameInfo.appBundleName)
         }
 
-        // The build may have been left running in the background.
-        NSApp.requestUserAttention(.criticalRequest)
         while true {
             guard let folder = await chooseOutputFolder(for: gameInfo) else {
                 if askChooseAgainOrStartOver(gameInfo) { continue }
@@ -338,7 +381,7 @@ class WrappBuildInput {
         alert.informativeText = "Choose where to save the game's app to keep it. Starting over throws away the game that was just installed."
         alert.addButton(withTitle: "Choose Where to Save")
         alert.addButton(withTitle: "Start Over")
-        return alert.runModal() == .alertFirstButtonReturn
+        return alert.runModalAskingForAttention() == .alertFirstButtonReturn
     }
 
     /// The game's app is already at `destination`: true to replace it,
@@ -358,7 +401,7 @@ class WrappBuildInput {
                 : "Replace it with the one just installed? Your saved games are kept."
             alert.addButton(withTitle: "Replace")
             alert.addButton(withTitle: "Choose Another Place")
-            guard alert.runModal() == .alertFirstButtonReturn else { return false }
+            guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else { return false }
             let stillOpen = NSWorkspace.shared.runningApplications.contains {
                 $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL
             }
@@ -423,8 +466,7 @@ class WrappBuildInput {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Continue Without It")
         alert.addButton(withTitle: "Stop Installing")
-        NSApp.requestUserAttention(.criticalRequest)
-        return alert.runModal() == .alertFirstButtonReturn
+        return alert.runModalAskingForAttention() == .alertFirstButtonReturn
     }
 
     /// What to do with a disc or download whose game wasn't recognised.
@@ -452,7 +494,7 @@ class WrappBuildInput {
         alert.addButton(withTitle: "Choose Another \(what.capitalized)…")
         alert.addButton(withTitle: "Install Anyway")
         alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
+        switch alert.runModalAskingForAttention() {
         case .alertFirstButtonReturn:
             logger.notice("Unrecognised game: choosing another \(what)")
             return .chooseAnother
@@ -508,7 +550,7 @@ class WrappBuildInput {
             picker = popUp
         }
 
-        switch alert.runModal() {
+        switch alert.runModalAskingForAttention() {
         case .alertFirstButtonReturn:
             let program = picker?.titleOfSelectedItem ?? first
             logger.notice("No installer recognised: trying \(program)")
@@ -539,7 +581,7 @@ class WrappBuildInput {
             + "agreeing to Apple's licence for it. Your Mac will ask for your password."
         alert.addButton(withTitle: "Install Rosetta")
         alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
             logger.notice("Rosetta is missing, and the person chose not to install it")
             throw WrappBuildError.userCancelledBeforeStart
         }
@@ -589,9 +631,12 @@ class WrappBuildInput {
     /// environment and no view model then deletes its output, and Finder's
     /// window fell back to the temporary folder, one left open per run.
     @MainActor
+    /// The build is done: bounce the Dock icon if the person has gone off
+    /// to do something else. The completion page offers to play it and to
+    /// show it in the Finder; nothing opens over it.
     func onWrappBuildComplete(_ wrappPath: URL) async {
         guard viewModel != nil, !isHeadlessRun else { return }
-        NSWorkspace.shared.selectFile(wrappPath.path, inFileViewerRootedAtPath: "")
+        await MainActor.run { NSApp.askForAttention() }
     }
 
     // MARK: - Env Helpers
@@ -640,9 +685,12 @@ class WrappBuildInput {
     }
 
     private func runOpenPanel(_ panel: NSOpenPanel) async -> URL? {
+        // A sheet on Second Chance's own window, never on Settings or the
+        // log window, whichever happens to be key.
+        NSApp.askForAttention()
         let response: NSApplication.ModalResponse
-        if let keyWindow = NSApp.keyWindow {
-            response = await panel.beginSheetModal(for: keyWindow)
+        if let window = NSApp.installerWindow {
+            response = await panel.beginSheetModal(for: window)
         } else {
             response = panel.runModal()
         }

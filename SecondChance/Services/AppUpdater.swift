@@ -9,18 +9,19 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// Checks the GitHub releases for a newer Second Chance and offers to install
 /// it, through Sparkle. The feed and the key updates must be signed with are
 /// in `Info.plist`; how a release publishes them is in docs/updates.md.
-final class AppUpdater: ObservableObject {
+final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     static let shared = AppUpdater()
 
     /// Sparkle's own answer: false while a check is already running, and
     /// always false when the updater is off.
     @Published private(set) var canCheckForUpdates = false
 
-    private let controller: SPUStandardUpdaterController?
+    private var controller: SPUStandardUpdaterController?
 
-    private init() {
+    override private init() {
+        super.init()
         guard let reason = Self.disabledReason else {
-            let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+            let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
             self.controller = controller
             controller.updater.publisher(for: \.canCheckForUpdates).assign(to: &$canCheckForUpdates)
             do {
@@ -31,8 +32,23 @@ final class AppUpdater: ObservableObject {
             }
             return
         }
-        controller = nil
         logger.debug("Update checks are off: \(reason)")
+    }
+
+    /// Installing an update quits Second Chance, which would throw away a
+    /// game being installed: the relaunch waits until no build is running.
+    func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem,
+                 untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
+        guard WrappBuildHelper.hasTemporaryWrapps else { return false }
+        logger.notice("Holding back the update to \(item.displayVersionString) until the game being installed is done")
+        nonisolated(unsafe) let install = installHandler
+        WrappBuildHelper.whenNoBuildIsRunning {
+            DispatchQueue.main.async {
+                logger.notice("No game is being installed now: installing the update")
+                install()
+            }
+        }
+        return true
     }
 
     func checkForUpdates() {

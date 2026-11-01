@@ -22,7 +22,14 @@ typealias WrappBuildInputFactory = @MainActor (WrappBuildViewModel) -> WrappBuil
 /// Main ViewModel for coordinating the wrapp build process
 @MainActor
 class WrappBuildViewModel: ObservableObject {
-    @Published var currentState: WrappBuildState = .idle
+    @Published var currentState: WrappBuildState = .idle {
+        didSet {
+            if let step = InstallerStep(currentState) { lastStep = step }
+        }
+    }
+    /// The step the build last reached, so a failure can mark it. Kept here
+    /// rather than in the window, which may be closed and opened again.
+    @Published private(set) var lastStep: InstallerStep = .source
     @Published var selectedWrappSource: WrappSource?
     /// The game holding Steam, when a Steam build failed because of it: the
     /// error screen offers to try again, and to quit it as a fallback.
@@ -31,9 +38,12 @@ class WrappBuildViewModel: ObservableObject {
     @Published var isQuittingSteamHolder = false
     /// It was asked to quit, and didn't.
     @Published var steamHolderDidNotQuit = false
-    /// A Steam build failed in a way trying again may fix: Steam got stuck
-    /// signing in, or nobody signed in. The error screen offers Try Again.
-    @Published var steamBuildCanRetry = false
+    /// The disc or download the last build was started from, so Try Again
+    /// can use it again rather than asking for it.
+    var chosenInstaller: URL?
+    /// Set by Try Again for the next build's input to take
+    /// (`WrappBuildInput.takeRetryInstaller`).
+    var retryInstaller: URL?
     /// Steam kept getting stuck signing in, so Try Again signs out of Steam
     /// first, in case the saved sign-in is what it's stuck on.
     @Published var steamRetrySignsOut = false
@@ -54,7 +64,6 @@ class WrappBuildViewModel: ObservableObject {
     /// The person asked to stop the build, which is winding down.
     @Published private(set) var isCancelling = false
 
-    @Published var progress: Double = 0.0
     /// How far the current step has got, when the build can measure it
     /// (`WrappBuildEvent.stepProgress`). Cleared at each new step.
     @Published var stepProgress: StepProgress?
@@ -200,7 +209,6 @@ class WrappBuildViewModel: ObservableObject {
 
         // Initially show state without elapsed time (substep hidden until 5 s)
         currentState = withElapsedSeconds(state, elapsed: nil)
-        progress = state.progress ?? 0.0
 
         // Start the timer unless the state doesn't need one
         switch state {
@@ -384,7 +392,6 @@ class WrappBuildViewModel: ObservableObject {
         if case .steamInUse(let holder) = buildError {
             steamInUseHolder = holder
         }
-        steamBuildCanRetry = buildError == .steamStoppedResponding || buildError == .steamSignInTimedOut
         steamRetrySignsOut = buildError == .steamStoppedResponding
         if buildError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
@@ -400,8 +407,9 @@ class WrappBuildViewModel: ObservableObject {
         selectedWrappSource = nil
         detectedGame = nil
         builtWrappURL = nil
-        progress = 0.0
         instructions = nil
+        stepProgress = nil
+        chosenInstaller = nil
         stopStepTimer()
         lastProgressState = nil
         failureReport.clear()
@@ -409,7 +417,6 @@ class WrappBuildViewModel: ObservableObject {
         steamInUseHolder = nil
         isQuittingSteamHolder = false
         steamHolderDidNotQuit = false
-        steamBuildCanRetry = false
         steamRetrySignsOut = false
         steamSignInNotice = nil
         steamSignInAfreshRequested = false
@@ -423,10 +430,13 @@ class WrappBuildViewModel: ObservableObject {
         steamSignInNotice = nil
     }
 
-    /// Start the Steam build again, from the error screen: signed out of
-    /// Steam first, when it kept getting stuck signing in.
-    func retrySteamBuild() {
-        let signOut = steamRetrySignsOut
+    /// Start the build again from the error screen, from the same source:
+    /// the same disc or download when it's still there, and for Steam,
+    /// signed out first when it kept getting stuck signing in.
+    func retryBuild() {
+        guard let source = selectedWrappSource else { return }
+        let signOut = source == .steam && steamRetrySignsOut
+        let installer = chosenInstaller
         reset()
         if signOut {
             logger.notice("Trying the Steam build again, signed out of Steam, as it kept getting stuck signing in")
@@ -436,9 +446,10 @@ class WrappBuildViewModel: ObservableObject {
                 logger.error("Couldn't sign out of Steam before trying again: \(error)")
             }
         } else {
-            logger.notice("Trying the Steam build again")
+            logger.notice("Trying the build again, from \(source.rawValue)")
         }
-        Task { await build(from: .steam) }
+        retryInstaller = installer
+        Task { await build(from: source) }
     }
 
     /// The fallback the error screen offers: quit the game holding Steam
@@ -451,7 +462,7 @@ class WrappBuildViewModel: ObservableObject {
             let gone = await holder.quit()
             isQuittingSteamHolder = false
             if gone {
-                retrySteamBuild()
+                retryBuild()
             } else {
                 steamHolderDidNotQuit = true
             }

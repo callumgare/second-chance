@@ -53,13 +53,11 @@ enum UIStateCatalog {
             }),
             window("error-steam-stuck") {
                 $0.selectedWrappSource = .steam
-                $0.steamBuildCanRetry = true
-                $0.currentState = .error(WrappBuildError.steamStoppedResponding.localizedDescription)
+                $0.currentState = .error(WrappBuildError.steamStoppedResponding.playerMessage)
             },
             window("error-steam-sign-in-timed-out") {
                 $0.selectedWrappSource = .steam
-                $0.steamBuildCanRetry = true
-                $0.currentState = .error(WrappBuildError.steamSignInTimedOut.localizedDescription)
+                $0.currentState = .error(WrappBuildError.steamSignInTimedOut.playerMessage)
             },
             window("completed") {
                 $0.selectedWrappSource = .steam
