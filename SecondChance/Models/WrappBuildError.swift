@@ -19,8 +19,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     case steamSignInRequired
     /// Nobody signed in to the window Steam showed, in time.
     case steamSignInTimedOut
-    /// Steam neither signed in nor asked for credentials: it went quiet, or
-    /// kept at it for too long without getting anywhere.
+    /// Steam neither signed in nor asked for credentials: it went quiet
+    /// again after being started again (and, from the app, after signing in
+    /// afresh), or kept at it for too long without getting anywhere.
     case steamStoppedResponding
     /// Steam exited before it signed in, twice: once is started again.
     case steamExited
@@ -79,7 +80,8 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .steamSignInTimedOut:
             return "Steam waited for you to sign in, but nobody did. Try again when you're ready, and sign in when Steam's window appears."
         case .steamStoppedResponding:
-            return "Steam got stuck while it was signing in. Try again: it usually works the second time."
+            return "Steam kept getting stuck while it was signing in, even after it was started again. "
+                + "Check that this Mac is connected to the internet, then try again."
         case .steamExited:
             return "Steam closed unexpectedly while it was starting up. Try again."
         case .steamExitedWhileInstalling:
