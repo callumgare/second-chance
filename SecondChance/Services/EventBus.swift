@@ -25,13 +25,13 @@ import Synchronization
 ///
 /// Use a concrete `Event` type (e.g. `AppEvent`) and obtain a shared instance
 /// via `EventBus.app` or construct a fresh one for test isolation.
-actor EventBus<Event> {
+actor EventBus<Event: Sendable> {
     /// A subscriber handle. Store it to unsubscribe later.
     struct Token: Hashable {
         let id: UUID
     }
 
-    private struct Delivery {
+    private struct Delivery: Sendable {
         let event: Event
         let done: Done
     }
@@ -97,12 +97,12 @@ actor EventBus<Event> {
 /// The subscriber whose handler this task is running, if any: a handler
 /// that publishes mustn't wait for its own queue, which is busy with it.
 /// Outside `EventBus`, as a generic type can't hold a task-local.
-private enum EventBusDelivery {
+nonisolated private enum EventBusDelivery {
     @TaskLocal static var subscriber: UUID?
 }
 
 /// Signalled once a subscriber has handled a delivery.
-private final class Done: Sendable {
+nonisolated private final class Done: Sendable {
     private let state = Mutex<(finished: Bool, waiter: CheckedContinuation<Void, Never>?)>((false, nil))
 
     func finish() {

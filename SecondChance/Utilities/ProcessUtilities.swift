@@ -32,7 +32,7 @@ extension Process {
         environment: [String: String]? = nil
     ) async throws -> ProcessOutput {
         try Task.checkCancellation()
-        nonisolated(unsafe) let process = Process()
+        let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         if let environment { process.environment = environment }

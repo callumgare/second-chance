@@ -15,7 +15,7 @@ import Logging
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.InProcessControl")
 
 /// One app's control socket.
-public struct ControlSocket {
+nonisolated public struct ControlSocket: Sendable {
     public let path: String
 
     /// Whether something has created the socket. It may not be listening yet.
@@ -82,7 +82,7 @@ public struct ControlSocket {
 }
 
 /// What a window control reports about the window it serves.
-public struct ControlledWindowState {
+nonisolated public struct ControlledWindowState: Sendable {
     public let windowNumber: Int
     /// In points.
     public let size: CGSize
@@ -107,7 +107,7 @@ public struct ControlledWindowState {
 /// `click <x> <y>` and `move <x> <y>`, in window points with a top-left
 /// origin — a capture's pixels divided by its scale — `yield <pid>` and
 /// `quit`.
-public struct WindowControl {
+nonisolated public struct WindowControl: Sendable {
     public let socket: ControlSocket
 
     public func state() -> ControlledWindowState? {

@@ -258,7 +258,8 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
     /// view's bounds-change notifications so new batches can follow the tail
     /// (Console.app style) without yanking a user who has scrolled up.
     private var isPinnedToBottom = true
-    private var boundsObserver: NSObjectProtocol?
+    // Set on the main thread; read again only by deinit, when nothing else can.
+    nonisolated(unsafe) private var boundsObserver: NSObjectProtocol?
     /// The scroll view currently observed. Compact-mode toggles rebuild the
     /// table (and its scroll view), so the observer must re-attach.
     private weak var observedScrollView: NSScrollView?
@@ -386,9 +387,9 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
             object: clipView,
             queue: .main
         ) { [weak self] notification in
-            guard let clipView = notification.object as? NSClipView,
-                  let scrollView = clipView.enclosingScrollView else { return }
+            guard let clipView = notification.object as? NSClipView else { return }
             MainActor.assumeIsolated {
+                guard let scrollView = clipView.enclosingScrollView else { return }
                 self?.updatePinnedState(in: scrollView)
             }
         }

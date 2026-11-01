@@ -8,14 +8,14 @@ import Foundation
 
 /// Process exit codes. The integration tests read these, so the numbers are a
 /// contract — see docs/testing.md.
-public enum PuppetExitCode: Int32 {
+nonisolated public enum PuppetExitCode: Int32 {
     case passed = 0
     case failed = 1
     case forcedQuit = 2
 }
 
 /// Typed result of running a scenario.
-public enum PuppetResult {
+nonisolated public enum PuppetResult {
     case passed
     case forcedQuit
     case failed(String)

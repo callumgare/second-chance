@@ -341,7 +341,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             }
         }
         while Date() < deadline {
-            if policy.notice == .stuck, await input.takeSteamSignInAfreshRequest() {
+            if policy.notice == .stuck, input.takeSteamSignInAfreshRequest() {
                 logger.notice("Signing out of Steam and starting it again, as the person asked")
                 try await carryOut(policy.signingInAfresh())
                 await client.shutdown(timeout: 30)

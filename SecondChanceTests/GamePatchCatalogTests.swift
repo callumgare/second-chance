@@ -16,6 +16,7 @@ import GameCatalog
 import SecondChanceKit
 
 @Suite("Game patch catalog")
+@MainActor
 struct GamePatchCatalogTests {
 
     /// The manifest as it sits in the source tree, so these tests do not

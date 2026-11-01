@@ -11,7 +11,8 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.WindowRecorder")
 
-public final class WindowRecorder {
+/// Unchecked: `stopped`, all that changes, is guarded by `lock`.
+nonisolated public final class WindowRecorder: @unchecked Sendable {
     private let window: WindowControl
     private let directory: URL
     private let interval: TimeInterval

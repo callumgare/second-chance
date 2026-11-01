@@ -13,7 +13,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 
 /// How to tell that an app is in front. Apps differ: some never report
 /// `isActive` reliably, others take over the screen without activating.
-public enum FocusStrategy {
+nonisolated public enum FocusStrategy {
     /// `isActive`, or the frontmost application's PID matches.
     case frontmost
     /// The app says its window is fullscreen — for apps that take over the
@@ -23,7 +23,7 @@ public enum FocusStrategy {
 }
 
 /// How a wait for focus ended.
-public enum FocusWaitResult: Equatable {
+nonisolated public enum FocusWaitResult: Equatable {
     case focused
     case timedOut
     /// Nothing can come to the front: the screen is locked or the display

@@ -74,7 +74,7 @@ nonisolated public struct WineServer: Sendable {
         logger.warning("[Wine Cleanup] Killing Wine (wineserver -k9)")
         _ = try? await wine.output(of: .wineserver(["-k9"]))
         let server = self
-        await Blocking.run { server.killPrograms("after wineserver -k9") }
+        _ = await Blocking.run { server.killPrograms("after wineserver -k9") }
     }
 
     /// The Wine programs running in this prefix, found by the folder each is

@@ -16,11 +16,13 @@ import Logging
 nonisolated public enum AppLogging {
 
     private static let lock = NSLock()
-    private static var bootstrapped = false
+    // Guarded by `lock`.
+    nonisolated(unsafe) private static var bootstrapped = false
     /// Set once by `bootstrap`; see there.
     nonisolated(unsafe) private(set) static var osLogEchoesToStderr = false
-    private static var completedBootstrap = false
-    private static var subsystemUsed: String?
+    // Guarded by `lock`, as is `subsystemUsed`.
+    nonisolated(unsafe) private static var completedBootstrap = false
+    nonisolated(unsafe) private static var subsystemUsed: String?
 
     /// Bootstrap the logging system. Must be the first executable statement of
     /// the process — a Logger constructed before this call is permanently

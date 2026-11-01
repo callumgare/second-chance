@@ -56,7 +56,7 @@ class WineManager {
 
     /// `build`, then the engine's version as a path-safe slug:
     /// "wine sikarugir 10.0 (revision 8)" → "dev-wine-sikarugir-10-0-revision-8".
-    static func prefixCacheKey(build: String, engineVersion: String?) -> String {
+    nonisolated static func prefixCacheKey(build: String, engineVersion: String?) -> String {
         let slug = (engineVersion ?? "")
             .lowercased()
             .split(whereSeparator: { !($0.isASCII && ($0.isLetter || $0.isNumber)) })

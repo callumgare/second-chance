@@ -59,7 +59,8 @@ public enum InputControl {
                 context.duration = clickAnimationDuration
                 animationView.animator().alphaValue = 0.0
             }, completionHandler: {
-                window.close()
+                // Called on the main thread, as the group was run there.
+                MainActor.assumeIsolated { window.close() }
             })
         }
     }

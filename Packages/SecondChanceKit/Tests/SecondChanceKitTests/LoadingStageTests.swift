@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Wrapp loading stages")
 struct LoadingStageTests {
-    static let timed: [LoadingStage] = [
+    nonisolated static let timed: [LoadingStage] = [
         .startingGame(title: "Danger by Design"),
         .startingSteam,
         .steamStartingGame(title: "Curse of Blackmoor Manor"),
@@ -157,7 +157,7 @@ struct LaunchActivityTests {
     typealias Snapshot = LaunchActivityMonitor.Snapshot
 
     @Test("ps's CPU times read as seconds", arguments: [
-        ("0:00.19", 0.19), ("1:02.50", 62.5), ("1:00:00.00", 3600), ("2-01:00:00.00", 2 * 86_400 + 3600),
+        ("0:00.19", 0.19), ("1:02.50", 62.5), ("1:00:00.00", 3600.0), ("2-01:00:00.00", 2 * 86_400 + 3600.0),
     ])
     func psTime(text: String, seconds: Double) throws {
         #expect(abs(try #require(ProcessList.seconds(fromPSTime: text)) - seconds) < 0.001)

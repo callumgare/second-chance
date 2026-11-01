@@ -12,7 +12,7 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.TextRecognizer")
 
-public enum TextRecognizer {
+nonisolated public enum TextRecognizer {
     /// Find each of `searchTexts` (case-insensitive substring match) in the
     /// image. Returns the rect of the first line containing each text found, in
     /// image pixels with a top-left origin; texts not found are absent.

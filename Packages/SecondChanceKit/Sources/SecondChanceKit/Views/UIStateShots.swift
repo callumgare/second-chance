@@ -9,7 +9,7 @@
 
 import AppKit
 import Logging
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import SwiftUI
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.UIStateShots")

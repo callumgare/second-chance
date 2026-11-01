@@ -106,10 +106,11 @@ nonisolated public struct LogFormatter {
 
     /// `<ISO8601>  <level>  <full label>  <message>` — labels carry no spaces,
     /// and fields are separated by runs of 2+ spaces.
-    nonisolated private static let fullLineRegex = /^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/
+    /// (A Regex is a value that is never changed; it just isn't marked Sendable.)
+    nonisolated(unsafe) private static let fullLineRegex = /^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/
 
     /// `HH:mm:ss.SSS  <level>  <category>  <message>`.
-    nonisolated private static let compactLineRegex = /^(\d{2}:\d{2}:\d{2}\.\d{3})\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/
+    nonisolated(unsafe) private static let compactLineRegex = /^(\d{2}:\d{2}:\d{2}\.\d{3})\s{2,}(\S+)\s{2,}(\S+)\s{2,}(.*)$/
 
     /// Time formatter for compact display (HH:mm:ss.SSS).
     nonisolated private static let timeFormatter: DateFormatter = {

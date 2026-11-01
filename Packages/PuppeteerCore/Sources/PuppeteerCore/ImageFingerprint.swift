@@ -15,7 +15,7 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.ImageFingerprint")
 
-public struct ImageFingerprint {
+nonisolated public struct ImageFingerprint {
     /// The fingerprint's grid, in cells.
     public static let width = 24
     public static let height = 18

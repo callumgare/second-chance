@@ -6,6 +6,7 @@ import Foundation
 /// to carry on without it. The GUI's alert isn't tested here; the answers a
 /// headless run gives without one are.
 @Suite("Patch failures")
+@MainActor
 struct PatchFailureTests {
     private static var manifest: URL {
         TestPaths.repoRoot.appendingPathComponent("WrappTemplate/game-patches.json")

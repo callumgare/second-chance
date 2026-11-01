@@ -189,7 +189,7 @@ public enum LoadingStage: Equatable {
 
     /// How much longer a stage gets, before it may count as failed, while the
     /// Mac is heavily loaded — if it's one whose speed depends on the CPU.
-    public static let heavyLoadFactor: TimeInterval = 3
+    nonisolated public static let heavyLoadFactor: TimeInterval = 3
 
     /// Whether how long the stage takes depends on the CPU, so that a busy
     /// Mac gives it longer. Not a download, a connection, or Wine's last

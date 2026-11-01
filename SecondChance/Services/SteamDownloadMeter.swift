@@ -123,7 +123,8 @@ nonisolated struct SteamDownloadMeter {
     }
 
     /// Sizes as figures, "0 bytes" included rather than "Zero KB".
-    private static let bytes: ByteCountFormatter = {
+    /// Set up once, then only read: formatters are safe to share.
+    nonisolated(unsafe) private static let bytes: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         formatter.allowsNonnumericFormatting = false

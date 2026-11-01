@@ -23,15 +23,15 @@ private nonisolated(unsafe) var cleanupArgvs: UnsafeMutablePointer<UnsafeMutable
 private nonisolated(unsafe) var cleanupArgvCount = 0
 /// Where to write the exit code (`--exit-code-file`), as a C string.
 private nonisolated(unsafe) var exitCodePath: UnsafeMutablePointer<CChar>?
-private let terminationMessage = strdup("\n⚠️  Received termination signal - killing processes under test...\n")
+private nonisolated(unsafe) let terminationMessage = strdup("\n⚠️  Received termination signal - killing processes under test...\n")
 
-private func handleTermination(_ sig: Int32) {
+private nonisolated func handleTermination(_ sig: Int32) {
     killTestedProcessesAndExit(143, message: terminationMessage)
 }
 
 /// Kill what's under test, run the cleanup commands, record `status` and
 /// exit with it. Async-signal-safe: called from the signal handler too.
-private func killTestedProcessesAndExit(_ status: Int32, message: UnsafeMutablePointer<CChar>?) -> Never {
+private nonisolated func killTestedProcessesAndExit(_ status: Int32, message: UnsafeMutablePointer<CChar>?) -> Never {
     if let message { _ = write(STDERR_FILENO, message, strlen(message)) }
 
     if cleanupAppPid > 0 { kill(cleanupAppPid, SIGKILL) }
@@ -54,7 +54,7 @@ private func killTestedProcessesAndExit(_ status: Int32, message: UnsafeMutableP
 /// WrappPuppeteer through LaunchServices: it isn't WrappPuppeteer's parent,
 /// so it can't read the exit status (kqueue's NOTE_EXITSTATUS is only for a
 /// process's own children).
-public enum ExitCodeFile {
+nonisolated public enum ExitCodeFile {
     public static func set(_ path: String) {
         exitCodePath = strdup(path)
     }
@@ -91,7 +91,7 @@ public enum ExitCodeFile {
 
 /// Kills the app under test (and anything it spawned) if WrappPuppeteer is
 /// interrupted, so an aborted run doesn't leave it holding the screen.
-public enum ProcessCleanup {
+nonisolated public enum ProcessCleanup {
     /// Install SIGINT/SIGTERM/SIGHUP handlers. `cleanupCommands` are run
     /// after the app is killed, for helper processes that outlive it: each a
     /// whole argv with an absolute path first, e.g. `["/usr/bin/pkill", "-9", "scummvm"]`.
@@ -161,7 +161,7 @@ public enum ProcessCleanup {
 /// `command` as `ps` reports it.
 public typealias RunningProcess = ProcessList.Entry
 
-public enum ProcessFinder {
+nonisolated public enum ProcessFinder {
     /// Every process on the system, via `ps`. Sees processes that
     /// NSWorkspace doesn't, such as Wine's.
     public static func allProcesses() -> [RunningProcess] {
@@ -232,7 +232,8 @@ public enum ProcessControl {
         configuration.createsNewApplicationInstance = true
         configuration.environment = environment
 
-        var app: NSRunningApplication?
+        // Written before the semaphore is signalled, read after.
+        nonisolated(unsafe) var app: NSRunningApplication?
         let semaphore = DispatchSemaphore(value: 0)
 
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: appPath), configuration: configuration) { runningApp, error in
@@ -255,7 +256,7 @@ public enum ProcessControl {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         configuration.createsNewApplicationInstance = false
-        var opened = false
+        nonisolated(unsafe) var opened = false
         let semaphore = DispatchSemaphore(value: 0)
         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: appPath), configuration: configuration) { runningApp, error in
             if let error {

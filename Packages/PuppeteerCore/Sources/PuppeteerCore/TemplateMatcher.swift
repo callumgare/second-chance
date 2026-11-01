@@ -8,12 +8,12 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 
 /// Set to `true` to write heatmaps, search-region and match visualisations
 /// next to each screenshot. Slow — debugging only.
-public let findImageExtraDebugging = Foundation.ProcessInfo.processInfo.environment["FIND_IMAGE_EXTRA_DEBUGGING"] == "true"
+nonisolated public let findImageExtraDebugging = Foundation.ProcessInfo.processInfo.environment["FIND_IMAGE_EXTRA_DEBUGGING"] == "true"
 
 /// With extra debugging on, `FIND_IMAGE_DEBUG_PROBE=x,y` (full-screenshot pixel
 /// coordinates) also scores the template at that one position and writes the
 /// images compared there — for answering "why didn't it match *here*?".
-private let findImageDebugProbe: CGPoint? = {
+private nonisolated let findImageDebugProbe: CGPoint? = {
     guard let raw = Foundation.ProcessInfo.processInfo.environment["FIND_IMAGE_DEBUG_PROBE"] else { return nil }
     let parts = raw.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
     guard parts.count == 2 else {
@@ -24,7 +24,7 @@ private let findImageDebugProbe: CGPoint? = {
 }()
 
 /// How colour pixels are reduced to the single channel that gets correlated.
-public enum GrayscaleConversion {
+nonisolated public enum GrayscaleConversion {
     /// Standard perceived brightness. A sensible default for most templates.
     case luminance
     /// `R - max(G, B)`: pure red is brightest, everything else darkens. Makes a
@@ -36,7 +36,7 @@ public enum GrayscaleConversion {
 /// for the template at its own pixel size; a caller that knows where its
 /// target sits and how big it renders should say so — cropping the search
 /// region is by far the biggest speed win.
-public struct TemplateMatchOptions {
+nonisolated public struct TemplateMatchOptions {
     /// Part of the screenshot to search, in unit coordinates with a top-left
     /// origin: `(0, 0, 1, 1)` is the whole screenshot,
     /// `(0.5, 0.5, 0.5, 0.5)` the bottom-right quarter.
@@ -69,7 +69,7 @@ public struct TemplateMatchOptions {
 
 /// Normalised cross-correlation template matching on the CPU, using a
 /// coarse → fine → pixel-perfect search.
-public enum TemplateMatcher {
+nonisolated public enum TemplateMatcher {
     /// Find a template image within a screenshot. Returns the match rect in
     /// screenshot pixels, top-left origin.
     public static func findImage(_ templatePath: String, in screenshotPath: String, options: TemplateMatchOptions = TemplateMatchOptions()) -> CGRect? {

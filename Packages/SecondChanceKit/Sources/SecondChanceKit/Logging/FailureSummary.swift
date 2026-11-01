@@ -22,8 +22,9 @@ import Synchronization
 /// different one. Outside a build there is just the process's stage.
 nonisolated public enum LogContext {
     private static let lock = NSLock()
-    private static var _stage: String?
-    private static var _stageStart: UInt64 = 0
+    // Both guarded by `lock`.
+    nonisolated(unsafe) private static var _stage: String?
+    nonisolated(unsafe) private static var _stageStart: UInt64 = 0
 
     /// The build the current task is working for, if any. Work that leaves
     /// the task — a detached task, a dispatch queue, a pipe's reader — loses

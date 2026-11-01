@@ -4,6 +4,7 @@ import Foundation
 import GameCatalog
 
 @Suite("Game Installer")
+@MainActor
 struct GameInstallerTests {
 
     // Helper to create test game info
@@ -170,6 +171,7 @@ struct GameInstallerTests {
 }
 
 @Suite("Installer Integration Tests")
+@MainActor
 struct InstallerIntegrationTests {
 
     @Test("An .msi is an MSI installer, whatever is in it")

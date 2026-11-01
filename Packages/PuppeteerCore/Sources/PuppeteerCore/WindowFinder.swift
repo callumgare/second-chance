@@ -12,7 +12,7 @@ import Logging
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.WindowFinder")
 
 /// One entry from `CGWindowListCopyWindowInfo`, typed.
-public struct WindowInfo {
+nonisolated public struct WindowInfo {
     public let number: Int32
     public let ownerPid: Int32
     public let ownerName: String
@@ -38,7 +38,7 @@ public struct WindowInfo {
     public var area: CGFloat { bounds.width * bounds.height }
 }
 
-public enum WindowFinder {
+nonisolated public enum WindowFinder {
     public static func onScreenWindows(excludingDesktop: Bool = true) -> [WindowInfo] {
         var options: CGWindowListOption = [.optionOnScreenOnly]
         if excludingDesktop { options.insert(.excludeDesktopElements) }

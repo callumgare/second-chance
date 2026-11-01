@@ -10,7 +10,7 @@ import Foundation
 import AppKit
 import CoreGraphics
 
-public enum TemplateMatchDebugImages {
+nonisolated public enum TemplateMatchDebugImages {
     public static func saveTemplate(templatePath: String, screenshotPath: String) {
         guard let template = NSImage(contentsOfFile: templatePath),
               let cgImage = template.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }

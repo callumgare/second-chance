@@ -13,7 +13,7 @@ import Foundation
 import CoreGraphics
 import ImageIO
 
-public enum PictureFrameCheck {
+nonisolated public enum PictureFrameCheck {
     /// Something light in one of the bars.
     public struct Finding {
         /// Which bar: left, right, top or bottom.

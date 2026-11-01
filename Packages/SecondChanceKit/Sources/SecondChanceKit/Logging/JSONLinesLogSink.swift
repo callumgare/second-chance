@@ -25,7 +25,8 @@ nonisolated final class JSONLinesLogSink: @unchecked Sendable {
     /// snapshot is written, so a batch delivered meanwhile waits for it and
     /// the file stays in order, and around each batch after.
     private let writing = NSLock()
-    private static let formatter: ISO8601DateFormatter = {
+    // Never changed once made, and ISO8601DateFormatter is thread-safe.
+    nonisolated(unsafe) private static let formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter

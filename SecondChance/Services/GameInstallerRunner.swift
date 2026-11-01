@@ -577,7 +577,7 @@ class GameInstallerRunner {
         // Stream the installer's own log independently from Wine stdout/stderr.
         var logStreamer: InstallerLogStreamer?
         if let installerLog {
-            logStreamer = try startInstallerLogStreaming(installerLog, onLine: stallWatch.map { watch in { _ in watch.sawOutput() } })
+            logStreamer = try startInstallerLogStreaming(installerLog, onLine: stallWatch.map { watch in { @Sendable _ in watch.sawOutput() } })
         }
         defer {
             if let logStreamer {
@@ -896,7 +896,7 @@ class GameInstallerRunner {
 
 extension GameInstallerRunner {
     /// Names of the programs an installer leaves beside a game that aren't it.
-    private static let notTheGame = ["unins", "uninst", "setup", "install", "update", "patch", "readme", "dxsetup", "vcredist"]
+    nonisolated private static let notTheGame = ["unins", "uninst", "setup", "install", "update", "patch", "readme", "dxsetup", "vcredist"]
 
     /// The new executable most likely to be the game, or nil if every one
     /// is an uninstaller, a setup program or the like.

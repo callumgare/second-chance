@@ -142,7 +142,9 @@ when it applies across the repo. Link between them rather than repeating.
 
 ## Tech Stack
 
-- **Swift 5.0** / **SwiftUI**, deployment target **macOS 15.0** (some targets 15.6)
+- **Swift 6** language mode for the packages and Second Chance; WrappTemplate,
+  WrappPuppeteer and the tests are still Swift 5. **SwiftUI**, deployment
+  target **macOS 15.0** (some targets 15.6)
 - Xcode project (`SecondChance.xcodeproj`), with the shared code in local Swift packages (`Packages/`)
 - Uses Swift Testing framework (`@Test`, `#expect`) — not XCTest
 - Unsandboxed app (required for Wine); entitlements enable dyld env vars, unsigned executable memory, and disable library validation
@@ -202,11 +204,14 @@ The rules that keep it working:
 - **`SecondChanceKit` never depends on reporting.** When it needs to know
   something only reporting knows, reporting tells it (as
   `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
-- **Each `Package.swift` mirrors the app targets' Swift settings** — Swift 5
-  mode, `MainActor` default isolation, approachable concurrency,
+- **Each `Package.swift` mirrors the app targets' Swift settings** —
+  `MainActor` default isolation, approachable concurrency,
   `MemberImportVisibility`, bare `/regex/` literals. Change a target's Swift
   settings and the packages' together, or the same code means different
-  things in each.
+  things in each. The language mode is the exception: the packages are
+  Swift 6 already, so what they declare `nonisolated` must really be safe
+  off the main thread, and a Swift 5 target calling into them is held to
+  their isolation.
 - **A new file is picked up by being in the folder**; nothing to tick in
   Xcode. A file in an app's folder can't be used by the package.
 - **Products stay static.** Don't mark a library `.dynamic`: a wrapp's

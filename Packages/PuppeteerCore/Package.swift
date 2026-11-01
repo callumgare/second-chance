@@ -12,14 +12,10 @@ import PackageDescription
 /// The same settings as the app targets and SecondChanceKit (its
 /// Package.swift has why).
 let swiftSettings: [SwiftSetting] = [
-    .swiftLanguageMode(.v5),
+    .swiftLanguageMode(.v6),
     .defaultIsolation(MainActor.self),
     .enableUpcomingFeature("MemberImportVisibility"),
-    .enableUpcomingFeature("BareSlashRegexLiterals"),
-    .enableUpcomingFeature("DisableOutwardActorInference"),
-    .enableUpcomingFeature("GlobalActorIsolatedTypesUsability"),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    .enableUpcomingFeature("InferSendableFromCaptures"),
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
 ]
 

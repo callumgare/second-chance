@@ -97,7 +97,7 @@ struct WindowsExecutableTests {
         #expect(try #require(WindowsExecutable(data: slice)).versionStrings == ["ProductName": "Wine"])
     }
 
-    static let winesExplorer = Bundle.main.resourceURL?.appendingPathComponent(
+    nonisolated static let winesExplorer = Bundle.main.resourceURL?.appendingPathComponent(
         "WrappTemplate.app/Contents/SharedSupport/wine/lib/wine/i386-windows/explorer.exe")
 
     @Test("Wine's own explorer.exe reads as Wine",

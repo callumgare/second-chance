@@ -11,7 +11,7 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.DebugImage")
 
-public enum DebugImage {
+nonisolated public enum DebugImage {
     /// Draw over a copy of the screenshot and save it beside the original as
     /// `<name>-<suffix>.png`. Drawing happens in screenshot *pixels* with
     /// AppKit's bottom-left origin — use `flip` for top-left rects.

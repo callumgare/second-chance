@@ -6,21 +6,18 @@
 
 import PackageDescription
 
-/// The settings every Xcode target uses, so code reads the same here as in
-/// the apps: Swift 5 mode, main-actor isolation by default (everything
-/// meant to run elsewhere says `nonisolated`), what Xcode's
+/// Swift 6 mode, ahead of the apps, which are still in Swift 5 mode; with
+/// the settings every Xcode target uses, so code means the same here as in
+/// the apps: main-actor isolation by default (everything meant to run
+/// elsewhere says `nonisolated`), and what Xcode's
 /// SWIFT_APPROACHABLE_CONCURRENCY and
-/// SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY turn on, and the
-/// `/regex/` literals Xcode allows by default.
+/// SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY turn on beyond what Swift
+/// 6 does by itself.
 let swiftSettings: [SwiftSetting] = [
-    .swiftLanguageMode(.v5),
+    .swiftLanguageMode(.v6),
     .defaultIsolation(MainActor.self),
     .enableUpcomingFeature("MemberImportVisibility"),
-    .enableUpcomingFeature("BareSlashRegexLiterals"),
-    .enableUpcomingFeature("DisableOutwardActorInference"),
-    .enableUpcomingFeature("GlobalActorIsolatedTypesUsability"),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    .enableUpcomingFeature("InferSendableFromCaptures"),
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
 ]
 

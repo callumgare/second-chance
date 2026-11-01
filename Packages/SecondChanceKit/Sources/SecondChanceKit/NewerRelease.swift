@@ -32,7 +32,7 @@ public enum NewerRelease {
 
     /// The version that built this wrapp: the template's own, as
     /// `sc release` versions WrappTemplate along with the app.
-    public static func runningVersion(_ info: [String: Any]? = Bundle.main.infoDictionary) -> ReleaseVersion? {
+    nonisolated public static func runningVersion(_ info: [String: Any]? = Bundle.main.infoDictionary) -> ReleaseVersion? {
         guard let shortVersion = info?["CFBundleShortVersionString"] as? String,
               let build = (info?["CFBundleVersion"] as? String).flatMap({ Int($0) }) else { return nil }
         return ReleaseVersion(shortVersion: shortVersion, build: build)
@@ -41,7 +41,7 @@ public enum NewerRelease {
     /// Why not to check, or nil to. As Second Chance's own update checks: off
     /// in a Debug build, whose version is the last release's whatever it
     /// holds, and `SECOND_CHANCE_UPDATES=1` or `0` overrides that.
-    static func disabledReason(environment: [String: String], isDebugBuild: Bool) -> String? {
+    nonisolated static func disabledReason(environment: [String: String], isDebugBuild: Bool) -> String? {
         if let forced = environment["SECOND_CHANCE_UPDATES"] {
             return forced == "1" ? nil : "SECOND_CHANCE_UPDATES=\(forced)"
         }
@@ -91,7 +91,7 @@ public enum NewerRelease {
 
     /// The newest item in a Sparkle appcast. Sparkle 2 writes the versions
     /// as elements of the item; older appcasts put them on its enclosure.
-    static func latestRelease(inAppcast data: Data) -> ReleaseVersion? {
+    nonisolated static func latestRelease(inAppcast data: Data) -> ReleaseVersion? {
         let reader = AppcastReader()
         let parser = XMLParser(data: data)
         parser.delegate = reader
@@ -100,7 +100,7 @@ public enum NewerRelease {
     }
 }
 
-private final class AppcastReader: NSObject, XMLParserDelegate {
+private nonisolated final class AppcastReader: NSObject, XMLParserDelegate {
     private(set) var releases: [ReleaseVersion] = []
     private var inItem = false
     private var build: String?

@@ -4,6 +4,7 @@ import Foundation
 import GameCatalog
 
 @Suite("Game Detection")
+@MainActor
 struct GameDetectorTests {
 
     // Test fingerprint to game slug mapping
@@ -117,6 +118,7 @@ struct GameDetectorTests {
 }
 
 @Suite("Game Detection - the catalogue")
+@MainActor
 struct GameDetectorCatalogueTests {
     @Test("Every game in the catalogue is recognised by its own title")
     func everyTitle() {
@@ -135,6 +137,7 @@ struct GameDetectorCatalogueTests {
 }
 
 @Suite("Game Detection - Fixtures")
+@MainActor
 struct GameDetectorFixtureTests {
 
     @Test("Detect game from the mock disc in TestFixtures")

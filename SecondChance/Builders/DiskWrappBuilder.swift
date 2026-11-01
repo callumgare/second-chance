@@ -186,7 +186,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
                 logger.notice("Detected game: \(gameInfo.title)")
                 if gameInfo.id == GameInfo.unknownGame.id,
-                   try await input.askAboutUnrecognisedGame(.disk) == .chooseAnother {
+                   try input.askAboutUnrecognisedGame(.disk) == .chooseAnother {
                     await isoMounter.unmountAll()
                     disk1 = try await input.getDisk1Path()
                     continue
@@ -201,7 +201,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     case .none:
                         throw WrappBuildError.installerNotFound
                     case .unrecognised(let programs):
-                        switch try await input.askAboutUnidentifiedInstaller(programs: programs) {
+                        switch try input.askAboutUnidentifiedInstaller(programs: programs) {
                         case .tryProgram(let program):
                             installerName = program
                         case .chooseAnother:

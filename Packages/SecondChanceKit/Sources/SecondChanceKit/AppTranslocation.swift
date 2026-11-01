@@ -16,7 +16,8 @@ nonisolated public enum AppTranslocation {
     private typealias IsTranslocated = @convention(c) (CFURL, UnsafeMutablePointer<DarwinBoolean>, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> DarwinBoolean
     private typealias OriginalPath = @convention(c) (CFURL, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> Unmanaged<CFURL>?
 
-    private static let security = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY)
+    // A handle that never changes, only read.
+    nonisolated(unsafe) private static let security = dlopen("/System/Library/Frameworks/Security.framework/Security", RTLD_LAZY)
 
     private static func function<T>(_ name: String, as type: T.Type) -> T? {
         guard let security, let symbol = dlsym(security, name) else { return nil }

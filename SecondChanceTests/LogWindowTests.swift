@@ -9,6 +9,7 @@ import Logging
 @testable import SecondChanceKit
 
 @Suite("LogWindow streaming", .serialized)
+@MainActor
 struct LogWindowTests {
 
     actor LineCollector {
