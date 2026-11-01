@@ -221,4 +221,15 @@ struct LaunchActivityTests {
         // An idle session uses nothing; a program that went doesn't count against it.
         #expect(before.cpuUsed(since: after) == 0)
     }
+
+    @Test("Another game's Wine, running alongside, isn't this launch's progress")
+    func otherSessionsLeftOut() {
+        let ps = """
+          202     1   0.0 0:00.40 00:01 C:\\windows\\system32\\explorer.exe
+          303     1   0.0 0:09.00 00:01 C:\\Nancy Drew\\The Haunted Carousel\\Game.exe
+        """
+        let ours = Snapshot(ProcessList(psOutput: ps), isOurs: { $0 == 202 })
+        #expect(ours.names == ["explorer.exe"])
+        #expect(Snapshot(ProcessList(psOutput: ps)).names == ["explorer.exe", "game.exe"])
+    }
 }

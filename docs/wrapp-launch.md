@@ -89,7 +89,9 @@ until the game's window appears, and hands each sign to the clock:
 | `output` | Wine, Steam or the game printed a line |
 | `steamLog` | Steam wrote to its logs |
 
-It leaves out what the wrapp runs itself to check on the launch: Wine's
+It counts only the game's own Wine — programs working in another prefix
+are another game's, which would keep a stuck launch looking busy — and
+leaves out what the wrapp runs itself to check on the launch: Wine's
 desktop is checked for with `reg.exe`, a Wine program of its own each time,
 and `wineserver`'s CPU is mostly its work for those checks. Counted, they
 made a stuck desktop look busy. Each stage says which signs count

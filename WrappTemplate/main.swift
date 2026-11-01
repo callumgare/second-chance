@@ -797,13 +797,23 @@ func main() {
     // and not again to someone who saw it moments ago, on the launch through
     // Steam they've given up on.
     let saveWarningEnabled = config.gameEngine.runsInWine && !launchingWithoutSteam
+    // Only this game's Wine counts as its launch's progress: another game's,
+    // running alongside, would keep a stuck launch looking busy. ScummVM
+    // works in no prefix.
+    let server = config.wine.server
+    var isOurs: (@Sendable (pid_t) -> Bool)?
+    if config.gameEngine.runsInWine {
+        isOurs = { pid in !server.isElsewhere(pid) }
+    }
     let infoWindow = InfoWindowController(
         stage: config.gameEngine.needsSteam ? .startingSteam : .startingGame(title: config.gameTitle),
         appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
         saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor,
-        activity: LaunchActivityMonitor(steamLogsDir: config.gameEngine.needsSteam
-            ? config.winePrefix.appendingPathComponent(SteamClient.steamDirInPrefix).appendingPathComponent("logs") : nil))
+        activity: LaunchActivityMonitor(
+            steamLogsDir: config.gameEngine.needsSteam
+                ? config.winePrefix.appendingPathComponent(SteamClient.steamDirInPrefix).appendingPathComponent("logs") : nil,
+            isOurs: isOurs))
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
     infoWindow.reportStuckLaunch = { gameLauncher.reportStuckLaunch() }

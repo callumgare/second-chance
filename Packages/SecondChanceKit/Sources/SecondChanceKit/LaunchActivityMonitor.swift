@@ -29,6 +29,10 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
     /// seconds just when the launch needed watching most.
     private let queue = DispatchQueue(label: "au.gare.callum.second-chance.Shared.LaunchActivityMonitor", qos: .userInitiated)
     private let steamLogsDir: URL?
+    /// Whether a process is this launch's to watch; nil, every one. Another
+    /// game's Wine, running alongside, would otherwise keep a stuck launch
+    /// looking busy.
+    private let isOurs: (@Sendable (pid_t) -> Bool)?
     private var onSign: (@Sendable (LaunchProgressSign) -> Void)?
     private var timer: DispatchSourceTimer?
     private var previous: (snapshot: Snapshot, at: Date)?
@@ -37,9 +41,11 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
     private var sawOutput = false
     private var started = Date()
 
-    /// `steamLogsDir`, Steam's logs, when the game needs Steam running.
-    public init(steamLogsDir: URL? = nil) {
+    /// `steamLogsDir`, Steam's logs, when the game needs Steam running;
+    /// `isOurs`, which processes are this launch's (`WineServer.isElsewhere`).
+    public init(steamLogsDir: URL? = nil, isOurs: (@Sendable (pid_t) -> Bool)? = nil) {
         self.steamLogsDir = steamLogsDir
+        self.isOurs = isOurs
     }
 
     /// Start sampling, telling `onSign` on the main queue about each sign.
@@ -76,7 +82,7 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
         var signs: [LaunchProgressSign] = []
         var cores: Double?
         if let processes = ProcessList.current() {
-            let snapshot = Snapshot(processes)
+            let snapshot = Snapshot(processes, isOurs: isOurs)
             let now = Date()
             if let previous {
                 // As a rate: on a busy Mac the samples come further apart.
@@ -139,13 +145,14 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
         /// Their executables' names, lowercased: "explorer.exe", "game.exe".
         let names: Set<String>
 
-        init(_ processes: ProcessList) {
+        init(_ processes: ProcessList, isOurs: ((pid_t) -> Bool)? = nil) {
             var cpu: [Int32: Double] = [:]
             var steamPids: Set<Int32> = []
             var names: Set<String> = []
             for process in processes.entries {
                 let name = process.name.lowercased()
-                guard process.isWine || name == "scummvm", !Self.ignored.contains(name) else { continue }
+                guard process.isWine || name == "scummvm", !Self.ignored.contains(name),
+                      isOurs?(process.pid) ?? true else { continue }
                 cpu[process.pid] = process.cpuSeconds
                 if Self.steam.contains(name) { steamPids.insert(process.pid) }
                 names.insert(name)
