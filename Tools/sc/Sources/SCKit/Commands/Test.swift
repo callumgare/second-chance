@@ -251,18 +251,24 @@ enum TestCommandSupport {
     }
 
     /// sc's own Swift tests (Tools/sc).
-    /// SecondChanceKit's own tests (Packages/SecondChanceKit/Tests): what
-    /// needs neither app, run by SwiftPM with no Xcode build.
+    /// The local packages that have tests of their own: what needs neither
+    /// app, run by SwiftPM with no Xcode build.
+    static let testedPackages = ["SecondChanceKit", "PuppeteerCore"]
+
+    /// Each of `testedPackages`' tests; the first failure's status, or 0.
     static func runPackageTests(_ session: Session) async throws -> Int32 {
-        let package = session.repo.root.appendingPathComponent("Packages/SecondChanceKit")
-        do {
-            try await session.ui.logStep("SecondChanceKit's tests", log: "test-kit", success: "SecondChanceKit's tests passed") { sink in
-                try await Proc.stream("swift", ["test", "--package-path", package.path], cwd: session.repo.root) { await sink.line($0) }
+        var status: Int32 = 0
+        for name in testedPackages {
+            let package = session.repo.root.appendingPathComponent("Packages/\(name)")
+            do {
+                try await session.ui.logStep("\(name)'s tests", log: "test-\(name.lowercased())", success: "\(name)'s tests passed") { sink in
+                    try await Proc.stream("swift", ["test", "--package-path", package.path], cwd: session.repo.root) { await sink.line($0) }
+                }
+            } catch let error as SCError where error.alreadyReported {
+                if status == 0 { status = error.exitCode }
             }
-            return 0
-        } catch let error as SCError where error.alreadyReported {
-            return error.exitCode
         }
+        return status
     }
 
     static func runToolTests(_ session: Session) async throws -> Int32 {

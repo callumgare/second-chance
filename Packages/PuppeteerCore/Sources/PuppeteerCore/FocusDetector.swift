@@ -13,7 +13,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 
 /// How to tell that an app is in front. Apps differ: some never report
 /// `isActive` reliably, others take over the screen without activating.
-enum FocusStrategy {
+public enum FocusStrategy {
     /// `isActive`, or the frontmost application's PID matches.
     case frontmost
     /// The app says its window is fullscreen — for apps that take over the
@@ -23,7 +23,7 @@ enum FocusStrategy {
 }
 
 /// How a wait for focus ended.
-enum FocusWaitResult: Equatable {
+public enum FocusWaitResult: Equatable {
     case focused
     case timedOut
     /// Nothing can come to the front: the screen is locked or the display
@@ -31,8 +31,8 @@ enum FocusWaitResult: Equatable {
     case blocked(String)
 }
 
-enum FocusDetector {
-    static func isFocused(pid: Int32, strategy: FocusStrategy) -> Bool {
+public enum FocusDetector {
+    public static func isFocused(pid: Int32, strategy: FocusStrategy) -> Bool {
         switch strategy {
         case .reportsFullscreen(let isFullscreen):
             return isFullscreen()
@@ -48,7 +48,7 @@ enum FocusDetector {
     /// `activate` is set. Once focused, waits `settleDelay` more so the window
     /// has finished drawing before anything inspects it. Gives up at once if
     /// nothing can come to the front.
-    static func waitForFocus(
+    public static func waitForFocus(
         pid: Int32,
         strategy: FocusStrategy,
         activate: Bool,

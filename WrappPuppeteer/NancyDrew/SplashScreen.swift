@@ -14,6 +14,7 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import Logging
+import PuppeteerCore
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.SplashScreen")
 

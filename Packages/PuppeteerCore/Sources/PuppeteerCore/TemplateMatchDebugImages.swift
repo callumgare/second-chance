@@ -10,14 +10,14 @@ import Foundation
 import AppKit
 import CoreGraphics
 
-enum TemplateMatchDebugImages {
-    static func saveTemplate(templatePath: String, screenshotPath: String) {
+public enum TemplateMatchDebugImages {
+    public static func saveTemplate(templatePath: String, screenshotPath: String) {
         guard let template = NSImage(contentsOfFile: templatePath),
               let cgImage = template.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
         DebugImage.saveImage(cgImage, besides: screenshotPath, suffix: "template")
     }
 
-    static func searchRegion(screenshotPath: String, searchStartX: Int, searchStartY: Int, searchEndX: Int, searchEndY: Int) {
+    public static func searchRegion(screenshotPath: String, searchStartX: Int, searchStartY: Int, searchEndX: Int, searchEndY: Int) {
         DebugImage.annotate(screenshotPath, suffix: "search-region") { imageHeight in
             let rect = DebugImage.flip(
                 CGRect(x: searchStartX, y: searchStartY, width: searchEndX - searchStartX, height: searchEndY - searchStartY),
@@ -29,7 +29,7 @@ enum TemplateMatchDebugImages {
     }
 
     /// Correlation at every coarse-pass position, blue (low) through red (high).
-    static func heatmap(
+    public static func heatmap(
         screenshotPath: String,
         scalePercent: Int,
         templateWidth: Int,
@@ -75,7 +75,7 @@ enum TemplateMatchDebugImages {
     }
 
     /// The top five coarse candidates at each scale.
-    static func allMatches(
+    public static func allMatches(
         screenshotPath: String,
         allScaleMatches: [(scaleIndex: Int, scale: CGFloat, matches: [(x: Int, y: Int, correlation: Float)])],
         templateSizes: [(width: Int, height: Int)],
@@ -102,7 +102,7 @@ enum TemplateMatchDebugImages {
         }
     }
 
-    static func finalMatch(screenshotPath: String, match: CGRect, correlation: Float) {
+    public static func finalMatch(screenshotPath: String, match: CGRect, correlation: Float) {
         DebugImage.annotate(screenshotPath, suffix: "final-match") { imageHeight in
             let rect = DebugImage.flip(match, imageHeight: imageHeight)
             DebugImage.box(rect, stroke: .systemGreen, fill: NSColor.systemGreen.withAlphaComponent(0.3))
@@ -111,7 +111,7 @@ enum TemplateMatchDebugImages {
     }
 
     /// The images compared at a single probed position (FIND_IMAGE_DEBUG_PROBE).
-    static func probe(
+    public static func probe(
         screenshotPath: String,
         templatePath: String,
         colorTemplate: CGImage,

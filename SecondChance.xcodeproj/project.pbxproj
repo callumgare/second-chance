@@ -22,6 +22,7 @@
 		E25C0B102F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0B122F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0B142F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
+		E25C0C142F01000000000001 /* PuppeteerCore in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0C012F01000000000001 /* PuppeteerCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +68,7 @@
 		E24D78DE2F063E1E00B38683 /* WrappTemplate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WrappTemplate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E2A0E3C32F075266007E9F60 /* SecondChanceTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SecondChanceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E25C0B032F01000000000001 /* GameCatalog */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GameCatalog; path = Packages/GameCatalog; sourceTree = "<group>"; };
+		E25C0C032F01000000000001 /* PuppeteerCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = PuppeteerCore; path = Packages/PuppeteerCore; sourceTree = "<group>"; };
 		E25C0A032F01000000000001 /* SecondChanceKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = SecondChanceKit; path = Packages/SecondChanceKit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -144,6 +146,7 @@
 				E2B000042F01000000000001 /* Logging in Frameworks */,
 				E25C0A142F01000000000001 /* SecondChanceKit in Frameworks */,
 				E25C0B142F01000000000001 /* GameCatalog in Frameworks */,
+				E25C0C142F01000000000001 /* PuppeteerCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -186,6 +189,7 @@
 			isa = PBXGroup;
 			children = (
 				E25C0B032F01000000000001 /* GameCatalog */,
+				E25C0C032F01000000000001 /* PuppeteerCore */,
 				E25C0A032F01000000000001 /* SecondChanceKit */,
 				E2C65E102F15FA4700FAFF50 /* WrappTemplate */,
 				E21733932F04AA580058E8E9 /* SecondChance */,
@@ -228,6 +232,7 @@
 				E2B000012F01000000000001 /* Logging */,
 				E25C0A012F01000000000001 /* SecondChanceKit */,
 				E25C0B012F01000000000001 /* GameCatalog */,
+				E25C0C012F01000000000001 /* PuppeteerCore */,
 			);
 			productName = WrappPuppeteer;
 			productType = "com.apple.product-type.application";
@@ -359,6 +364,7 @@
 				E2D5E0052F01000000000001 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				E25C0A002F01000000000001 /* XCLocalSwiftPackageReference "Packages/SecondChanceKit" */,
 				E25C0B002F01000000000001 /* XCLocalSwiftPackageReference "Packages/GameCatalog" */,
+				E25C0C002F01000000000001 /* XCLocalSwiftPackageReference "Packages/PuppeteerCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
@@ -1066,6 +1072,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/GameCatalog;
 		};
+		E25C0C002F01000000000001 /* XCLocalSwiftPackageReference "Packages/PuppeteerCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/PuppeteerCore;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1125,6 +1135,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E25C0B002F01000000000001 /* XCLocalSwiftPackageReference "Packages/GameCatalog" */;
 			productName = GameCatalog;
+		};
+		E25C0C012F01000000000001 /* PuppeteerCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E25C0C002F01000000000001 /* XCLocalSwiftPackageReference "Packages/PuppeteerCore" */;
+			productName = PuppeteerCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

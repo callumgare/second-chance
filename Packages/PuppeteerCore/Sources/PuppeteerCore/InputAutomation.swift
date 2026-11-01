@@ -14,11 +14,11 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 
 // MARK: - Click feedback
 
-enum InputControl {
+public enum InputControl {
     private static let clickAnimationDuration: TimeInterval = 0.5
 
     /// Show a visual click animation at the specified point
-    static func showClickAnimation(at point: CGPoint) {
+    public static func showClickAnimation(at point: CGPoint) {
         guard let screen = NSScreen.main else { return }
 
         // Create a window to show the click animation
@@ -68,7 +68,7 @@ enum InputControl {
     /// the length of its fade. The scenario runs on the main thread and
     /// otherwise only ever sleeps, so without that AppKit wouldn't put the
     /// ring's window on screen, or fade and close it, until the process exited.
-    static func showClick(at point: CGPoint) {
+    public static func showClick(at point: CGPoint) {
         showClickAnimation(at: point)
         if Thread.isMainThread {
             RunLoop.current.run(until: Date().addingTimeInterval(clickAnimationDuration + 0.1))
@@ -78,8 +78,8 @@ enum InputControl {
 
 // MARK: - Click Animation View
 
-class ClickAnimationView: NSView {
-    override func draw(_ dirtyRect: NSRect) {
+public class ClickAnimationView: NSView {
+    public override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
         guard let context = NSGraphicsContext.current?.cgContext else { return }

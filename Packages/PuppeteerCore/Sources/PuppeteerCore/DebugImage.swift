@@ -11,11 +11,11 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.DebugImage")
 
-enum DebugImage {
+public enum DebugImage {
     /// Draw over a copy of the screenshot and save it beside the original as
     /// `<name>-<suffix>.png`. Drawing happens in screenshot *pixels* with
     /// AppKit's bottom-left origin — use `flip` for top-left rects.
-    static func annotate(_ screenshotPath: String, suffix: String, draw: (_ imageHeight: CGFloat) -> Void) {
+    public static func annotate(_ screenshotPath: String, suffix: String, draw: (_ imageHeight: CGFloat) -> Void) {
         guard let image = NSImage(contentsOfFile: screenshotPath),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
               let rep = NSBitmapImageRep(
@@ -45,7 +45,7 @@ enum DebugImage {
     }
 
     /// Save a single-channel buffer as a grayscale PNG.
-    static func saveGray(_ data: UnsafePointer<UInt8>, width: Int, height: Int, besides screenshotPath: String, suffix: String) {
+    public static func saveGray(_ data: UnsafePointer<UInt8>, width: Int, height: Int, besides screenshotPath: String, suffix: String) {
         guard let provider = CGDataProvider(data: Data(bytes: data, count: width * height) as CFData),
               let cgImage = CGImage(
                   width: width,
@@ -65,16 +65,16 @@ enum DebugImage {
         save(NSBitmapImageRep(cgImage: cgImage), to: derivedPath(screenshotPath, suffix: suffix))
     }
 
-    static func saveImage(_ cgImage: CGImage, besides screenshotPath: String, suffix: String) {
+    public static func saveImage(_ cgImage: CGImage, besides screenshotPath: String, suffix: String) {
         save(NSBitmapImageRep(cgImage: cgImage), to: derivedPath(screenshotPath, suffix: suffix))
     }
 
     /// Convert a top-left-origin rect to the bottom-left origin used when drawing.
-    static func flip(_ rect: CGRect, imageHeight: CGFloat) -> CGRect {
+    public static func flip(_ rect: CGRect, imageHeight: CGFloat) -> CGRect {
         CGRect(x: rect.minX, y: imageHeight - rect.maxY, width: rect.width, height: rect.height)
     }
 
-    static func box(_ rect: CGRect, stroke: NSColor, fill: NSColor? = nil, lineWidth: CGFloat = 3) {
+    public static func box(_ rect: CGRect, stroke: NSColor, fill: NSColor? = nil, lineWidth: CGFloat = 3) {
         if let fill {
             fill.setFill()
             NSBezierPath(rect: rect).fill()
@@ -86,7 +86,7 @@ enum DebugImage {
     }
 
     /// Outlined text, legible on any background.
-    static func label(_ text: String, at point: CGPoint, size: CGFloat = 14, color: NSColor = .white) {
+    public static func label(_ text: String, at point: CGPoint, size: CGFloat = 14, color: NSColor = .white) {
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: size, weight: .bold),
             .foregroundColor: color,

@@ -54,13 +54,13 @@ private func killTestedProcessesAndExit(_ status: Int32, message: UnsafeMutableP
 /// WrappPuppeteer through LaunchServices: it isn't WrappPuppeteer's parent,
 /// so it can't read the exit status (kqueue's NOTE_EXITSTATUS is only for a
 /// process's own children).
-enum ExitCodeFile {
-    static func set(_ path: String) {
+public enum ExitCodeFile {
+    public static func set(_ path: String) {
         exitCodePath = strdup(path)
     }
 
     /// Record `status`, from ordinary code.
-    static func write(_ status: Int32) {
+    public static func write(_ status: Int32) {
         guard let path = exitCodePath else { return }
         do {
             try Data("\(status)\n".utf8).write(to: URL(fileURLWithPath: String(cString: path)), options: .atomic)
@@ -70,7 +70,7 @@ enum ExitCodeFile {
     }
 
     /// Record `status` with nothing but async-signal-safe calls.
-    static func writeFromSignalHandler(_ status: Int32) {
+    public static func writeFromSignalHandler(_ status: Int32) {
         guard let path = exitCodePath else { return }
         let fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
         guard fd >= 0 else { return }
@@ -91,11 +91,11 @@ enum ExitCodeFile {
 
 /// Kills the app under test (and anything it spawned) if WrappPuppeteer is
 /// interrupted, so an aborted run doesn't leave it holding the screen.
-enum ProcessCleanup {
+public enum ProcessCleanup {
     /// Install SIGINT/SIGTERM/SIGHUP handlers. `cleanupCommands` are run
     /// after the app is killed, for helper processes that outlive it: each a
     /// whole argv with an absolute path first, e.g. `["/usr/bin/pkill", "-9", "scummvm"]`.
-    static func install(cleanupCommands: [[String]]) {
+    public static func install(cleanupCommands: [[String]]) {
         let argvs = UnsafeMutablePointer<UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>>.allocate(capacity: max(cleanupCommands.count, 1))
         for (index, command) in cleanupCommands.enumerated() {
             let argv = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: command.count + 1)
@@ -117,7 +117,7 @@ enum ProcessCleanup {
     /// starts WrappPuppeteer through LaunchServices isn't its parent —
     /// launchd is — so without this, stopping or crashing the run that
     /// started it would leave it, and the app under test, running.
-    static func watchParent(_ pid: Int32) {
+    public static func watchParent(_ pid: Int32) {
         let watcher = Thread {
             // EPERM: alive, just not ours to signal.
             while kill(pid, 0) == 0 || errno == EPERM {
@@ -134,7 +134,7 @@ enum ProcessCleanup {
     /// Fail the run, killing what's under test, if it is still going after
     /// `seconds`: a game that wedges must not hold up a whole integration run
     /// (each phase has a limit of its own; this bounds them all together).
-    static func limitRuntime(to seconds: TimeInterval) {
+    public static func limitRuntime(to seconds: TimeInterval) {
         let watchdog = Thread {
             Thread.sleep(forTimeInterval: seconds)
             logger.error("WRAPP_PUPPETEER: run_failed: still running after \(Int(seconds)) s, the most a run may take (--max-runtime)")
@@ -148,7 +148,7 @@ enum ProcessCleanup {
 
     /// Record the processes to kill. `helperPid` is a second process that
     /// isn't a child of the app, if there is one.
-    static func track(appPid: Int32, helperPid: Int32?) {
+    public static func track(appPid: Int32, helperPid: Int32?) {
         cleanupAppPid = appPid
         cleanupHelperPid = helperPid ?? 0
         logger.notice("  → Cleanup tracking app PID \(appPid), helper PID \(cleanupHelperPid)")
@@ -159,12 +159,12 @@ enum ProcessCleanup {
 
 /// A process `ProcessFinder` found: its pid, executable `name` and
 /// `command` as `ps` reports it.
-typealias RunningProcess = ProcessList.Entry
+public typealias RunningProcess = ProcessList.Entry
 
-enum ProcessFinder {
+public enum ProcessFinder {
     /// Every process on the system, via `ps`. Sees processes that
     /// NSWorkspace doesn't, such as Wine's.
-    static func allProcesses() -> [RunningProcess] {
+    public static func allProcesses() -> [RunningProcess] {
         guard let processes = ProcessList.current() else {
             logger.error("  ⚠️  Couldn't list processes")
             return []
@@ -178,7 +178,7 @@ enum ProcessFinder {
     /// over from something else (a process stuck exiting can't be killed)
     /// would otherwise be watched in place of the one just launched.
     /// `ps` gives start times to the second, hence the second's leeway.
-    static func waitForProcess(named name: String, startedSince since: Date? = nil, timeout: TimeInterval) -> RunningProcess? {
+    public static func waitForProcess(named name: String, startedSince since: Date? = nil, timeout: TimeInterval) -> RunningProcess? {
         let start = Date()
         var lastLog = Date()
         while Date().timeIntervalSince(start) < timeout {
@@ -203,7 +203,7 @@ enum ProcessFinder {
 
 // MARK: - App lifecycle
 
-enum ProcessControl {
+public enum ProcessControl {
     /// Launch an app bundle through LaunchServices and wait for it to start.
     ///
     /// Always a new process. LaunchServices otherwise hands back an instance
@@ -211,7 +211,7 @@ enum ProcessControl {
     /// earlier run, say, sitting on an error window — and the run then tests
     /// that instead, which never starts the game. Any such leftover is killed
     /// first.
-    static func launch(appPath: String, arguments: [String] = [], environment: [String: String] = [:]) -> NSRunningApplication? {
+    public static func launch(appPath: String, arguments: [String] = [], environment: [String: String] = [:]) -> NSRunningApplication? {
         logger.notice("🚀 Launching \(appPath)...")
         if !arguments.isEmpty {
             logger.notice("   Arguments: \(arguments.joined(separator: " "))")
@@ -251,7 +251,7 @@ enum ProcessControl {
     /// LaunchServices sends it a reopen and makes it active. Whether
     /// LaunchServices took the request.
     @discardableResult
-    static func reopen(appPath: String) -> Bool {
+    public static func reopen(appPath: String) -> Bool {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         configuration.createsNewApplicationInstance = false
@@ -278,7 +278,7 @@ enum ProcessControl {
     /// Waits until the window is on screen. Returns the window, for
     /// `giveBackScreen`, or nil if it never showed (and then gives the
     /// screen back itself).
-    static func takeOverScreen(title: String, timeout: TimeInterval = 15, handOver: () -> Bool) -> NSWindow? {
+    public static func takeOverScreen(title: String, timeout: TimeInterval = 15, handOver: () -> Bool) -> NSWindow? {
         if !finishedLaunching {
             NSApp.finishLaunching()
             finishedLaunching = true
@@ -312,7 +312,7 @@ enum ProcessControl {
     /// Close the window `takeOverScreen` showed, and go back to being an
     /// accessory app, whose windows (the click ring) can show over another
     /// app's fullscreen Space.
-    static func giveBackScreen(_ window: NSWindow?) {
+    public static func giveBackScreen(_ window: NSWindow?) {
         window?.close()
         NSApp.setActivationPolicy(.accessory)
         handleEvents(for: 0.1)
@@ -322,7 +322,7 @@ enum ProcessControl {
     /// WrappPuppeteer never runs NSApp's event loop, and becoming active or
     /// a window coming on screen arrives as events: left on the queue,
     /// neither happens.
-    static func handleEvents(for seconds: TimeInterval) {
+    public static func handleEvents(for seconds: TimeInterval) {
         let until = Date().addingTimeInterval(seconds)
         while let event = NSApp.nextEvent(matching: .any, until: until, inMode: .default, dequeue: true) {
             NSApp.sendEvent(event)
@@ -330,7 +330,7 @@ enum ProcessControl {
     }
 
     /// Poll until `pid` has exited; false if it is still alive at `timeout`.
-    static func waitForExit(_ pid: Int32, timeout: TimeInterval) -> Bool {
+    public static func waitForExit(_ pid: Int32, timeout: TimeInterval) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while isAlive(pid) {
             if Date() >= deadline { return false }
@@ -343,7 +343,7 @@ enum ProcessControl {
     /// check that's reliable for processes LaunchServices doesn't track. It
     /// also succeeds for a zombie — a process that has exited and is only
     /// waiting for its parent to collect it — which counts as dead here.
-    static func isAlive(_ pid: Int32) -> Bool {
+    public static func isAlive(_ pid: Int32) -> Bool {
         guard kill(pid, 0) == 0 else { return false }
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride
@@ -353,7 +353,7 @@ enum ProcessControl {
     }
 
     /// True while either the app or the helper process is alive.
-    static func isRunning(_ app: NSRunningApplication, helperPid: Int32?) -> Bool {
+    public static func isRunning(_ app: NSRunningApplication, helperPid: Int32?) -> Bool {
         let appRunning = isAlive(app.processIdentifier)
         let helperRunning = helperPid.map { isAlive($0) } ?? false
         logger.debug("isRunning: app PID \(app.processIdentifier)=\(appRunning), helper PID \(helperPid ?? -1)=\(helperRunning)")
@@ -363,12 +363,12 @@ enum ProcessControl {
     /// How long a force-quit app gets to clean up before SIGKILL.
     /// `forceTerminate` sends SIGTERM, which a wrapp takes as Cmd-Q: it ends
     /// its game, waits for Wine to finish, and kills it itself after 15 s.
-    static let forceQuitGrace: TimeInterval = 20
+    public static let forceQuitGrace: TimeInterval = 20
 
     /// Force-terminate the app (SIGTERM), SIGKILL it only if it is still
     /// running `forceQuitGrace` later, then run `cleanup`, for helper
     /// processes that can outlive it.
-    static func forceQuit(_ app: NSRunningApplication, cleanup: () -> Void = {}) {
+    public static func forceQuit(_ app: NSRunningApplication, cleanup: () -> Void = {}) {
         logger.warning("⚠️  Force quitting \(app.localizedName ?? "app")...")
         // forceTerminate doesn't always end the process (a wrapp once outlived
         // it by an hour), so check, and kill it outright if it is still there.
@@ -385,14 +385,14 @@ enum ProcessControl {
     }
 
     /// Whether any process's command line matches `pattern` (`pgrep -f`).
-    static func anyRunning(matching pattern: String) -> Bool {
+    public static func anyRunning(matching pattern: String) -> Bool {
         run("/usr/bin/pgrep", ["-f", "--", pattern]) == 0
     }
 
     /// Signal every process whose command line matches `pattern`
     /// (`pkill -f`), and wait up to `timeout` for them all to go. Whether
     /// they did.
-    static func end(matching pattern: String, signal: Int32, timeout: TimeInterval) -> Bool {
+    public static func end(matching pattern: String, signal: Int32, timeout: TimeInterval) -> Bool {
         _ = run("/usr/bin/pkill", ["-\(signal)", "-f", "--", pattern])
         let deadline = Date().addingTimeInterval(timeout)
         while anyRunning(matching: pattern) {
@@ -404,7 +404,7 @@ enum ProcessControl {
 
     /// Run a program and return its exit status, or -1 if it couldn't start.
     @discardableResult
-    static func run(_ path: String, _ arguments: [String]) -> Int32 {
+    public static func run(_ path: String, _ arguments: [String]) -> Int32 {
         let command = Process()
         command.executableURL = URL(fileURLWithPath: path)
         command.arguments = arguments
@@ -421,7 +421,7 @@ enum ProcessControl {
     }
 
     /// Wait until neither the app nor the helper process is running.
-    static func waitForTermination(_ app: NSRunningApplication, helperPid: Int32?, timeout: TimeInterval) -> Bool {
+    public static func waitForTermination(_ app: NSRunningApplication, helperPid: Int32?, timeout: TimeInterval) -> Bool {
         let start = Date()
         var lastLog = Date()
 

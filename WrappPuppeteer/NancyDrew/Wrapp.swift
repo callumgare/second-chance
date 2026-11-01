@@ -9,6 +9,7 @@ import Foundation
 import GameCatalog
 import SecondChanceKit
 import Logging
+import PuppeteerCore
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.Wrapp")
 

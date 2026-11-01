@@ -13,10 +13,10 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.ScreenCapture")
 
-enum ScreenCapture {
+public enum ScreenCapture {
     /// Capture the whole screen to a timestamped PNG and return its path.
     /// The caller owns the file.
-    static func captureScreen(prefix: String = "wrapp-puppeteer") -> String? {
+    public static func captureScreen(prefix: String = "wrapp-puppeteer") -> String? {
         let path = "/tmp/\(prefix)-\(Int(Date().timeIntervalSince1970)).png"
         return run(arguments: ["-x", path]) ? path : nil
     }

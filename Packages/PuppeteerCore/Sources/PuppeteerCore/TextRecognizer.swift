@@ -12,14 +12,14 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.TextRecognizer")
 
-enum TextRecognizer {
+public enum TextRecognizer {
     /// Find each of `searchTexts` (case-insensitive substring match) in the
     /// image. Returns the rect of the first line containing each text found, in
     /// image pixels with a top-left origin; texts not found are absent.
     ///
     /// Every recognised line is logged, unless `app` is given and isn't
     /// frontmost — that keeps the log quiet once the target has gone away.
-    static func findText(_ searchTexts: [String], in imagePath: String, loggingWhileFrontmost app: NSRunningApplication? = nil) -> [String: CGRect] {
+    public static func findText(_ searchTexts: [String], in imagePath: String, loggingWhileFrontmost app: NSRunningApplication? = nil) -> [String: CGRect] {
         guard let image = NSImage(contentsOfFile: imagePath),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             logger.error("⚠️  Failed to load image for OCR")

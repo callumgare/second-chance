@@ -15,20 +15,20 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.ImageFingerprint")
 
-struct ImageFingerprint {
+public struct ImageFingerprint {
     /// The fingerprint's grid, in cells.
-    static let width = 24
-    static let height = 18
+    public static let width = 24
+    public static let height = 18
 
     /// RGB per cell, 0…1, row by row from the top.
-    let values: [Float]
+    public let values: [Float]
     /// Where the picture sits in the image it came from, as fractions of that
     /// image with a top-left origin — the part left once the dark margins are
     /// trimmed.
-    let contentRect: CGRect
+    public let contentRect: CGRect
 
     /// Mean difference per channel, 0 (identical) … 1.
-    func distance(to other: ImageFingerprint) -> Float {
+    public func distance(to other: ImageFingerprint) -> Float {
         var total: Float = 0
         for index in values.indices {
             total += abs(values[index] - other.values[index])
@@ -40,7 +40,7 @@ struct ImageFingerprint {
     /// screen not drawn yet, or between two pictures. `trimmingMargins` false
     /// takes the whole image, for one already trimmed (`content(of:width:)`):
     /// trimming again would cut further in.
-    init?(imageAt path: String, trimmingMargins: Bool = true) {
+    public init?(imageAt path: String, trimmingMargins: Bool = true) {
         guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             logger.warning("Couldn't read \(path)")
@@ -49,7 +49,7 @@ struct ImageFingerprint {
         self.init(image: image, trimmingMargins: trimmingMargins)
     }
 
-    init?(image: CGImage, trimmingMargins: Bool = true) {
+    public init?(image: CGImage, trimmingMargins: Bool = true) {
         // Trimming is done on a small copy: the bars are big, and finding
         // their edges to within half a percent is plenty.
         let sampleWidth = 320
@@ -83,7 +83,7 @@ struct ImageFingerprint {
 
     /// The image's trimmed content — what a fingerprint is taken of — as a
     /// small image, for saving as a reference to match captures against.
-    static func content(of image: CGImage, width: Int) -> CGImage? {
+    public static func content(of image: CGImage, width: Int) -> CGImage? {
         guard let fingerprint = ImageFingerprint(image: image) else { return nil }
         let rect = fingerprint.contentRect
         let crop = CGRect(x: rect.minX * CGFloat(image.width), y: rect.minY * CGFloat(image.height),
@@ -107,14 +107,14 @@ struct ImageFingerprint {
     /// line of thin lettering on black, which then fingerprints as blank.
     private static let contentFraction = 0.15
 
-    static func makeContext(width: Int, height: Int) -> CGContext? {
+    public static func makeContext(width: Int, height: Int) -> CGContext? {
         CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
                   space: CGColorSpaceCreateDeviceRGB(),
                   bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
     }
 
     /// The image scaled to `width`×`height`, as RGBX bytes, top row first.
-    static func render(_ image: CGImage, width: Int, height: Int) -> [UInt8]? {
+    public static func render(_ image: CGImage, width: Int, height: Int) -> [UInt8]? {
         guard let context = makeContext(width: width, height: height) else { return nil }
         context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))

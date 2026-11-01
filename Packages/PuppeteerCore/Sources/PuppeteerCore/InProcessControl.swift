@@ -15,15 +15,15 @@ import Logging
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.InProcessControl")
 
 /// One app's control socket.
-struct ControlSocket {
-    let path: String
+public struct ControlSocket {
+    public let path: String
 
     /// Whether something has created the socket. It may not be listening yet.
-    var exists: Bool { FileManager.default.fileExists(atPath: path) }
+    public var exists: Bool { FileManager.default.fileExists(atPath: path) }
 
     /// Send `line` and return the reply, without its newline; nil if nothing
     /// is listening, or nothing came back within `timeout`.
-    func request(_ line: String, timeout: TimeInterval = 40) -> String? {
+    public func request(_ line: String, timeout: TimeInterval = 40) -> String? {
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
         guard descriptor >= 0 else { return nil }
         defer { close(descriptor) }
@@ -66,7 +66,7 @@ struct ControlSocket {
     }
 
     /// The `key=value` fields of an `ok` reply; nil for an error or no reply.
-    static func fields(of reply: String?) -> [String: String]? {
+    public static func fields(of reply: String?) -> [String: String]? {
         guard let reply, reply == "ok" || reply.hasPrefix("ok ") else { return nil }
         var fields: [String: String] = [:]
         for part in reply.split(separator: " ").dropFirst() {
@@ -75,38 +75,42 @@ struct ControlSocket {
         }
         return fields
     }
+
+    public init(path: String) {
+        self.path = path
+    }
 }
 
 /// What a window control reports about the window it serves.
-struct ControlledWindowState {
-    let windowNumber: Int
+public struct ControlledWindowState {
+    public let windowNumber: Int
     /// In points.
-    let size: CGSize
+    public let size: CGSize
     /// Pixels per point.
-    let scale: CGFloat
+    public let scale: CGFloat
     /// In a macOS fullscreen Space, or exactly covering its screen.
-    let fullscreen: Bool
+    public let fullscreen: Bool
     /// In a macOS fullscreen Space.
-    let native: Bool
-    let key: Bool
-    let active: Bool
+    public let native: Bool
+    public let key: Bool
+    public let active: Bool
     /// On the Space on screen; nil when the window doesn't say.
-    let onActiveSpace: Bool?
+    public let onActiveSpace: Bool?
     /// The app has hidden the cursor and confined it to its window.
-    let cursorHeld: Bool
+    public let cursorHeld: Bool
     /// What the app's own cursor-locking, if it has any, says it is doing;
     /// nil when the app doesn't say.
-    let cursorLock: String?
+    public let cursorLock: String?
 }
 
 /// A window served over a control socket: `state`, `capture <path>`,
 /// `click <x> <y>` and `move <x> <y>`, in window points with a top-left
 /// origin — a capture's pixels divided by its scale — `yield <pid>` and
 /// `quit`.
-struct WindowControl {
-    let socket: ControlSocket
+public struct WindowControl {
+    public let socket: ControlSocket
 
-    func state() -> ControlledWindowState? {
+    public func state() -> ControlledWindowState? {
         guard let fields = ControlSocket.fields(of: socket.request("state", timeout: 10)),
               let window = fields["window"].flatMap(Int.init),
               let sizeParts = fields["size"]?.split(separator: "x"), sizeParts.count == 2,
@@ -120,7 +124,7 @@ struct WindowControl {
     }
 
     /// Capture the window to a PNG at `path`; its size in pixels, or nil.
-    func capture(to path: String) -> CGSize? {
+    public func capture(to path: String) -> CGSize? {
         let started = Date()
         let reply = socket.request("capture \(path)")
         let seconds = Date().timeIntervalSince(started)
@@ -137,18 +141,18 @@ struct WindowControl {
     }
 
     @discardableResult
-    func click(at point: CGPoint) -> Bool {
+    public func click(at point: CGPoint) -> Bool {
         report(socket.request("click \(point.x) \(point.y)"), for: "click")
     }
 
     @discardableResult
-    func move(to point: CGPoint) -> Bool {
+    public func move(to point: CGPoint) -> Bool {
         report(socket.request("move \(point.x) \(point.y)"), for: "move")
     }
 
     /// Ask the window's app to quit, as its Quit menu item does.
     @discardableResult
-    func quitApp() -> Bool {
+    public func quitApp() -> Bool {
         report(socket.request("quit"), for: "quit")
     }
 
@@ -156,7 +160,7 @@ struct WindowControl {
     /// can then make itself active: since macOS 14 only the active app may
     /// hand it on.
     @discardableResult
-    func yieldActivation(to pid: pid_t) -> Bool {
+    public func yieldActivation(to pid: pid_t) -> Bool {
         report(socket.request("yield \(pid)"), for: "yield")
     }
 
@@ -166,5 +170,9 @@ struct WindowControl {
             return false
         }
         return true
+    }
+
+    public init(socket: ControlSocket) {
+        self.socket = socket
     }
 }

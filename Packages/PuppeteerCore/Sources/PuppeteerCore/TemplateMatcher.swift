@@ -8,7 +8,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 
 /// Set to `true` to write heatmaps, search-region and match visualisations
 /// next to each screenshot. Slow — debugging only.
-let findImageExtraDebugging = Foundation.ProcessInfo.processInfo.environment["FIND_IMAGE_EXTRA_DEBUGGING"] == "true"
+public let findImageExtraDebugging = Foundation.ProcessInfo.processInfo.environment["FIND_IMAGE_EXTRA_DEBUGGING"] == "true"
 
 /// With extra debugging on, `FIND_IMAGE_DEBUG_PROBE=x,y` (full-screenshot pixel
 /// coordinates) also scores the template at that one position and writes the
@@ -24,7 +24,7 @@ private let findImageDebugProbe: CGPoint? = {
 }()
 
 /// How colour pixels are reduced to the single channel that gets correlated.
-enum GrayscaleConversion {
+public enum GrayscaleConversion {
     /// Standard perceived brightness. A sensible default for most templates.
     case luminance
     /// `R - max(G, B)`: pure red is brightest, everything else darkens. Makes a
@@ -36,32 +36,43 @@ enum GrayscaleConversion {
 /// for the template at its own pixel size; a caller that knows where its
 /// target sits and how big it renders should say so — cropping the search
 /// region is by far the biggest speed win.
-struct TemplateMatchOptions {
+public struct TemplateMatchOptions {
     /// Part of the screenshot to search, in unit coordinates with a top-left
     /// origin: `(0, 0, 1, 1)` is the whole screenshot,
     /// `(0.5, 0.5, 0.5, 0.5)` the bottom-right quarter.
-    var searchRegion = CGRect(x: 0, y: 0, width: 1, height: 1)
+    public var searchRegion = CGRect(x: 0, y: 0, width: 1, height: 1)
     /// Resize the template so its height is this fraction of the screenshot's
     /// height, for targets that scale with the screen. `nil` keeps the
     /// template's own pixel size.
-    var templateHeightFraction: CGFloat?
+    public var templateHeightFraction: CGFloat?
     /// Multipliers on the template size to also try, for targets whose size
     /// varies. Each one costs a full search.
-    var scaleVariations: [CGFloat] = [1.0]
-    var grayscale: GrayscaleConversion = .luminance
+    public var scaleVariations: [CGFloat] = [1.0]
+    public var grayscale: GrayscaleConversion = .luminance
     /// Best correlation (−1…1) a match needs to be reported. 10% tolerance is
     /// applied below this.
-    var minConfidence: Float = 0.5
+    public var minConfidence: Float = 0.5
     /// Correlation a coarse-pass position needs to be refined further.
-    var candidateThreshold: Float = 0.6
+    public var candidateThreshold: Float = 0.6
+
+    public init(searchRegion: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1), templateHeightFraction: CGFloat? = nil,
+                scaleVariations: [CGFloat] = [1.0], grayscale: GrayscaleConversion = .luminance,
+                minConfidence: Float = 0.5, candidateThreshold: Float = 0.6) {
+        self.searchRegion = searchRegion
+        self.templateHeightFraction = templateHeightFraction
+        self.scaleVariations = scaleVariations
+        self.grayscale = grayscale
+        self.minConfidence = minConfidence
+        self.candidateThreshold = candidateThreshold
+    }
 }
 
 /// Normalised cross-correlation template matching on the CPU, using a
 /// coarse → fine → pixel-perfect search.
-enum TemplateMatcher {
+public enum TemplateMatcher {
     /// Find a template image within a screenshot. Returns the match rect in
     /// screenshot pixels, top-left origin.
-    static func findImage(_ templatePath: String, in screenshotPath: String, options: TemplateMatchOptions = TemplateMatchOptions()) -> CGRect? {
+    public static func findImage(_ templatePath: String, in screenshotPath: String, options: TemplateMatchOptions = TemplateMatchOptions()) -> CGRect? {
         let startTime = Date()
         var stepStartTime = Date()
         logger.debug("⏱️  Starting template matching for \((templatePath as NSString).lastPathComponent)...")

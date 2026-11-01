@@ -354,7 +354,7 @@ Mac: the save warning shows, and no setting the player chose changes the
 test. Before, Warnings at Waverly Academy failed every run on one Mac whose
 `Waverly.INI` there said to play in a window.
 
-Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
+Its exit codes (`Packages/PuppeteerCore/Sources/PuppeteerCore/PuppetResult.swift`):
 
 | Code | Meaning |
 | --- | --- |
@@ -463,7 +463,8 @@ is no accessibility tree to query: WrappPuppeteer finds things on screen with OC
 and template matching and clicks by coordinates. It is split in two, and the
 dependency only runs one way:
 
-- **`WrappPuppeteer/Core/`** — reusable automation with no knowledge of Nancy
+- **`Packages/PuppeteerCore`** (a local package, so its matching can be tested
+  with `swift test`, in `Tests/PuppeteerCoreTests`) — reusable automation with no knowledge of Nancy
   Drew, wrapps or engines: the control-socket client (`InProcessControl`),
   OCR (`TextRecognizer`), template matching (`TemplateMatcher`), screen
   fingerprints (`ImageFingerprint`), checking a picture's bars

@@ -6,6 +6,7 @@ import AppKit
 import ImageIO
 import Logging
 import SecondChanceKit
+import PuppeteerCore
 
 // Bootstrap logging before anything else can construct a Logger — top-level
 // code in main.swift runs in source order, and the logger below (like any

@@ -539,9 +539,10 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
   ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#puppet-control)).
   Don't give it Screen Recording or Accessibility to fix a failure: look for
   `[Helpers] Puppet control armed` in the wrapp's log instead.
-- **WrappPuppeteer keeps its utilities generic.** `WrappPuppeteer/Core/` must not
+- **WrappPuppeteer keeps its utilities generic.** Its core, the local package
+  `Packages/PuppeteerCore` (so it can be tested, with `swift test`), must not
   know about Nancy Drew, wrapps or engines; what is specific to driving a game
-  lives in `WrappPuppeteer/NancyDrew/` and configures Core through parameters.
+  lives in `WrappPuppeteer/NancyDrew/` and configures it through parameters.
   [docs/testing.md](docs/testing.md#wrapppuppeteer) has the details.
 - **Test fixtures** are in `TestFixtures/` and `installers/`. Make skips
   explicit rather than returning early, so a skipped test reads as skipped.

@@ -13,16 +13,16 @@ import Foundation
 import CoreGraphics
 import ImageIO
 
-enum PictureFrameCheck {
+public enum PictureFrameCheck {
     /// Something light in one of the bars.
-    struct Finding {
+    public struct Finding {
         /// Which bar: left, right, top or bottom.
-        let bar: String
+        public let bar: String
         /// How much of it isn't dark, 0…1.
-        let lightFraction: Double
+        public let lightFraction: Double
         /// Its colour, as `#rrggbb`, when the light is one flat colour — an
         /// undrawn bar rather than a picture spilling into it.
-        let flatColour: String?
+        public let flatColour: String?
     }
 
     /// What's light in the bars a picture of `pictureAspect` (width over
@@ -30,7 +30,7 @@ enum PictureFrameCheck {
     /// dark, and when the image has the picture's shape and so no bars.
     /// `ignoring` leaves out parts of the image something else is known to
     /// draw over, as fractions of its size with a top-left origin.
-    static func findings(in image: CGImage, pictureAspect: Double, ignoring: [CGRect] = []) -> [Finding] {
+    public static func findings(in image: CGImage, pictureAspect: Double, ignoring: [CGRect] = []) -> [Finding] {
         let width = sampleWidth
         let height = max(1, Int((Double(image.height) / Double(image.width) * Double(width)).rounded()))
         guard pictureAspect > 0, let pixels = ImageFingerprint.render(image, width: width, height: height) else { return [] }
@@ -44,7 +44,7 @@ enum PictureFrameCheck {
     }
 
     /// The image in a file, for checking; nil if it can't be read.
-    static func image(atPath path: String) -> CGImage? {
+    public static func image(atPath path: String) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }

@@ -11,7 +11,7 @@ import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.WindowRecorder")
 
-final class WindowRecorder {
+public final class WindowRecorder {
     private let window: WindowControl
     private let directory: URL
     private let interval: TimeInterval
@@ -21,13 +21,13 @@ final class WindowRecorder {
 
     /// Frames go in `directory` as `<milliseconds since start>.png`, at most
     /// one every `interval` seconds — fewer when a capture takes longer.
-    init(window: WindowControl, directory: URL, interval: TimeInterval = 0.1) {
+    public init(window: WindowControl, directory: URL, interval: TimeInterval = 0.1) {
         self.window = window
         self.directory = directory
         self.interval = interval
     }
 
-    func start() {
+    public func start() {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
@@ -54,7 +54,7 @@ final class WindowRecorder {
     }
 
     /// Stop, and wait for the capture in flight to finish.
-    func stop() {
+    public func stop() {
         lock.lock()
         stopped = true
         lock.unlock()

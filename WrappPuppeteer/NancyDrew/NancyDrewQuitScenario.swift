@@ -10,6 +10,7 @@ import AppKit
 import CoreGraphics
 import Logging
 import SecondChanceKit
+import PuppeteerCore
 
 struct NancyDrewQuitScenario {
     struct Options {
