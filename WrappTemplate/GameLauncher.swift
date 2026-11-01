@@ -262,14 +262,17 @@ class GameLauncher {
     /// moments otherwise, so while the Mac is heavily loaded each of a quit's
     /// waits is `LoadingStage.heavyLoadFactor` times as long: fewer quits
     /// come to a kill, which can leave Wine's programs behind
-    /// (`WineServer.kill`).
-    nonisolated static func quitPeriods(grace: TimeInterval = 5, stop: TimeInterval = 5) -> QuitPeriods {
+    /// (`WineServer.kill`). Logs the longer wait when `announce`.
+    nonisolated static func quitPeriods(grace: TimeInterval = 5, stop: TimeInterval = 5,
+                                        announce: Bool = true) -> QuitPeriods {
         guard let load = SystemLoad.read(), load.isHeavy else {
             return QuitPeriods(grace: grace, stop: stop, heavyLoad: false)
         }
         let factor = LoadingStage.heavyLoadFactor
-        Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
-            .notice("[Wine Cleanup] The Mac is heavily loaded (\(load.summary)): giving Wine \(Int(grace * factor)) s to finish")
+        if announce {
+            Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
+                .notice("[Wine Cleanup] The Mac is heavily loaded (\(load.summary)): giving Wine \(Int(grace * factor)) s to finish")
+        }
         return QuitPeriods(grace: grace * factor, stop: stop * factor, heavyLoad: true)
     }
 

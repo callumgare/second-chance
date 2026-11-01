@@ -482,7 +482,7 @@ private func installTerminationHandlers() {
             // Off the main queue, so it fires even if the main thread is stuck;
             // later on a busy Mac, whose quit gets longer (`quitPeriods`).
             DispatchQueue.global(qos: .userInitiated).async {
-                let after = GameLauncher.quitPeriods().forcedExitAfter
+                let after = GameLauncher.quitPeriods(announce: false).forcedExitAfter
                 DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + after) {
                     mainLogger.error("Cleanup didn't finish within \(Int(after)) s of \(SubprocessWatch.signalName(sig)); exiting anyway")
                     // Not with Wine still running in the prefix, though.
