@@ -61,7 +61,7 @@ nonisolated public enum AppLogging {
             // Tripwire: the factory runs for every Logger construction. If one
             // happens while bootstrap() is still on the stack, logging state
             // (e.g. the disk mirror) may not be configured yet — loud in debug.
-            if !completedBootstrap {
+            if !isBootstrapped {
                 assertionFailure("Logger created before AppLogging.bootstrap() completed! Label: \(label)")
             }
             #endif

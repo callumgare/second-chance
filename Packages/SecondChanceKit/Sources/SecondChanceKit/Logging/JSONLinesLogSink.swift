@@ -15,11 +15,16 @@
 //  Turned on by SECOND_CHANCE_LOG_JSONL=<path>; sc sets it for wrapp builds.
 
 import Foundation
+import Synchronization
 
 nonisolated final class JSONLinesLogSink: @unchecked Sendable {
 
     private let handle: FileHandle
     private var cancel: (@Sendable () -> Void)?
+    /// Held while writing: by `start` from before it subscribes until the
+    /// snapshot is written, so a batch delivered meanwhile waits for it and
+    /// the file stays in order, and around each batch after.
+    private let writing = NSLock()
     private static let formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -27,16 +32,24 @@ nonisolated final class JSONLinesLogSink: @unchecked Sendable {
     }()
 
     /// Kept alive for the life of the process once started.
-    nonisolated(unsafe) private static var shared: JSONLinesLogSink?
+    private static let shared = Mutex<JSONLinesLogSink?>(nil)
 
     /// Start writing every entry, from the start of the process, to `path`.
     static func start(path: URL) {
-        guard shared == nil else { return }
         FileManager.default.createFile(atPath: path.path, contents: nil)
         guard let handle = FileHandle(forWritingAtPath: path.path) else { return }
         let sink = JSONLinesLogSink(handle: handle)
-        shared = sink
-        let (snapshot, cancel) = LogStore.shared.subscribe { batch in sink.write(batch) }
+        let started = shared.withLock { shared in
+            guard shared == nil else { return false }
+            shared = sink
+            return true
+        }
+        guard started else { return }
+        sink.writing.lock()
+        defer { sink.writing.unlock() }
+        let (snapshot, cancel) = LogStore.shared.subscribe { batch in
+            sink.writing.withLock { sink.write(batch) }
+        }
         sink.cancel = cancel
         sink.write(snapshot)
     }

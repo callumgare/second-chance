@@ -104,6 +104,12 @@ nonisolated public final class LogStore: @unchecked Sendable {
     /// Waits at most `timeout` for the drain queue, so a starved one can't
     /// hold up the exit that called it.
     nonisolated public func flush(timeout: TimeInterval = 2.0) {
+        // On the drain queue (a subscriber that flushes), the block below
+        // couldn't run until this had given up waiting for it.
+        if isRunningInDrainQueue() {
+            drain()
+            return
+        }
         let drained = DispatchSemaphore(value: 0)
         drainQueue.async {
             self.drain()
@@ -365,6 +371,15 @@ nonisolated public final class LogStore: @unchecked Sendable {
 
         if Self.mirrorsToStderr {
             writeToStderr(entries: entries)
+        }
+
+        // What was logged while delivering (a subscriber, or the mirror
+        // saying it failed) didn't schedule a drain, to keep this from
+        // recursing: deliver it in a moment rather than leaving it until
+        // something else is logged.
+        let followUp = lock.withLock { scheduleDrainIfNeeded(state: &$0) }
+        if followUp {
+            drainQueue.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.drain() }
         }
     }
 

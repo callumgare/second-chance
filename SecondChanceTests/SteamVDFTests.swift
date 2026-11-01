@@ -115,6 +115,21 @@ struct SteamVDFTests {
         var offset = 0
         #expect(throws: VDFError.self) { try VDF.parseBinary(Data(truncated), at: &offset) }
     }
+
+    @Test("Binary: objects nested without end are an error, not a stack overflow")
+    func rejectsDeepNesting() {
+        // Each `00 'k' 00` opens another object, and none is ever closed.
+        let data = Data((0..<10_000).flatMap { _ in [0x00, UInt8(ascii: "k"), 0x00] })
+        var offset = 0
+        #expect(throws: VDFError.self) { try VDF.parseBinary(data, at: &offset) }
+    }
+
+    @Test("Binary: an offset near the end of Int is an error, not an overflow")
+    func rejectsHugeOffset() {
+        var reader = BinaryReader(data: Data([1, 2, 3, 4]), offset: Int.max - 1)
+        #expect(throws: VDFError.self) { _ = try reader.uint32() }
+        #expect(throws: VDFError.self) { _ = try reader.cString() }
+    }
 }
 
 @Suite("Steam caches and manifests")

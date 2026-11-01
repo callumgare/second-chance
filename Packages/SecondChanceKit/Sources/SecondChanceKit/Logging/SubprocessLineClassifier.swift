@@ -77,15 +77,21 @@ nonisolated enum SubprocessLineClassifier {
         // Optional "pid:tid:" or "tid:" prefix of hex digits, then the class.
         let parts = line.split(separator: ":", maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count >= 3 else { return nil }
-        let hex = CharacterSet(charactersIn: "0123456789abcdefABCDEF")
         var index = 0
         while index < parts.count - 2,
               !parts[index].isEmpty,
-              parts[index].unicodeScalars.allSatisfy({ hex.contains($0) }) {
+              parts[index].utf8.allSatisfy({ isHexDigit($0) }) {
             index += 1
         }
         let candidate = parts[index]
-        return ["err", "warn", "fixme", "trace"].contains(candidate) ? candidate : nil
+        return debugClasses.contains(candidate) ? candidate : nil
+    }
+
+    /// Built once, not for every line Wine prints.
+    private static let debugClasses: Set<Substring> = ["err", "warn", "fixme", "trace"]
+
+    private static func isHexDigit(_ byte: UInt8) -> Bool {
+        (0x30...0x39).contains(byte) || (0x41...0x46).contains(byte) || (0x61...0x66).contains(byte)
     }
 
     /// `err:` lines Wine prints on every healthy run. Kept at debug so
