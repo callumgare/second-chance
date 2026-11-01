@@ -184,22 +184,45 @@ enum ProcessControl {
 
     private static var finishedLaunching = false
 
-    /// Make this process the active app, once another has handed it
-    /// activation (since macOS 14 an app can't take it otherwise), and wait
-    /// up to `timeout` for macOS to say it is. Whether it did.
-    static func activateSelf(timeout: TimeInterval = 5) -> Bool {
-        // A process that never ran NSApp's event loop hasn't finished
-        // launching as far as macOS is concerned, and isn't made active.
+    /// Take the screen from the app in front, as Cmd-Tab to another app
+    /// does: become a regular app with a window, once the app in front has
+    /// handed this one activation. macOS can't show a regular app's window
+    /// in another app's fullscreen Space, so it slides over to the
+    /// desktop's. Waits until the window is on screen. Returns the window,
+    /// for `giveBackScreen`, or nil if it never showed (and then gives the
+    /// screen back itself).
+    static func takeOverScreen(title: String, timeout: TimeInterval = 15) -> NSWindow? {
         if !finishedLaunching {
             NSApp.finishLaunching()
             finishedLaunching = true
         }
+        NSApp.setActivationPolicy(.regular)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 160),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.title = title
+        window.isReleasedWhenClosed = false
+        window.center()
+        window.makeKeyAndOrderFront(nil)
         NSApp.activate()
         let deadline = Date().addingTimeInterval(timeout)
-        while !NSApp.isActive, Date() < deadline {
+        while !window.occlusionState.contains(.visible), Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        return NSApp.isActive
+        guard window.occlusionState.contains(.visible) else {
+            logger.warning("⚠️  WrappPuppeteer's window never came on screen within \(Int(timeout))s")
+            giveBackScreen(window)
+            return nil
+        }
+        return window
+    }
+
+    /// Close the window `takeOverScreen` showed, and go back to being an
+    /// accessory app, whose windows (the click ring) can show over another
+    /// app's fullscreen Space.
+    static func giveBackScreen(_ window: NSWindow?) {
+        window?.close()
+        NSApp.setActivationPolicy(.accessory)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
     }
 
     /// Poll until `pid` has exited; false if it is still alive at `timeout`.

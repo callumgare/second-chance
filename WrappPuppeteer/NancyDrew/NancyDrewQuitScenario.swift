@@ -247,8 +247,10 @@ struct NancyDrewQuitScenario {
 
     /// Switch away from the game and back as a player would, and say why
     /// that went wrong, or nil. The game hands activation to WrappPuppeteer,
-    /// which makes itself active, as Cmd-Tab away does; then WrappPuppeteer
-    /// opens the wrapp as a click on its Dock icon does. The game has to be
+    /// which shows a window of its own, so macOS slides off the game's
+    /// fullscreen Space to the desktop, as Cmd-Tab to another app does; then
+    /// WrappPuppeteer opens the wrapp as a click on its Dock icon does, and
+    /// closes its window once the game is back. The game has to be
     /// active again within `switchBackSeconds`: a Wine game's process has no
     /// Dock icon of its own, so the wrapp brings it forward. A Direct3D game
     /// whose mode Wine emulates once came back with its picture half a screen
@@ -257,11 +259,17 @@ struct NancyDrewQuitScenario {
     /// it's only warned about.
     private func switchAwayAndBackFailure(_ context: Context, gamePid: Int32) -> String? {
         logger.notice("🔀 Switching away from the game, then back by opening the game's app as its Dock icon would...")
-        // What counts is the game no longer being active, whether or not
-        // macOS then says WrappPuppeteer is: once the game has gone to the
-        // background, it has to come back.
-        if context.game.yieldActivation(to: getpid()), !ProcessControl.activateSelf() {
-            logger.notice("   macOS didn't say WrappPuppeteer is active; going by the game")
+        // What counts is the game no longer being active: once it has gone to
+        // the background, it has to come back. WrappPuppeteer's window, shown
+        // until then, takes the screen off the game's fullscreen Space, as
+        // Cmd-Tab to another app's window does.
+        var window: NSWindow?
+        if context.game.yieldActivation(to: getpid()) {
+            window = ProcessControl.takeOverScreen(title: "WrappPuppeteer: switched away from the game")
+        }
+        defer { ProcessControl.giveBackScreen(window) }
+        if window != nil {
+            logger.notice("   WrappPuppeteer's window is on screen, off the game's Space")
         }
         let away = Date().addingTimeInterval(Self.switchBackSeconds)
         while context.game.state()?.active == true, Date() < away {

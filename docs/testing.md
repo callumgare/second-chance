@@ -626,10 +626,16 @@ takes the path a capture is saved to as one word.
 The first time Exit is found, before clicking it, the scenario switches
 away from the game and back, as a player would. The game's helper hands
 activation to WrappPuppeteer (`yield`, [puppet
-control](wine-in-process-helpers.md#puppet-control)), which makes itself the
-active app, as Cmd-Tab away does. Once the game says it is no longer active,
-WrappPuppeteer opens the wrapp as a click on its Dock icon does
-(`ProcessControl.reopen`), and the game has to be active again within 15 s:
+control](wine-in-process-helpers.md#puppet-control)), which becomes a regular
+app for the moment and shows a window (`ProcessControl.takeOverScreen`).
+macOS can't show it in the game's fullscreen Space, so the screen slides over
+to the desktop, as Cmd-Tab to another app's window does; WrappPuppeteer waits
+until its window is on screen. Without a window of its own nothing would show
+the switch: the game's Space would stay up, and only which app is active
+would change. Once the game says it is no longer active, WrappPuppeteer opens
+the wrapp as a click on its Dock icon does (`ProcessControl.reopen`), and
+closes its window once the game is back. The game has to be active again
+within 15 s:
 a Wine game's process has no Dock icon of its own
 ([one Dock icon](wine-in-process-helpers.md#one-dock-icon)), so the wrapp
 brings it forward. The menu's frame is then checked again, below: a Direct3D
