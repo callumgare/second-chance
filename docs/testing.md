@@ -13,7 +13,8 @@ The tests run inside `Second Chance.app`, their test host. Under test it keeps
 no run log, leaves the welcome screen's first-launch greeting alone and opens
 no main window (`TestHost`). Each integration-test build has a window of its
 own instead (`BuildWindow`), showing that build's screens as a person building
-the game would see them. It opens without coming to the front, and closes when
+the game would see them. It opens on top without making the test host the
+active app (so a game being tested keeps the keyboard), and closes when
 the build is done unless the build failed: that one stays on the screen saying
 why. Where the repo's `.env` sets `SECOND_CHANCE_HIDE_TEST_UI=1`,
 `sc test unit` and `sc test integration` pass it on and the host also opens no

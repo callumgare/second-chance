@@ -39,9 +39,10 @@ final class BuildWindow {
             nextTopLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
         }
         nextTopLeft = window.cascadeTopLeft(from: nextTopLeft)
-        // Not brought to the front: a game another test is launching must
-        // stay there.
-        window.orderFront(nil)
+        // On screen without making the test host active, which would take
+        // the keyboard from a game another test is launching: `orderFront`
+        // leaves an inactive app's window off screen altogether.
+        window.orderFrontRegardless()
         return BuildWindow(window: window)
     }
 
