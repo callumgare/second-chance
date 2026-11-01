@@ -267,7 +267,7 @@ Swift code — rules in `.swiftlint.yml` — and markdownlint-cli2, pinned to
 listed rather than globbed, since a glob from the root walks the installers
 and build output before any ignore applies. Each linter is a step whose output
 shows when it fails, and the command exits 1 if either does. CI's Lint job runs
-it, and `sc release` runs the same check
+it, and shellcheck over `./sc` and the build phases' scripts (`.shellcheckrc`), and `sc release` runs the same check
 ([releasing.md](releasing.md#lint-first)). `sc setup` checks `swiftlint` and
 `npx` are installed. `swiftlint --fix` fixes much of what SwiftLint finds.
 

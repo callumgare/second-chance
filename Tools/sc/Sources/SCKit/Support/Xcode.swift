@@ -32,7 +32,15 @@ struct Xcode {
             "-configuration", configuration,
             "-derivedDataPath", repo.derivedData.path,
             "ONLY_ACTIVE_ARCH=NO",
-        ]
+        ] + Self.signingOverrides
+    }
+
+    /// On CI (`CI=true`, which GitHub Actions sets), sign ad hoc: the project
+    /// signs with the developer's team, whose certificate a CI runner doesn't
+    /// have ("No signing certificate 'Mac Development' found").
+    static var signingOverrides: [String] {
+        guard ProcessInfo.processInfo.environment["CI"] == "true" else { return [] }
+        return ["CODE_SIGN_IDENTITY=-", "CODE_SIGN_STYLE=Manual", "DEVELOPMENT_TEAM="]
     }
 
     private static let environment: [String: String?] = ["NSUnbufferedIO": "YES"]
@@ -69,7 +77,7 @@ struct Xcode {
     /// Build the app and the test bundle.
     func buildForTesting() async throws {
         try Proc.require("xcbeautify", brew: "xcbeautify")
-        let args = ["build-for-testing"] + testArguments + ["ONLY_ACTIVE_ARCH=NO"]
+        let args = ["build-for-testing"] + testArguments + ["ONLY_ACTIVE_ARCH=NO"] + Self.signingOverrides
         try await ui.logStep("Build for testing", log: "build-for-testing", formatting: .xcbeautify, success: "Built for testing") { sink in
             try await Proc.stream("xcodebuild", args, env: Self.environment, cwd: repo.root) { await sink.line($0) }
         }

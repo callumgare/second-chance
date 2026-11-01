@@ -77,7 +77,7 @@ OUTPUT_LIST="${SCRIPT_DIR}/Resources/scummvm-files"
 echo "📝 Creating output files list..."
 {
     find "${TEMP_DIR}" -type f | while read -r file; do
-        echo "${file#${TEMP_DIR}/}"
+        echo "${file#"${TEMP_DIR}"/}"
     done
 } > "${OUTPUT_LIST}"
 

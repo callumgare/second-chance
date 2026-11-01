@@ -1,1 +1,3 @@
 external-sources=true
+# Sourced files are found beside the script that sources them.
+source-path=SCRIPTDIR

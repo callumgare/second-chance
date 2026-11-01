@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+  # sc's package. The app's own pins (swift-log, Sentry, Sparkle) are in the
+  # Xcode project's Package.resolved, which Dependabot doesn't read: update
+  # those from Xcode (File > Packages > Update to Latest Package Versions).
+  - package-ecosystem: swift
+    directory: /Tools/sc
+    schedule:
+      interval: monthly
