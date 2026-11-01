@@ -2,6 +2,60 @@
 
 All notable changes to Second Chance.
 
+## 1.0.0 — 2026-11-01
+
+### New
+
+- Show Steam's progress while a game builds. The app now says when Steam is updating or connecting, fills the progress bar, and shows how much of the game has downloaded and roughly how long is left.
+- Ask before using a disc with no installer. If a disc doesn't have an installer the app recognises (a special edition or another language, say), it asks whether to try one of its programs, pick another disc, or cancel.
+- Give each game one Dock icon. Clicking it in the Dock or choosing it with Cmd-Tab brings the game back.
+
+### Improved
+
+- Warn when a download is stuck. If a Steam download makes no progress for a minute, the app tells you to check your internet, and the build stops if it stays stuck for 30 minutes.
+- Warn if the Mac is out of space during a Steam build.
+- Explain when a game's app is missing something it needs, instead of showing developer instructions.
+- Explain why a disc image won't open and what to do about it.
+- Check the save location earlier. If you can't add apps to the Applications folder, the save window opens in your own Applications folder and turns down a folder you can't save to, so you don't lose a finished install.
+
+### Fixed
+
+- Fix a bug that causes the game's graphics to become screwed up when using Cmd+Tab.
+- Fix Quit from the game's own menu hanging in some games, such as The White Wolf of Icicle Creek.
+- Fix clicking a game in the Dock not taking you back to the game's fullscreen screen.
+- Fix Steam games never getting past starting Steam when the app had been run straight from a download.
+- Fix Steam builds waiting for hours when Steam closed or crashed partway through. The build now restarts Steam once, then fails with a clear message.
+- Fix builds failing when two games were built at the same time.
+- Fix some InstallShield games waiting forever for an install button that never got clicked on a busy Mac.
+- Fix installing some games, such as The White Wolf of Icicle Creek, installing the wrong thing and failing.
+- Fix a game's installer sometimes being given mangled file locations.
+- Fix disc images not being opened unless their name ended in .iso.
+- Fix the Debug menu's Wine Config option never opening.
+- Fix quitting Second Chance mid-build leaving the installer running.
+- Fix a Steam game's leftover session keeping your Steam account busy after you quit, for games run from a disk image.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Quarantine is now removed from the game's app template copy, so macOS no longer runs built apps from a read-only copy.
+- Wine is now started through one launcher (Wine, WineCommand, wine.registry, wine.server, wine.start, Winetricks) instead of a shell script, and Winetricks, wineserver calls and registry access go through it. Added a lint rule to keep Wine's folder inside the library.
+- ExifTool is no longer bundled. Game detection reads Windows program version info and MSI subjects natively, and the product name now reaches the game fingerprint for the first time.
+- The shared code is now a local Swift package (Packages/SecondChanceKit with SecondChanceKit and SecondChanceReporting), and the game database moved to its own GameCatalog package.
+- A wrapp's settings, layout and drives are shared types (WrappSettings, WrappLayout, Wine.drives). The wrapp and WrappPuppeteer use the catalog's GameEngine. ProcessList is now the one place that reads running processes.
+- Steam's sign-in wait and lock wait are shared between build and wrapp (SteamSignInWatch, SteamActiveLock.take). Steam shutdown waits on wineserver -w rather than polling.
+- Builds are tagged with a log context and report on their own bus, so builds can run side by side in one process. The Wine prefix cache is made one at a time and copied in by rename. A cache bug that removed the new prefix itself is fixed, and caching failures no longer fail a build.
+- Integration tests build games side by side (BuildGate, --build-concurrency, --disk-margin, default one build per four performance cores) and launch them one at a time. Results report build, launch, wait and disk separately. Every source runs through IntegrationGameRun. A silent-install failure in a build under test no longer retries with the wizard.
+- Integration tests now switch away from each game and back through the wrapp, relaunch it and quit it from its menu, check an installed game is turned down, and attach WrappPuppeteer's screenshots. The installed-game check builds on its own bus.
+- WrappPuppeteer now starts each game with the cursor away from the top, ignores the title bar and Steam's notice corner in the framing check, shows a window to really leave the game's Space, and ends only the tested wrapp's Wine or ScummVM with a graceful stop before a kill.
+- The Dock icon is handled by the wrapp (SECOND_CHANCE_ONE_DOCK_ICON=0 or --debug no-one-dock-icon turns it off). Wine's mode scaling helper now answers restore and minimize requests as done while the game is in the background, until the game asks for its own mode again.
+- A build logs and tags failures for games whose .exe is wrapped in copy protection (SecuROM, SafeDisc, StarForce). The load and launch monitors' log lines now carry their build.
+- The AutoIt script for InstallShield now waits while the installer runs and closes it if the click fails. DYLD_ variables from the test host are kept out of Wine's environment.
+- sc: --on now syncs only DerivedData's built products, and only sends this Mac's app build with --skip-app-build. It leaves out .claude/worktrees and no longer syncs .env, and says plainly when a sync stops partway. Test host windows are hidden only when .env sets SECOND_CHANCE_HIDE_TEST_UI.
+- The Steam stall check now always says a download is stuck before failing. A unit test no longer depends on timing, and a few other tests were made less flaky (fake Wine records, exception ports lock).
+- Documentation added or updated for the Wine library, its historical plan, the shared-wrapp review, concurrent integration builds, and the title bar and notched display experiments.
+
+</details>
+
 ## 0.10.0 — 2026-10-30
 
 ### Fixed
