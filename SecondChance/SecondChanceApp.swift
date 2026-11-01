@@ -37,15 +37,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return .terminateCancel
         }
         logger.notice("🛑 Application terminating, cleaning up...")
-        guard !RunningSteam.shared.isEmpty else {
+        guard !RunningSteam.shared.isEmpty || WrappBuildHelper.hasTemporaryWrapps else {
             finishTerminating()
             return .terminateNow
         }
-        // A Steam build has Steam running — perhaps its sign-in window, left
-        // open. Stop it before the temporary wrapp it runs from is deleted.
-        logger.notice("Stopping the build's Steam before quitting")
+        // A build may have Steam running — perhaps its sign-in window, left
+        // open — or an installer. Stop them before the temporary wrapps they
+        // run from are deleted: Steam first, as it keeps Wine going.
         Task { @MainActor in
-            await RunningSteam.shared.stopAll()
+            if !RunningSteam.shared.isEmpty {
+                logger.notice("Stopping the build's Steam before quitting")
+                await RunningSteam.shared.stopAll()
+            }
+            await WrappBuildHelper.endWineInTemporaryWrapps()
             self.finishTerminating()
             sender.reply(toApplicationShouldTerminate: true)
         }

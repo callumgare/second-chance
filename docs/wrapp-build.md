@@ -157,6 +157,11 @@ The division that keeps this from re-tangling:
   (not `removeTempWrapp`) afterwards. `removeTempWrapp` stops the wrapp's
   Wine session before deleting it: a build that failed partway can leave one
   running, and once the wrapp is gone so is the wineserver that could end it.
+  Quitting Second Chance mid-build does the same for every temporary wrapp
+  still registered, first (`endWineInTemporaryWrapps`, from
+  `applicationShouldTerminate`): each running session is asked to stop and
+  forced only if it won't (`shutDown(gracePeriod: 1)`, since an installer
+  partway through won't finish by itself), after any Steam is stopped.
 - **The helper never calls a builder.** One direction only.
 - **Source-specific work stays out of the helper.** Disk layout and CD-ROM
   mounting live in `DiskWrappBuilder` because no other source has disks.
@@ -300,7 +305,7 @@ line with its pid. Facades on `Wine` cover the rest: `wine.registry` sets,
 imports and reads registry values with named keys (`.x11Driver`,
 `.wineDrives`, `.videoDeviceMap`), `wine.server` checks on, waits for and ends
 the prefix's session (`shutDown(gracePeriod:)` escalates from waiting to
-`-k` to `-k9`), and `Winetricks` (app only, as only Second Chance bundles it)
+`-k` to `-k9`, telling an `onStep` callback as it goes), and `Winetricks` (app only, as only Second Chance bundles it)
 installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,
 which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
 GCD queues call it through `Blocking.wait` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`), the

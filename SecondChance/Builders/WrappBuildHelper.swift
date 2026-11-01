@@ -646,6 +646,30 @@ class WrappBuildHelper {
         }
     }
 
+    /// Whether a build has a temporary wrapp that quitting would delete.
+    static var hasTemporaryWrapps: Bool {
+        wrappsLock.withLock { !temporaryWrapps.isEmpty }
+    }
+
+    /// End the Wine running in each temporary wrapp, before quitting deletes
+    /// them: an installer partway through won't finish by itself, and Wine
+    /// left running from a deleted folder would carry on with nothing to show
+    /// for it. Each session is asked to stop first and forced only if it
+    /// won't (`WineServer.shutDown`), all at once.
+    static func endWineInTemporaryWrapps() async {
+        let wrapps = wrappsLock.withLock { Array(temporaryWrapps) }
+        await withTaskGroup(of: Void.self) { group in
+            for wrapp in wrapps {
+                group.addTask {
+                    let server = Wine(wrapp: wrapp).server
+                    guard await server.isRunning else { return }
+                    logger.notice("Ending Wine in \(wrapp.lastPathComponent) before quitting")
+                    await server.shutDown(gracePeriod: 1)
+                }
+            }
+        }
+    }
+
     func cleanupTemporaryWrapps() {
         Self.wrappsLock.lock()
         let wrapps = Array(Self.temporaryWrapps)
