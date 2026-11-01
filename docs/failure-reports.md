@@ -151,7 +151,16 @@ that outcome for `FailureReportCallout`.
   which sends it through `GameLauncher.reportStuckLaunch`, shows it being
   sent or asks about it as the error window would, and quits again once
   it has gone or been declined. Launch Directly is not a give-up and quits
-  without one.
+  without one. Most people walk away from a stuck launch rather than quit
+  it while it says so, so a launch still saying it may have failed 5
+  minutes after its loading window first showed
+  (`InfoWindowViewModel.stuckReportAfter`) is reported by itself, and keeps
+  waiting (`GameLauncher.reportStuckLaunchWithoutQuitting`): only at Basic
+  or Detailed, once the first failure's question has been answered
+  (`ReportingPreferences.detailWithoutAsking`), as there is nowhere to ask,
+  and a quit after it reports nothing more. The `stuck_report` tag says
+  which it was: `gave-up` or `automatic`. An automatic one isn't counted
+  as the launch's outcome in the success reports, which may yet be a game.
 - **A wrapp's own start-up errors.** The `exit(1)` paths in `main.swift` use
   `reportAndWait`.
 - **Crashes.** The SDK records a crash and finds it at the next start.

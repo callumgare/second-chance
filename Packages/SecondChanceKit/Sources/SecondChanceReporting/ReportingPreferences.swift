@@ -32,6 +32,18 @@ nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
     /// until the person has been asked, after their first successful build.
     public var successReports: Bool?
 
+    /// The detail a report is sent at without asking anyone; nil when the
+    /// setting asks first (Manual), or nobody has answered the first-failure
+    /// question yet. For a failure with no screen to ask on.
+    public var detailWithoutAsking: ReportDetail? {
+        guard promptShown else { return nil }
+        switch level {
+        case .manual: return nil
+        case .basic: return .basic
+        case .detailed: return .detailed
+        }
+    }
+
     public static let defaultDirectory = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/SecondChance", isDirectory: true)
     static let fileName = "failure-reporting.json"

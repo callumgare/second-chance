@@ -164,6 +164,17 @@ struct ReportingPreferencesTests {
         ReportingPreferences.update(in: directory) { $0.successReports = answer }
         #expect(ReportingPreferences.load(from: directory).successReports == answer)
     }
+
+    @Test("A report goes without asking only at Basic or Detailed, once the first failure's question is answered", arguments: [
+        (ReportLevel.basic, true, ReportDetail.basic),
+        (.detailed, true, .detailed),
+        (.manual, true, nil),
+        (.basic, false, nil),
+        (.detailed, false, nil),
+    ] as [(ReportLevel, Bool, ReportDetail?)])
+    func detailWithoutAsking(level: ReportLevel, promptShown: Bool, expected: ReportDetail?) {
+        #expect(ReportingPreferences(level: level, promptShown: promptShown).detailWithoutAsking == expected)
+    }
 }
 
 @Suite("Success reports")

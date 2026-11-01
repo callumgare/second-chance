@@ -367,6 +367,32 @@ class GameLauncher {
         let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
         let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
         logger.error("■ Gave up waiting for the launch after \(ran)\(window): the player quit while it seemed stuck")
+        let stuck = stuckReport(how: "gave-up")
+        recordLaunch(outcome: stuck.kind)
+        report(stuck)
+        return (stuck, reportTask ?? Task { .disabled })
+    }
+
+    /// Report a launch that has looked stuck for minutes, with no one having
+    /// given up on it, and carry on waiting: sent only if the setting sends
+    /// reports without asking, as there is nowhere to ask. Not counted as the
+    /// launch's outcome, which may yet be a game. Whether it was sent.
+    func reportStuckLaunchWithoutQuitting() -> Bool {
+        let ran = SubprocessWatch.duration(Date().timeIntervalSince(launchedAt))
+        let stuck = stuckReport(how: "automatic")
+        guard let sending = FailureReporter.sendWithoutAsking(stuck) else {
+            logger.notice("[Report] The launch has seemed stuck for \(ran); the report settings ask first, so it waits for a quit to be reported")
+            return false
+        }
+        logger.error("[Report] The launch has seemed stuck for \(ran): reporting it, and still waiting")
+        failureReport = stuck
+        reportTask = sending
+        return true
+    }
+
+    /// The report of a launch that seems stuck. `how`: given up on by the
+    /// player, or sent by itself after a while.
+    private func stuckReport(how: String) -> FailureReport {
         // From `startupDiagnostics`, not `diagnostics`: a launch stuck before
         // the game started (Wine's desktop, say) has a `stalled` bundle too.
         var files: [(String, String)] = []
@@ -374,14 +400,13 @@ class GameLauncher {
             files.append(("Diagnostics", bundle.path))
         }
         let summary = FailureSummary.log(logger, what: "Starting \(config.gameTitle)", files: files)
-        let stuck = FailureReport(
+        var tags = failureTags(exitCode: nil, signal: nil)
+        tags["stuck_report"] = how
+        return FailureReport(
             what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.gameEngine.rawValue,
-            tags: failureTags(exitCode: nil, signal: nil), summary: summary,
+            tags: tags, summary: summary,
             diagnostics: startupDiagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
         )
-        recordLaunch(outcome: stuck.kind)
-        report(stuck)
-        return (stuck, reportTask ?? Task { .disabled })
     }
 
     /// Count this launch for the success reports, once: a launch given up

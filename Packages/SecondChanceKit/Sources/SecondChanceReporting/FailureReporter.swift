@@ -229,6 +229,15 @@ nonisolated public enum FailureReporter {
         }
     }
 
+    /// Send `report` now, without holding up the caller, if the setting sends
+    /// reports without asking (`ReportingPreferences.detailWithoutAsking`);
+    /// nil, sending nothing, if it would ask. For a failure no one is looking
+    /// at, with no screen to ask on: a launch stuck for minutes.
+    public static func sendWithoutAsking(_ report: FailureReport) -> Task<ReportOutcome, Never>? {
+        guard isEnabled, let detail = ReportingPreferences.load().detailWithoutAsking else { return nil }
+        return sendInBackground(report, detail: detail)
+    }
+
     /// Send `report` at `detail`, whatever the setting.
     static func send(_ report: FailureReport, detail: ReportDetail) async -> ReportOutcome {
         guard isEnabled else { return .disabled }

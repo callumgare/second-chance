@@ -115,6 +115,17 @@ class InfoWindowViewModel: ObservableObject {
     /// Reports the launch as stuck, for `giveUpIfStuck`: the report and its
     /// sending.
     var reportStuckLaunch: (() -> (FailureReport, Task<ReportOutcome, Never>))?
+    /// Reports a launch that has seemed stuck for `stuckReportAfter`, and
+    /// carries on: whether it was sent. Once sent, a quit doesn't report it again.
+    var reportStuckLaunchWithoutQuitting: (() -> Bool)?
+    /// How long into loading a launch that seems stuck is reported by itself.
+    static let stuckReportAfter: TimeInterval = 5 * 60
+    /// When the loading content first showed.
+    private var loadingSince: Date?
+    /// Whether the stuck launch's report has been tried (`stuckReportAfter`),
+    /// and whether it went.
+    private var stuckReportTried = false
+    private var stuckLaunchReported = false
 
     /// A newer Second Chance than the one that built this wrapp, once a
     /// failure has looked for one and found it.
@@ -152,6 +163,7 @@ class InfoWindowViewModel: ObservableObject {
     /// Start the current stage's clock afresh: the slow note, then the
     /// possible failure, as the stage's `LoadingClock` judges them.
     func startStageTimers() {
+        if loadingSince == nil { loadingSince = Date() }
         stopTimer()
         showSlowLoadingNote = false
         showSuspectedHang = false
@@ -192,6 +204,13 @@ class InfoWindowViewModel: ObservableObject {
                 checkForNewerRelease()
             }
         }
+        // Reported by itself after a while, as most people who meet a stuck
+        // launch walk away rather than quit it while it says so.
+        if showSuspectedHang, !stuckReportTried, let since = loadingSince,
+           Date().timeIntervalSince(since) >= Self.stuckReportAfter {
+            stuckReportTried = true
+            stuckLaunchReported = reportStuckLaunchWithoutQuitting?() ?? false
+        }
     }
 
     func showError(exitCode: Int32, explanation: String? = nil) {
@@ -215,7 +234,7 @@ class InfoWindowViewModel: ObservableObject {
     /// stuck, then quit once the report has gone or been declined. Returns
     /// whether it did, in which case this quit should wait for that one.
     func giveUpIfStuck() -> Bool {
-        guard case .loading = phase, showSuspectedHang, !gameHasLoaded,
+        guard case .loading = phase, showSuspectedHang, !gameHasLoaded, !stuckLaunchReported,
               FailureReporter.isEnabled, let reportStuckLaunch else { return false }
         stopTimer()
         let (report, sending) = reportStuckLaunch()

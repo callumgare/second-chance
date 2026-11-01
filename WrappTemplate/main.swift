@@ -794,6 +794,7 @@ func main() {
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
     infoWindow.reportStuckLaunch = { gameLauncher.reportStuckLaunch() }
+    infoWindow.reportStuckLaunchWithoutQuitting = { gameLauncher.reportStuckLaunchWithoutQuitting() }
     infoWindow.onPossibleFailure = { gameLauncher.captureDiagnostics(.stalled) }
     gameLauncher.onQuitStep = { step in infoWindow.quitting(step) }
     if config.canLaunchWithoutSteam {
