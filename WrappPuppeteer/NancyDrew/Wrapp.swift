@@ -81,23 +81,35 @@ struct Wrapp {
 
 extension Wrapp {
     /// Commands that end the engine processes that can outlive the wrapp
-    /// (see `ProcessCleanup.install`). For Wine, first the wrapp's own
-    /// `wineserver -k`, which ends everything in its prefix — Steam included —
-    /// whatever it's called: under Wine 10 a Windows program's command line
-    /// is its Windows path (`C:\Program Files (x86)\Steam\steam.exe`), which
-    /// the old `pkill -f wine` never matched.
+    /// (see `ProcessCleanup.install`), and only this wrapp's: the integration
+    /// tests build other games beside a launch, and a machine-wide
+    /// `pkill -f wine` once killed their installers and patchers. For Wine,
+    /// the wrapp's own `wineserver -k` ends everything in its prefix — Steam
+    /// included — whatever it's called (under Wine 10 a Windows program's
+    /// command line is its Windows path, `C:\Program Files (x86)\Steam\steam.exe`),
+    /// then anything still running from the wrapp's own Wine. For ScummVM,
+    /// the wrapp's own `scummvm`, by its path: by the time this runs the wrapp
+    /// has gone and its child belongs to launchd.
     var cleanupCommands: [[String]] {
+        let layout = WrappLayout(app: URL(fileURLWithPath: appPath))
         switch engine {
         case .wine, .wineSteam, .wineSteamSilent:
-            let wineserver = WrappLayout(app: URL(fileURLWithPath: appPath)).wine.appendingPathComponent("bin/wineserver").path
+            let wineserver = layout.wine.appendingPathComponent("bin/wineserver").path
             return [
                 ["/usr/bin/env", "WINEPREFIX=\(winePrefix.path)", wineserver, "-k"],
-                ["/usr/bin/pkill", "-9", "-f", "wine"],
+                ["/usr/bin/pkill", "-9", "-f", "^" + Self.extendedRegexEscaped(layout.wine.path + "/")],
             ]
         case .scummvm:
-            return [["/usr/bin/pkill", "-9", "scummvm"]]
+            return [["/usr/bin/pkill", "-9", "-f", "^" + Self.extendedRegexEscaped(layout.scummvm.path)]]
         case nil:
             return []
         }
+    }
+
+    /// `text` as a POSIX extended regular expression (`pkill`'s) that
+    /// matches only itself: a wrapp's name can hold `.`, `(` and the like.
+    static func extendedRegexEscaped(_ text: String) -> String {
+        let special: Set<Character> = [".", "[", "]", "(", ")", "*", "+", "?", "{", "}", "|", "^", "$", "\\"]
+        return String(text.flatMap { special.contains($0) ? ["\\", $0] : [$0] })
     }
 }
