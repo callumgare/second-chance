@@ -68,7 +68,8 @@ static void quitWatchInit(void) {
         helperReport("QuitWatch", "warning", "no -[WineOpenGLContext flushBuffer] or -[WineApplicationController applicationShouldTerminate:]; a game that quits before drawing anything isn't reported");
         return;
     }
-    gWineFlushBuffer = method_setImplementation(flush, (IMP)reportingFlushBuffer);
-    gWineShouldTerminate = method_setImplementation(terminate, (IMP)reportingShouldTerminate);
+    gWineFlushBuffer = replaceOwnMethod(NSClassFromString(@"WineOpenGLContext"), @selector(flushBuffer), (IMP)reportingFlushBuffer);
+    gWineShouldTerminate = replaceOwnMethod(NSClassFromString(@"WineApplicationController"),
+                                            @selector(applicationShouldTerminate:), (IMP)reportingShouldTerminate);
     helperReport("QuitWatch", "notice", "armed in %s", getenv("QUIT_WATCH_EXE"));
 }

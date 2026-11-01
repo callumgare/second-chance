@@ -285,6 +285,12 @@ extension InfoWindowViewModel.Phase {
         case .warning, .loading, .quitting: return false
         }
     }
+
+    /// The window that says the game is closing.
+    var isQuitting: Bool {
+        if case .quitting = self { return true }
+        return false
+    }
 }
 
 struct InfoWindowView: View {

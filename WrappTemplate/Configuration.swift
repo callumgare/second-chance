@@ -111,6 +111,19 @@ func getWinePrefix(appPath: URL, bundleId: String) -> URL {
         .appendingPathComponent(bundleId)
         .appendingPathComponent("prefix")
 
+    // The copy is kept from one launch to the next, with what the game and
+    // Wine changed in it, for as long as it is a copy of this same prefix:
+    // where it came from, and when that prefix's registry last changed (a
+    // rebuilt or updated wrapp changes it).
+    let stampFile = cachedPrefixPath.appendingPathComponent(".copied-from")
+    let systemReg = originalPrefixPath.appendingPathComponent("system.reg")
+    let modified = (try? fileManager.attributesOfItem(atPath: systemReg.path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+    let stamp = "\(originalPrefixPath.path)\n\(modified)\n"
+    if (try? String(contentsOf: stampFile, encoding: .utf8)) == stamp {
+        configLogger.notice("[Wine] Prefix is read-only; using its copy from an earlier launch")
+        return cachedPrefixPath
+    }
+
     // Try to remove existing cache if present
     if fileManager.fileExists(atPath: cachedPrefixPath.path) {
         configLogger.notice("[Wine] Removing existing cached prefix...")
@@ -196,12 +209,18 @@ func getWinePrefix(appPath: URL, bundleId: String) -> URL {
         try recreateDriveCStructure(sourceDir: originalDriveCPath, destDir: cachedDriveCPath)
 
         configLogger.notice("[Wine] Recreated drive_c structure with selective copying/symlinking")
+        do {
+            try stamp.write(to: stampFile, atomically: true, encoding: .utf8)
+        } catch {
+            configLogger.warning("[Wine] Couldn't mark the prefix's copy, so the next launch copies it again: \(error.localizedDescription)")
+        }
 
         return cachedPrefixPath
 
     } catch {
         configLogger.critical("⛔️ [Wine] Error setting up cached prefix: \(error)")
-        configLogger.notice("[Wine] Falling back to original prefix")
+        configLogger.error("[Wine] Falling back to the read-only original prefix: Wine can't write its registry there, and a game that saves its settings in it will fail to")
+        try? fileManager.removeItem(at: stampFile)
         return originalPrefixPath
     }
 }

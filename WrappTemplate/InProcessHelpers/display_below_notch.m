@@ -219,8 +219,14 @@ static void displayBelowNotchInit(void) {
             return;
         }
     }
-    for (size_t i = 0; i < sizeof(imports) / sizeof(*imports); i++) {
-        replaceWinemacImport(imports[i].original, imports[i].replacement);
+    // And all or nothing in the patching too: an entry that couldn't be made
+    // writable puts back the ones already replaced.
+    size_t count = sizeof(imports) / sizeof(*imports);
+    for (size_t i = 0; i < count; i++) {
+        if (replaceWinemacImport(imports[i].original, imports[i].replacement) > 0) continue;
+        for (size_t j = 0; j < i; j++) replaceWinemacImport(imports[j].replacement, imports[j].original);
+        if (inGame) helperReport("NativeFullscreen", "warning", "couldn't redirect winemac.so's %s; a notched display is shown to the game whole", imports[i].name);
+        return;
     }
     gScreenFrame = method_setImplementation(class_getInstanceMethod([NSScreen class], @selector(frame)), (IMP)belowNotchFrame);
     gScreenVisibleFrame = method_setImplementation(class_getInstanceMethod([NSScreen class], @selector(visibleFrame)), (IMP)belowNotchVisibleFrame);

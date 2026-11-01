@@ -395,11 +395,11 @@ static void emulatedModeScalingInit(void) {
         helperReport("EmulatedMode", "warning", "no -[WineOpenGLContext wine_updateBackingSize:]; an emulated mode's picture isn't scaled");
         return;
     }
-    gWineUpdateBackingSize = method_setImplementation(method, (IMP)scaledUpdateBackingSize);
+    gWineUpdateBackingSize = replaceOwnMethod(context, @selector(wine_updateBackingSize:), (IMP)scaledUpdateBackingSize);
 
     Method setColorImage = class_getInstanceMethod(NSClassFromString(@"WineContentView"), @selector(setColorImage:));
     if (setColorImage) {
-        gWineSetColorImage = method_setImplementation(setColorImage, (IMP)blackOutsideGLView);
+        gWineSetColorImage = replaceOwnMethod(NSClassFromString(@"WineContentView"), @selector(setColorImage:), (IMP)blackOutsideGLView);
     } else {
         helperReport("EmulatedMode", "warning", "no -[WineContentView setColorImage:]; bars beside a scaled picture are grey");
     }
@@ -407,14 +407,14 @@ static void emulatedModeScalingInit(void) {
     Class wineWindow = NSClassFromString(@"WineWindow");
     Method checkTransparency = class_getInstanceMethod(wineWindow, @selector(checkTransparency));
     if (checkTransparency) {
-        gWineCheckTransparency = method_setImplementation(checkTransparency, (IMP)checkTransparencyKeepingBlack);
+        gWineCheckTransparency = replaceOwnMethod(wineWindow, @selector(checkTransparency), (IMP)checkTransparencyKeepingBlack);
     } else {
         helperReport("EmulatedMode", "warning", "no -[WineWindow checkTransparency]; the bar right of a scaled picture may be grey");
     }
 
     Method constrain = class_getInstanceMethod(wineWindow, @selector(constrainFrameRect:toScreen:));
     if (constrain) {
-        gWineConstrainFrameRect = method_setImplementation(constrain, (IMP)unconstrainedBorderless);
+        gWineConstrainFrameRect = replaceOwnMethod(wineWindow, @selector(constrainFrameRect:toScreen:), (IMP)unconstrainedBorderless);
     } else {
         helperReport("EmulatedMode", "warning", "no -[WineWindow constrainFrameRect:toScreen:]; a game's window may start below the menu bar");
     }

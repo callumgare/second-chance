@@ -419,7 +419,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// and the Wine session have been stopped, so the new instance finds the
     /// prefix free. Through `open`, so it outlives us.
     func openAgain(arguments wrappArguments: [String], why: String) {
-        var arguments = ["-n", config.appPath.path, "--args"] + wrappArguments
+        // Marked, as this copy may not have quite gone when the new one looks
+        // for another already running (`main`).
+        var arguments = ["-n", config.appPath.path, "--args", openedAgainArgument] + wrappArguments
         if CommandLine.arguments.contains("--debug") { arguments.append("--debug") }
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
@@ -447,6 +449,8 @@ let launchWithoutSteamArgument = "--launch-without-steam"
 let afterNoDisplayArgument = "--after-no-display"
 /// The error window's explanation when it happens again.
 let noDisplayExplanation = "The game couldn't open its window, because this Mac was too busy while it started. Close some other apps, then open the game again."
+/// Passed by `openAgain`: this copy follows one that is on its way out.
+let openedAgainArgument = "--opened-again"
 
 // MARK: - Termination signals
 
@@ -674,6 +678,19 @@ func main() {
     FailureReporter.setGame(config.gameSlug, engine: config.gameEngine.rawValue)
     FailureReporter.setRunLogs(in: gameLogs, prefix: "launch")
     CrashMarker.install(in: gameLogs, logger: mainLogger)
+
+    // Another copy of this game already running (opened with `open -n`, or
+    // from a terminal) is the one in use: its Wine is no leftover session
+    // for this copy to offer to stop. Bring it forward instead, and go.
+    if !CommandLine.arguments.contains(openedAgainArgument),
+       let other = NSRunningApplication.runningApplications(withBundleIdentifier: config.bundleId)
+           .first(where: { $0.processIdentifier != getpid() && !$0.isTerminated }) {
+        mainLogger.notice("\(config.gameTitle) is already running (pid \(other.processIdentifier)): bringing it forward instead")
+        other.activate()
+        LogStore.shared.flush()
+        exit(0)
+    }
+
     // For the whole run: a game that crashes an hour in may have been
     // starved of CPU, too. The loading window observes it, and slows it down
     // once the game has loaded.

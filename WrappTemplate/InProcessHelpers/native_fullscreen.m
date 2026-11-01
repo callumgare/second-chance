@@ -31,6 +31,7 @@
 //  Built and installed by WrappTemplate/setup-wine.sh.
 //
 
+#include <stdatomic.h>
 #import <Cocoa/Cocoa.h>
 #import <objc/runtime.h>
 #import <os/log.h>
@@ -258,8 +259,7 @@ static void adoptedDidEndLiveResize(NSWindow *self, SEL _cmd, NSNotification *no
 }
 
 static IMP replaceMethod(Class cls, SEL selector, IMP replacement) {
-    Method method = class_getInstanceMethod(cls, selector);
-    return method ? method_setImplementation(method, replacement) : NULL;
+    return replaceOwnMethod(cls, selector, replacement);
 }
 
 /// Install the overrides; NO if Wine's classes aren't what this file expects,
@@ -419,10 +419,21 @@ static void *watcherMain(void *unused) {
 
     double giveUpAt = nowSeconds() + kGiveUpSeconds;
     BOOL reportedGivingUp = NO;
+    // One attempt queued at a time: a main thread that is busy (a game
+    // loading) would otherwise collect a block every interval and then run
+    // them all at once.
+    static atomic_bool queued = false;
     while (true) {
-        CFRunLoopPerformBlock(mainLoop, kCFRunLoopCommonModes, ^{ attemptFullscreen(); });
-        CFRunLoopWakeUp(mainLoop);
-        usleep((useconds_t)((gEntered ? kWatchInterval : kPollInterval) * USEC_PER_SEC));
+        if (!atomic_exchange(&queued, true)) {
+            CFRunLoopPerformBlock(mainLoop, kCFRunLoopCommonModes, ^{
+                atomic_store(&queued, false);
+                attemptFullscreen();
+            });
+            CFRunLoopWakeUp(mainLoop);
+        }
+        // Slower once in the Space, or once it has given up and the game
+        // stays in its window: only a new window is still worth catching.
+        usleep((useconds_t)((gEntered || gGaveUp ? kWatchInterval : kPollInterval) * USEC_PER_SEC));
 
         if (!gEntered && !reportedGivingUp && nowSeconds() > giveUpAt) {
             reportedGivingUp = YES;

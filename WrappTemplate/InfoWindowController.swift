@@ -132,6 +132,12 @@ class InfoWindowController: NSWindowController {
 
         super.init(window: window)
 
+        // A launch can take minutes on a busy Mac: floating above every app
+        // all that time would cover whatever the player went off to do.
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(updateLevel), name: name, object: nil)
+        }
+
         // Wire up the confirm callback: save pref then notify caller
         viewModel.onConfirm = { [weak self] in
             guard let self else { return }
@@ -179,8 +185,19 @@ class InfoWindowController: NSWindowController {
             // While Steam waits on the player in its own window, this one
             // mustn't float over it: both open in the middle of the screen,
             // and this one would hide the sign-in's QR code.
-            self.window?.level = stage.isWaitingOnThePlayer ? .normal : .floating
+            self.updateLevel()
         }
+    }
+
+    /// Above other windows while the game app is the one in front (Wine's
+    /// own windows open over it otherwise), and not while the player is in
+    /// another app. Nor while Steam waits on the player in its own window:
+    /// both open in the middle of the screen, and this one would hide the
+    /// sign-in's QR code. The closing window floats regardless
+    /// (`showQuitting`).
+    @objc private func updateLevel() {
+        guard let window, !viewModel.phase.isQuitting else { return }
+        window.level = NSApp.isActive && !viewModel.stage.isWaitingOnThePlayer ? .floating : .normal
     }
 
     func notifyGameLoaded() {
