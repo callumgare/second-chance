@@ -273,7 +273,8 @@ The newest 10 finished runs are kept.
 
 **`--on <host>[:<path>]` runs a command on another Mac.** It rsyncs the repo
 there (excluding `.git`, `.env`, `built-apps`, `test-results`, `tmp`, sc's own
-`.build`, and all of `DerivedData` but what was built, `Build/Products`) and runs `./sc` with the same
+`.build`, and all of `DerivedData`, or all but what was built, `Build/Products`,
+with `--skip-app-build`) and runs `./sc` with the same
 arguments over `ssh` (`-t` when interactive). Output stays there: a test run's
 results and report are in the remote Mac's `test-results/`, and the terminal
 shows the summary table. `<path>` defaults to this repo's path relative to
@@ -283,7 +284,10 @@ intermediates), so a build on the other Mac, in a checkout elsewhere, failed
 looking for files here; and it holds Xcode's compilation cache, sparse files
 tens of gigabytes long that rsync would send in full. rsync neither sends nor
 deletes what it leaves out, so the other Mac keeps its own build state, logs
-and jobs, and a build there is incremental. `.env` stays behind because it holds each Mac's own
+and jobs, and a build there is incremental. Only `--skip-app-build` runs
+this Mac's build there, so only then are its products sent: any other
+command builds the app there anyway, and products copied while something
+here was rebuilding them arrived half-copied. `.env` stays behind because it holds each Mac's own
 settings, such as whether tests hide their windows there
 ([testing.md](testing.md)). On the remote Mac, the GUI-session re-run applies as
 usual.
@@ -295,6 +299,12 @@ usual.
   fails to sign. Apple's rsync spells that `-E` and rejects `-X`; Homebrew's
   rsync 3.x reads `-E` as `--executability` and would drop them silently,
   which is why the remote end is named rather than left to its `PATH`.
+- **A sync that stops partway runs nothing there**, and sc says so: most
+  often files here changed while being copied (another build, or an agent's
+  worktree, which isn't synced). With `--skip-app-build` the other Mac's app
+  may be left half-copied, and its own build won't mend it, since its build
+  state says the template's Wine and ScummVM are already set up; sc says to
+  run `sc --on <host> clean build -y` and build there.
 - **If the connection drops,** sc says so: ssh's exit 255. Pick the run up
   with `sc --on <host>[:<path>] attach`, which doesn't sync.
 - **While a run is still going there, `--on` refuses to sync.** rsync would

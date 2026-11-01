@@ -676,6 +676,22 @@ struct DotEnvTests {
         #expect(include < exclude)
         #expect(filters.suffix(2) == ["--exclude", "/DerivedData/*"])
     }
+
+    @Test("Built products are sent only for --skip-app-build, which runs them")
+    func productsOnlyWhenSkipping() {
+        #expect(Remote.derivedDataFilters(for: ["test", "integration", "--skip-app-build"]) == Remote.derivedDataFilters)
+        #expect(Remote.derivedDataFilters(for: ["test", "integration", "old-clock"]) == ["--exclude", "/DerivedData"])
+    }
+
+    @Test("A sync that stops partway says so, and warns of a half-copied app only when one was sent")
+    func syncFailure() {
+        let skipping = Remote.syncFailure(host: "mac", rawTarget: "mac:~/sc", arguments: ["test", "--skip-app-build"], status: 23)
+        #expect(skipping.exitCode == 23)
+        #expect(!skipping.alreadyReported)
+        #expect(skipping.hints.contains { $0.contains("clean build") })
+        let building = Remote.syncFailure(host: "mac", rawTarget: "mac:~/sc", arguments: ["test"], status: 23)
+        #expect(!building.hints.contains { $0.contains("clean build") })
+    }
 }
 
 @Suite("Test VMs")

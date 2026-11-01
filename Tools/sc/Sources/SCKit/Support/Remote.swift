@@ -92,6 +92,29 @@ enum Remote {
         "--exclude", "/DerivedData/Build/*", "--exclude", "/DerivedData/*",
     ]
 
+    /// The DerivedData rules for a command. Only `--skip-app-build` runs
+    /// this Mac's build there, so only then are its products sent. Any other
+    /// command builds the app there, where products sent first would only
+    /// be in the way, and half-sent whenever something here was rebuilding
+    /// them meanwhile.
+    static func derivedDataFilters(for arguments: [String]) -> [String] {
+        arguments.contains("--skip-app-build") ? derivedDataFilters : ["--exclude", "/DerivedData"]
+    }
+
+    /// Why a sync that stopped partway failed, and what to do. What was sent
+    /// is there and the rest isn't, so with `--skip-app-build` the other
+    /// Mac's app is likely half-copied; its own build won't put that right,
+    /// since its build state says the template's set-up is already done.
+    static func syncFailure(host: String, rawTarget: String, arguments: [String], status: Int32) -> SCError {
+        var hints = ["Files here most likely changed while they were being copied: another build or worktree here. "
+            + "Run it again once that's done."]
+        if arguments.contains("--skip-app-build") {
+            hints.append("\(host)'s copy of the app may be half-copied. Before using it again, clear it and let it build: "
+                + "sc --on \(rawTarget) clean build -y, then run without --skip-app-build.")
+        }
+        return SCError("Copying this checkout to \(host) stopped partway, so nothing was run there.", hints: hints, exitCode: status)
+    }
+
     /// Whether the command needs this repo synced there first. `attach`
     /// follows a run already going, so it must not touch the checkout.
     static func syncs(_ arguments: [String]) -> Bool {
@@ -140,9 +163,13 @@ enum Remote {
             // spells it -E and rejects -X, while rsync 3.x reads -E as
             // --executability and would drop them without a word.
             let rsyncArgs = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + excludes.flatMap { ["--exclude", $0] }
-                + derivedDataFilters + ["./", "\(target.host):\(target.path)/"]
-            try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
-                try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                + derivedDataFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
+            do {
+                try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
+                    try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                }
+            } catch let error as SCError where error.alreadyReported {
+                throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
             }
         }
 
