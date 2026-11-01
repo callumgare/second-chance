@@ -31,12 +31,12 @@ struct IntegrationOptions: ParsableArguments {
     var ignoreLoad = false
 
     @Option(help: ArgumentHelp(
-        "How many games to build at once. Games still launch one at a time.",
+        "How many games to build at once. Games still launch one at a time. Defaults to one per four performance cores.",
         discussion: "Builds also wait for disk: each reserves what its game's build took last time (or an estimate), "
             + "and keeps it until its wrapp is deleted after its launch (docs/testing.md#building-games-side-by-side).",
         valueName: "count"
     ))
-    var buildConcurrency = 1
+    var buildConcurrency: Int?
 
     @Option(help: ArgumentHelp(
         "Disk to leave free while games build, in GB.",
@@ -90,8 +90,33 @@ struct IntegrationOptions: ParsableArguments {
 
     func validate() throws {
         _ = try Self.parseSources(source)
-        guard buildConcurrency >= 1 else { throw ValidationError("--build-concurrency must be at least 1.") }
+        guard (buildConcurrency ?? 1) >= 1 else { throw ValidationError("--build-concurrency must be at least 1.") }
         guard diskMargin >= 0 else { throw ValidationError("--disk-margin can't be negative.") }
+    }
+
+    /// `--build-concurrency`, or one build per four performance cores of the
+    /// Mac the tests run on: on an 8-performance-core Mac, two builds cut a
+    /// run's time by a quarter, and more saved little while slowing launches
+    /// (docs/testing.md#how-many-to-build-at-once).
+    var resolvedBuildConcurrency: Int {
+        buildConcurrency ?? Self.defaultBuildConcurrency(fastCores: Self.fastCoreCount)
+    }
+
+    static func defaultBuildConcurrency(fastCores: Int) -> Int {
+        max(1, fastCores / 4)
+    }
+
+    /// Performance cores, or all physical cores where there are no levels
+    /// (Intel Macs) — as `SystemLoad.fastCoreCount` counts them.
+    static var fastCoreCount: Int {
+        for name in ["hw.perflevel0.physicalcpu", "hw.physicalcpu"] {
+            var value: Int32 = 0
+            var size = MemoryLayout<Int32>.size
+            if sysctlbyname(name, &value, &size, nil, 0) == 0, value > 0 {
+                return Int(value)
+            }
+        }
+        return ProcessInfo.processInfo.activeProcessorCount
     }
 
     static func parseSources(_ value: String) throws -> [WrappSourceKind] {
@@ -142,7 +167,7 @@ struct TestAllCommand: AsyncParsableCommand {
         let integrationRun = try await integration.withVM(session) { vm in
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.buildConcurrency, diskMargin: integration.diskMargin,
+                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
                 vm: vm, stamp: stamp
             )
         }
@@ -199,7 +224,7 @@ struct TestIntegrationCommand: AsyncParsableCommand {
         let run = try await integration.withVM(session) { vm in
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.buildConcurrency, diskMargin: integration.diskMargin,
+                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
                 vm: vm, stamp: stamp
             )
         }

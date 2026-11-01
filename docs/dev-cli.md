@@ -54,7 +54,8 @@ command that takes it.
 `test integration --ignore-load` tests every game even on a heavily loaded Mac,
 which it otherwise reports as `overloaded` without testing
 ([testing.md](testing.md)). `--build-concurrency <n>` builds that many games at
-once (they still launch one at a time), as far as the disk has room, leaving
+once (they still launch one at a time; by default one per four performance
+cores), as far as the disk has room, leaving
 `--disk-margin <GB>` (10) free
 ([testing.md](testing.md#building-games-side-by-side)).
 

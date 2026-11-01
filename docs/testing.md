@@ -141,8 +141,9 @@ Swift Testing runs every game's test at once, across the suites, and
 go on:
 
 - **Builds** go through `BuildGate`, first come, first served. It lets in as
-  many at once as `--build-concurrency` says (`TEST_RUNNER_BUILD_CONCURRENCY`,
-  default 1), and only as many as the disk has room for. Each build reserves
+  many at once as `--build-concurrency` says (`TEST_RUNNER_BUILD_CONCURRENCY`;
+  by default one per four performance cores, [below](#how-many-to-build-at-once)),
+  and only as many as the disk has room for. Each build reserves
   a quarter more than its game's build took last time
   (`test-results/integration-sizes.json`), or before it has been measured,
   the engine and four times its installers' size (8 GB for a Steam game). It
@@ -164,6 +165,45 @@ Each build reports on a bus of its own and tags its log entries with its own
 id ([logging.md](logging.md#which-build-an-entry-is-from)), so its events
 and its log attachment are its own. The table's **Waited** column is the time
 a game spent waiting for either turn ([Filtering games](#filtering-games)).
+
+#### How many to build at once
+
+The default comes from the same eight disc games run at each setting, one
+run after another, on an M1 Max (8 performance and 2 efficiency cores):
+Ghost Dogs and Stay Tuned (ScummVM), Haunted Carousel, Old Clock, White Wolf,
+Captive Curse, Thornton Hall and Secrets Can Kill Remastered (Wine). Seconds:
+
+| Builds at once | 1 | 2 | 3 | 4 | 6 |
+| --- | --- | --- | --- | --- | --- |
+| Whole run | 437 | 333 | — | 295 | 314 |
+| All builds added up | 384 | 530 | 533 (7 games) | 704 | 851 |
+| White Wolf's build | 85 | 111 | 147 | 143 | 165 |
+| Slowest launch, against its time at 1 | 1.2× (a second run) | 1.4× | 1.6× | 1.7× | 1.5× |
+| Programs' CPU, average and peak, in cores | 3.3, 10 | 5.0, 9.7 | — | 5.4, 9.3 | 5.6, 10 |
+
+- **Launches set the floor.** Eight launches one at a time take about 220 s
+  between them, and builds overlap the launches even at one build at a time,
+  so a run can't get much below 300 s however many build.
+- **Two builds save a quarter; more save little.** From one to two the run
+  took 24% less. Four took 11% less again, and six took longer than four:
+  every build slowed as they shared the cores, White Wolf's from 85 s to
+  165 s.
+- **Launches slow from three builds.** Haunted Carousel's launch took 40–43 s
+  with three or four building behind it, against 25 s alone.
+- **Failures weren't from building side by side.** Runs at one build had
+  their own failures (a game quitting after a Wine error, a swallowed first
+  click, a build killed by SIGKILL). At three, Old Clock's installer waited
+  for ever: its window took more than the 20 s the AutoIt script then
+  allowed, so nothing clicked Install, and the run took 52 minutes before
+  the install timed out. The script now waits for the window for as long as
+  the installer runs.
+- **The first run of a sweep is slower** (761 s here): it makes the Wine
+  prefix that every later build copies.
+
+So `sc` builds one game per four performance cores, at least one: two on
+that Mac, one on a Mac with six. That is measured on one Mac only; on a
+bigger one, try `--build-concurrency` above the default and see whether the
+run's time still drops.
 
 The Her suite tests each download in `installers/<slug>/` named
 `her-download*.exe` or `her-download*.dmg`, once per file (a Mac download's

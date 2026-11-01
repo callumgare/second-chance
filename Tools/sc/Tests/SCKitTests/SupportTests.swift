@@ -387,6 +387,15 @@ struct GameTests {
         #expect(Set(source.availableGames(repo: repo).map(\.slug)) == [windows.slug, both.slug])
     }
 
+    @Test("--build-concurrency defaults to one build per four performance cores, never none")
+    func defaultBuildConcurrency() throws {
+        #expect(IntegrationOptions.defaultBuildConcurrency(fastCores: 8) == 2)
+        #expect(IntegrationOptions.defaultBuildConcurrency(fastCores: 6) == 1)
+        #expect(IntegrationOptions.defaultBuildConcurrency(fastCores: 12) == 3)
+        #expect(IntegrationOptions.defaultBuildConcurrency(fastCores: 2) == 1)
+        #expect(try IntegrationOptions.parse(["--build-concurrency", "3"]).resolvedBuildConcurrency == 3)
+    }
+
     @Test("--source takes a list, all, and suggests a fix for a typo")
     func integrationSources() throws {
         #expect(try IntegrationOptions.parseSources("her-download,disk") == [.disk, .herDownload])
