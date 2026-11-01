@@ -9,6 +9,9 @@ import AppKit
 import SwiftUI
 import SecondChanceKit
 import SecondChanceReporting
+import Logging
+
+private nonisolated let infoWindowControllerLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.InfoWindow")
 
 var globalInfoWindow: InfoWindowController?
 
@@ -91,7 +94,7 @@ class InfoWindowController: NSWindowController {
         self.activity = activity
 
         let shouldShow = saveWarningEnabled && !Self.hasUserDismissedSaveWarning(appSupportPath: appSupportPath)
-        self.viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: shouldShow, gameSlug: gameSlug)
+        self.viewModel = InfoWindowViewModel(stage: stage, saveWarningEnabled: shouldShow, gameSlug: gameSlug, gameTitle: gameTitle)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: InfoWindowView.width, height: 100),
@@ -171,6 +174,44 @@ class InfoWindowController: NSWindowController {
     func hideWarning() {
         viewModel.phase = .loading
         viewModel.startStageTimers()
+    }
+
+    /// The wrapp is quitting, and has got as far as `step`. Safe from any
+    /// thread. The window shows once the quit has run for
+    /// `QuitStep.showAfter`, so a quick one shows nothing, and then follows
+    /// each step. Never over the error window: someone reading why the game
+    /// failed keeps it.
+    nonisolated func quitting(_ step: InfoWindowViewModel.QuitStep) {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                self.quitStep = step
+                if self.quitStarted == nil {
+                    self.quitStarted = Date()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + InfoWindowViewModel.QuitStep.showAfter) {
+                        MainActor.assumeIsolated { self.showQuitting() }
+                    }
+                } else if case .quitting = self.viewModel.phase {
+                    self.viewModel.phase = .quitting(step)
+                }
+            }
+        }
+    }
+
+    private var quitStarted: Date?
+    private var quitStep = InfoWindowViewModel.QuitStep.closing
+
+    private func showQuitting() {
+        guard !viewModel.phase.isFailure else { return }
+        viewModel.stopTimer()
+        loadMonitor?.observe(nil)
+        activity?.stop()
+        viewModel.heavyLoad = nil
+        viewModel.phase = .quitting(quitStep)
+        window?.level = .floating
+        // Without activating: the wrapp may be hidden from the Dock, and
+        // whoever quit it has moved on.
+        window?.orderFrontRegardless()
+        infoWindowControllerLogger.notice("[Cleanup] Still quitting after \(Int(InfoWindowViewModel.QuitStep.showAfter))s: showing that it's closing")
     }
 
     /// `explanation` says what went wrong, when the wrapp knows: for a game

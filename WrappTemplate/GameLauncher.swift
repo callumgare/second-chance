@@ -93,6 +93,9 @@ class GameLauncher {
     private var desktop: WineDesktop?
     /// Steam, for a game that needs it running (`wine-steam*`).
     private var steam: WrappSteam?
+    /// Told how far a quit has got, for the window that says the game is
+    /// closing. Called from the cleanup's background queue.
+    var onQuitStep: (@Sendable (InfoWindowViewModel.QuitStep) -> Void)?
     /// What the in-process helpers report from inside the game; Wine games only.
     private var helperReport: InProcessHelperReport?
     /// Judges whether a Wine game's exit was a quit; nil for ScummVM.
@@ -139,6 +142,8 @@ class GameLauncher {
         logger.debug("[Cleanup/performCleanup] After cleanupQueue.sync block")
 
         logger.notice("[Cleanup] Starting cleanup process...")
+        let onQuitStep = onQuitStep
+        onQuitStep?(.closing)
 
         // Terminate the game process if it's still running
         if let process = currentProcess, process.isRunning {
@@ -161,10 +166,13 @@ class GameLauncher {
                 // has to be saved and taken out of the wrapp on the way out.
                 // Briefly: the quit fallback kills everything after 15s, and
                 // Steam has been seen to ignore -shutdown when it's stuck.
-                self.steam?.finish(timeout: 8)
+                if let steam = self.steam {
+                    onQuitStep?(.closingSteam)
+                    steam.finish(timeout: 8)
+                }
                 let server = self.config.wine.server
                 self.logger.debug("[Cleanup/performCleanup] Shutting down Wine...")
-                Blocking.wait { await server.shutDown() }
+                Blocking.wait { await server.shutDown { onQuitStep?(.init($0)) } }
                 self.logger.debug("[Cleanup/performCleanup] Wine shut down")
                 self.logger.debug("[Cleanup/performCleanup] About to call completion handler")
                 completion()
@@ -193,7 +201,8 @@ class GameLauncher {
         // Generous: it ends by itself in seconds, more on a loaded Mac, and
         // only a session that is stuck reaches the kill.
         let server = config.wine.server
-        Blocking.wait { await server.shutDown(gracePeriod: 30) }
+        let onQuitStep = onQuitStep
+        Blocking.wait { await server.shutDown(gracePeriod: 30) { onQuitStep?(.init($0)) } }
     }
 
     // MARK: - Common Cleanup

@@ -100,6 +100,20 @@ one, and "Steam is starting *Title*…". An update's download is reported
 about four times a second, so 30 s without a new line is a stalled update,
 whatever the load.
 
+## Closing
+
+The same window says when a wrapp is taking a moment to quit, whether
+someone quit it or the game ended by itself: the wrapp waits for Wine to
+finish before it exits, which takes about 4 s. Once a quit has run for 2 s
+(`QuitStep.showAfter`), so that a quick one shows nothing, the window comes
+up with a spinner and "Closing *Title*…", without taking the focus. Its
+line beneath follows how firmly the game is being ended, from
+`WineServer.shutDown`'s steps: waiting for it to finish, Steam closing (and
+saving its sign-in), asking it to stop (`wineserver -k`), and making it stop
+(`-k9`). It never replaces the error window: someone reading why the game
+failed keeps that. Quitting from the error window still waits for Wine, but
+says nothing more.
+
 ## Measurements
 
 The numbers come from launches timed on an M1 Max (8 performance and 2

@@ -21,6 +21,52 @@ class InfoWindowViewModel: ObservableObject {
         /// The person quit a launch that seemed stuck, and its report is
         /// being sent (or asked about) before the wrapp quits.
         case gaveUp
+        /// The wrapp is quitting, and it's taking a moment: shown once a quit
+        /// has run for `QuitStep.showAfter`, and updated as it gets firmer.
+        case quitting(QuitStep)
+    }
+
+    /// How far a quit has got, from asking the game nicely to making it stop.
+    nonisolated enum QuitStep: Equatable, Sendable {
+        /// Waiting for the game, and the rest of it in the background, to
+        /// finish closing by itself.
+        case closing
+        /// Waiting for Steam to close, which saves its sign-in on the way.
+        case closingSteam
+        /// The game is taking longer than usual, so it has been asked to stop.
+        case stopping
+        /// It still hasn't, so it is being made to.
+        case forcing
+
+        /// The step for how firmly Wine is being ended.
+        init(_ step: WineServer.ShutdownStep) {
+            switch step {
+            case .waiting: self = .closing
+            case .stopping: self = .stopping
+            case .killing: self = .forcing
+            }
+        }
+
+        /// How long a quit runs before the window says so: most finish
+        /// sooner, and a window flashing up as the game closes would only
+        /// puzzle.
+        static let showAfter: TimeInterval = 2
+
+        func message(gameTitle: String) -> String {
+            switch self {
+            case .closing, .stopping, .forcing: return "Closing \(gameTitle)…"
+            case .closingSteam: return "Closing Steam…"
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .closing: return "Waiting for the game to finish closing. This usually takes a few seconds."
+            case .closingSteam: return "Steam is saving your sign-in for next time."
+            case .stopping: return "It's taking longer than usual to close, so it's being asked to stop."
+            case .forcing: return "It isn't closing by itself, so it's being made to stop."
+            }
+        }
     }
 
     @Published var phase: Phase
@@ -31,6 +77,7 @@ class InfoWindowViewModel: ObservableObject {
 
     let saveWarningEnabled: Bool
     let gameSlug: String
+    let gameTitle: String
     /// The failed launch's report, for the error screen.
     let failureReport = FailureReportModel()
     var onConfirm: (() -> Void)?
@@ -68,10 +115,11 @@ class InfoWindowViewModel: ObservableObject {
     let builtWith = NewerRelease.runningVersion()
     private var newerReleaseCheck: Task<Void, Never>?
 
-    init(stage: LoadingStage, saveWarningEnabled: Bool, gameSlug: String = "nancy-drew") {
+    init(stage: LoadingStage, saveWarningEnabled: Bool, gameSlug: String = "nancy-drew", gameTitle: String = "the game") {
         self.stage = stage
         self.saveWarningEnabled = saveWarningEnabled
         self.gameSlug = gameSlug
+        self.gameTitle = gameTitle
         self.phase = saveWarningEnabled ? .warning : .loading
     }
 
@@ -203,7 +251,7 @@ extension InfoWindowViewModel.Phase {
     var isFailure: Bool {
         switch self {
         case .error, .gaveUp: return true
-        case .warning, .loading: return false
+        case .warning, .loading, .quitting: return false
         }
     }
 }
@@ -225,6 +273,8 @@ struct InfoWindowView: View {
                     errorContent(exitCode: exitCode, explanation: explanation)
                 case .gaveUp:
                     gaveUpContent
+                case .quitting(let step):
+                    quittingContent(step)
                 }
             }
             // A lone line of loading text sits level with the icon's middle
@@ -316,6 +366,20 @@ struct InfoWindowView: View {
                 })
             }
             .padding(.top, 6)
+        }
+    }
+
+    // MARK: - Quitting
+
+    private func quittingContent(_ step: InfoWindowViewModel.QuitStep) -> some View {
+        Group {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                message(step.message(gameTitle: viewModel.gameTitle))
+                    .accessibilityIdentifier("quitting-message")
+            }
+            informative(step.detail)
         }
     }
 
@@ -621,6 +685,16 @@ struct InfoWindowView: View {
     .frame(width: InfoWindowView.width)
 }
 
+#Preview("Closing, being made to stop") {
+    InfoWindowView(viewModel: {
+        let vm = InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: false,
+                                     gameTitle: "Stay Tuned for Danger")
+        vm.phase = .quitting(.forcing)
+        return vm
+    }())
+    .frame(width: InfoWindowView.width)
+}
+
 #Preview("Error") {
     InfoWindowView(viewModel: {
         let vm = InfoWindowViewModel(stage: .startingGame(title: "Stay Tuned for Danger"), saveWarningEnabled: false)
@@ -654,7 +728,7 @@ func renderInfoWindowShots(to dir: String) {
     _ = NSApplication.shared
     let newer = ReleaseVersion(shortVersion: "0.7.0", build: 300)
     func vm(_ stage: LoadingStage, _ setup: (InfoWindowViewModel) -> Void) -> InfoWindowViewModel {
-        let vm = InfoWindowViewModel(stage: stage, saveWarningEnabled: false)
+        let vm = InfoWindowViewModel(stage: stage, saveWarningEnabled: false, gameTitle: "Stay Tuned for Danger")
         setup(vm)
         vm.newerRelease = newer
         return vm
@@ -672,6 +746,10 @@ func renderInfoWindowShots(to dir: String) {
             $0.showSuspectedHang = true
         }),
         ("gave-up", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .gaveUp }),
+        ("quitting", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .quitting(.closing) }),
+        ("quitting-steam", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .quitting(.closingSteam) }),
+        ("quitting-stopping", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .quitting(.stopping) }),
+        ("quitting-forcing", vm(.startingGame(title: "Stay Tuned for Danger")) { $0.phase = .quitting(.forcing) }),
     ]
     for appearance in ["light", "dark"] {
         for (name, model) in shots {

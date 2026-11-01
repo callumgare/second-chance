@@ -737,6 +737,7 @@ func main() {
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
     infoWindow.reportStuckLaunch = { gameLauncher.reportStuckLaunch() }
+    gameLauncher.onQuitStep = { step in infoWindow.quitting(step) }
     if config.canLaunchWithoutSteam {
         infoWindow.onLaunchWithoutSteam = {
             mainLogger.notice("Player chose to launch without Steam: stopping this launch, then opening the wrapp again")

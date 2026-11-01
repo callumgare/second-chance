@@ -98,6 +98,16 @@ nonisolated public struct WineServer: Sendable {
         return waiter
     }
 
+    /// How firmly `shutDown` is ending the session.
+    public enum ShutdownStep: Sendable, Equatable {
+        /// Waiting for Wine to finish by itself.
+        case waiting
+        /// Asking Wine's programs to stop (`wineserver -k`).
+        case stopping
+        /// Killing them (`wineserver -k9`).
+        case killing
+    }
+
     /// Wait for the session to end, with escalating force.
     ///
     /// Wine gets `gracePeriod` to finish by itself: a game that quit leaves
@@ -107,17 +117,23 @@ nonisolated public struct WineServer: Sendable {
     /// `stopPeriod`, so
     /// this returns only once Wine has gone, or a kill has had its chance and
     /// been logged as failing. Whether Wine is known to have ended.
+    ///
+    /// `onStep` hears each step as it starts, for someone waiting to be told
+    /// (the wrapp's closing window); not called without a bundled Wine.
     @discardableResult
-    public func shutDown(gracePeriod: TimeInterval = 5, stopPeriod: TimeInterval = 5) async -> Bool {
+    public func shutDown(gracePeriod: TimeInterval = 5, stopPeriod: TimeInterval = 5,
+                         onStep: @Sendable (ShutdownStep) -> Void = { _ in }) async -> Bool {
         guard hasWine else { return true }
         let started = Date()
         logger.notice("[Wine Cleanup] Waiting for Wine to finish (wineserver -w)...")
+        onStep(.waiting)
         if await waitUntilStopped(timeout: gracePeriod) {
             logger.notice("[Wine Cleanup] Wine finished by itself after \(SubprocessWatch.duration(Date().timeIntervalSince(started)))")
             return true
         }
 
         logger.warning("[Wine Cleanup] Wine was still running after \(Int(gracePeriod)) s: stopping it (wineserver -k)")
+        onStep(.stopping)
         await stop()
         if await waitUntilStopped(timeout: stopPeriod) {
             logger.notice("[Wine Cleanup] Wine stopped")
@@ -125,6 +141,7 @@ nonisolated public struct WineServer: Sendable {
         }
 
         logger.error("[Wine Cleanup] Wine ignored SIGTERM: killing it (wineserver -k9)")
+        onStep(.killing)
         await kill()
         if await waitUntilStopped(timeout: stopPeriod) {
             logger.notice("[Wine Cleanup] Wine killed")
