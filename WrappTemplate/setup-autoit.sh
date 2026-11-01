@@ -8,44 +8,33 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Cache directory
 CACHE_DIR="${HOME}/Library/Caches/SecondChance"
-AUTOIT_CACHE="${CACHE_DIR}/autoit"
 
 echo "🔍 Setting up AutoIt for SecondChance..."
 
-# AutoIt download settings
-AUTOIT_URL="https://www.autoitscript.com/cgi-bin/getfile.pl?autoit3/autoit-v3.zip"
-AUTOIT_ZIP="${CACHE_DIR}/autoit-v3.zip"
-EXTRACTED_DIR="${CACHE_DIR}/install"
+# AutoIt download settings: pinned to the tested release and checked against
+# its SHA-256 (download-verified.sh). The cache names carry the version, so a
+# new version is downloaded and extracted afresh.
+AUTOIT_VERSION="3.3.18.0"
+AUTOIT_URL="https://www.autoitscript.com/autoit3/files/archive/autoit/autoit-v${AUTOIT_VERSION}.zip"
+AUTOIT_SHA256="ceb666a993a9f62621c3a0d4ee602774b2e7f543de1f08ec0380632ee3f89beb"
+AUTOIT_ZIP="${CACHE_DIR}/autoit-v${AUTOIT_VERSION}.zip"
+AUTOIT_CACHE="${CACHE_DIR}/autoit-${AUTOIT_VERSION}"
 
 # Destination in app bundle
 AUTOIT_DEST="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/autoit"
 
-# Create cache directory if needed
-mkdir -p "${CACHE_DIR}"
+# shellcheck source=download-verified.sh
+source "${SCRIPT_DIR}/download-verified.sh"
+fetch_verified "${AUTOIT_URL}" "${AUTOIT_ZIP}" "${AUTOIT_SHA256}"
 
-# Download if not cached
-if [ ! -f "${AUTOIT_ZIP}" ]; then
-    echo "📥 Downloading AutoIt..."
-    curl -fL "${AUTOIT_URL}" -o "${AUTOIT_ZIP}.tmp"
-    mv "${AUTOIT_ZIP}.tmp" "${AUTOIT_ZIP}"
-    echo "✓ Downloaded AutoIt"
-else
-    echo "✓ Using cached AutoIt zip"
-fi
-
-# Extract if not already extracted
+# Extract if not already extracted. Unpacked beside the cache, then renamed
+# into place whole, so an interrupted unzip never leaves a half-filled cache.
 if [ ! -d "${AUTOIT_CACHE}" ]; then
     echo "📦 Extracting AutoIt..."
-    
-    # Remove old extraction directory if it exists
-    [ -d "${EXTRACTED_DIR}" ] && rm -rf "${EXTRACTED_DIR}"
-    
-    # Extract
-    unzip -q "${AUTOIT_ZIP}" -d "${CACHE_DIR}"
-    
-    # Rename to cache location
-    mv "${EXTRACTED_DIR}" "${AUTOIT_CACHE}"
-    
+    EXTRACT_TMP="$(mktemp -d "${CACHE_DIR}/autoit-extract.XXXXXX")"
+    unzip -q "${AUTOIT_ZIP}" -d "${EXTRACT_TMP}"
+    mv "${EXTRACT_TMP}/install" "${AUTOIT_CACHE}"
+    rm -rf "${EXTRACT_TMP}"
     echo "✓ Extracted AutoIt"
 else
     echo "✓ Using cached AutoIt directory"
