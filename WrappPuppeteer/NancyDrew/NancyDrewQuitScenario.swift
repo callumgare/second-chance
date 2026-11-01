@@ -49,6 +49,12 @@ struct NancyDrewQuitScenario {
         var recordDirectory: URL?
         /// Click nothing: record for this long, then quit (`--record-seconds`).
         var watchOnlySeconds: TimeInterval?
+        /// Once at the menu, quit through the game's Quit menu item (⌘⌥Q)
+        /// rather than its Exit button (`--quit-from-menu`).
+        var quitFromMenu = false
+        /// How long the game may take to close once asked to from its menu:
+        /// the wrapp waits for Wine, which takes seconds.
+        var menuQuitTimeout: TimeInterval = 60
     }
 
     let wrapp: Wrapp
@@ -172,9 +178,18 @@ struct NancyDrewQuitScenario {
         }
 
         logger.notice("⏳ Waiting for game to exit...")
-        if ProcessControl.waitForTermination(app, helperPid: gamePid, timeout: options.quitTimeout) {
+        let quitTimeout = options.quitFromMenu ? options.menuQuitTimeout : options.quitTimeout
+        if ProcessControl.waitForTermination(app, helperPid: gamePid, timeout: quitTimeout) {
             logger.notice("✅ Game exited cleanly")
             return .passed
+        }
+        // Wine's Quit has hung for good before (with the game's process made
+        // an accessory app), stuck in -[NSApplication terminate:].
+        if options.quitFromMenu {
+            logger.error("❌ Quitting from the game's menu didn't close it within \(Int(quitTimeout))s")
+            diagnosticCapture(context, prefix: "menu-quit")
+            forceQuit(app)
+            return .failed("Quitting from the game's menu (as ⌘⌥Q does) didn't close the game within \(Int(quitTimeout))s")
         }
 
         logger.warning("⚠️  Game did not exit cleanly, force quitting...")
@@ -728,6 +743,15 @@ struct NancyDrewQuitScenario {
                         warnForTest("No splash screen was clicked past: none of the \(splashScreens.count) recorded for \(wrapp.gameSlug) "
                             + "was recognised, so the recordings may no longer match the game (docs/testing.md#splash-screens)")
                     }
+                }
+                if options.quitFromMenu {
+                    try? FileManager.default.removeItem(atPath: shotPath)
+                    logger.notice("  ✓ At the menu: quitting through the game's Quit menu item, as ⌘⌥Q does...")
+                    guard context.game.quitApp() else {
+                        forceQuit(app)
+                        return "Couldn't ask the game to quit from its menu"
+                    }
+                    return nil
                 }
                 if let failure = pictureFrameFailure(context, capturePath: shotPath, windowSize: state.size) {
                     forceQuit(app)

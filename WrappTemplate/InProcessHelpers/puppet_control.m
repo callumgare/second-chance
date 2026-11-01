@@ -25,6 +25,7 @@
 //    click <x> <y>    -> ok             mouse moved, a pause, then left button down and up
 //    move <x> <y>     -> ok             mouse moved only
 //    yield <pid>      -> ok             hand activation to that app, as Cmd-Tab away would
+//    quit             -> ok             ask the app to quit, as its Quit menu item (Cmd-Opt-Q in Wine) does
 //
 //  `cursor` is whether cnc-ddraw holds the mouse right now, and `cursorlock`
 //  how cursor_lock.m got on (helper_common.h). WrappPuppeteer compares
@@ -351,6 +352,15 @@ static NSString *yieldCommand(pid_t pid) {
     return @"error needs macOS 14";
 }
 
+/// Ask the app to quit as its Quit menu item does: Wine's is ⌘⌥Q, and
+/// -[NSApplication terminate:] is its action. Not waited for: terminate runs
+/// a loop of its own on the main thread until the app has agreed, which is
+/// what a hang would be stuck in.
+static NSString *quitCommand(void) {
+    dispatch_async(dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; });
+    return @"ok";
+}
+
 #pragma mark - Serving
 
 static NSString *handle(NSString *line) {
@@ -362,6 +372,7 @@ static NSString *handle(NSString *line) {
         return mouseCommand(parts[1].doubleValue, parts[2].doubleValue, [command isEqualToString:@"click"]);
     }
     if ([command isEqualToString:@"yield"] && parts.count == 2) return yieldCommand((pid_t)parts[1].intValue);
+    if ([command isEqualToString:@"quit"] && parts.count == 1) return quitCommand();
     return [@"error unknown request: " stringByAppendingString:line];
 }
 

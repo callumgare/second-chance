@@ -390,10 +390,14 @@ enum AppPuppetRunner {
     /// `onWarning` hears each warning WrappPuppeteer gave
     /// (`WRAPP_PUPPETEER: warning:`): something to look into that doesn't
     /// fail the game, such as a splash screen it no longer recognises.
+    ///
+    /// `quitFromMenu` quits the game through its Quit menu item (⌘⌥Q) once
+    /// at the menu, rather than its Exit button. Not in a VM.
     static func run(
         wrappURL: URL,
         game: GameInfo,
         timeout: TimeInterval = 90,
+        quitFromMenu: Bool = false,
         onWarning: @escaping (String) -> Void = { _ in }
     ) async throws -> Int32 {
         guard let bundle = WrappInfo.wrappPuppeteerBundle() else {
@@ -430,7 +434,8 @@ enum AppPuppetRunner {
             wrappURL: wrappURL,
             timeout: timeout,
             gameSlug: slug,
-            attemptLabel: "initial",
+            attemptLabel: quitFromMenu ? "menu-quit" : "initial",
+            extraArguments: quitFromMenu ? ["--quit-from-menu"] : [],
             requiredHelpers: requiredHelpers,
             onWarning: onWarning
         )
@@ -444,6 +449,7 @@ enum AppPuppetRunner {
         timeout: TimeInterval,
         gameSlug: String,
         attemptLabel: String,
+        extraArguments: [String] = [],
         requiredHelpers: [InProcessHelperReport.Helper],
         onWarning: (String) -> Void
     ) async throws -> (exitCode: Int32, pid: Int32) {
@@ -452,7 +458,7 @@ enum AppPuppetRunner {
             appBundle: appBundle,
             // So a stopped or crashed test run takes the puppeteer, and the
             // wrapp it's driving, down with it.
-            arguments: [wrappURL.path, "--timeout", String(Int(timeout)), "--parent-pid", String(getpid())]
+            arguments: [wrappURL.path, "--timeout", String(Int(timeout)), "--parent-pid", String(getpid())] + extraArguments
         )
 
         let logData = SystemLogReader.fetch(pid: pid, since: launchTime)

@@ -120,6 +120,17 @@ struct IntegrationGameRun {
             }
             outcome.puppeteerExit = exitCode
             outcome.expect(exitCode == 0, "WrappPuppeteer exited with \(exitCode) for \(label)")
+            // Again, quitting through the game's Quit menu item (⌘⌥Q), which
+            // goes through Wine rather than the game: it has hung for good
+            // when the game's process had no Dock icon of its own. Not in a
+            // VM, whose runner launches only the one way.
+            if exitCode == 0, VMTarget.current == nil {
+                outcome.phase("relaunching to quit from the menu")
+                let menuExit = try await outcome.timed(.launch) {
+                    try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout, quitFromMenu: true) { outcome.warn($0) }
+                }
+                outcome.expect(menuExit == 0, "WrappPuppeteer exited with \(menuExit) quitting \(label) from its menu")
+            }
             await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
             outcome.completed = true
         }

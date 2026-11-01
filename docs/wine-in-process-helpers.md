@@ -545,6 +545,7 @@ capture's pixels divided by `scale` — so no screen geometry is involved.
 | `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
 | `click <x> <y>` | `ok`: a mouse move, 150 ms for the game to see it, then the left button held for 100 ms |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
+| `quit` | `ok`: the app is asked to quit as its Quit menu item (Wine's ⌘⌥Q) does, with `-[NSApplication terminate:]`, not waited for, since a hang would be inside it |
 | `yield <pid>` | `ok`: the game's app hands activation to that app, which may then make itself active: WrappPuppeteer switching away from the game, as Cmd-Tab would, since macOS 14 only lets the active app hand activation on |
 
 The wrapp answers for its own window the same way, on

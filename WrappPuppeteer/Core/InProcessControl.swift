@@ -101,7 +101,8 @@ struct ControlledWindowState {
 
 /// A window served over a control socket: `state`, `capture <path>`,
 /// `click <x> <y>` and `move <x> <y>`, in window points with a top-left
-/// origin — a capture's pixels divided by its scale — and `yield <pid>`.
+/// origin — a capture's pixels divided by its scale — `yield <pid>` and
+/// `quit`.
 struct WindowControl {
     let socket: ControlSocket
 
@@ -143,6 +144,12 @@ struct WindowControl {
     @discardableResult
     func move(to point: CGPoint) -> Bool {
         report(socket.request("move \(point.x) \(point.y)"), for: "move")
+    }
+
+    /// Ask the window's app to quit, as its Quit menu item does.
+    @discardableResult
+    func quitApp() -> Bool {
+        report(socket.request("quit"), for: "quit")
     }
 
     /// Hand activation from the window's app to the app with `pid`, which

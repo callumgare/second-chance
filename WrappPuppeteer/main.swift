@@ -33,6 +33,8 @@ func printUsage() {
         --record <dir>         Save the game window to <dir> from when it appears
                                until the run ends
         --record-seconds <s>   Click nothing: record for <s> seconds, then quit
+        --quit-from-menu       Once at the menu, quit with the game's Quit menu item
+                               (as Cmd-Opt-Q does) rather than its Exit button
         --classify             Print each frame's nearest splash screen of the game,
                                how near it is, and anything light where the bars
                                beside a 4:3 picture should be (no launch)
@@ -84,6 +86,8 @@ while i < CommandLine.arguments.count {
         if i < CommandLine.arguments.count, let seconds = TimeInterval(CommandLine.arguments[i]) {
             options.watchOnlySeconds = seconds
         }
+    case "--quit-from-menu":
+        options.quitFromMenu = true
     case "--classify":
         classifyArguments = Array(CommandLine.arguments.dropFirst(i + 1))
         i = CommandLine.arguments.count

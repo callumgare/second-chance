@@ -646,6 +646,19 @@ up. A game that doesn't come back fails the run. A switch away that doesn't
 happen at all is the test's problem rather than the game's, so it's only a
 warning.
 
+### Quitting from the menu
+
+Once a game has passed, the test launches it again and quits it the other way
+a player can: through its Quit menu item, as ⌘⌥Q does, rather than the game's
+Exit button (`--quit-from-menu`). Once at the menu, the game's helper calls
+`-[NSApplication terminate:]`, the menu item's action (`quit`, [puppet
+control](wine-in-process-helpers.md#puppet-control)), and the game has to close
+within 60 s. That goes through Wine (or ScummVM) rather than the game, and it
+once hung for good: with the game's process made an accessory app, White
+Wolf's main thread waited in `terminate:` for an answer that never came. A
+game that doesn't close fails the run, with a capture of its window. The
+relaunch's time is in the **Launch** column too. It's skipped in a VM.
+
 ### The picture's bars and shape
 
 On a display of another shape than the game's, the wrapp shows the game's
