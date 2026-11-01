@@ -82,6 +82,22 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
         }
     }
 
+    /// The level any helper's status line states, a helper armed per game or
+    /// not (cocoa_start_wait.m runs in every Wine process); nil for any
+    /// other line.
+    static func statusLevel(of line: String) -> Logger.Level? {
+        let prefix = "second-chance-helper["
+        guard line.hasPrefix(prefix), let close = line.firstIndex(of: "]") else { return nil }
+        let rest = line[line.index(after: close)...].drop(while: { $0 == " " })
+        guard let colon = rest.firstIndex(of: ":") else { return nil }
+        switch rest[..<colon] {
+        case "notice": return .notice
+        case "warning": return .warning
+        case "error": return .error
+        default: return nil
+        }
+    }
+
     /// How long after the game's window appears a helper has to report
     /// arming before it counts as not having armed. Arming happens when the
     /// game first draws, well before its window shows, so this is only slack.

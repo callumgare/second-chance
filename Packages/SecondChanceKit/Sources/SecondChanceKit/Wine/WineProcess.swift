@@ -390,16 +390,34 @@ nonisolated public final class WineProcess: @unchecked Sendable {
     }
 }
 
-/// Watches a Wine program's output for `nodrv_CreateWindow`, the line Wine
-/// prints when a program tries to open a window without a working desktop.
-nonisolated final class NoDisplaySignal: @unchecked Sendable {
+/// Watches a Wine program's output for the lines that say it has no display
+/// driver, and never will: `nodrv_CreateWindow`, which Wine prints when a
+/// program tries to open a window without a working desktop, and the Mac
+/// driver's "Failed to start Cocoa app main loop", when the program's main
+/// thread didn't start Cocoa within Wine's 5 s (cocoa_start_wait.m, in the
+/// wrapp, lifts that limit). `onFirst` hears the first such line.
+nonisolated public final class NoDisplaySignal: @unchecked Sendable {
     private let lock = NSLock()
     private var flagged = false
+    private let onFirst: (@Sendable (String) -> Void)?
 
-    var seen: Bool { lock.withLock { flagged } }
+    public init(onFirst: (@Sendable (String) -> Void)? = nil) {
+        self.onFirst = onFirst
+    }
 
-    func check(_ line: String) {
-        guard line.contains("nodrv_CreateWindow") else { return }
-        lock.withLock { flagged = true }
+    public var seen: Bool { lock.withLock { flagged } }
+
+    /// Whether `line` is one of them.
+    public static func means(_ line: String) -> Bool {
+        line.contains("nodrv_CreateWindow") || line.contains("Failed to start Cocoa app main loop")
+    }
+
+    public func check(_ line: String) {
+        guard Self.means(line) else { return }
+        let first = lock.withLock { () -> Bool in
+            defer { flagged = true }
+            return !flagged
+        }
+        if first { onFirst?(line) }
     }
 }

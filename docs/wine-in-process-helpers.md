@@ -12,6 +12,7 @@ wrapp does not have:
 | Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, unless the game draws with Direct3D ([below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Mode scaling | `WrappTemplate/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `WrappTemplate/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
+| Cocoa start wait | `WrappTemplate/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
 | Puppet control | `WrappTemplate/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 
 ## How they get into the game process
@@ -506,6 +507,46 @@ A game that quits unexpectedly logs, after the usual `■ Game exited …` line:
 
 A healthy launch that gets reported this way has met a Wine error that's
 routine after all: the line it names belongs in `GameQuitCheck.routineErrors`.
+
+## Cocoa start wait
+
+### The problem it solves
+
+Every Wine program that talks to the Mac driver — `explorer.exe`, Wine's
+services, the game — starts it in `macdrv_start_cocoa_app` (Wine's
+`dlls/winemac.drv/cocoa_main.m`): it asks the main thread to become a Cocoa
+app, handing it a pointer to a struct on its own stack, and waits 5 seconds
+for it. With every core busy, under Rosetta, the main thread hasn't always
+got there by then — seen with nine games starting at once and busy loops on
+top. The driver then gives up ("Failed to start Cocoa app main loop"), so
+the program has no display driver for good: the game never shows a window,
+sitting there using CPU, or explorer's desktop never comes up and the game
+is told "The explorer process failed to start". When the main thread does
+get to the request, it reads the struct from a stack frame long gone and
+crashes (`-[__NSMallocBlock__ lock]: unrecognized selector`). Nothing
+recovers once the load goes.
+
+### What it does
+
+It replaces `-[NSConditionLock lockWhenCondition:beforeDate:]`, and for the
+one call that is that wait — from `winemac.so`, for condition 1,
+`COCOA_APP_RUNNING` — waits up to 10 minutes instead, as long as a build
+waits for Wine's desktop. Every other call goes straight to the original. A
+start that took longer than 5 s logs
+`second-chance-helper[CocoaStart] warning: the main thread took …s to start
+Cocoa, past Wine's 5s limit`, the cases that would have failed before.
+
+It isn't armed per game: it runs in every Wine process, the build's
+installers included, as all of them start the driver the same way.
+
+### If it happens anyway
+
+The wrapp watches the game's output for the driver giving up, or for
+`nodrv_CreateWindow` (`NoDisplaySignal`, which a build also retries on).
+Either means the game can never show a window, so the wrapp reports it,
+stops the launch and opens the game again by itself, passing
+`--after-no-display`; a copy started that way shows an error instead
+(`noDisplayExplanation`) if it happens again.
 
 ## Puppet control
 

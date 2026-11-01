@@ -366,7 +366,11 @@ direct assignment.
   stops Wine seeing a notched display without its notch strip),
   `SECOND_CHANCE_CURSOR_LOCK=0` leaves cursor lock unarmed (next bullet), and
   `SECOND_CHANCE_MODE_SCALING=0` leaves a Direct3D game's picture unscaled
-  when Wine emulates the display mode it switched to, and
+  when Wine emulates the display mode it switched to,
+  `SECOND_CHANCE_COCOA_START_WAIT=0` puts back Wine's 5 s limit on a
+  program's main thread starting Cocoa, which a fully loaded Mac runs out,
+  leaving the program with no display driver for good
+  ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#cocoa-start-wait)), and
   `SECOND_CHANCE_WINE_SYNC=esync` or `none` turns off Wine's msync, or msync
   and esync both, so every wait goes through wineserver — for every Wine
   program, the build's too.

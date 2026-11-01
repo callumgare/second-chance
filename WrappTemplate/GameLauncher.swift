@@ -101,6 +101,10 @@ class GameLauncher {
     /// The process whose window is the game's, from when that window appears
     /// until the game ends: what `bringGameForward` brings forward.
     private let gameWindowPid = OSAllocatedUnfairLock<pid_t?>(initialState: nil)
+    /// Told, once, when the game's Wine says it has no display driver
+    /// (`NoDisplaySignal`): it will never show a window. Called from the
+    /// thread reading its output.
+    var onNoDisplay: (@Sendable (String) -> Void)?
     /// Told how far a quit has got, for the window that says the game is
     /// closing. Called from the cleanup's background queue.
     var onQuitStep: (@Sendable (InfoWindowViewModel.QuitStep) -> Void)?
@@ -390,6 +394,33 @@ class GameLauncher {
         return true
     }
 
+    /// Report the game's Wine having no display driver. `final`: the launch
+    /// already started afresh once for it, and the error window shows this
+    /// report; otherwise it is sent as the launch starts afresh, without
+    /// asking, as there is nowhere to ask. Not counted as the launch's
+    /// outcome until it is final.
+    func reportNoDisplay(final: Bool) {
+        var files: [(String, String)] = []
+        if let bundle = startupDiagnostics?.lastBundle {
+            files.append(("Diagnostics", bundle.path))
+        }
+        let summary = FailureSummary.log(logger, what: "Starting \(config.gameTitle)", files: files)
+        var tags = failureTags(exitCode: nil, signal: nil)
+        tags["no_display"] = final ? "after-retry" : "retrying"
+        let noDisplay = FailureReport(
+            what: "Starting the game", kind: "no-display", game: config.gameSlug, engine: config.gameEngine.rawValue,
+            tags: tags, summary: summary,
+            diagnostics: startupDiagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
+        )
+        if final {
+            recordLaunch(outcome: noDisplay.kind)
+            report(noDisplay)
+        } else if let sending = FailureReporter.sendWithoutAsking(noDisplay) {
+            failureReport = noDisplay
+            reportTask = sending
+        }
+    }
+
     /// The report of a launch that seems stuck. `how`: given up on by the
     /// player, or sent by itself after a while.
     private func stuckReport(how: String) -> FailureReport {
@@ -479,6 +510,7 @@ class GameLauncher {
                 let quitCheck = quitCheck
                 let activity = infoWindow?.activity
                 let status = steamStatusHandler(infoWindow)
+                let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
                 guard let lock = try takeSteam() else {
                     logger.notice("[Steam] Not starting: another game has Steam, and the player chose to leave it")
                     return -1
@@ -488,6 +520,7 @@ class GameLauncher {
                                              onOutputLine: {
                                                  helperReport?.observe(line: $0)
                                                  quitCheck?.observe(line: $0)
+                                                 noDisplay.check($0)
                                                  activity?.noteOutput()
                                              })
                 steam = started  // from here a quit can stop it
@@ -655,10 +688,12 @@ class GameLauncher {
         }
         let helperReport = helperReport
         let quitCheck = quitCheck
+        let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
         let observe: @Sendable (String) -> Void = { line in
             diagnostics.observe(line: line)
             helperReport?.observe(line: line)
             quitCheck?.observe(line: line)
+            noDisplay.check(line)
             activity?.noteOutput()
         }
         let game: WineProcess

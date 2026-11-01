@@ -19,7 +19,7 @@ nonisolated enum SubprocessLineClassifier {
     static func level(for line: String, fallback: Logging.Logger.Level) -> Logging.Logger.Level {
         // The wrapp's in-process helpers state their own level:
         // "second-chance-helper[CursorLock] notice: armed in Game.exe".
-        if let helperLine = InProcessHelperReport.Line(line) { return helperLine.level }
+        if let level = InProcessHelperReport.statusLevel(of: line) { return level }
 
         // Wine's debug classes: "0124:err:module:import_dll …".
         if let wineClass = wineDebugClass(of: line) {

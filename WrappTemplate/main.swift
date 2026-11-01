@@ -298,9 +298,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set when the player chose "Launch Directly": once this launch is
     /// cleaned up, the wrapp opens again with `--launch-without-steam`.
     var relaunchWithoutSteam = false
-    /// The player chose Try Again on a launch that seemed stuck: once Wine
-    /// has finished, a fresh copy starts.
-    var tryAgain = false
+    /// The player chose Try Again on a launch that seemed stuck, or the game
+    /// had no display driver: once Wine has finished, a fresh copy starts,
+    /// with these arguments.
+    var tryAgain: [String]?
     /// The game has ended and the wrapp is closing down: waiting for Wine,
     /// hidden from the Dock. Set from the game's thread, read on main.
     private let closingState = OSAllocatedUnfairLock(initialState: (closing: false, openAgain: false))
@@ -352,7 +353,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Quitting a launch that seems stuck: report it, then quit again.
         // Not on the way to relaunching without Steam, which isn't giving up.
-        if !isCleaningUp, !relaunchWithoutSteam, globalInfoWindow?.giveUpIfStuck() == true {
+        // Nor when the game had no display driver, already reported.
+        if !isCleaningUp, !relaunchWithoutSteam, tryAgain != [afterNoDisplayArgument],
+           globalInfoWindow?.giveUpIfStuck() == true {
             mainLogger.notice("Quitting while the launch seems stuck: reporting it before quitting")
             return .terminateCancel
         }
@@ -393,8 +396,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 // Drain pending entries so the disk mirror / stderr keep the last lines.
                 if self.relaunchWithoutSteam {
                     self.openAgain(arguments: [launchWithoutSteamArgument], why: "to start without Steam")
-                } else if self.tryAgain {
-                    self.openAgain(arguments: [], why: "to try the launch again")
+                } else if let arguments = self.tryAgain {
+                    self.openAgain(arguments: arguments, why: "to try the launch again")
                 } else if self.openAgainWhenClosed {
                     self.openAgain(arguments: [], why: "as it was opened while closing")
                 }
@@ -439,6 +442,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 /// instead, for this launch only. Passed by the wrapp to itself when the
 /// player picks "Launch Directly" after a launch through Steam failed.
 let launchWithoutSteamArgument = "--launch-without-steam"
+/// Passed to the copy started afresh after the game had no display driver,
+/// so that a second time shows the error rather than starting it again.
+let afterNoDisplayArgument = "--after-no-display"
+/// The error window's explanation when it happens again.
+let noDisplayExplanation = "The game couldn't open its window, because this Mac was too busy while it started. Close some other apps, then open the game again."
 
 // MARK: - Termination signals
 
@@ -804,8 +812,27 @@ func main() {
         // Quitting reports the launch as stuck, if it hasn't been already,
         // and opens the game again once Wine has finished.
         mainLogger.notice("Player chose to try the launch again: stopping this launch, then opening the game again")
-        appDelegate.tryAgain = true
+        appDelegate.tryAgain = []
         NSApp.terminate(nil)
+    }
+    // The game's Wine has no display driver: it can never show a window.
+    // The Mac was too busy as it started (cocoa_start_wait.m), which a fresh
+    // start usually gets past; a second time, say so.
+    gameLauncher.onNoDisplay = { line in
+        DispatchQueue.main.async {
+            guard appDelegate.tryAgain == nil else { return }
+            if CommandLine.arguments.contains(afterNoDisplayArgument) {
+                mainLogger.critical("The game can't show a window (\(line)), again after starting afresh: giving up")
+                gameLauncher.reportNoDisplay(final: true)
+                infoWindow.showError(exitCode: -1, explanation: noDisplayExplanation,
+                                     report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
+            } else {
+                mainLogger.error("The game can't show a window (\(line)): stopping this launch and starting it afresh")
+                gameLauncher.reportNoDisplay(final: false)
+                appDelegate.tryAgain = [afterNoDisplayArgument]
+                NSApp.terminate(nil)
+            }
+        }
     }
     infoWindow.onPossibleFailure = { gameLauncher.captureDiagnostics(.stalled) }
     gameLauncher.onQuitStep = { step in infoWindow.quitting(step) }
