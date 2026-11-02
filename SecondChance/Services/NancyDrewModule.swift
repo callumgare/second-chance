@@ -206,7 +206,10 @@ nonisolated enum ShippedBundles {
         let edition: String
         let licence: Manifest.Licence
         let licenceFrom: String?
+        let licenceFile: String?
         let input: Manifest.Input
+        /// Where its Wrappfile installs it (its global `ARG install-dir`).
+        let installDir: String?
     }
 
     /// Every shipped bundle's download editions, in the catalogue's order.
@@ -217,10 +220,14 @@ nonisolated enum ShippedBundles {
         return try GameInfoProvider.shared.allGames().flatMap { game -> [DownloadEdition] in
             let folder = resources.appendingPathComponent("Bundles/" + game.programID)
             guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("manifest.yaml").path) else { return [] }
-            let manifest = try loader.load(folder).get().manifest
-            return manifest.editions.compactMap { edition in
+            let bundle = try loader.load(folder).get()
+            let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+            let planner = BuildPlanner(bundle: bundle, wrappfile: wrappfile, modules: modules)
+            return bundle.manifest.editions.compactMap { edition in
                 guard edition.source == .download, let licence = edition.licence, let input = edition.inputs?.first else { return nil }
-                return DownloadEdition(game: game, edition: edition.id, licence: licence, licenceFrom: edition.licenceFrom, input: input)
+                return DownloadEdition(game: game, edition: edition.id, licence: licence, licenceFrom: edition.licenceFrom,
+                                       licenceFile: edition.licenceFile, input: input,
+                                       installDir: planner.globalArgs(edition: edition.id)["install-dir"])
             }
         }
     }

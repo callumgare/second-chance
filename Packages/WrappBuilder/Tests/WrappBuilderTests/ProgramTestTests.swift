@@ -67,6 +67,15 @@ struct ProgramTestTests {
         #expect(test.needles.tagged("running").first?.spec.text?.strings.contains("Start") == true)
     }
 
+    @Test("Every bundle beyond Nancy Drew has a test, with something for each handler to wait for",
+          arguments: try FileManager.default.contentsOfDirectory(atPath: bundlesRoot.appendingPathComponent("freeware").path).sorted())
+    func freeware(name: String) throws {
+        let test = try ProgramTest.load(bundleFolder: bundlesRoot.appendingPathComponent("freeware/\(name)"), modulesRoot: modulesRoot)
+        for handler in test.scenario.handlers where handler.when != "blank" {
+            #expect(!test.needles.tagged(handler.when).isEmpty, "\(name): nothing is tagged \(handler.when)")
+        }
+    }
+
     @Test("A parameter the scenario doesn't have is refused")
     func unknownParameter() throws {
         let file = modulesRoot.appendingPathComponent("nancy-drew/scenarios/quit-from-menu.yaml")

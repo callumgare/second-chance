@@ -1,8 +1,9 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "scummvm"
-release: 1
+release: 2
 native: "scummvm"                            # its Swift: ScummVMRuntime, ScummVMBuild
 versions:
   - { version: "2026.3.0" }                  # setup-scummvm.sh
 runtime: { save-warning: false }
+assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a game with no menu to quit from, started and quit

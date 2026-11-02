@@ -10,6 +10,14 @@ nonisolated extension GameInfoProvider {
     /// Every game a bundle describes, in the order lists show them.
     static let bundledGames: [GameInfo] = [
         GameInfo(
+            id: "lure-of-the-temptress",
+            title: "Lure of the Temptress",
+            diskCount: 1,
+            gameEngine: .scummvm,
+            program: "freeware/lure-of-the-temptress",
+            displayName: "Lure of the Temptress"
+        ),
+        GameInfo(
             id: "skifree",
             title: "SkiFree",
             diskCount: 1,

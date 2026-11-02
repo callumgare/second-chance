@@ -1,0 +1,8 @@
+# Lure of the Temptress: its data, as the zip has it, for ScummVM to read.
+
+ARG install-dir="C:/Lure of the Temptress"
+
+FROM scratch AS download
+ARG install-dir
+USE scummvm
+COPY --from=game lure ${install-dir}/        # the zip's lure/ folder: the game's data and its licence

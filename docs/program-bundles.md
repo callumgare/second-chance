@@ -154,6 +154,15 @@ editions:
   `shareware` (a free first part) or `abandonware` (no longer sold, nothing
   said). `licence-from` says where the permission comes from.
 - **`unpack`** is `none` or `zip` so far; `install` is `none`.
+- **`licence-file`** names the licence's own words in the unpacked input
+  (`lure/LICENSE.txt`), saved into the app after what the person is told.
+
+The shipped ones are SkiFree (`freeware/skifree`, a bare exe under Wine) and
+Lure of the Temptress (`freeware/lure-of-the-temptress`, a zip ScummVM hosts,
+under ScummVM). A ScummVM game needs its engine's data file in the template:
+`setup-scummvm.sh` copies the ones the shipped bundles' engines use
+(`ENGINE_DATA`), and a game whose file is missing stops at ScummVM's "Unable
+to locate the 'lure.dat' engine data file", naming its engine's.
 
 A download edition is the first of a **program beyond Nancy Drew**, in a
 namespace of its own (`freeware/skifree`). Its catalogue entry carries its

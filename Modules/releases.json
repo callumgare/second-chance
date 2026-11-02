@@ -341,6 +341,22 @@
         "versions" : [
           "2026.3.0"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "83c81530c6b98024318746bee5bdc10f3ff39e266548a610833a5e3e3701b40f",
+          "scenarios/starts-and-quits.yaml" : "3ff1ea7da37332fec5cb23ce436b172ed4c0fd739d27e33d9e3385308b8f65df"
+        },
+        "functions" : [
+
+        ],
+        "release" : 2,
+        "versions" : [
+          "2026.3.0"
+        ]
       }
     ],
     "steam" : [

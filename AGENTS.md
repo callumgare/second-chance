@@ -675,8 +675,8 @@ backed up as a Passwords entry and imported once on each releasing Mac.
 - **Free games download, hidden.** The download source
   (`DownloadWrappBuilder`) builds a program its makers give away from the URLs
   its bundle names, and appears on the welcome screen only after a double-click
-  on the icon above the steps. Its first program is SkiFree
-  (`Bundles/freeware/skifree`), the first beyond Nancy Drew
+  on the icon above the steps. Its programs are SkiFree and Lure of the
+  Temptress (`Bundles/freeware/`), the first beyond Nancy Drew
   ([docs/program-bundles.md](docs/program-bundles.md#download-editions)).
 - The produced game app's process is named `WrappTemplate` in Activity Monitor.
   Renaming the executable per-game during configuration would read better.

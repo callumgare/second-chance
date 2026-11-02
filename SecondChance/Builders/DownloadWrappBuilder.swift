@@ -85,19 +85,32 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.buildRecipeProblem("\(game.programID)'s \(chosen.edition) edition names no stage")
             }
             try await run(plan, inputs: [chosen.input.id: unpacked], wrappPath: wrappPath)
-            guard let exe = game.internalGameExePath,
+            // What the wrapp starts: a Wine program's exe, or for ScummVM the
+            // folder of the game's data, which it reads.
+            let installDir = chosen.installDir.map { $0.hasPrefix("C:") ? String($0.dropFirst(2)) : $0 }
+            let launcher = game.composition.launcher
+            guard let exe = launcher == .scummvm ? installDir : game.internalGameExePath,
                   FileManager.default.fileExists(atPath: WrappLayout(app: wrappPath).onDriveC(exe).path) else {
                 throw WrappBuildError.gameExecutableNotFound
             }
             await bus.publishWrappBuild(.gameExeDetected(path: exe, gameInfo: game))
 
-            // Why it was free to have, for anyone who wants to know later.
-            try notice.licenceFile(from: chosen.licenceFrom)
-                .write(to: WrappLayout(app: wrappPath).resources.appendingPathComponent("Licence.txt"), atomically: true, encoding: .utf8)
+            // Why it was free to have, for anyone who wants to know later,
+            // with the licence's own words when it has some.
+            var licence = notice.licenceFile(from: chosen.licenceFrom)
+            if let file = chosen.licenceFile {
+                do {
+                    licence += "\n" + (try String(contentsOf: unpacked.appendingPathComponent(file), encoding: .utf8))
+                } catch {
+                    throw WrappBuildError.buildRecipeProblem("\(game.programID): its licence-file \(file) isn't in the download")
+                }
+            }
+            try licence.write(to: WrappLayout(app: wrappPath).resources.appendingPathComponent("Licence.txt"), atomically: true, encoding: .utf8)
             try await helper.cleanupUnusedEngine(at: wrappPath, composition: game.composition)
 
             let finalPath = try await helper.completeBuild(
-                wrapp: wrappPath, gameInfo: game, source: .download, gameExePath: exe, installerDir: "",
+                wrapp: wrappPath, gameInfo: game, source: .download, gameExePath: exe,
+                installerDir: launcher == .scummvm ? exe : "",
                 configureINI: false, edition: chosen.edition, input: input
             )
             try? FileManager.default.removeItem(at: unpacked)

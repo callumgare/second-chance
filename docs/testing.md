@@ -654,9 +654,11 @@ handlers:
   only says what to wait for and do in between. `goal` is `program-ends`,
   the only one so far, and `timeout` the seconds it has.
 
-A program with no menu to quit from uses the wine module's
-`scenarios/starts-and-quits.yaml`: when its bundle's `running` needles show,
-it quits. SkiFree's is the text on its slope ("Start", "Chris Pirih").
+A program with no menu to quit from uses its engine module's
+`scenarios/starts-and-quits.yaml` (the wine module's, or the scummvm
+module's): when its bundle's `running` needles show, it quits. SkiFree's is
+the text on its slope ("Start", "Chris Pirih"), Lure of the Temptress's the
+word under Revolution's logo.
 
 An edition with another title screen adds a needle under the same tag, and
 leaves the scenario alone. Handler patches by id and shared fragments of

@@ -51,7 +51,14 @@ echo "📦 Extracting ScummVM files..."
 SCUMMVM_APP="${SCUMMVM_MOUNT_PATH}/ScummVM.app"
 
 ditto --rsrc "${SCUMMVM_APP}/Contents/MacOS/scummvm" "${TEMP_DIR}/MacOS/scummvm"
-ditto --rsrc "${SCUMMVM_APP}/Contents/Resources/nancy.dat" "${TEMP_DIR}/Resources/nancy.dat"
+# The engine data files of the engines the shipped bundles' ScummVM games
+# use: nancy for Nancy Drew, lure for Lure of the Temptress. A game whose
+# engine's file is missing stops at "Unable to locate the '<engine>.dat'
+# engine data file".
+ENGINE_DATA=(nancy.dat lure.dat)
+for data in "${ENGINE_DATA[@]}"; do
+    ditto --rsrc "${SCUMMVM_APP}/Contents/Resources/${data}" "${TEMP_DIR}/Resources/${data}"
+done
 ditto --rsrc "${SCUMMVM_APP}/Contents/Resources/shaders.dat" "${TEMP_DIR}/Resources/shaders.dat"
 ditto --rsrc "${SCUMMVM_APP}/Contents/Resources/translations.dat" "${TEMP_DIR}/Resources/translations.dat"
 ditto --rsrc "${SCUMMVM_APP}/Contents/Resources/gui-icons.dat" "${TEMP_DIR}/Resources/gui-icons.dat"

@@ -122,6 +122,8 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         /// comes from (`free-release`, …), and who gives the permission.
         public let licence: Licence?
         public let licenceFrom: String?
+        /// The licence's own words: a file in the unpacked input.
+        public let licenceFile: String?
 
         /// The choice called `name` (`launch-mode`), however its key was
         /// decoded.

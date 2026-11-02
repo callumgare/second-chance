@@ -409,7 +409,12 @@
             "properties": {
               "inputs": { "type": "array", "items": { "$ref": "#/$defs/download-input" } },
               "licence": { "enum": ["freeware-licensed", "free-release", "shareware", "abandonware"] },
-              "licence-from": { "type": "string", "minLength": 1 }
+              "licence-from": { "type": "string", "minLength": 1 },
+              "licence-file": {
+                "description": "The licence's own words, a file in the unpacked input, saved into the app after what the person is told.",
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         }

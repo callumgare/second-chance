@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "freeware/lure-of-the-temptress"
+version: 1
+title: "Lure of the Temptress"
+display-name: "Lure of the Temptress"
+
+volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+  scummvm-saves:
+    display-name: "saved games"
+  scummvm-settings:
+    in-use-when: "never"                     # only ScummVM's settings
+    display-name: "settings"
+
+variants:
+  - id: "scummvm"
+    volumes:
+      - { source: "scummvm-saves" }          # ScummVM's save path
+      - { source: "scummvm-settings" }       # its settings file, scummvm.ini
+
+editions:
+  - id: "download"
+    source: "download"
+    build: { target: "download" }
+    licence: "freeware-licensed"             # Revolution's licence lets anyone share it
+    licence-from: "Revolution Software's licence, in the download"
+    licence-file: "lure/LICENSE.txt"         # its own words, saved into the app
+    inputs:
+      - id: "game"
+        urls:                                # ScummVM hosts it for Revolution; then the Wayback copy of that URL
+          - "https://downloads.scummvm.org/frs/extras/Lure%20of%20the%20Temptress/lure-1.1.zip"
+          - "https://web.archive.org/web/20230312165937id_/https://downloads.scummvm.org/frs/extras/Lure%20of%20the%20Temptress/lure-1.1.zip"
+        sha256: "f3178245a1483da1168c3a11e70b65d33c389f1f5df63d4f3a356886c1890108"
+        size: 5678861
+        unpack: "zip"
+        install: "none"
+
+tests:
+  scenario: "scummvm/starts-and-quits"
+
+notes:                                       # for people only; nothing reads these
+  about: "Revolution Software's 1992 adventure, the English DOS release ScummVM hosts with Revolution's permission. The first ScummVM program beyond Nancy Drew."
+  checked: "2026-11-03: ScummVM's URL gives the file its published .sha256 names; the 2023 Wayback capture (id_) is the same file (CDX digest = its SHA-1)."
