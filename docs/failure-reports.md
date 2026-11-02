@@ -199,6 +199,14 @@ that outcome for `FailureReportCallout`.
   and a quit after it reports nothing more. The `stuck_report` tag says
   which it was: `gave-up` or `automatic`. An automatic one isn't counted
   as the launch's outcome in the success reports, which may yet be a game.
+- **Recognising a game.** `GameDetector` sends, without asking, a source
+  nothing recognised that nearly matched a bundle (`Recognising the game` /
+  `near-miss`) and one two bundles matched equally (`ambiguous`). A basic
+  report says which kinds of signal the source had (`signals`), the bundle
+  it nearly matched (`near_bundle`, `near_series`) or the bundles tied
+  (`tied`), and for a file-hash matcher the file's name, size and md5 — never
+  the signals' text, which can hold whatever an installer put there. That
+  goes only in a detailed report's summary.
 - **A wrapp's own start-up errors.** The `exit(1)` paths in `main.swift` use
   `reportAndWait`.
 - **Crashes.** The SDK records a crash and finds it at the next start.

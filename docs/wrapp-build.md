@@ -92,14 +92,22 @@ Second Chance made the wrapp itself, so the quarantine guards nothing.
 **Step 3 happens exactly once.** `GameInfo` is threaded through every later
 step; nothing downstream re-detects. (An earlier design detected twice.)
 
-**How a game is recognised.** `GameDetector` gathers the names a disc gives
-itself into one fingerprint and matches it against the games' titles: the
-product name in `setup.exe`'s version info (`WindowsExecutable`), the
-subject of an `.msi`'s summary information (`MSISummary`), `setup.ini`'s
-`AppName` and `Product`, `autorun.inf`'s label, and the volume name. Some
-discs name the game in only one of these: Castle Malloy's only in its MSI's
-subject. A Her download adds the names its installer carries as plain text
-(`embeddedInstallerSignals`). The same version info tells InstallShield from
+**How a game is recognised.** `GameDetector` gathers what a disc says of
+itself (a `DetectionSource`): the product name in `setup.exe`'s version info
+(`WindowsExecutable`), the subject of an `.msi`'s summary information
+(`MSISummary`), `setup.ini`'s `AppName` and `Product`, `autorun.inf`'s label,
+the folder's and volume's names, and the disc's files. Some discs name the
+game in only one of these: Castle Malloy's only in its MSI's subject. A Her
+download adds the names its installer carries as plain text
+(`embeddedInstallerSignals`). It is matched against every shipped bundle's
+matchers, compiled once into a `DetectionIndex` (`Packages/WrappBuilder`,
+loaded off the main thread on first use): each bundle's title, aliases and
+codes, and any `detect.matchers` it writes
+([program-bundles.md](program-bundles.md#detection)). The most specific match
+wins; a true tie between two bundles is treated as a game nothing
+recognised, and reported. A source nothing recognises that nearly matched a
+bundle is reported as a near miss ([failure-reports.md](failure-reports.md)),
+so editions not recognised yet show up. The same version info tells InstallShield from
 Inno Setup (`GameInstallerRunner.detectInstallerType`). Both readers are
 Swift, in `Packages/WrappKit/Sources/WindowsFormats/` and `SecondChance/Services/`, and read only as
 much of the file as they need.

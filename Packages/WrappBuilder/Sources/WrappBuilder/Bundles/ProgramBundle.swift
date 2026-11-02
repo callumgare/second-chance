@@ -31,12 +31,15 @@ public nonisolated struct ProgramBundle: Sendable {
 public nonisolated final class ProgramBundleLoader {
     public let root: URL
     private let validator: SchemaValidator
-    /// The modules a bundle's Wrappfile is checked against.
-    private let modules: [ModuleFolder]
+    /// The modules a bundle's Wrappfile is checked against; nil to leave
+    /// Wrappfiles unchecked, for what reads only manifests (recognising a
+    /// disc), as the shipped bundles were checked before they shipped.
+    private let modules: [ModuleFolder]?
 
     /// A loader for the bundles under `root`, which holds
-    /// `manifest.schema.json`, checking their Wrappfiles against `modules`.
-    public init(root: URL, modules: [ModuleFolder]) throws {
+    /// `manifest.schema.json`, checking their Wrappfiles against `modules`,
+    /// or not at all when it is nil.
+    public init(root: URL, modules: [ModuleFolder]?) throws {
         self.root = root
         self.modules = modules
         validator = try SchemaValidator()
@@ -94,7 +97,9 @@ public nonisolated final class ProgramBundleLoader {
             return problems(["manifest.yaml couldn't be read: \(error)"])
         }
         var messages = Self.problems(with: manifest, in: folder)
-        messages += wrappfileProblems(manifest, in: folder)
+        if let modules {
+            messages += wrappfileProblems(manifest, in: folder, modules: modules)
+        }
         if !messages.isEmpty { return problems(messages) }
         return .success(ProgramBundle(folder: folder, manifest: manifest))
     }
@@ -125,7 +130,7 @@ public nonisolated final class ProgramBundleLoader {
 
     /// What's wrong with the bundle's Wrappfile, which a bundle with editions
     /// to build has (every one does, but one whose only edition is Steam's).
-    func wrappfileProblems(_ manifest: Manifest, in folder: URL) -> [String] {
+    func wrappfileProblems(_ manifest: Manifest, in folder: URL, modules: [ModuleFolder]) -> [String] {
         let file = folder.appendingPathComponent("Wrappfile")
         guard let text = try? String(contentsOf: file, encoding: .utf8) else {
             let needed = manifest.editions.contains { $0.build != nil } || manifest.variants?.contains { $0.build != nil } == true

@@ -238,18 +238,86 @@
           "uniqueItems": true
         },
         "codes": {
-          "description": "Short codes it is called by (STFD), matched in capitals, as a whole word.",
+          "description": "Short codes it is called by (STFD), matched as a word, case and all: the riskiest kind of matcher, as a volume label can have SEA or LIE in it.",
           "type": "array",
           "items": { "type": "string", "pattern": "^[A-Z0-9]+$" },
           "uniqueItems": true
         },
         "matchers": {
+          "description": "What tells this edition apart when its title, aliases and codes can't. Each is one kind; they have no order, and the most specific match wins (docs/program-bundles.md).",
           "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["matcher"],
-            "properties": { "matcher": { "$ref": "#/$defs/name" } }
+          "items": { "$ref": "#/$defs/matcher" },
+          "minItems": 1
+        }
+      }
+    },
+    "file-glob": {
+      "description": "A file's path from the top of the disc or download, with forward slashes, matched case aside. * and ? don't cross a /.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\]([^\\\\]*[^/\\\\])?$"
+    },
+    "matcher": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "file-exists": {
+          "description": "A file is there.",
+          "$ref": "#/$defs/file-glob"
+        },
+        "file-contains": {
+          "description": "A file holds this text, exactly as written, in UTF-8 or UTF-16 (the first 16 MB are read).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "text"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob" },
+            "text": { "type": "string", "minLength": 1 }
           }
+        },
+        "file-hash": {
+          "description": "A file's size and the md5 of its first bytes, as ScummVM's detection tables have them.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "size", "md5"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob" },
+            "size": { "type": "integer", "minimum": 0 },
+            "md5": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+            "bytes": {
+              "description": "How many bytes from the start the md5 is of: 5000 when left out, as ScummVM's usually are.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "exe-version": {
+          "description": "A Windows program's version information has this text in one of its strings, case aside.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "key", "text"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob" },
+            "key": { "type": "string", "enum": ["ProductName", "FileDescription", "CompanyName", "InternalName", "OriginalFilename", "ProductVersion", "FileVersion", "LegalCopyright", "Comments"] },
+            "text": { "type": "string", "minLength": 1 }
+          }
+        },
+        "msi-summary": {
+          "description": "An MSI's summary information has this text in its subject, case aside.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["subject"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob", "description": "Which MSI: *.msi when left out." },
+            "subject": { "type": "string", "minLength": 1 }
+          }
+        },
+        "volume-name": {
+          "description": "The disc's volume name, whole, case aside; * and ? as in a file's path.",
+          "type": "string",
+          "minLength": 1
         }
       }
     },

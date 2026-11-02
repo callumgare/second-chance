@@ -36,6 +36,7 @@ let package = Package(
                 .product(name: "Yams", package: "Yams"),
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "WrappModules", package: "WrappKit"),
+                .product(name: "WindowsFormats", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings,
             linkerSettings: [.linkedFramework("JavaScriptCore")]

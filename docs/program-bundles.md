@@ -115,6 +115,36 @@ Checks the schema can't make, across fields or against the folder (the id
 matches its folder, no two editions share an id), are in
 `ProgramBundleLoader`.
 
+## Detection
+
+Every bundle is recognised by its `title` (less a leading "The"), matched
+anywhere in what a disc or download says of itself, case aside, with nothing
+written. An edition's `detect` adds:
+
+```yaml
+detect:
+  aliases: ["Blue Moon Canyon"]      # other names, matched as the title is
+  codes: ["TRN"]                     # short codes, in capitals, as a whole word
+  matchers:                          # anything else, when names can't tell editions apart
+    - { file-exists: "Data/*.cif" }
+    - { file-contains: { file: "autorun.inf", text: "Blue Moon" } }
+    - { file-hash: { file: "Data/game.dat", size: 123456, md5: "…", bytes: 5000 } }
+    - { exe-version: { file: "setup.exe", key: "ProductName", text: "Blue Moon" } }
+    - { msi-summary: { subject: "Blue Moon" } }     # file: "*.msi" when left out
+    - { volume-name: "BLUEMOON" }
+```
+
+Aliases and codes count for the whole bundle, as they always have; a
+`matchers` entry names its edition. Matchers have no order: where more than
+one bundle matches, the most specific wins — the longest text matched (which
+is how Remastered wins over Secrets Can Kill, whose title it contains), a
+glob or volume name by its length without wildcards, and a file's hash over
+any text. Two bundles matching equally are a tie, which is asked about as a
+game nothing recognised is. A source nothing recognises is reported as a near
+miss when a hash matcher's file is there with another size or md5, or else
+more than half of a title's words are (common words aside), or else only the
+series' name.
+
 ## The table of games
 
 `GameCatalog` stays Foundation-only, so the apps, the wrapps, WrappPuppeteer and

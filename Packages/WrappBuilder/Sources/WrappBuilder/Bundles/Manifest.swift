@@ -94,9 +94,13 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let product: Int?
     }
 
+    /// How an edition is recognised (`Detection/`): its aliases and codes
+    /// join the title in the default matcher; `matchers` are what titles
+    /// can't tell apart.
     public struct Detect: Decodable, Hashable, Sendable {
         public let aliases: [String]?
         public let codes: [String]?
+        public let matchers: [Matcher]?
     }
 
     public struct Installer: Decodable, Hashable, Sendable {
