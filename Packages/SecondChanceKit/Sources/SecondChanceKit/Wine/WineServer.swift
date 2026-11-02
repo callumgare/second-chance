@@ -203,7 +203,8 @@ nonisolated public struct WineServer: Sendable {
             return true
         case .idle:
             // Routine, so not a step for the closing window to tell.
-            logger.notice("[Wine Cleanup] Wine's programs all ended after \(SubprocessWatch.duration(Date().timeIntervalSince(started))): stopping its server and services rather than waiting for them to linger (wineserver -k)")
+            let ran = SubprocessWatch.duration(Date().timeIntervalSince(started))
+            logger.notice("[Wine Cleanup] Wine's programs all ended after \(ran): stopping its server and services rather than waiting for them to linger (wineserver -k)")
         case .timedOut:
             logger.warning("[Wine Cleanup] Wine was still running after \(Int(gracePeriod)) s: stopping it (wineserver -k)")
             onStep(.stopping)
