@@ -58,7 +58,12 @@ activates it.
    finishes; only one runs in a prefix (a second hands over to the first and
    exits, so its DevTools port never answers), so the session is ended there.
    AutoIt and the installer are staged under `C:\second-chance-big-fish` and
-   removed after.
+   removed after. While it runs, Z: shows an empty folder
+   (`BigFishWrappPreparer.hideMacDrive`): the installer runs Big Fish's
+   `epoch.exe`, which searches every drive, folder by folder, for a
+   `bfgextstate.json` a Big Fish CD would have, and Z: is the whole Mac,
+   which takes hours through Wine. The installer looks stuck on "Execute:
+   …\bfgclient\epoch.exe" meanwhile.
 3. **It starts** with its DevTools port (`BigFishGameManager.start`).
 4. **Sign-in.** Already signed in is fine. Otherwise, from the app, the
    Game Manager's sign-in form is opened and its window brought forward, the

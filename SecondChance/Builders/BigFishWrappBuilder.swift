@@ -129,6 +129,12 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
 
         func windows(_ url: URL) -> String { GameInstallerRunner.windowsPath(of: url, driveC: layout.driveC) }
         await wine.server.stop()
+        // The installer runs Big Fish's epoch.exe, which searches every drive,
+        // folder by folder, for a file a Big Fish CD would have. Z: is the
+        // whole Mac, which takes hours through Wine, so Z: shows an empty
+        // folder until the installer is done.
+        let restoreZ = try await Blocking.run { try Self.hideMacDrive(of: wine, prefix: layout.prefix) }
+        defer { restoreZ() }
         let desktop = await WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
         do {
             // /ErrorStdOut: a script error is logged, not shown in a box nobody closes.
@@ -147,6 +153,29 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
             throw WrappBuildError.internalError("Big Fish's installer finished, but there's no \(client.path)")
         }
         logger.notice("Installed the Game Manager")
+    }
+
+    /// Point Z: (the Mac's whole disk) at an empty folder in the prefix, and
+    /// return what puts it back.
+    nonisolated static func hideMacDrive(of wine: Wine, prefix: URL) throws -> @Sendable () -> Void {
+        let drives = wine.drives
+        let original = try? drives.target(of: "Z")
+        let empty = prefix.appendingPathComponent("second-chance-empty-z")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        try drives.mount(empty, as: "Z")
+        logger.notice("Z: shows an empty folder while Big Fish's installer runs (it was \(original ?? "nothing"))")
+        return {
+            do {
+                if let original {
+                    try drives.mount(original, as: "Z")
+                } else {
+                    try? FileManager.default.removeItem(at: drives.link("Z"))
+                }
+                try? FileManager.default.removeItem(at: empty)
+            } catch {
+                logger.error("Couldn't put Z: back to \(original ?? "nothing"): \(error.localizedDescription)")
+            }
+        }
     }
 
     /// End the prefix's Wine session, and the Game Manager the installer started with it.
