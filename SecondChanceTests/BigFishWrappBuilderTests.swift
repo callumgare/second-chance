@@ -109,6 +109,8 @@ final class FakeBigFishPreparer: BigFishWrappPreparing, @unchecked Sendable {
     }
     func startCancellingDirectXSetup(in path: URL) async { directX.append("start") }
     func stopCancellingDirectXSetup(in path: URL) async { directX.append("stop") }
+    private(set) var forgotAccount = 0
+    func forgetAccount(in path: URL) async throws { forgotAccount += 1 }
 }
 
 /// Answers the game picker as a person would, offering what it was shown.
@@ -210,6 +212,8 @@ struct BigFishWrappBuilderTests {
         #expect(settings.bigFishTrial == nil)
         #expect(run.manager?.calls == ["start", "download \(Self.whiteWolf) full", "signOut", "shutdown"])
         #expect(run.preparer.directX == ["start", "stop"])
+        // Signing out leaves the account's tokens and cookies; they're taken out after.
+        #expect(run.preparer.forgotAccount == 1)
         // The Game Manager stays: its services start the game.
         let client = wrapp.appendingPathComponent("Contents/SharedSupport/prefix").appendingPathComponent(BigFishGameManager.clientDirInPrefix)
         #expect(FileManager.default.fileExists(atPath: client.path))

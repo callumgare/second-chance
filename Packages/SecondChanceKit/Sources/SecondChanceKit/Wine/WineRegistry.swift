@@ -48,6 +48,15 @@ nonisolated public struct WineRegistry: Sendable {
         try await wine.run(.wine(["reg", "add", key.rawValue, "/v", name, "/t", type, "/d", data, "/f"]), timeout: timeout)
     }
 
+    /// Delete `name` from `key`. Deleting what isn't there isn't an error.
+    public func deleteValue(_ name: String, in key: Key, timeout: TimeInterval = 600) async throws {
+        do {
+            try await wine.run(.wine(["reg", "delete", key.rawValue, "/v", name, "/f"]), timeout: timeout)
+        } catch WineError.executionFailed {
+            // reg exits 1 when the key or value doesn't exist.
+        }
+    }
+
     /// Import the `.reg` file at `path`, a path as Windows programs see it.
     public func importFile(atWindowsPath path: String, timeout: TimeInterval) async throws {
         try await wine.run(.wine(["reg", "import", path]), timeout: timeout)

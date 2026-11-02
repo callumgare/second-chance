@@ -69,6 +69,10 @@ protocol BigFishWrappPreparing {
     /// Stop that, and take what it put in the prefix out again. Safe to call
     /// when it was never started.
     func stopCancellingDirectXSetup(in path: URL) async
+    /// Take the account out of the prefix once the Game Manager has stopped:
+    /// signing out leaves its tokens and email in the registry, and the store's
+    /// session cookies in the Game Manager's browser profile.
+    func forgetAccount(in path: URL) async throws
 }
 
 /// The real `BigFishWrappPreparing`: Big Fish's installer, clicked through
@@ -176,6 +180,26 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
                 logger.error("Couldn't put Z: back to \(original ?? "nothing"): \(error.localizedDescription)")
             }
         }
+    }
+
+    /// The Game Manager's sign-in, as it keeps it in the registry.
+    static let accountKey: WineRegistry.Key = #"HKEY_CURRENT_USER\Software\Big Fish Games\Client"#
+    static let accountValues = ["AccessToken", "AccessExpires", "RefreshToken", "RefreshExpires", "Email", "EmailError"]
+    /// Its browser profile: cookies (the store's session among them) and caches.
+    static let browserProfile = "drive_c/ProgramData/Big Fish/cef"
+
+    func forgetAccount(in path: URL) async throws {
+        let layout = WrappLayout(app: path)
+        let profile = layout.prefix.appendingPathComponent(Self.browserProfile)
+        try await Blocking.run {
+            if FileManager.default.fileExists(atPath: profile.path) { try FileManager.default.removeItem(at: profile) }
+        }
+        let wine = Wine(wrapp: path)
+        for name in Self.accountValues {
+            try await wine.registry.deleteValue(name, in: Self.accountKey)
+        }
+        await endSession(wine)
+        logger.notice("Took the Big Fish account out of the prefix: its registry values and the Game Manager's browser profile")
     }
 
     /// End the prefix's Wine session, and the Game Manager the installer started with it.
@@ -390,6 +414,9 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Closing Big Fish's Game Manager"))))
             await manager.shutdown(timeout: Self.shutdownTimeout)
             managerStarted = false
+            // Signing out leaves the account's tokens in the registry and the
+            // store's session in the Game Manager's browser profile.
+            try await preparer.forgetAccount(in: wrappPath)
 
             // ── Locate and configure ───────────────────────────────────
             let files = try FileManager.default.contentsOfDirectory(atPath: installed.folder.path)

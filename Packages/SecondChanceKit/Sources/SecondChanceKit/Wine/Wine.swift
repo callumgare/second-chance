@@ -113,11 +113,16 @@ nonisolated public struct Wine: Sendable {
     /// (its injected libraries and framework paths), and loaded into Wine they
     /// changed what an installer did. Wine used to start through `/bin/sh`,
     /// which, being protected, never got them, so none ever reached Wine.
+    /// Nor does the Big Fish test account (`BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD`)
+    /// a test build signs in with: Windows programs can read their environment.
     public var environment: [String: String] {
         ProcessInfo.processInfo.environment
-            .filter { !$0.key.hasPrefix("DYLD_") }
+            .filter { !$0.key.hasPrefix("DYLD_") && !Self.withheld.contains($0.key) }
             .merging(variables) { $1 }
     }
+
+    /// What a Wine program is never given from Second Chance's environment.
+    static let withheld: Set<String> = ["BIG_FISH_EMAIL", "BIG_FISH_PASSWORD"]
 
     /// `export NAME='value'` lines for `variables`, sorted: pasted into a
     /// shell, they run Wine by hand against this prefix. Wine's own folder

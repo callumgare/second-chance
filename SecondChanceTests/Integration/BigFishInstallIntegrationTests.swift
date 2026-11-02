@@ -89,6 +89,15 @@ struct BigFishOwnedInstallIntegrationTests {
                 let found = await Blocking.run { BigFishIntegration.files(in: prefix, mentioning: email) }
                 outcome.expect(found.isEmpty, "The test account's email address shipped in the wrapp, in \(found.joined(separator: ", "))")
             }
+            // Signing out leaves the Game Manager's tokens in the registry and the
+            // store's session cookies in its browser profile; the build removes both.
+            let prefix = WrappLayout(app: wrapp).prefix
+            let userReg = (try? String(contentsOf: prefix.appendingPathComponent("user.reg"), encoding: .utf8)) ?? ""
+            for value in ["AccessToken", "RefreshToken"] {
+                outcome.expect(!userReg.contains("\"\(value)\"="), "The Game Manager's \(value) shipped in the wrapp's registry")
+            }
+            let cookies = prefix.appendingPathComponent("drive_c/ProgramData/Big Fish/cef/Cookies")
+            outcome.expect(!FileManager.default.fileExists(atPath: cookies.path), "The Game Manager's cookies shipped in the wrapp")
         }
     }
 }
