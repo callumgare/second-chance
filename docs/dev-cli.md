@@ -174,6 +174,7 @@ They map onto the app's and wrapp's own switches:
 | `skip-installer`          | `--skip-installer`                    | ✓         | ✓             |             |
 | `strict-install`          | `STRICT_INSTALL=true`                 |           | ✓             |             |
 | `install-stall=<seconds>` | `SECOND_CHANCE_INSTALL_STALL_SECONDS` | ✓         | ✓             |             |
+| `layer-cache=<policy>`    | `SECOND_CHANCE_LAYER_CACHE=<policy>`  | ✓         | ✓             |             |
 | `settings-dialog`         | `--debug-options`                     |           |               | ✓           |
 | `wine=<channels>`         | `SECOND_CHANCE_WINEDEBUG=<channels>`  | ✓         | ✓             | ✓           |
 | `wine-sync=<mode>`        | `SECOND_CHANCE_WINE_SYNC=<mode>`      | ✓         | ✓             | ✓           |

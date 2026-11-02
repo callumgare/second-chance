@@ -70,6 +70,10 @@ class WineManager {
             try? FileManager.default.removeItem(at: Self.formerPrefixCache)
             return try Self.prefixLayerKey(for: wrappPath)
         }
+        guard LayerCachePolicy.current() != .off else {
+            _ = try await makeWinePrefix(at: wrappPath, bus: bus)
+            return
+        }
         if let why = layers.explain(key) {
             logger.notice("No cached Wine prefix to use (\(why)): making one")
         }

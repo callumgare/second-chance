@@ -81,8 +81,21 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s disc edition names no stage")
             }
             let composition = gameInfo.composition
-            let installed = try await run(plan, wrappPath: wrappPath, disk1Root: disk1Root, gameInfo: gameInfo,
-                                          installerName: installerName, input: input)
+            // The same disc, plan and modules install the same game: a
+            // build after the first clones its install (docs/wrapp-build.md#the-layer-cache).
+            // On disc 1's listing alone, so a rebuild needs only disc 1.
+            let key: LayerKey? = DebugSettings.shared.skipInstaller ? nil : try await Blocking.run {
+                try InstallLayer.key(slot: "\(gameInfo.id) \(plan.edition): install", plan: plan, wrappPath: wrappPath, inputs: [
+                    .init("disc 1", try LayerKey.listing(of: disk1Root)),
+                    .init("installer program", installerName ?? "found by name"),
+                ])
+            }
+            let installed = try await InstallLayer(store: wineManager.layers, bus: bus).run(
+                key: key, wrappPath: wrappPath, gameInfo: gameInfo, disk1: disk1Root
+            ) {
+                try await run(plan, wrappPath: wrappPath, disk1Root: disk1Root, gameInfo: gameInfo,
+                              installerName: installerName, input: input)
+            }
 
             // Clean up unused engine unless we skipped the installer — wine
             // might be needed to run the installer later.
@@ -122,7 +135,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     private func run(
         _ plan: BuildPlan, wrappPath: URL, disk1Root: URL, gameInfo: GameInfo,
         installerName: String?, input: WrappBuildInput
-    ) async throws -> (gameExePath: String, installerDir: String, configuredINI: Bool) {
+    ) async throws -> InstallLayer.Installed {
         let layout = WrappLayout(app: wrappPath)
         let composition = gameInfo.composition
         var installed: (gameExePath: String, installerDir: String)?
@@ -200,7 +213,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         guard let result = installed else {
             throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s disc plan installs nothing")
         }
-        return (result.gameExePath, result.installerDir, configuredINI)
+        return InstallLayer.Installed(gameExePath: result.gameExePath, installerDir: result.installerDir, configuredINI: configuredINI)
     }
 
     /// Whether `name` is one of the game's patches: a step `DO

@@ -361,8 +361,29 @@ What a build makes that the next build would make the same is kept as a
 *layer* (`LayerStore`, in `Packages/WrappBuilder/Sources/WrappBuilder/Layers/`),
 in `~/Library/Caches/SecondChance/layers/<key>/`: the layer's folder as
 `content/`, with `key.json`, `meta.json` (made, last used, size) and the
-events its steps published beside it. Today one layer is cached, the new Wine
-prefix (`USE wine`); the install and the steps after it aren't yet.
+events its steps published beside it. Two layers are cached so far: the new
+Wine prefix (`USE wine`), and on top of it a disc build's install
+(`InstallLayer`) — the discs copied, the installer run, the patches applied
+and the .ini settings made, which is everything the plan's stages do. A
+rebuild from the same disc clones that prefix and publishes the install's
+`disksResolved`, `engineRouted`, `installerResolved`, `gameExeDetected` and
+`patchApplied` again, so the screens and tests see what they would have. Her
+downloads and Steam aren't cached yet (Steam's key needs the app's build id,
+from a signed-in Steam).
+
+- **What is cached is a policy** (`LayerCachePolicy`,
+  `SECOND_CHANCE_LAYER_CACHE`, `sc … --debug layer-cache=<policy>`): `all`
+  by default, `prefix` alone under test, so an integration run installs every
+  game for real, and `off`. An install with a failed patch isn't kept, so the
+  next build tries the patch again.
+- **The install's key** is the prefix's, then the edition and the plan's
+  steps as written out, a hash of each bundle asset they read (by its path in
+  the bundle), each module the plan uses (its release and a hash of its whole
+  folder), disc 1's listing (every path and size, `LayerKey.listing`), the
+  program that was picked as the installer, the Mac's architecture and
+  `InstallLayer.codeRevision`, raised by hand when the Swift that installs
+  changes what it makes. Disc 2 isn't in it, as it is asked for only once
+  disc 1 is copied, so a rebuild needs only disc 1.
 
 - **A key is a hash of what the layer was made from** (`LayerKey`): its
   parent's key, and each input by name. The prefix's
