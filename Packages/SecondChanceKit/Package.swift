@@ -35,7 +35,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
-        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.30.2"),
+        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.32.0"),
         .package(path: "../GameCatalog"),
     ],
     targets: [
