@@ -487,7 +487,8 @@ class GameInstallerRunner {
         logPath: String? = nil
     ) -> InstallerPlan {
         InstallerPlan(installerPath: installerPath, type: installerType, attempt: attemptNumber,
-                      hasAnswerFile: hasAnswerFile(in: wrappPath), game: gameInfo, logPath: logPath)
+                      hasAnswerFile: hasAnswerFile(in: wrappPath), game: gameInfo,
+                      driveC: WrappLayout(app: wrappPath).driveC, logPath: logPath)
     }
 
     /// Whether the disc's InstallShield answer file was copied in.

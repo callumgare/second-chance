@@ -1,11 +1,10 @@
 $gameInstallerPath = $CmdLine[1]
-$gameTitle = $CmdLine[2]
 
 Func LogInfo($msg)
     ConsoleWrite(@YEAR & "-" & @MON & "-" & @MDAY & " " & @HOUR & ":" & @MIN & ":" & @SEC & " " & $msg & @CRLF)
 EndFunc
 
-LogInfo("Starting automation: installer=" & $gameInstallerPath & " title=" & $gameTitle)
+LogInfo("Starting automation: installer=" & $gameInstallerPath)
 
 LogInfo("Launching installer")
 Local $iPID = Run('"' & $gameInstallerPath & '" /s /sms /f1C:\nancy-drew-installer\setup.iss')

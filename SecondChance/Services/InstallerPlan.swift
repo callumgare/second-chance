@@ -21,19 +21,22 @@ nonisolated struct InstallerPlan: Equatable, Sendable {
     /// `nancy-drew-installer/setup.iss` is there: InstallShield can install
     /// silently from it.
     let hasAnswerFile: Bool
-    let gameTitle: String
+    /// The installer as a program inside Wine names it, which is what
+    /// AutoIt is given (`windowsPath(ofInstaller:driveC:)`).
+    let installerWindowsPath: String
     /// The game's InstallShield installer doesn't exit by itself when run
     /// silently, so AutoIt drives it instead (`GameInfo`).
     let doesNotExitWhenSilent: Bool
     /// Where an MSI or Inno Setup installer writes its own log, as Windows sees it.
     let logPath: String?
 
-    init(installerPath: String, type: InstallerType, attempt: Int, hasAnswerFile: Bool, game: GameInfo, logPath: String? = nil) {
+    init(installerPath: String, type: InstallerType, attempt: Int, hasAnswerFile: Bool, game: GameInfo,
+         driveC: URL? = nil, logPath: String? = nil) {
         self.installerPath = installerPath
         self.type = type
         self.attempt = attempt
         self.hasAnswerFile = hasAnswerFile
-        self.gameTitle = game.title
+        self.installerWindowsPath = driveC.map { Self.windowsPath(ofInstaller: installerPath, driveC: $0) } ?? installerPath
         self.doesNotExitWhenSilent = game.doesNotExitInNonInteractiveMode
         self.logPath = logPath
     }
@@ -82,7 +85,18 @@ nonisolated struct InstallerPlan: Equatable, Sendable {
 
     /// Its arguments.
     var arguments: [String] {
-        usesAutoIt ? ["C:\\installshield-custom-dialog-automate.au3", installerPath, gameTitle] : installerArguments
+        usesAutoIt ? ["C:\\installshield-custom-dialog-automate.au3", installerWindowsPath] : installerArguments
+    }
+
+    /// The installer as a program inside Wine names it: its C: path when it
+    /// is in the prefix, as a copied disc's is. A Mac path reaches it only
+    /// through Z:, the whole Mac, so it is kept only for an installer outside
+    /// the prefix.
+    static func windowsPath(ofInstaller installerPath: String, driveC: URL) -> String {
+        let driveCPath = driveC.standardizedFileURL.path
+        let installer = URL(fileURLWithPath: installerPath).standardizedFileURL.path
+        guard installer.hasPrefix(driveCPath + "/") else { return installerPath }
+        return "C:" + installer.dropFirst(driveCPath.count).replacingOccurrences(of: "/", with: "\\")
     }
 
     /// Through `wine start /wait`, which waits for a GUI installer.

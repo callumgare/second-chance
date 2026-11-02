@@ -25,11 +25,11 @@ struct InstallerPlanTests {
         #expect(!Self.plan(.innoSetup, game: Self.stubbornGame).usesAutoIt)
     }
 
-    @Test("An AutoIt run is AutoIt's program, the script, the installer and the game's title")
+    @Test("An AutoIt run is AutoIt's program, the script and the installer")
     func autoItCommand() {
         let plan = Self.plan(.installShield, game: Self.stubbornGame)
         #expect(plan.program == "C:\\autoit\\AutoIt3.exe")
-        #expect(plan.arguments == ["C:\\installshield-custom-dialog-automate.au3", plan.installerPath, "Stubborn Game"])
+        #expect(plan.arguments == ["C:\\installshield-custom-dialog-automate.au3", plan.installerPath])
         #expect(!plan.usesStart)
         #expect(!plan.runsInteractively)
         #expect(plan.automatedDescription != nil)
@@ -62,5 +62,18 @@ struct InstallerPlanTests {
     func answerFileArgument() {
         #expect(Self.plan(.installShield).installerArguments == ["/s", "/sms", "/f1C:\\nancy-drew-installer\\setup.iss"])
         #expect(Self.plan(.installShield, answerFile: false).installerArguments == ["/r"])
+    }
+
+    @Test("AutoIt gets a disc installer's C: path, and a Mac path only for one outside the prefix")
+    func autoItInstallerWindowsPath() {
+        let driveC = URL(fileURLWithPath: "/tmp/w.app/Contents/SharedSupport/prefix/drive_c")
+        #expect(InstallerPlan.windowsPath(
+            ofInstaller: driveC.appendingPathComponent("nancy-drew-installer/disk-1/Setup.exe").path, driveC: driveC)
+                == "C:\\nancy-drew-installer\\disk-1\\Setup.exe")
+        #expect(InstallerPlan.windowsPath(ofInstaller: "/tmp/elsewhere/Setup.exe", driveC: driveC)
+                == "/tmp/elsewhere/Setup.exe")
+        // A sibling whose name starts like drive_c's isn't inside it
+        #expect(InstallerPlan.windowsPath(ofInstaller: driveC.path + "_old/Setup.exe", driveC: driveC)
+                == driveC.path + "_old/Setup.exe")
     }
 }
