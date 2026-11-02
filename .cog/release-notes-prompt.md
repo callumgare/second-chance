@@ -72,6 +72,13 @@ understands what changed for them and why it matters.
   something that worked and is now faster, clearer, easier or nicer, and
   `New` for something they couldn't do at all before. When a bullet sits in
   `Fixed`, write its headline as a fix too.
+- Order the bullets under each heading by how big a change a player would
+  think it is for them, the biggest first, not by commit order. Weigh how
+  many players it touches and how much: a fix for games that wouldn't start
+  comes before a fix for an occasional slow quit, and a new way to get
+  games comes before a new button. A change to a step everyone goes
+  through outranks one only a few will meet. In the internal section, put
+  what a curious reader would find most interesting first.
 
 **Internal changes** are ones no player would notice: the developer's
 command-line tool (`sc`, scope `sc-cli`), tests, documentation, refactors,
