@@ -540,6 +540,8 @@
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/puppet_control.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/helper_common.h",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/patch-winemac.swift",
+				"$(SRCROOT)/WrappTemplate/RosettaFaultFix/main.swift",
+				"$(SRCROOT)/Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/RosettaFaultFix.swift",
 			);
 			name = "Download And Copy Wine Files";
 			outputFileListPaths = (

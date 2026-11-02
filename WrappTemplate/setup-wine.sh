@@ -103,6 +103,19 @@ echo "🔧 Patching winemac.so to load the in-process helpers..."
 "${HELPERS_DIR}/patch-winemac.swift" \
     "${TEMP_DIR}/SharedSupport/wine/lib/wine/x86_64-unix/winemac.so"
 
+# Rosetta 2 raises faults Windows wouldn't for two things the DRM on Big Fish's
+# games (Armadillo) does: an fs: access with the 0x67 address-size prefix, which
+# it can't run, and the Windows 9x SoftICE probes, which code takes because Wine
+# on macOS runs 32-bit code in an LDT segment. The patch makes Wine's 32-bit
+# ntdll deal with them before any exception handler sees them.
+# See docs/big-fish.md#armadillo-under-rosetta.
+echo "🔧 Adding the Rosetta fault fix to Wine's 32-bit ntdll..."
+PATCH_NTDLL="${DERIVED_FILE_DIR}/patch-ntdll"
+xcrun swiftc -O -o "${PATCH_NTDLL}" \
+    "${SCRIPT_DIR}/RosettaFaultFix/main.swift" \
+    "${SCRIPT_DIR}/../Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/RosettaFaultFix.swift"
+"${PATCH_NTDLL}" "${TEMP_DIR}/SharedSupport/wine/lib/wine/i386-windows/ntdll.dll"
+
 # Fix rpaths
 echo "🔧 Fixing rpaths..."
 for binary in "${TEMP_DIR}/SharedSupport/wine/bin"/*; do
