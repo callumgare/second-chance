@@ -23,7 +23,8 @@ nonisolated public enum ReportOutcome: Equatable, Sendable {
     case sent(eventID: String, detail: ReportDetail)
     /// Nothing has failed before: the error screen asks how detailed a
     /// report to send, and holds its way out back until it is answered.
-    /// Leaving without answering sends it basic (`FailureReporter.wait`).
+    /// Leaving without answering sends it basic, or as Settings has since
+    /// been set (`FailureReporter.wait`).
     case askingHowDetailed
     /// The setting is Manual: the error screen asks what to send.
     case awaitingChoice
@@ -64,6 +65,9 @@ nonisolated public struct FailureReport: Sendable {
     var summary: String?
     /// The diagnostics bundle for this failure, once it is complete.
     var diagnostics: (@Sendable () async -> URL?)?
+    /// The windows as they were when it failed, taken before the error
+    /// screen replaced them; nil to take them as the report is sent.
+    public var screenshots: ReportScreenshots?
 
     public init(what: String, kind: String, stage: String? = LogContext.stage.name, game: String? = nil,
                 source: String? = nil, engine: String? = nil, tags: [String: String] = [:],

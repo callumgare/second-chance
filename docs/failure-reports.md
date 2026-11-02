@@ -16,8 +16,9 @@ the UI.
 One setting covers Second Chance and every wrapp (`ReportingPreferences`). It
 is a JSON file, `~/Library/Application Support/SecondChance/failure-reporting.json`
 (read key by key, so a file missing a key keeps the rest; one that can't be
-read at all stands for the most private setting, Manual with success reports
-off, as the person may have chosen exactly that),
+read at all stands for the most private setting short of Off, Manual with
+success reports off, as the person may have chosen to send nothing and we
+can't tell),
 because each wrapp is its own bundle with its own `UserDefaults`. It is read
 afresh at each failure, so a change made in Second Chance reaches wrapps that
 are already running.
@@ -27,14 +28,22 @@ are already running.
 | **Basic** (the default) | Sent basic | Sent basic |
 | **Detailed** | Sent detailed | Sent detailed |
 | **Manual** | The error screen offers Send Detailed / Send Basic / Don't Send | An alert offers the same |
+| **Off** | Nothing sent, nothing asked | Nothing sent, nothing asked |
+
+**Off is only in Settings.** Reports are how failures get found and fixed,
+so the first-failure question offers a basic or a detailed report, never
+none; a quiet line under it says reports can be turned off in Settings. Off
+is saved as `"level": "manual"` with `"off": true` beside it, because wrapps
+built by an older Second Chance read the same file and don't know an `off`
+level: a file they can't decode leaves them at their defaults, which send,
+where Manual leaves them asking.
 
 **The first failure anywhere sends nothing until it is asked.** Until
 `promptShown` is set, `FailureReporter.report` returns
 `ReportOutcome.askingHowDetailed`, and the error screen asks whether to send
-a basic or a detailed report, or none. The question makes the case that a
-detailed report is usually what it takes to fix the problem. The answer sends
-this report (or not) and becomes the setting: Basic, Detailed, or for Don't
-Send, Manual, so each later failure asks again. The screen's way out (Quit,
+a basic or a detailed report. The question makes the case that a detailed
+report is usually what it takes to fix the problem. The answer sends this
+report and becomes the setting, Basic or Detailed. The screen's way out (Quit,
 Start Without Steam, Start Over) stays hidden until then
 (`HiddenUntilReportAnswered`). Leaving anyway sends the report basic on the
 way out: `FailureReporter.wait`, which every exit path calls, sends any
@@ -42,8 +51,15 @@ unanswered first failure as basic before it waits. That covers Cmd-Q, a run
 that ends with no error window, and the wrapp's start-up errors. Nothing is
 recorded as answered then, so the next failure asks again. A crash has no
 error screen, so an alert asks the same question at the next start, and the
-crash is sent at the answer. Choosing a level in Settings counts as having
-been asked. Where nobody is there to answer (a headless build, a wrapp
+crash is sent at the answer. Esc picks neither. Choosing a level in Settings
+counts as having been asked, even while the question is up. Saving the
+settings posts a distributed notification
+(`ReportingPreferences.changedNotification`), and an error screen still
+asking, in Second Chance or any wrapp, takes the setting as its answer at
+once (`FailureReportModel.followSettings`): it sends at that level, or
+nothing for Off or Manual. The quiet line under the question says so.
+Leaving before the notification arrives does the same
+(`FailureReporter.unansweredDetail`). Where nobody is there to answer (a headless build, a wrapp
 WrappPuppeteer drives, a test: `FailureReporter.canAsk`), which happens only
 when `SECOND_CHANCE_REPORTING=1` forces reporting on, no alert is shown and a
 crash goes at the setting's level, Manual sending nothing.
@@ -56,15 +72,16 @@ What each report contains:
 | `process` (`app` / `wrapp`), game slug, source, engine (tags) | ✓ | ✓ |
 | `translocated`, `memory` and `memory_pressure` (tags, below) | ✓ | ✓ |
 | What failed, how (`kind`) and the stage: our own fixed words | ✓ | ✓ |
-| A crash's stack trace | ✓ | ✓ |
+| A crash's stack trace, and its message (redacted) | ✓ | ✓ |
 | The `FailureSummary` block (as the event's `summary` extra) | | ✓ |
 | `failure-report.zip`: the log, and the diagnostics bundle if there is one | | ✓ |
 | In the zip, for a crash: macOS's crash report (the `.ips`) | | ✓ |
-| In the zip, for a failure: screenshots of the process's own windows | | ✓ |
+| In the zip, for a failure: screenshots of the process's own windows (a build's as it failed) | | ✓ |
 | A comment and an email address, if the person adds them | ✓ | ✓ |
 
-**A basic report never contains message text**, because messages and
-associated values can hold paths. The kind of a thrown error is
+**A basic report contains no message text of ours**, because messages and
+associated values can hold paths; a crash's own message, redacted, is the
+exception, since it is often all that says why it crashed. The kind of a thrown error is
 `ErrorChain.identifier`: its type and case (`WrappBuildError.installIncomplete`,
 `NSCocoaErrorDomain 513`), with underlying errors in the `caused_by` tag, and
 for an error that says how a program ended (`ProgramExitError`: a Wine
@@ -117,11 +134,22 @@ Every event, ours or the SDK's, passes through `scrub` in `beforeSend`:
 - SteamID64s, and the `[U:1:…]` Steam3 IDs in Steam's logs, with `<steam-id>`.
 
 It is made afresh for each report, so a Steam sign-in made since the last one
-is covered. A basic report also drops a crash's exception message, keeping its
-type and stack.
+is covered.
 
 The zip's text files go through the same redactor (`ReportBundle`), and a
 text file that isn't UTF-8 is left out rather than sent unchecked.
+
+**A build's screenshots are of the step that failed**, not the error screen
+that follows it. When a build fails, `WrappBuildViewModel` takes them
+(`ReportScreenshots.capture`) before it shows the error screen, whichever of
+the bus's `.failed` and the build's own catch gets there first, and both wait
+for the same capture. That holds the error screen back for as long as the
+capture takes, so it gives up after 2 s and the report goes without them.
+They are taken only when a report could carry them (not with reporting off,
+in this run or in Settings), ride on the `FailureReport`, and are deleted when
+it is let go. Elsewhere, and for a wrapp, whose own windows at a failure are
+only its loading window (the game draws in Wine's process), they are taken as
+the report is sent.
 
 The screenshots are the one thing a redactor can't check, so
 `WindowScreenshots` decides what is in them. They are of the process's own
@@ -184,6 +212,24 @@ that outcome for `FailureReportCallout`.
   or its boot (`ReportRedactor.crashReportIdentifiers`) emptied. The `.ips` has the stack of every
   thread, which matters when the SDK's own capture comes out short: one
   crash came in with a single frame on the crashed thread.
+
+## Show What's Sent
+
+Wherever a report asks before it is sent (the first-failure question, the
+Manual choice, and the alerts for a previous run's crash), **Show What's
+Sent…** opens `ReportPreviewWindow`: what a basic and a detailed report would
+carry, with the detailed one's files as they would go in the zip, redacted
+(`ReportPreview`, built from `ReportBundle.stage`, the same staging `make`
+zips). The log is shown in the log window's own table (`LogFileView`,
+the log window's view without Export or Import), other text files as plain
+text. A failure's preview takes its own screenshots and waits for the
+diagnostics bundle, off the main actor, while the window shows a spinner.
+A crash's alert is modal on a main-queue job, where no other main-queue work
+can run, so its preview is made there and then without screenshots or a zip,
+and runs modally over the alert. The window shows the log, so report
+screenshots leave it out (`WindowScreenshots.mayCapture`). What it can't show
+exactly: the fields Sentry adds itself (described rather than copied), and a
+log trimmed to fit the zip's size cap.
 
 A new failure that someone sees should get a report too: build a
 `FailureReport` with fixed words for `what` and an identifier for `kind`.

@@ -189,6 +189,22 @@ struct ReportingPreferencesTests {
         #expect(ReportingPreferences.load(from: directory).level == .manual)
     }
 
+    @Test("Off is saved so a wrapp from an older Second Chance reads it as asking first")
+    func offRoundTrip() throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        ReportingPreferences.update(in: directory) {
+            $0.level = .off
+            $0.promptShown = true
+        }
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .off, promptShown: true))
+        // What an older Second Chance decodes: its own levels, ignoring `off`.
+        let saved = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: directory.appendingPathComponent(ReportingPreferences.fileName))) as? [String: Any]
+        #expect(saved?["level"] as? String == "manual")
+        #expect(saved?["off"] as? Bool == true)
+    }
+
     @Test("A file saved before success reports existed reads as not asked yet")
     func beforeSuccessReports() throws {
         let directory = temporaryDirectory()
@@ -213,6 +229,7 @@ struct ReportingPreferencesTests {
         (ReportLevel.basic, true, ReportDetail.basic),
         (.detailed, true, .detailed),
         (.manual, true, nil),
+        (.off, true, nil),
         (.basic, false, nil),
         (.detailed, false, nil),
     ] as [(ReportLevel, Bool, ReportDetail?)])
@@ -361,11 +378,22 @@ struct FailureReporterGatingTests {
         #expect(FailureReporter.canAsk(environment: environment) == expected)
     }
 
-    @Test("Without asking, a previous crash goes at the setting's detail; Manual drops it")
+    @Test("Leaving with the first question unanswered sends basic, unless Settings has since been set", arguments: [
+        (ReportingPreferences(level: .basic, promptShown: false), ReportDetail?.some(.basic)),
+        (ReportingPreferences(level: .off, promptShown: true), nil),
+        (ReportingPreferences(level: .manual, promptShown: true), nil),
+        (ReportingPreferences(level: .detailed, promptShown: true), .detailed),
+    ])
+    func unansweredDetail(preferences: ReportingPreferences, expected: ReportDetail?) {
+        #expect(FailureReporter.unansweredDetail(preferences) == expected)
+    }
+
+    @Test("Without asking, a previous crash goes at the setting's detail; Manual and Off drop it")
     func crashDetail() {
         #expect(FailureReporter.defaultCrashDetail(for: .detailed) == .detailed)
         #expect(FailureReporter.defaultCrashDetail(for: .basic) == .basic)
         #expect(FailureReporter.defaultCrashDetail(for: .manual) == nil)
+        #expect(FailureReporter.defaultCrashDetail(for: .off) == nil)
     }
 }
 
@@ -404,6 +432,28 @@ struct ReportBundleTests {
         #expect(try String(contentsOf: staging.appendingPathComponent("log.txt"), encoding: .utf8) == "prefix ~/Library\n")
         #expect(try String(contentsOf: staging.appendingPathComponent("diagnostics/summary.txt"), encoding: .utf8)
                 == "game files in ~/Applications\n")
+    }
+
+    @Test("A crash's preview shows its message and the files a detailed report would send, redacted")
+    func crashPreview() throws {
+        let work = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: work) }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let log = work.appendingPathComponent("run.log")
+        try Data("opened \(home)/Library/x\n".utf8).write(to: log)
+        let ips = work.appendingPathComponent("crash.ips")
+        try Data(#"{"crashReporterKey":"ABC-123"}"#.utf8).write(to: ips)
+
+        let preview = ReportPreview.previousRunCrash(exception: "EXC_BAD_ACCESS: at \(home)/x", tags: ["game": "royal-tower"],
+                                                     log: log, crashReport: ips, process: .app)
+        defer { preview.removeFiles() }
+        #expect(preview.fields.contains { $0.value == "EXC_BAD_ACCESS: at ~/x" })
+        #expect(preview.fields.contains { $0.value == "royal-tower" })
+        #expect(preview.files.map(\.id) == ["log.txt", "crash.ips"])
+        #expect(preview.files.first?.content == .text("opened ~/Library/x\n"))
+        #expect(preview.files.last.map { file in
+            if case .text(let text) = file.content { !text.contains("ABC-123") } else { false }
+        } == true)
     }
 
     @Test("Over the cap, the thread samples go first")
@@ -524,17 +574,21 @@ struct FailureReportModelTests {
         #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .basic, promptShown: true))
     }
 
-    @Test("Answering Don't Send sends nothing, and asks each time from then on")
-    func answersDontSend() async {
+    @Test("Turning reports off in Settings while the first question is up answers it: nothing is sent")
+    func settingsAnswerTheQuestion() async {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let model = FailureReportModel(preferencesDirectory: directory)
         model.track(report, sending: Task { .askingHowDetailed })
         await settle(model)
-        model.choose(nil)
+        ReportingPreferences.update(in: directory) {
+            $0.level = .off
+            $0.promptShown = true
+        }
+        model.followSettings()
         #expect(model.outcome == .declined)
         #expect(!model.holdsBackWayOut)
-        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .manual, promptShown: true))
+        #expect(ReportingPreferences.load(from: directory) == ReportingPreferences(level: .off, promptShown: true))
     }
 
     @Test("A report that was sent, or is asking whether to be, holds nothing back")

@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ (build %@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (build %2$@)"
+          }
+        }
+      }
+    },
     "%@ can't start until it quits." : {
 
     },
@@ -36,7 +46,25 @@
         }
       }
     },
+    "A %@ failure report was sent." : {
+
+    },
+    "A basic report sends only this:" : {
+
+    },
+    "A detailed report sends this, and the files listed beside it:" : {
+
+    },
     "A previous copy of the game is still running…" : {
+
+    },
+    "A random number for this copy of Second Chance, not linked to you" : {
+
+    },
+    "About the failure" : {
+
+    },
+    "Add a Comment…" : {
 
     },
     "Another game is using Steam" : {
@@ -45,10 +73,16 @@
     "Answer the question in Steam's window, and the game will carry on starting." : {
 
     },
+    "Basic Report" : {
+
+    },
     "Cancel" : {
 
     },
     "Category" : {
+
+    },
+    "Caused by" : {
 
     },
     "Close" : {
@@ -78,13 +112,34 @@
     "Copy Message" : {
 
     },
+    "Copy protection" : {
+
+    },
     "Couldn't Open Your Saved Games" : {
 
     },
     "Couldn't start Steam" : {
 
     },
+    "Detailed Report" : {
+
+    },
+    "Details" : {
+
+    },
+    "Don't Send" : {
+
+    },
     "Don't show this again" : {
+
+    },
+    "Email, if you'd like a reply (optional)" : {
+
+    },
+    "Engine" : {
+
+    },
+    "Exit code" : {
 
     },
     "Export" : {
@@ -97,6 +152,21 @@
 
     },
     "Failure Reports" : {
+
+    },
+    "Failure reports are turned off: nothing is sent when the game fails to start." : {
+
+    },
+    "Files" : {
+
+    },
+    "Game" : {
+
+    },
+    "How it failed" : {
+
+    },
+    "How much should the failure report include?" : {
 
     },
     "I Understand" : {
@@ -114,6 +184,12 @@
     "Import Failed" : {
 
     },
+    "Installation ID" : {
+
+    },
+    "Installed from" : {
+
+    },
     "Installing Steam's update" : {
 
     },
@@ -126,19 +202,37 @@
     "It's still trying. If it doesn't get going, you'll be able to sign in to Steam again from scratch." : {
 
     },
+    "Later reports are sent the same way." : {
+
+    },
     "Level" : {
 
     },
     "Log lines will appear here as the app runs." : {
 
     },
+    "Mac" : {
+
+    },
+    "Memory" : {
+
+    },
+    "Memory running short" : {
+
+    },
     "Message" : {
+
+    },
+    "No" : {
 
     },
     "No Logs" : {
 
     },
     "No Matching Lines" : {
+
+    },
+    "No failure report was sent." : {
 
     },
     "Nothing at the selected level — switch back to All." : {
@@ -169,6 +263,15 @@
     "Open a previously saved log file and show it here instead of the live logs." : {
 
     },
+    "Opened from a temporary copy" : {
+
+    },
+    "Picture of a window: %@" : {
+
+    },
+    "Putting the report together…" : {
+
+    },
     "Quit" : {
 
     },
@@ -176,6 +279,12 @@
 
     },
     "Quit it, then click Try Again." : {
+
+    },
+    "Report" : {
+
+    },
+    "Report %@" : {
 
     },
     "Save Failed" : {
@@ -196,13 +305,40 @@
     "Saving…" : {
 
     },
+    "Second Chance" : {
+
+    },
     "Second Chance is adding a game from Steam" : {
+
+    },
+    "Second Chance version" : {
+
+    },
+    "Send Basic Report" : {
+
+    },
+    "Send Comment" : {
+
+    },
+    "Send Detailed Report" : {
+
+    },
+    "Send a report about this, so it can be fixed?" : {
+
+    },
+    "Sending a failure report before quitting…" : {
+
+    },
+    "Sending a failure report…" : {
 
     },
     "Show" : {
 
     },
     "Show Log" : {
+
+    },
+    "Show What's Sent…" : {
 
     },
     "Show all lines, only warnings and above, or only errors and above." : {
@@ -218,6 +354,9 @@
 
     },
     "Sign in to Steam" : {
+
+    },
+    "Signal" : {
 
     },
     "Something in it is missing. Make the game's app again with Second Chance." : {
@@ -268,6 +407,9 @@
     "Steam seems to be stuck signing in" : {
 
     },
+    "Step" : {
+
+    },
     "Stop Previous and Continue" : {
 
     },
@@ -278,6 +420,12 @@
 
     },
     "Success reports are on: Second Chance counts when a game starts, and whether it worked." : {
+
+    },
+    "Summary of the failure" : {
+
+    },
+    "Thanks — your comment was sent with it." : {
 
     },
     "The file could not be read as a text log file." : {
@@ -305,6 +453,9 @@
 
     },
     "The game runs through Steam, so Steam is starting up first." : {
+
+    },
+    "The game's app" : {
 
     },
     "The log file could not be saved. Please try again." : {
@@ -337,6 +488,18 @@
     "Waiting for a previous copy of the game to finish closing…" : {
 
     },
+    "What failed" : {
+
+    },
+    "What happened" : {
+
+    },
+    "What were you doing when it went wrong?" : {
+
+    },
+    "What's Sent in a Report" : {
+
+    },
     "When the game fails to start, a basic report is sent: which game, and what failed." : {
 
     },
@@ -346,10 +509,28 @@
     "When the game fails to start, you're asked what to send." : {
 
     },
+    "Where" : {
+
+    },
+    "Where it happened" : {
+
+    },
+    "Which part of the code each thread was running when it crashed" : {
+
+    },
+    "Yes" : {
+
+    },
     "You can change these in Second Chance → Settings. They apply to all your games." : {
 
     },
     "Your Steam account is playing on another computer" : {
+
+    },
+    "Your name, your Mac's name and your folders are taken out of everything above." : {
+
+    },
+    "macOS version" : {
 
     }
   },

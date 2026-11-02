@@ -10,8 +10,8 @@
 //  wrapp's, so a wrapp's pictures are of its own windows only.
 //
 //  Left out: an open or save panel, which shows the person's folders and
-//  files, and the log window, whose lines name them — a picture can't be
-//  redacted the way text is.
+//  files, and the log window and report preview, whose lines name them — a
+//  picture can't be redacted the way text is.
 
 import AppKit
 import Foundation
@@ -21,6 +21,45 @@ import os
 import SecondChanceKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.Reporting")
+
+/// Pictures of the windows taken when something failed, before its error
+/// screen replaced them (`FailureReport.screenshots`). Removed from disk once
+/// nothing holds them: when the report has gone, or the screen moved on.
+nonisolated public final class ReportScreenshots: Sendable {
+    let directory: URL
+    let files: [URL]
+
+    init(directory: URL, files: [URL]) {
+        self.directory = directory
+        self.files = files
+    }
+
+    deinit {
+        do {
+            try FileManager.default.removeItem(at: directory)
+        } catch {
+            logger.warning("Couldn't remove a failure's screenshots: \(error.localizedDescription)")
+        }
+    }
+
+    /// Picture the windows now, for a failure about to be shown — nil when
+    /// no report could carry them (reporting off in this run, or in
+    /// Settings). Bounded by `timeout`, so the error screen is never held up
+    /// for long: a capture that takes longer is left out.
+    public static func capture(timeout: TimeInterval = 2) async -> ReportScreenshots? {
+        guard FailureReporter.isEnabled, ReportingPreferences.load().level != .off else { return nil }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("second-chance-screenshots-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            logger.warning("Left the screenshots out of the failure report: \(error.localizedDescription)")
+            return nil
+        }
+        let files = await WindowScreenshots.capture(into: directory, timeout: timeout)
+        return ReportScreenshots(directory: directory, files: files)
+    }
+}
 
 nonisolated enum WindowScreenshots {
 
@@ -52,6 +91,7 @@ nonisolated enum WindowScreenshots {
     @MainActor
     static func mayCapture(_ window: NSWindow) -> Bool {
         !(window is NSSavePanel) && window.identifier != LogWindow.windowIdentifier
+            && window.identifier != ReportPreviewWindow.identifier
     }
 
     @MainActor

@@ -54,7 +54,7 @@ public struct FailureReportCallout: View {
         case nil where model.report != nil:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text(model.sendingBeforeQuit ? "Sending a basic failure report before quitting…" : "Sending a failure report…")
+                Text(model.sendingBeforeQuit ? "Sending a failure report before quitting…" : "Sending a failure report…")
                     .font(.callout)
             }
         case .sent(_, let detail):
@@ -91,6 +91,7 @@ public struct FailureReportCallout: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                showWhatsSent
                 HStack {
                     Spacer()
                     // None filled: the screen's own way on is its default.
@@ -120,23 +121,32 @@ public struct FailureReportCallout: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Later reports are sent the same way. You can change that in Second Chance's Settings.")
+            Text("Later reports are sent the same way.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            showWhatsSent
             HStack {
                 Spacer()
-                // Esc: the choice that sends nothing.
-                Button("Don't Send") { model.choose(nil) }
-                    .keyboardShortcut(.cancelAction)
                 Button("Send Basic Report") { model.choose(.basic) }
                 // The default while the question holds the screen's way out back.
                 Button("Send Detailed Report") { model.choose(.detailed) }
                     .keyboardShortcut(.defaultAction)
             }
             .controlSize(.small)
+            Text(Self.turningOffHere)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityIdentifier("failure-report-detail-question")
+    }
+
+    /// Opens the window with exactly what each kind of report would send.
+    private var showWhatsSent: some View {
+        Button("Show What's Sent…") { model.showPreview() }
+            .buttonStyle(.link)
+            .controlSize(.small)
     }
 
     private var commentForm: some View {
@@ -169,13 +179,24 @@ public struct FailureReportCallout: View {
         + "A detailed one includes the log of what was happening, which is usually what it takes to track the problem down and fix it. "
         + "Your name and folders are taken out. A basic one says only which game it was and what failed."
 
+    /// Under the first-failure question, kept quiet: reports can be turned
+    /// off, but only in Settings.
+    static let turningOff = "Reports are how problems with the games get found and fixed, so they help make sure every game works. "
+        + "If you really don't want to send them, you can turn them off in Second Chance's Settings."
+
+    /// `turningOff`, on an error screen, which follows a change in Settings
+    /// at once (`FailureReportModel.followSettings`).
+    static let turningOffHere = "Reports are how problems with the games get found and fixed, so they help make sure every game works. "
+        + "If you really don't want to send them, turn them off in Second Chance's Settings, and this one won't be sent either."
+
     /// What a basic and a detailed report each say, in a sentence.
     static let levelExplanation = "A basic report says which game and what failed. A detailed one adds the log and diagnostics, with your name and folders taken out."
 }
 
 /// An error screen's way out — Quit, Start Over — kept back while the
 /// failure's report is asking how detailed to send it, so the question is
-/// answered rather than skipped. Leaving anyway (Cmd-Q) sends it basic.
+/// answered rather than skipped. Leaving anyway (Cmd-Q) sends it basic,
+/// or as Settings has since been set.
 public struct HiddenUntilReportAnswered<Content: View>: View {
     @ObservedObject var model: FailureReportModel
     @ViewBuilder var content: () -> Content

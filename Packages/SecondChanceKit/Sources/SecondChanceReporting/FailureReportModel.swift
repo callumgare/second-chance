@@ -24,6 +24,7 @@ public final class FailureReportModel: ObservableObject {
 
     private let preferencesDirectory: URL
     private var quitObserver: AnyCancellable?
+    private var settingsObserver: AnyCancellable?
 
     public init(preferencesDirectory: URL = ReportingPreferences.defaultDirectory) {
         self.preferencesDirectory = preferencesDirectory
@@ -34,6 +35,20 @@ public final class FailureReportModel: ObservableObject {
                 self.outcome = nil
                 self.sendingBeforeQuit = true
             }
+        settingsObserver = DistributedNotificationCenter.default()
+            .publisher(for: ReportingPreferences.changedNotification, object: preferencesDirectory.path as NSString)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.followSettings() }
+    }
+
+    /// Reports were set in Settings while this screen asked how detailed
+    /// to send its report: the setting answers it, sending at its level,
+    /// or nothing for Off or Manual.
+    func followSettings() {
+        guard outcome == .askingHowDetailed else { return }
+        let preferences = ReportingPreferences.load(from: preferencesDirectory)
+        guard preferences.promptShown else { return }
+        send(preferences.detailWithoutAsking)
     }
 
     /// Whether the error screen must keep its way out (Quit, Start Over)
@@ -76,11 +91,16 @@ public final class FailureReportModel: ObservableObject {
     }
 
     /// The answer to the first-failure question: send this report at
-    /// `detail`, and send later ones the same way; or (nil) send nothing,
-    /// and ask each time from now on.
-    func choose(_ detail: ReportDetail?) {
+    /// `detail`, and send later ones the same way.
+    func choose(_ detail: ReportDetail) {
         ReportingPreferences.update(in: preferencesDirectory) { $0.answerFirstQuestion(detail) }
         send(detail)
+    }
+
+    /// Open a window with what this report would send.
+    func showPreview() {
+        guard let report, let process = FailureReporter.process else { return }
+        ReportPreviewWindow.show { await ReportPreview.failure(report, process: process) }
     }
 
     func sendComment(_ text: String, email: String) {
