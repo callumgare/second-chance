@@ -1,7 +1,9 @@
 import Testing
 import Logging
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 @Suite("Subprocess line classifier")
 struct SubprocessLineClassifierTests {

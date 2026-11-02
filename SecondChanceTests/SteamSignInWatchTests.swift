@@ -7,8 +7,10 @@
 
 import Foundation
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 @Suite("Steam sign-in watch")
 struct SteamSignInWatchTests {

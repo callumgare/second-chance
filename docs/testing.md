@@ -90,14 +90,15 @@ in `installers/` doesn't skip, and takes hours.
 
 ## Test structure
 
-### Package tests (`Packages/SecondChanceKit/Tests/SecondChanceKitTests/`)
+### Package tests (`Packages/WrappKit/Tests/`, `Packages/SecondChanceKit/Tests/`)
 
-What needs neither app: the VDF, Windows-program and MSI readers, process
-listings and names, the subprocess line reader and watch, load measurement,
-the quit check, loading stages, shell quoting and the wrapp's settings. They
-run with `swift test --package-path Packages/SecondChanceKit`, which needs no
-Xcode build, in well under a second; `sc test unit` runs them as a step of its
-own, and CI with it.
+What needs neither app. `WrappKitTests`: the Windows-program and MSI readers,
+process listings and names, the subprocess line reader and watch, load
+measurement, shell quoting and the wrapp's settings. `SecondChanceKitTests`:
+the VDF reader, the quit check, the in-process helpers' variables and loading
+stages. They run with `swift test --package-path Packages/<package>`, which
+needs no Xcode build, in well under a second; `sc test unit` runs them as a
+step of its own, and CI with it.
 
 `Packages/WrappBuilder/Tests/` are the same kind: every program bundle checked
 against the manifest schema, the YAML 1.2 cases, and a check that GameCatalog's

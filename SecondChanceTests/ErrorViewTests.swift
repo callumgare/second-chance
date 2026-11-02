@@ -9,8 +9,10 @@
 import Testing
 import Foundation
 import Logging
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 private let testLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.ErrorViewTests")
 

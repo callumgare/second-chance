@@ -214,7 +214,7 @@ open from the menu bar closes it, and with nothing ever locking the cursor the
 helper kept clicking for its full 15 tries — again on every return to the app.
 
 So the wrapp arms it only where cnc-ddraw may be drawing. `GameGraphicsAPI`
-(`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) reads the DLLs the game's `.exe` imports, from its PE import
+(`Packages/WrappKit/Sources/WindowsFormats/`) reads the DLLs the game's `.exe` imports, from its PE import
 directory: `ddraw.dll` means DirectDraw; `d3d8.dll` or `d3d9.dll` without it
 means Direct3D, and cursor lock stays unarmed. Every game checked fell cleanly
 on one side, the Steam copies too: Steam's DRM wrapper leaves the imports

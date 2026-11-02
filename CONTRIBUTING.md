@@ -15,8 +15,10 @@ There are two main parts:
   needed to run one game — Wine or ScummVM, their settings, and the installed game itself.
 
 Second Chance copies the wrapper from inside itself for each game and installs the game into the copy. Code both apps
-use (logging, running Wine, driving Steam, failure reports) is in `Packages/SecondChanceKit/`, a local Swift package with two modules:
-`SecondChanceKit`, and `SecondChanceReporting`, which holds everything that uses Sentry. WrappPuppeteer, the tool the
+use is in local Swift packages: what any program that builds or runs wrapps needs (logging, running processes and Wine,
+reading Windows programs) in `Packages/WrappKit/`, and Second Chance's own (driving Steam, its windows, failure reports)
+in `Packages/SecondChanceKit/`, which has two modules: `SecondChanceKit`, and `SecondChanceReporting`, which holds
+everything that uses Sentry. WrappPuppeteer, the tool the
 integration tests drive games with, uses `SecondChanceKit` too. Each game Second Chance knows is described by a program bundle in `Bundles/`
 ([docs/program-bundles.md](docs/program-bundles.md)), and the list made from them is a package of its own,
 `Packages/GameCatalog/`, which the developer CLI uses as well.

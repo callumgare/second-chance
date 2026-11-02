@@ -8,6 +8,7 @@ import Foundation
 import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 @Suite("Wine prefix cache key")
 struct WinePrefixCacheKeyTests {

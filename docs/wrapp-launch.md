@@ -54,7 +54,7 @@ desktop access starts `explorer.exe /desktop` and waits only 10 s for it; on a
 loaded machine under Rosetta that runs out, and the game carries on with no
 display adapters — Secrets Can Kill Remastered then crashes on a null Direct3D
 object exactly 10 s in. `WineDesktop`
-(`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) starts the desktop
+(`Packages/WrappKit/Sources/WineKit/`) starts the desktop
 itself and waits until it has registered the display devices, which it detects
 through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key. A build waits up to
 600 s, since with every core busy a fresh session has taken two and a half

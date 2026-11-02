@@ -8,8 +8,10 @@
 //  lock on the launches, since a game runs full screen and must be in front.
 
 import Foundation
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 enum IntegrationStages {
     /// Builds at once (`sc test integration --build-concurrency`), and the

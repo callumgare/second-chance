@@ -78,10 +78,10 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the Wine prefix cache |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/WrappKit/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the Wine prefix cache |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
-| [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/SecondChanceKit/Sources/SecondChanceKit/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
+| [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/WrappKit/Sources/WrappLogging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
 | [docs/program-bundles.md](docs/program-bundles.md) | You are adding or changing a game, or touching `Bundles/` — a program bundle's `manifest.yaml`, its JSON Schema, how bundles are read (YAML 1.2) and checked (ajv in JavaScriptCore), `Packages/WrappBuilder/`, the generated table of games (`GameInfoProvider+Bundles.swift`), or `sc bundle` |
@@ -186,12 +186,28 @@ step by step, including the resource-ownership rules and both injection seams.
 Code more than one app uses lives in `Packages/`, in local Swift packages
 the Xcode project depends on. `Packages/SecondChanceKit/` has two modules:
 
-- **`SecondChanceKit`** (`Packages/SecondChanceKit/Sources/SecondChanceKit/`): logging, Wine,
-  Steam, the loading window's stages and the rest. Second Chance,
-  WrappTemplate and WrappPuppeteer all link it.
+- **`SecondChanceKit`** (`Packages/SecondChanceKit/Sources/SecondChanceKit/`):
+  Steam, the loading and log windows, crash markers and the rest of Second
+  Chance's own, and it re-exports `WrappKit`'s modules (next paragraph), so
+  an app imports `SecondChanceKit` alone. Second Chance, WrappTemplate and
+  WrappPuppeteer all link it.
 - **`SecondChanceReporting`** (`Packages/SecondChanceKit/Sources/SecondChanceReporting/`):
   failure and success reports, and the only code that imports Sentry.
   Second Chance and WrappTemplate link it; WrappPuppeteer doesn't.
+
+`Packages/WrappKit/` holds what any program that builds or runs wrapps
+needs, with nothing of Second Chance's own, one module each: `WrappLogging`
+(the swift-log handlers, `LogStore`, `LogContext`, `RunContext`),
+`ProcessKit` (`Blocking`, `ProcessList`, `ChildProcess`, `SystemLoad`,
+running and logging subprocesses), `WindowsFormats` (`WindowsExecutable`,
+`MSISummary`, `CopyProtection`, `GameGraphicsAPI`), `WineKit` (the Wine
+library) and `WrappFormat` (`WrappLayout`, `WrappSettings`,
+`WrappSource`). It depends only on swift-log and `GameCatalog`, so the
+builder (`Packages/WrappBuilder/`, [docs/program-bundles.md](docs/program-bundles.md)),
+which may one day be a command-line tool, can use it without fetching
+Sentry, as anything depending on the `SecondChanceKit` package does. Code
+that names Second Chance, shows a window or knows Nancy Drew stays in
+`SecondChanceKit`.
 
 `Packages/GameCatalog/` is a package of its own: `GameInfo`, the engine and
 `GameInfoProvider`, with nothing but Foundation. Every app links it, and
@@ -204,7 +220,8 @@ The rules that keep it working:
   module) uses must be `public`; everything else stays `internal`. Make a
   declaration public when the compiler asks, not ahead of time. A `public`
   function's default argument values must be public too. Tests reach the
-  rest with `@testable import SecondChanceKit`.
+  rest with `@testable import SecondChanceKit`, and `@testable import` of
+  the `WrappKit` module that declares it (`WineKit`, `ProcessKit`, …).
 - **`SecondChanceKit` never depends on reporting.** When it needs to know
   something only reporting knows, reporting tells it (as
   `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
@@ -280,7 +297,7 @@ direct assignment.
   waited for with `waitUntilExit()`, or a big copy, removal or walk over
   files, freezes the window until it's done. Run a program with
   `Process.output(of:_:)` and other blocking work in `Blocking.run`
-  (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
+  (`Packages/WrappKit/Sources/ProcessKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
   Code on a plain thread — a GCD queue, a `Thread`, a signal handler — calls
   async code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
 - **Main-actor code that runs off the main thread crashes.** Swift 6 checks
@@ -342,7 +359,7 @@ direct assignment.
   `privacy:`) and its Wine ones (`wine_without_crash_handler`,
   `wine_path_outside_library`) ([docs/dev-cli.md](docs/dev-cli.md#lint)).
 - **Every Wine program starts through the Wine library.** `Wine.run`,
-  `output(of:)` and `start` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/WineProcess.swift`) take a
+  `output(of:)` and `start` (`Packages/WrappKit/Sources/WineKit/WineProcess.swift`) take a
   `WineCommand`; `wine.registry`, `wine.server` and `Winetricks` cover the
   registry, the session and winetricks. Don't build a `Process` for Wine,
   `wineserver` or winetricks: the launcher is what clears Sentry's exception
@@ -543,7 +560,8 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
 
 - **Unit tests** live in `SecondChanceTests/`, using Swift Testing, except
   those that need neither app, which live in the package beside the code
-  (`Packages/SecondChanceKit/Tests/SecondChanceKitTests/`: parsers, process
+  (`Packages/WrappKit/Tests/WrappKitTests/` and
+  `Packages/SecondChanceKit/Tests/SecondChanceKitTests/`: parsers, process
   listings, line handling) and run with `swift test`, in seconds and with no
   Xcode build; `sc test unit` runs both. Put a new test there when it can.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new

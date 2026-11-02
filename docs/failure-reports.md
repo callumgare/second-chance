@@ -310,7 +310,7 @@ normally, with either arrangement.
 ### Child processes
 
 **Start Wine with `runWithoutCrashHandler()`, never a bare `run()`**
-(`Packages/SecondChanceKit/Sources/SecondChanceKit/ChildProcess.swift`). A child inherits its parent's task exception
+(`Packages/WrappKit/Sources/ProcessKit/ChildProcess.swift`). A child inherits its parent's task exception
 ports, so with reporting on, a child's bad memory accesses are sent to
 Sentry's Mach exception handler inside Second Chance or the wrapp, rather than
 becoming a signal in the child. Windows programs fault on purpose all the
@@ -336,10 +336,10 @@ puts them back, all under a lock. The child, and anything it starts, keeps
 the default ports, so its faults reach Wine. A crash on another of our threads
 in that moment still reaches Sentry's signal handler; only its Mach handler
 misses it. Every Wine, `wineserver` and winetricks process starts this way,
-as all of them start in one place (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/WineProcess.swift`), and so
+as all of them start in one place (`Packages/WrappKit/Sources/WineKit/WineProcess.swift`), and so
 does ScummVM (`TaggedProcess`). A
 SwiftLint rule (`wine_without_crash_handler`) rejects a bare `run()` in
-`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/` and `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, and `ChildProcessTests` checks that a
+`Packages/WrappKit/Sources/WineKit/`, `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/` and `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, and `ChildProcessTests` checks that a
 child started this way faults normally while one started with `run()`
 hangs.
 

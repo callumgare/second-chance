@@ -101,7 +101,7 @@ discs name the game in only one of these: Castle Malloy's only in its MSI's
 subject. A Her download adds the names its installer carries as plain text
 (`embeddedInstallerSignals`). The same version info tells InstallShield from
 Inno Setup (`GameInstallerRunner.detectInstallerType`). Both readers are
-Swift, in `Packages/SecondChanceKit/Sources/SecondChanceKit/Windows/` and `SecondChance/Services/`, and read only as
+Swift, in `Packages/WrappKit/Sources/WindowsFormats/` and `SecondChance/Services/`, and read only as
 much of the file as they need.
 
 A disc or Her download whose game isn't recognised (`GameInfo.unknownGame`,
@@ -313,7 +313,7 @@ record, which `sc wrapp build` shows after the stage.
 ## Running Wine
 
 Every Wine, `wineserver` and winetricks process — the build's and the wrapp's
-— starts in one place, `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/WineProcess.swift`. `Wine(wrapp:prefix:)`
+— starts in one place, `Packages/WrappKit/Sources/WineKit/WineProcess.swift`. `Wine(wrapp:prefix:)`
 names one wrapp's Wine and the prefix it runs in (the wrapp's own unless given
 another), and a `WineCommand` says what to run: `.program(exe, args)`,
 `.start(exe, args)` for `wine start /wait`, `.wine(args)` for a builtin such as
@@ -344,10 +344,10 @@ left, rather than wait out their 3 s linger; `kill()` follows
 killing the server alone, leaves running for good), and `Winetricks` (app only, as only Second Chance bundles it)
 installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,
 which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
-GCD queues call it through `Blocking.wait` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`), the
+GCD queues call it through `Blocking.wait` (`Packages/WrappKit/Sources/ProcessKit/Blocking.swift`), the
 build's blocking work goes the other way through `Blocking.run`, and a
 SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
-`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`.
+`Packages/WrappKit/Sources/WineKit/`.
 
 ## The prefix cache
 

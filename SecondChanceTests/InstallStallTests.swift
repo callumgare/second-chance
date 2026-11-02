@@ -8,8 +8,10 @@
 import CoreGraphics
 import Foundation
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 @Suite("A stalled install")
 struct InstallStallTests {

@@ -9,8 +9,12 @@
 import Foundation
 import Logging
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WindowsFormats
+@testable import WineKit
+@testable import WrappLogging
 
 @Suite("A build's part of the log")
 struct BuildLogContextTests {

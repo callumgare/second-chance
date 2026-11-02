@@ -3,6 +3,8 @@ import Foundation
 import Logging
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
+@testable import WrappLogging
 
 @Suite("Failure summary")
 struct FailureSummaryTests {

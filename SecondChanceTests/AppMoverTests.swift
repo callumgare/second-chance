@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 @Suite("Moving the app to Applications")
 struct AppMoverTests {

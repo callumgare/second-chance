@@ -11,8 +11,11 @@
 
 import Foundation
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WindowsFormats
+@testable import WineKit
 import GameCatalog
 
 /// The VM `sc` prepared: running, reachable over SSH, someone logged in at
