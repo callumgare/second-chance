@@ -1,0 +1,36 @@
+# DO nancy-drew.patch --id=<patch> --into=<the game's folder>
+#
+# Applies one of Her Interactive's official patches (patches.json, by its
+# id; docs/game-patches.md), as GameInstallerRunner+Patches does today. The
+# patch's archive is found by its sha256 in the download cache before it is
+# downloaded. Each step is named after the patch, so a skipped one is
+# recorded by its id.
+FUNCTION patch
+  ARG id
+  ARG into
+  IF ${data.patches.${id}.action}=copy-into-game-dir
+    # A data file, dropped into the game's folder.
+    ADD --name=${id} --checksum=sha256:${data.patches.${id}.sha256} \
+        --unpack=zip --member=${data.patches.${id}.payload} \
+        ${data.patches.${id}.url} ${into}/${data.patches.${id}.destinationSubdirectory:-}
+  ELSE IF ${data.patches.${id}.action}=extract-into-game-dir
+    # A self-extracting zip, unpacked into the game's folder.
+    ADD --name=${id} --checksum=sha256:${data.patches.${id}.sha256} \
+        --unpack=zip --member=${data.patches.${id}.payload} --extract \
+        ${data.patches.${id}.url} ${into}/${data.patches.${id}.destinationSubdirectory:-}
+  ELSE IF ${data.patches.${id}.automation:-none}=none
+    # A patcher with a silent mode, staged beside the game, where these old
+    # patchers look for it.
+    installer.RUN --name=${id} --into=${into} \
+        --mount=type=fetch,url=${data.patches.${id}.url},sha256=${data.patches.${id}.sha256},unpack=zip,member=${data.patches.${id}.payload},target=${into}/${data.patches.${id}.payload} \
+        ${into}/${data.patches.${id}.payload}
+  ELSE
+    # A wizard with no silent mode, clicked through by its AutoIt script,
+    # which exits 0 only once the patcher says the game was updated.
+    RUN --name=${id} \
+        --mount=type=fetch,url=${data.patches.${id}.url},sha256=${data.patches.${id}.sha256},unpack=zip,member=${data.patches.${id}.payload},target=${into}/${data.patches.${id}.payload} \
+        --mount=type=bind,from=nancy-drew,source=assets/${data.patches.${id}.automation}.au3,target=C:/patch.au3 \
+        --mount=type=bind,from=installer,source=autoit,target=C:/autoit \
+        C:/autoit/AutoIt3.exe C:/patch.au3 ${into}/${data.patches.${id}.payload}
+  END
+END

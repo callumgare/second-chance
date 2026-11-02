@@ -25,7 +25,7 @@ struct BundleCheckCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let loader = try ProgramBundleLoader(root: session.repo.bundles)
+        let loader = try ProgramBundleLoader(root: session.repo.bundles, modules: try loadModules(session))
         let folders = paths.isEmpty
             ? try loader.bundleFolders()
             : paths.map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL }
@@ -65,12 +65,22 @@ struct BundleListCommand: AsyncParsableCommand {
             }
             return query
         }
-        let loader = try ProgramBundleLoader(root: session.repo.bundles)
+        let loader = try ProgramBundleLoader(root: session.repo.bundles, modules: try loadModules(session))
         for folder in try loader.bundleFolders() {
             let document = try loader.document(in: folder)
             guard queries.allSatisfy({ $0.matches(document) }) else { continue }
             let id = (document as? [String: Any])?["id"] as? String
             session.ui.result(id ?? session.repo.display(folder))
         }
+    }
+}
+
+/// Every module in Modules/, which bundles' Wrappfiles are checked against.
+func loadModules(_ session: Session) throws -> [ModuleFolder] {
+    switch try ModuleLoader(root: session.repo.modules).loadAll() {
+    case .success(let modules): return modules
+    case .failure(let problems):
+        for problem in problems.all { session.ui.line(problem.description) }
+        throw SCError("Some modules have problems; fix them first (sc module check).")
     }
 }

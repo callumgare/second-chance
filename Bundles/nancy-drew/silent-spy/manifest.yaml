@@ -14,14 +14,17 @@ variants:
 editions:
   - id: "cd"
     source: "disc"
+    build: { target: "disc" }
     inputs:
       - { id: "disc-1" }
     detect: { codes: ["SPY"] }
   - id: "her-windows"
     source: "her-download"
+    build: { target: "her-download" }
     inputs: [{ id: "installer", format: "windows" }]
   - id: "her-mac"
     source: "her-download"
+    build: { target: "her-download" }
     inputs: [{ id: "installer", format: "mac" }]
   - id: "steam"
     source: "steam"

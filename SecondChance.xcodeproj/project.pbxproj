@@ -23,6 +23,7 @@
 		E25C0D102F01000000000001 /* WrappBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0D012F01000000000001 /* WrappBuilder */; };
 		E25C0E102F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
 		E25C0E112F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
+		E25C0F102F01000000000001 /* Bundles in Resources */ = {isa = PBXBuildFile; fileRef = E25C0F032F01000000000001 /* Bundles */; };
 		E25C0B122F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0B142F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0C142F01000000000001 /* PuppeteerCore in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0C012F01000000000001 /* PuppeteerCore */; };
@@ -73,6 +74,7 @@
 		E25C0B032F01000000000001 /* GameCatalog */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = GameCatalog; path = Packages/GameCatalog; sourceTree = "<group>"; };
 		E25C0D032F01000000000001 /* WrappBuilder */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = WrappBuilder; path = Packages/WrappBuilder; sourceTree = "<group>"; };
 		E25C0E032F01000000000001 /* Modules */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Modules; sourceTree = "<group>"; };
+		E25C0F032F01000000000001 /* Bundles */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Bundles; sourceTree = "<group>"; };
 		E25C0C032F01000000000001 /* PuppeteerCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = PuppeteerCore; path = Packages/PuppeteerCore; sourceTree = "<group>"; };
 		E25C0A032F01000000000001 /* SecondChanceKit */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = SecondChanceKit; path = Packages/SecondChanceKit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -208,6 +210,7 @@
 				E25C0B032F01000000000001 /* GameCatalog */,
 				E25C0D032F01000000000001 /* WrappBuilder */,
 				E25C0E032F01000000000001 /* Modules */,
+				E25C0F032F01000000000001 /* Bundles */,
 				E25C0C032F01000000000001 /* PuppeteerCore */,
 				E25C0A032F01000000000001 /* SecondChanceKit */,
 				E2C65E102F15FA4700FAFF50 /* WrappTemplate */,
@@ -406,6 +409,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E25C0E102F01000000000001 /* Modules in Resources */,
+				E25C0F102F01000000000001 /* Bundles in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

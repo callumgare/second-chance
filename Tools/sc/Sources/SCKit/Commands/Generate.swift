@@ -19,7 +19,7 @@ struct GenerateCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         let bundles: [ProgramBundle]
-        switch try ProgramBundleLoader(root: session.repo.bundles).loadAll() {
+        switch try ProgramBundleLoader(root: session.repo.bundles, modules: try loadModules(session)).loadAll() {
         case .success(let loaded): bundles = loaded
         case .failure(let problems):
             for problem in problems.all { session.ui.line(problem.description) }

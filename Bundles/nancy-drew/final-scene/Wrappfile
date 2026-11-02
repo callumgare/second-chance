@@ -1,0 +1,27 @@
+# The Final Scene: how Second Chance builds it. Written from what its builders did
+# for it when bundles came in; change it as the game needs.
+
+# Where Her's download installs the game, whose data ScummVM reads.
+ARG install-dir="C:/Program Files (x86)/Her Interactive/The Final Scene"
+
+FROM scratch AS prefix
+USE wine@10                                # set up as the wine module's prefix.yaml says
+
+# The CD edition: ScummVM reads the disc's data, kept in the wrapp and
+# patched through Wine, which the wrapp then leaves out.
+FROM prefix AS disc
+USE nancy-drew
+USE scummvm
+wine.KEEP-DISCS --into=C:/nancy-drew-installer
+EXPORT C:/nancy-drew-installer/disk-1
+
+# Her Interactive's download: a Windows installer, or a Mac app whose
+# Windows game is taken out
+FROM prefix AS her-download
+ARG install-dir
+USE her-download
+USE nancy-drew
+USE scummvm
+her-download.INSTALL installer --into=${install-dir}
+
+# Steam's edition names no stage: the steam module's default stages build it.

@@ -41,10 +41,11 @@ A download's installer asks different questions from the disc's. Scarlet Hand's
 disc asks 8 (welcome, licence, two info pages, folder, setup type, options,
 finish) and the download asks 5 (welcome, licence, folder, ready, finish).
 Each answer file is also keyed on the product GUID in `setup.ini`, which
-differs between the two. So downloads have answer files of their own, in
-`SecondChance/Resources/installer-answer-files/her-download/<slug>.iss`, beside the
-discs' in `installer-answer-files/`. `WrappBuildHelper.installAnswerFile` copies the
-one for the build's source to `nancy-drew-installer/setup.iss`.
+differs between the two. So downloads have answer files of their own: each
+game's bundle has the disc's as `assets/disc.iss` and the download's as
+`assets/her-download.iss` (`Bundles/nancy-drew/<slug>/`,
+[program-bundles.md](program-bundles.md)). `WrappBuildHelper.installAnswerFile`
+copies the one for the build's source to `nancy-drew-installer/setup.iss`.
 
 Only Scarlet Hand has one so far. To record one for another game:
 
@@ -52,7 +53,9 @@ Only Scarlet Hand has one so far. To record one for another game:
    `wine <download>.exe /extract_all:C:\out`.
 2. Run the wizard in record mode, `wine C:\out\Disk1\setup.exe /r /f1C:\out\rec.iss`,
    and click through it accepting the defaults.
-3. Save `rec.iss` as `installer-answer-files/her-download/<slug>.iss`.
+3. Save `rec.iss` as `Bundles/nancy-drew/<slug>/assets/her-download.iss`, and
+   name it in the bundle's Wrappfile (`her-download.INSTALL installer
+   --answer-file=${assets/her-download.iss}`).
 
 The downloads install to `C:\Program Files (x86)\Her Interactive\<game>`, not to the
 disc's `C:\Program Files (x86)\Nancy Drew\<game>` or `C:\Nancy Drew\<game>`. So the

@@ -66,3 +66,14 @@ nonisolated enum DownloadCache {
         return file
     }
 }
+
+/// The program bundles Second Chance ships (`Contents/Resources/Bundles`,
+/// docs/program-bundles.md).
+nonisolated enum ShippedBundles {
+    /// A file in the assets of the Nancy Drew game `slug`'s bundle, if it has it.
+    static func asset(_ name: String, ofGame slug: String, in bundle: Bundle = .main) -> URL? {
+        guard let file = bundle.resourceURL?.appendingPathComponent("Bundles/nancy-drew/\(slug)/assets/\(name)"),
+              FileManager.default.fileExists(atPath: file.path) else { return nil }
+        return file
+    }
+}

@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "disc"
+release: 1
+native: "disc"                               # its Swift: DiscBuild, DiskWrappBuilder, ISOMounter
+versions:
+  - { version: "1" }
+notes:
+  about: "A source: the person's own disc, brought in as an input."

@@ -14,11 +14,13 @@ variants:
 editions:
   - id: "cd"
     source: "disc"
+    build: { target: "disc" }
     inputs:
       - { id: "disc-1" }
       - { id: "disc-2" }
   - id: "her-windows"
     source: "her-download"
+    build: { target: "her-download" }
     inputs: [{ id: "installer", format: "windows" }]
   - id: "steam"
     source: "steam"

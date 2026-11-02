@@ -31,11 +31,14 @@ public nonisolated struct ProgramBundle: Sendable {
 public nonisolated final class ProgramBundleLoader {
     public let root: URL
     private let validator: SchemaValidator
+    /// The modules a bundle's Wrappfile is checked against.
+    private let modules: [ModuleFolder]
 
     /// A loader for the bundles under `root`, which holds
-    /// `manifest.schema.json`.
-    public init(root: URL) throws {
+    /// `manifest.schema.json`, checking their Wrappfiles against `modules`.
+    public init(root: URL, modules: [ModuleFolder]) throws {
         self.root = root
+        self.modules = modules
         validator = try SchemaValidator()
         let schema = root.appendingPathComponent("manifest.schema.json")
         try validator.addSchema(Data(contentsOf: schema))
@@ -90,7 +93,8 @@ public nonisolated final class ProgramBundleLoader {
         } catch {
             return problems(["manifest.yaml couldn't be read: \(error)"])
         }
-        let messages = Self.problems(with: manifest, in: folder)
+        var messages = Self.problems(with: manifest, in: folder)
+        messages += wrappfileProblems(manifest, in: folder)
         if !messages.isEmpty { return problems(messages) }
         return .success(ProgramBundle(folder: folder, manifest: manifest))
     }
@@ -117,6 +121,23 @@ public nonisolated final class ProgramBundleLoader {
     public struct Problems: Error, CustomStringConvertible {
         public let all: [ProgramBundle.Problem]
         public var description: String { all.map(\.description).joined(separator: "\n") }
+    }
+
+    /// What's wrong with the bundle's Wrappfile, which a bundle with editions
+    /// to build has (every one does, but one whose only edition is Steam's).
+    func wrappfileProblems(_ manifest: Manifest, in folder: URL) -> [String] {
+        let file = folder.appendingPathComponent("Wrappfile")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else {
+            let needed = manifest.editions.contains { $0.build != nil } || manifest.variants?.contains { $0.build != nil } == true
+            return needed ? ["has editions to build but no Wrappfile"] : []
+        }
+        do {
+            let parsed = try WrappfileParser.parse(text)
+            return WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: modules).problems(parsed)
+                .map { "Wrappfile \($0)" }
+        } catch {
+            return ["Wrappfile \(error)"]
+        }
     }
 
     /// What the schema can't check: rules across fields and the folder.

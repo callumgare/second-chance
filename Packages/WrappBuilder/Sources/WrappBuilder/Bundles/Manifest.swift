@@ -20,6 +20,8 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public let seriesOrder: Int?
     public let displayName: String?
     public let formerBundleIds: [String]?
+    /// A Wrappfile function the default stages run first.
+    public let setup: String?
     public let variants: [Variant]?
     public let editions: [Edition]
 
@@ -29,7 +31,15 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
 
     public struct Variant: Decodable, Hashable, Sendable {
         public let id: String
+        public let build: Build?
         public let launch: Launch?
+    }
+
+    /// The Wrappfile stage built (`target`), and the stage it starts from
+    /// on a fresh build (`base`).
+    public struct Build: Decodable, Hashable, Sendable {
+        public let target: String
+        public let base: String?
     }
 
     public struct Launch: Decodable, Hashable, Sendable {
@@ -49,6 +59,14 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let detect: Detect?
         public let installer: Installer?
         public let drm: String?
+        public let build: Build?
+        /// Its choices, by name: each an `ARG` its stages may read.
+        public let choices: [String: Choice]?
+    }
+
+    public struct Choice: Decodable, Hashable, Sendable {
+        public let options: [String]
+        public let `default`: String
     }
 
     public enum Source: String, Decodable, Hashable, Sendable {

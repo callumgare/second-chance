@@ -17,8 +17,12 @@ Modules/
     module.yaml
     prefix.yaml             how a new prefix is set up (prefix.schema.json beside it)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
-  scummvm/  steam/  nancy-drew/
+  scummvm/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
+
+`installer`, `disc`, `her-download` and `big-fish` are, so far, a `module.yaml` naming their
+Swift: the instructions a Wrappfile gives them ([wrappfile.md](wrappfile.md))
+and today's builders.
 
 Second Chance ships the folder in its resources (`Contents/Resources/Modules`),
 where a build reads it, and so does WrappPuppeteer, for its needles.
@@ -55,6 +59,8 @@ it.
 | `nancy-drew` | `clean-exit-log.yaml`: the log Her's later engine writes, and its clean-exit line | the wrapp (`HerEngineLog`), compiled in by `sc generate` |
 | `nancy-drew` | `assets/*.au3`: the AutoIt scripts that click through an installer that won't run silently, and patchers with no silent mode | `GameInstallerRunner` |
 | `nancy-drew` | `needles/`: the splash screens WrappPuppeteer clicks past, and the main menu's quit button | WrappPuppeteer (`NancyDrewNeedles`), from the source tree or its bundle's copy |
+
+| `nancy-drew` | `functions/patch`, `functions/configure-ini`: Wrappfile functions (`DO nancy-drew.patch --id=… --into=…`), and `assemble`, which runs `configure-ini` after every final stage that uses the module | the Wrappfile checker, for now |
 
 Second Chance's app finds the nancy-drew module through `NancyDrewModule`.
 The quit scenario itself is still Swift (`NancyDrewQuitScenario`), until

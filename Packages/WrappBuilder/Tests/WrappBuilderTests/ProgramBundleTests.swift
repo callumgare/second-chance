@@ -9,9 +9,14 @@ nonisolated let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent()
 nonisolated let bundlesRoot = repoRoot.appendingPathComponent("Bundles")
 
+/// Every module in the repo's Modules/.
+nonisolated func shippedModules() throws -> [ModuleFolder] {
+    try ModuleLoader(root: repoRoot.appendingPathComponent("Modules")).loadAll().get()
+}
+
 struct ProgramBundleTests {
     @Test func everyBundleIsValid() throws {
-        let loader = try ProgramBundleLoader(root: bundlesRoot)
+        let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let folders = try loader.bundleFolders()
         #expect(folders.count >= 33)
         for folder in folders {
@@ -22,7 +27,7 @@ struct ProgramBundleTests {
     }
 
     @Test func theCatalogueIsWhatTheBundlesMake() throws {
-        let loader = try ProgramBundleLoader(root: bundlesRoot)
+        let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let bundles = try loader.loadAll().get()
         let generated = GameCatalogSource.source(for: GameCatalogSource.games(from: bundles))
         let checkedIn = try String(contentsOf: repoRoot.appendingPathComponent(GameCatalogSource.path), encoding: .utf8)
@@ -30,14 +35,14 @@ struct ProgramBundleTests {
     }
 
     @Test func theCatalogueRoundTripsThroughTheSourceItIsMadeOf() throws {
-        let loader = try ProgramBundleLoader(root: bundlesRoot)
+        let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let games = GameCatalogSource.games(from: try loader.loadAll().get())
         #expect(games == GameInfoProvider.shared.allGames())
     }
 
     @Test func aFolderMustMatchItsId() throws {
         let folder = try temporaryBundle(id: "nancy-drew/elsewhere", in: "nancy-drew/old-clock")
-        let loader = try ProgramBundleLoader(root: folder.deletingLastPathComponent().deletingLastPathComponent())
+        let loader = try ProgramBundleLoader(root: folder.deletingLastPathComponent().deletingLastPathComponent(), modules: [])
         guard case .failure(let problems) = loader.load(folder) else {
             Issue.record("loaded a bundle in the wrong folder")
             return

@@ -14,6 +14,8 @@ Bundles/
   nancy-drew/                  a namespace: who the bundles come from
     blue-moon/                 one program
       manifest.yaml
+      Wrappfile                how each edition is built (docs/wrappfile.md)
+      assets/                  files the Wrappfile names: disc.iss, her-download.iss
 ```
 
 ## The manifest
@@ -129,12 +131,16 @@ will hold everything that turns a bundle into a wrapp, kept apart from the app.
 ## Commands
 
 ```bash
-./sc bundle check                         # check every bundle against the schema
+./sc bundle check                         # check every bundle: its manifest and its Wrappfile
 ./sc bundle check Bundles/nancy-drew/old-clock
 ./sc bundle list --where notes.installer=installshield
 ./sc bundle list --where editions.source=steam --where series="Nancy Drew"
 ./sc generate                             # regenerate GameCatalog's table (and modules' Swift)
 ```
+
+Second Chance ships `Bundles/` in its resources, where a build finds a game's
+answer file (`assets/disc.iss`, `assets/her-download.iss`). Each edition names
+the Wrappfile stage it builds (`build: { target: "disc" }`).
 
 `--where` takes a path into the manifest and a value; a list along the path
 matches when any item does, so `editions.source=steam` is any edition. Repeat it

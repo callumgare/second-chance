@@ -217,16 +217,17 @@ class WrappBuildHelper {
     /// `installerBaseDir` (the wrapp's `drive_c/nancy-drew-installer`), where
     /// `GameInstallerRunner` looks for one to run the installer silently.
     ///
-    /// Answer files live in the bundle's `installer-answer-files`, the discs'
-    /// at its top level and other sources' in a subdirectory named after the
-    /// source (`her-download/`), since a download's installer asks different
-    /// questions from the disc's. Returns whether there was one to copy; a
-    /// game without one installs interactively.
+    /// Answer files are the game's bundle's assets (`Bundles/nancy-drew/<slug>/assets/`,
+    /// shipped in Second Chance's resources, which its Wrappfile names): the
+    /// disc's `disc.iss`, and a download's `her-download.iss`, since a
+    /// download's installer asks different questions from the disc's.
+    /// Returns whether there was one to copy; a game without one installs
+    /// interactively.
     @discardableResult
     func installAnswerFile(forGame gameSlug: String, source: WrappSource, into installerBaseDir: URL) -> Bool {
-        let directory = source == .disk ? "installer-answer-files" : "installer-answer-files/\(source.rawValue)"
-        guard let issPath = Bundle.main.path(forResource: gameSlug, ofType: "iss", inDirectory: directory) else {
-            logger.notice("ℹ️ No setup.iss in \(directory) for \(gameSlug)")
+        let name = source == .disk ? "disc.iss" : "\(source.rawValue).iss"
+        guard let issPath = ShippedBundles.asset(name, ofGame: gameSlug)?.path else {
+            logger.notice("ℹ️ No \(name) in \(gameSlug)'s bundle")
             return false
         }
         let destination = installerBaseDir.appendingPathComponent("setup.iss")
@@ -236,7 +237,7 @@ class WrappBuildHelper {
                 try fileManager.removeItem(at: destination)
             }
             try fileManager.copyItem(atPath: issPath, toPath: destination.path)
-            logger.notice("✅ Copied \(directory)/\(gameSlug).iss to setup.iss")
+            logger.notice("✅ Copied \(gameSlug)'s \(name) to setup.iss")
             return true
         } catch {
             logger.warning("⚠️ Failed to copy setup.iss: \(error)")
