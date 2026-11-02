@@ -73,21 +73,12 @@ struct SplashScreen {
             .min { $0.distance < $1.distance }
     }
 
-    /// Every splash reference: from the source tree when WrappPuppeteer runs
-    /// from a build inside it, else from the app bundle. The source tree goes
-    /// first because a build keeps a reference that was since deleted or
-    /// renamed, and doesn't pick up one just made until it is rebuilt.
+    /// Every splash reference: the nancy-drew module's `needles/splash`
+    /// (`NancyDrewNeedles`).
     private static func referencePaths() -> [String] {
-        var dir = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        for _ in 0..<10 {
-            dir = dir.deletingLastPathComponent()
-            let candidate = dir.appendingPathComponent("WrappPuppeteer/NancyDrew/assets/splash")
-            if let files = try? FileManager.default.contentsOfDirectory(atPath: candidate.path) {
-                return files.filter { $0.hasPrefix("splash-") && $0.hasSuffix(".png") }
-                    .map { candidate.appendingPathComponent($0).path }
-            }
-        }
-        return Bundle.main.paths(forResourcesOfType: "png", inDirectory: nil)
-            .filter { ($0 as NSString).lastPathComponent.hasPrefix("splash-") }
+        guard let folder = NancyDrewNeedles.folder("splash"),
+              let files = try? FileManager.default.contentsOfDirectory(atPath: folder.path) else { return [] }
+        return files.filter { $0.hasPrefix("splash-") && $0.hasSuffix(".png") }
+            .map { folder.appendingPathComponent($0).path }
     }
 }

@@ -11,7 +11,9 @@ The catalogue is scraped from Her Interactive's
 ## The manifest is the source of truth
 
 Everything about patches lives in one file:
-[WrappTemplate/game-patches.json](../WrappTemplate/game-patches.json). Two very
+the nancy-drew module's
+[patches.json](../Modules/nancy-drew/patches.json) ([modules.md](modules.md)),
+checked against `patches.schema.json` beside it. Two very
 different consumers read it, which is the whole point of the format:
 
 | Consumer | When | What it does with it |
@@ -121,12 +123,15 @@ The `Download And Copy Game Patches` build phase runs
    discarded (`download-verified.sh`, shared with the Wine, AutoIt and ScummVM
    downloads), so an error page or a re-uploaded file never ships. A new patch
    needs its hash: `shasum -a 256 <archive>`.
-2. Copies it into the bundle at `Contents/Resources/game-patches/<game>/`.
-3. Copies the manifest itself to `Contents/Resources/game-patches/manifest.json`,
-   which is what `GamePatchCatalog` reads at runtime.
+2. Copies it into the app's download cache, `Contents/Resources/downloads/`,
+   named by its `sha256`: content-addressed, as a build finds what it
+   downloads (`DownloadCache`), so a wrapp build downloads nothing Second
+   Chance ships.
 
-The bundle directory is rebuilt from scratch each time, so a patch removed from
-the manifest does not linger in an incremental build.
+`GamePatchCatalog` reads the manifest from the nancy-drew module in the app's
+resources (`Contents/Resources/Modules/nancy-drew/patches.json`). The cache
+is rebuilt from scratch each time, so a patch removed from the manifest does
+not linger in an incremental build.
 
 **A failed download fails only a Release build.** In Debug the script reports
 it and exits 0: the resulting Second Chance simply ships without that patch,
@@ -161,7 +166,7 @@ Copies overwrite rather than fail, so rebuilding a wrapp is idempotent.
 
 Most of Her Interactive's patchers have no silent mode: they are wizards that
 wait for clicks. A patch whose manifest entry names an `automation` script is
-run through AutoIt with that script from `SecondChance/Resources/patch-automation/`
+run through AutoIt with that script from the nancy-drew module's `assets/`
 (`runAutomatedPatchInstaller`), which clicks through the wizard and exits 0 only
 once the patcher says the game was updated; anything else fails the patch, and
 the script's log lines, which name each page it saw, are in the build log.
@@ -284,7 +289,8 @@ succeeds without them.
 
 ## Adding or updating a patch
 
-1. Add an entry to `WrappTemplate/game-patches.json`. Check what is actually
+1. Add an entry to `Modules/nancy-drew/patches.json`, and raise the module's
+   release ([modules.md](modules.md#releases)). Check what is actually
    inside the archive — every current one holds exactly one file — and set
    `payload` to that exact name.
 2. Make sure `game` matches a real `GameInfo.id`. A typo means the patch is

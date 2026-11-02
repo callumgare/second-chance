@@ -361,6 +361,7 @@ class WrappBuildHelper {
         }
 
         logger.notice("Found \(iniFiles.count) INI file\(iniFiles.count == 1 ? "" : "s") to configure")
+        let settings = try NancyDrewModule.iniSettings()
 
         for iniFile in iniFiles {
             logger.notice("  Processing: \(iniFile.lastPathComponent)")
@@ -374,29 +375,32 @@ class WrappBuildHelper {
             var content = originalContent
             var modified = false
 
-            // Set LCD mode (WindowMode=2)
-            let windowModeChanged = content.contains("WindowMode=0")
-            if windowModeChanged {
-                content = content.replacingOccurrences(of: "WindowMode=0", with: "WindowMode=2")
-                logger.notice("    ✅ Set WindowMode to 2 (LCD mode)")
-                modified = true
-            } else if content.contains("WindowMode=2") {
-                logger.notice("    ℹ️ WindowMode already set to 2")
-            } else {
-                logger.notice("    ℹ️ No WindowMode setting found")
+            // The nancy-drew module's settings (Modules/nancy-drew/ini.yaml):
+            // LCD mode, and saves in Documents.
+            for replacement in settings.replace ?? [] {
+                if content.contains(replacement.from) {
+                    content = content.replacingOccurrences(of: replacement.from, with: replacement.to)
+                    logger.notice("    ✅ Set \(replacement.to)")
+                    modified = true
+                } else if let already = replacement.already, content.contains(already) {
+                    logger.notice("    ℹ️ \(already) already")
+                } else {
+                    logger.notice("    ℹ️ No \(replacement.from) setting found")
+                }
             }
-
-            // Set save path to Documents
-            let savePath = "LoadSavePath=\\\\users\\\\crossover\\\\Documents"
-            if let match = content.firstMatch(of: /LoadSavePath=.*/) {
-                let oldValue = String(match.output)
-                content = content.replacing(/LoadSavePath=.*/) { _ in savePath }
-                logger.notice("    ✅ Updated LoadSavePath")
-                logger.notice("       Old: \(oldValue)")
-                logger.notice("       New: \(savePath)")
-                modified = true
-            } else {
-                logger.notice("    ℹ️ No LoadSavePath setting found")
+            for setting in settings.set ?? [] {
+                let line = "\(setting.key)=\(setting.value)"
+                let pattern = try Regex("\(setting.key)=.*")
+                if let match = content.firstMatch(of: pattern) {
+                    let oldValue = String(content[match.range])
+                    content = content.replacing(pattern) { _ in line }
+                    logger.notice("    ✅ Updated \(setting.key)")
+                    logger.notice("       Old: \(oldValue)")
+                    logger.notice("       New: \(line)")
+                    modified = true
+                } else {
+                    logger.notice("    ℹ️ No \(setting.key) setting found")
+                }
             }
 
             // Write back if modified

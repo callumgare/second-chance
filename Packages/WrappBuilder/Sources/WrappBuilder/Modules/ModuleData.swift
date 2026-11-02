@@ -105,7 +105,7 @@ public nonisolated final class ModuleLoader {
             do {
                 let values = try YAML12.load(String(contentsOf: folder.appendingPathComponent(table), encoding: .utf8))
                 // A table with a schema beside it (prefix.schema.json) is checked against it.
-                let schema = folder.appendingPathComponent(String(table.dropLast(".yaml".count)) + ".schema.json")
+                let schema = folder.appendingPathComponent((table as NSString).deletingPathExtension + ".schema.json")
                 guard FileManager.default.fileExists(atPath: schema.path) else { continue }
                 let id = try schemaID(of: schema)
                 messages += try validator.problems(with: values, against: id).map { "\(table) at \($0)" }

@@ -11,7 +11,8 @@ import Logging
 import GameCatalog
 import SecondChanceKit
 
-/// One official Her Interactive patch, as described by `game-patches.json`.
+/// One official Her Interactive patch, as described by the nancy-drew
+/// module's `patches.json`.
 ///
 /// The manifest is the single source of truth: `setup-game-patches.sh` reads it
 /// to download and stage the archives at build time, and this type reads the
@@ -62,8 +63,10 @@ nonisolated struct GamePatch: Codable, Identifiable, Hashable, Sendable {
     let game: String
     let title: String
     let url: String
-    /// Zip filename as staged under `game-patches/<game>/`.
+    /// The archive's file name, as downloaded.
     let archive: String
+    /// The archive's sha256: how it is found in the download cache.
+    let sha256: String
     /// The single file inside the archive. Named explicitly because the
     /// filenames follow no pattern worth guessing at.
     let payload: String
@@ -79,13 +82,13 @@ nonisolated struct GamePatch: Codable, Identifiable, Hashable, Sendable {
     let automatic: Bool
     let fixes: String
     let sourceUrl: String
-    /// For `runInstaller`, the AutoIt script in `patch-automation/` (without
+    /// For `runInstaller`, the AutoIt script in the module's `assets/` (without
     /// `.au3`) that clicks through the installer's wizard, for patchers with
     /// no silent mode. Nil runs the installer with silent flags.
     let automation: String?
 }
 
-/// Loads `game-patches/manifest.json` from the app bundle.
+/// Loads the nancy-drew module's `patches.json` from the app bundle.
 final class GamePatchCatalog {
     static let shared = GamePatchCatalog()
 
@@ -96,7 +99,7 @@ final class GamePatchCatalog {
     /// empty catalog rather than throwing: a wrapp without patches is still a
     /// working wrapp, so this must never fail a build.
     init(bundle: Bundle = .main) {
-        guard let url = bundle.url(forResource: "manifest", withExtension: "json", subdirectory: "game-patches") else {
+        guard let url = NancyDrewModule.patchesManifest(in: bundle), FileManager.default.fileExists(atPath: url.path) else {
             Logger(label: "au.gare.callum.second-chance.SecondChance.GamePatchCatalog")
                 .notice("ℹ️  No game-patch manifest in bundle — patches are unavailable")
             self.patches = []

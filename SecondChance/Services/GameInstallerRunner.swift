@@ -412,8 +412,8 @@ class GameInstallerRunner {
         try await Blocking.run { try FileManager.default.copyItem(at: autoitSourceDir, to: autoitDestDir) }
         logger.notice("✅ Copied AutoIt to drive_c")
 
-        // Copy automation script from bundle
-        if let scriptPath = Bundle.main.path(forResource: "installshield-custom-dialog-automate", ofType: "au3") {
+        // Copy the nancy-drew module's script that clicks through the installer
+        if let scriptPath = NancyDrewModule.autoItScript("installshield-custom-dialog-automate")?.path {
             let scriptDestPath = driveCPath.appendingPathComponent("installshield-custom-dialog-automate.au3")
 
             // Remove existing script if present

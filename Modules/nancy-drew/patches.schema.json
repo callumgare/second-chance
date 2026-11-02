@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/nancy-drew/patches.json",
+  "title": "Her Interactive's official game patches",
+  "description": "docs/game-patches.md describes every field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["patches"],
+  "properties": {
+    "comment": { "type": "string" },
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "game", "title", "url", "archive", "sha256", "payload", "action", "edition", "automatic", "fixes", "sourceUrl"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "game": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "url": { "type": "string", "pattern": "^https://" },
+          "archive": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "payload": { "type": "string", "minLength": 1 },
+          "action": { "enum": ["run-installer", "copy-into-game-dir", "extract-into-game-dir"] },
+          "destinationSubdirectory": { "type": "string" },
+          "edition": { "enum": ["any", "cd", "digital-download"] },
+          "automatic": { "type": "boolean" },
+          "fixes": { "type": "string" },
+          "sourceUrl": { "type": "string", "pattern": "^https://" },
+          "automation": {
+            "description": "The AutoIt script in the module's assets/ (without .au3) that drives a patcher with no silent mode.",
+            "enum": ["her-update-wizard", "update-installation-wizard"]
+          }
+        }
+      }
+    }
+  }
+}

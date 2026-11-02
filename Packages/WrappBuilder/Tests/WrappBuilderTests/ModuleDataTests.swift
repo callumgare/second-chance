@@ -15,10 +15,11 @@ struct ModuleDataTests {
         }
     }
 
-    @Test func theRoutineErrorsAreWhatTheDataMakes() throws {
-        let generated = try ModuleDataSource.routineErrorsSource(modules: try ModuleLoader(root: modulesRoot))
-        let checkedIn = try String(contentsOf: repoRoot.appendingPathComponent(ModuleDataSource.routineErrorsPath), encoding: .utf8)
-        #expect(generated == checkedIn, "\(ModuleDataSource.routineErrorsPath) is stale: run `sc generate`")
+    @Test func theGeneratedSwiftIsWhatTheDataMakes() throws {
+        for (path, generated) in try ModuleDataSource.generatedFiles(modules: try ModuleLoader(root: modulesRoot)) {
+            let checkedIn = try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
+            #expect(generated == checkedIn, "\(path) is stale: run `sc generate`")
+        }
     }
 
     @Test func aChangedModuleNeedsANewRelease() throws {

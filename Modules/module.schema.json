@@ -54,9 +54,9 @@
     "stages": { "type": "array", "items": { "type": "string" } },
     "functions": { "type": "array", "items": { "type": "string" } },
     "data": {
-      "description": "Tables of the module's own, each a YAML file in its folder, read as ${data.<table>.<key>.<field>}.",
+      "description": "Tables of the module's own, each a YAML file in its folder (or JSON, which YAML 1.2 reads too), read as ${data.<table>.<key>.<field>}.",
       "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.yaml$" },
+      "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.(yaml|json)$" },
       "uniqueItems": true
     },
     "assets": {

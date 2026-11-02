@@ -81,20 +81,12 @@ enum MainMenuScreen {
         return result
     }
 
-    /// The quit-button template from the app bundle, or from the source tree
-    /// when running a dev build that hasn't copied it.
+    /// The quit-button template: the nancy-drew module's
+    /// `needles/quit-button.png` (`NancyDrewNeedles`).
     private static func resolveQuitButtonImagePath() -> String {
-        if let bundled = Bundle.main.path(forResource: "quit-button", ofType: "png") {
-            return bundled
+        guard let file = NancyDrewNeedles.file("quit-button.png") else {
+            fatalError("quit-button.png not found in the nancy-drew module, in the source tree or WrappPuppeteer's bundle.")
         }
-        var dir = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent()
-        for _ in 0..<10 {
-            dir = dir.deletingLastPathComponent()
-            let candidate = dir.appendingPathComponent("WrappPuppeteer/NancyDrew/assets/quit-button.png").path
-            if FileManager.default.fileExists(atPath: candidate) {
-                return candidate
-            }
-        }
-        fatalError("quit-button.png not found in bundle or source tree. Add it to the WrappPuppeteer target's Copy Bundle Resources build phase.")
+        return file.path
     }
 }

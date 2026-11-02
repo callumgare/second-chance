@@ -56,6 +56,47 @@ public nonisolated enum ModuleDataSource {
         return lines.joined(separator: "\n")
     }
 
+    /// Where the clean-exit log's Swift lives, from the repo's root.
+    public static let cleanExitLogPath = "Packages/SecondChanceKit/Sources/SecondChanceKit/HerEngineLog+Data.swift"
+
+    struct CleanExitLog: Decodable {
+        let file: String
+        let marker: String
+    }
+
+    /// `HerEngineLog`'s file and clean-exit line: the nancy-drew module's.
+    public static func cleanExitLogSource(modules loader: ModuleLoader) throws -> String {
+        guard let module = loader.module("nancy-drew") else {
+            throw ModuleReleases.RecordError(description: "the nancy-drew module is missing or has problems")
+        }
+        let log = try ModuleLoader.table("clean-exit-log.yaml", of: module, as: CleanExitLog.self)
+        return [
+            "//",
+            "//  HerEngineLog+Data.swift",
+            "//  Shared",
+            "//",
+            "//  Generated from Modules/nancy-drew/clean-exit-log.yaml by `sc generate`.",
+            "//  Don't edit it: change the module's data and run that again. A test",
+            "//  fails when this file isn't what the data makes.",
+            "",
+            "nonisolated extension HerEngineLog {",
+            "    /// The log's name, in the game's folder in Documents.",
+            "    static let fileName = \(literal(log.file))",
+            "    /// What its last line ends with once the game has finished its cleanup.",
+            "    static let cleanExitLine = \(literal(log.marker))",
+            "}",
+            "",
+        ].joined(separator: "\n")
+    }
+
+    /// Every generated file, by its path from the repo's root.
+    public static func generatedFiles(modules loader: ModuleLoader) throws -> [(path: String, source: String)] {
+        [
+            (routineErrorsPath, try routineErrorsSource(modules: loader)),
+            (cleanExitLogPath, try cleanExitLogSource(modules: loader)),
+        ]
+    }
+
     /// `text`'s words in lines of at most `width` characters.
     static func wrapped(_ text: String, width: Int) -> [String] {
         var lines: [String] = []

@@ -1,0 +1,7 @@
+# The log Her Interactive's later engine (Ghost of Thornton Hall on) writes
+# to its folder in Documents, afresh on every launch, and the line it ends
+# with once its cleanup is done: the game's own verdict on a quit, as its
+# exit codes are meaningless (HerEngineLog). The wrapp has these compiled
+# in (`sc generate`).
+file: "Debug.LOG"
+marker: "ExitInstance(), good exit..."

@@ -9,7 +9,7 @@ import Foundation
 @MainActor
 struct PatchFailureTests {
     private static var manifest: URL {
-        TestPaths.repoRoot.appendingPathComponent("WrappTemplate/game-patches.json")
+        TestPaths.repoRoot.appendingPathComponent("Modules/nancy-drew/patches.json")
     }
 
     private static func anyPatch() throws -> GamePatch {

@@ -511,7 +511,8 @@ dependency only runs one way:
   commands and a focus strategy (`Wrapp`); the wrapp's "save regularly" window
   (`InfoWindow`); where the Exit button and Her Interactive logo are and how to
   recognise them (`MainMenuScreen`); each game's splash screens
-  (`SplashScreen`, with its reference images in `NancyDrew/assets/splash/`); and
+  (`SplashScreen`, with its reference images in the nancy-drew module's
+  `needles/splash/`); and
   the launch → menu → Exit flow itself (`NancyDrewQuitScenario`).
 
 Core never names a game. When a game-specific fact would make a utility work
@@ -643,15 +644,18 @@ splash screen. Across recordings of 31 games, no menu came nearer than 0.134
 to any reference its game is matched against, and every game had a splash
 screen recognised within its first six seconds.
 
-The references are files in `WrappPuppeteer/NancyDrew/assets/splash/`:
+The references are files in the nancy-drew module's `needles/splash/`
+(`Modules/nancy-drew/`, [modules.md](modules.md)), and the main menu's quit
+button is `needles/quit-button.png` beside it:
 `splash-any-<what it shows>.png` for the screens many games share — the Her
 Interactive logos and intro, the glowing "Nancy Drew", and Big Fish's logo,
 on its own or above Her Interactive's, which Big Fish's editions open with — and
 `splash-<game slug>-<what it shows>.png` for one game's own, mostly title
-cards. A game is matched against its own and every `any` one. They're copied
-flat into the app's resources, so the names must be unique; WrappPuppeteer
+cards. A game is matched against its own and every `any` one. WrappPuppeteer
 reads them from the source tree when it runs from a build inside it, so one
-just made is used without rebuilding. Each is a recorded frame with its bars
+just made is used without rebuilding, and otherwise from the copy of
+`Modules/` in its bundle (`NancyDrewNeedles`). A new one changes the module,
+so raise its release. Each is a recorded frame with its bars
 trimmed, 160 pixels wide. An animated screen needs a reference for each look
 it has long enough to be caught in.
 
@@ -671,7 +675,7 @@ $WP "built-apps/Nancy Drew - <game>.app" --record /tmp/rec --record-seconds 60
 
 # Make a reference from a frame partway through each splash screen
 $WP --make-splash-reference /tmp/rec/004960.png \
-  WrappPuppeteer/NancyDrew/assets/splash/splash-<slug>-her-logo.png
+  Modules/nancy-drew/needles/splash/splash-<slug>-her-logo.png
 
 # Check every frame: SPLASH, the nearest reference and its distance, and
 # anything light where the bars beside a 4:3 picture should be

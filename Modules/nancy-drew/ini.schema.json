@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/nancy-drew/ini.json",
+  "title": "What a game's .ini files have changed after it installs",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "replace": {
+      "description": "Text replaced wherever it appears; `already` is what says it's set already, for the log.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "type": "string", "minLength": 1 },
+          "to": { "type": "string" },
+          "already": { "type": "string" }
+        }
+      }
+    },
+    "set": {
+      "description": "A key=value line given a new value, where the file has the key.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "value"],
+        "properties": {
+          "key": { "type": "string", "pattern": "^[A-Za-z0-9_]+$" },
+          "value": { "type": "string" }
+        }
+      }
+    }
+  }
+}

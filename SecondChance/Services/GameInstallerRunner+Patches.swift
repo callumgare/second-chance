@@ -145,11 +145,7 @@ extension GameInstallerRunner {
         driveCPath: URL,
         gameInstallDir: URL
     ) async throws {
-        guard let archiveURL = Bundle.main.url(
-            forResource: patch.archive,
-            withExtension: nil,
-            subdirectory: "game-patches/\(patch.game)"
-        ) else {
+        guard let archiveURL = DownloadCache.shipped(sha256: patch.sha256) else {
             throw GamePatchError.archiveMissing(patch.archive)
         }
 
@@ -329,13 +325,13 @@ extension GameInstallerRunner {
         }
     }
 
-    /// Copy AutoIt and a `patch-automation` script into the prefix, returning
+    /// Copy AutoIt and one of the nancy-drew module's scripts into the prefix, returning
     /// the script's host path.
     private func stageAutoIt(script: String, inDriveC driveCPath: URL) async throws -> URL {
         guard AutoItService.shared.isAvailable else {
             throw WrappBuildError.autoItNotAvailable
         }
-        guard let source = Bundle.main.url(forResource: script, withExtension: "au3", subdirectory: "patch-automation") else {
+        guard let source = NancyDrewModule.autoItScript(script) else {
             throw WrappBuildError.autoItScriptNotFound
         }
         let autoitDestDir = driveCPath.appendingPathComponent("autoit")

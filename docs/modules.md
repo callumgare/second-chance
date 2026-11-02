@@ -21,7 +21,7 @@ Modules/
 ```
 
 Second Chance ships the folder in its resources (`Contents/Resources/Modules`),
-where a build reads it.
+where a build reads it, and so does WrappPuppeteer, for its needles.
 
 ## module.yaml
 
@@ -50,6 +50,15 @@ it.
 | `wine` | `prefix.yaml`: the registry setting, winetricks verbs and `ddraw.ini` settings a new prefix gets, in order | `WineManager`, as it makes a prefix |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
 | `steam` | `routine-errors.yaml`: what Steam logs as it starts | the same, for a game launched through Steam |
+| `nancy-drew` | `patches.json`: Her Interactive's patches ([game-patches.md](game-patches.md)) | `GamePatchCatalog`, and `setup-game-patches.sh`, which stages their archives in the app's download cache |
+| `nancy-drew` | `ini.yaml`: what every `.ini` in a game's folder has changed once it's installed (LCD mode, saves in Documents) | `WrappBuildHelper`, configuring the wrapp |
+| `nancy-drew` | `clean-exit-log.yaml`: the log Her's later engine writes, and its clean-exit line | the wrapp (`HerEngineLog`), compiled in by `sc generate` |
+| `nancy-drew` | `assets/*.au3`: the AutoIt scripts that click through an installer that won't run silently, and patchers with no silent mode | `GameInstallerRunner` |
+| `nancy-drew` | `needles/`: the splash screens WrappPuppeteer clicks past, and the main menu's quit button | WrappPuppeteer (`NancyDrewNeedles`), from the source tree or its bundle's copy |
+
+Second Chance's app finds the nancy-drew module through `NancyDrewModule`.
+The quit scenario itself is still Swift (`NancyDrewQuitScenario`), until
+scenarios are data.
 
 The wrapp reads no YAML, as only the builder does, so what it needs of a
 module's data is generated as Swift by `sc generate` and checked in; a test

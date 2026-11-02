@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/nancy-drew/clean-exit-log.json",
+  "title": "The log a game writes, and the line that says it quit cleanly",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["file", "marker"],
+  "properties": {
+    "file": { "description": "Its name, in the game's folder in Documents.", "type": "string", "pattern": "^[^/\\\\]+$" },
+    "marker": { "description": "What a line ends with once the game has finished its cleanup.", "type": "string", "minLength": 1 }
+  }
+}
