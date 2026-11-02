@@ -22,7 +22,9 @@ import SecondChanceKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.PuppetServer")
 
-enum PuppetServer {
+/// On a thread of its own, reaching the windows on the main thread through
+/// `onMain`.
+nonisolated enum PuppetServer {
     /// Start serving if WrappPuppeteer started the wrapp.
     static func startIfRequested() {
         guard let directory = Wine.puppetDirectory() else { return }
@@ -77,8 +79,13 @@ enum PuppetServer {
         }
     }
 
+    /// Run `work` on the main thread, and wait for it.
+    private static func onMain<T: Sendable>(_ work: @MainActor () -> T) -> T {
+        DispatchQueue.main.sync { MainActor.assumeIsolated(work) }
+    }
+
     private static func info() -> String {
-        DispatchQueue.main.sync {
+        onMain {
             let open = globalInfoWindow?.window?.isVisible == true
             let warning = open && globalInfoWindow?.isShowingWarning == true
             return "ok open=\(open ? 1 : 0) warning=\(warning ? 1 : 0)"
@@ -89,7 +96,7 @@ enum PuppetServer {
     /// button for 100 ms. If the warning is still up two seconds later — a
     /// click can be lost on a loaded Mac — do what the button does instead.
     private static func confirm() -> String {
-        let target: (window: NSWindow, point: NSPoint)? = DispatchQueue.main.sync {
+        let target: (windowNumber: Int, point: NSPoint)? = onMain {
             guard let window = globalInfoWindow?.window, window.isVisible,
                   let point = globalInfoWindow?.confirmButtonLocation else { return nil }
             // As it is for a player: a click on a window that isn't key only
@@ -98,15 +105,15 @@ enum PuppetServer {
                 NSApp.activate(ignoringOtherApps: true)
                 window.makeKeyAndOrderFront(nil)
             }
-            return (window, point)
+            return (window.windowNumber, point)
         }
         guard let target else { return "error the save warning isn't showing" }
 
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            DispatchQueue.main.sync {
+            onMain {
                 if let event = NSEvent.mouseEvent(with: type, location: target.point, modifierFlags: [],
                                                   timestamp: ProcessInfo.processInfo.systemUptime,
-                                                  windowNumber: target.window.windowNumber, context: nil,
+                                                  windowNumber: target.windowNumber, context: nil,
                                                   eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) {
                     NSApp.postEvent(event, atStart: false)
                 }
@@ -115,15 +122,16 @@ enum PuppetServer {
         }
         let deadline = Date().addingTimeInterval(2)
         while Date() < deadline {
-            if !DispatchQueue.main.sync(execute: { globalInfoWindow?.isShowingWarning == true }) { return "ok clicked" }
+            if !onMain({ globalInfoWindow?.isShowingWarning == true }) { return "ok clicked" }
             usleep(100_000)
         }
-        let state = DispatchQueue.main.sync {
-            "key=\(target.window.isKeyWindow), active=\(NSApp.isActive), clicked at \(target.point) "
-                + "in a \(target.window.frame.size) window, \(globalInfoWindow?.confirmButtonGeometry ?? "")"
+        let state = onMain {
+            let window = globalInfoWindow?.window
+            return "key=\(window?.isKeyWindow == true), active=\(NSApp.isActive), clicked at \(target.point) "
+                + "in a \(window?.frame.size ?? .zero) window, \(globalInfoWindow?.confirmButtonGeometry ?? "")"
         }
         logger.warning("[Puppet] Clicking I Understand didn't confirm the save warning (\(state)); confirming it directly")
-        DispatchQueue.main.sync { globalInfoWindow?.pressConfirm() }
+        onMain { globalInfoWindow?.pressConfirm() }
         return "ok pressed"
     }
 }

@@ -67,17 +67,17 @@ class GameMonitor {
     /// a launch that may still work is waited for until the player gives up.
     func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil,
                             abandonIf: ((Set<ProcessList.Entry>) -> String?)? = nil,
-                            whileWaiting: (() -> Void)? = nil) -> Int32? {
+                            whileWaiting: (() -> Void)? = nil) async -> Int32? {
         switch gameEngine {
         case .wine, .wineSteam, .wineSteamSilent:
-            return waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, abandonIf: abandonIf, whileWaiting: whileWaiting)
+            return await waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, abandonIf: abandonIf, whileWaiting: whileWaiting)
         case .scummvm:
             return waitForScummVMGameToStart(gamePid: gamePid)
         }
     }
 
     /// Wait for game to stop (works for both Wine and ScummVM games)
-    func waitForGameToStop(gamePid: Int32, process: Process? = nil) {
+    func waitForGameToStop(gamePid: Int32, process: Process? = nil) async {
         guard !isMonitoring else {
             logger.notice("[Game Monitor] Already monitoring, skipping duplicate start")
             return
@@ -87,9 +87,9 @@ class GameMonitor {
 
         switch gameEngine {
         case .wine, .wineSteam, .wineSteamSilent:
-            waitForWineGameToStop(winePid: gamePid, process: process)
+            await waitForWineGameToStop(winePid: gamePid, process: process)
         case .scummvm:
-            waitForScummVMGameToStop(gamePid: gamePid, process: process)
+            await waitForScummVMGameToStop(gamePid: gamePid, process: process)
         }
     }
 
@@ -97,16 +97,16 @@ class GameMonitor {
     /// the game runs. Returns whether a window appeared: false when the game
     /// exited first.
     @discardableResult
-    func activateGameWindow(gamePid: Int32, infoWindow: InfoWindowController?) -> Bool {
-        waitForWindowAndActivate(pid: gamePid, infoWindow: infoWindow)
+    func activateGameWindow(gamePid: Int32, infoWindow: InfoWindowController?) async -> Bool {
+        await waitForWindowAndActivate(pid: gamePid, infoWindow: infoWindow)
     }
 
     // MARK: - Process Detection (Wine Games)
 
-    /// Wine's processes, the game among them.
-    func getAllWineProcesses() -> Set<ProcessList.Entry> {
+    /// Wine's processes, the game among them. Listed off the main thread.
+    func getAllWineProcesses() async -> Set<ProcessList.Entry> {
         // Checked twice a second while waiting for the game: no staler.
-        guard let processes = ProcessList.recent(maxAge: .milliseconds(500)) else {
+        guard let processes = await Blocking.run({ ProcessList.recent(maxAge: .milliseconds(500)) }) else {
             logger.error("[Wine Processes] Couldn't list processes")
             return []
         }
@@ -121,7 +121,7 @@ class GameMonitor {
     /// game appears: what else the launcher wants to watch meanwhile.
     private func waitForWineGameToStart(gameExeName: String, launcher: Process?,
                                         abandonIf: ((Set<ProcessList.Entry>) -> String?)?,
-                                        whileWaiting: (() -> Void)? = nil) -> Int32? {
+                                        whileWaiting: (() -> Void)? = nil) async -> Int32? {
         logger.notice("[Game Monitor] Waiting for Wine game executable: \(gameExeName)")
         logger.debug("[Game Monitor] Wine prefix: \(self.config.winePrefix.path)")
 
@@ -138,7 +138,7 @@ class GameMonitor {
                 logger.error("[Game Monitor] Wine's launcher \(how) after \(ran) and \(gameExeName) never appeared — the game did not start")
                 return nil
             }
-            let processes = self.getAllWineProcesses()
+            let processes = await getAllWineProcesses()
 
             // Not another session's copy of the game: one a killed session
             // left behind, or another copy of this wrapp's.
@@ -166,7 +166,7 @@ class GameMonitor {
                     return nil
                 }
                 whileWaiting?()
-                Thread.sleep(forTimeInterval: 0.5)
+                try? await Task.sleep(for: .milliseconds(500))
             }
         }
 
@@ -180,7 +180,7 @@ class GameMonitor {
     }
 
     /// Wait for game window to appear and activate it
-    private func waitForWindowAndActivate(pid: Int32, infoWindow: InfoWindowController?) -> Bool {
+    private func waitForWindowAndActivate(pid: Int32, infoWindow: InfoWindowController?) async -> Bool {
         logger.notice("[Game Monitor] Monitoring for windows...")
 
         var windowDetected = false
@@ -228,10 +228,8 @@ class GameMonitor {
 
                 // Notify info window if it exists
                 if let infoWindow = infoWindow {
-                    DispatchQueue.main.async {
-                        Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameMonitor").notice("[Game Monitor] Notifying info window that game has loaded...")
-                        infoWindow.notifyGameLoaded()
-                    }
+                    logger.notice("[Game Monitor] Notifying info window that game has loaded...")
+                    infoWindow.notifyGameLoaded()
                 }
 
                 // Activate the game process
@@ -247,7 +245,7 @@ class GameMonitor {
                 break
             }
 
-            Thread.sleep(forTimeInterval: 0.2) // Check every 200ms
+            try? await Task.sleep(for: .milliseconds(200)) // Check every 200ms
         }
         return windowDetected
     }
@@ -262,10 +260,8 @@ class GameMonitor {
             logger.notice("[Game Monitor] Skipping dock hide (debug mode enabled)")
             return
         }
-        DispatchQueue.main.async {
-            Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameMonitor").notice("[Game Monitor] Hiding wrapper app from dock...")
-            NSApp.setActivationPolicy(.accessory)
-        }
+        logger.notice("[Game Monitor] Hiding wrapper app from dock...")
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - Game Stop Monitoring
@@ -273,7 +269,7 @@ class GameMonitor {
     /// Wait for Wine game to stop. With the launcher's `Process`, its exit
     /// status (which `wine start /wait` passes through from the game) or the
     /// signal that killed it is recorded; without one, only that it ended.
-    private func waitForWineGameToStop(winePid: Int32, process: Process?) {
+    private func waitForWineGameToStop(winePid: Int32, process: Process?) async {
         logger.notice("[Process Monitor] Waiting for Wine game to stop (PID \(winePid))")
 
         var lastProcessList: Set<String> = []
@@ -282,11 +278,7 @@ class GameMonitor {
         // (GameQuitCheck) measures how soon after a Wine error it came. A
         // process that has already gone can't be watched, so the check below
         // covers one that exited before the source was armed.
-        let ended = DispatchSemaphore(value: 0)
-        let exitSource = DispatchSource.makeProcessSource(
-            identifier: process?.processIdentifier ?? winePid, eventMask: .exit, queue: .global())
-        exitSource.setEventHandler { ended.signal() }
-        exitSource.resume()
+        let (ended, exitSource) = Self.watchExit(of: process?.processIdentifier ?? winePid)
         defer { exitSource.cancel() }
 
         // The process tree is checked often while the game starts, when it
@@ -295,16 +287,16 @@ class GameMonitor {
         let watchStarted = Date()
         while process?.isRunning ?? isProcessRunning(pid: winePid) {
             let interval: TimeInterval = Date().timeIntervalSince(watchStarted) < 120 ? 3 : 60
-            if ended.wait(timeout: .now() + interval) == .success { break }
+            if await ended.wait(timeout: .seconds(interval)) { break }
             // Log the session's process tree when it changes.
-            let wineProcesses = self.getAllWineProcessesDetailed()
+            let wineProcesses = await getAllWineProcessesDetailed()
             lastProcessList = self.logWineProcesses(wineProcesses, mainWinePid: winePid, lastProcessList: lastProcessList)
         }
 
         if let process {
             // Foundation may not have reaped it yet, and asking a Process it
             // thinks is still running for its exit status throws.
-            process.waitUntilExit()
+            await Self.waitUntilReaped(process)
             setExit(from: process)
         } else {
             // No Process to ask, so no exit status to report.
@@ -321,24 +313,24 @@ class GameMonitor {
     }
 
     /// Wait for ScummVM game to stop
-    private func waitForScummVMGameToStop(gamePid: Int32, process: Process?) {
+    private func waitForScummVMGameToStop(gamePid: Int32, process: Process?) async {
         logger.notice("[Process Monitor] Waiting for ScummVM game to stop (PID \(gamePid))")
 
         // If we have the process object, use it directly for better reliability
         if let process = process {
             if process.isRunning {
-                process.waitUntilExit()
+                let (ended, exitSource) = Self.watchExit(of: process.processIdentifier)
+                while process.isRunning, await !ended.wait(timeout: .seconds(60)) {}
+                exitSource.cancel()
             }
+            await Self.waitUntilReaped(process)
             // Capture how it ended while we safely have access to the process object
             self.setExit(from: process)
             logger.notice("[Process Monitor] ScummVM process \(gamePid) has ended")
         } else {
             // No Process to wait on: watch the pid exit instead.
-            let ended = DispatchSemaphore(value: 0)
-            let exitSource = DispatchSource.makeProcessSource(identifier: gamePid, eventMask: .exit, queue: .global())
-            exitSource.setEventHandler { ended.signal() }
-            exitSource.resume()
-            while isProcessRunning(pid: gamePid), ended.wait(timeout: .now() + 60) == .timedOut {}
+            let (ended, exitSource) = Self.watchExit(of: gamePid)
+            while isProcessRunning(pid: gamePid), await !ended.wait(timeout: .seconds(60)) {}
             exitSource.cancel()
             logger.notice("[Process Monitor] ScummVM process \(gamePid) has terminated")
             self.setExitCode(nil)  // Process is gone; its status is unknown
@@ -348,9 +340,26 @@ class GameMonitor {
         logger.notice("[Process Monitor] Monitoring stopped")
     }
 
+    /// Signalled the moment `pid` exits, while the source is kept. A process
+    /// that has already gone can't be watched, so callers check it is still
+    /// running too.
+    private static func watchExit(of pid: Int32) -> (OneTimeSignal, DispatchSourceProcess) {
+        let ended = OneTimeSignal()
+        let exitSource = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global())
+        exitSource.setEventHandler { ended.signal() }
+        exitSource.resume()
+        return (ended, exitSource)
+    }
+
+    /// Until Foundation has reaped `process`, moments after it exits: off
+    /// the main thread, as `waitUntilExit` blocks.
+    private static func waitUntilReaped(_ process: Process) async {
+        await Blocking.run { process.waitUntilExit() }
+    }
+
     /// Wine's processes, for the log of what is running.
-    private func getAllWineProcessesDetailed() -> [(pid: String, ppid: String, name: String)] {
-        guard let processes = ProcessList.recent(maxAge: .seconds(2)) else {
+    private func getAllWineProcessesDetailed() async -> [(pid: String, ppid: String, name: String)] {
+        guard let processes = await Blocking.run({ ProcessList.recent(maxAge: .seconds(2)) }) else {
             logger.error("[Process Monitor] Couldn't list processes")
             return []
         }

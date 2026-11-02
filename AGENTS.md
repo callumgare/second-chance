@@ -142,9 +142,8 @@ when it applies across the repo. Link between them rather than repeating.
 
 ## Tech Stack
 
-- **Swift 6** language mode for the packages and Second Chance; WrappTemplate,
-  WrappPuppeteer and the tests are still Swift 5. **SwiftUI**, deployment
-  target **macOS 15.0** (some targets 15.6)
+- **Swift 6** language mode for every target, the tests and the packages.
+  **SwiftUI**, deployment target **macOS 15.0** (some targets 15.6)
 - Xcode project (`SecondChance.xcodeproj`), with the shared code in local Swift packages (`Packages/`)
 - Uses Swift Testing framework (`@Test`, `#expect`) — not XCTest
 - Unsandboxed app (required for Wine); entitlements enable dyld env vars, unsigned executable memory, and disable library validation
@@ -205,13 +204,9 @@ The rules that keep it working:
   something only reporting knows, reporting tells it (as
   `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
 - **Each `Package.swift` mirrors the app targets' Swift settings** —
-  `MainActor` default isolation, approachable concurrency,
-  `MemberImportVisibility`, bare `/regex/` literals. Change a target's Swift
-  settings and the packages' together, or the same code means different
-  things in each. The language mode is the exception: the packages are
-  Swift 6 already, so what they declare `nonisolated` must really be safe
-  off the main thread, and a Swift 5 target calling into them is held to
-  their isolation.
+  Swift 6, `MainActor` default isolation, approachable concurrency,
+  `MemberImportVisibility`. Change a target's Swift settings and the
+  packages' together, or the same code means different things in each.
 - **A new file is picked up by being in the folder**; nothing to tick in
   Xcode. A file in an app's folder can't be used by the package.
 - **Products stay static.** Don't mark a library `.dynamic`: a wrapp's
@@ -278,8 +273,16 @@ direct assignment.
   files, freezes the window until it's done. Run a program with
   `Process.output(of:_:)` and other blocking work in `Blocking.run`
   (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
-  Code on a plain thread — the wrapp's `main()` and GCD queues — calls async
-  code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
+  Code on a plain thread — a GCD queue, a `Thread`, a signal handler — calls
+  async code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
+- **Main-actor code that runs off the main thread crashes.** Swift 6 checks
+  at run time, closures included, and stops the process with SIGILL
+  (`dispatch_assert_queue`) — a crash only a launch shows, as the compiler
+  can't see every thread a callback is called on. So what a GCD queue, a
+  `Thread`, a `Process` handler or a dispatch source calls is `nonisolated`,
+  or hops to the main thread first (`DispatchQueue.main.async` with
+  `MainActor.assumeIsolated`), and code that waits, as the wrapp's launch
+  does, is `async` and awaits rather than holding a thread of its own.
   A Debug build logs `[Hang]` whenever the main thread stalls for more than
   0.25 s (`MainThreadWatchdog`), so a build's log shows any step that still
   blocks.

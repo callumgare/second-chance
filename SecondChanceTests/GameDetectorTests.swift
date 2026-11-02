@@ -145,7 +145,7 @@ struct GameDetectorFixtureTests {
         let mockDiskPath = TestPaths.repoRoot.appendingPathComponent("TestFixtures/scarlet-hand-disk")
         try #require(FileManager.default.fileExists(atPath: mockDiskPath.path), "TestFixtures/scarlet-hand-disk is committed")
 
-        let detector = await GameDetector.shared
+        let detector = GameDetector.shared
         let gameSlug = try await detector.detectGame(fromDisk: mockDiskPath)
 
         #expect(gameSlug == "scarlet-hand")

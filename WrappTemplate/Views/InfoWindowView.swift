@@ -172,7 +172,9 @@ class InfoWindowViewModel: ObservableObject {
         showSuspectedHang = false
         clock = LoadingClock(stage: stage)
         clock?.heavyLoad = heavyLoad != nil
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.checkClock() }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkClock() }  // on the main run loop
+        }
         RunLoop.main.add(timer, forMode: .common)
         clockTimer = timer
     }

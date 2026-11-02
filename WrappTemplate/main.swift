@@ -11,6 +11,7 @@ import os
 import SecondChanceKit
 import SecondChanceReporting
 import GameCatalog
+import Synchronization
 
 // NOTE: no top-level Logger in main.swift — top-level code here is eager and
 // runs in source order, so a logger declared at file scope would be
@@ -134,7 +135,7 @@ func main() {
     }
 
     let wine = config.wine
-    killWineBeforeForcedExit = { Blocking.wait { await wine.server.kill() } }
+    killWineBeforeForcedExit.withLock { $0 = { Blocking.wait { await wine.server.kill() } } }
 
     var debugMode = options.debugMode
     if options.showsDebugSettings {
@@ -297,7 +298,7 @@ func main() {
     // The save warning holds back only the game itself: Wine, and Steam for
     // a game that needs it, get going behind it, so the game starts sooner
     // once the player has read it.
-    let warningConfirmed = DispatchSemaphore(value: 0)
+    let warningConfirmed = OneTimeSignal()
     if infoWindow.isShowingWarning {
         mainLogger.notice("Showing the save warning; getting Wine ready behind it")
         infoWindow.onWarningConfirmed = {
@@ -309,15 +310,16 @@ func main() {
         warningConfirmed.signal()
     }
 
-    // Launch based on engine type
+    // Launch based on engine type. On the main actor, as the loading window
+    // is: the launch awaits whatever it waits for, so the window keeps going.
     func launchGameAsync() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.needsSteam
+        Task {
+            await waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.needsSteam
                 ? .startingSteam : .startingGame(title: config.gameTitle))
-            let outcome = gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode) {
-                if warningConfirmed.wait(timeout: .now()) == .timedOut {
+            let outcome = await gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode) {
+                if !warningConfirmed.isSignalled {
                     mainLogger.notice("Ready to start the game; waiting for the player to confirm the save warning")
-                    warningConfirmed.wait()
+                    await warningConfirmed.wait()
                 }
                 mainLogger.notice("Launching the game")
             }
@@ -338,7 +340,7 @@ func main() {
                     appDelegate.gameExitCode = exitCode != 0 ? exitCode : 1
                     infoWindow.showError(exitCode: exitCode, explanation: failure.explanation,
                                          report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
-                    gameLauncher.finishSession()
+                    await gameLauncher.finishSession()
                     return
                 }
                 // One that ended badly before its window appeared: the player
@@ -349,7 +351,7 @@ func main() {
                     appDelegate.gameExitCode = exitCode != 0 ? exitCode : 1
                     infoWindow.showError(exitCode: exitCode,
                                          report: gameLauncher.failureReport, sending: gameLauncher.reportTask)
-                    gameLauncher.finishSession()
+                    await gameLauncher.finishSession()
                     return
                 }
             }
@@ -359,12 +361,13 @@ func main() {
                 // From now, opening the game again starts it again once Wine
                 // has finished, rather than being ignored while this waits.
                 appDelegate.isClosing = true
-                gameLauncher.finishSession()
+                await gameLauncher.finishSession()
                 // A run can end badly after the game loaded, with no error
                 // window: its report still has to go before the wrapp does.
-                FailureReporter.wait(for: gameLauncher.reportTask, timeout: 120)
+                let reportTask = gameLauncher.reportTask
+                await Blocking.run { FailureReporter.wait(for: reportTask, timeout: 120) }
                 // The game has gone, but Wine may not have yet.
-                gameLauncher.waitForWineToEnd()
+                await gameLauncher.waitForWineToEnd()
                 if appDelegate.openAgainWhenClosed {
                     appDelegate.openAgain(arguments: [], why: "as it was opened while closing")
                 }

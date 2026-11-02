@@ -77,9 +77,11 @@ class InfoWindowController: NSWindowController {
     }
 
     /// Say Steam is slow or stuck signing in, or no longer. Any thread.
-    func setSteamNotice(_ notice: SteamSignInNotice?) {
+    nonisolated func setSteamNotice(_ notice: SteamSignInNotice?) {
         DispatchQueue.main.async {
-            self.viewModel.steamNotice = notice
+            MainActor.assumeIsolated {
+                self.viewModel.steamNotice = notice
+            }
         }
     }
 
@@ -172,20 +174,24 @@ class InfoWindowController: NSWindowController {
     }
 
     /// A sign the launch is getting somewhere. Safe from any thread.
-    func noteProgress(_ sign: LaunchProgressSign) {
+    nonisolated func noteProgress(_ sign: LaunchProgressSign) {
         DispatchQueue.main.async {
-            self.viewModel.noteProgress(sign)
+            MainActor.assumeIsolated {
+                self.viewModel.noteProgress(sign)
+            }
         }
     }
 
     /// Show that the launch has moved on to `stage`. Safe from any thread.
-    func setStage(_ stage: LoadingStage) {
+    nonisolated func setStage(_ stage: LoadingStage) {
         DispatchQueue.main.async {
-            self.viewModel.setStage(stage)
-            // While Steam waits on the player in its own window, this one
-            // mustn't float over it: both open in the middle of the screen,
-            // and this one would hide the sign-in's QR code.
-            self.updateLevel()
+            MainActor.assumeIsolated {
+                self.viewModel.setStage(stage)
+                // While Steam waits on the player in its own window, this one
+                // mustn't float over it: both open in the middle of the screen,
+                // and this one would hide the sign-in's QR code.
+                self.updateLevel()
+            }
         }
     }
 
@@ -267,15 +273,14 @@ class InfoWindowController: NSWindowController {
         }
     }
 
-    /// Safe to call from any thread: the game launcher calls it from its
-    /// background queue when the game exits, and AppKit traps (SIGILL) on a
-    /// window closed off the main thread. Off-main calls are queued, so they
-    /// stay in order with `showError`, which is queued the same way.
+    /// Queued, as `showError` is, so the two stay in order.
     override func close() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { self.close() }
-            return
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { self.closeNow() }
         }
+    }
+
+    private func closeNow() {
         viewModel.stopTimer()
         loadMonitor?.observe(nil)
         activity?.stop()

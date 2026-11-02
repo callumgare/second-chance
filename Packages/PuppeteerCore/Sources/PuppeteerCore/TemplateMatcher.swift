@@ -24,7 +24,7 @@ private nonisolated let findImageDebugProbe: CGPoint? = {
 }()
 
 /// How colour pixels are reduced to the single channel that gets correlated.
-nonisolated public enum GrayscaleConversion {
+nonisolated public enum GrayscaleConversion: Sendable {
     /// Standard perceived brightness. A sensible default for most templates.
     case luminance
     /// `R - max(G, B)`: pure red is brightest, everything else darkens. Makes a
@@ -36,7 +36,7 @@ nonisolated public enum GrayscaleConversion {
 /// for the template at its own pixel size; a caller that knows where its
 /// target sits and how big it renders should say so — cropping the search
 /// region is by far the biggest speed win.
-nonisolated public struct TemplateMatchOptions {
+nonisolated public struct TemplateMatchOptions: Sendable {
     /// Part of the screenshot to search, in unit coordinates with a top-left
     /// origin: `(0, 0, 1, 1)` is the whole screenshot,
     /// `(0.5, 0.5, 0.5, 0.5)` the bottom-right quarter.

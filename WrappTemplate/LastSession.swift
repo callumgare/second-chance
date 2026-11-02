@@ -18,20 +18,20 @@ import GameCatalog
 /// wrapp still waiting for it to close down, which takes seconds. Wait for it
 /// in the loading window (`.lastSessionClosing`), which after a few seconds
 /// also offers to stop it; if it closes before anyone answers, the offer goes
-/// and the launch carries on to `nextStage`. Runs off the main thread, before
-/// the game starts; "Quit" exits the wrapp, leaving it be.
-func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nextStage: LoadingStage) {
+/// and the launch carries on to `nextStage`. Before the game starts; "Quit"
+/// exits the wrapp, leaving it be.
+func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nextStage: LoadingStage) async {
     let server = wine.server
     // Programs a killed session left behind never finish, and the game among
     // them would be taken for this launch's (`WineServer.clearLeftovers`).
-    Blocking.wait { await server.clearLeftovers() }
-    guard Blocking.wait({ await server.isRunning }) else { return }
+    await server.clearLeftovers()
+    guard await server.isRunning else { return }
     mainLogger.notice("Wine is still running in this game's prefix, probably from the last time it was played: waiting for it to finish")
     let started = Date()
     infoWindow.setStage(.lastSessionClosing)
 
     enum Outcome { case ended, choice(InfoWindowViewModel.LastSessionChoice) }
-    let decided = DispatchSemaphore(value: 0)
+    let decided = OneTimeSignal()
     let outcome = OSAllocatedUnfairLock<Outcome?>(initialState: nil)
     let decide: @Sendable (Outcome) -> Void = { value in
         let first = outcome.withLock { current -> Bool in
@@ -42,13 +42,11 @@ func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nex
         if first { decided.signal() }
     }
     let waiter = server.onStop { decide(.ended) }
-    DispatchQueue.main.async {
-        infoWindow.onLastSessionChoice = { choice in decide(.choice(choice)) }
-    }
-    if waiter == nil, !Blocking.wait({ await server.isRunning }) { decide(.ended) }
-    decided.wait()
+    infoWindow.onLastSessionChoice = { choice in decide(.choice(choice)) }
+    if waiter == nil, await !server.isRunning { decide(.ended) }
+    await decided.wait()
     waiter?.terminate()
-    DispatchQueue.main.async { infoWindow.onLastSessionChoice = nil }
+    infoWindow.onLastSessionChoice = nil
 
     let waited = SubprocessWatch.duration(Date().timeIntervalSince(started))
     switch outcome.withLock({ $0 }) {
@@ -56,10 +54,8 @@ func waitForLastSession(_ wine: Wine, infoWindow: InfoWindowController, then nex
         mainLogger.notice("The last session's Wine finished after \(waited)")
     case .choice(.stopItAndContinue):
         mainLogger.notice("Player chose to stop the last session's Wine after \(waited)")
-        let stopped = Blocking.wait {
-            await server.stop()
-            return await server.waitUntilStopped(timeout: 10)
-        }
+        await server.stop()
+        let stopped = await server.waitUntilStopped(timeout: 10)
         if !stopped {
             mainLogger.warning("The last session's Wine was still running 10 s after it was stopped; starting anyway")
         }

@@ -30,6 +30,7 @@
 import Foundation
 import Logging
 import SecondChanceKit
+import Synchronization
 
 /// `@unchecked Sendable`: every piece of mutable state is confined to `queue`.
 nonisolated final class StartupDiagnostics: @unchecked Sendable {
@@ -367,23 +368,25 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             return "failed to run \(path): \(error)\n"
         }
         // Drain while it runs so a large output can't fill the pipe and block it.
-        var output = Data()
+        let output = Mutex(Data())
         let reader = DispatchQueue(label: "au.gare.callum.second-chance.WrappTemplate.Diagnostics.reader")
-        reader.async { output = pipe.fileHandleForReading.readDataToEndOfFile() }
+        reader.async {
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            output.withLock { $0 = data }
+        }
 
         if done.wait(timeout: .now() + timeout) == .timedOut {
             process.terminate()
             _ = done.wait(timeout: .now() + 2)
             reader.sync {}
-            return String(decoding: output, as: UTF8.self) + "\n[timed out after \(Int(timeout))s]\n"
+            return String(decoding: output.withLock { $0 }, as: UTF8.self) + "\n[timed out after \(Int(timeout))s]\n"
         }
         reader.sync {}
-        return String(decoding: output, as: UTF8.self)
+        return String(decoding: output.withLock { $0 }, as: UTF8.self)
     }
 
-    /// Made once: this runs for every line Wine prints. Only used on
-    /// `queue`, so never from two threads at once.
-    nonisolated(unsafe) private static let timestampFormatter: DateFormatter = {
+    /// Made once: this runs for every line Wine prints.
+    private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss.SSS"
         return formatter

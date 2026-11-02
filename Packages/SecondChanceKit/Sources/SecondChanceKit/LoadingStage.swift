@@ -107,7 +107,7 @@ public enum LoadingStage: Equatable {
     }
 
     /// The stage for where a starting Steam has got to.
-    public init(steam stage: SteamStartupStage) {
+    public nonisolated init(steam stage: SteamStartupStage) {
         switch stage {
         case .starting: self = .startingSteam
         case .updating(let phase): self = .updatingSteam(phase)

@@ -25,7 +25,6 @@ let package = Package(
                 .enableUpcomingFeature("MemberImportVisibility"),
                 .enableUpcomingFeature("InferIsolatedConformances"),
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
-                .unsafeFlags(["-Xfrontend", "-disable-dynamic-actor-isolation"]),
             ]
         ),
     ]

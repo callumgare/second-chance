@@ -9,6 +9,7 @@ import Foundation
 import AppKit
 import Logging
 import PuppeteerCore
+import Synchronization
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.MainMenuScreen")
 
@@ -23,15 +24,15 @@ struct MainMenuAnalysis {
 }
 
 enum MainMenuScreen {
-    private static let exitTexts = ["Exit Game", "Quit"]
-    private static let logoText = "interactive"
+    private nonisolated static let exitTexts = ["Exit Game", "Quit"]
+    private nonisolated static let logoText = "interactive"
 
     /// Games whose Exit is a graphic rather than text are matched against
     /// assets/quit-button.png. Across the series that button is red and sits
     /// in the bottom-right corner, at roughly the same size relative to the
     /// game's screen, so the search is narrowed to match. (The scenario's
     /// screenshots are of the game's window alone.)
-    static let quitButtonMatchOptions = TemplateMatchOptions(
+    nonisolated static let quitButtonMatchOptions = TemplateMatchOptions(
         searchRegion: CGRect(x: 2.0 / 3.0, y: 5.0 / 6.0, width: 1.0 / 3.0, height: 1.0 / 6.0),
         templateHeightFraction: 0.0662,
         scaleVariations: [1.0],
@@ -44,22 +45,26 @@ enum MainMenuScreen {
         let quitButtonImagePath = resolveQuitButtonImagePath()
 
         let dispatchGroup = DispatchGroup()
-        var foundTexts: [String: CGRect] = [:]
-        var quitButtonLocation: CGRect?
+        let found = Mutex<[String: CGRect]>([:])
+        let matched = Mutex<CGRect?>(nil)
 
         dispatchGroup.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            foundTexts = TextRecognizer.findText(exitTexts + [logoText], in: screenshotPath, loggingWhileFrontmost: app)
+            let texts = TextRecognizer.findText(exitTexts + [logoText], in: screenshotPath, loggingWhileFrontmost: app)
+            found.withLock { $0 = texts }
             dispatchGroup.leave()
         }
 
         dispatchGroup.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            quitButtonLocation = TemplateMatcher.findImage(quitButtonImagePath, in: screenshotPath, options: quitButtonMatchOptions)
+            let location = TemplateMatcher.findImage(quitButtonImagePath, in: screenshotPath, options: quitButtonMatchOptions)
+            matched.withLock { $0 = location }
             dispatchGroup.leave()
         }
 
         dispatchGroup.wait()
+        let foundTexts = found.withLock { $0 }
+        let quitButtonLocation = matched.withLock { $0 }
 
         let result = MainMenuAnalysis(
             quitButton: exitTexts.lazy.compactMap { foundTexts[$0] }.first ?? quitButtonLocation,

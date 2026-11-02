@@ -11,6 +11,7 @@ import AppKit
 import Logging
 import os
 import SecondChanceKit
+import Synchronization
 import SecondChanceReporting
 import GameCatalog
 
@@ -24,7 +25,7 @@ var appNapOff: NSObjectProtocol?
 
 /// Kills the game's Wine session, once the configuration is known: called
 /// when the wrapp has to exit without its cleanup having finished.
-var killWineBeforeForcedExit: (() -> Void)?
+nonisolated let killWineBeforeForcedExit = Mutex<(@Sendable () -> Void)?>(nil)
 
 /// Capture a diagnostics bundle on SIGUSR1, whatever the launch or the game
 /// is doing: `kill -USR1 <wrapp pid>`, for a game that seems stuck. See
@@ -68,7 +69,7 @@ func installTerminationHandlers() {
                 DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + after) {
                     mainLogger.error("Cleanup didn't finish within \(Int(after)) s of \(SubprocessWatch.signalName(sig)); exiting anyway")
                     // Not with Wine still running in the prefix, though.
-                    killWineBeforeForcedExit?()
+                    killWineBeforeForcedExit.withLock { $0 }?()
                     LogStore.shared.flush()
                     exit(code)
                 }
@@ -80,7 +81,7 @@ func installTerminationHandlers() {
             // sign-in hung there for good. From the run loop, the main queue
             // keeps draining while terminate waits.
             RunLoop.main.perform(inModes: [.common]) {
-                NSApplication.shared.terminate(nil)
+                MainActor.assumeIsolated { NSApplication.shared.terminate(nil) }
             }
         }
         source.resume()

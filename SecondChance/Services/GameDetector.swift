@@ -174,7 +174,7 @@ class GameDetector {
     // MARK: - Installer or Installed Game
 
     /// What a disc offers to install the game with, from its top level.
-    enum InstallerLookup: Equatable {
+    nonisolated enum InstallerLookup: Equatable, Sendable {
         /// An installer by its usual name: an `.msi`, `setup.exe` or `install.exe`.
         case recognised(String)
         /// No installer by name, but programs that might be one, sorted.
