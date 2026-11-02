@@ -587,9 +587,16 @@ meant for. The Direct3D and ScummVM games have no lock to wait for.
 
 From the game's window appearing to the Exit click took 3.3–13 s across all
 33 games, 4.1 s for half of them, where waiting out the screens took up to a
-minute (Labyrinth of Lies' and Sea of Darkness's intros run 50 s). The slowest
-is Secrets Can Kill Remastered, black for its first six seconds with nothing
-there to click.
+minute (Labyrinth of Lies' and Sea of Darkness's intros run 50 s).
+
+**A black start can take a click too.** Secrets Can Kill Remastered from disc
+is black for its first five seconds, then shows its logo and title card for
+fifteen more. A click in the black skips the lot: its menu came up 4.4 s in,
+against 28.6 s unclicked. A game listed in `SplashScreen.blankStartTakesClick`
+has a black capture clicked as a splash screen is, again every 2 s while it
+stays black. Whether a game's black start takes a click is found with
+`--record-click-at` (below); one whose splash screens come within a second or
+two gains little.
 
 A screen is recognised by its **fingerprint** (`ImageFingerprint`): the dark
 bars around the picture are trimmed off, so the display's shape doesn't
@@ -635,6 +642,10 @@ $WP --make-splash-reference /tmp/rec/004960.png \
 # Check every frame: SPLASH, the nearest reference and its distance, and
 # anything light where the bars beside a 4:3 picture should be
 $WP --classify <slug> /tmp/rec
+
+# What a click skips: click the picture 1.5 s after the window goes
+# fullscreen (a comma-separated list for more), and see when the menu comes
+$WP "built-apps/Nancy Drew - <game>.app" --record /tmp/rec-click --record-seconds 40 --record-click-at 1.5
 ```
 
 Some of the splash frames should say `SPLASH`, early on, and every frame from

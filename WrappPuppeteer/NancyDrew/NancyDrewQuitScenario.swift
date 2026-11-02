@@ -51,6 +51,9 @@ struct NancyDrewQuitScenario {
         var recordDirectory: URL?
         /// Click nothing: record for this long, then quit (`--record-seconds`).
         var watchOnlySeconds: TimeInterval?
+        /// While only watching: when to click the game, in seconds from its
+        /// window going fullscreen, to see what a click skips.
+        var watchClicks: [TimeInterval] = []
         /// Once at the menu, quit through the game's Quit menu item (⌘⌥Q)
         /// rather than its Exit button (`--quit-from-menu`).
         var quitFromMenu = false
@@ -169,8 +172,19 @@ struct NancyDrewQuitScenario {
         }
 
         if let seconds = options.watchOnlySeconds {
+            let fullscreenAt = Date()
+            for at in options.watchClicks {
+                let wait = at - Date().timeIntervalSince(fullscreenAt)
+                if wait > 0 { Thread.sleep(forTimeInterval: wait) }
+                // Inside a 4:3 picture on a wide screen, near its top-left
+                // corner, where no menu has a button: as a splash's click is.
+                guard let size = context.game.state()?.size else { continue }
+                let point = CGPoint(x: size.width * 0.2, y: size.height * 0.12)
+                logger.notice("🖱️  [\(String(format: "%.1f", Date().timeIntervalSince(fullscreenAt)))s after fullscreen] Clicking at \(Int(point.x)),\(Int(point.y))")
+                context.game.click(at: point)
+            }
             let remaining = seconds - Date().timeIntervalSince(recordingStart)
-            logger.notice("🎥 Watching for another \(Int(max(remaining, 0)))s, clicking nothing...")
+            logger.notice("🎥 Watching for another \(Int(max(remaining, 0)))s\(options.watchClicks.isEmpty ? ", clicking nothing" : "")...")
             if remaining > 0 { Thread.sleep(forTimeInterval: remaining) }
             forceQuit(app)
             return .passed
@@ -693,13 +707,34 @@ struct NancyDrewQuitScenario {
                 CGRect(x: rect.minX / scale, y: rect.minY / scale, width: rect.width / scale, height: rect.height / scale)
             }
 
+            let fingerprint = ImageFingerprint(imageAt: shotPath)
+
+            // A game whose black start takes a click (`blankStartTakesClick`)
+            // is clicked there, near where a splash screen would be, and
+            // again every `splashRetryInterval` while it stays black: the
+            // first clicks can come before the game takes any.
+            if !clickedExitButton, fingerprint == nil, SplashScreen.blankStartTakesClick.contains(wrapp.gameSlug),
+               !(firstClickToCheck && state.cursorLock == "waiting"),
+               Date().timeIntervalSince(lastSplashClick) >= splashRetryInterval {
+                let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
+                logger.notice("  ✓ [\(elapsed)s] Black start, which this game skips on a click: clicking...")
+                try? FileManager.default.removeItem(atPath: shotPath)
+                if let failure = click(at: CGPoint(x: state.size.width * 0.2, y: state.size.height * 0.12)) {
+                    forceQuit(app)
+                    return failure
+                }
+                splashesClicked.insert("black start")
+                lastSplashClick = Date()
+                continue
+            }
+
             // A splash screen is recognised in milliseconds, where the OCR
             // below takes most of a second, so it's checked first. Its click
             // goes near the picture's top-left corner, which no game's menu
             // has a button in: should a menu ever pass for a splash screen,
             // the click does nothing there.
             if !clickedExitButton, !splashScreens.isEmpty,
-               let fingerprint = ImageFingerprint(imageAt: shotPath),
+               let fingerprint,
                let splash = SplashScreen.match(fingerprint, among: splashScreens) {
                 let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
                 // Until the cursor lock has finished, the first click can't be

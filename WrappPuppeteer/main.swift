@@ -37,6 +37,9 @@ func printUsage() {
         --record <dir>         Save the game window to <dir> from when it appears
                                until the run ends
         --record-seconds <s>   Click nothing: record for <s> seconds, then quit
+        --record-click-at <s,…>  With --record-seconds, click the game's picture
+                               near its top-left corner this many seconds after
+                               its window went fullscreen: what a click skips
         --quit-from-menu       Once at the menu, quit with the game's Quit menu item
                                (as Cmd-Opt-Q does) rather than its Exit button
         --classify             Print each frame's nearest splash screen of the game,
@@ -98,6 +101,11 @@ while i < CommandLine.arguments.count {
         i += 1
         if i < CommandLine.arguments.count, let seconds = TimeInterval(CommandLine.arguments[i]) {
             options.watchOnlySeconds = seconds
+        }
+    case "--record-click-at":
+        i += 1
+        if i < CommandLine.arguments.count {
+            options.watchClicks = CommandLine.arguments[i].split(separator: ",").compactMap { TimeInterval(String($0)) }.sorted()
         }
     case "--quit-from-menu":
         options.quitFromMenu = true
