@@ -213,7 +213,7 @@ class WrappBuildHelper {
 
     /// The edition a build from `source` is, where the builder doesn't say:
     /// the disc's `cd`, Her's Windows download, Steam's or Big Fish's.
-    static func edition(of source: WrappSource) -> String {
+    nonisolated static func edition(of source: WrappSource) -> String {
         switch source {
         case .disk: "cd"
         case .herDownload: "her-windows"
@@ -509,6 +509,7 @@ class WrappBuildHelper {
         bigFishTrial: Bool? = nil,
         configureINI: Bool = true,
         edition: String? = nil,
+        updated: WrappLock.UpdateRecord? = nil,
         input: WrappBuildInput
     ) async throws -> URL {
         // What it was built from, for updating it and for reports; its
@@ -516,9 +517,10 @@ class WrappBuildHelper {
         // off the main thread.
         let edition = edition ?? Self.edition(of: source)
         let slug = gameInfo.id, lockComposition = composition ?? gameInfo.composition
-        let lock = try await Blocking.run {
+        var lock = try await Blocking.run {
             try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: lockComposition)
         }
+        lock.updated = updated
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,

@@ -22,6 +22,9 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     public let functions: [String]?
     /// Steps run after every final stage that `USE`s the module.
     public let assemble: [String]?
+    /// Its default updates, run after a bundle's for a wrapp whose copy of
+    /// the module is behind this one (`UpdatePlanner`).
+    public let updates: [Update]?
 
     public struct Version: Decodable, Hashable, Sendable {
         public let version: String

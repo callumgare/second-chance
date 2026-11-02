@@ -414,6 +414,56 @@ the app's build id, from a signed-in Steam).
 The cache that came before, `wine-prefix-cache/`, is removed by the next
 build.
 
+## Updating a wrapp
+
+A wrapp built by an older Second Chance can be brought up to this one from
+itself, with no disc, when its bundle and modules say how. For now that is a
+hidden extra of the disc source, as disc images are: a game's app chosen
+where its first disc would go (or given as `DISK_1_PATH`) is updated by
+`UpdateWrappBuilder` rather than installed. Nothing on screen offers it yet.
+
+- **What it was built from is its lock** (`WrappLock.json`, `WrappLock`):
+  the bundle's version, each module's version and release and a hash of each
+  of its data files, the Wrappfile's global `ARG`s (`install-dir`), and how it
+  was updated, if it was. A wrapp from before locks gets one made up from its
+  settings and its Wine's version file (`WrappLock.madeUp`), at bundle version
+  0, with the disc edition for a wrapp that never recorded its source.
+- **What to do is worked out before anything runs** (`UpdatePlanner`, in
+  `Packages/WrappBuilder/Sources/WrappBuilder/Updates/`), from the old lock and
+  the lock this build would write. The bundle's `updates` are tried in order,
+  then each module's own, as database migrations are: an update applies when
+  its `from` matches the program as the updates before it left it (`from: {
+  bundle: "<3" }`, `{ wine: "9" }`, `{ nancy-drew: { release: "<3" } }`), and
+  runs its `build.target` stage, or the edition's own when it names none,
+  after which nothing else applies. A module's default update applies only
+  when the wrapp's copy of the module is behind this build's, and, with
+  `when-changed`, only when one of those data files differs. A bundle entry
+  with only an id runs a module's default there instead.
+- **Or the wrapp is built afresh**, and choosing its app says the disc is
+  needed (`WrappBuildError.updateNeedsSource`): when an update says
+  `fresh-build: true`, when the wrapp is another edition or its game is in
+  another folder, or when Wine would cross a major version that no applied
+  update's `from` names. Wine within a major version is moved
+  (`wineboot -u`, `WineManager.movePrefix`).
+- **The shipped defaults**: the wine module's `wine-prefix`, when
+  `prefix.yaml` changed, applies this set-up over the old prefix
+  (`WineManager.applyPrefixSetup`) with the game left installed. The steam
+  module's `steam` builds afresh, from Steam, which needs no disc.
+- **The old wrapp's prefix is carried into a new one** made from this
+  template, so the launch code is always this Second Chance's. Its
+  `Documents` and A: drive lead to the person's saves, so both are pointed at
+  an empty stand-in before anything runs (the first launch points them back),
+  and Z: is mounted for the update's Wine programs and taken away again as
+  the wrapp is finished. An update's stage runs patches and the .ini settings
+  over the installed game; a step that installs the game again makes it a
+  fresh build. Nothing carried over from the old wrapp is cached.
+- **The new lock records the chain** (`updated`: the old bundle version and
+  modules, the updates applied, and the Second Chance that built it).
+
+Telling the owner of a wrapp built with a fixed bug that updating it fixes
+the problem, and whether that needs the disc, is left for when updating is
+offered on screen; `ShippedBundles.updateDecision` is what it will ask.
+
 ## Cancelling
 
 The progress screen's **Cancel** asks for confirmation, then cancels the

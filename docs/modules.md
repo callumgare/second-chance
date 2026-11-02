@@ -38,14 +38,18 @@ native: "wine"                 # the Swift compiled into Second Chance it is
 versions:                      # what this release provides, as a bundle names it with @
   - { version: "10.0_8" }
 data: ["prefix.yaml", "routine-errors.yaml"]
+updates:                       # its default updates, after a bundle's
+  - { id: "wine-prefix", when-changed: ["prefix.yaml"] }
 ```
 
 A module's data tables are YAML, read as YAML 1.2 as bundles are
 ([program-bundles.md](program-bundles.md#how-a-manifest-is-read)), and a table
 with a schema beside it (`prefix.yaml` and `prefix.schema.json`) is checked
-against it whenever the module is loaded. The rest of the format (functions,
-stages, volumes, a module's updates) is the plan's, and comes with what reads
-it.
+against it whenever the module is loaded. A module's `updates` are run after a
+bundle's for a wrapp whose copy of the module is behind, as
+[wrapp-build.md](wrapp-build.md#updating-a-wrapp) describes; one with no
+`build` is done by the module's own Swift. The rest of the format (functions,
+stages, volumes) is the plan's, and comes with what reads it.
 
 ## What lives where
 

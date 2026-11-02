@@ -26,6 +26,8 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public let editions: [Edition]
     /// What is kept outside the app, by name.
     public let volumes: [String: Volume]?
+    /// How an old wrapp is brought up to this bundle, in order (`UpdatePlanner`).
+    public let updates: [Update]?
 
     public struct Volume: Decodable, Hashable, Sendable {
         /// When the volume holds something of the person's: any file in it

@@ -38,6 +38,7 @@ let package = Package(
                 .product(name: "WrappModules", package: "WrappKit"),
                 .product(name: "WindowsFormats", package: "WrappKit"),
                 .product(name: "ProcessKit", package: "WrappKit"),
+                .product(name: "WrappFormat", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings,
             linkerSettings: [.linkedFramework("JavaScriptCore")]

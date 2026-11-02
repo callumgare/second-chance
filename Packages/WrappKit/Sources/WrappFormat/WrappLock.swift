@@ -35,6 +35,13 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
     public var savesVolume: String?
     /// The volume ScummVM's settings file is kept in, for a ScummVM game.
     public var scummvmSettingsVolume: String?
+    /// The Wrappfile's global `ARG`s as the build had them (`install-dir`),
+    /// which an update must find unchanged or move the program for.
+    public var args: [String: String]?
+    /// How this wrapp was updated from an older one; nil for a fresh build.
+    public var updated: UpdateRecord?
+    /// A lock made up for a wrapp built before locks, from its settings.
+    public var madeUp: Bool?
     public var builtAt: Date
 
     public struct BundleRef: Codable, Sendable, Equatable {
@@ -53,11 +60,33 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
         public var release: Int
         /// The version the build used, as `USE` resolved it.
         public var version: String?
+        /// The SHA-256 of each of the module's data files the build read
+        /// (`prefix.yaml`), which a module's default update compares.
+        public var files: [String: String]?
 
-        public init(id: String, release: Int, version: String?) {
+        public init(id: String, release: Int, version: String?, files: [String: String]? = nil) {
             self.id = id
             self.release = release
             self.version = version
+            self.files = files
+        }
+    }
+
+    /// The updates that brought a wrapp here, and what it was before them:
+    /// "updated from bundle 3 and wine 9.0_2 by from-wine-9, then taffy-patch".
+    public struct UpdateRecord: Codable, Sendable, Equatable {
+        public var fromBundle: Int
+        public var fromModules: [ModuleRef]
+        /// Each update that ran, in order; empty when the old wrapp's files
+        /// were carried into this Second Chance's with nothing else to do.
+        public var applied: [String]
+        public var fromBuiltBy: String
+
+        public init(fromBundle: Int, fromModules: [ModuleRef], applied: [String], fromBuiltBy: String) {
+            self.fromBundle = fromBundle
+            self.fromModules = fromModules
+            self.applied = applied
+            self.fromBuiltBy = fromBuiltBy
         }
     }
 
@@ -76,6 +105,44 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
         self.volumes = volumes
         self.savesVolume = savesVolume
         self.scummvmSettingsVolume = scummvmSettingsVolume
+    }
+
+    /// The lock a wrapp built before locks would have had, made up from its
+    /// settings and its Wine engine's version file, at bundle version 0:
+    /// enough for an update to work out what it needs. `program` and
+    /// `edition` are the caller's, which knows its bundles.
+    public static func madeUp(settings: WrappSettings, program: String, edition: String,
+                              wineVersion: String?, builtAt: Date = Date()) -> WrappLock {
+        let composition = settings.composition
+        let modules = composition.modules.map { module in
+            ModuleRef(id: module.rawValue, release: 0, version: module == .wine ? wineVersion : nil)
+        }
+        // The game's folder, as the global ARG writes it: C:/… with the
+        // exe's name dropped. ScummVM's exe path is the folder already.
+        var installDir = settings.gameExePath
+        if composition.has(.wine), let slash = installDir.lastIndex(of: "/") { installDir = String(installDir[..<slash]) }
+        let args = composition.has(.wine) && !installDir.isEmpty ? ["install-dir": "C:" + installDir] : nil
+        var lock = WrappLock(bundle: .init(id: program, version: 0), edition: edition,
+                             source: (settings.source ?? .disk).rawValue, composition: composition,
+                             modules: modules, builtBy: "unknown", builtAt: builtAt)
+        lock.args = args
+        lock.madeUp = true
+        return lock
+    }
+
+    /// `10.0_8` from a Wine engine's version file ("wine sikarugir 10.0
+    /// (revision 8)"), the way the wine module writes its versions; nil
+    /// when there is no number in it.
+    public static func wineVersion(fromVersionFile text: String) -> String? {
+        let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard let number = words.first(where: { $0.first?.isNumber == true && $0.allSatisfy { $0.isNumber || $0 == "." } }) else {
+            return nil
+        }
+        if let index = words.firstIndex(of: "(revision"), index + 1 < words.count {
+            let revision = words[index + 1].trimmingCharacters(in: CharacterSet(charactersIn: ")"))
+            if Int(revision) != nil { return "\(number)_\(revision)" }
+        }
+        return number
     }
 
     /// The bundle id a wrapp of `program` (`nancy-drew/blue-moon`) has.

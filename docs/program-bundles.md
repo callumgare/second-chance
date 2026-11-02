@@ -60,8 +60,10 @@ notes:                          # for people only; nothing reads these
   installer: "installshield"
 ```
 
-The schema describes every field, including those nothing reads yet (volumes,
-updates, choices, tests). What today's code reads, by field:
+The schema describes every field, including those nothing reads yet (choices,
+tests). `updates` is read when an old wrapp is updated
+([wrapp-build.md](wrapp-build.md#updating-a-wrapp)). What today's code reads
+into `GameInfo`, by field:
 
 | Manifest | Today's `GameInfo` |
 | --- | --- |

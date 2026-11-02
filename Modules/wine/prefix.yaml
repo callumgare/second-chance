@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=prefix.schema.json
 # How every Wine prefix a build makes is set up, in order, after wineboot.
-# WineManager runs these; a prefix made before a change here stays cached
-# until `sc clean wine-prefixes`.
+# WineManager runs these. A change here makes a fresh prefix (the prefix
+# layer is keyed on this file), and the wine-prefix update applies it to
+# an old wrapp's prefix.
 setup:
   # Have Wine say yes to a game's display mode switch without making it,
   # and scale the game up to the real display instead. Old games quit when

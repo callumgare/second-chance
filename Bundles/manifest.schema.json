@@ -488,6 +488,7 @@
       }
     },
     "update": {
+      "description": "One way of bringing an old wrapp up to this bundle, run in order like a database's migrations. An entry with only an id names a module's default update, to run it there.",
       "type": "object",
       "additionalProperties": false,
       "required": ["id"],
@@ -496,7 +497,10 @@
         "from": { "$ref": "#/$defs/versions" },
         "to": { "$ref": "#/$defs/versions" },
         "build": { "$ref": "#/$defs/build" },
-        "fresh-build": { "type": "boolean" }
+        "fresh-build": {
+          "description": "Wrapps matching `from` can't be brought forward and are built afresh from their source.",
+          "type": "boolean"
+        }
       }
     },
     "versions": {

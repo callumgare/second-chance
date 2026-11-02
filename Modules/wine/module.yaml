@@ -1,9 +1,15 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 1
+release: 2
 native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
 versions:
   - { version: "10.0_8" }                    # Sikarugir's Wine 10.0, packaging 8 (setup-wine.sh)
 runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
 data: ["prefix.yaml", "routine-errors.yaml"]
+updates:
+  # A wrapp whose prefix was set up from another prefix.yaml gets this
+  # one's set-up applied over it (registry settings, cnc-ddraw and its
+  # ddraw.ini), keeping the game installed. Not on every release: most only
+  # change what happens at launch, which a new wrapp brings anyway.
+  - { id: "wine-prefix", when-changed: ["prefix.yaml"] }

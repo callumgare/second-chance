@@ -33,6 +33,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     private let gameInfoProvider: GameInfoProvider
     private let isoMounter: ISOMounter
     private let wineManager: WineManager
+    private let updater: UpdateWrappBuilder
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.DiskWrappBuilder")
 
@@ -52,6 +53,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         self.isoMounter = isoMounter
         self.wineManager = wineManager
         self.bus = bus
+        updater = UpdateWrappBuilder(helper: helper, installerRunner: installerRunner, gameInfoProvider: gameInfoProvider,
+                                     wineManager: wineManager, bus: bus)
     }
 
     // MARK: - Build Flow
@@ -59,9 +62,17 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .disk))
 
+        // A game's app chosen where its disc would go is updated from
+        // itself (docs/wrapp-build.md#updating-a-wrapp): the disc source is
+        // the way to it until updating is a source of its own.
+        let chosen = try await input.getDisk1Path()
+        if UpdateWrappBuilder.isWrapp(chosen) {
+            return try await updater.update(wrapp: chosen, input: input)
+        }
+
         // ── Resolve disk 1 and detect the game ONCE ──────────────────────
         // GameInfo threads through from here.
-        let (disk1Root, _, gameInfo, installerName) = try await resolveGame(input: input)
+        let (disk1Root, _, gameInfo, installerName) = try await resolveGame(disk1: chosen, input: input)
 
         // ── Build ──────────────────────────────────────────────────────
         // The builder owns the temp wrapp lifecycle: removed on both the
@@ -264,9 +275,9 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// disc, the wrong game) still unmounts what it mounted and reports
     /// itself, like a failure in the build.
     private func resolveGame(
-        input: WrappBuildInput
+        disk1 chosen: URL, input: WrappBuildInput
     ) async throws -> (disk1Root: URL, gameSlug: String, gameInfo: GameInfo, installerName: String?) {
-        var disk1 = try await input.getDisk1Path()
+        var disk1 = chosen
         do {
             while true {
                 logger.notice("Disk 1: \(disk1.path)")

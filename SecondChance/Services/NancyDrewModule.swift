@@ -103,10 +103,15 @@ nonisolated enum ShippedBundles {
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let planned = try plan(forGame: slug, edition: edition, in: bundle)?.target?.modules
             let used = planned ?? composition.modules.map(\.rawValue)
-            let refs = used.compactMap { id in
-                modules.first { $0.manifest.id == id }.map {
-                    WrappLock.ModuleRef(id: id, release: $0.manifest.release, version: $0.manifest.versions.first?.version)
+            // Each module's data files by hash, which its default updates
+            // compare (`when-changed`).
+            let refs = try used.compactMap { id -> WrappLock.ModuleRef? in
+                guard let module = modules.first(where: { $0.manifest.id == id }) else { return nil }
+                let files = try (module.manifest.data ?? []).reduce(into: [String: String]()) { files, name in
+                    files[name] = try LayerKey.hash(file: module.file(name))
                 }
+                return WrappLock.ModuleRef(id: id, release: module.manifest.release, version: module.manifest.versions.first?.version,
+                                           files: files.isEmpty ? nil : files)
             }
             let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
             // The volumes of the variant the wrapp runs: its launcher's.
@@ -121,15 +126,69 @@ nonisolated enum ShippedBundles {
                 }
             }
             let mounted = variant?.volumes?.map(\.source) ?? []
-            return WrappLock(bundle: .init(id: manifest.id, version: manifest.version), edition: edition,
-                             source: source.rawValue, composition: composition, modules: refs, builtBy: version,
-                             formerBundleIDs: manifest.formerBundleIds, volumes: rules.isEmpty ? nil : rules,
-                             savesVolume: mounted.first,
-                             scummvmSettingsVolume: mounted.contains("scummvm-settings") ? "scummvm-settings" : nil)
+            var lock = WrappLock(bundle: .init(id: manifest.id, version: manifest.version), edition: edition,
+                                 source: source.rawValue, composition: composition, modules: refs, builtBy: version,
+                                 formerBundleIDs: manifest.formerBundleIds, volumes: rules.isEmpty ? nil : rules,
+                                 savesVolume: mounted.first,
+                                 scummvmSettingsVolume: mounted.contains("scummvm-settings") ? "scummvm-settings" : nil)
+            let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+            let args = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).globalArgs(edition: edition)
+            lock.args = args.isEmpty ? nil : args
+            return lock
         } catch let error as WrappBuildError {
             throw error
         } catch {
             throw WrappBuildError.buildRecipeProblem("\(slug) \(edition) lock: \(error)")
+        }
+    }
+
+    /// How to bring the old wrapp `old` locks up to what this Second Chance
+    /// builds for the Nancy Drew game `slug`: the lock it would write is the
+    /// target, and the bundle's and modules' updates the way there
+    /// (`UpdatePlanner`). Throws `buildRecipeProblem` when the bundle can't
+    /// be loaded or planned.
+    static func updateDecision(from old: WrappLock, forGame slug: String, source: WrappSource, composition: Composition,
+                               in bundle: Bundle = .main) throws -> (decision: UpdatePlanner.Decision, target: WrappLock) {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
+        let target = try lock(forGame: slug, edition: old.edition, source: source, composition: composition, in: bundle)
+        do {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+            let planner = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules)
+            let edition = old.edition
+            let updates = UpdatePlanner(manifest: loaded.manifest, modules: modules) { stage in
+                try planner.plan(edition: edition, target: stage, conditions: .thisMac).target?.modules ?? []
+            }
+            let decision = try updates.plan(old: old, target: .init(
+                bundleVersion: target.bundle.version, edition: target.edition, modules: target.modules, args: target.args ?? [:]
+            ))
+            return (decision, target)
+        } catch let error as WrappBuildError {
+            throw error
+        } catch {
+            throw WrappBuildError.buildRecipeProblem("\(slug) update from \(old.summary): \(error)")
+        }
+    }
+
+    /// The stage `stage` of `edition` of the Nancy Drew game `slug`, planned
+    /// for an update that applies `updates`, with `previous` read from the
+    /// old wrapp's lock.
+    static func plan(forGame slug: String, edition: String, stage: String, updates: [String], previous: [String: String],
+                     in bundle: Bundle = .main) throws -> BuildPlan {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
+        do {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+            var conditions = BuildConditions.thisMac
+            conditions.updates = updates
+            conditions.previous = previous
+            return try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).plan(edition: edition, target: stage, conditions: conditions)
+        } catch {
+            throw WrappBuildError.buildRecipeProblem("\(slug) \(edition) \(stage): \(error)")
         }
     }
 

@@ -67,6 +67,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// The folder chosen holds a game that's already installed, with no
     /// installer beside it (`GameDetector.isInstalledGame`).
     case installedGameNotInstaller
+    /// A game's app was chosen to be updated, and it can only be built
+    /// afresh from its `source`, for `reason` (for the log).
+    case updateNeedsSource(reason: String, source: WrappSource = .disk)
     case gameExecutableNotFound
     case userCancelled
     case userCancelledBeforeStart
@@ -248,6 +251,26 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: """
                 This is a game that's already installed, not its installer. Second Chance needs to install the game itself: \
                 choose the game's disc, or the installer you downloaded from Her Interactive.
+                """)
+        case .updateNeedsSource(_, .disk):
+            return String(localized: """
+                This game's app can't be brought up to date without the game's disc. \
+                Choose the game's first disc instead, and Second Chance will make the app again.
+                """)
+        case .updateNeedsSource(_, .herDownload):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Choose the file you downloaded \
+                from Her Interactive instead, and Second Chance will make the app again.
+                """)
+        case .updateNeedsSource(_, .steam):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Add the game from Steam again, \
+                and Second Chance will make the app again.
+                """)
+        case .updateNeedsSource(_, .bigFish):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Add the game from Big Fish Games again, \
+                and Second Chance will make the app again.
                 """)
         case .gameExecutableNotFound:
             return String(localized: "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests.")

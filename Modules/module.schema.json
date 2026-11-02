@@ -71,7 +71,33 @@
       "type": "object"
     },
     "volumes": { "type": "object" },
-    "updates": { "type": "array" },
+    "updates": {
+      "description": "The module's default updates, run after a bundle's for a wrapp whose copy of this module is behind this release. One with no build is done by the module's own Swift.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "from": { "type": "object" },
+          "to": { "type": "object" },
+          "build": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target"],
+            "properties": { "target": { "type": "string" }, "base": { "type": "string" } }
+          },
+          "fresh-build": { "type": "boolean" },
+          "when-changed": {
+            "description": "It applies only when one of these data files differs from the one the old wrapp was built with.",
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          }
+        }
+      }
+    },
     "invalidates": { "type": "object" },
     "notes": { "description": "For people only; never read." }
   }

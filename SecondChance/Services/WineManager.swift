@@ -181,7 +181,6 @@ class WineManager {
     private func makeWinePrefix(at wrappPath: URL, bus: EventBus<AppEvent>) async throws -> Bool {
 
         let wine = Wine(wrapp: wrappPath)
-        let winetricks = Winetricks(wine: wine)
 
         // Run wineboot to initialize (wineboot is a Windows program, so run it through wine)
         try await wine.run(.wine(["wineboot", "-u"]))
@@ -191,6 +190,30 @@ class WineManager {
 
         // The rest is the wine module's data (Modules/wine/prefix.yaml), in
         // order.
+        let configured = try await applyPrefixSetup(at: wrappPath, bus: bus)
+
+        // Only the drives a game needs (WineDrives has what each is for),
+        // and no Z: showing the whole Mac. The A: drive's place in /tmp
+        // stands in for the saves until the wrapp points it at them, and C:
+        // is relative so the prefix still works copied into a wrapp.
+        wine.drives.removeAll()
+        try wine.drives.mount("/tmp/second-chance-nancy-drew-\(UUID().uuidString)", as: "a")
+        try wine.drives.mount("../drive_c", as: "c")
+        wine.drives.block("bdefghijklmnopqrstuvwxyz")
+
+        // Ensure Wine server is fully shut down before caching
+        // This ensures all registry changes and file writes are flushed to disk
+        try await wine.server.waitUntilProgramsExit(timeout: nil)
+        return configured
+    }
+
+    /// The wine module's set-up (`prefix.yaml`), applied to the prefix of
+    /// the wrapp at `wrappPath`: a new one, or an old wrapp's, which the
+    /// `wine-prefix` update brings up to this set-up with its game left
+    /// installed. Whether every step took.
+    func applyPrefixSetup(at wrappPath: URL, bus: EventBus<AppEvent>) async throws -> Bool {
+        let wine = Wine(wrapp: wrappPath)
+        let winetricks = Winetricks(wine: wine)
         var configured = true
         for step in try Self.prefixSetup().setup {
             if let progress = step.progress.flatMap(Self.progressText) {
@@ -207,19 +230,16 @@ class WineManager {
                                                     settings: settings) && configured
             }
         }
-
-        // Only the drives a game needs (WineDrives has what each is for),
-        // and no Z: showing the whole Mac. The A: drive's place in /tmp
-        // stands in for the saves until the wrapp points it at them, and C:
-        // is relative so the prefix still works copied into a wrapp.
-        wine.drives.removeAll()
-        try wine.drives.mount("/tmp/second-chance-nancy-drew-\(UUID().uuidString)", as: "a")
-        try wine.drives.mount("../drive_c", as: "c")
-        wine.drives.block("bdefghijklmnopqrstuvwxyz")
-
-        // Ensure Wine server is fully shut down before caching
-        // This ensures all registry changes and file writes are flushed to disk
         try await wine.server.waitUntilProgramsExit(timeout: nil)
         return configured
+    }
+
+    /// Move the prefix of the wrapp at `wrappPath`, made by another Wine of
+    /// the same major version, to the wrapp's own: `wineboot -u`, which
+    /// rewrites only Wine's own files.
+    func movePrefix(at wrappPath: URL) async throws {
+        let wine = Wine(wrapp: wrappPath)
+        try await wine.run(.wine(["wineboot", "-u"]))
+        try await wine.server.waitUntilProgramsExit(timeout: nil)
     }
 }

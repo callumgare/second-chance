@@ -867,7 +867,9 @@ class WrappBuildInput {
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.canCreateDirectories = false
-        panel.allowedContentTypes = [.folder] + [UTType(filenameExtension: "iso")].compactMap { $0 }
+        // A game's app is a hidden extra, as disc images are: updating it
+        // from itself (UpdateWrappBuilder) until it is a source of its own.
+        panel.allowedContentTypes = [.folder, .applicationBundle] + [UTType(filenameExtension: "iso")].compactMap { $0 }
         panel.directoryURL = URL(fileURLWithPath: "/Volumes")
 
         return await runOpenPanel(panel)

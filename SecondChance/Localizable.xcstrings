@@ -719,6 +719,9 @@
     "Second Chance wants to install Rosetta, which the games need." : {
 
     },
+    "Second Chance's instructions for building this game have a problem. Updating Second Chance may fix it." : {
+
+    },
     "Select the game you downloaded from Her Interactive: the .exe file for Windows, or for Mac the .dmg file or the installer app inside it." : {
 
     },
@@ -1006,6 +1009,15 @@
     "This game needs Steam signed in, which needs the internet." : {
 
     },
+    "This game's app can't be brought up to date by itself. Add the game from Steam again, and Second Chance will make the app again." : {
+
+    },
+    "This game's app can't be brought up to date by itself. Choose the file you downloaded from Her Interactive instead, and Second Chance will make the app again." : {
+
+    },
+    "This game's app can't be brought up to date without the game's disc. Choose the game's first disc instead, and Second Chance will make the app again." : {
+
+    },
     "This is a game that's already installed, not its installer. Second Chance needs to install the game itself: choose the game's disc, or the installer you downloaded from Her Interactive." : {
 
     },
@@ -1034,6 +1046,9 @@
 
     },
     "Updating Steam…" : {
+
+    },
+    "Updating the game's Windows files" : {
 
     },
     "Use Steam's window, or scan its QR code with the Steam app on your phone." : {

@@ -112,6 +112,15 @@ public nonisolated struct BuildPlanner {
             throw PlanError(description: "\(bundle.manifest.id) has no edition called \(editionID)")
         }
         guard let target = edition.build?.target else { return nil }
+        return try plan(edition: editionID, target: target, conditions: conditions)
+    }
+
+    /// The plan that builds the stage `target` for `editionID`: the
+    /// edition's own target, or an update's (`updates[].build.target`).
+    public func plan(edition editionID: String, target: String, conditions: BuildConditions) throws(PlanError) -> BuildPlan {
+        guard let edition = bundle.manifest.editions.first(where: { $0.id == editionID }) else {
+            throw PlanError(description: "\(bundle.manifest.id) has no edition called \(editionID)")
+        }
         var choices = Dictionary(uniqueKeysWithValues: (edition.choices ?? [:]).map { (WrappfileChecker.kebabCase($0.key), $0.value.default) })
         choices.merge(conditions.choices) { $1 }
         var effective = conditions
@@ -130,6 +139,13 @@ public nonisolated struct BuildPlanner {
             stages.append(planned.stage)
         }
         return BuildPlan(edition: editionID, stages: stages)
+    }
+
+    /// The Wrappfile's global `ARG`s as `editionID` has them
+    /// (`install-dir`), for its lock.
+    public func globalArgs(edition editionID: String) -> [String: String] {
+        guard let edition = bundle.manifest.editions.first(where: { $0.id == editionID }) else { return [:] }
+        return Context(planner: self, edition: edition, conditions: .thisMac).globals
     }
 
     // MARK: - Working it out
@@ -466,5 +482,5 @@ public nonisolated struct BuildPlanner {
 nonisolated extension ModuleFolder {
     /// Marks a bundle's own function's scope, which has no module data.
     static let none = ModuleFolder(folder: URL(fileURLWithPath: "/"), manifest: ModuleManifest(
-        format: 1, id: "", release: 1, native: nil, versions: [], dependsOn: nil, data: nil, assets: nil, functions: nil, assemble: nil))
+        format: 1, id: "", release: 1, native: nil, versions: [], dependsOn: nil, data: nil, assets: nil, functions: nil, assemble: nil, updates: nil))
 }
