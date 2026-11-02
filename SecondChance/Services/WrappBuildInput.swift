@@ -44,6 +44,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
 /// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
 /// | `askAboutUnrecognisedGame(_:)` | — (headless: installs it anyway)       | NSAlert: choose another, install anyway, cancel |
+/// | `chooseGameProgram(among:)`   | — (headless: the first, as ranked)      | NSAlert with the programs      |
 /// | `ensureRosetta(bus:)`         | — (headless: fails if it's missing)     | NSAlert offering to install it |
 /// | `onGameDetected()`            | `EXPECTED_GAME_SLUG` (fails on mismatch)| accepts whatever was detected  |
 ///
@@ -580,6 +581,35 @@ class WrappBuildInput {
             logger.notice("No installer recognised: cancelled")
             throw WrappBuildError.userCancelledBeforeStart
         }
+    }
+
+    /// Which of the programs the install left is the game, when it isn't
+    /// where the game's details say and more than one is new. `programs`
+    /// comes ranked, likeliest first (`GameInstallerRunner.rankedGamePrograms`),
+    /// and the list starts on the first. A headless run takes that one.
+    @MainActor
+    func chooseGameProgram(among programs: [String]) throws -> String {
+        guard let first = programs.first else { throw WrappBuildError.gameExecutableNotFound }
+        if isHeadlessRun {
+            logger.warning("More than one program could be the game: using \(first)")
+            return first
+        }
+
+        let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 420, height: 26), pullsDown: false)
+        menu.addItems(withTitles: programs)
+        let alert = NSAlert()
+        alert.messageText = "Which program starts the game?"
+        alert.informativeText = "The game installed several programs, and Second Chance can't tell "
+            + "which one is the game. The likeliest is chosen for you."
+        alert.accessoryView = menu
+        alert.addButton(withTitle: "Continue")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn, let chosen = menu.titleOfSelectedItem else {
+            logger.notice("Choosing the game's program: cancelled")
+            throw WrappBuildError.userCancelled
+        }
+        logger.notice("Chosen as the game's program: \(chosen)")
+        return chosen
     }
 
     /// Make sure this Mac can run Wine before the build asks for anything:

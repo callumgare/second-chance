@@ -139,7 +139,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 source: .herDownload,
                 installerPath: unpacked ? nil : installer,
                 unattended: input.isUnattended,
-                confirmPatchFailure: input.confirmPatchFailure
+                confirmPatchFailure: input.confirmPatchFailure,
+                chooseGameProgram: input.chooseGameProgram(among:)
             )
 
             // Unlike a disc, nothing reads the installer once the game is in.

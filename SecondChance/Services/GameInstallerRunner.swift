@@ -54,7 +54,8 @@ class GameInstallerRunner {
         installerPath: URL? = nil,
         installerName: String? = nil,
         unattended: Bool,
-        confirmPatchFailure: PatchFailureConfirmation
+        confirmPatchFailure: PatchFailureConfirmation,
+        chooseGameProgram: ([String]) throws -> String
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
@@ -144,7 +145,8 @@ class GameInstallerRunner {
                         before: exesBefore,
                         after: exesAfter,
                         expectedPath: gameInfo.internalGameExePath,
-                        driveCPath: driveCPath
+                        driveCPath: driveCPath,
+                        choose: chooseGameProgram
                     )
                     if let found = gameExe {
                         do {
@@ -822,12 +824,33 @@ class GameInstallerRunner {
         return executables
     }
 
+    /// New programs an install left, likeliest to be the game first.
+    /// Uninstallers, setup programs and the like go last. Of the rest, the
+    /// shallowest first, as a game's own program sits at the top of the
+    /// folder it was installed in (the one the person picked, if the
+    /// installer asked) and its helpers in folders beneath; then the largest,
+    /// as a game's program dwarfs its helpers; then by name, so the order
+    /// never depends on how the disk lists them.
+    nonisolated static func rankedGamePrograms(_ paths: Set<String>) -> [URL] {
+        func size(_ url: URL) -> Int { (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
+        let ranked = paths.map { URL(fileURLWithPath: $0) }.map { (url: $0, size: size($0)) }.sorted { first, second in
+            let (firstOut, secondOut) = (isNotTheGame(first.url), isNotTheGame(second.url))
+            if firstOut != secondOut { return secondOut }
+            let (firstDepth, secondDepth) = (first.url.pathComponents.count, second.url.pathComponents.count)
+            if firstDepth != secondDepth { return firstDepth < secondDepth }
+            if first.size != second.size { return first.size > second.size }
+            return first.url.path.localizedStandardCompare(second.url.path) == .orderedAscending
+        }
+        return ranked.map(\.url)
+    }
+
     /// Find the game executable after installation
     private func findGameExecutable(
         before: Set<String>,
         after: Set<String>,
         expectedPath: String?,
-        driveCPath: URL
+        driveCPath: URL,
+        choose: ([String]) throws -> String
     ) throws -> URL {
         logger.notice("=== Searching for game executable ===")
 
@@ -876,12 +899,24 @@ class GameInstallerRunner {
         }
         logger.notice("✗ No 'game.exe' found in new executables")
 
-        // Otherwise the likeliest of what's new: never an uninstaller or a
-        // setup program, and of the rest the largest (a game's exe dwarfs its
-        // helpers), so the choice is the same every time.
-        if let likeliest = Self.likeliestGameExe(among: newExes) {
-            logger.notice("Using the likeliest new executable: \(likeliest.path)")
-            return likeliest
+        // Otherwise one of the new programs: the only likely one, or the
+        // person's choice when there are several
+        let ranked = Self.rankedGamePrograms(newExes)
+        let likely = ranked.filter { !Self.isNotTheGame($0) }
+        if likely.count == 1, let only = likely.first {
+            logger.notice("Using the only likely new executable: \(only.path)")
+            return only
+        }
+        if ranked.count == 1, let only = ranked.first {
+            logger.notice("Using the only new executable: \(only.path)")
+            return only
+        }
+        if !ranked.isEmpty {
+            let names = ranked.map { Self.windowsPath(of: $0, driveC: driveCPath) }
+            let chosen = try choose(names)
+            guard let index = names.firstIndex(of: chosen) else { throw WrappBuildError.gameExecutableNotFound }
+            logger.notice("Using the chosen executable: \(ranked[index].path)")
+            return ranked[index]
         }
 
         logger.critical("ERROR: Could not determine game executable")
@@ -898,17 +933,10 @@ extension GameInstallerRunner {
     /// Names of the programs an installer leaves beside a game that aren't it.
     nonisolated private static let notTheGame = ["unins", "uninst", "setup", "install", "update", "patch", "readme", "dxsetup", "vcredist"]
 
-    /// The new executable most likely to be the game, or nil if every one
-    /// is an uninstaller, a setup program or the like.
-    nonisolated static func likeliestGameExe(among paths: some Collection<String>) -> URL? {
-        let candidates = paths.map { URL(fileURLWithPath: $0) }.filter { url in
-            let name = url.lastPathComponent.lowercased()
-            return !notTheGame.contains { name.hasPrefix($0) }
-        }
-        func size(_ url: URL) -> Int { (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
-        return candidates.max { lhs, rhs in
-            let (left, right) = (size(lhs), size(rhs))
-            return left != right ? left < right : lhs.path > rhs.path
-        }
+    /// Whether a program is an uninstaller, a setup program or the like,
+    /// by its name.
+    nonisolated static func isNotTheGame(_ program: URL) -> Bool {
+        let name = program.lastPathComponent.lowercased()
+        return notTheGame.contains { name.hasPrefix($0) }
     }
 }

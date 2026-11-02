@@ -94,7 +94,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     source: .disk,
                     installerName: installerName,
                     unattended: input.isUnattended,
-                    confirmPatchFailure: input.confirmPatchFailure
+                    confirmPatchFailure: input.confirmPatchFailure,
+                    chooseGameProgram: input.chooseGameProgram(among:)
                 )
             case .scummvm:
                 await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
@@ -314,7 +315,13 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         try cacheManager.saveCache(wrappPath: wrappPath, stage: .diskGameInstallerCopied, gameSlug: gameSlug)
     }
 
-    /// Mount game disk directories as CD-ROM drives
+    /// Mount game disk directories as CD-ROM drives.
+    ///
+    /// The copies stay in the wrapp after the install, still mounted, for the
+    /// game as well as its installer: some games check their disc is in the
+    /// drive before they will play. We don't know which files each one looks
+    /// at, so the whole disc is kept rather than just what the check reads.
+    /// A ScummVM game needs them anyway, as its game data.
     private func mountGameDisksIntoWine(wrappPath: URL) async throws {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let installerPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder)

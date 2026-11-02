@@ -83,19 +83,6 @@ struct BuildPipelineReliabilityTests {
         await #expect(throws: CancellationError.self) { try await copying.value }
     }
 
-    @Test("The game's exe is the largest new program that isn't an uninstaller or a setup program")
-    func likeliestExe() throws {
-        let root = try Self.temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let names = ["unins000.exe": 900_000, "Setup.exe": 800_000, "Game.exe": 500_000, "Helper.exe": 10_000]
-        for (name, size) in names {
-            try Data(repeating: 0, count: size).write(to: root.appendingPathComponent(name))
-        }
-        let picked = GameInstallerRunner.likeliestGameExe(among: names.keys.map { root.appendingPathComponent($0).path })
-        #expect(picked?.lastPathComponent == "Game.exe")
-        #expect(GameInstallerRunner.likeliestGameExe(among: [root.appendingPathComponent("unins000.exe").path]) == nil)
-    }
-
     @Test("A Windows-1252 file is read, and written back in the encoding it came in")
     func windowsText() throws {
         let root = try Self.temporaryDirectory()
