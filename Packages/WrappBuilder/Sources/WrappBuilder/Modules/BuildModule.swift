@@ -73,13 +73,36 @@ public nonisolated enum WineBuild: BuildModule {
 
     /// The prefix set-up in the wine module in `modules`.
     public static func prefixSetup(modules root: URL) throws -> PrefixSetup {
+        try ModuleLoader.table("prefix.yaml", of: module(in: root), as: PrefixSetup.self)
+    }
+
+    static func module(in root: URL) throws -> ModuleFolder {
         let loader = try ModuleLoader(root: root)
         switch loader.load(root.appendingPathComponent(id.rawValue)) {
         case .success(let module):
-            return try ModuleLoader.table("prefix.yaml", of: module, as: PrefixSetup.self)
+            return module
         case .failure(let problems):
             throw ModuleReleases.RecordError(description: "The wine module has problems: \(problems)")
         }
+    }
+
+    /// Raised whenever the Swift that makes a prefix (`WineManager`'s
+    /// `makeWinePrefix`) changes what it makes: the one input of the prefix
+    /// layer's key that can't be read from a file.
+    public static let prefixCodeRevision = 1
+
+    /// The key of the layer a new prefix is (`USE wine`): the engine, the
+    /// wine module's release and the set-up it follows, and winetricks.
+    /// A change to any of them makes a fresh prefix, with nothing to clear.
+    public static func prefixLayerKey(engineVersion: String, modules root: URL, winetricks: URL?) throws -> LayerKey {
+        let module = try module(in: root)
+        return LayerKey(slot: "wine prefix", inputs: [
+            .init("wine engine", engineVersion.trimmingCharacters(in: .whitespacesAndNewlines)),
+            .init("wine release", String(module.manifest.release)),
+            .init("wine prefix.yaml", try LayerKey.hash(file: module.file("prefix.yaml"))),
+            .init("winetricks", try winetricks.map(LayerKey.hash(file:)) ?? "none"),
+            .init("prefix code revision", String(prefixCodeRevision)),
+        ])
     }
 }
 

@@ -21,7 +21,7 @@ package in `Tools/sc/` — [docs/dev-cli.md](docs/dev-cli.md)). The project uses
 ./sc app run                       # Build (incrementally) and launch it
 ./sc wrapp build <game-slug>       # Build a game's wrapp headlessly
 ./sc wrapp run <game-slug>         # Launch it (building it first if needed)
-./sc clean wine-prefixes           # Clear the cached Wine prefix
+./sc clean layers                  # Clear the layer cache (the cached Wine prefix)
 
 ./sc test unit                     # Unit tests (~6s) — fast feedback loop
 ./sc lint                          # SwiftLint (strict) and markdownlint, as CI runs them
@@ -78,7 +78,7 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/WrappKit/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the Wine prefix cache |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/WrappKit/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the layer cache (`LayerStore`, `LayerKey`) and the Wine prefix it keeps |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/WrappKit/Sources/WrappLogging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
@@ -416,11 +416,12 @@ direct assignment.
   must be logged in at that Mac's console. That run is a LaunchAgent, so it
   outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
   picks it up again.
-- - **Wine prefix caching**: the build caches its Wine prefix, keyed by
-  version and Wine engine. A change to how the prefix is set up (winetricks
-  verbs, `ddraw.ini`, registry settings) doesn't change the key: run
-  `./sc clean wine-prefixes` after one
-  ([docs/wrapp-build.md](docs/wrapp-build.md#the-prefix-cache)).
+- - **The Wine prefix is a cached layer**, keyed on the engine, the wine
+  module's release and `prefix.yaml`, and winetricks, so changing the set-up's
+  data makes a fresh prefix by itself. The Swift that makes it isn't a file
+  the key can read: raise `WineBuild.prefixCodeRevision` when
+  `WineManager.makeWinePrefix` changes what it makes
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-layer-cache)).
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
   and builds under test (the integration tests) never take it either, since the

@@ -68,8 +68,15 @@ struct Repo: Sendable {
         return root.appendingPathComponent("installers")
     }
 
-    /// The Wine prefix cache `WineManager` keeps (`~/Library/Caches/SecondChance/wine-prefix-cache`).
-    static var winePrefixCache: URL {
+    /// The layer cache builds keep (`LayerStore`, `~/Library/Caches/SecondChance/layers`).
+    static var layerStore: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/layers")
+    }
+
+    /// Where Wine prefixes were cached before the layer store; a build
+    /// removes it, as does `sc clean layers`.
+    static var formerWinePrefixCache: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SecondChance/wine-prefix-cache")
     }
@@ -89,7 +96,7 @@ struct Repo: Sendable {
     static var downloads: [URL] {
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SecondChance")
-        let kept: Set = ["wine-prefix-cache", "steam-client", "wrapp-cache", "wrapper-cache"]
+        let kept: Set = ["layers", "wine-prefix-cache", "steam-client", "wrapp-cache", "wrapper-cache"]
         let entries = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
         return entries.filter { !kept.contains($0.lastPathComponent) }
     }

@@ -29,7 +29,7 @@ nearest command's help.
 ./sc release --build-only              # Build and zip the next version, changing nothing
 ./sc lint                              # SwiftLint and markdownlint, as CI runs them
 ./sc setup                             # Once per clone: tools, commit hook, completions
-./sc clean wine-prefixes               # Start the next build from a fresh Wine prefix
+./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
 ./sc clean downloads                   # Fetch (and check) Wine, AutoIt, ScummVM, the patches and Big Fish's installer afresh
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
 ./sc --on <host> attach                # Pick up a remote run after the connection dropped

@@ -199,9 +199,7 @@ private struct Release {
         let lastTag = try await git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
         let previous = lastTag.succeeded ? lastTag.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         let version = try await resolveVersion(override: versionOverride, previous: previous)
-        // CFBundleVersion, kept monotonic off the commit count, which also
-        // means it changes every release — WineManager keys its prefix cache
-        // on it, so a stale cache can't survive an upgrade.
+        // CFBundleVersion, kept monotonic off the commit count.
         let buildNumber = try await git(["rev-list", "--count", "HEAD"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
         let origin = versionOverride != nil ? "from --version" : "up from \(previous ?? "no tag")"
         ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(origin)"))"))

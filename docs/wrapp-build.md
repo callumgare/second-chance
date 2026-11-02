@@ -355,21 +355,42 @@ build's blocking work goes the other way through `Blocking.run`, and a
 SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
 `Packages/WrappKit/Sources/WineKit/`.
 
-## The prefix cache
+## The layer cache
 
-`WineManager` caches prefixes in
-`~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or
-`"dev"` in DEBUG) plus the bundled Wine engine's version
-(`Contents/SharedSupport/wine/version`), so a Wine upgrade starts a fresh
-prefix by itself. Caching a prefix removes every other key's. Builds in one
-process that find the cache empty make the prefix one at a time
-(`WineManager.prefixCreation`): the first makes and caches it, and the rest
-then copy it; a prefix is renamed into the cache whole, so none is ever taken
-half-copied. Other changes to how the prefix is set up — the wine module's
-`Modules/wine/prefix.yaml`: winetricks verbs, `ddraw.ini`, registry settings
-such as `EmulateModeset` — don't change the key:
-run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after
-those, or if Wine setup misbehaves after code changes.
+What a build makes that the next build would make the same is kept as a
+*layer* (`LayerStore`, in `Packages/WrappBuilder/Sources/WrappBuilder/Layers/`),
+in `~/Library/Caches/SecondChance/layers/<key>/`: the layer's folder as
+`content/`, with `key.json`, `meta.json` (made, last used, size) and the
+events its steps published beside it. Today one layer is cached, the new Wine
+prefix (`USE wine`); the install and the steps after it aren't yet.
+
+- **A key is a hash of what the layer was made from** (`LayerKey`): its
+  parent's key, and each input by name. The prefix's
+  (`WineBuild.prefixLayerKey`) is the engine's version
+  (`Contents/SharedSupport/wine/version`), the wine module's release, a hash of
+  `Modules/wine/prefix.yaml` and of winetricks, and
+  `WineBuild.prefixCodeRevision`, raised by hand when the Swift that makes a
+  prefix (`WineManager.makeWinePrefix`) changes what it makes. A new Wine, or
+  a changed winetricks verb, `ddraw.ini` or registry setting, makes a fresh
+  prefix with nothing to clear.
+- **Every layer keeps its key's inputs**, so a miss is explained: the build
+  logs which inputs differ from the layer last used for the same slot
+  (``No cached Wine prefix to use (`wine prefix.yaml` changed): making one``).
+- **One build makes a layer; the rest wait and clone it.** A build takes a
+  lock on the key (`flock`, so across processes too) before looking, makes the
+  layer under a hidden name and renames it into place whole, so none is ever
+  taken half made. A prefix whose cnc-ddraw settings couldn't be made isn't
+  kept, and a build whose caching fails carries on with the prefix it made.
+- **Restoring clones** (`clonefile`), which costs nothing until a file
+  changes; across volumes the layer is copied, and the log says so.
+- **Pruned by use**: Second Chance, at most once a day and off the main
+  thread, removes layers unused for 30 days, then the least recently used
+  beyond 40 GB. A layer's size is what it took when made; one that shares its
+  blocks with a wrapp frees less when it goes.
+
+`./sc clean layers` (or the app's `--clear-wine-cache`) removes every layer.
+The cache that came before, `wine-prefix-cache/`, is removed by the next
+build.
 
 ## Cancelling
 

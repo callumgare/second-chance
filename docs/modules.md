@@ -68,9 +68,10 @@ scenarios are data.
 
 The wrapp reads no YAML, as only the builder does, so what it needs of a
 module's data is generated as Swift by `sc generate` and checked in; a test
-fails when it isn't what the data makes. A change to `prefix.yaml` doesn't
-change the prefix cache's key: run `./sc clean wine-prefixes` after one
-([wrapp-build.md](wrapp-build.md#the-prefix-cache)).
+fails when it isn't what the data makes. A change to `prefix.yaml`, or to
+the wine module's release, changes the prefix layer's key, so the next build
+makes a fresh prefix by itself
+([wrapp-build.md](wrapp-build.md#the-layer-cache)).
 
 ## Releases
 
