@@ -120,7 +120,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             // An InstallShield launcher unpacks into the layout a disc has,
             // and then installs silently from an answer file as a disc does.
             // Anything else runs as it is, and asks its questions itself.
-            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: "Unpacking the installer")))
+            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Unpacking the installer"))))
             let unpacked = try await installerRunner.unpackInstallShieldLauncher(installer, at: wrappPath)
             if unpacked {
                 helper.installAnswerFile(forGame: gameInfo.id, source: .herDownload, into: installerBaseDir)
@@ -211,7 +211,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             try await helper.createBaseWrapp(at: wrappPath)
             let driveCPath = WrappLayout(app: wrappPath).driveC
 
-            await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game")))
+            await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Unpacking the game"))))
             try await publishEngineRoute(for: gameInfo)
 
             // Staged inside the wrapp, so moving the game out of it into

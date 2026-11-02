@@ -19,7 +19,9 @@ import Synchronization
 // logger lives in MainLogger.swift (lazy global).
 
 /// The error window's explanation when the game has no display a second time.
-let noDisplayExplanation = "The game couldn't open its window, because this Mac was too busy while it started. Close some other apps, then open the game again."
+var noDisplayExplanation: String {
+    String(localized: "The game couldn't open its window, because this Mac was too busy while it started. Close some other apps, then open the game again.")
+}
 
 // MARK: - Main
 
@@ -47,7 +49,8 @@ func main() {
 
     // Get app path for prefix determination
     guard let executablePath = ProcessInfo.processInfo.arguments.first else {
-        showAlert(message: "This Game's App Is Damaged", informativeText: "Something in it is missing. Make the game's app again with Second Chance.")
+        showAlert(message: String(localized: "This Game's App Is Damaged"),
+                  informativeText: String(localized: "Something in it is missing. Make the game's app again with Second Chance."))
         FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "no-executable-path"))
         exit(1)
     }
@@ -56,7 +59,8 @@ func main() {
     let appPath = executableURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     // Get bundle ID for prefix path
     guard let bundleId = readPlist(at: WrappLayout(app: appPath).infoPlist, key: "CFBundleIdentifier") else {
-        showAlert(message: "This Game's App Is Damaged", informativeText: "Something in it is missing. Make the game's app again with Second Chance.")
+        showAlert(message: String(localized: "This Game's App Is Damaged"),
+                  informativeText: String(localized: "Something in it is missing. Make the game's app again with Second Chance."))
         FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "no-bundle-identifier"))
         exit(1)
     }
@@ -78,7 +82,8 @@ func main() {
 
     // Load configuration
     guard let loadedConfig = loadConfig(customWinePrefix: winePrefix) else {
-        showAlert(message: "This Game's App Is Damaged", informativeText: "Something in it is missing. Make the game's app again with Second Chance.")
+        showAlert(message: String(localized: "This Game's App Is Damaged"),
+                  informativeText: String(localized: "Something in it is missing. Make the game's app again with Second Chance."))
         FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "unreadable-configuration"))
         exit(1)
     }
@@ -275,8 +280,8 @@ func main() {
             try config.wine.drives.mount(config.appSupportPath, as: "a")
         } catch {
             mainLogger.critical("ERROR: Failed to mount directory into Wine: \(error)")
-            showAlert(message: "Couldn't Open Your Saved Games",
-                      informativeText: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)")
+            showAlert(message: String(localized: "Couldn't Open Your Saved Games"),
+                      informativeText: String(localized: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)"))
             FailureReporter.reportAndWait(FailureReport(what: "Mounting the saves folder", error: error,
                                                         game: config.gameSlug, engine: config.gameEngine.rawValue))
             exit(1)
@@ -287,8 +292,8 @@ func main() {
             try SavesLink.link(config.wine.documents, to: config.appSupportPath)
         } catch {
             mainLogger.critical("ERROR: Failed to create symbolic link for Documents directory: \(error)")
-            showAlert(message: "Couldn't Open Your Saved Games",
-                      informativeText: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)")
+            showAlert(message: String(localized: "Couldn't Open Your Saved Games"),
+                      informativeText: String(localized: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)"))
             FailureReporter.reportAndWait(FailureReport(what: "Linking the saves folder", error: error,
                                                         game: config.gameSlug, engine: config.gameEngine.rawValue))
             exit(1)

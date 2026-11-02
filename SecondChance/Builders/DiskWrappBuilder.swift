@@ -273,7 +273,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         // Copy disk 2 if present
         if let disk2 = try await resolveDisk2() {
-            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: "Copying disc 2")))
+            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Copying disc 2"))))
             let disk2Dest = installerPath.appendingPathComponent("disk-2")
             try await copyDisc(disk2, to: disk2Dest)
 

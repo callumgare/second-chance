@@ -261,7 +261,7 @@ class WrappBuildHelper {
         gameEngine: GameInfo.GameEngine? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil
     ) async throws {
-        await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Adjusting the game's settings")))
+        await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
         let infoPlistPath = WrappLayout(app: wrappPath).infoPlist
 
@@ -441,7 +441,7 @@ class WrappBuildHelper {
             return
         }
 
-        await bus.publishWrappBuild(.progress(.installingGame(substep: "Installing Steam")))
+        await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Installing Steam"))))
 
         let wine = Wine(wrapp: wrappPath)
         await wine.server.stop()

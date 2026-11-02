@@ -43,13 +43,13 @@ nonisolated enum DiscImageError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .incomplete:
-            return "That file is only part of a game disc: it may not have finished downloading or copying. Copy it again, then try again."
+            return String(localized: "That file is only part of a game disc: it may not have finished downloading or copying. Copy it again, then try again.")
         case .rawCDImage:
-            return "That file is a copy of a game disc in a form a Mac can't open. Choose the game's disc instead."
+            return String(localized: "That file is a copy of a game disc in a form a Mac can't open. Choose the game's disc instead.")
         case .notADiscImage:
-            return "That file isn't a copy of a game disc. Choose the game's disc instead."
+            return String(localized: "That file isn't a copy of a game disc. Choose the game's disc instead.")
         case .wontOpen:
-            return "Your Mac couldn't open that file. If you downloaded it, try downloading it again."
+            return String(localized: "Your Mac couldn't open that file. If you downloaded it, try downloading it again.")
         }
     }
 }

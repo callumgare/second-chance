@@ -74,10 +74,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Whether to quit with a game still being installed.
     private static func confirmQuitDuringBuild() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "A game is still being installed"
-        alert.informativeText = "If you quit now, installing stops, and you'll need to start again from the beginning."
-        alert.addButton(withTitle: "Keep Installing")
-        alert.addButton(withTitle: "Quit")
+        alert.messageText = String(localized: "A game is still being installed")
+        alert.informativeText = String(localized: "If you quit now, installing stops, and you'll need to start again from the beginning.")
+        alert.addButton(withTitle: String(localized: "Keep Installing"))
+        alert.addButton(withTitle: String(localized: "Quit"))
         alert.buttons[1].hasDestructiveAction = true
         return alert.runModal() == .alertSecondButtonReturn
     }
@@ -234,11 +234,11 @@ struct SecondChanceApp: App {
         let alert = NSAlert()
         do {
             try SteamSessionStore().signOut()
-            alert.messageText = "Signed out of Steam"
-            alert.informativeText = "Your games will ask you to sign in to Steam again the next time they need it."
+            alert.messageText = String(localized: "Signed out of Steam")
+            alert.informativeText = String(localized: "Your games will ask you to sign in to Steam again the next time they need it.")
         } catch {
             logger.error("Couldn't sign out of Steam: \(error.localizedDescription)")
-            alert.messageText = "Couldn't sign out of Steam"
+            alert.messageText = String(localized: "Couldn't sign out of Steam")
             alert.informativeText = error.localizedDescription
             alert.alertStyle = .warning
         }

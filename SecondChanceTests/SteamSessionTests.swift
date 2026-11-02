@@ -425,12 +425,13 @@ struct SteamActiveLockTests {
     @Test("The alert offers to quit only a game it can find, and never as the default")
     @MainActor
     func alertChoices() {
-        let unknown = SteamLockHolder(pid: nil, bundleID: "au.example.gone").alert(blocked: "the game can't start until it quits.")
+        let unknown = SteamLockHolder(pid: nil, bundleID: "au.example.gone").alert(blocked: "The game can't start until it quits.")
         #expect(unknown.0.messageText == "Another game is using Steam")
+        #expect(unknown.0.informativeText == "Only one game can use Steam at a time. The game can't start until it quits. Quit it, then click Try Again.")
         #expect(unknown.0.buttons.map(\.title) == ["Try Again", "Cancel"])
         #expect(unknown.1 == [.tryAgain, .cancel])
 
-        let build = SteamLockHolder(pid: getpid(), bundleID: SteamLockHolder.buildBundleID).alert(blocked: "the game can't start until it quits.")
+        let build = SteamLockHolder(pid: getpid(), bundleID: SteamLockHolder.buildBundleID).alert(blocked: "The game can't start until it quits.")
         #expect(build.0.messageText == "Second Chance is adding a game from Steam")
         #expect(build.1 == [.tryAgain, .cancel])
     }

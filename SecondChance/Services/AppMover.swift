@@ -50,8 +50,8 @@ enum AppMover {
                 if let error {
                     logger.error("Couldn't reopen from \(moved.path): \(ErrorChain.describe(error))")
                     let alert = NSAlert()
-                    alert.messageText = "Second Chance couldn't reopen itself"
-                    alert.informativeText = "It's now in your Applications folder. Quit it and open it from there."
+                    alert.messageText = String(localized: "Second Chance couldn't reopen itself")
+                    alert.informativeText = String(localized: "It's now in your Applications folder. Quit it and open it from there.")
                     alert.runModal()
                     return
                 }
@@ -63,15 +63,15 @@ enum AppMover {
     /// The question: Move to Applications, or Not Now.
     static func offerAlert() -> NSAlert {
         let alert = NSAlert()
-        alert.messageText = "Move Second Chance to your Applications folder"
-        alert.informativeText = """
+        alert.messageText = String(localized: "Move Second Chance to your Applications folder")
+        alert.informativeText = String(localized: """
         Second Chance is running from where it was downloaded, where macOS keeps it from making games that work.
 
         Moving Second Chance to your Applications folder fixes this. \
         It will reopen from there, and you won't be asked again.
-        """
-        alert.addButton(withTitle: "Move to Applications")
-        alert.addButton(withTitle: "Not Now")
+        """)
+        alert.addButton(withTitle: String(localized: "Move to Applications"))
+        alert.addButton(withTitle: String(localized: "Not Now"))
         return alert
     }
 
@@ -137,13 +137,13 @@ enum AppMover {
     static func moveFailedAlert(original: URL, error: Error) -> NSAlert {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Second Chance couldn't move itself"
-        alert.informativeText = """
+        alert.messageText = String(localized: "Second Chance couldn't move itself")
+        alert.informativeText = String(localized: """
         Quit Second Chance, drag it from \(original.deletingLastPathComponent().path) into your Applications folder, \
         then open it from there.
 
         \(error.localizedDescription)
-        """
+        """)
         return alert
     }
 }

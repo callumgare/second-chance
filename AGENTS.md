@@ -316,12 +316,15 @@ direct assignment.
   it so it needn't stay so: whole sentences for each case, never one built
   from fragments, a noun dropped in, `.capitalized` or a plural `s`
   (`SteamDownloadMeter.text`), and `String(localized:)` for text that isn't a
-  SwiftUI literal. Second Chance's strings collect in
-  `SecondChance/Localizable.xcstrings` when Xcode builds it
-  (`xcrun xcstringstool sync` from the build's `.stringsdata` does the same
-  from the command line). Text built in plain `String` helpers, such as
-  `WrappBuildError.playerMessage` and the loading window's stages, isn't
-  converted yet.
+  SwiftUI literal; text only the logs or `sc` read stays plain. Each app has
+  a string catalog — `SecondChance/Localizable.xcstrings` and
+  `WrappTemplate/Resources/Localizable.xcstrings` — and the package's text
+  (`SecondChanceKit` declares English for this) is looked up in the catalog
+  of the app showing it, so it belongs in both. Xcode fills an app's catalog
+  from its own code when it builds it, not the package's: after changing
+  text, sync both with `xcrun xcstringstool sync <catalog> --stringsdata
+  <file>…`, from the `.stringsdata` the build left for the app's target and
+  for `SecondChanceKit` under `DerivedData/Build/Intermediates.noindex/`.
 - **Lint passes.** `./sc lint` runs SwiftLint (`--strict`, `.swiftlint.yml`)
   and markdownlint (`.markdownlint.jsonc`), CI fails on either, and
   `sc release` asks before releasing with failures. Fix what they find

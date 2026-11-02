@@ -840,7 +840,8 @@ class GameLauncher {
             await MainActor.run {
                 NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
-                return holder.ask(blocked: "\(SteamLockHolder.quoted(title)) can't start until it quits.")
+                let quoted = SteamLockHolder.quoted(title)
+                return holder.ask(blocked: String(localized: "\(quoted) can't start until it quits."))
             }
         }
         switch taking {
@@ -852,18 +853,27 @@ class GameLauncher {
 
     private func reportSteamFailure(_ error: Error) {
         let (title, detail): (String, String)
+        let game = config.gameTitle
         switch error {
         case WrappSteam.Failure.inUse(let holder):
-            let name = holder.name.map(SteamLockHolder.quoted)
-            (title, detail) = ("\(name ?? "Another game") is using Steam",
-                               "Only one game can use Steam at a time. Quit \(name ?? "it"), then open \(SteamLockHolder.quoted(config.gameTitle)) again.")
+            let quotedGame = SteamLockHolder.quoted(game)
+            if let name = holder.name.map(SteamLockHolder.quoted) {
+                (title, detail) = (String(localized: "\(name) is using Steam"),
+                                   String(localized: "Only one game can use Steam at a time. Quit \(name), then open \(quotedGame) again."))
+            } else {
+                (title, detail) = (String(localized: "Another game is using Steam"),
+                                   String(localized: "Only one game can use Steam at a time. Quit it, then open \(quotedGame) again."))
+            }
         case WrappSteam.Failure.exited:
-            (title, detail) = ("Steam closed before it signed in", "\(config.gameTitle) needs Steam signed in to start. Open it again to have another go.")
+            (title, detail) = (String(localized: "Steam closed before it signed in"),
+                               String(localized: "\(game) needs Steam signed in to start. Open it again to have another go."))
         case WrappSteam.Failure.stuck:
-            (title, detail) = ("Steam got stuck signing in", "\(config.gameTitle) needs Steam signed in to start. "
-                + "Check that this Mac is connected to the internet, then open it again to have another go.")
+            (title, detail) = (String(localized: "Steam got stuck signing in"), String(localized: """
+                \(game) needs Steam signed in to start. \
+                Check that this Mac is connected to the internet, then open it again to have another go.
+                """))
         default:
-            (title, detail) = ("Couldn't start Steam", error.localizedDescription)
+            (title, detail) = (String(localized: "Couldn't start Steam"), error.localizedDescription)
         }
         logger.critical("[Steam] \(title): \(detail)")
         let summary = FailureSummary.log(logger, what: "Starting Steam for \(config.gameTitle)", files: [])

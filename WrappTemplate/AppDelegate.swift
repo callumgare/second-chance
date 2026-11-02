@@ -22,17 +22,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let preferences = ReportingPreferences.load()
         let level = preferences.level
         let alert = NSAlert()
-        alert.messageText = "Failure Reports"
+        alert.messageText = String(localized: "Failure Reports")
         let current: String
         switch level {
-        case .detailed: current = "When the game fails to start, a detailed report is sent, with the log (your name and folders taken out)."
-        case .basic: current = "When the game fails to start, a basic report is sent: which game, and what failed."
-        case .manual: current = "When the game fails to start, you're asked what to send."
+        case .detailed: current = String(localized: "When the game fails to start, a detailed report is sent, with the log (your name and folders taken out).")
+        case .basic: current = String(localized: "When the game fails to start, a basic report is sent: which game, and what failed.")
+        case .manual: current = String(localized: "When the game fails to start, you're asked what to send.")
         }
         let success = preferences.successReports == true
-            ? "Success reports are on: Second Chance counts when a game starts, and whether it worked."
-            : "Success reports are off."
-        alert.informativeText = "\(current)\n\n\(success)\n\nYou can change these in Second Chance → Settings. They apply to all your games."
+            ? String(localized: "Success reports are on: Second Chance counts when a game starts, and whether it worked.")
+            : String(localized: "Success reports are off.")
+        let changing = String(localized: "You can change these in Second Chance → Settings. They apply to all your games.")
+        alert.informativeText = [current, success, changing].joined(separator: "\n\n")
         alert.runModal()
     }
 

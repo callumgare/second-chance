@@ -1,0 +1,357 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ can't start until it quits." : {
+
+    },
+    "%@ is using Steam" : {
+
+    },
+    "%@ needs Steam signed in to start. Check that this Mac is connected to the internet, then open it again to have another go." : {
+
+    },
+    "%@ needs Steam signed in to start. Open it again to have another go." : {
+
+    },
+    "%lld earlier lines hidden" : {
+
+    },
+    "%lld of %lld MB" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld MB"
+          }
+        }
+      }
+    },
+    "%lld of %lld lines" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld lines"
+          }
+        }
+      }
+    },
+    "A previous copy of the game is still running…" : {
+
+    },
+    "Another game is using Steam" : {
+
+    },
+    "Answer the question in Steam's window, and the game will carry on starting." : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Category" : {
+
+    },
+    "Close" : {
+
+    },
+    "Compact" : {
+
+    },
+    "Connecting to Steam" : {
+
+    },
+    "Connecting to Steam…" : {
+
+    },
+    "Continue Anyway" : {
+
+    },
+    "Copy %lld Lines" : {
+
+    },
+    "Copy All Visible Lines" : {
+
+    },
+    "Copy Line" : {
+
+    },
+    "Copy Message" : {
+
+    },
+    "Couldn't Open Your Saved Games" : {
+
+    },
+    "Couldn't start Steam" : {
+
+    },
+    "Don't show this again" : {
+
+    },
+    "Export" : {
+
+    },
+    "Export Failed" : {
+
+    },
+    "Exporting…" : {
+
+    },
+    "Failure Reports" : {
+
+    },
+    "I Understand" : {
+
+    },
+    "If %@ won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost." : {
+
+    },
+    "If it hasn't signed in by then, it will be started again in %@." : {
+
+    },
+    "Import" : {
+
+    },
+    "Import Failed" : {
+
+    },
+    "Installing Steam's update" : {
+
+    },
+    "Installing Steam's update…" : {
+
+    },
+    "It's still trying, and this goes away if it gets going. Or you can sign in to Steam again from scratch: you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too." : {
+
+    },
+    "It's still trying. If it doesn't get going, you'll be able to sign in to Steam again from scratch." : {
+
+    },
+    "Level" : {
+
+    },
+    "Log lines will appear here as the app runs." : {
+
+    },
+    "Message" : {
+
+    },
+    "No Logs" : {
+
+    },
+    "No Matching Lines" : {
+
+    },
+    "Nothing at the selected level — switch back to All." : {
+
+    },
+    "OK" : {
+
+    },
+    "Only one game can use Steam at a time." : {
+
+    },
+    "Only one game can use Steam at a time. Quit %@, then open %@ again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Only one game can use Steam at a time. Quit %1$@, then open %2$@ again."
+          }
+        }
+      }
+    },
+    "Only one game can use Steam at a time. Quit it, then open %@ again." : {
+
+    },
+    "Only the most recent %lld lines are kept in view. Use Save Logs for the full history." : {
+
+    },
+    "Open a previously saved log file and show it here instead of the live logs." : {
+
+    },
+    "Quit" : {
+
+    },
+    "Quit It Without Saving" : {
+
+    },
+    "Quit it, then click Try Again." : {
+
+    },
+    "Save Failed" : {
+
+    },
+    "Save Log…" : {
+
+    },
+    "Save the displayed file's logs to a new file." : {
+
+    },
+    "Save the full in-memory log history to a file." : {
+
+    },
+    "Save your game in %@ and quit it, then click Try Again." : {
+
+    },
+    "Saving…" : {
+
+    },
+    "Second Chance is adding a game from Steam" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show Log" : {
+
+    },
+    "Show all lines, only warnings and above, or only errors and above." : {
+
+    },
+    "Show only the Level and Message columns." : {
+
+    },
+    "Showing logs from **%@** — live logs from this process are paused" : {
+
+    },
+    "Sign In Again" : {
+
+    },
+    "Sign in to Steam" : {
+
+    },
+    "Something in it is missing. Make the game's app again with Second Chance." : {
+
+    },
+    "Something went wrong inside the game, and it had to close." : {
+
+    },
+    "Start Without Steam" : {
+
+    },
+    "Starting %@…" : {
+
+    },
+    "Starting Steam" : {
+
+    },
+    "Starting Steam…" : {
+
+    },
+    "Starting the updated Steam" : {
+
+    },
+    "Starting the updated Steam…" : {
+
+    },
+    "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here." : {
+
+    },
+    "Steam closed before it signed in" : {
+
+    },
+    "Steam got stuck signing in" : {
+
+    },
+    "Steam is starting %@…" : {
+
+    },
+    "Steam is taking longer than usual to sign in" : {
+
+    },
+    "Steam is updating itself, as it does now and then. The game starts once it's done." : {
+
+    },
+    "Steam is waiting for you" : {
+
+    },
+    "Steam seems to be stuck signing in" : {
+
+    },
+    "Stop Previous and Continue" : {
+
+    },
+    "Stop showing the imported file and resume the in-memory logs of the current process." : {
+
+    },
+    "Success reports are off." : {
+
+    },
+    "Success reports are on: Second Chance counts when a game starts, and whether it worked." : {
+
+    },
+    "The file could not be read as a text log file." : {
+
+    },
+    "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it." : {
+
+    },
+    "The game couldn't load a file it needs." : {
+
+    },
+    "The game couldn't open its window, because this Mac was too busy while it started. Close some other apps, then open the game again." : {
+
+    },
+    "The game couldn't reach the folder where your saved games are kept: %@" : {
+
+    },
+    "The game quit before it showed anything." : {
+
+    },
+    "The game quit before its window appeared." : {
+
+    },
+    "The game quit just after something went wrong in it." : {
+
+    },
+    "The game runs through Steam, so Steam is starting up first." : {
+
+    },
+    "The log file could not be saved. Please try again." : {
+
+    },
+    "This Game's App Is Damaged" : {
+
+    },
+    "This game needs Steam signed in, which needs the internet." : {
+
+    },
+    "Time" : {
+
+    },
+    "Try Again" : {
+
+    },
+    "Updating Steam" : {
+
+    },
+    "Updating Steam…" : {
+
+    },
+    "Use Steam's window, or scan its QR code with the Steam app on your phone." : {
+
+    },
+    "Wait for Second Chance to finish, then try again." : {
+
+    },
+    "Waiting for a previous copy of the game to finish closing…" : {
+
+    },
+    "When the game fails to start, a basic report is sent: which game, and what failed." : {
+
+    },
+    "When the game fails to start, a detailed report is sent, with the log (your name and folders taken out)." : {
+
+    },
+    "When the game fails to start, you're asked what to send." : {
+
+    },
+    "You can change these in Second Chance → Settings. They apply to all your games." : {
+
+    },
+    "Your Steam account is playing on another computer" : {
+
+    }
+  },
+  "version" : "1.0"
+}

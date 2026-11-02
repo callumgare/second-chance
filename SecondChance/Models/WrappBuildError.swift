@@ -110,9 +110,12 @@ enum WrappBuildError: LocalizedError, Equatable {
         }
     }
 
-    private static let tryAgain =
-        "Something went wrong while installing the game. Try again, and if it happens again, the failure report helps get it fixed."
-    private static let damaged = "Part of Second Chance is damaged. Download Second Chance again and try once more."
+    private static var tryAgain: String {
+        String(localized: "Something went wrong while installing the game. Try again, and if it happens again, the failure report helps get it fixed.")
+    }
+    private static var damaged: String {
+        String(localized: "Part of Second Chance is damaged. Download Second Chance again and try once more.")
+    }
 
     /// What the error screen says: plain words, nothing technical.
     var playerMessage: String {
@@ -120,20 +123,23 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .internalError, .missingRequiredParameter, .copyFailed, .signingFailed, .cachedGameMismatch:
             return Self.tryAgain
         case .invalidPath:
-            return "Second Chance can't install the game from that. Choose the game's disc, or the file you downloaded from Her Interactive."
+            return String(localized: "Second Chance can't install the game from that. Choose the game's disc, or the file you downloaded from Her Interactive.")
         case .installIncomplete:
-            return "The game didn't install completely. Try again."
+            return String(localized: "The game didn't install completely. Try again.")
         case .steamInstallFailed:
-            return "Steam couldn't install the game. Try again."
+            return String(localized: "Steam couldn't install the game. Try again.")
         case .unsupportedMacDownload:
-            return "Second Chance can't use this Mac download. It may not have finished downloading: download it again, "
-                + "or download the Windows version from Her Interactive instead."
+            return String(localized: """
+                Second Chance can't use this Mac download. It may not have finished downloading: download it again, \
+                or download the Windows version from Her Interactive instead.
+                """)
         case .saveFailed(let destination, _):
             let folder = URL(fileURLWithPath: destination).deletingLastPathComponent().lastPathComponent
-            return "Couldn't save the game's app in \(folder). Try again, and choose another folder, such as Applications."
+            return String(localized: "Couldn't save the game's app in \(folder). Try again, and choose another folder, such as Applications.")
         case .wrongGame(let expected, let detected):
             let provider = GameInfoProvider.shared
-            return "This disc is \(provider.gameInfo(for: detected).title), not \(provider.gameInfo(for: expected).title)."
+            let disc = provider.gameInfo(for: detected).title, wanted = provider.gameInfo(for: expected).title
+            return String(localized: "This disc is \(disc), not \(wanted).")
         case .templateDamaged, .templateSignaturesLost:
             return Self.damaged
         default:
@@ -144,52 +150,56 @@ enum WrappBuildError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .unsupportedEngine:
-            return "Second Chance doesn't know how to run this game yet."
+            return String(localized: "Second Chance doesn't know how to run this game yet.")
         case .steamGameNotOwned(let title):
-            return "Your Steam account doesn't own \(title)"
+            return String(localized: "Your Steam account doesn't own \(title)")
         case .steamNoGamesOwned:
-            return "Your Steam account doesn't own any of the Nancy Drew games on Steam"
+            return String(localized: "Your Steam account doesn't own any of the Nancy Drew games on Steam")
         case .steamSignInRequired:
+            // Only a headless build (sc) says this, so it needn't be plain.
             return "Steam needs you to sign in, which a headless build can't do. Build once from the app to sign in."
         case .steamSignInTimedOut:
-            return "Steam waited for you to sign in, but nobody did. Try again when you're ready, and sign in when Steam's window appears."
+            return String(localized: "Steam waited for you to sign in, but nobody did. Try again when you're ready, and sign in when Steam's window appears.")
         case .steamStoppedResponding:
-            return "Steam kept getting stuck while it was signing in. "
-                + "Check that this Mac is connected to the internet.\n\nTrying again signs you out of Steam to start afresh: "
-                + "you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too."
+            return String(localized: """
+                Steam kept getting stuck while it was signing in. Check that this Mac is connected to the internet.
+
+                Trying again signs you out of Steam to start afresh: you'll need to sign in once more, \
+                and your other Nancy Drew games from Steam will ask you to sign in again once too.
+                """)
         case .steamExited:
-            return "Steam closed unexpectedly while it was starting up. Try again."
+            return String(localized: "Steam closed unexpectedly while it was starting up. Try again.")
         case .steamExitedWhileInstalling:
-            return "Steam closed unexpectedly while it was downloading the game. Try again."
+            return String(localized: "Steam closed unexpectedly while it was downloading the game. Try again.")
         case .steamDownloadStalled:
-            return "Steam stopped downloading the game. Check that this Mac is connected to the internet, then try again."
+            return String(localized: "Steam stopped downloading the game. Check that this Mac is connected to the internet, then try again.")
         case .steamInstallFailed(let reason):
             return "Steam couldn't install the game: \(reason)"
         case .steamInUse(let holder):
             if holder.isBuild {
-                return "Second Chance is already adding a game from Steam, and only one game can use Steam at a time. Wait for it to finish and try again."
+                return String(localized: "Second Chance is already adding a game from Steam, and only one game can use Steam at a time. Wait for it to finish and try again.")
             }
             guard let name = holder.name.map(SteamLockHolder.quoted) else {
-                return "Another game is using Steam, and only one game can use it at a time. Quit it and try again."
+                return String(localized: "Another game is using Steam, and only one game can use it at a time. Quit it and try again.")
             }
-            return "\(name) is using Steam, and only one game can use it at a time. Save your game in \(name) and quit it, then click Try Again."
+            return String(localized: "\(name) is using Steam, and only one game can use it at a time. Save your game in \(name) and quit it, then click Try Again.")
         case .installerNotFound:
-            return "Couldn't find the game's installer. Check that it's the first disc of a Nancy Drew game, or the file you downloaded from Her Interactive."
+            return String(localized: "Couldn't find the game's installer. Check that it's the first disc of a Nancy Drew game, or the file you downloaded from Her Interactive.")
         case .installedGameNotInstaller:
-            return "This is a game that's already installed, not its installer. Second Chance needs to install the game itself: "
-                + "choose the game's disc, or the installer you downloaded from Her Interactive."
+            return String(localized: """
+                This is a game that's already installed, not its installer. Second Chance needs to install the game itself: \
+                choose the game's disc, or the installer you downloaded from Her Interactive.
+                """)
         case .gameExecutableNotFound:
-            return "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests."
+            return String(localized: "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests.")
         case .userCancelled:
-            return "You cancelled installing the game."
+            return String(localized: "You cancelled installing the game.")
         case .userCancelledBeforeStart:
-            return "You cancelled before installing started."
+            return String(localized: "You cancelled before installing started.")
         case .diskNotFound:
-            return "Couldn't find the files copied from the game disc. Try again."
-        case .autoItNotAvailable:
-            return "Part of Second Chance is missing. Download Second Chance again and try once more."
-        case .autoItScriptNotFound:
-            return "Part of Second Chance is missing. Download Second Chance again and try once more."
+            return String(localized: "Couldn't find the files copied from the game disc. Try again.")
+        case .autoItNotAvailable, .autoItScriptNotFound:
+            return String(localized: "Part of Second Chance is missing. Download Second Chance again and try once more.")
         case .missingRequiredParameter(let param):
             return "Missing required parameter: \(param)"
         case .invalidPath(let message):
@@ -203,21 +213,24 @@ enum WrappBuildError: LocalizedError, Equatable {
         case .installIncomplete(let reason):
             return "The game didn't install completely: \(reason)"
         case .installStalled:
-            return "The game's installer stopped responding, so installing was stopped. Try again."
+            return String(localized: "The game's installer stopped responding, so installing was stopped. Try again.")
         case .unsupportedMacDownload(let reason):
             return "Second Chance can't use this Mac download: \(reason). Download the Windows version from Her Interactive instead."
         case .rosettaMissing:
-            return "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license"
+            return String(localized: "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license")
         case .rosettaInstallFailed:
-            return "Rosetta, which the games need, couldn't be installed. Check that your Mac is connected to the internet, then try again."
+            return String(localized: "Rosetta, which the games need, couldn't be installed. Check that your Mac is connected to the internet, then try again.")
         case .discImage(let error):
             return error.errorDescription
         case .notEnoughSpace(let needed, let available):
             guard let needed, let available else {
-                return "Your Mac ran out of space while installing the game. Free up some space, then try again."
+                return String(localized: "Your Mac ran out of space while installing the game. Free up some space, then try again.")
             }
-            return "There isn't enough free space on your Mac to install the game. It needs about \(FreeSpace.describe(needed)), "
-                + "and \(FreeSpace.describe(available)) is free. Free up some space, then try again."
+            let neededText = FreeSpace.describe(needed), availableText = FreeSpace.describe(available)
+            return String(localized: """
+                There isn't enough free space on your Mac to install the game. It needs about \(neededText), \
+                and \(availableText) is free. Free up some space, then try again.
+                """)
         case .templateDamaged(let detail):
             return "Part of Second Chance (the game app template) is damaged: \(detail)"
         case .templateSignaturesLost:

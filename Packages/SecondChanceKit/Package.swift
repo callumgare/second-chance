@@ -22,6 +22,9 @@ let swiftSettings: [SwiftSetting] = [
 
 let package = Package(
     name: "SecondChanceKit",
+    // English, so Xcode extracts the text people see (String(localized:)) for the
+    // apps' string catalogs. The text is looked up in the app showing it.
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
         // Left to Xcode to link statically: a wrapp's Contents/Frameworks

@@ -193,7 +193,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.instructions(nil))
 
             // ── Pick the game ──────────────────────────────────────────
-            await bus.publishWrappBuild(.progress(.installingGame(substep: "Checking which games your Steam account owns")))
+            await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Checking which games your Steam account owns"))))
             let owned = try await client.ownedAppIDs(timeout: 120)
             let ownedGames = gameInfoProvider.allGames().filter { $0.isOnSteam && $0.steamAppID.map(owned.contains) == true }
             logger.notice("The Steam account owns \(ownedGames.count) of the games: \(ownedGames.map(\.id).joined(separator: ", "))")
@@ -221,7 +221,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
             if preselected == nil {
                 // Steam only installs a queued game when it starts.
-                await bus.publishWrappBuild(.progress(.installingGame(substep: "Restarting Steam to install \(gameInfo.title)")))
+                await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Restarting Steam to install \(gameInfo.title)"))))
                 if run.claimStop() {
                     await stopSteam(client, prefix: prefix, signedIn: run.signedIn, keepSignIn: true)
                 }
@@ -258,7 +258,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             let gameExePath = engine == .scummvm ? gameDirPath : gameDirPath + "/" + exe
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
 
-            await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Applying game patches")))
+            await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Applying game patches"))))
             try await installerRunner.applyGamePatches(wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameDir,
                                                        source: .steam, confirmFailure: input.confirmPatchFailure)
 
@@ -361,7 +361,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                     return true
                 case .needsSignIn:
                     guard input.canSignInToSteam else { throw WrappBuildError.steamSignInRequired }
-                    await bus.publishWrappBuild(.progress(.installingGame(substep: "Waiting for you to sign in to Steam")))
+                    await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Waiting for you to sign in to Steam"))))
                     await bus.publishWrappBuild(.instructions(Self.signInInstructions))
                     await client.bringSignInWindowForward()
                     deadline = Date().addingTimeInterval(Self.signInTimeout)

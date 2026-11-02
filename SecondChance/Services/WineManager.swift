@@ -203,11 +203,11 @@ class WineManager {
         // Wine 10 reads this from the X11 Driver key whatever the driver. The
         // wrapp's mode scaling helper scales what Direct3D draws to match.
         // See docs/wine-in-process-helpers.md#mode-scaling.
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's display")))
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Setting up the game's display"))))
         try await wine.registry.set(.string("Y"), for: "EmulateModeset", in: .x11Driver)
 
         // Install cnc-ddraw for better DirectDraw compatibility
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up the game's graphics")))
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Setting up the game's graphics"))))
         try await winetricks.install(.cncDdraw)
 
         // Configure cnc-ddraw to maintain aspect ratio. windowed=true is what lets
@@ -235,7 +235,7 @@ class WineManager {
         }
 
         // Install isolate_home to remove unnecessary mounts
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Setting up where the game finds its disc")))
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Setting up where the game finds its disc"))))
         try await winetricks.install(.isolateHome)
 
         // Only the drives a game needs (WineDrives has what each is for).

@@ -19,8 +19,8 @@ public nonisolated enum SteamSignInNotice: Equatable, Sendable {
     /// The notice's heading.
     public var title: String {
         switch self {
-        case .slow: return "Steam is taking longer than usual to sign in"
-        case .stuck: return "Steam seems to be stuck signing in"
+        case .slow: return String(localized: "Steam is taking longer than usual to sign in")
+        case .stuck: return String(localized: "Steam seems to be stuck signing in")
         }
     }
 
@@ -30,17 +30,20 @@ public nonisolated enum SteamSignInNotice: Equatable, Sendable {
         switch self {
         case .slow(let restartAt?):
             let left = max(0, restartAt.timeIntervalSince(now))
-            return "If it hasn't signed in by then, it will be started again in \(Self.countdown(left))."
+            let countdown = Self.countdown(left)
+            return String(localized: "If it hasn't signed in by then, it will be started again in \(countdown).")
         case .slow(nil):
-            return "It's still trying. If it doesn't get going, you'll be able to sign in to Steam again from scratch."
+            return String(localized: "It's still trying. If it doesn't get going, you'll be able to sign in to Steam again from scratch.")
         case .stuck:
-            return "It's still trying, and this goes away if it gets going. Or you can sign in to Steam again from scratch: "
-                + "you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too."
+            return String(localized: """
+                It's still trying, and this goes away if it gets going. Or you can sign in to Steam again from scratch: \
+                you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too.
+                """)
         }
     }
 
     /// The button that takes up the offer to sign in afresh, on `.stuck`.
-    public static let signInAgainButton = "Sign In Again"
+    public static var signInAgainButton: String { String(localized: "Sign In Again") }
 
     /// "1m 40s", or "40s" under a minute.
     static func countdown(_ seconds: TimeInterval) -> String {
