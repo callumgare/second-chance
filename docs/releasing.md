@@ -81,7 +81,9 @@ show`, `git log` and `git diff`, and the repo's files, with no MCP servers, and
 shape and `sc` lays out the Markdown (`ReleaseNotes` in `Tools/sc`):
 
 - Changes a player would notice, in plain language under **New**,
-  **Improved** and **Fixed**.
+  **Improved** and **Fixed**. The heading follows what the player saw
+  before, not the commit type: a `feat` that makes something work that used
+  to fail is a fix to them.
 - Everything else — `sc`, tests, docs, refactors, diagnostics — in a
   collapsed `<details>` section headed **Behind the scenes**. Since it costs
   the reader nothing until opened, these say what changed and why rather than

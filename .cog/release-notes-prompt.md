@@ -54,8 +54,24 @@ understands what changed for them and why it matters.
   bullet that goes on to explain the comment box, what the report contains
   and the setting that controls it.
 - Put each bullet under exactly one heading: `New` for something they
-  couldn't do before, `Improved` for something that works better, `Fixed` for
-  a problem that is gone.
+  couldn't do before, `Improved` for something that already worked and now
+  works better, `Fixed` for a problem that is gone. Choose by how a player
+  would think of the change, not by how the commit is labelled. The headings
+  in the generated notes ("Features", "Bug Fixes") and the commit types
+  (`feat`, `fix`) say what kind of code change it was, for developers, so
+  treat them as a hint at most. A change that needed new code is often a fix
+  from the player's side.
+
+  Ask what the player saw before. If something they tried to do went wrong
+  (a game didn't start, crashed, froze, showed the wrong thing, a build
+  failed, a click did nothing), that's `Fixed`, even if the commit is a
+  `feat` and even if it only went wrong on some Macs, some games or under
+  some conditions. For example, a `feat` commit that makes games wait longer
+  and retry on a busy Mac, where before they never opened a window, is
+  `Fixed`: "Fix games not starting on a very busy Mac." Keep `Improved` for
+  something that worked and is now faster, clearer, easier or nicer, and
+  `New` for something they couldn't do at all before. When a bullet sits in
+  `Fixed`, write its headline as a fix too.
 
 **Internal changes** are ones no player would notice: the developer's
 command-line tool (`sc`, scope `sc-cli`), tests, documentation, refactors,
