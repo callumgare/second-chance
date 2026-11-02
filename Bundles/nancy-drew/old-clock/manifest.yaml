@@ -43,6 +43,9 @@ editions:
     source: "big-fish"
     inputs: [{ id: "game", product: 1297 }]
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
 notes:                                       # for people only; nothing reads these
   installer: "installshield"
   disc-answer-file: "installer-answer-files/old-clock.iss"

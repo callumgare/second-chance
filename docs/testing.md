@@ -510,18 +510,23 @@ dependency only runs one way:
 - **`WrappPuppeteer/NancyDrew/`** — everything specific to driving a game: reading
   the wrapp's `AppSettings.plist` (`WrappSettings`) and mapping its engine to process names, kill
   commands and a focus strategy (`Wrapp`); the wrapp's "save regularly" window
-  (`InfoWindow`); where the Exit button and Her Interactive logo are and how to
-  recognise them (`MainMenuScreen`); each game's splash screens
-  (`SplashScreen`, with its reference images in the nancy-drew module's
-  `needles/splash/`); and
-  the launch → menu → Exit flow itself (`NancyDrewQuitScenario`).
+  (`InfoWindow`); reading the game's test from its bundle (`TestData`);
+  finding a scenario's `text` and `region` needles (`MainMenuScreen`) and its
+  `screen` ones (`SplashScreen`); and the launch, then the scenario's
+  handlers until the game ends (`NancyDrewQuitScenario`).
+
+What it looks for and what it does when it sees it are data, not Swift
+([needles](#needles), [scenarios](#scenarios)), read by the builder
+package (`Packages/WrappBuilder/Sources/WrappBuilder/Testing/`), which knows
+bundles and modules but no game.
 
 Core never names a game. When a game-specific fact would make a utility work
 better, Core takes it as a parameter and the scenario supplies it — for
-example the quit-button search is narrowed by
-`MainMenuScreen.quitButtonMatchOptions`, a `TemplateMatchOptions` that limits
-the search to the bottom-right corner, sizes the template relative to the
-screen, and uses red-emphasis greyscale because the button is red. Called
+example the quit-button search is narrowed by the quit button's needle
+(`region:` in `needles/quit-button.yaml`, made a `TemplateMatchOptions` by
+`MainMenuScreen.matchOptions`), which limits the search to the bottom-right
+corner, sizes the template relative to the screen, and uses red-emphasis
+greyscale because the button is red. Called
 without options, `TemplateMatcher` searches the whole screen at the template's
 own size. Its coarse pass steps across the screen in strides that grow with
 the capture's width, over copies of the screen and the template blurred by
@@ -577,6 +582,80 @@ and search-region/match overlays next to the screenshot. Add
 `FIND_IMAGE_DEBUG_PROBE=x,y` (screenshot pixels) to also score the template at
 one position and save the images compared there.
 
+### Needles
+
+A **needle** (openQA's word) is something the scenario looks for on the
+game's screen, found by its **tags**: a `<name>.yaml`, beside `<name>.png`
+for an image. Three kinds:
+
+- `screen`: the whole capture's fingerprint against an image's, as the
+  splash screens below are (`SplashScreen`).
+- `region`: an image matched in part of the screen, as the quit button is
+  (`region: { search, height-fraction, scales, grayscale }`, for
+  `TemplateMatcher`).
+- `text`: strings read off the screen by OCR, the first found winning:
+  "Exit Game" or "Quit", and "interactive" for the Her Interactive logo.
+
+`click: { x, y }` says where to click what matched, as fractions of it (of
+the picture, for a `screen` needle); without it, its middle. A folder's
+`defaults.yaml` describes every image in it with no file of its own, which is
+how the splash folders say "a screen tagged `splash`, clicked 8% in from its
+top-left corner" once.
+
+A game's needles are its bundle's `tests/needles/`, then the needles of the
+module its scenario is in (`Modules/nancy-drew/needles/`). A bundle's needle
+replaces the module's of the same name, and every other is added: Scarlet
+Hand's `exit-text.yaml` clicks its Exit at the label's top edge, where its
+hotspot is (`click: { x: 0.5, y: 0 }`), and every other game uses the
+module's. Within a tag, a `text` needle found wins over a `region` one.
+WrappPuppeteer reads them from the source tree when it runs from a build
+inside it, so one just made is used without rebuilding, and otherwise from
+the copies of `Bundles/` and `Modules/` in its bundle (`TestData`).
+
+### Scenarios
+
+A **scenario** is a set of handlers rather than a list of steps: each waits
+for a tag and says what to do when it shows, and on every look at the
+game's window they are tried in order. The quit test is the nancy-drew
+module's `scenarios/quit-from-menu.yaml`, which every game's manifest names
+(`tests: { scenario: "nancy-drew/quit-from-menu" }`):
+
+```yaml
+handlers:
+  - { id: "black-start", when: "blank", if: "blank-start-takes-click", retry-after: "${splash-retry}",
+      do: [{ click: { x: 0.2, y: 0.12 } }] }
+  - { id: "splash", when: "splash", retry-after: "${splash-retry}", do: ["click"] }
+  - { id: "main-menu", when: "quit", repeat-where-last-seen: 3, do: [{ check: "menu" }, "click", "expect-end"] }
+  - { id: "her-logo", when: "her-logo", once: true, do: ["click"] }
+```
+
+- **Handlers on whole screens first.** One whose tag has `screen` needles,
+  or that waits for `blank` (a capture with nothing on it), is tried in
+  milliseconds; the first that acts ends the look. The rest share one read of
+  the window (OCR and template matches together) and each acts on what was
+  found, in order.
+- **Actions**: `click` (the needle's click point), `{ click: { x, y } }` (a
+  point of the window), `{ check: "menu" }` (the picture's bars, and
+  switching away and back, below) and `expect-end` (the click before it
+  should end the game: once it has, only that handler runs again).
+- **`retry-after`** is how long a screen still showing after its handler
+  clicked it waits before another click; **`once`** runs a handler once;
+  **`repeat-where-last-seen`** clicks where its needle was last found when
+  it isn't found this time, after that many seconds; **`if`** names a
+  parameter that must be true.
+- **Parameters** are the scenario's `parameters:`, which a bundle's
+  `tests.parameters` set: Secrets Can Kill Remastered's
+  `blank-start-takes-click: true`. A parameter the scenario doesn't have is
+  refused.
+- **Launching and quitting are WrappPuppeteer's**, as are the save warning,
+  the first-click check and the checks a handler can ask for; a scenario
+  only says what to wait for and do in between. `goal` is `program-ends`,
+  the only one so far, and `timeout` the seconds it has.
+
+An edition with another title screen adds a needle under the same tag, and
+leaves the scenario alone. Handler patches by id and shared fragments of
+handlers aren't written yet; they come when a game first needs them.
+
 ### Splash screens
 
 Before its main menu a game shows a few screens a click skips: a black
@@ -597,7 +676,7 @@ taken for one comes to no harm.
 A splash screen is clicked as soon as it's seen. The screen moving on is the
 sign the click took, so one still up — the same picture as the one clicked —
 is only clicked again 2 s later, as a retry: some take a click only once
-they've finished appearing. None is clicked once Exit has been, and a capture
+they've finished appearing (`retry-after`). None is clicked once Exit has been, and a capture
 that isn't clicked still goes to the OCR, so a menu wrongly taken for a splash
 screen still has its Exit found. The Her Interactive logo is also still
 clicked where OCR reads "interactive", which catches it in a game with no
@@ -627,9 +706,9 @@ minute (Labyrinth of Lies' and Sea of Darkness's intros run 50 s).
 **A black start can take a click too.** Secrets Can Kill Remastered from disc
 is black for its first five seconds, then shows its logo and title card for
 fifteen more. A click in the black skips the lot: its menu came up 4.4 s in,
-against 28.6 s unclicked. A game listed in `SplashScreen.blankStartTakesClick`
-has a black capture clicked as a splash screen is, again every 2 s while it
-stays black. Whether a game's black start takes a click is found with
+against 28.6 s unclicked. A game whose bundle sets
+`blank-start-takes-click` has a black capture clicked as a splash screen is,
+again every 2 s while it stays black. Whether a game's black start takes a click is found with
 `--record-click-at` (below); one whose splash screens come within a second or
 two gains little.
 
@@ -645,18 +724,15 @@ splash screen. Across recordings of 31 games, no menu came nearer than 0.134
 to any reference its game is matched against, and every game had a splash
 screen recognised within its first six seconds.
 
-The references are files in the nancy-drew module's `needles/splash/`
-(`Modules/nancy-drew/`, [modules.md](modules.md)), and the main menu's quit
-button is `needles/quit-button.png` beside it:
-`splash-any-<what it shows>.png` for the screens many games share — the Her
-Interactive logos and intro, the glowing "Nancy Drew", and Big Fish's logo,
-on its own or above Her Interactive's, which Big Fish's editions open with — and
-`splash-<game slug>-<what it shows>.png` for one game's own, mostly title
-cards. A game is matched against its own and every `any` one. WrappPuppeteer
-reads them from the source tree when it runs from a build inside it, so one
-just made is used without rebuilding, and otherwise from the copy of
-`Modules/` in its bundle (`NancyDrewNeedles`). A new one changes the module,
-so raise its release. Each is a recorded frame with its bars
+The references are `screen` needles tagged `splash`: the nancy-drew
+module's `needles/splash/splash-any-<what it shows>.png` for the screens
+many games share — the Her Interactive logos and intro, the glowing "Nancy
+Drew", and Big Fish's logo, on its own or above Her Interactive's, which Big
+Fish's editions open with — and a game's bundle's
+`tests/needles/splash/splash-<game slug>-<what it shows>.png` for its own,
+mostly title cards. A game is matched against its own and every `any` one.
+A new `any` one changes the module, so raise its release
+([modules.md](modules.md)). Each is a recorded frame with its bars
 trimmed, 160 pixels wide. An animated screen needs a reference for each look
 it has long enough to be caught in.
 
@@ -676,7 +752,7 @@ $WP "built-apps/Nancy Drew - <game>.app" --record /tmp/rec --record-seconds 60
 
 # Make a reference from a frame partway through each splash screen
 $WP --make-splash-reference /tmp/rec/004960.png \
-  Modules/nancy-drew/needles/splash/splash-<slug>-her-logo.png
+  Bundles/nancy-drew/<slug>/tests/needles/splash/splash-<slug>-her-logo.png
 
 # Check every frame: SPLASH, the nearest reference and its distance, and
 # anything light where the bars beside a 4:3 picture should be

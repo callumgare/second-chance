@@ -60,9 +60,11 @@ notes:                          # for people only; nothing reads these
   installer: "installshield"
 ```
 
-The schema describes every field, including those nothing reads yet (choices,
-tests). `updates` is read when an old wrapp is updated
-([wrapp-build.md](wrapp-build.md#updating-a-wrapp)). What today's code reads
+The schema describes every field, including those nothing reads yet
+(choices). `updates` is read when an old wrapp is updated
+([wrapp-build.md](wrapp-build.md#updating-a-wrapp)), and `tests` (the
+scenario and its parameters) by WrappPuppeteer, with the needles in the
+bundle's `tests/needles/` ([testing.md](testing.md#needles)). What today's code reads
 into `GameInfo`, by field:
 
 | Manifest | Today's `GameInfo` |

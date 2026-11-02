@@ -62,7 +62,7 @@ stages, volumes) is the plan's, and comes with what reads it.
 | `nancy-drew` | `ini.yaml`: what every `.ini` in a game's folder has changed once it's installed (LCD mode, saves in Documents) | `WrappBuildHelper`, configuring the wrapp |
 | `nancy-drew` | `clean-exit-log.yaml`: the log Her's later engine writes, and its clean-exit line | the wrapp (`HerEngineLog`), compiled in by `sc generate` |
 | `nancy-drew` | `assets/*.au3`: the AutoIt scripts that click through an installer that won't run silently, and patchers with no silent mode | `GameInstallerRunner` |
-| `nancy-drew` | `needles/`: the splash screens WrappPuppeteer clicks past, and the main menu's quit button | WrappPuppeteer (`NancyDrewNeedles`), from the source tree or its bundle's copy |
+| `nancy-drew` | `needles/`: the splash screens many games share and the main menu's Exit, and `scenarios/quit-from-menu.yaml`, the test every game's bundle names ([testing.md](testing.md#scenarios)) | WrappPuppeteer (`TestData`), from the source tree or its bundle's copy |
 
 | `nancy-drew` | `functions/patch`, `functions/configure-ini`: Wrappfile functions (`DO nancy-drew.patch --id=… --into=…`), and `assemble`, which runs `configure-ini` after every final stage that uses the module | the Wrappfile checker, for now |
 

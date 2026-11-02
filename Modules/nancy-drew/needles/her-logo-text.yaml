@@ -1,0 +1,4 @@
+# The Her Interactive logo some games wait on a click at before their menu.
+kind: "text"
+tags: ["her-logo"]
+text: { strings: ["interactive"] }

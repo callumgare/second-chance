@@ -1,0 +1,78 @@
+import Foundation
+import CoreGraphics
+import Testing
+@testable import WrappBuilder
+
+struct ProgramTestTests {
+    private func test(_ slug: String) throws -> ProgramTest {
+        try ProgramTest.load(bundleFolder: bundlesRoot.appendingPathComponent("nancy-drew/\(slug)"), modulesRoot: modulesRoot)
+    }
+
+    @Test("Every bundle's test loads: its scenario, parameters and needles",
+          arguments: try FileManager.default.contentsOfDirectory(atPath: bundlesRoot.appendingPathComponent("nancy-drew").path).sorted())
+    func everyBundle(slug: String) throws {
+        let test = try test(slug)
+        #expect(test.scenario.id == "nancy-drew/quit-from-menu")
+        for handler in test.scenario.handlers where handler.when != "blank" {
+            #expect(!test.needles.tagged(handler.when).isEmpty, "\(slug): nothing is tagged \(handler.when)")
+        }
+    }
+
+    @Test("A game's own splash screens join the shared ones, and no other game's")
+    func splashesByBundle() throws {
+        let oldClock = try test("old-clock").needles.tagged("splash").map(\.name)
+        #expect(oldClock.contains("splash-old-clock-title"))
+        #expect(oldClock.contains("splash-any-her-logo-blue"))
+        #expect(!oldClock.contains { $0.hasPrefix("splash-blue-moon") })
+        // Secrets Can Kill's name begins Secrets Can Kill Remastered's, whose
+        // screens it took by its file names' prefix before they were in bundles.
+        let original = try test("secrets-can-kill").needles.tagged("splash").map(\.name)
+        #expect(!original.contains { $0.hasPrefix("splash-secrets-can-kill-remastered") })
+    }
+
+    @Test("A bundle's needle replaces the module's of the same id: Scarlet Hand's Exit is clicked at its label's top")
+    func scarletHandsExit() throws {
+        let exit = try #require(try test("scarlet-hand").needles.needles.first { $0.id == "exit-text" })
+        #expect(exit.spec.click == .init(x: 0.5, y: 0))
+        #expect(exit.clickPoint(in: CGRect(x: 10, y: 20, width: 100, height: 40)) == CGPoint(x: 60, y: 20))
+        let usual = try #require(try test("old-clock").needles.needles.first { $0.id == "exit-text" })
+        #expect(usual.clickPoint(in: CGRect(x: 10, y: 20, width: 100, height: 40)) == CGPoint(x: 60, y: 40))
+    }
+
+    @Test("A bundle's parameters set the scenario's")
+    func parameters() throws {
+        #expect(try test("secrets-can-kill-remastered").scenario.parameters["blank-start-takes-click"] == "true")
+        let usual = try test("old-clock").scenario
+        #expect(usual.parameters["blank-start-takes-click"] == "false")
+        let blackStart = try #require(usual.handlers.first { $0.id == "black-start" })
+        #expect(!blackStart.applies(with: usual.parameters))
+        #expect(usual.handlers.first { $0.id == "splash" }?.retryAfter == 2)
+    }
+
+    @Test("The scenario's handlers say what to do")
+    func handlers() throws {
+        let scenario = try test("old-clock").scenario
+        #expect(scenario.handlers.map(\.id) == ["black-start", "splash", "main-menu", "her-logo"])
+        let menu = try #require(scenario.handlers.first { $0.id == "main-menu" })
+        #expect(menu.actions == [.check("menu"), .click, .expectEnd])
+        #expect(menu.repeatWhereLastSeen == 3)
+        #expect(scenario.handlers.first { $0.id == "her-logo" }?.once == true)
+    }
+
+    @Test("A parameter the scenario doesn't have is refused")
+    func unknownParameter() throws {
+        let file = modulesRoot.appendingPathComponent("nancy-drew/scenarios/quit-from-menu.yaml")
+        #expect(throws: ScenarioError.self) {
+            try Scenario.load(id: "nancy-drew/quit-from-menu", file: file, overrides: ["no-such-thing": "1"])
+        }
+    }
+
+    @Test("An image with no description, and no defaults beside it, is refused")
+    func undescribedImage() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("needles-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data().write(to: folder.appendingPathComponent("lonely.png"))
+        #expect(throws: NeedleError.self) { try NeedleLibrary.load([folder]) }
+    }
+}

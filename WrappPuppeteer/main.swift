@@ -7,6 +7,7 @@ import ImageIO
 import Logging
 import SecondChanceKit
 import PuppeteerCore
+import WrappBuilder
 
 // Bootstrap logging before anything else can construct a Logger — top-level
 // code in main.swift runs in source order, and the logger below (like any
@@ -33,7 +34,8 @@ func printUsage() {
                                caller that launched this through LaunchServices
         --debug                Launch the wrapp in debug mode
         --parent-pid <pid>     Stop, killing the wrapp, once this process exits
-        --analyze <path>       Analyze a screenshot for quit buttons (no launch)
+        --analyze <path>       Look for the nancy-drew module's needles on a
+                               screenshot (no launch)
         --record <dir>         Save the game window to <dir> from when it appears
                                until the run ends
         --record-seconds <s>   Click nothing: record for <s> seconds, then quit
@@ -139,7 +141,16 @@ if let arguments = classifyArguments {
         fputs("Usage: --classify <game-slug> <frame.png|dir>...\n", stderr)
         exit(1)
     }
-    let screens = SplashScreen.screens(forGame: arguments[0])
+    // The game's splash screens, from its bundle and the module its
+    // scenario is in.
+    let screens: [SplashScreen]
+    do {
+        let program = arguments[0].contains("/") ? arguments[0] : "nancy-drew/" + arguments[0]
+        screens = SplashScreen.screens(tagged: "splash", in: try TestData.test(forProgram: program).needles)
+    } catch {
+        fputs("Couldn't read \(arguments[0])'s test: \(error)\n", stderr)
+        exit(1)
+    }
     if screens.isEmpty { fputs("No splash references for \(arguments[0])\n", stderr) }
     var frames: [String] = []
     for argument in arguments.dropFirst() {
@@ -202,12 +213,22 @@ if let screenshotPath = analyzePath {
         fputs("Error: Screenshot not found at \(screenshotPath)\n", stderr)
         exit(1)
     }
-    let result = MainMenuScreen.analyze(screenshotPath: screenshotPath)
+    // The nancy-drew module's needles that are read off a screen.
+    let needles: [Needle]
+    do {
+        needles = try TestData.moduleNeedles("nancy-drew").needles.filter { $0.spec.kind != .screen }
+    } catch {
+        fputs("Couldn't read the needles: \(error)\n", stderr)
+        exit(1)
+    }
+    let result = MainMenuScreen.analyze(screenshotPath: screenshotPath, needles: needles)
     // Human-readable summary on stdout, for use from a terminal
     print("Screenshot analysis: \(screenshotPath)")
-    if let r = result.quitButton { print("  Quit button: x=\(Int(r.minX)) y=\(Int(r.minY)) w=\(Int(r.width)) h=\(Int(r.height))") }
-    if let r = result.interactiveLogo { print("  Interactive logo: x=\(Int(r.minX)) y=\(Int(r.minY)) w=\(Int(r.width)) h=\(Int(r.height))") }
-    if result.quitButton == nil && result.interactiveLogo == nil {
+    for (tag, found) in result.sorted(by: { $0.key < $1.key }) {
+        let r = found.rect
+        print("  \(tag) (\(found.needle.id)): x=\(Int(r.minX)) y=\(Int(r.minY)) w=\(Int(r.width)) h=\(Int(r.height))")
+    }
+    if result.isEmpty {
         print("  (nothing found)")
     }
     exit(0)

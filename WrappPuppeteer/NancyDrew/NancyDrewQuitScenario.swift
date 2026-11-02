@@ -11,6 +11,7 @@ import CoreGraphics
 import Logging
 import SecondChanceKit
 import PuppeteerCore
+import WrappBuilder
 
 struct NancyDrewQuitScenario {
     struct Options {
@@ -34,8 +35,6 @@ struct NancyDrewQuitScenario {
         /// first, which on a loaded machine can take a while.
         var fullScreenTimeout: TimeInterval = 120
         var quitTimeout: TimeInterval = 300
-        /// How long to keep looking for the Exit button
-        var findExitTimeout: TimeInterval = 300
         /// How long the wrapp's cursor lock may take to finish before the
         /// first click. It waits up to 100 s for the window to settle, then
         /// spends up to ~35 s on middle clicks.
@@ -77,6 +76,16 @@ struct NancyDrewQuitScenario {
         logger.notice("   Max runtime: \(Int(options.maxRuntime))s")
 
         ProcessCleanup.install(cleanupCommands: wrapp.cleanupCommands)
+
+        // What to do once the game is up: its bundle's scenario, parameters
+        // and needles (docs/testing.md#scenarios).
+        let program = TestData.program(of: wrapp)
+        let test: ProgramTest
+        do {
+            test = try TestData.test(forProgram: program)
+        } catch {
+            return .failed("Couldn't read \(program)'s test: \(error)")
+        }
 
         // The wrapp and the game serve their windows on sockets here
         // (docs/wine-in-process-helpers.md#puppet-control).
@@ -193,7 +202,7 @@ struct NancyDrewQuitScenario {
             return .passed
         }
 
-        if let failure = clickExit(appName: appName, app: app, gamePid: gamePid, context: context) {
+        if let failure = runHandlers(test: test, app: app, gamePid: gamePid, context: context) {
             return .failed(failure)
         }
 
@@ -608,34 +617,39 @@ struct NancyDrewQuitScenario {
         return false
     }
 
-    /// Look for the Exit button and click it, first clicking past whatever
-    /// splash screens the game shows before its menu: those recorded for it
-    /// (`SplashScreen`), and the Her Interactive logo, found by OCR, in any
-    /// game. Nil once Exit has been clicked and the game lost focus or exited;
-    /// otherwise why not.
+    /// What a handler's acting came to.
+    private enum Outcome {
+        /// It acted; look at the screen afresh.
+        case acted
+        /// It found its needle but did nothing this time.
+        case waited
+        /// The run is over: nil when it ended as it should, else why not.
+        case finished(String?)
+    }
+
+    /// Run the scenario's handlers until the game ends (the goal): on every
+    /// look at the game's window, each handler that waits for a whole-screen
+    /// tag or a blank screen is tried in order, then the window is read for
+    /// the rest's needles, which run in order on what was found
+    /// (docs/testing.md#scenarios). Nil when the game ended as it should.
     ///
     /// The first click, whichever it is, must reach the game: a Wine game's
     /// cnc-ddraw swallows it unless the wrapp's cursor lock took the cursor
     /// first, and on a splash screen — which any click skips — nothing else
     /// would show it.
-    private func clickExit(appName: String, app: NSRunningApplication, gamePid: Int32, context: Context) -> String? {
-        logger.notice("🎮 Attempting to quit game...")
+    private func runHandlers(test: ProgramTest, app: NSRunningApplication, gamePid: Int32, context: Context) -> String? {
+        let scenario = test.scenario
+        logger.notice("🎮 Running \(scenario.id): handlers \(scenario.handlers.map(\.id).joined(separator: ", "))")
         let strategy = focusStrategy(context)
-        let notFound = "OCR could not find Exit button"
-
-        // Only cnc-ddraw swallows a first click, so only a Wine game that may
-        // draw through it has a first click to check.
-        /// How long a splash screen that's still showing after its click may
-        /// go before it is clicked again: some take a click only once they
-        /// have finished appearing. A different one is clicked at once.
-        let splashRetryInterval: TimeInterval = 2
+        let notFound = "The game's menu, with its Exit, never appeared"
 
         var firstClickToCheck = wrapp.runsInWine && wrapp.graphics.mayUseCncDdraw
         if wrapp.runsInWine && !firstClickToCheck {
             logger.notice("  ℹ️  \(wrapp.gameExeName) draws with \(wrapp.graphics.logDescription): no cnc-ddraw to swallow its first click")
         }
         /// Click a window point, checking the first click wasn't swallowed;
-        /// the failure if it was.
+        /// the failure if it was. Only cnc-ddraw swallows a first click, so
+        /// only a Wine game that may draw through it has one to check.
         func click(at point: CGPoint) -> String? {
             var heldBefore: Bool?
             if firstClickToCheck {
@@ -656,43 +670,55 @@ struct NancyDrewQuitScenario {
             return nil
         }
 
-        let splashScreens = SplashScreen.screens(forGame: wrapp.gameSlug)
-        let splashNames = splashScreens.isEmpty ? "" : ": " + splashScreens.map(\.name).joined(separator: ", ")
-        logger.notice("  ℹ️  \(splashScreens.count) splash screen(s) known for \(wrapp.gameSlug)\(splashNames)")
-        /// The splash screens clicked past, by name: none at all, when some
-        /// are known for the game, is warned about once the menu is up.
-        var splashesClicked: Set<String> = []
-        /// The screen last clicked as a splash screen, and when.
-        var lastSplashClicked: ImageFingerprint?
-        var lastSplashClick = Date.distantPast
-        var loggedLockWait: String?
+        let handlers = scenario.handlers.filter { handler in
+            let applies = handler.applies(with: scenario.parameters)
+            if !applies { logger.notice("  ℹ️  Handler \(handler.id) is off for \(wrapp.gameSlug) (\(handler.condition ?? ""))") }
+            return applies
+        }
+        /// Each whole-screen tag's screens, fingerprinted once.
+        var screens: [String: [SplashScreen]] = [:]
+        for handler in handlers where handler.when != Self.blankTag {
+            let found = SplashScreen.screens(tagged: handler.when, in: test.needles)
+            if !found.isEmpty { screens[handler.when] = found }
+        }
+        let fastHandlers = handlers.filter { $0.when == Self.blankTag || screens[$0.when] != nil }
+        let readHandlers = handlers.filter { $0.when != Self.blankTag && screens[$0.when] == nil }
+        let readNeedles = readHandlers.flatMap { test.needles.tagged($0.when) }.filter { $0.spec.kind != .screen }
+        for (tag, list) in screens.sorted(by: { $0.key < $1.key }) {
+            logger.notice("  ℹ️  \(list.count) screen(s) tagged \(tag) for \(wrapp.gameSlug): \(list.map(\.name).joined(separator: ", "))")
+        }
 
-        var clickedInteractive = false
-        var clickedExitButton = false
+        /// What each handler has done so far, by id.
+        struct Memory {
+            var actedAt = Date.distantPast
+            var actedOn: ImageFingerprint?
+            var acted = false
+            /// Where its needle was last found, in window points.
+            var lastSeen: CGPoint?
+        }
+        var memory: [String: Memory] = [:]
+        /// The screens clicked past by a whole-screen handler, by name: none
+        /// at all, when some are known, is warned about once the menu is up.
+        var screensClicked: Set<String> = []
+        var loggedLockWait: String?
+        var ended = false
         var reachedMenu = false
         var switchedAway = false
-        // Where Exit was last found (in window points), and when it was last
-        // clicked: on a loaded machine the game can miss the click, and with
-        // its own cursor then drawn over the label OCR may never find it again.
-        var lastExitLocation: CGRect?
-        var lastExitClick = Date.distantPast
         let startTime = Date()
         var attempt = 0
 
-        while Date().timeIntervalSince(startTime) < options.findExitTimeout {
+        attemptLoop: while Date().timeIntervalSince(startTime) < scenario.timeout {
             attempt += 1
             let iterationStartTime = Date()
-
             if attempt == 1 { NSSound.beep() }
 
-            // Losing focus after clicking Exit means the game is shutting down;
-            // losing it before means something else took over the screen.
+            // Losing focus after the ending click means the game is shutting
+            // down; losing it before means something else took over the screen.
             guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
-                if clickedExitButton { return nil }
+                if ended { return nil }
                 forceQuit(app)
                 return notFound
             }
-
             logger.notice("  → Attempt \(attempt) (elapsed: \(String(format: "%.1f", Date().timeIntervalSince(startTime)))s)")
 
             // The game window alone, captured by the game: nothing in front
@@ -704,89 +730,102 @@ struct NancyDrewQuitScenario {
                 Thread.sleep(forTimeInterval: 0.2)
                 continue
             }
+            defer { try? FileManager.default.removeItem(atPath: shotPath) }
             let scale = pixels.width / state.size.width
-            let toPoints = { (rect: CGRect) in
-                CGRect(x: rect.minX / scale, y: rect.minY / scale, width: rect.width / scale, height: rect.height / scale)
-            }
-
+            let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
+            // Until the cursor lock has finished, the first click can't be
+            // made, and by then the screen may have gone: look again.
+            let lockPending = firstClickToCheck && state.cursorLock == "waiting"
             let fingerprint = ImageFingerprint(imageAt: shotPath)
 
-            // A game whose black start takes a click (`blankStartTakesClick`)
-            // is clicked there, near where a splash screen would be, and
-            // again every `splashRetryInterval` while it stays black: the
-            // first clicks can come before the game takes any.
-            if !clickedExitButton, fingerprint == nil, SplashScreen.blankStartTakesClick.contains(wrapp.gameSlug),
-               !(firstClickToCheck && state.cursorLock == "waiting"),
-               Date().timeIntervalSince(lastSplashClick) >= splashRetryInterval {
-                let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
-                logger.notice("  ✓ [\(elapsed)s] Black start, which this game skips on a click: clicking...")
-                try? FileManager.default.removeItem(atPath: shotPath)
-                if let failure = click(at: CGPoint(x: state.size.width * 0.2, y: state.size.height * 0.12)) {
+            // Whole screens are recognised in milliseconds, where reading
+            // the window takes most of a second, so they're tried first. A
+            // screen still showing after its click is clicked again only
+            // after the handler's `retry-after`: some take a click only once
+            // they have finished appearing. A different one is clicked at once.
+            var actedOnScreen = false
+            for handler in fastHandlers where !ended {
+                var remembered = memory[handler.id, default: Memory()]
+                let retry = handler.retryAfter ?? 0
+                let point: CGPoint
+                let name: String
+                if handler.when == Self.blankTag {
+                    guard fingerprint == nil, !lockPending, Date().timeIntervalSince(remembered.actedAt) >= retry else { continue }
+                    guard case .clickAt(let fraction) = handler.actions.first(where: { if case .clickAt = $0 { true } else { false } }) else { continue }
+                    point = CGPoint(x: state.size.width * fraction.x, y: state.size.height * fraction.y)
+                    name = "blank screen"
+                    logger.notice("  ✓ [\(elapsed)s] Blank screen, which \(handler.id) clicks: clicking...")
+                } else {
+                    guard let fingerprint, let match = SplashScreen.match(fingerprint, among: screens[handler.when] ?? []) else { continue }
+                    if lockPending {
+                        if loggedLockWait != match.screen.name {
+                            logger.notice("  ⏳ [\(elapsed)s] Screen '\(match.screen.name)' — waiting for the wrapp's cursor lock before clicking")
+                            loggedLockWait = match.screen.name
+                        }
+                        Thread.sleep(forTimeInterval: 0.2)
+                        actedOnScreen = true
+                        break
+                    }
+                    // The screen moving on from the one clicked is the click
+                    // having taken; until it has, only a retry.
+                    let unchanged = remembered.actedOn.map { fingerprint.distance(to: $0) <= SplashScreen.matchDistance } ?? false
+                    guard !unchanged || Date().timeIntervalSince(remembered.actedAt) >= retry else { continue }
+                    let fraction = match.clickFraction
+                    point = CGPoint(x: fraction.x * state.size.width, y: fraction.y * state.size.height)
+                    name = match.screen.name
+                    logger.notice("  ✓ [\(elapsed)s] Screen '\(name)' (distance \(String(format: "%.3f", match.distance))), \(handler.id) clicking...")
+                    remembered.actedOn = fingerprint
+                }
+                if let failure = click(at: point) {
                     forceQuit(app)
                     return failure
                 }
-                splashesClicked.insert("black start")
-                lastSplashClick = Date()
-                continue
+                screensClicked.insert(name)
+                remembered.actedAt = Date()
+                remembered.acted = true
+                memory[handler.id] = remembered
+                actedOnScreen = true
+                break
             }
-
-            // A splash screen is recognised in milliseconds, where the OCR
-            // below takes most of a second, so it's checked first. Its click
-            // goes near the picture's top-left corner, which no game's menu
-            // has a button in: should a menu ever pass for a splash screen,
-            // the click does nothing there.
-            if !clickedExitButton, !splashScreens.isEmpty,
-               let fingerprint,
-               let splash = SplashScreen.match(fingerprint, among: splashScreens) {
-                let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
-                // Until the cursor lock has finished, the first click can't be
-                // made, and by then this screen may have gone: look again.
-                let lockPending = firstClickToCheck && state.cursorLock == "waiting"
-                // The screen moving on from the one clicked is the click
-                // having taken; until it has, only a retry.
-                let unchanged = lastSplashClicked.map { fingerprint.distance(to: $0) <= SplashScreen.matchDistance } ?? false
-                if !lockPending, !unchanged || Date().timeIntervalSince(lastSplashClick) >= splashRetryInterval {
-                    logger.notice("  ✓ [\(elapsed)s] Splash screen '\(splash.screen.name)' (distance \(String(format: "%.3f", splash.distance))), clicking past it...")
-                    let content = splash.contentRect
-                    let point = CGPoint(x: (content.minX + content.width * 0.08) * state.size.width,
-                                        y: (content.minY + content.height * 0.08) * state.size.height)
-                    try? FileManager.default.removeItem(atPath: shotPath)
-                    if let failure = click(at: point) {
-                        forceQuit(app)
-                        return failure
-                    }
-                    splashesClicked.insert(splash.screen.name)
-                    lastSplashClicked = fingerprint
-                    lastSplashClick = Date()
-                    continue
-                }
-                if lockPending {
-                    if loggedLockWait != splash.screen.name {
-                        logger.notice("  ⏳ [\(elapsed)s] Splash screen '\(splash.screen.name)' — waiting for the wrapp's cursor lock before clicking")
-                        loggedLockWait = splash.screen.name
-                    }
-                    try? FileManager.default.removeItem(atPath: shotPath)
-                    Thread.sleep(forTimeInterval: 0.2)
-                    continue
-                }
-            }
+            if actedOnScreen { continue }
 
             let searchStartTime = Date()
-            let analysis = MainMenuScreen.analyze(screenshotPath: shotPath, app: app)
+            let found = MainMenuScreen.analyze(screenshotPath: shotPath, needles: readNeedles, app: app)
             logger.notice("    ⏱️  Search took \(String(format: "%.2f", Date().timeIntervalSince(searchStartTime)))s")
-            // The menu, fully drawn, is what every run reaches: its frame is
-            // checked the first time Exit is found on it, and again after
-            // switching away from the game and back.
-            if analysis.quitButton != nil, !clickedExitButton {
-                if !reachedMenu {
+
+            for handler in readHandlers {
+                var remembered = memory[handler.id, default: Memory()]
+                let ends = handler.actions.contains(.expectEnd)
+                guard !ended || ends else { continue }
+                if handler.once, remembered.acted { continue }
+                var target = found[handler.when].map { found in
+                    CGPoint(x: found.clickPoint.x / scale, y: found.clickPoint.y / scale)
+                }
+                if target != nil, ends, !ended, !reachedMenu {
                     reachedMenu = true
-                    if !splashScreens.isEmpty, splashesClicked.isEmpty {
-                        warnForTest("No splash screen was clicked past: none of the \(splashScreens.count) recorded for \(wrapp.gameSlug) "
+                    let known = screens.values.reduce(0) { $0 + $1.count }
+                    if known > 0, screensClicked.isEmpty {
+                        warnForTest("No splash screen was clicked past: none of the \(known) recorded for \(wrapp.gameSlug) "
                             + "was recognised, so the recordings may no longer match the game (docs/testing.md#splash-screens)")
                     }
                 }
-                if options.quitFromMenu {
-                    try? FileManager.default.removeItem(atPath: shotPath)
+                if let seen = target {
+                    remembered.lastSeen = seen
+                } else if let seen = remembered.lastSeen, let after = handler.repeatWhereLastSeen,
+                          Date().timeIntervalSince(remembered.actedAt) >= after {
+                    // On a loaded machine the game can miss the click, and
+                    // with its own cursor then drawn over the label it may
+                    // never be found again.
+                    logger.notice("  ↻ \(handler.id): its \(handler.when) wasn't found this time — clicking where it was found before")
+                    target = seen
+                }
+                guard let point = target else { continue }
+                // As for a whole screen: not while the cursor lock is still
+                // working, unless the run has already clicked its ending.
+                if lockPending, !ended { continue }
+                // Asked to quit through the game's Quit menu item instead
+                // (--quit-from-menu): at once, as that is what is tested.
+                if ends, !ended, options.quitFromMenu, found[handler.when] != nil {
                     logger.notice("  ✓ At the menu: quitting through the game's Quit menu item, as ⌘⌥Q does...")
                     guard context.game.quitApp() else {
                         forceQuit(app)
@@ -794,79 +833,51 @@ struct NancyDrewQuitScenario {
                     }
                     return nil
                 }
-                if let failure = pictureFrameFailure(context, capturePath: shotPath, windowSize: state.size) {
-                    forceQuit(app)
-                    return failure
-                }
-                if !switchedAway {
-                    switchedAway = true
-                    try? FileManager.default.removeItem(atPath: shotPath)
-                    if let failure = switchAwayAndBackFailure(context, gamePid: gamePid) {
-                        forceQuit(app)
-                        return failure
+
+                for action in handler.actions {
+                    switch action {
+                    case .check(let check):
+                        guard !ended, found[handler.when] != nil else { continue }
+                        switch runCheck(check, state: state, shotPath: shotPath, switchedAway: &switchedAway, gamePid: gamePid,
+                                        app: app, context: context) {
+                        case .acted: memory[handler.id] = remembered; continue attemptLoop
+                        case .waited: break
+                        case .finished(let failure): return failure
+                        }
+                    case .click, .clickAt:
+                        guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
+                            if ended { return nil }
+                            forceQuit(app)
+                            return notFound
+                        }
+                        var clickAt = point
+                        if case .clickAt(let fraction) = action {
+                            clickAt = CGPoint(x: state.size.width * fraction.x, y: state.size.height * fraction.y)
+                        }
+                        logger.notice(remembered.acted ? "  ✓ \(handler.id): clicking its \(handler.when) again..." : "  ✓ \(handler.id): found its \(handler.when), clicking...")
+                        if let failure = click(at: clickAt) {
+                            forceQuit(app)
+                            return failure
+                        }
+                        remembered.acted = true
+                        remembered.actedAt = Date()
+                    case .expectEnd:
+                        ended = true
+                        memory[handler.id] = remembered
+                        Thread.sleep(forTimeInterval: 1)
+                        // The game draws its own cursor into the frame, so
+                        // left on the button it hides part of the label (or
+                        // hover-highlights it) and a retry can't find it.
+                        // Parked against the left edge, clear of the centred
+                        // menu text and of the bottom-right corner.
+                        context.game.move(to: CGPoint(x: 20, y: state.size.height / 2))
+                        if !ProcessControl.isRunning(app, helperPid: gamePid) {
+                            logger.notice("✅ Game exited successfully")
+                            return nil
+                        }
                     }
-                    // The menu again, to check its frame as it is now.
-                    continue
                 }
-            }
-            try? FileManager.default.removeItem(atPath: shotPath)
-
-            var exitTarget = analysis.quitButton.map(toPoints)
-            if let found = exitTarget {
-                lastExitLocation = found
-            } else if let remembered = lastExitLocation, Date().timeIntervalSince(lastExitClick) >= 3 {
-                logger.notice("  ↻ 'Exit Game' not found this time — clicking where it was found before")
-                exitTarget = remembered
-            }
-
-            if let exitLocation = exitTarget {
-                guard FocusDetector.isFocused(pid: gamePid, strategy: strategy) else {
-                    if clickedExitButton { return nil }
-                    forceQuit(app)
-                    return notFound
-                }
-
-                logger.notice(clickedExitButton ? "  ✓ Clicking 'Exit Game' button again..." : "  ✓ Found 'Exit Game' button, clicking...")
-                clickedExitButton = true
-
-                var clickPoint = CGPoint(x: exitLocation.midX, y: exitLocation.midY)
-
-                // The Scarlet Hand's Exit hotspot sits above its label
-                if appName.contains("Scarlet Hand") {
-                    clickPoint.y -= exitLocation.height / 2
-                }
-
-                if let failure = click(at: clickPoint) {
-                    forceQuit(app)
-                    return failure
-                }
-                lastExitClick = Date()
-                Thread.sleep(forTimeInterval: 1)
-
-                // The game draws its own cursor into the frame, so left on the
-                // button it hides part of the label from OCR (or hover-
-                // highlights it) and a retry can't find it. Park it against the
-                // left edge, clear of the centred menu text and of the
-                // bottom-right corner the quit-button template is searched in.
-                context.game.move(to: CGPoint(x: 20, y: state.size.height / 2))
-
-                if !ProcessControl.isRunning(app, helperPid: gamePid) {
-                    logger.notice("✅ Game exited successfully")
-                    return nil
-                }
-            }
-
-            // As for a splash screen: not while the cursor lock is still
-            // working, when the logo may be gone by the time it can be clicked.
-            if let interactiveLocation = analysis.interactiveLogo.map(toPoints), !clickedInteractive,
-               !(firstClickToCheck && state.cursorLock == "waiting") {
-                logger.notice("  ✓ Found 'interactive' logo, clicking to enable menu...")
-                let logoPoint = CGPoint(x: interactiveLocation.midX, y: interactiveLocation.midY)
-                if let failure = click(at: logoPoint) {
-                    forceQuit(app)
-                    return failure
-                }
-                clickedInteractive = true
+                memory[handler.id] = remembered
             }
 
             let remainingTime = 0.2 - Date().timeIntervalSince(iterationStartTime)
@@ -875,11 +886,37 @@ struct NancyDrewQuitScenario {
 
         // Each attempt's screenshot is deleted once analysed, so without this
         // a menu that never appeared leaves no trace of what was on screen.
-        logger.error("❌ No Exit button or logo found within \(Int(options.findExitTimeout))s")
+        logger.error("❌ The scenario's goal wasn't reached within \(Int(scenario.timeout))s")
         diagnosticCapture(context, prefix: "exit-not-found")
         optionalScreenshot(prefix: "exit-not-found")
         WindowFinder.logAllWindows()
         forceQuit(app)
         return notFound
+    }
+
+    /// The tag a handler waits on for a screen with nothing on it.
+    static let blankTag = "blank"
+
+    /// A check a handler asks for (`check: menu`): the menu, fully drawn,
+    /// is what every run reaches, so its frame is checked the first time
+    /// it's found, and again after switching away from the game and back.
+    private func runCheck(_ check: String, state: ControlledWindowState, shotPath: String, switchedAway: inout Bool,
+                          gamePid: Int32, app: NSRunningApplication, context: Context) -> Outcome {
+        guard check == "menu" else {
+            forceQuit(app)
+            return .finished("The scenario asks for a check called \(check), which WrappPuppeteer doesn't have")
+        }
+        if let failure = pictureFrameFailure(context, capturePath: shotPath, windowSize: state.size) {
+            forceQuit(app)
+            return .finished(failure)
+        }
+        guard !switchedAway else { return .waited }
+        switchedAway = true
+        if let failure = switchAwayAndBackFailure(context, gamePid: gamePid) {
+            forceQuit(app)
+            return .finished(failure)
+        }
+        // The menu again, to check its frame as it is now.
+        return .acted
     }
 }

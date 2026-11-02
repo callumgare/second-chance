@@ -2,91 +2,93 @@
 //  MainMenuScreen.swift
 //  WrappPuppeteer
 //
-//  Finding what the scenario clicks on a Nancy Drew game's screen: the Exit
-//  button on the main menu, and the Her Interactive logo on the splash.
+//  Finding a scenario's `text` and `region` needles on a screenshot: the
+//  Exit on a game's main menu, the Her Interactive logo before it.
 
 import Foundation
 import AppKit
 import Logging
 import PuppeteerCore
 import Synchronization
+import WrappBuilder
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.MainMenuScreen")
 
-/// Points of interest found in a game screenshot, in screenshot pixels with a
-/// top-left origin.
-struct MainMenuAnalysis {
-    /// "Exit Game" or "Quit" text, or the quit button matched by image
-    var quitButton: CGRect?
-    /// "interactive" text — the Her Interactive logo, which needs a click to
-    /// get past the splash to the menu
-    var interactiveLogo: CGRect?
+/// A needle found on a screenshot, in screenshot pixels with a top-left
+/// origin.
+struct FoundNeedle {
+    let needle: Needle
+    let rect: CGRect
+
+    /// Where to click it, in the same pixels.
+    var clickPoint: CGPoint { needle.clickPoint(in: rect) }
 }
 
 enum MainMenuScreen {
-    private nonisolated static let exitTexts = ["Exit Game", "Quit"]
-    private nonisolated static let logoText = "interactive"
-
-    /// Games whose Exit is a graphic rather than text are matched against
-    /// assets/quit-button.png. Across the series that button is red and sits
-    /// in the bottom-right corner, at roughly the same size relative to the
-    /// game's screen, so the search is narrowed to match. (The scenario's
-    /// screenshots are of the game's window alone.)
-    nonisolated static let quitButtonMatchOptions = TemplateMatchOptions(
-        searchRegion: CGRect(x: 2.0 / 3.0, y: 5.0 / 6.0, width: 1.0 / 3.0, height: 1.0 / 6.0),
-        templateHeightFraction: 0.0662,
-        scaleVariations: [1.0],
-        grayscale: .redEmphasis
-    )
-
-    /// Analyse a screenshot. OCR and the template match run in parallel.
+    /// Look for `needles` on a screenshot: every `text` needle's strings in
+    /// one OCR pass, beside each `region` needle's template match. The
+    /// result is one match per tag: a text needle's first, as reading the
+    /// words is surer than matching a picture, in its strings' order.
     /// Usable standalone against a saved screenshot (`--analyze`).
-    static func analyze(screenshotPath: String, app: NSRunningApplication? = nil) -> MainMenuAnalysis {
-        let quitButtonImagePath = resolveQuitButtonImagePath()
+    static func analyze(screenshotPath: String, needles: [Needle], app: NSRunningApplication? = nil) -> [String: FoundNeedle] {
+        let texts = needles.filter { $0.spec.kind == .text }
+        let regions = needles.filter { $0.spec.kind == .region }
+        let strings = texts.flatMap { $0.spec.text?.strings ?? [] }
 
         let dispatchGroup = DispatchGroup()
-        let found = Mutex<[String: CGRect]>([:])
-        let matched = Mutex<CGRect?>(nil)
+        let read = Mutex<[String: CGRect]>([:])
+        let matched = Mutex<[String: CGRect]>([:])
 
-        dispatchGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let texts = TextRecognizer.findText(exitTexts + [logoText], in: screenshotPath, loggingWhileFrontmost: app)
-            found.withLock { $0 = texts }
-            dispatchGroup.leave()
+        if !strings.isEmpty {
+            dispatchGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let found = TextRecognizer.findText(strings, in: screenshotPath, loggingWhileFrontmost: app)
+                read.withLock { $0 = found }
+                dispatchGroup.leave()
+            }
         }
-
-        dispatchGroup.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            let location = TemplateMatcher.findImage(quitButtonImagePath, in: screenshotPath, options: quitButtonMatchOptions)
-            matched.withLock { $0 = location }
-            dispatchGroup.leave()
+        for needle in regions {
+            guard let image = needle.image else { continue }
+            dispatchGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let location = TemplateMatcher.findImage(image.path, in: screenshotPath, options: matchOptions(needle))
+                if let location { matched.withLock { $0[needle.id] = location } }
+                dispatchGroup.leave()
+            }
         }
-
         dispatchGroup.wait()
-        let foundTexts = found.withLock { $0 }
-        let quitButtonLocation = matched.withLock { $0 }
+        let foundTexts = read.withLock { $0 }, foundRegions = matched.withLock { $0 }
 
-        let result = MainMenuAnalysis(
-            quitButton: exitTexts.lazy.compactMap { foundTexts[$0] }.first ?? quitButtonLocation,
-            interactiveLogo: foundTexts[logoText]
-        )
+        var result: [String: FoundNeedle] = [:]
+        func add(_ found: FoundNeedle) {
+            for tag in found.needle.spec.tags where result[tag] == nil { result[tag] = found }
+        }
+        for needle in texts {
+            if let rect = (needle.spec.text?.strings ?? []).lazy.compactMap({ foundTexts[$0] }).first {
+                add(FoundNeedle(needle: needle, rect: rect))
+            }
+        }
+        for needle in regions {
+            if let rect = foundRegions[needle.id] { add(FoundNeedle(needle: needle, rect: rect)) }
+        }
 
         logger.notice("Screen analysis results:")
-        if let r = result.quitButton { logger.notice("  Quit button: \(Int(r.minX)),\(Int(r.minY)) \(Int(r.width))x\(Int(r.height))") }
-        if let r = result.interactiveLogo { logger.notice("  Interactive logo: \(Int(r.minX)),\(Int(r.minY)) \(Int(r.width))x\(Int(r.height))") }
-        if result.quitButton == nil && result.interactiveLogo == nil {
-            logger.notice("  (nothing found)")
+        for (tag, found) in result.sorted(by: { $0.key < $1.key }) {
+            let r = found.rect
+            logger.notice("  \(tag) (\(found.needle.id)): \(Int(r.minX)),\(Int(r.minY)) \(Int(r.width))x\(Int(r.height))")
         }
-
+        if result.isEmpty { logger.notice("  (nothing found)") }
         return result
     }
 
-    /// The quit-button template: the nancy-drew module's
-    /// `needles/quit-button.png` (`NancyDrewNeedles`).
-    private static func resolveQuitButtonImagePath() -> String {
-        guard let file = NancyDrewNeedles.file("quit-button.png") else {
-            fatalError("quit-button.png not found in the nancy-drew module, in the source tree or WrappPuppeteer's bundle.")
-        }
-        return file.path
+    /// A `region` needle's search, as the template matcher takes it.
+    nonisolated static func matchOptions(_ needle: Needle) -> TemplateMatchOptions {
+        let region = needle.spec.region
+        return TemplateMatchOptions(
+            searchRegion: region?.search?.cgRect ?? CGRect(x: 0, y: 0, width: 1, height: 1),
+            templateHeightFraction: region?.heightFraction.map { CGFloat($0) },
+            scaleVariations: region?.scales.map { $0.map { CGFloat($0) } } ?? [1.0],
+            grayscale: region?.grayscale == "red-emphasis" ? .redEmphasis : .luminance
+        )
     }
 }

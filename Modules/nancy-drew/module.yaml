@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "nancy-drew"
-release: 3
+release: 5
 versions:
   - { version: "1" }
 depends-on: ["wine@10"]                      # its installers and patches run in Wine
@@ -10,8 +10,8 @@ assets:
   - "assets/installshield-custom-dialog-automate.au3"   # clicks through an installer that won't run silently
   - "assets/her-update-wizard.au3"                       # patchers with no silent mode
   - "assets/update-installation-wizard.au3"
-  - "needles/quit-button.png"                            # WrappPuppeteer's: the main menu's quit button
-  - "needles/splash"                                     # and the splash screens it clicks past
+  - "needles"                                            # WrappPuppeteer's: what its scenario looks for, by tag
+  - "scenarios/quit-from-menu.yaml"                      # and the scenario every game's bundle names
 functions: ["functions/patch", "functions/configure-ini"]   # DO nancy-drew.<name>
 assemble: ["DO nancy-drew.configure-ini --into=${install-dir}"]   # after every final stage that USEs it; install-dir is the bundle's global ARG
 notes:

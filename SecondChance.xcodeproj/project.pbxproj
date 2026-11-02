@@ -21,9 +21,11 @@
 		E25C0A142F01000000000001 /* SecondChanceKit in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0A012F01000000000001 /* SecondChanceKit */; };
 		E25C0B102F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0D102F01000000000001 /* WrappBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0D012F01000000000001 /* WrappBuilder */; };
+		E25C0D112F01000000000001 /* WrappBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0D052F01000000000001 /* WrappBuilder */; };
 		E25C0E102F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
 		E25C0E112F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
 		E25C0F102F01000000000001 /* Bundles in Resources */ = {isa = PBXBuildFile; fileRef = E25C0F032F01000000000001 /* Bundles */; };
+		E25C0F112F01000000000001 /* Bundles in Resources */ = {isa = PBXBuildFile; fileRef = E25C0F032F01000000000001 /* Bundles */; };
 		E25C0B122F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0B142F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0C142F01000000000001 /* PuppeteerCore in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0C012F01000000000001 /* PuppeteerCore */; };
@@ -165,6 +167,7 @@
 				E25C0A142F01000000000001 /* SecondChanceKit in Frameworks */,
 				E25C0B142F01000000000001 /* GameCatalog in Frameworks */,
 				E25C0C142F01000000000001 /* PuppeteerCore in Frameworks */,
+				E25C0D112F01000000000001 /* WrappBuilder in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,6 +258,7 @@
 				E25C0A012F01000000000001 /* SecondChanceKit */,
 				E25C0B012F01000000000001 /* GameCatalog */,
 				E25C0C012F01000000000001 /* PuppeteerCore */,
+				E25C0D052F01000000000001 /* WrappBuilder */,
 			);
 			productName = WrappPuppeteer;
 			productType = "com.apple.product-type.application";
@@ -418,6 +422,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E25C0E112F01000000000001 /* Modules in Resources */,
+				E25C0F112F01000000000001 /* Bundles in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1176,6 +1181,11 @@
 			productName = PuppeteerCore;
 		};
 		E25C0D012F01000000000001 /* WrappBuilder */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E25C0D002F01000000000001 /* XCLocalSwiftPackageReference "Packages/WrappBuilder" */;
+			productName = WrappBuilder;
+		};
+		E25C0D052F01000000000001 /* WrappBuilder */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E25C0D002F01000000000001 /* XCLocalSwiftPackageReference "Packages/WrappBuilder" */;
 			productName = WrappBuilder;

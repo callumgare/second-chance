@@ -1,0 +1,4 @@
+# The main menu's Exit, as most games write it.
+kind: "text"
+tags: ["quit"]
+text: { strings: ["Exit Game", "Quit"] }

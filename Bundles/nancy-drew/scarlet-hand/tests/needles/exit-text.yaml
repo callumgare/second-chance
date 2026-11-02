@@ -1,0 +1,6 @@
+# Scarlet Hand's Exit hotspot sits above its label: clicked at the label's
+# top edge rather than its middle. Replaces the nancy-drew module's.
+kind: "text"
+tags: ["quit"]
+text: { strings: ["Exit Game", "Quit"] }
+click: { x: 0.5, y: 0.0 }

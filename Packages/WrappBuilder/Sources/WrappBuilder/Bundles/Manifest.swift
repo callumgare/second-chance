@@ -28,6 +28,30 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public let volumes: [String: Volume]?
     /// How an old wrapp is brought up to this bundle, in order (`UpdatePlanner`).
     public let updates: [Update]?
+    /// How its wrapps are tested (`ProgramTest`).
+    public let tests: Tests?
+
+    public struct Tests: Decodable, Hashable, Sendable {
+        /// `<module>/<scenario>`.
+        public let scenario: String?
+        public let parameters: [String: TestValue]?
+    }
+
+    /// A number, flag or text, kept as text for `${…}`.
+    public struct TestValue: Decodable, Hashable, Sendable {
+        public let text: String
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let flag = try? container.decode(Bool.self) {
+                text = flag ? "true" : "false"
+            } else if let number = try? container.decode(Double.self) {
+                text = number == number.rounded() ? String(Int(number)) : String(number)
+            } else {
+                text = try container.decode(String.self)
+            }
+        }
+    }
 
     public struct Volume: Decodable, Hashable, Sendable {
         /// When the volume holds something of the person's: any file in it

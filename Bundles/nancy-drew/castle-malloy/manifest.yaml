@@ -37,6 +37,9 @@ editions:
     source: "big-fish"
     inputs: [{ id: "game", product: 2699 }]
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
 notes:                                       # for people only; nothing reads these
   quirks:
     - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

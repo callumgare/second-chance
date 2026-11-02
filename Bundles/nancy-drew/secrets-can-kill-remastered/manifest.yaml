@@ -41,6 +41,11 @@ editions:
     source: "big-fish"
     inputs: [{ id: "game", product: 6180 }]
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+  parameters:
+    blank-start-takes-click: true   # black for 5 s, then logo and title for 15 s; a click 1.5 s in brings the menu up
+
 notes:                                       # for people only; nothing reads these
   quirks:
     - "Her's Mac download hasn't been looked inside: it is taken to be a Cider build, as Trail of the Twister's is."

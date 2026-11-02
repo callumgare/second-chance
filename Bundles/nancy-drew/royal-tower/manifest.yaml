@@ -42,6 +42,9 @@ editions:
     source: "big-fish"
     inputs: [{ id: "game", product: 5229 }]
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
 notes:                                       # for people only; nothing reads these
   installer: "installshield"
   disc-answer-file: "installer-answer-files/royal-tower.iss"

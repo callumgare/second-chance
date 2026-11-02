@@ -42,6 +42,9 @@ editions:
     source: "big-fish"
     inputs: [{ id: "game", product: 5517 }]
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
 notes:                                       # for people only; nothing reads these
   quirks:
     - "Runs in ScummVM, which reads the installed data; Wine only installs it."

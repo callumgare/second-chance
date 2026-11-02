@@ -41,6 +41,9 @@ editions:
     source: "big-fish"
     inputs: [{ id: "game", product: 14014 }]
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
 notes:                                       # for people only; nothing reads these
   quirks:
     - "Her's Mac download hasn't been looked inside: it is taken to be a Cider build, as Trail of the Twister's is."

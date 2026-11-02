@@ -1,0 +1,27 @@
+# Get a Nancy Drew game from launch to its main menu and quit through its
+# own Exit: clicking past the screens before the menu, checking the menu,
+# then expecting the game to end. Handlers are tried in order on each look
+# at the screen; WrappPuppeteer runs them (docs/testing.md#scenarios).
+goal: "program-ends"
+timeout: 300
+parameters:
+  splash-retry: 2                    # seconds before a screen still showing is clicked again
+  blank-start-takes-click: false     # a game whose black start a click skips (with every splash after it)
+handlers:
+  - id: "black-start"
+    when: "blank"
+    if: "blank-start-takes-click"
+    retry-after: "${splash-retry}"
+    do: [{ click: { x: 0.2, y: 0.12 } }]
+  - id: "splash"
+    when: "splash"
+    retry-after: "${splash-retry}"
+    do: ["click"]
+  - id: "main-menu"
+    when: "quit"
+    repeat-where-last-seen: 3
+    do: [{ check: "menu" }, "click", "expect-end"]
+  - id: "her-logo"
+    when: "her-logo"
+    once: true
+    do: ["click"]

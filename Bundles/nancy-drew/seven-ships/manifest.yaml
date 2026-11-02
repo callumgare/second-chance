@@ -34,6 +34,9 @@ editions:
       - { id: "game", app-id: 31980, common-folder: "Nancy Drew Ransom of the Seven Ships", exe: "Ransom.exe" }
     # drm left out: not known, so the game is started through Steam
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
 notes:                                       # for people only; nothing reads these
   quirks:
     - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

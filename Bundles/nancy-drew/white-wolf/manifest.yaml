@@ -37,6 +37,9 @@ editions:
     source: "big-fish"
     inputs: [{ id: "game", product: 2435 }]
 
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
 notes:                                       # for people only; nothing reads these
   installer: "installshield"
   disc-answer-file: "installer-answer-files/white-wolf.iss"
