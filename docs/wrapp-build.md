@@ -307,7 +307,9 @@ line with its pid. Facades on `Wine` cover the rest: `wine.registry` sets,
 imports and reads registry values with named keys (`.x11Driver`,
 `.wineDrives`, `.videoDeviceMap`), `wine.server` checks on, waits for and ends
 the prefix's session (`shutDown(gracePeriod:)` escalates from waiting to
-`-k` to `-k9`, telling an `onStep` callback as it goes; `kill()` follows
+`-k` to `-k9`, telling an `onStep` callback as it goes, and goes to `-k`
+early, untold, once only the server and Wine's services and desktop are
+left, rather than wait out their 3 s linger; `kill()` follows
 `-k9` by killing the programs working in the prefix's folder, which `-k9`,
 killing the server alone, leaves running for good), and `Winetricks` (app only, as only Second Chance bundles it)
 installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,

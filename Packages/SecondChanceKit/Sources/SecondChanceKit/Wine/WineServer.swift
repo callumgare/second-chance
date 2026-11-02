@@ -175,7 +175,10 @@ nonisolated public struct WineServer: Sendable {
     ///
     /// Wine gets `gracePeriod` to finish by itself: a game that quit leaves
     /// explorer and Wine's services to wind down, which takes a few seconds,
-    /// while someone quitting the wrapp wants it gone sooner. Then `stop()`
+    /// while someone quitting the wrapp wants it gone sooner. Once its
+    /// programs have all ended, though, only the server and Wine's services
+    /// are left, which linger 3 s after the last program before ending:
+    /// they are stopped then rather than waited out (`waitUntilProgramsEnd`). Then `stop()`
     /// and, if that isn't enough, `kill()`, each followed by a wait of
     /// `stopPeriod`, so
     /// this returns only once Wine has gone, or a kill has had its chance and
@@ -194,13 +197,17 @@ nonisolated public struct WineServer: Sendable {
         defer { server.killPrograms("after Wine ended") }
         logger.notice("[Wine Cleanup] Waiting for Wine to finish (wineserver -w)...")
         onStep(.waiting)
-        if await waitUntilStopped(timeout: gracePeriod) {
+        switch await waitUntilStoppedOrIdle(timeout: gracePeriod) {
+        case .stopped:
             logger.notice("[Wine Cleanup] Wine finished by itself after \(SubprocessWatch.duration(Date().timeIntervalSince(started)))")
             return true
+        case .idle:
+            // Routine, so not a step for the closing window to tell.
+            logger.notice("[Wine Cleanup] Wine's programs all ended after \(SubprocessWatch.duration(Date().timeIntervalSince(started))): stopping its server and services rather than waiting for them to linger (wineserver -k)")
+        case .timedOut:
+            logger.warning("[Wine Cleanup] Wine was still running after \(Int(gracePeriod)) s: stopping it (wineserver -k)")
+            onStep(.stopping)
         }
-
-        logger.warning("[Wine Cleanup] Wine was still running after \(Int(gracePeriod)) s: stopping it (wineserver -k)")
-        onStep(.stopping)
         await stop()
         if await waitUntilStopped(timeout: stopPeriod) {
             logger.notice("[Wine Cleanup] Wine stopped")
@@ -216,6 +223,87 @@ nonisolated public struct WineServer: Sendable {
         }
         logger.error("[Wine Cleanup] Wine was still running \(SubprocessWatch.duration(stopPeriod)) after SIGKILL")
         return false
+    }
+
+    /// How the grace period of `shutDown` ended.
+    enum GraceOutcome: Sendable {
+        /// The session ended.
+        case stopped
+        /// Its programs ended, leaving the server.
+        case idle
+        case timedOut
+    }
+
+    /// Wait for the session to end or its programs to, whichever is first,
+    /// for at most `timeout`.
+    func waitUntilStoppedOrIdle(timeout: TimeInterval) async -> GraceOutcome {
+        await withTaskGroup(of: GraceOutcome.self) { group in
+            group.addTask { await waitUntilStopped(timeout: timeout) ? .stopped : .timedOut }
+            group.addTask { await waitUntilProgramsEnd(timeout: timeout) ? .idle : .timedOut }
+            // A wait that gave up early (no process list) leaves it to the other.
+            var outcome = GraceOutcome.timedOut
+            for await result in group where result != .timedOut {
+                outcome = result
+                break
+            }
+            group.cancelAll()
+            return outcome
+        }
+    }
+
+    /// Wine's system programs: its services and the desktop. They wait for
+    /// the server to end, so they keep running through its linger, and end
+    /// with it. Stopping them with `wineserver -k` rather than letting the
+    /// server signal them loses nothing: the registry is the server's, and
+    /// it saves it as it exits either way; they keep nothing else.
+    static let systemPrograms: Set<String> = [
+        "wineserver", "services.exe", "winedevice.exe", "plugplay.exe", "svchost.exe", "rpcss.exe", "explorer.exe",
+    ]
+
+    /// Wait until no program is running in the prefix but the server and
+    /// Wine's system programs (`systemPrograms`), for at most `timeout`.
+    /// Whether that came; false too when what is running can't be listed,
+    /// or the task is cancelled. Each program's exit is waited on, then the
+    /// list taken again, as one may have started another.
+    func waitUntilProgramsEnd(timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        let server = self
+        while !Task.isCancelled {
+            let left = await Blocking.run { () -> [pid_t]? in
+                guard let processes = ProcessList.current() else { return nil }
+                return server.programs(in: processes)
+                    .filter { !Self.systemPrograms.contains($0.name.lowercased()) }
+                    .map(\.pid)
+            }
+            guard let left else { return false }
+            if left.isEmpty { return true }
+            guard await Self.waitForAnyExit(of: left, until: deadline) else { return false }
+        }
+        return false
+    }
+
+    /// Wait until one of `pids` exits (or has), or `deadline`, or the task is
+    /// cancelled. Whether one did, or the task was cancelled.
+    private static func waitForAnyExit(of pids: [pid_t], until deadline: Date) async -> Bool {
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0 else { return false }
+        let exited = DispatchSemaphore(value: 0)
+        return await withTaskCancellationHandler {
+            await Blocking.run {
+                let sources = pids.map { pid in
+                    let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global())
+                    source.setEventHandler { exited.signal() }
+                    source.resume()
+                    return source
+                }
+                defer { sources.forEach { $0.cancel() } }
+                // Gone before its source was watching: that one would never fire.
+                if pids.contains(where: { Darwin.kill($0, 0) != 0 && errno == ESRCH }) { return true }
+                return exited.wait(timeout: .now() + remaining) == .success
+            }
+        } onCancel: {
+            exited.signal()
+        }
     }
 
     /// Wait for the programs an installer left running to finish, as a run

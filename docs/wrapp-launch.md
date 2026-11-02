@@ -193,7 +193,10 @@ good, where with the icon and menu bar it quits cleanly.
 
 The same window says when a wrapp is taking a moment to quit, whether
 someone quit it or the game ended by itself: the wrapp waits for Wine to
-finish before it exits, which takes about 4 s. Once a quit has run for 6 s
+finish before it exits. Wine's server, and with it Wine's services and
+desktop (`WineServer.systemPrograms`), lingers 3 s after its last program
+ends, so once only those are left they are stopped (`wineserver -k`) rather
+than waited out — routine, so not shown as a step below. Once a quit has run for 6 s
 (`QuitStep.showAfter`), so that a usual one shows nothing, the window comes
 up with a spinner, "Closing *Title*…" and that it's taking a little longer
 than usual, without taking the focus. Its
