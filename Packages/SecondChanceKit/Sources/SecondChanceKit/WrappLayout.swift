@@ -35,7 +35,9 @@ nonisolated public struct WrappLayout: Sendable, Hashable {
     /// The prefix's C: drive.
     public var driveC: URL { prefix.appendingPathComponent("drive_c") }
     /// Where a build puts the game's installer: one `disk-N` folder per disc,
-    /// and `disk-combined` for a game on more than one.
+    /// and `disk-combined` for a game on more than one. Kept in the finished
+    /// wrapp, mounted as CD drives, for games that check for their disc
+    /// before they will play.
     public var installers: URL { driveC.appendingPathComponent(Self.installersFolder) }
     /// The folder in drive_c a build copies the discs or installer into.
     public static let installersFolder = "nancy-drew-installer"
