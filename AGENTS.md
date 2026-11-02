@@ -523,8 +523,11 @@ direct assignment.
 - **The template is `WrappTemplate.app`**, embedded in
   `Second Chance.app/Contents/Resources/`. `WrappBuildHelper` copies it per game
   and rewrites `CFBundleIdentifier` from
-  `au.gare.callum.SecondChance.WrappTemplate` to
-  `au.gare.callum.SecondChance.nancy-drew.<slug>`. Because
+  `au.gare.callum.SecondChance.WrappTemplate` to the program's,
+  `au.gare.callum.second-chance.program.nancy-drew.<slug>` (`WrappLock.wrappBundleID`),
+  which names where the wrapp keeps the person's files; a launch moves them in
+  from the folder of the id wrapps had before
+  ([docs/wrapp-launch.md](docs/wrapp-launch.md#user-files)). Because
   `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's executable is
   `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't depend on that name: it
   finds the wrapp by the PID it launched and the game by its own process name,

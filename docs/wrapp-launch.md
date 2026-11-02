@@ -319,12 +319,53 @@ start the game until someone clicks **I Understand** — Wine's desktop, and
 Steam for a game that needs it, start behind it — so a script that launches a
 wrapp and waits for the game waits for ever on an unattended Mac. The wrapp
 skips the dialog when `~/Library/Application Support/<bundle
-id>/dont-show-save-warning` exists (`InfoWindowController`). Create it for the
-experiment and remove it afterwards, as it is the player's own setting.
-`SECOND_CHANCE_DATA_DIR` moves that folder, with the game's saves and the
-settings some games keep beside them, somewhere else (`Configuration.swift`);
-WrappPuppeteer sets it to an empty folder for each launch, so a test always
-meets the dialog and never reads or changes the player's saves and settings.
+id>/wrapp-settings/dont-show-save-warning` exists (`InfoWindowController`; for
+a wrapp built before volumes, `<bundle id>/dont-show-save-warning`). Create it
+for the experiment and remove it afterwards, as it is the player's own setting.
+`SECOND_CHANCE_APP_SUPPORT_DIR` names a folder in place of
+`~/Library/Application Support`, where the wrapp keeps its folder, with the
+game's saves and the settings some games keep beside them
+([below](#user-files)); WrappPuppeteer sets it to an empty folder for each
+launch, so a test always meets the dialog and never reads or changes the
+player's saves and settings.
+
+## User files
+
+A wrapp built from a bundle keeps everything of the person's in one folder
+named by its bundle id (`au.gare.callum.second-chance.program.<namespace>.<name>`),
+as a Mac app does (`UserFilesLayout`):
+
+```text
+~/Library/Application Support/<bundle id>/
+  volumes/<volume>/    the game's saves, and the settings it keeps beside them
+  wrapp-settings/      Second Chance's settings for the wrapp
+```
+
+The volumes are the bundle's (`wine-documents`, a Wine game's Documents and
+A: drive; `scummvm-saves` and `scummvm-settings` for ScummVM), recorded in the
+wrapp's `WrappLock.json` with the patterns that say which files belong to
+each. Wrapps built before bundles had another id
+(`au.gare.callum.SecondChance.nancy-drew.<slug>`) and kept their saves loose in
+its folder, so every launch, and every build, moves that folder in
+(`UserFilesMove`) from each id the manifest lists in `former-bundle-ids`:
+
+- Its files go to the volume whose patterns they match, Second Chance's own
+  settings files to `wrapp-settings/`, and the rest to the volume the game
+  saves in. The old folder becomes a link to that volume, so an old wrapp
+  still installed carries on finding its saves.
+- A folder whose files all go to one volume is renamed whole; otherwise each
+  file moves on its own and the folder becomes the link once empty. A marker
+  says a move began, so a run cut short only makes the link next time.
+- Nothing is overwritten: a file whose name is taken stays, and the one coming
+  in is kept beside it as `<name> (from <date>).<ext>`.
+- One mover at a time (a lock in Application Support), and none while a game
+  with the old or the new id is running. ScummVM's settings, kept in
+  `~/Library/Preferences/<old id>.ini`, move into `scummvm-settings` too.
+
+With nothing to move it is one `lstat` per former id. A build under test moves
+files only in the folder `SECOND_CHANCE_APP_SUPPORT_DIR` names, never the real
+one. A wrapp with no lock, one built before bundles, keeps everything loose in
+its folder, as it always did.
 
 ## Measurements
 

@@ -214,7 +214,7 @@ func main() {
         ?? .startingGame(title: config.gameTitle)
     let infoWindow = InfoWindowController(
         stage: firstStage,
-        appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
+        appSupportPath: config.settingsPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
         saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor,
         activity: LaunchActivityMonitor(

@@ -109,8 +109,23 @@ nonisolated enum ShippedBundles {
                 }
             }
             let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-            return WrappLock(bundle: .init(id: loaded.manifest.id, version: loaded.manifest.version), edition: edition,
-                             source: source.rawValue, composition: composition, modules: refs, builtBy: version)
+            // The volumes of the variant the wrapp runs: its launcher's.
+            let manifest = loaded.manifest
+            let variant = manifest.variants?.first { $0.id == composition.launcher.rawValue }
+                ?? manifest.variants?.first { $0.id == "wine" && composition.has(.wine) }
+            let rules = (manifest.volumes ?? [:]).sorted { $0.key < $1.key }.map { name, volume -> VolumeRule in
+                switch volume.inUseWhen {
+                case .patterns(let patterns): VolumeRule(name: name, patterns: patterns)
+                case .never: VolumeRule(name: name, patterns: [])
+                case .anyFile, nil: VolumeRule(name: name, patterns: nil)
+                }
+            }
+            let mounted = variant?.volumes?.map(\.source) ?? []
+            return WrappLock(bundle: .init(id: manifest.id, version: manifest.version), edition: edition,
+                             source: source.rawValue, composition: composition, modules: refs, builtBy: version,
+                             formerBundleIDs: manifest.formerBundleIds, volumes: rules.isEmpty ? nil : rules,
+                             savesVolume: mounted.first,
+                             scummvmSettingsVolume: mounted.contains("scummvm-settings") ? "scummvm-settings" : nil)
         } catch let error as WrappBuildError {
             throw error
         } catch {

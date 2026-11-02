@@ -7,8 +7,14 @@ series: "Nancy Drew"
 series-order: 13
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.old-clock"]
 
+volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+  wine-documents:
+    display-name: "saved games"
+
 variants:
   - id: "wine"
+    volumes:
+      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
     launch: { wine: { exe: "C:/Nancy Drew/Secret of the Old Clock/Game.exe", graphics: "direct-draw" } }
 
 editions:

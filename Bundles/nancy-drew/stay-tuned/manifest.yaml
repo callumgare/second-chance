@@ -7,8 +7,21 @@ series: "Nancy Drew"
 series-order: 3
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.stay-tuned"]
 
+volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+  scummvm-saves:
+    display-name: "saved games"
+  scummvm-settings:
+    in-use-when: "never"                     # only ScummVM's settings
+    display-name: "settings"
+  wine-documents:                            # Wine saves from before the game ran in ScummVM
+    in-use-when: ["*/*.Hi*Save", "*/*.SAV", "*/HICONTINUE.*"]
+    display-name: "saved games from before"
+
 variants:
   - id: "scummvm"
+    volumes:
+      - { source: "scummvm-saves" }          # ScummVM's save path
+      - { source: "scummvm-settings" }       # its settings file, scummvm.ini
 
 editions:
   - id: "cd"

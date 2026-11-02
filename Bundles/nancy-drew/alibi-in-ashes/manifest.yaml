@@ -7,8 +7,14 @@ series: "Nancy Drew"
 series-order: 26
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.alibi-in-ashes"]
 
+volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+  wine-documents:
+    display-name: "saved games"
+
 variants:
   - id: "wine"
+    volumes:
+      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
     launch: { wine: { exe: "C:/Program Files (x86)/Her Interactive/Nancy Drew Alibi in Ashes/Alibi.exe", graphics: "direct-3d" } }
 
 editions:

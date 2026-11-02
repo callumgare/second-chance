@@ -24,6 +24,35 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public let setup: String?
     public let variants: [Variant]?
     public let editions: [Edition]
+    /// What is kept outside the app, by name.
+    public let volumes: [String: Volume]?
+
+    public struct Volume: Decodable, Hashable, Sendable {
+        /// When the volume holds something of the person's: any file in it
+        /// (nil, or `any-file`), never, or a file matching one of these.
+        public let inUseWhen: InUseWhen?
+        public let displayName: String?
+    }
+
+    public enum InUseWhen: Decodable, Hashable, Sendable {
+        case anyFile, never
+        case patterns([String])
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let patterns = try? container.decode([String].self) {
+                self = .patterns(patterns)
+            } else {
+                self = try container.decode(String.self) == "never" ? .never : .anyFile
+            }
+        }
+    }
+
+    /// A volume, mounted where a variant wants it.
+    public struct Mount: Decodable, Hashable, Sendable {
+        public let source: String
+        public let target: String?
+    }
 
     /// The part of the id after the namespace: today's game slug.
     public var name: String { String(id.split(separator: "/").last ?? "") }
@@ -31,6 +60,7 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
 
     public struct Variant: Decodable, Hashable, Sendable {
         public let id: String
+        public let volumes: [Mount]?
         public let build: Build?
         public let launch: Launch?
     }

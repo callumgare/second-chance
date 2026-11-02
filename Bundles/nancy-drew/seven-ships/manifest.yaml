@@ -7,8 +7,14 @@ series: "Nancy Drew"
 series-order: 21
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.seven-ships"]
 
+volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+  wine-documents:
+    display-name: "saved games"
+
 variants:
   - id: "wine"
+    volumes:
+      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
     launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/Ransom of the Seven Ships/Ransom.exe", graphics: "direct-3d" } }
 
 editions:

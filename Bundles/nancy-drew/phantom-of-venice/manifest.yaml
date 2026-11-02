@@ -7,8 +7,14 @@ series: "Nancy Drew"
 series-order: 19
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.phantom-of-venice"]
 
+volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+  wine-documents:
+    display-name: "saved games"
+
 variants:
   - id: "wine"
+    volumes:
+      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
     launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/The Phantom of Venice/PhantomOfVenice.exe", graphics: "direct-3d" } }
 
 editions:

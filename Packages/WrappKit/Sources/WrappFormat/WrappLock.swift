@@ -23,6 +23,18 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
     public var modules: [ModuleRef]
     /// The version of Second Chance that built it.
     public var builtBy: String
+    /// The bundle ids this program's wrapps had before, whose folders are
+    /// moved into this one's (`UserFilesMove`).
+    public var formerBundleIDs: [String]?
+    /// The variant's volumes, with the patterns a file of the person's in
+    /// each matches.
+    public var volumes: [VolumeRule]?
+    /// The volume the game keeps its saves in, which the old folders become
+    /// links to; nil keeps everything loose in the wrapp's folder, as a
+    /// wrapp built before volumes did.
+    public var savesVolume: String?
+    /// The volume ScummVM's settings file is kept in, for a ScummVM game.
+    public var scummvmSettingsVolume: String?
     public var builtAt: Date
 
     public struct BundleRef: Codable, Sendable, Equatable {
@@ -50,7 +62,9 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
     }
 
     public init(bundle: BundleRef, edition: String, source: String, composition: Composition,
-                modules: [ModuleRef], builtBy: String, builtAt: Date = Date()) {
+                modules: [ModuleRef], builtBy: String, builtAt: Date = Date(),
+                formerBundleIDs: [String]? = nil, volumes: [VolumeRule]? = nil, savesVolume: String? = nil,
+                scummvmSettingsVolume: String? = nil) {
         self.bundle = bundle
         self.edition = edition
         self.source = source
@@ -58,7 +72,19 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
         self.modules = modules
         self.builtBy = builtBy
         self.builtAt = builtAt
+        self.formerBundleIDs = formerBundleIDs
+        self.volumes = volumes
+        self.savesVolume = savesVolume
+        self.scummvmSettingsVolume = scummvmSettingsVolume
     }
+
+    /// The bundle id a wrapp of `program` (`nancy-drew/blue-moon`) has.
+    public static func wrappBundleID(program: String) -> String {
+        "au.gare.callum.second-chance.program." + program.replacingOccurrences(of: "/", with: ".")
+    }
+
+    /// This wrapp's bundle id.
+    public var wrappBundleID: String { Self.wrappBundleID(program: bundle.id) }
 
     /// The lock of the wrapp at `layout`; nil for a wrapp built before locks.
     public init?(of layout: WrappLayout) throws {

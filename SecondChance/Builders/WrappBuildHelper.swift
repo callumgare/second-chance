@@ -238,7 +238,8 @@ class WrappBuildHelper {
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,
-        configureINI: Bool = true
+        configureINI: Bool = true,
+        bundleID: String? = nil
     ) async throws {
         await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
@@ -259,7 +260,9 @@ class WrappBuildHelper {
             throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
-        let newBundleID = currentBundleID.replacingOccurrences(of: "WrappTemplate", with: "nancy-drew." + gameInfo.id)
+        // The program's bundle's id (`au.gare.callum.second-chance.program.nancy-drew.<slug>`),
+        // which names where the wrapp keeps the person's files.
+        let newBundleID = bundleID ?? WrappLock.wrappBundleID(program: "nancy-drew/" + gameInfo.id)
         plist["CFBundleIdentifier"] = newBundleID
         plist["CFBundleName"] = gameInfo.appName
         plist["CFBundleDisplayName"] = gameInfo.appName
@@ -508,25 +511,47 @@ class WrappBuildHelper {
         edition: String? = nil,
         input: WrappBuildInput
     ) async throws -> URL {
+        // What it was built from, for updating it and for reports; its
+        // bundle names the wrapp's bundle id. Checking the bundle runs ajv:
+        // off the main thread.
+        let edition = edition ?? Self.edition(of: source)
+        let slug = gameInfo.id, lockComposition = composition ?? gameInfo.composition
+        let lock = try await Blocking.run {
+            try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: lockComposition)
+        }
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,
             bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial,
-            configureINI: configureINI
+            configureINI: configureINI, bundleID: lock.wrappBundleID
         )
-        // What it was built from, for updating it and for reports.
-        let edition = edition ?? Self.edition(of: source)
-        // Checking the bundle runs ajv: off the main thread.
-        let slug = gameInfo.id, composition = composition ?? gameInfo.composition
-        let lock = try await Blocking.run {
-            try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: composition)
-        }
         try lock.write(to: WrappLayout(app: wrappPath))
         logger.notice("Built from \(lock.summary)")
+        moveUserFiles(for: lock)
         await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: installerDir, gameInfo: gameInfo))
         let finalPath = try await finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
         unregisterTemporaryWrapp(wrappPath)
         return finalPath
+    }
+
+    /// Move the person's files from the folders the program's wrapps kept
+    /// under former bundle ids into this wrapp's layout, as every launch
+    /// does too (`UserFilesMove`); in the folder the environment names in
+    /// place of Application Support under test, so a test never touches a
+    /// player's files.
+    func moveUserFiles(for lock: WrappLock) {
+        guard let saves = lock.savesVolume, let former = lock.formerBundleIDs, !former.isEmpty else { return }
+        // A build under test moves files only in the folder it was given.
+        guard !TestHost.isRunning || ProcessInfo.processInfo.environment["SECOND_CHANCE_APP_SUPPORT_DIR"] != nil else {
+            logger.notice("[User files] Not moving anything: a build under test has no SECOND_CHANCE_APP_SUPPORT_DIR")
+            return
+        }
+        let move = UserFilesMove(
+            layout: UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: lock.wrappBundleID),
+            formerBundleIDs: former, volumes: lock.volumes ?? [], linkVolume: saves
+        )
+        let outcome = move.run(isRunning: { !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty })
+        for line in outcome.log { logger.notice("[User files] \(line)") }
     }
 
     /// Launch the saved wrapp when the run asked for it (`LAUNCH_GAME`). The

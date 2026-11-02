@@ -101,7 +101,7 @@ struct NancyDrewQuitScenario {
         let screen = CGDisplayBounds(CGMainDisplayID())
         CGWarpMouseCursorPosition(CGPoint(x: screen.minX + 2, y: screen.midY))
 
-        let environment = ["SECOND_CHANCE_PUPPET_DIR": directory, "SECOND_CHANCE_DATA_DIR": directory + "/data"]
+        let environment = ["SECOND_CHANCE_PUPPET_DIR": directory, "SECOND_CHANCE_APP_SUPPORT_DIR": directory + "/data"]
         let launchedAt = Date()
         guard let app = ProcessControl.launch(appPath: wrapp.appPath, arguments: options.debugMode ? ["--debug"] : [],
                                               environment: environment) else {
