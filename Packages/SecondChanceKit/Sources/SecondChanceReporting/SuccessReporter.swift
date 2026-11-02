@@ -79,8 +79,7 @@ nonisolated public enum SuccessReporter {
 
     public static func record(_ report: SuccessReport) {
         guard shouldRecord(ReportingPreferences.load(), reportingEnabled: FailureReporter.isEnabled) else { return }
-        SentrySDK.metrics.count(report.event.rawValue, value: 1,
-                                options: SentryMetricOptions(attributes: report.attributes.mapValues { $0 as SentryAttributeValue }))
+        SentrySDK.metrics.count(key: report.event.rawValue, value: 1, attributes: report.attributes)
         logger.debug("Counted a \(report.event.rawValue) for the success reports: \(report.outcome)")
     }
 
