@@ -342,8 +342,9 @@ class GameMonitor {
 
     /// Signalled the moment `pid` exits, while the source is kept. A process
     /// that has already gone can't be watched, so callers check it is still
-    /// running too.
-    private static func watchExit(of pid: Int32) -> (OneTimeSignal, DispatchSourceProcess) {
+    /// running too. Nonisolated, so its handler is: the source calls it on a
+    /// global queue, where a main-actor closure traps.
+    private nonisolated static func watchExit(of pid: Int32) -> (OneTimeSignal, DispatchSourceProcess) {
         let ended = OneTimeSignal()
         let exitSource = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .global())
         exitSource.setEventHandler { ended.signal() }

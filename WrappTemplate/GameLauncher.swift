@@ -171,8 +171,9 @@ class GameLauncher {
 
     /// Capture a diagnostics bundle now, whatever the launch is doing: when
     /// the loading window says it may have failed (`.stalled`), or when the
-    /// wrapp is sent SIGUSR1 (`.manual`). Nothing for ScummVM.
-    func captureDiagnostics(_ reason: StartupDiagnostics.Reason) {
+    /// wrapp is sent SIGUSR1 (`.manual`), from the signal's queue. Nothing
+    /// for ScummVM.
+    nonisolated func captureDiagnostics(_ reason: StartupDiagnostics.Reason) {
         startupDiagnostics?.captureNow(reason)
     }
 

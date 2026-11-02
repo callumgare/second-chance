@@ -36,9 +36,10 @@ func installDiagnosticsSignalHandler(_ gameLauncher: GameLauncher) {
     sigaddset(&set, SIGUSR1)
     pthread_sigmask(SIG_UNBLOCK, &set, nil)
     signal(SIGUSR1, SIG_IGN)
-    // Not on the main queue, which may be what is stuck.
+    // Not on the main queue, which may be what is stuck; so `@Sendable`, as
+    // a main-actor handler would trap there.
     let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .global(qos: .userInitiated))
-    source.setEventHandler {
+    source.setEventHandler { @Sendable in
         mainLogger.notice("Received SIGUSR1: capturing diagnostics")
         gameLauncher.captureDiagnostics(.manual)
     }
