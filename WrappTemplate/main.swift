@@ -94,7 +94,8 @@ func main() {
     // The game's files: the exe's folder for Wine, the data folder itself for
     // ScummVM. An install that was cut short shows up here as too small.
     let gamePath = WrappLayout.onDriveC(config.gameExePath, in: config.wine.driveC)
-    let gameDir = config.gameEngine == .scummvm ? gamePath : gamePath.deletingLastPathComponent()
+    let gameDir = (try? gamePath.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        ? gamePath : gamePath.deletingLastPathComponent()
     // Every launch keeps its own log, since a wrapp opened from Finder has no
     // terminal to show it. Started before the header; it backfills anyway.
     let gameLogs = FileManager.default.homeDirectoryForCurrentUser
@@ -102,7 +103,7 @@ func main() {
     let launchLog = RotatingLogFile.start(in: gameLogs, prefix: "launch", logger: mainLogger)
     RunContext.logHeader(mainLogger, extra: [
         ("log", launchLog?.path ?? "none"),
-        ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.gameEngine.rawValue)"),
+        ("game", "\(config.gameTitle) (\(config.gameSlug)), engine \(config.composition.engineTag)"),
         ("game files", gameDir.path),
         ("game exe", config.gameExePath),
         ("app", config.appPath.path),
@@ -114,7 +115,7 @@ func main() {
     DispatchQueue.global(qos: .utility).async {
         mainLogger.notice("Game files: \(DirectorySize.measure(gameDir).description) in \(gameDir.path)")
     }
-    FailureReporter.setGame(config.gameSlug, engine: config.gameEngine.rawValue)
+    FailureReporter.setGame(config.gameSlug, engine: config.composition.engineTag)
     FailureReporter.setRunLogs(in: gameLogs, prefix: "launch")
     CrashMarker.install(in: gameLogs, logger: mainLogger)
 
@@ -161,11 +162,20 @@ func main() {
         mainLogger.notice("Debug mode enabled - log window will be shown")
     }
 
+    // What runs the game: one module for each the composition has.
+    guard let modules = RuntimeModules(config: config) else {
+        mainLogger.critical("This wrapp can't run \(config.composition) games")
+        showAlert(message: String(localized: "This Game's App Is Damaged"),
+                  informativeText: String(localized: "Something in it is missing. Make the game's app again with Second Chance."))
+        FailureReporter.reportAndWait(FailureReport(what: "Starting the wrapp", kind: "unknown-modules"))
+        exit(1)
+    }
+
     // Create game monitor
-    let gameMonitor = GameMonitor(config: config, debugMode: debugMode)
+    let gameMonitor = GameMonitor(config: config, discovery: modules.launcher.findsGame, debugMode: debugMode)
 
     // Create game launcher
-    let gameLauncher = GameLauncher(config: config, gameMonitor: gameMonitor)
+    let gameLauncher = GameLauncher(config: config, gameMonitor: gameMonitor, modules: modules)
     installDiagnosticsSignalHandler(gameLauncher)
 
     // Set the process name BEFORE initializing NSApplication
@@ -193,30 +203,22 @@ func main() {
     }
 
     // Create info window with game title
-    // Only show save warning for Wine games (ScummVM games are more stable),
-    // and not again to someone who saw it moments ago, on the launch through
-    // Steam they've given up on.
-    let saveWarningEnabled = config.gameEngine.runsInWine && !launchingWithoutSteam
-    // Only this game's Wine counts as its launch's progress: another game's,
-    // running alongside, would keep a stuck launch looking busy. ScummVM
-    // works in no prefix.
-    let server = config.wine.server
-    var isOurs: (@Sendable (pid_t) -> Bool)?
-    if config.gameEngine.runsInWine {
-        isOurs = { pid in !server.isElsewhere(pid) }
-    }
-    // What the loading window says first: Steam starting, or the game,
-    // which Big Fish's copy protection makes slow to start.
-    let firstStage: LoadingStage = config.gameEngine.needsSteam ? .startingSteam
-        : config.launchedByBigFish ? .bigFishStartingGame(title: config.gameTitle) : .startingGame(title: config.gameTitle)
+    // Show the save warning when a module asks for it (Wine games: ScummVM
+    // games are more stable), but not again to someone who saw it moments
+    // ago, on the launch through Steam they've given up on.
+    let saveWarningEnabled = modules.all.contains { $0.showsSaveWarning } && !launchingWithoutSteam
+    // Which processes count as the launch's progress, as the module that
+    // can tell says: only this game's Wine, not another game's alongside.
+    let isOurs = modules.all.lazy.compactMap(\.ownsProcess).first
+    let firstStage = modules.all.lazy.compactMap { $0.firstStage(gameTitle: config.gameTitle) }.first
+        ?? .startingGame(title: config.gameTitle)
     let infoWindow = InfoWindowController(
         stage: firstStage,
         appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
         saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor,
         activity: LaunchActivityMonitor(
-            steamLogsDir: config.gameEngine.needsSteam
-                ? config.winePrefix.appendingPathComponent(SteamClient.steamDirInPrefix).appendingPathComponent("logs") : nil,
+            steamLogsDir: modules.module(SteamRuntime.self)?.logsDir,
             isOurs: isOurs))
     globalInfoWindow = infoWindow
     PuppetServer.startIfRequested()
@@ -278,31 +280,14 @@ func main() {
 
     mainLogger.notice("Starting game...")
 
-    // Setup Wine environment (only for Wine games)
-    if config.gameEngine.runsInWine {
+    // Where the player's saves are, as each module's game sees them.
+    for module in modules.all {
         do {
-            try config.wine.drives.mount(config.appSupportPath, as: "a")
-            // A wrapp built when prefixes had a Z: showing the whole Mac
-            // (WineDrives): the game never needed it.
-            config.wine.drives.block("z")
+            try module.connectSaves(config.appSupportPath)
         } catch {
-            mainLogger.critical("ERROR: Failed to mount directory into Wine: \(error)")
-            showAlert(message: String(localized: "Couldn't Open Your Saved Games"),
-                      informativeText: String(localized: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)"))
-            FailureReporter.reportAndWait(FailureReport(what: "Mounting the saves folder", error: error,
-                                                        game: config.gameSlug, engine: config.gameEngine.rawValue))
-            exit(1)
-        }
-
-        // Where the game keeps its saves, linked to the player's saves folder.
-        do {
-            try SavesLink.link(config.wine.documents, to: config.appSupportPath)
-        } catch {
-            mainLogger.critical("ERROR: Failed to create symbolic link for Documents directory: \(error)")
-            showAlert(message: String(localized: "Couldn't Open Your Saved Games"),
-                      informativeText: String(localized: "The game couldn't reach the folder where your saved games are kept: \(error.localizedDescription)"))
-            FailureReporter.reportAndWait(FailureReport(what: "Linking the saves folder", error: error,
-                                                        game: config.gameSlug, engine: config.gameEngine.rawValue))
+            showAlert(message: error.title, informativeText: error.detail)
+            FailureReporter.reportAndWait(FailureReport(what: error.what, error: error.error,
+                                                        game: config.gameSlug, engine: config.composition.engineTag))
             exit(1)
         }
     }
@@ -378,7 +363,7 @@ func main() {
                 let reportTask = gameLauncher.reportTask
                 await Blocking.run { FailureReporter.wait(for: reportTask, timeout: 120) }
                 // The game has gone, but Wine may not have yet.
-                await gameLauncher.waitForWineToEnd()
+                await gameLauncher.waitForSessionToEnd()
                 if appDelegate.openAgainWhenClosed {
                     appDelegate.openAgain(arguments: [], why: "as it was opened while closing")
                 }
@@ -391,18 +376,8 @@ func main() {
         }
     }
 
-    switch config.gameEngine {
-    case .wine:
-        launchGameAsync()
-
-    case .wineSteam, .wineSteamSilent:
-        mainLogger.notice("Launching through Steam...")
-        launchGameAsync()
-
-    case .scummvm:
-        mainLogger.notice("Launching ScummVM game...")
-        launchGameAsync()
-    }
+    mainLogger.notice("Launching the game (\(config.composition))...")
+    launchGameAsync()
 
     NSApp.run()
 }

@@ -55,6 +55,7 @@ let package = Package(
                 .product(name: "WindowsFormats", package: "WrappKit"),
                 .product(name: "WineKit", package: "WrappKit"),
                 .product(name: "WrappFormat", package: "WrappKit"),
+                .product(name: "WrappModules", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings
         ),

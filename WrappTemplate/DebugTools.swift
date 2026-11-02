@@ -30,7 +30,7 @@ func showDebugSettings(_ config: GameConfig, initialDebugMode: Bool) -> (shouldC
         let alert = NSAlert()
         alert.messageText = "Debug Settings"
         let debugStatus = initialDebugMode ? "Enabled" : "Disabled"
-        alert.informativeText = "Game: \(config.appPath.lastPathComponent)\nEngine: \(config.gameEngine.rawValue)\nPrefix: \(config.winePrefix.path)\n\n"
+        alert.informativeText = "Game: \(config.appPath.lastPathComponent)\nEngine: \(config.composition)\nPrefix: \(config.winePrefix.path)\n\n"
             + "Launch Command: \(getGameLaunchInfo(config).formatLaunchCommand())\n\nDebug Mode: \(debugStatus)"
         alert.alertStyle = .informational
 
@@ -209,12 +209,7 @@ func launchScummvmShell(_ config: GameConfig) {
 }
 
 func launchShell(_ config: GameConfig) {
-    switch config.gameEngine {
-    case .scummvm:
-        launchScummvmShell(config)
-    case .wine, .wineSteam, .wineSteamSilent:
-        launchWineShell(config)
-    }
+    RuntimeModules(config: config)?.launcher.launchShell()
 }
 
 func launchWineControlPanel(_ config: GameConfig) {

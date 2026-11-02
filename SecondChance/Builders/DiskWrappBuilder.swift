@@ -83,12 +83,14 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 disk2: { try await self.resolveDisk2(gameInfo: gameInfo, disk1: disk1Root, input: input) }
             )
 
-            // Install the game via the engine it actually uses.
+            // Install the game for the module that runs it: Wine runs the
+            // disc's installer, ScummVM reads the disc's files.
             await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
             let (gameExePath, installerDir): (String, String)
-            switch gameInfo.gameEngine {
+            let composition = gameInfo.composition
+            switch composition.launcher {
             case .wine:
-                await bus.publishWrappBuild(.engineRouted(engine: .wine, gameInfo: gameInfo))
+                await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithWine(
                     wrappPath: wrappPath,
                     gameInfo: gameInfo,
@@ -99,7 +101,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     chooseGameProgram: input.chooseGameProgram(among:)
                 )
             case .scummvm:
-                await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
+                await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithScummVM(
                     wrappPath: wrappPath,
                     gameInfo: gameInfo,
@@ -113,7 +115,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             // Clean up unused engine unless we skipped the installer — wine
             // might be needed to run the installer later.
             if !DebugSettings.shared.skipInstaller {
-                try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+                try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
             }
 
             // ── Shared tail: configure → sign → save → notify ──────────────
@@ -196,7 +198,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 // Asked about before the disc is copied, so choosing another
                 // costs nothing. ScummVM runs a game from the disc's files.
                 var installerName: String?
-                if gameInfo.gameEngine == .wine {
+                if gameInfo.composition.launcher == .wine {
                     switch try GameDetector.installerLookup(in: disk1Root) {
                     case .recognised:
                         break

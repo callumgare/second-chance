@@ -18,7 +18,8 @@ struct GameConfig {
     let winePrefix: URL
     let gameExePath: String
     let gameInstallerDir: String
-    let gameEngine: GameInfo.GameEngine
+    /// The modules the wrapp runs (`RuntimeModules`).
+    let composition: Composition
     let steamGameId: String?
     /// The user's choice, at build time, of how a DRM-free Steam game starts;
     /// nil for a game that offered no choice.
@@ -45,9 +46,6 @@ struct GameConfig {
     /// starts.
     var bigFishTrial = false
 
-    /// Big Fish's programs start the game, not the wrapp.
-    nonisolated var launchedByBigFish: Bool { bigFishLaunchFile != nil && gameEngine == .wine }
-
     /// The wrapp's Wine, running in the prefix the game runs in.
     nonisolated var wine: Wine { Wine(wrapp: appPath, prefix: winePrefix) }
 
@@ -55,7 +53,7 @@ struct GameConfig {
     /// DRM-free game the user chose to launch through Steam. Its files are
     /// still in Steam's library, where Wine runs them just as well.
     var canLaunchWithoutSteam: Bool {
-        gameEngine == .wineSteam && steamLaunchMode == .steam
+        composition.launcher == .steam && steamLaunchMode == .steam
     }
 
     /// This configuration, launching the game's exe directly rather than
@@ -63,7 +61,7 @@ struct GameConfig {
     func withoutSteam() -> GameConfig {
         GameConfig(
             appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
-            gameInstallerDir: gameInstallerDir, gameEngine: .wine, steamGameId: nil,
+            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: .wine), steamGameId: nil,
             steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
             gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, scummvmConfigPath: scummvmConfigPath
         )
@@ -289,7 +287,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         winePrefix: winePrefix,
         gameExePath: settings.gameExePath,
         gameInstallerDir: settings.installerDir,
-        gameEngine: settings.engine,
+        composition: settings.composition,
         steamGameId: settings.steamAppID,
         steamLaunchMode: settings.steamLaunchMode,
         gameTitle: gameTitle,

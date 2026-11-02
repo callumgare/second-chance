@@ -44,7 +44,7 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     /// The game's app's file name.
     public var appBundleName: String { appName + ".app" }
 
-    public enum GameEngine: String, Codable, Sendable {
+    public enum GameEngine: String, Codable, Sendable, CaseIterable {
         case wine
         case scummvm
         case wineSteam = "wine-steam"

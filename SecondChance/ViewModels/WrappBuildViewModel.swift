@@ -212,7 +212,7 @@ class WrappBuildViewModel {
                 applyProgress(state)
             case .gameDetected(let info):
                 detectedGame = info
-                FailureReporter.setGame(info.id, source: selectedWrappSource?.rawValue, engine: info.gameEngine.rawValue)
+                FailureReporter.setGame(info.id, source: selectedWrappSource?.rawValue, engine: info.composition.engineTag)
             case .failed(let error):
                 instructions = nil
                 steamSignInNotice = nil
@@ -482,7 +482,7 @@ class WrappBuildViewModel {
                 let summary = FailureSummary.log(logger, what: "Building the wrapp", error: error)
                 var report = FailureReport(
                     what: "Building the wrapp", error: error, game: detectedGame?.id,
-                    source: selectedWrappSource?.rawValue, engine: detectedGame?.gameEngine.rawValue,
+                    source: selectedWrappSource?.rawValue, engine: detectedGame?.composition.engineTag,
                     summary: summary
                 )
                 report.screenshots = await screenshotsBeforeError()
@@ -511,7 +511,7 @@ class WrappBuildViewModel {
     private func recordBuild(outcome: String) {
         SuccessReporter.record(SuccessReport(
             event: .build, outcome: outcome, game: detectedGame?.id,
-            source: selectedWrappSource?.rawValue, engine: detectedGame?.gameEngine.rawValue
+            source: selectedWrappSource?.rawValue, engine: detectedGame?.composition.engineTag
         ))
     }
 

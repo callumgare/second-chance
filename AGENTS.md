@@ -273,10 +273,19 @@ The rules that keep it working:
   changed in its bundle, then `sc bundle catalog` regenerates the table;
   never edit `GameInfoProvider+Bundles.swift` by hand
   ([docs/program-bundles.md](docs/program-bundles.md)).
-- **`GameInfo.GameEngine`** (`wine`, `scummvm`, `wineSteam`, `wineSteamSilent`,
-  in `GameCatalog`): determines which engine the wrapp uses. The app, the
-  wrapp and WrappPuppeteer all use it, and ask it `runsInWine`, `needsSteam`
-  and `launchedBySteam` rather than comparing its raw values.
+- **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
+  wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
+  `steam` or `big-fish`) and the services started before it — read from a wrapp's
+  settings or a game's `GameInfo.GameEngine`, which it replaces as the
+  question every process asks: `composition.has(.wine)`, `launcher ==
+  .steam`, never the engine's raw values. Each module does its own part in
+  each process — `RuntimeModule`s in the wrapp (`WrappTemplate/Modules/`),
+  `TestModule`s in WrappPuppeteer (`WrappPuppeteer/Modules/`),
+  `BuildModule`s in the build (`Packages/WrappBuilder`) — so the launch code
+  asks the module that would know rather than branching on an engine.
+  Reports and the build's events still carry today's engine name as
+  `engine` (`Composition.engineTag`), so dashboards and recorded event
+  streams read as before ([docs/wrapp-launch.md](docs/wrapp-launch.md#modules)).
 
 ### Wrapp build state machine
 

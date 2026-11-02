@@ -12,3 +12,4 @@
 @_exported import WineKit
 @_exported import WrappFormat
 @_exported import WrappLogging
+@_exported import WrappModules

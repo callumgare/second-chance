@@ -6,6 +6,7 @@
 
 import Foundation
 import GameCatalog
+import WrappModules
 
 /// What the build records about a wrapp's game, in its AppSettings.plist
 /// (`WrappLayout.settingsFile`): written by `WrappBuildHelper`, read by the
@@ -69,6 +70,12 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         self.bigFishLaunchFile = bigFishLaunchFile
         self.bigFishSKU = bigFishSKU
         self.bigFishTrial = bigFishTrial
+    }
+
+    /// The modules the wrapp runs, from its engine: a Wine game with a
+    /// `.bfg` to start it is started by Big Fish's DRM.
+    public var composition: Composition {
+        engine == .wine && bigFishLaunchFile != nil ? Composition(launcher: .bigFish) : Composition(legacy: engine)
     }
 
     /// The settings of the wrapp at `layout`.

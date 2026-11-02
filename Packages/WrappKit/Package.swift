@@ -36,6 +36,7 @@ let package = Package(
         .library(name: "WindowsFormats", targets: ["WindowsFormats"]),
         .library(name: "WineKit", targets: ["WineKit"]),
         .library(name: "WrappFormat", targets: ["WrappFormat"]),
+        .library(name: "WrappModules", targets: ["WrappModules"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
@@ -71,10 +72,17 @@ let package = Package(
             dependencies: ["WrappLogging", "ProcessKit", "WrappFormat", .product(name: "Logging", package: "swift-log")],
             swiftSettings: swiftSettings
         ),
+        // Modules: their ids, and the composition of them a wrapp runs.
+        .target(
+            name: "WrappModules",
+            dependencies: [.product(name: "GameCatalog", package: "GameCatalog")],
+            swiftSettings: swiftSettings
+        ),
         // What a wrapp holds: its layout, settings and source.
         .target(
             name: "WrappFormat",
             dependencies: [
+                "WrappModules",
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],
@@ -83,7 +91,7 @@ let package = Package(
         .testTarget(
             name: "WrappKitTests",
             dependencies: [
-                "WrappLogging", "ProcessKit", "WindowsFormats", "WineKit", "WrappFormat",
+                "WrappLogging", "ProcessKit", "WindowsFormats", "WineKit", "WrappFormat", "WrappModules",
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],

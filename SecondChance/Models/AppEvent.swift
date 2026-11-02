@@ -63,7 +63,7 @@ enum WrappBuildEvent {
     case disksResolved(disk1: URL, disk2: URL?)
     case gameDetected(GameInfo)
     case isoMounted(URL)
-    case engineRouted(engine: GameInfo.GameEngine, gameInfo: GameInfo)
+    case engineRouted(composition: Composition, gameInfo: GameInfo)
     case installerResolved(exePath: String, type: InstallerType)
     case gameExeDetected(path: String, gameInfo: GameInfo)
     case wrappConfigured(exePath: String, installerDir: String, gameInfo: GameInfo)

@@ -130,7 +130,8 @@ Chance's own window shows what it is doing.
    one that isn't Big Fish's. The wrapp records `BigFishLaunchFile` (the
    folder's `LaunchGame.bfg`, from the root of C:) and `BigFishSKU`, and keeps
    the Game Manager: its `bfgprocess.exe` and `bfggameservices.exe` start the
-   game. A game ScummVM runs (Haunted Mansion, Royal Tower) is a ScummVM wrapp
+   game, as the wrapp's `big-fish` module has them (`BigFishRuntime`,
+   [wrapp-launch.md](wrapp-launch.md#modules)). A game ScummVM runs (Haunted Mansion, Royal Tower) is a ScummVM wrapp
    of the installed folder, as from Steam: no launch file, and the Game
    Manager and its download cache are taken out. No official Her Interactive
    patch applies to a Big Fish copy (`GamePatch.Edition.matches`).

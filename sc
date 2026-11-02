@@ -10,13 +10,14 @@ package="$root/Tools/sc"
 binary="$package/.build/release/sc"
 # What the binary was built from, as a hash of the sources' contents: with
 # Packages/GameCatalog, the game catalog sc shares with the app, and
-# Packages/WrappBuilder, the bundle loading `sc bundle` uses. Not their
-# modification times: `sc --on` syncs with rsync, which keeps the sending
-# Mac's times, so a checkout synced over another's (another branch, or an
-# older commit) kept the binary built from that one (~50 ms).
+# Packages/WrappBuilder, the bundle loading `sc bundle` uses, with the
+# WrappKit modules it needs. Not their modification times: `sc --on` syncs
+# with rsync, which keeps the sending Mac's times, so a checkout synced over
+# another's (another branch, or an older commit) kept the binary built from
+# that one (~50 ms).
 stamp="$binary.sources"
 sources_hash="$(cd "$root" && find -L Tools/sc/Sources Packages/GameCatalog Packages/WrappBuilder/Sources Packages/WrappBuilder/Package.swift \
-    Tools/sc/Package.swift Tools/sc/Package.resolved \
+    Packages/WrappKit/Sources Packages/WrappKit/Package.swift Tools/sc/Package.swift Tools/sc/Package.resolved \
     -type f -not -path '*/.build/*' -not -path '*/.swiftpm/*' -not -name .DS_Store -print0 2>/dev/null \
     | sort -z | xargs -0 shasum | shasum)"
 

@@ -2,8 +2,9 @@
 //
 // What turns a program bundle into a wrapp, kept apart from the app so it
 // could one day be a command-line tool of its own: for now, loading and
-// checking bundles. It depends only on what such a tool could ship with,
-// and on nothing of Second Chance's but GameCatalog.
+// checking bundles, and what each module contributes to a build. It
+// depends only on what such a tool could ship with: GameCatalog and
+// WrappKit, nothing of Second Chance's own.
 
 import PackageDescription
 
@@ -26,6 +27,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/jpsim/Yams", .upToNextMinor(from: "6.2.2")),
         .package(path: "../GameCatalog"),
+        .package(path: "../WrappKit"),
     ],
     targets: [
         .target(
@@ -33,6 +35,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Yams", package: "Yams"),
                 .product(name: "GameCatalog", package: "GameCatalog"),
+                .product(name: "WrappModules", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings,
             linkerSettings: [.linkedFramework("JavaScriptCore")]

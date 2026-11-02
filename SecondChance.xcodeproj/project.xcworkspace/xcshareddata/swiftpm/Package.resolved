@@ -1,5 +1,5 @@
 {
-  "originHash" : "94775653ad64f75d2a75fe2ad52d48966464b6d7e05616888143e322d32d5d74",
+  "originHash" : "32513e6f6048a8c5e9df7cdb2acc09532f66c2b69e0c2972b0cc181addb16191",
   "pins" : [
     {
       "identity" : "sentry-cocoa",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "3ffafb9722d5d918c614feb496c8789a3b59d222",
         "version" : "1.15.0"
+      }
+    },
+    {
+      "identity" : "yams",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/jpsim/Yams",
+      "state" : {
+        "revision" : "a27b21e0c81c5bf42049b897a62aaf387e80f279",
+        "version" : "6.2.2"
       }
     }
   ],

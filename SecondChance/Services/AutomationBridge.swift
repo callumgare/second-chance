@@ -173,10 +173,11 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
             if let disk2 { d["disk2Path"] = disk2.path }
         case .gameDetected(let info):
             d["type"] = "wrappBuild.gameDetected"
-            d["gameId"] = info.id; d["gameTitle"] = info.title; d["engine"] = info.gameEngine.rawValue
-        case .engineRouted(let engine, let info):
+            d["gameId"] = info.id; d["gameTitle"] = info.title; d["engine"] = info.composition.engineTag
+        case .engineRouted(let composition, let info):
+            // `engine`, as the event has always had it, so recorded streams compare the same.
             d["type"] = "wrappBuild.engineRouted"
-            d["engine"] = engine.rawValue; d["gameId"] = info.id
+            d["engine"] = composition.engineTag; d["gameId"] = info.id
         case .installerResolved(let exePath, let type):
             d["type"] = "wrappBuild.installerResolved"
             d["exePath"] = exePath; d["installerType"] = "\(type)"

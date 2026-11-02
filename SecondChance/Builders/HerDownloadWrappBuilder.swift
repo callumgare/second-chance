@@ -149,7 +149,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             }
 
             if !DebugSettings.shared.skipInstaller {
-                try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+                try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
             }
 
             return try await finish(
@@ -236,7 +236,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             // ran one, and it is a later build than they patch anyway.
             logger.notice("Not applying game patches: a Mac download is a later build than Her Interactive's patches update")
 
-            try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+            try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
 
             return try await finish(
                 wrappPath: wrappPath,
@@ -257,9 +257,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// Publish which engine the game runs under; a Her download is only ever
     /// a Wine or a ScummVM game.
     private func publishEngineRoute(for gameInfo: GameInfo) async throws {
-        switch gameInfo.gameEngine {
+        switch gameInfo.composition.launcher {
         case .wine, .scummvm:
-            await bus.publishWrappBuild(.engineRouted(engine: gameInfo.gameEngine, gameInfo: gameInfo))
+            await bus.publishWrappBuild(.engineRouted(composition: gameInfo.composition, gameInfo: gameInfo))
         default:
             throw WrappBuildError.unsupportedEngine
         }

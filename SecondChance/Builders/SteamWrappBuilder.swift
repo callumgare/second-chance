@@ -214,9 +214,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.internalError("\(gameInfo.title) has no Steam app data")
             }
             let (appID, installDir, exe) = (steam.appID, steam.installDir, steam.exe)
-            let engine = gameInfo.steamEngine(launchMode: launchMode)
-            await bus.publishWrappBuild(.engineRouted(engine: engine, gameInfo: gameInfo))
-            logger.notice("Building \(gameInfo.title) from Steam (app \(appID)), engine \(engine.rawValue)\(launchMode.map { ", launching \($0.rawValue)" } ?? "")")
+            let composition = Composition(legacy: gameInfo.steamEngine(launchMode: launchMode))
+            await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
+            logger.notice("Building \(gameInfo.title) from Steam (app \(appID)), engine \(composition.engineTag)\(launchMode.map { ", launching \($0.rawValue)" } ?? "")")
 
             if preselected == nil {
                 // Steam only installs a queued game when it starts.
@@ -250,11 +250,11 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.gameExecutableNotFound
             }
 
-            let runsWithoutSteam = !engine.needsSteam
+            let runsWithoutSteam = !composition.has(.steam)
             let gameDir = runsWithoutSteam ? try moveOutOfSteam(steamGameDir, prefix: prefix, installDir: installDir) : steamGameDir
             let driveC = WrappLayout(app: wrappPath).driveC
             let gameDirPath = "/" + gameDir.path(relativeTo: driveC)
-            let gameExePath = engine == .scummvm ? gameDirPath : gameDirPath + "/" + exe
+            let gameExePath = composition.launcher == .scummvm ? gameDirPath : gameDirPath + "/" + exe
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
 
             await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Applying game patches"))))
@@ -262,12 +262,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                                                        source: .steam, confirmFailure: input.confirmPatchFailure)
 
             if runsWithoutSteam { try removeSteam(from: prefix) }
-            try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: engine)
+            try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
 
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .steam,
                 gameExePath: gameExePath, installerDir: gameDirPath,
-                steamID: runsWithoutSteam ? nil : String(appID), gameEngine: engine, steamLaunchMode: launchMode,
+                steamID: runsWithoutSteam ? nil : String(appID), composition: composition, steamLaunchMode: launchMode,
                 input: input
             )
             await helper.launchIfAsked(finalPath, input: input)

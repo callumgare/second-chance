@@ -421,9 +421,11 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             let gameInfo = choice.game
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
-            let engine = gameInfo.gameEngine
-            await bus.publishWrappBuild(.engineRouted(engine: engine, gameInfo: gameInfo))
-            logger.notice("Building \(gameInfo.title) from Big Fish (\(choice.sku)\(trial ? ", free trial" : "")), engine \(engine.rawValue)")
+            // Big Fish's DRM starts a Wine game; ScummVM runs nothing of Big Fish's.
+            let runsInScummVM = gameInfo.composition.launcher == .scummvm
+            let composition = runsInScummVM ? gameInfo.composition : Composition(launcher: .bigFish)
+            await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
+            logger.notice("Building \(gameInfo.title) from Big Fish (\(choice.sku)\(trial ? ", free trial" : "")), engine \(composition.engineTag)")
 
             // ── Download, install and activate ─────────────────────────
             await preparer.startCancellingDirectXSetup(in: wrappPath)
@@ -453,7 +455,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             }
             let layout = WrappLayout(app: wrappPath)
             let gameDirPath = "/" + installed.folder.path(relativeTo: layout.driveC)
-            let gameExePath = engine == .scummvm ? gameDirPath : gameDirPath + "/" + exe
+            let gameExePath = runsInScummVM ? gameDirPath : gameDirPath + "/" + exe
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
 
             await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Applying game patches"))))
@@ -462,17 +464,17 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
 
             // ScummVM reads the game's files and runs nothing of Big Fish's.
             let launchFile: String?
-            if engine == .scummvm {
+            if runsInScummVM {
                 Self.removeGameManager(from: layout.prefix)
                 launchFile = nil
             } else {
                 launchFile = "/" + installed.launchFile.path(relativeTo: layout.driveC)
             }
-            try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: engine)
+            try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
 
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .bigFish,
-                gameExePath: gameExePath, installerDir: gameDirPath, gameEngine: engine,
+                gameExePath: gameExePath, installerDir: gameDirPath, composition: composition,
                 bigFishLaunchFile: launchFile, bigFishSKU: choice.sku.description, bigFishTrial: trial ? true : nil,
                 input: input
             )

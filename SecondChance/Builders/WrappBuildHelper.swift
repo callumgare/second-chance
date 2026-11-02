@@ -23,6 +23,7 @@ import Logging
 import AppKit
 import SecondChanceKit
 import GameCatalog
+import WrappBuilder
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildHelper")
 
@@ -136,19 +137,15 @@ class WrappBuildHelper {
         logger.warning("codesign --verify reports a problem with the wrapp template, carrying on: \(detail)")
     }
 
-    /// Remove the engine this game doesn't use from the wrapp.
-    func cleanupUnusedEngine(at wrappPath: URL, gameEngine: GameInfo.GameEngine) async throws {
+    /// Remove from the wrapp the files of each module its composition
+    /// doesn't run (`BuildModule.templateFiles`).
+    func cleanupUnusedEngine(at wrappPath: URL, composition: Composition) async throws {
         logger.notice("Cleaning up unused game engine from wrapp...")
 
         let resourcesPath = WrappLayout(app: wrappPath).resources
-
-        switch gameEngine {
-        case .wine, .wineSteam, .wineSteamSilent:
-            try await removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("scummvm-files"),
-                                  engine: "ScummVM", from: wrappPath)
-        case .scummvm:
-            try await removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("wine-files"),
-                                  engine: "Wine", from: wrappPath)
+        for (module, list) in BuildModules.unusedTemplateFiles(for: composition) {
+            try await removeEngineFiles(listedIn: resourcesPath.appendingPathComponent(list),
+                                        engine: module.rawValue, from: wrappPath)
         }
 
         logger.notice("Cleanup complete")
@@ -258,7 +255,7 @@ class WrappBuildHelper {
         gameExePath: String,
         installerDir: String,
         steamID: String? = nil,
-        gameEngine: GameInfo.GameEngine? = nil,
+        composition: Composition? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
@@ -300,9 +297,12 @@ class WrappBuildHelper {
         let updatedData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try updatedData.write(to: infoPlistPath)
 
-        // What the wrapp reads about its game when it starts.
+        // What the wrapp reads about its game when it starts. Its settings
+        // still name the composition by its engine, as every wrapp's have.
+        let composition = composition ?? gameInfo.composition
+        guard let engine = composition.legacyEngine else { throw WrappBuildError.unsupportedEngine }
         let settings = WrappSettings(
-            gameExePath: gameExePath, engine: gameEngine ?? gameInfo.gameEngine, gameSlug: gameInfo.id,
+            gameExePath: gameExePath, engine: engine, gameSlug: gameInfo.id,
             source: source, installerDir: installerDir, steamAppID: steamID, steamLaunchMode: steamLaunchMode,
             bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
         )
@@ -515,7 +515,7 @@ class WrappBuildHelper {
         gameExePath: String,
         installerDir: String,
         steamID: String? = nil,
-        gameEngine: GameInfo.GameEngine? = nil,
+        composition: Composition? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
@@ -524,7 +524,7 @@ class WrappBuildHelper {
     ) async throws -> URL {
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
-            steamID: steamID, gameEngine: gameEngine, steamLaunchMode: steamLaunchMode,
+            steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,
             bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
         )
         await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: installerDir, gameInfo: gameInfo))

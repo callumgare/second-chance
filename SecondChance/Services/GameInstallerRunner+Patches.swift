@@ -123,7 +123,7 @@ extension GameInstallerRunner {
                 await bus.publishWrappBuild(.patchFailed(id: patch.id, message: error.localizedDescription))
                 _ = FailureReporter.sendWithoutAsking(FailureReport(
                     what: "Applying a game patch", kind: ErrorChain.identifier(error),
-                    game: gameInfo.id, source: source.rawValue, engine: gameInfo.gameEngine.rawValue,
+                    game: gameInfo.id, source: source.rawValue, engine: gameInfo.composition.engineTag,
                     tags: ["patch": patch.id]
                 ))
                 let continueInstall = await confirmFailure(patch, error)
