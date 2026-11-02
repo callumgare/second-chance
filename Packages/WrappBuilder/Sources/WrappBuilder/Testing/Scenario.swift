@@ -55,6 +55,9 @@ public nonisolated struct Scenario: Sendable, Equatable {
         /// The click before it should end the program: nothing else runs
         /// once it has.
         case expectEnd
+        /// Ask the program to quit, as its app's Quit (⌘Q) does, and expect
+        /// it to end: for a program with nothing to click to quit.
+        case quit
     }
 
     /// The scenario at `file`, with `overrides` (the bundle's parameters)
@@ -117,7 +120,7 @@ public nonisolated struct Scenario: Sendable, Equatable {
             let `do`: [RawAction]
         }
 
-        /// `click`, `expect-end`, `{ click: { x, y } }` or `{ check: menu }`.
+        /// `click`, `expect-end`, `quit`, `{ click: { x, y } }` or `{ check: menu }`.
         struct RawAction: Decodable {
             let action: Action
 
@@ -126,6 +129,7 @@ public nonisolated struct Scenario: Sendable, Equatable {
                     switch word {
                     case "click": action = .click
                     case "expect-end": action = .expectEnd
+                    case "quit": action = .quit
                     default:
                         throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "no action called \(word)"))
                     }

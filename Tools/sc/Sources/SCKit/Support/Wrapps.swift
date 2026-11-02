@@ -11,6 +11,7 @@ enum WrappSourceKind: String, CaseIterable, ExpressibleByArgument, Sendable {
     case steam
     case herDownload = "her-download"
     case bigFish = "big-fish"
+    case download
 }
 
 /// What a source contributes to a headless build: the app's
@@ -215,6 +216,27 @@ struct BigFishSourceOptions: ParsableArguments, WrappSourceInput {
     }
 }
 
+/// `--from download`: a game its makers give away, downloaded from where
+/// its bundle says (docs/wrapp-build.md#the-download-source).
+struct DownloadSourceOptions: ParsableArguments, WrappSourceInput {
+    func availableGames(repo: Repo) -> [CatalogGame] {
+        Catalog.games.filter { game in
+            let manifest = repo.bundles.appendingPathComponent(game.programID).appendingPathComponent("manifest.yaml")
+            return (try? String(contentsOf: manifest, encoding: .utf8))?.contains("source: \"download\"") == true
+        }
+    }
+
+    var availabilityDescription: String { "download editions" }
+
+    func environment(for game: CatalogGame, repo: Repo) throws -> [String: String] {
+        guard availableGames(repo: repo).contains(game) else {
+            throw SCError("\(game.title) has no download edition.",
+                          hints: ["Games to download: \(availableGames(repo: repo).map(\.slug).joined(separator: ", "))"])
+        }
+        return ["INSTALLATION_SOURCE": "download", "DOWNLOAD_PROGRAM": game.programID]
+    }
+}
+
 enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
     case `continue`
     case cancel
@@ -222,7 +244,7 @@ enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
 
 /// Everything about what a wrapp is built from.
 struct WrappSourceOptions: ParsableArguments {
-    @Option(help: "What to build the wrapp from: disk, steam, her-download or big-fish.")
+    @Option(help: "What to build the wrapp from: disk, steam, her-download, big-fish or download.")
     var from: WrappSourceKind = .disk
 
     @OptionGroup(title: "Disk source")
@@ -237,6 +259,9 @@ struct WrappSourceOptions: ParsableArguments {
     @OptionGroup(title: "Big Fish Games source")
     var bigFish: BigFishSourceOptions
 
+    @OptionGroup(title: "Download source")
+    var download: DownloadSourceOptions
+
     @Option(help: "What to do when an official game patch fails to apply: continue or cancel. Default: continue.")
     var patchFailure: PatchFailurePolicy?
 
@@ -246,6 +271,7 @@ struct WrappSourceOptions: ParsableArguments {
         case .steam: steam
         case .herDownload: herDownload
         case .bigFish: bigFish
+        case .download: download
         }
     }
 }

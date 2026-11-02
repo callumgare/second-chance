@@ -10,6 +10,14 @@ nonisolated extension GameInfoProvider {
     /// Every game a bundle describes, in the order lists show them.
     static let bundledGames: [GameInfo] = [
         GameInfo(
+            id: "skifree",
+            title: "SkiFree",
+            diskCount: 1,
+            internalGameExePath: "/SkiFree/ski32.exe",
+            program: "freeware/skifree",
+            displayName: "SkiFree"
+        ),
+        GameInfo(
             id: "secrets-can-kill",
             title: "Secrets Can Kill",
             diskCount: 2,

@@ -54,6 +54,19 @@ extension WrappBuildInput {
         ], viewModel: viewModel)
     }
 
+    /// A headless input for a build of a free game downloaded from where
+    /// its bundle says (`program`: a bundle id).
+    convenience init(
+        download program: String,
+        outputDir: URL,
+        viewModel: WrappBuildViewModel? = nil
+    ) {
+        self.init(environment: [
+            "DOWNLOAD_PROGRAM": program,
+            "OUTPUT_PATH": outputDir.path,
+        ], viewModel: viewModel)
+    }
+
     /// A headless input for a Steam build of `slug`. Headless, so Steam can't
     /// ask anyone to sign in: the build needs a saved sign-in.
     convenience init(

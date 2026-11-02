@@ -5,6 +5,7 @@
 //  The nancy-drew module's data and assets, as Second Chance ships them.
 
 import Foundation
+import GameCatalog
 import WrappBuilder
 import SecondChanceKit
 
@@ -71,6 +72,12 @@ nonisolated enum DownloadCache {
 /// The program bundles Second Chance ships (`Contents/Resources/Bundles`,
 /// docs/program-bundles.md).
 nonisolated enum ShippedBundles {
+    /// The program bundle id of the game `slug`: `nancy-drew/<slug>`, or
+    /// its own for a program beyond Nancy Drew.
+    static func programID(_ slug: String) -> String {
+        GameInfoProvider.shared.gameInfo(for: slug).programID
+    }
+
     /// What building `edition` of the Nancy Drew game `slug` runs, from its
     /// shipped bundle, Wrappfile and the shipped modules; nil for an edition
     /// with no stage of its own. Throws `buildRecipeProblem` when the bundle
@@ -79,7 +86,7 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             return try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).plan(edition: edition, conditions: .thisMac)
@@ -99,7 +106,7 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let planned = try plan(forGame: slug, edition: edition, in: bundle)?.target?.modules
             let used = planned ?? composition.modules.map(\.rawValue)
@@ -153,7 +160,7 @@ nonisolated enum ShippedBundles {
         let target = try lock(forGame: slug, edition: old.edition, source: source, composition: composition, in: bundle)
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             let planner = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules)
@@ -180,7 +187,7 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             var conditions = BuildConditions.thisMac
@@ -192,9 +199,35 @@ nonisolated enum ShippedBundles {
         }
     }
 
+    /// A download edition a shipped bundle has: what the download source
+    /// offers.
+    struct DownloadEdition: Sendable {
+        let game: GameInfo
+        let edition: String
+        let licence: Manifest.Licence
+        let licenceFrom: String?
+        let input: Manifest.Input
+    }
+
+    /// Every shipped bundle's download editions, in the catalogue's order.
+    static func downloadEditions(in bundle: Bundle = .main) throws -> [DownloadEdition] {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
+        let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+        let loader = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules)
+        return try GameInfoProvider.shared.allGames().flatMap { game -> [DownloadEdition] in
+            let folder = resources.appendingPathComponent("Bundles/" + game.programID)
+            guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("manifest.yaml").path) else { return [] }
+            let manifest = try loader.load(folder).get().manifest
+            return manifest.editions.compactMap { edition in
+                guard edition.source == .download, let licence = edition.licence, let input = edition.inputs?.first else { return nil }
+                return DownloadEdition(game: game, edition: edition.id, licence: licence, licenceFrom: edition.licenceFrom, input: input)
+            }
+        }
+    }
+
     /// A file in the assets of the Nancy Drew game `slug`'s bundle, if it has it.
     static func asset(_ name: String, ofGame slug: String, in bundle: Bundle = .main) -> URL? {
-        guard let file = bundle.resourceURL?.appendingPathComponent("Bundles/nancy-drew/\(slug)/assets/\(name)"),
+        guard let file = bundle.resourceURL?.appendingPathComponent("Bundles/\(programID(slug))/assets/\(name)"),
               FileManager.default.fileExists(atPath: file.path) else { return nil }
         return file
     }

@@ -48,14 +48,14 @@ class GameDetector {
     nonisolated static func catalogueIndex(_ games: [GameInfo]) -> DetectionIndex {
         let games = games.filter { $0.id != GameInfo.unknownGame.id }
         let rules = games.flatMap { game -> [DetectionIndex.Rule] in
-            let id = "nancy-drew/\(game.id)"
+            let id = game.programID
             let title = game.title.lowercased()
             let names = [title.hasPrefix("the ") ? String(title.dropFirst(4)) : title] + game.detectionAliases.map { $0.lowercased() }
             return names.map { DetectionIndex.Rule(bundleID: id, matcher: .text($0)) }
                 + game.detectionCodes.map { DetectionIndex.Rule(bundleID: id, matcher: .word($0)) }
         }
         return DetectionIndex(rules: rules, programs: games.map {
-            .init(bundleID: "nancy-drew/\($0.id)", title: $0.title, series: "Nancy Drew")
+            .init(bundleID: $0.programID, title: $0.title, series: $0.program == nil ? "Nancy Drew" : nil)
         })
     }
 

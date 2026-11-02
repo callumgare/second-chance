@@ -78,7 +78,7 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/WrappKit/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the layer cache (`LayerStore`, `LayerKey`) and the Wine prefix it keeps, or updating a wrapp from itself (`UpdateWrappBuilder`, `UpdatePlanner`, `WrappLock`) |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/WrappKit/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the layer cache (`LayerStore`, `LayerKey`) and the Wine prefix it keeps, or updating a wrapp from itself (`UpdateWrappBuilder`, `UpdatePlanner`, `WrappLock`), or the hidden download source (`DownloadWrappBuilder`, `Downloader`) |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, needles and scenarios (a bundle's `tests`), how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/WrappKit/Sources/WrappLogging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
@@ -385,7 +385,7 @@ direct assignment.
 ## Gotchas
 
 - **Non-interactive mode**: `NON_INTERACTIVE=true` plus `INSTALLATION_SOURCE`
-  (`disk` | `her-download` | `steam` | `big-fish`) and `OUTPUT_PATH`; `disk` also needs
+  (`disk` | `her-download` | `steam` | `big-fish` | `download`) and `OUTPUT_PATH`; `disk` also needs
   `DISK_1_PATH` (and optionally `DISK_2_PATH`), and `steam` needs
   `STEAM_GAME_SLUG` (`STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game) and
   a saved Steam sign-in ([docs/steam.md](docs/steam.md)); `her-download` needs
@@ -393,7 +393,9 @@ direct assignment.
   `big-fish` needs `BIG_FISH_GAME_SLUG` and, as nobody can sign in, either
   `BIG_FISH_TRIAL=1` (the free trial) or the test harness's account
   (`BIG_FISH_TEST_SIGN_IN=1`, `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD`)
-  ([docs/big-fish.md](docs/big-fish.md#the-build)).
+  ([docs/big-fish.md](docs/big-fish.md#the-build)); and `download` needs
+  `DOWNLOAD_PROGRAM`, a bundle id with a download edition
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-download-source)).
   `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`, `PATCH_FAILURE_POLICY` and
   `EXPECTED_GAME_SLUG` (fail if the disc is another game) are read by
   `WrappBuildInput` when the corresponding prompt would appear. **`CLIBuilder`
@@ -670,6 +672,12 @@ backed up as a Passwords entry and imported once on each releasing Mac.
   download has an answer file so far (others install with their wizard), and
   Mac downloads that aren't Cider builds are refused until a sample shows
   what they are.
+- **Free games download, hidden.** The download source
+  (`DownloadWrappBuilder`) builds a program its makers give away from the URLs
+  its bundle names, and appears on the welcome screen only after a double-click
+  on the icon above the steps. Its first program is SkiFree
+  (`Bundles/freeware/skifree`), the first beyond Nancy Drew
+  ([docs/program-bundles.md](docs/program-bundles.md#download-editions)).
 - The produced game app's process is named `WrappTemplate` in Activity Monitor.
   Renaming the executable per-game during configuration would read better.
 

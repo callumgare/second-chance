@@ -49,7 +49,9 @@ public nonisolated enum GameCatalogSource {
             bigFish: editions.first { $0.source == .bigFish }?.inputs?.first?.product,
             doesNotExitInNonInteractiveMode: editions.contains { $0.installer?.stubborn == true },
             detectionAliases: unique(editions.flatMap { $0.detect?.aliases ?? [] }),
-            detectionCodes: unique(editions.flatMap { $0.detect?.codes ?? [] })
+            detectionCodes: unique(editions.flatMap { $0.detect?.codes ?? [] }),
+            program: manifest.namespace == "nancy-drew" ? nil : manifest.id,
+            displayName: manifest.displayName ?? (manifest.series == "Nancy Drew" ? nil : manifest.title)
         )
     }
 
@@ -103,6 +105,8 @@ public nonisolated enum GameCatalogSource {
             if game.doesNotExitInNonInteractiveMode { arguments.append("doesNotExitInNonInteractiveMode: true") }
             if !game.detectionAliases.isEmpty { arguments.append("detectionAliases: [\(game.detectionAliases.map(literal).joined(separator: ", "))]") }
             if !game.detectionCodes.isEmpty { arguments.append("detectionCodes: [\(game.detectionCodes.map(literal).joined(separator: ", "))]") }
+            if let program = game.program { arguments.append("program: \(literal(program))") }
+            if let name = game.displayName { arguments.append("displayName: \(literal(name))") }
             lines += arguments.enumerated().map { "            \($1)\($0 == arguments.count - 1 ? "" : ",")" }
             lines.append("        ),")
         }

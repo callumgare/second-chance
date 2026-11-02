@@ -59,6 +59,14 @@ struct ProgramTestTests {
         #expect(scenario.handlers.first { $0.id == "her-logo" }?.once == true)
     }
 
+    @Test("A program beyond Nancy Drew has its own test: SkiFree started, then quit")
+    func skifree() throws {
+        let test = try ProgramTest.load(bundleFolder: bundlesRoot.appendingPathComponent("freeware/skifree"), modulesRoot: modulesRoot)
+        #expect(test.scenario.id == "wine/starts-and-quits")
+        #expect(test.scenario.handlers.first?.actions == [.quit])
+        #expect(test.needles.tagged("running").first?.spec.text?.strings.contains("Start") == true)
+    }
+
     @Test("A parameter the scenario doesn't have is refused")
     func unknownParameter() throws {
         let file = modulesRoot.appendingPathComponent("nancy-drew/scenarios/quit-from-menu.yaml")

@@ -219,6 +219,7 @@ class WrappBuildHelper {
         case .herDownload: "her-windows"
         case .steam: "steam"
         case .bigFish: "big-fish"
+        case .download: "download"
         }
     }
 
@@ -262,7 +263,7 @@ class WrappBuildHelper {
 
         // The program's bundle's id (`au.gare.callum.second-chance.program.nancy-drew.<slug>`),
         // which names where the wrapp keeps the person's files.
-        let newBundleID = bundleID ?? WrappLock.wrappBundleID(program: "nancy-drew/" + gameInfo.id)
+        let newBundleID = bundleID ?? WrappLock.wrappBundleID(program: gameInfo.programID)
         plist["CFBundleIdentifier"] = newBundleID
         plist["CFBundleName"] = gameInfo.appName
         plist["CFBundleDisplayName"] = gameInfo.appName

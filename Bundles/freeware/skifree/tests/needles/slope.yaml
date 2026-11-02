@@ -1,0 +1,5 @@
+# SkiFree's slope as it starts: the start flags along the bottom and the
+# author's name under the title.
+kind: "text"
+tags: ["running"]
+text: { strings: ["Start", "Chris Pirih"] }

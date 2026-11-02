@@ -1,0 +1,8 @@
+# SkiFree: one program, copied in as it comes, nothing to install.
+
+ARG install-dir="C:/SkiFree"
+
+FROM scratch AS download
+ARG install-dir
+USE wine@10
+COPY --from=game . ${install-dir}/           # the edition's download input, unpacked as its manifest says

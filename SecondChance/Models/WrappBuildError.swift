@@ -70,6 +70,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// A game's app was chosen to be updated, and it can only be built
     /// afresh from its `source`, for `reason` (for the log).
     case updateNeedsSource(reason: String, source: WrappSource = .disk)
+    /// None of the places a free game's bundle names had its file, or
+    /// none answered (each is in the log and reported).
+    case downloadUnavailable(title: String)
     case gameExecutableNotFound
     case userCancelled
     case userCancelledBeforeStart
@@ -262,6 +265,11 @@ enum WrappBuildError: LocalizedError, Equatable {
                 This game's app can't be brought up to date by itself. Choose the file you downloaded \
                 from Her Interactive instead, and Second Chance will make the app again.
                 """)
+        case .updateNeedsSource(_, .download):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Download the game again, \
+                and Second Chance will make the app again.
+                """)
         case .updateNeedsSource(_, .steam):
             return String(localized: """
                 This game's app can't be brought up to date by itself. Add the game from Steam again, \
@@ -271,6 +279,11 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: """
                 This game's app can't be brought up to date by itself. Add the game from Big Fish Games again, \
                 and Second Chance will make the app again.
+                """)
+        case .downloadUnavailable(let title):
+            return String(localized: """
+                \(title) can't be downloaded right now. The places that had it don't have it any more, \
+                or aren't answering. Try again later.
                 """)
         case .gameExecutableNotFound:
             return String(localized: "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests.")

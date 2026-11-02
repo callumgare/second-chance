@@ -70,7 +70,8 @@ is the only place xcodebuild is run from; see AGENTS.md for why the flag is
 load-bearing.
 
 **Sources.** `wrapp build --from disk` (the default), `--from steam`,
-`--from her-download` or `--from big-fish`. Each source is a case of `WrappSourceKind` with its own
+`--from her-download`, `--from big-fish` or `--from download` (a free game, downloaded from where
+its bundle says: [wrapp-build.md](wrapp-build.md#the-download-source)). Each source is a case of `WrappSourceKind` with its own
 options type conforming to `WrappSourceInput` (`Support/Wrapps.swift`), which
 turns the options into the app's `INSTALLATION_SOURCE` and inputs. Adding a
 source is a new case and a new type — the same shape as the app's
@@ -81,7 +82,7 @@ source is a new case and a new type — the same shape as the app's
 than one download needs `--her-download` to pick which
 ([her-download.md](her-download.md)).
 
-`sc test integration --source disk|steam|her-download|big-fish|big-fish-trial|all`
+`sc test integration --source disk|steam|her-download|big-fish|big-fish-trial|download|all`
 (comma-separated) picks which build sources' suites run; [testing.md](testing.md)
 has what each needs. These are `IntegrationSource`'s cases rather than
 `WrappSourceKind`'s, as Big Fish has two suites, the owned games and the free

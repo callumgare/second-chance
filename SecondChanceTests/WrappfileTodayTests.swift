@@ -11,7 +11,8 @@ import WrappBuilder
 /// Wrappfile builder runs them, this is what keeps the two from drifting.
 @MainActor
 struct WrappfileTodayTests {
-    nonisolated static let games = GameInfoProvider.shared.allGames()
+    /// The Nancy Drew games, whose builders came before their Wrappfiles.
+    nonisolated static let games = GameInfoProvider.shared.allGames().filter { $0.program == nil }
 
     private func wrappfile(_ game: GameInfo) throws -> Wrappfile {
         let file = TestPaths.repoRoot.appendingPathComponent("Bundles/nancy-drew/\(game.id)/Wrappfile")

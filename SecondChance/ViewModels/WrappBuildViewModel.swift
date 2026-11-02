@@ -43,6 +43,9 @@ class WrappBuildViewModel {
     var isQuittingSteamHolder = false
     /// It was asked to quit, and didn't.
     var steamHolderDidNotQuit = false
+    /// Whether the welcome screen lists the sources not offered yet (free
+    /// games): a double-click on the icon above the steps shows them.
+    var revealsHiddenSources = false
     /// The disc or download the last build was started from, so Try Again
     /// can use it again rather than asking for it.
     @ObservationIgnored var chosenInstaller: URL?
@@ -140,6 +143,7 @@ class WrappBuildViewModel {
     let failureReport = FailureReportModel()
 
     private let diskBuilder: DiskWrappBuilder
+    private let downloadBuilder: DownloadWrappBuilder
     private let herDownloadBuilder: HerDownloadWrappBuilder
     private let steamBuilder: SteamWrappBuilder
     private let bigFishBuilder: BigFishWrappBuilder
@@ -177,6 +181,7 @@ class WrappBuildViewModel {
         herDownloadBuilder = HerDownloadWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
         steamBuilder = SteamWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
         bigFishBuilder = BigFishWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
+        downloadBuilder = DownloadWrappBuilder(helper: helper, bus: bus)
 
         // Subscribe to the build's bus so wrapp-build events drive the observed properties.
         // (A headless run is this view model too: CLIBuilder starts its build.)
@@ -335,6 +340,7 @@ class WrappBuildViewModel {
         case .herDownload: await runBuild(herDownloadBuilder, from: source)
         case .steam: await runBuild(steamBuilder, from: source)
         case .bigFish: await runBuild(bigFishBuilder, from: source)
+        case .download: await runBuild(downloadBuilder, from: source)
         }
     }
 

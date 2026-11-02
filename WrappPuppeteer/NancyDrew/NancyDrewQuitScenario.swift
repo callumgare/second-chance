@@ -795,7 +795,7 @@ struct NancyDrewQuitScenario {
 
             for handler in readHandlers {
                 var remembered = memory[handler.id, default: Memory()]
-                let ends = handler.actions.contains(.expectEnd)
+                let ends = handler.actions.contains(.expectEnd) || handler.actions.contains(.quit)
                 guard !ended || ends else { continue }
                 if handler.once, remembered.acted { continue }
                 var target = found[handler.when].map { found in
@@ -861,6 +861,13 @@ struct NancyDrewQuitScenario {
                         }
                         remembered.acted = true
                         remembered.actedAt = Date()
+                    case .quit:
+                        logger.notice("  ✓ \(handler.id): found its \(handler.when), quitting the program as its app's Quit does...")
+                        guard context.game.quitApp() else {
+                            forceQuit(app)
+                            return "Couldn't ask the program to quit"
+                        }
+                        return nil
                     case .expectEnd:
                         ended = true
                         memory[handler.id] = remembered

@@ -23,6 +23,9 @@
     "%@ (in another language)" : {
 
     },
+    "%@ can't be downloaded right now. The places that had it don't have it any more, or aren't answering. Try again later." : {
+
+    },
     "%@ comes on two discs, and disc 1 has been copied. Take it out and put in disc 2: installing carries on by itself once it's in. If disc 2 is already on this Mac, choose it instead." : {
 
     },
@@ -38,6 +41,9 @@
           }
         }
       }
+    },
+    "%@ is free." : {
+
     },
     "%@ is installed, but not saved yet" : {
 
@@ -57,6 +63,9 @@
           }
         }
       }
+    },
+    "%@ isn't sold any more." : {
+
     },
     "%@ of %@" : {
       "localizations" : {
@@ -258,6 +267,9 @@
     "Choose Disc 2…" : {
 
     },
+    "Choose Where to Save" : {
+
+    },
     "Choose Where to Save…" : {
 
     },
@@ -354,7 +366,13 @@
     "Done" : {
 
     },
+    "Download" : {
+
+    },
     "Downloading the game" : {
+
+    },
+    "Downloading the game. This is a big download and may take a while" : {
 
     },
     "Either way it's the same game. They differ in how quickly it starts and where your saves are kept." : {
@@ -511,6 +529,12 @@
     "It's still trying. If it doesn't get going, you'll be able to sign in to Steam again from scratch." : {
 
     },
+    "Its makers have given it away and say anyone may share it. Second Chance will download it, check it's the genuine file, and set it up for you." : {
+
+    },
+    "Its makers let anyone share it for free, as long as it isn't changed. The rest of the game was sold separately. Second Chance will download the free part, from the Internet Archive if the makers' website no longer has it, and check it's the genuine, unchanged file." : {
+
+    },
     "Keep Installing" : {
 
     },
@@ -521,6 +545,9 @@
 
     },
     "Launch Directly" : {
+
+    },
+    "Launch directly: starts faster and is more reliable, but saves stay on this Mac.\n\nLaunch via Steam: keeps your saves in Steam Cloud, but starts slower." : {
 
     },
     "Launch via Steam" : {
@@ -560,6 +587,9 @@
 
     },
     "No failure report was sent." : {
+
+    },
+    "Nobody has sold it for a long time, and its makers haven't said whether it may be shared. Second Chance will download a copy kept by the Internet Archive, a library that keeps copies of old software, and check it's the genuine file first." : {
 
     },
     "Not Now" : {
@@ -971,6 +1001,9 @@
     "The next game you get from Big Fish Games will ask you to sign in. The games you have already play as before." : {
 
     },
+    "The people who made it now give it away. Second Chance will download it from their website. If their website doesn't have it any more, Second Chance gets the same file from the Internet Archive, a library that keeps copies of old websites. Either way, it checks it's the genuine file first." : {
+
+    },
     "There isn't enough free space on your Mac to install the game. It needs about %@, and %@ is free. Free up some space, then try again." : {
       "localizations" : {
         "en" : {
@@ -985,6 +1018,9 @@
 
     },
     "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam." : {
+
+    },
+    "These games are free: their makers give them away. Second Chance downloads the one you pick." : {
 
     },
     "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license" : {
@@ -1015,10 +1051,16 @@
     "This game's app can't be brought up to date by itself. Choose the file you downloaded from Her Interactive instead, and Second Chance will make the app again." : {
 
     },
+    "This game's app can't be brought up to date by itself. Download the game again, and Second Chance will make the app again." : {
+
+    },
     "This game's app can't be brought up to date without the game's disc. Choose the game's first disc instead, and Second Chance will make the app again." : {
 
     },
     "This is a game that's already installed, not its installer. Second Chance needs to install the game itself: choose the game's disc, or the installer you downloaded from Her Interactive." : {
+
+    },
+    "This is the free first part of %@." : {
 
     },
     "This usually takes a few minutes. You can leave it running and do something else." : {
@@ -1102,10 +1144,16 @@
     "Where it happened" : {
 
     },
+    "Where its makers say so: %@." : {
+
+    },
     "Which game do you want from Big Fish Games?" : {
 
     },
     "Which game do you want from Steam?" : {
+
+    },
+    "Which game do you want?" : {
 
     },
     "Which part of the code each thread was running when it crashed" : {

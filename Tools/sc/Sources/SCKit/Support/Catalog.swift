@@ -19,6 +19,8 @@ public struct CatalogGame: Sendable, Hashable {
     public let isOnBigFish: Bool
     /// The wrapp's bundle name, as the app names it (`GameInfo.appBundleName`).
     public let wrappName: String
+    /// Its program bundle's id, `nancy-drew/<slug>` or another's.
+    public let programID: String
 }
 
 public enum Catalog {
@@ -26,7 +28,7 @@ public enum Catalog {
     public static let games: [CatalogGame] = GameInfoProvider.shared.allGames().map {
         CatalogGame(slug: $0.id, title: $0.title, diskCount: $0.diskCount, engine: $0.gameEngine.rawValue,
                     isOnSteam: $0.isOnSteam, offersSteamLaunchChoice: $0.offersSteamLaunchChoice, isOnBigFish: $0.isOnBigFish,
-                    wrappName: $0.appBundleName)
+                    wrappName: $0.appBundleName, programID: $0.programID)
     }
 
     public static func game(slug: String) -> CatalogGame? {

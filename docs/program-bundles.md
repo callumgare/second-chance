@@ -119,6 +119,49 @@ Checks the schema can't make, across fields or against the folder (the id
 matches its folder, no two editions share an id), are in
 `ProgramBundleLoader`.
 
+## Download editions
+
+An edition with `source: download` is a program its makers give away, which
+Second Chance downloads ([wrapp-build.md](wrapp-build.md#the-download-source)):
+
+```yaml
+editions:
+  - id: "download"
+    source: "download"
+    build: { target: "download" }
+    licence: "free-release"
+    licence-from: "the author's website"
+    inputs:
+      - id: "game"
+        urls:                                # tried in order; the hash alone decides
+          - "https://ski.ihoc.net/ski32.exe"
+          - "https://web.archive.org/web/20110929074042id_/http://ski.ihoc.net/ski32.exe"
+        sha256: "3572d375…"
+        size: 118784
+        unpack: "none"
+        install: "none"
+```
+
+- **`urls`**: the publisher's, or a distributor it names; then the Wayback
+  Machine's `id_` copy of that same URL with its full 14-digit timestamp (a
+  partial one redirects to whichever capture is nearest); then archive.org
+  items. No fan sites and no servers of ours. Every lookup in an archive is done
+  when the bundle is written, never by the app: the Wayback index's `digest`
+  is the file's SHA-1, so a capture can be checked without downloading it.
+- **`licence`** says what the person is told before it downloads, never a
+  gate on where it comes from: `freeware-licensed` (its makers say anyone may
+  share it), `free-release` (they give it away, saying nothing more),
+  `shareware` (a free first part) or `abandonware` (no longer sold, nothing
+  said). `licence-from` says where the permission comes from.
+- **`unpack`** is `none` or `zip` so far; `install` is `none`.
+
+A download edition is the first of a **program beyond Nancy Drew**, in a
+namespace of its own (`freeware/skifree`). Its catalogue entry carries its
+bundle id and app name (`GameInfo.program`, `GameInfo.displayName`), so its app
+is "SkiFree", its bundle id `au.gare.callum.second-chance.program.freeware.skifree`,
+and the code that finds a game's bundle goes by `GameInfo.programID` rather than
+`nancy-drew/<slug>`.
+
 ## Detection
 
 Every bundle is recognised by its `title` (less a leading "The"), matched

@@ -1,12 +1,13 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 2
+release: 3
 native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
 versions:
   - { version: "10.0_8" }                    # Sikarugir's Wine 10.0, packaging 8 (setup-wine.sh)
 runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
 data: ["prefix.yaml", "routine-errors.yaml"]
+assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program with no menu, started and quit
 updates:
   # A wrapp whose prefix was set up from another prefix.yaml gets this
   # one's set-up applied over it (registry settings, cnc-ddraw and its

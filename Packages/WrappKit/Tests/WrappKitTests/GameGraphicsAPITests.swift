@@ -107,9 +107,12 @@ struct GameGraphicsAPITests {
         #expect(GameGraphicsAPI(exeAt: direct3D, game: shadowRanch) == .direct3D)
     }
 
-    @Test("Every Wine game in the catalog says what it draws with")
+    /// The Nancy Drew games: each draws with one or the other, and Big Fish's
+    /// editions of them hide it. A free program such as SkiFree draws with
+    /// neither, and its .exe can say so itself.
+    @Test("Every Nancy Drew game Wine runs says in the catalog what it draws with")
     func catalogKnowsEveryWineGame() {
-        for game in GameInfoProvider.shared.allGames() {
+        for game in GameInfoProvider.shared.allGames() where game.programID.hasPrefix("nancy-drew/") {
             #expect((game.graphics != nil) == game.gameEngine.runsInWine, "\(game.id)")
         }
     }

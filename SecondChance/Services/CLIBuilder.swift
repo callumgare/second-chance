@@ -55,11 +55,11 @@ enum CLIBuilder {
     /// misconfigured runs fail fast. Returns the validated source on success.
     static func validatedSource() -> WrappSource {
         guard let name = environment["INSTALLATION_SOURCE"] else {
-            failValidation("INSTALLATION_SOURCE environment variable is required (disk, her-download, steam, big-fish)")
+            failValidation("INSTALLATION_SOURCE environment variable is required (disk, her-download, steam, big-fish, download)")
         }
 
         guard let source = WrappSource(rawValue: name) else {
-            failValidation("Invalid INSTALLATION_SOURCE '\(name)' (disk, her-download, steam, big-fish)")
+            failValidation("Invalid INSTALLATION_SOURCE '\(name)' (disk, her-download, steam, big-fish, download)")
         }
 
         logger.notice("NON-INTERACTIVE MODE: Auto-starting installation — source: \(name)")
@@ -86,6 +86,13 @@ enum CLIBuilder {
                 failValidation("BIG_FISH_GAME_SLUG environment variable is required for a Big Fish build (the game's slug)")
             }
             logger.notice("Big Fish game: \(slug)\(environment["BIG_FISH_TRIAL"] == "1" ? " (free trial)" : "")")
+        }
+
+        if source == .download {
+            guard let program = environment["DOWNLOAD_PROGRAM"] else {
+                failValidation("DOWNLOAD_PROGRAM environment variable is required for a download (a bundle id, freeware/skifree)")
+            }
+            logger.notice("Download: \(program)")
         }
 
         guard let output = environment["OUTPUT_PATH"] else {

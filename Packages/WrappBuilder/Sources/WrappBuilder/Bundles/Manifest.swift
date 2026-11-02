@@ -118,12 +118,25 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let build: Build?
         /// Its choices, by name: each an `ARG` its stages may read.
         public let choices: [String: Choice]?
+        /// A download edition's: what the person is told about where it
+        /// comes from (`free-release`, …), and who gives the permission.
+        public let licence: Licence?
+        public let licenceFrom: String?
 
         /// The choice called `name` (`launch-mode`), however its key was
         /// decoded.
         public func choice(_ name: String) -> Choice? {
             choices?[name] ?? choices?[WrappfileChecker.camelCase(name)]
         }
+    }
+
+    /// Why a download edition may be offered, which decides what the
+    /// person is told before it downloads (docs/program-bundles.md#download-editions).
+    public enum Licence: String, Decodable, Hashable, Sendable {
+        case freewareLicensed = "freeware-licensed"
+        case freeRelease = "free-release"
+        case shareware
+        case abandonware
     }
 
     public struct Choice: Decodable, Hashable, Sendable {
@@ -148,6 +161,13 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let exe: String?
         /// A Big Fish edition's product number.
         public let product: Int?
+        /// A download's: its URLs in order, its file's SHA-256 and size,
+        /// and how it is unpacked (`none`, `zip`) and installed (`none`).
+        public let urls: [String]?
+        public let sha256: String?
+        public let size: Int?
+        public let unpack: String?
+        public let install: String?
     }
 
     /// How an edition is recognised (`Detection/`): its aliases and codes

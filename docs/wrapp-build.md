@@ -215,7 +215,8 @@ There are **no separate interactive/non-interactive classes**. Headless is just
 "every env var set, so nothing prompts."
 
 A question the build asks part way through — which game to get from a store,
-how a DRM-free Steam game starts, disc 2, a disc or game it doesn't
+which free game to download and where it comes from, how a DRM-free Steam
+game starts, disc 2, a disc or game it doesn't
 recognise, which program is the game, a patch that failed, Steam in use,
 whether to start over rather than save — is a `BuildQuestion`, which the main
 window shows as a page of its own (`BuildQuestionView`) in place of the
@@ -694,6 +695,41 @@ executable is `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't rely on tha
 name — it tracks the wrapp by the PID it launched and finds the game by the
 game's own process name — so the target can be renamed without touching it.
 
+## The download source
+
+A program its makers give away is downloaded from where its bundle says
+(`DownloadWrappBuilder`). It is a fourth source on the welcome screen that
+only appears after a double-click on the icon above the build's steps
+(`WrappBuildViewModel.revealsHiddenSources`): nothing on screen offers it
+otherwise. Headless, it is `INSTALLATION_SOURCE=download` with
+`DOWNLOAD_PROGRAM` naming the bundle (`freeware/skifree`), or `sc wrapp build
+<slug> --from download`.
+
+- **The person picks a game and is told why it's free** before anything
+  downloads (`DownloadNotice`, by the edition's `licence`,
+  [program-bundles.md](program-bundles.md#download-editions)). The same words
+  are saved into the app as `Contents/Resources/Licence.txt`.
+- **The hash alone decides** (`Downloader`, in
+  `Packages/WrappBuilder/Sources/WrappBuilder/Downloads/`). The input's URLs are
+  tried in order, and the first whose file has the bundle's SHA-256 is used;
+  status codes are ignored, since an archived page that has gone can come back
+  200 with HTML. Downloads are kept in `~/Library/Caches/SecondChance/downloads/`
+  by their hash, so each is fetched once per Mac.
+- **Politely**: one download at a time from each site, a User-Agent naming
+  Second Chance, waiting as `Retry-After` says on a 429 or 503 (three times at
+  most), and an interrupted download resumed with `Range`. A download bigger
+  than 50 MB says in its progress step that it may take a while.
+- **Each URL that didn't have it is reported** (a `Downloading a free game`
+  report tagged with the site), not only a total failure, so a dead publisher
+  URL is noticed even when the archive's copy takes over. When none has it the
+  build fails with `WrappBuildError.downloadUnavailable`, which says so
+  plainly.
+- **Unpacking**: `unpack: none` puts the file itself in a folder named for the
+  input, `zip` that folder's contents (`ditto`). The edition's Wrappfile stage
+  then copies it in (`COPY --from=<input> . ${install-dir}/`), which is the only
+  instruction a download edition can run so far; an `install` program and other
+  archive formats come when an edition needs them.
+
 ## Adding a source
 
 1. Add a case to `WrappSource`.
@@ -701,7 +737,8 @@ game's own process name — so the target can be renamed without touching it.
    both paths.
 3. Add the builder to the ViewModel and a case to its `build(from:)` that
    calls `runBuild(_:)`; the welcome screen's list (`WelcomeView`) and the
-   File menu (`InstallCommands`) offer the source.
+   File menu (`InstallCommands`) offer the source. Add it to `sc`'s
+   `WrappSourceKind` too, with an integration suite of its own.
 4. Publish the same events the disk flow does — that is what the UI and tests
    read.
 5. Add any new prompt to `WrappBuildInput` with an env-var override, or headless

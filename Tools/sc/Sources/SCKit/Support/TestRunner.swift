@@ -18,15 +18,17 @@ enum IntegrationSource: String, CaseIterable, Sendable {
     case herDownload = "her-download"
     case bigFish = "big-fish"
     case bigFishTrial = "big-fish-trial"
+    case download
 
     /// Whether the source's suite tests `game`, given the games with Her
-    /// downloads in installers/.
-    func tests(_ game: CatalogGame, herDownloads: Set<String>) -> Bool {
+    /// downloads in installers/ and those with a download edition.
+    func tests(_ game: CatalogGame, herDownloads: Set<String>, downloads: Set<String>) -> Bool {
         switch self {
         case .disk: true
         case .steam: game.isOnSteam
         case .herDownload: herDownloads.contains(game.slug)
         case .bigFish, .bigFishTrial: game.isOnBigFish
+        case .download: downloads.contains(game.slug)
         }
     }
 }
@@ -53,6 +55,8 @@ struct TestRunner {
         // Real Big Fish downloads: `sc test integration --source big-fish` and `big-fish-trial`.
         "BigFishOwnedInstallIntegrationTests",
         "BigFishTrialInstallIntegrationTests",
+        // Real downloads of free games: `sc test integration --source download`.
+        "DownloadInstallIntegrationTests",
     ]
 
     static var unitSelection: [String] {
@@ -67,6 +71,7 @@ struct TestRunner {
         case .herDownload: "HerDownloadInstallIntegrationTests"
         case .bigFish: "BigFishOwnedInstallIntegrationTests"
         case .bigFishTrial: "BigFishTrialInstallIntegrationTests"
+        case .download: "DownloadInstallIntegrationTests"
         }
     }
 
@@ -140,10 +145,12 @@ struct TestRunner {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
         // Steam; the Her suite, those with a Her download in installers/; the
-        // Big Fish suites, those Big Fish sells.
+        // Big Fish suites, those Big Fish sells; the download suite, those
+        // with a download edition.
         let withHerDownloads = Set(Games.withHerDownloads(in: repo.defaultInstallersDir).map(\.slug))
+        let toDownload = Set(DownloadSourceOptions().availableGames(repo: repo).map(\.slug))
         let entries = sources.flatMap { source in
-            games.filter { source.tests($0, herDownloads: withHerDownloads) }.map { (source: source.rawValue, game: $0) }
+            games.filter { source.tests($0, herDownloads: withHerDownloads, downloads: toDownload) }.map { (source: source.rawValue, game: $0) }
         }
         if entries.isEmpty {
             throw SCError("None of those games can be built from \(sources.map(\.rawValue).joined(separator: " or ")).",

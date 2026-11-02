@@ -7,6 +7,7 @@
 //  that module.
 
 import Foundation
+import GameCatalog
 import SecondChanceKit
 import WrappBuilder
 
@@ -42,7 +43,7 @@ enum TestData {
     static func program(of wrapp: Wrapp) -> String {
         let layout = WrappLayout(app: URL(fileURLWithPath: wrapp.appPath))
         if let lock = try? WrappLock(of: layout) { return lock.bundle.id }
-        return "nancy-drew/" + wrapp.gameSlug
+        return GameInfoProvider.shared.gameInfo(for: wrapp.gameSlug).programID
     }
 
     /// One module's needles alone, for looking at a screenshot with no game

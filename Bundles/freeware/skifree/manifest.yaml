@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "freeware/skifree"
+version: 1
+title: "SkiFree"
+display-name: "SkiFree"
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/SkiFree/ski32.exe" } }
+
+editions:
+  - id: "download"
+    source: "download"
+    build: { target: "download" }
+    licence: "free-release"                  # its author gives it away; Microsoft holds the copyright
+    licence-from: "the author's website"
+    inputs:
+      - id: "game"
+        urls:                                # tried in order; the hash alone decides
+          - "https://ski.ihoc.net/ski32.exe"
+          - "https://web.archive.org/web/20110929074042id_/http://ski.ihoc.net/ski32.exe"
+        sha256: "3572d3757638bc1ae388c3d007ba59ba1f370911901e2a35d2f1297e8cf0ff35"
+        size: 118784
+        unpack: "none"                       # a bare program, nothing to install
+        install: "none"
+
+tests:
+  scenario: "wine/starts-and-quits"
+
+notes:                                       # for people only; nothing reads these
+  about: "Chris Pirih's 1991 skiing game, in the 32-bit build he made in 2005. The first program beyond Nancy Drew, and the first download edition."
+  checked: "2026-11-03: the author's URL and the 2011 Wayback capture (id_) both give the file with this sha256."

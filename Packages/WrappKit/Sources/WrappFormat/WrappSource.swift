@@ -12,6 +12,9 @@ public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable
     case herDownload = "her-download"
     case steam = "steam"
     case bigFish = "big-fish"
+    /// A program its makers give away, downloaded from where they put it
+    /// (or an archive's copy of it): hidden until asked for.
+    case download = "download"
 
     public var id: String { rawValue }
 
@@ -25,6 +28,8 @@ public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable
             return "Steam"
         case .bigFish:
             return "Big Fish Games"
+        case .download:
+            return "Free from the internet"
         }
     }
 
@@ -38,6 +43,8 @@ public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable
             return "A game in your Steam library"
         case .bigFish:
             return "A game in your Big Fish library"
+        case .download:
+            return "A game its makers give away"
         }
     }
 }

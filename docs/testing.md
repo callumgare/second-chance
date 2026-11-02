@@ -636,8 +636,10 @@ handlers:
   found, in order.
 - **Actions**: `click` (the needle's click point), `{ click: { x, y } }` (a
   point of the window), `{ check: "menu" }` (the picture's bars, and
-  switching away and back, below) and `expect-end` (the click before it
-  should end the game: once it has, only that handler runs again).
+  switching away and back, below), `expect-end` (the click before it
+  should end the game: once it has, only that handler runs again) and
+  `quit` (ask the program to quit as its app's Quit does, and expect it to
+  end).
 - **`retry-after`** is how long a screen still showing after its handler
   clicked it waits before another click; **`once`** runs a handler once;
   **`repeat-where-last-seen`** clicks where its needle was last found when
@@ -651,6 +653,10 @@ handlers:
   the first-click check and the checks a handler can ask for; a scenario
   only says what to wait for and do in between. `goal` is `program-ends`,
   the only one so far, and `timeout` the seconds it has.
+
+A program with no menu to quit from uses the wine module's
+`scenarios/starts-and-quits.yaml`: when its bundle's `running` needles show,
+it quits. SkiFree's is the text on its slope ("Start", "Chris Pirih").
 
 An edition with another title screen adds a needle under the same tag, and
 leaves the scenario alone. Handler patches by id and shared fragments of
