@@ -4,6 +4,16 @@
     "" : {
 
     },
+    "%@ (build %@)" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ (build %2$@)"
+          }
+        }
+      }
+    },
     "%@ didn't quit." : {
 
     },
@@ -119,6 +129,15 @@
         }
       }
     },
+    "A %@ failure report was sent." : {
+
+    },
+    "A basic report sends only this:" : {
+
+    },
+    "A detailed report sends this, and the files listed beside it:" : {
+
+    },
     "A fix for the game couldn't be added" : {
 
     },
@@ -126,6 +145,15 @@
 
     },
     "A previous copy of the game is still running…" : {
+
+    },
+    "A random number for this copy of Second Chance, not linked to you" : {
+
+    },
+    "About the failure" : {
+
+    },
+    "Add a Comment…" : {
 
     },
     "Adds a menu with the log of what Second Chance is doing, and settings for testing it." : {
@@ -155,10 +183,16 @@
     "Basic" : {
 
     },
+    "Basic Report" : {
+
+    },
     "Cancel" : {
 
     },
     "Category" : {
+
+    },
+    "Caused by" : {
 
     },
     "Check for Updates…" : {
@@ -215,6 +249,9 @@
     "Copy Message" : {
 
     },
+    "Copy protection" : {
+
+    },
     "Copy the game's files but don't run its installer, for testing a wrapp's set-up without waiting for an install." : {
 
     },
@@ -245,13 +282,31 @@
     "Detailed" : {
 
     },
+    "Detailed Report" : {
+
+    },
+    "Details" : {
+
+    },
     "Don't Send" : {
+
+    },
+    "Don't send reports" : {
 
     },
     "Done" : {
 
     },
     "Eject Disc 1" : {
+
+    },
+    "Email, if you'd like a reply (optional)" : {
+
+    },
+    "Engine" : {
+
+    },
+    "Exit code" : {
 
     },
     "Export" : {
@@ -269,6 +324,12 @@
     "Failure Reports" : {
 
     },
+    "Files" : {
+
+    },
+    "Game" : {
+
+    },
     "Her Interactive made a fix for this game, \"%@\", and Second Chance couldn't add it. The game will still work without it. What it fixes:\n\n%@" : {
       "localizations" : {
         "en" : {
@@ -278,6 +339,12 @@
           }
         }
       }
+    },
+    "How it failed" : {
+
+    },
+    "How much should the failure report include?" : {
+
     },
     "How should %@ start?" : {
 
@@ -321,7 +388,13 @@
     "Install from Steam…" : {
 
     },
+    "Installation ID" : {
+
+    },
     "Installation steps" : {
+
+    },
+    "Installed from" : {
 
     },
     "Installing %@" : {
@@ -360,6 +433,9 @@
     "Keep Installing" : {
 
     },
+    "Later reports are sent the same way." : {
+
+    },
     "Launch Directly" : {
 
     },
@@ -375,6 +451,15 @@
     "Log lines will appear here as the app runs." : {
 
     },
+    "Mac" : {
+
+    },
+    "Memory" : {
+
+    },
+    "Memory running short" : {
+
+    },
     "Message" : {
 
     },
@@ -384,10 +469,16 @@
     "Move to Applications" : {
 
     },
+    "No" : {
+
+    },
     "No Logs" : {
 
     },
     "No Matching Lines" : {
+
+    },
+    "No failure report was sent." : {
 
     },
     "Not Now" : {
@@ -417,13 +508,22 @@
     "Open a previously saved log file and show it here instead of the live logs." : {
 
     },
+    "Opened from a temporary copy" : {
+
+    },
     "Part of Second Chance is damaged. Download Second Chance again and try once more." : {
 
     },
     "Part of Second Chance is missing. Download Second Chance again and try once more." : {
 
     },
+    "Picture of a window: %@" : {
+
+    },
     "Play Now" : {
+
+    },
+    "Putting the report together…" : {
 
     },
     "Quit" : {
@@ -449,6 +549,12 @@
 
     },
     "Replace" : {
+
+    },
+    "Report" : {
+
+    },
+    "Report %@" : {
 
     },
     "Reports go to the developer, through Sentry, a service that collects reports like these." : {
@@ -523,6 +629,9 @@
     "Second Chance needs Rosetta" : {
 
     },
+    "Second Chance version" : {
+
+    },
     "Second Chance wants to install Rosetta, which the games need." : {
 
     },
@@ -532,13 +641,31 @@
     "Send" : {
 
     },
+    "Send Basic Report" : {
+
+    },
+    "Send Comment" : {
+
+    },
+    "Send Detailed Report" : {
+
+    },
     "Send a basic report" : {
 
     },
     "Send a detailed report" : {
 
     },
+    "Send a report about this, so it can be fixed?" : {
+
+    },
     "Send success reports" : {
+
+    },
+    "Sending a failure report before quitting…" : {
+
+    },
+    "Sending a failure report…" : {
 
     },
     "Setting up the game's display" : {
@@ -565,6 +692,9 @@
     "Show Run Log in Finder" : {
 
     },
+    "Show What's Sent…" : {
+
+    },
     "Show all lines, only warnings and above, or only errors and above." : {
 
     },
@@ -584,6 +714,9 @@
 
     },
     "Sign in to Steam" : {
+
+    },
+    "Signal" : {
 
     },
     "Signed out of Steam" : {
@@ -652,6 +785,9 @@
     "Steam waited for you to sign in, but nobody did. Try again when you're ready, and sign in when Steam's window appears." : {
 
     },
+    "Step" : {
+
+    },
     "Stop Installing" : {
 
     },
@@ -662,6 +798,12 @@
 
     },
     "Success Reports" : {
+
+    },
+    "Summary of the failure" : {
+
+    },
+    "Thanks — your comment was sent with it." : {
 
     },
     "That file is a copy of a game disc in a form a Mac can't open. Choose the game's disc instead." : {
@@ -698,6 +840,9 @@
 
     },
     "The game you're adding can't be installed until it quits." : {
+
+    },
+    "The game's app" : {
 
     },
     "The game's installer stopped responding, so installing was stopped. Try again." : {
@@ -786,6 +931,18 @@
     "Waiting for you to sign in to Steam" : {
 
     },
+    "What failed" : {
+
+    },
+    "What happened" : {
+
+    },
+    "What were you doing when it went wrong?" : {
+
+    },
+    "What's Sent in a Report" : {
+
+    },
     "What's in a report?" : {
 
     },
@@ -795,10 +952,22 @@
     "When a game is set up or played, say whether it worked: which game, where it came from, and the Second Chance and macOS versions. Nothing about you or your files is sent. It shows which games are known to work." : {
 
     },
+    "Where" : {
+
+    },
+    "Where it happened" : {
+
+    },
     "Which game do you want from Steam?" : {
 
     },
+    "Which part of the code each thread was running when it crashed" : {
+
+    },
     "Which program should it try?" : {
+
+    },
+    "Yes" : {
 
     },
     "You can change this any time in Settings." : {
@@ -828,7 +997,13 @@
     "Your games will ask you to sign in to Steam again the next time they need it." : {
 
     },
+    "Your name, your Mac's name and your folders are taken out of everything above." : {
+
+    },
     "Your success reports will help show which games work." : {
+
+    },
+    "macOS version" : {
 
     }
   },

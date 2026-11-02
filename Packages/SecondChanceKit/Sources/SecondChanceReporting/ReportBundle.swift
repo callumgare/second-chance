@@ -32,11 +32,43 @@ nonisolated enum ReportBundle {
     ///   - screenshots: PNGs of the windows, which go in as they are.
     static func make(log: String, diagnostics: URL?, crashReport: URL? = nil, screenshots: [URL] = [],
                      redactor: ReportRedactor, in directory: URL, sizeCap: Int = defaultSizeCap) throws -> URL {
+        let staging = try stage(log: log, diagnostics: diagnostics, crashReport: crashReport, screenshots: screenshots,
+                                redactor: redactor, in: directory)
+        let logFile = staging.appendingPathComponent(logFileName)
+        var logText = try String(contentsOf: logFile, encoding: .utf8)
+        let pictures = staging.appendingPathComponent("screenshots", isDirectory: true)
+
+        let zip = directory.appendingPathComponent("failure-report.zip")
+        try compress(staging, to: zip)
+        if size(of: zip) > sizeCap {
+            for sample in samples(in: staging) {
+                try? FileManager.default.removeItem(at: sample)
+            }
+            try compress(staging, to: zip)
+        }
+        if size(of: zip) > sizeCap, FileManager.default.fileExists(atPath: pictures.path) {
+            try? FileManager.default.removeItem(at: pictures)
+            try compress(staging, to: zip)
+        }
+        // Then the log's oldest half, until it fits or there's little left.
+        while size(of: zip) > sizeCap, logText.utf8.count > 64 * 1024 {
+            logText = "[earlier lines left out to fit the report]\n" + String(logText.suffix(logText.count / 2))
+            try Data(logText.utf8).write(to: logFile)
+            try compress(staging, to: zip)
+        }
+        logger.debug("Failure report bundle is \(size(of: zip)) bytes")
+        return zip
+    }
+
+    static let logFileName = "log.txt"
+
+    /// The files the zip is made of, redacted, in a `failure-report` folder
+    /// in `directory`, which is returned. What `ReportPreview` shows.
+    static func stage(log: String, diagnostics: URL?, crashReport: URL? = nil, screenshots: [URL] = [],
+                      redactor: ReportRedactor, in directory: URL) throws -> URL {
         let staging = directory.appendingPathComponent("failure-report", isDirectory: true)
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
-        let logFile = staging.appendingPathComponent("log.txt")
-        var logText = redactor.redact(log)
-        try Data(logText.utf8).write(to: logFile)
+        try Data(redactor.redact(log).utf8).write(to: staging.appendingPathComponent(logFileName))
 
         if let diagnostics {
             let copy = staging.appendingPathComponent("diagnostics", isDirectory: true)
@@ -75,26 +107,7 @@ nonisolated enum ReportBundle {
             }
         }
 
-        let zip = directory.appendingPathComponent("failure-report.zip")
-        try compress(staging, to: zip)
-        if size(of: zip) > sizeCap {
-            for sample in samples(in: staging) {
-                try? FileManager.default.removeItem(at: sample)
-            }
-            try compress(staging, to: zip)
-        }
-        if size(of: zip) > sizeCap, FileManager.default.fileExists(atPath: pictures.path) {
-            try? FileManager.default.removeItem(at: pictures)
-            try compress(staging, to: zip)
-        }
-        // Then the log's oldest half, until it fits or there's little left.
-        while size(of: zip) > sizeCap, logText.utf8.count > 64 * 1024 {
-            logText = "[earlier lines left out to fit the report]\n" + String(logText.suffix(logText.count / 2))
-            try Data(logText.utf8).write(to: logFile)
-            try compress(staging, to: zip)
-        }
-        logger.debug("Failure report bundle is \(size(of: zip)) bytes")
-        return zip
+        return staging
     }
 
     /// The diagnostics bundle's `ps -A` names every program running on the

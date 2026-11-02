@@ -70,6 +70,15 @@ nonisolated public enum RunContext {
         return sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0 && translated == 1
     }
 
+    /// This process's architecture: `arm64`, `x86_64`, or `x86_64 under Rosetta`.
+    public static var processArchitecture: String {
+        #if arch(x86_64)
+        return isTranslated ? "x86_64 under Rosetta" : "x86_64"
+        #else
+        return "arm64"
+        #endif
+    }
+
     /// The lines of the header, without logging them.
     static func headerLines(extra: [(String, String)] = []) -> [String] {
         let info = Bundle.main.infoDictionary
@@ -77,11 +86,7 @@ nonisolated public enum RunContext {
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         let os = ProcessInfo.processInfo.operatingSystemVersion
-        #if arch(x86_64)
-        let arch = isTranslated ? "x86_64 under Rosetta" : "x86_64"
-        #else
-        let arch = "arm64"
-        #endif
+        let arch = processArchitecture
         let session = hasWindowServerSession
             ? "GUI session (\(launchdSession ?? "unknown"))"
             : "no GUI session (\(launchdSession ?? "unknown")) — Wine can't open windows here (run through `sc in-gui-session`)"
@@ -111,7 +116,8 @@ nonisolated public enum RunContext {
         }
     }
 
-    private static func machineModel() -> String {
+    /// The Mac's model identifier (`Mac14,2`).
+    public static func machineModel() -> String {
         var size = 0
         guard sysctlbyname("hw.model", nil, &size, nil, 0) == 0, size > 0 else { return "unknown Mac" }
         var buffer = [UInt8](repeating: 0, count: size)

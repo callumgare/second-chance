@@ -28,6 +28,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .detailed: current = String(localized: "When the game fails to start, a detailed report is sent, with the log (your name and folders taken out).")
         case .basic: current = String(localized: "When the game fails to start, a basic report is sent: which game, and what failed.")
         case .manual: current = String(localized: "When the game fails to start, you're asked what to send.")
+        case .off: current = String(localized: "Failure reports are turned off: nothing is sent when the game fails to start.")
         }
         let success = preferences.successReports == true
             ? String(localized: "Success reports are on: Second Chance counts when a game starts, and whether it worked.")

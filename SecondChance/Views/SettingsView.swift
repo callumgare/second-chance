@@ -27,6 +27,7 @@ struct SettingsView: View {
                     Text("Send a detailed report").tag(ReportLevel.detailed)
                     Text("Send a basic report").tag(ReportLevel.basic)
                     Text("Ask me each time").tag(ReportLevel.manual)
+                    Text("Don't send reports").tag(ReportLevel.off)
                 }
                 .pickerStyle(.radioGroup)
 
@@ -146,6 +147,8 @@ struct SettingsView: View {
             return "Every failure is reported with only which game it was and what failed — enough to know it happens, rarely enough to fix it."
         case .manual:
             return "When something fails, you choose whether to send a detailed report, a basic one, or nothing."
+        case .off:
+            return "Nothing is sent when something fails. Reports are how problems with the games get found and fixed, so please consider turning them back on."
         }
     }
 }

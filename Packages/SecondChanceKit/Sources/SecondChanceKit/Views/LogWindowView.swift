@@ -287,6 +287,9 @@ private struct LogCell: View {
 /// The log window's content: an options bar above a Console-style table.
 struct LogWindowView: View {
     @ObservedObject var model: LogDisplayModel
+    /// Export, Import and the imported file's banner: off where the view
+    /// shows one fixed log (`LogFileView`).
+    var showsFileControls = true
     /// The selected rows: click, Shift-click for a range, Command-click to
     /// add or remove one, as in any macOS list. Edit ▸ Copy (⌘C) copies them.
     @State private var selection = Set<LogRow.ID>()
@@ -300,10 +303,11 @@ struct LogWindowView: View {
             LogFilterBar(
                 model: model,
                 shownCount: filteredRows.count,
-                totalCount: model.rows.count
+                totalCount: model.rows.count,
+                showsFileControls: showsFileControls
             )
             Divider()
-            if case .importedFile(let url) = model.source {
+            if showsFileControls, case .importedFile(let url) = model.source {
                 ImportedFileBar(url: url) {
                     model.source = .live
                 }
@@ -483,6 +487,7 @@ private struct LogFilterBar: View {
     @ObservedObject var model: LogDisplayModel
     let shownCount: Int
     let totalCount: Int
+    let showsFileControls: Bool
 
     var body: some View {
         HStack(spacing: 14) {
@@ -502,28 +507,9 @@ private struct LogFilterBar: View {
 
             Spacer(minLength: 8)
 
-            Button {
-                model.exportLogs()
-            } label: {
-                if model.isExporting {
-                    Label("Exporting…", systemImage: "hourglass")
-                } else {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                }
+            if showsFileControls {
+                fileButtons
             }
-            .controlSize(.small)
-            .disabled(model.isExporting)
-            .help(model.source == .live
-                  ? "Save the full in-memory log history to a file."
-                  : "Save the displayed file's logs to a new file.")
-
-            Button {
-                model.importLogs()
-            } label: {
-                Label("Import", systemImage: "square.and.arrow.down.on.square")
-            }
-            .controlSize(.small)
-            .help("Open a previously saved log file and show it here instead of the live logs.")
 
             if model.levelFilter != .all {
                 Text("\(shownCount) of \(totalCount) lines")
@@ -540,5 +526,50 @@ private struct LogFilterBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var fileButtons: some View {
+        Button {
+            model.exportLogs()
+        } label: {
+            if model.isExporting {
+                Label("Exporting…", systemImage: "hourglass")
+            } else {
+                Label("Export", systemImage: "square.and.arrow.up")
+            }
+        }
+        .controlSize(.small)
+        .disabled(model.isExporting)
+        .help(model.source == .live
+              ? "Save the full in-memory log history to a file."
+              : "Save the displayed file's logs to a new file.")
+
+        Button {
+            model.importLogs()
+        } label: {
+            Label("Import", systemImage: "square.and.arrow.down.on.square")
+        }
+        .controlSize(.small)
+        .help("Open a previously saved log file and show it here instead of the live logs.")
+    }
+}
+
+// MARK: - A Fixed Log
+
+/// The log window's table, filter and compact mode for one log's text
+/// (either export format), without Export or Import: what a failure
+/// report's preview shows its log in.
+public struct LogFileView: View {
+    @StateObject private var model: LogDisplayModel
+
+    public init(text: String) {
+        let model = LogDisplayModel()
+        model.rows = LogRow.parse(fileContents: text)
+        _model = StateObject(wrappedValue: model)
+    }
+
+    public var body: some View {
+        LogWindowView(model: model, showsFileControls: false)
     }
 }

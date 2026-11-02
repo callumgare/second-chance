@@ -7,6 +7,7 @@
 //  making it happen for real. `welcome` is the README's picture.
 
 import SecondChanceKit
+import SecondChanceReporting
 import SwiftUI
 import GameCatalog
 
@@ -58,6 +59,26 @@ enum UIStateCatalog {
             window("error-steam-sign-in-timed-out") {
                 $0.selectedWrappSource = .steam
                 $0.currentState = .error(WrappBuildError.steamSignInTimedOut.playerMessage)
+            },
+            // The first failure anywhere: its report asks how detailed to send it.
+            window("error-first-failure") {
+                $0.selectedWrappSource = .disk
+                $0.currentState = .error(WrappBuildError.installStalled.playerMessage)
+                $0.failureReport.track(FailureReport(what: "Building the wrapp", kind: "WrappBuildError.installStalled"),
+                                       sending: Task { .askingHowDetailed })
+            },
+            // Show What's Sent…, with made-up values.
+            UIStateShot("report-preview-basic", title: "What's Sent in a Report",
+                        width: ReportPreviewSample.size.width, height: ReportPreviewSample.size.height) {
+                ReportPreviewSample.view(detail: .basic)
+            },
+            UIStateShot("report-preview-detailed", title: "What's Sent in a Report",
+                        width: ReportPreviewSample.size.width, height: ReportPreviewSample.size.height) {
+                ReportPreviewSample.view(detail: .detailed)
+            },
+            UIStateShot("report-preview-log", title: "What's Sent in a Report",
+                        width: ReportPreviewSample.size.width, height: ReportPreviewSample.size.height) {
+                ReportPreviewSample.view(detail: .detailed, file: "log.txt")
             },
             window("completed") {
                 $0.selectedWrappSource = .steam

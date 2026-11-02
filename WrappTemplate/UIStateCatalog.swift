@@ -7,6 +7,7 @@
 //  without making it happen for real.
 
 import SecondChanceKit
+import SecondChanceReporting
 import SwiftUI
 
 @MainActor
@@ -64,6 +65,12 @@ enum UIStateCatalog {
             },
             window("error-quit-unexpectedly", .startingGame(title: "The White Wolf of Icicle Creek"), title: "The White Wolf of Icicle Creek") {
                 $0.phase = .error(exitCode: 0, explanation: "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it.")
+            },
+            // The first failure anywhere: its report asks how detailed to send it.
+            window("error-first-failure", .startingGame(title: "Stay Tuned for Danger")) {
+                $0.phase = .error(exitCode: 1, explanation: nil)
+                $0.failureReport.track(FailureReport(what: "Running the game", kind: "exit-code"),
+                                       sending: Task { .askingHowDetailed })
             },
             window("gave-up", .startingGame(title: "Stay Tuned for Danger")) { $0.phase = .gaveUp },
             window("quitting", .startingGame(title: "Stay Tuned for Danger")) { $0.phase = .quitting(.closing) },

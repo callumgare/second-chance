@@ -164,6 +164,10 @@ class WrappBuildViewModel {
                 stopStepTimer()
                 // A cancelled build goes back to the start once it has wound
                 // down (`runBuild`), whatever error it stopped with.
+                guard !isCancelling else { break }
+                // The report's pictures are of the step that failed, not
+                // the error screen about to replace it.
+                _ = await screenshotsBeforeError()
                 if !isCancelling { handleBuildFailure(error) }
             case .completed:
                 instructions = nil
@@ -344,6 +348,7 @@ class WrappBuildViewModel {
     private func performBuildLogged(_ builder: WrappBuildStrategy) async {
         // A new build: none of the last one's stage carries over to it.
         LogContext.clearStage()
+        failureScreenshots = nil
         lastProgressState = nil
         lastBuildError = nil
         let input = makeInput(self)
@@ -360,11 +365,13 @@ class WrappBuildViewModel {
             if isCancelling { return }
             if !Self.isCancellation(error) {
                 let summary = FailureSummary.log(logger, what: "Building the wrapp", error: error)
-                failureReport.report(FailureReport(
+                var report = FailureReport(
                     what: "Building the wrapp", error: error, game: detectedGame?.id,
                     source: selectedWrappSource?.rawValue, engine: detectedGame?.gameEngine.rawValue,
                     summary: summary
-                ))
+                )
+                report.screenshots = await screenshotsBeforeError()
+                failureReport.report(report)
                 recordBuild(outcome: ErrorChain.identifier(error))
             }
             handleBuildFailure(error)
@@ -372,6 +379,18 @@ class WrappBuildViewModel {
     }
 
     // MARK: - Helper Methods
+
+    /// The windows as the build failed, taken once for the failure's report
+    /// by whichever comes first — the bus's `.failed`, or the build's own
+    /// catch — and awaited by both before the error screen shows.
+    private var failureScreenshots: Task<ReportScreenshots?, Never>?
+
+    private func screenshotsBeforeError() async -> ReportScreenshots? {
+        if failureScreenshots == nil {
+            failureScreenshots = Task { await ReportScreenshots.capture() }
+        }
+        return await failureScreenshots?.value
+    }
 
     /// Count the build for the success reports, if the person said yes.
     private func recordBuild(outcome: String) {

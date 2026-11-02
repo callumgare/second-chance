@@ -22,6 +22,9 @@ nonisolated public enum ReportLevel: String, Codable, CaseIterable, Sendable {
     case basic
     /// Ask at each failure: detailed, basic, or nothing.
     case manual
+    /// Send nothing, and don't ask. Only Settings chooses it: the
+    /// first-failure question offers a basic or a detailed report.
+    case off
 }
 
 nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
@@ -38,7 +41,7 @@ nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
     public var detailWithoutAsking: ReportDetail? {
         guard promptShown else { return nil }
         switch level {
-        case .manual: return nil
+        case .manual, .off: return nil
         case .basic: return .basic
         case .detailed: return .detailed
         }
@@ -50,13 +53,32 @@ nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
         self.successReports = successReports
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case level, promptShown, successReports, off
+    }
+
     /// Read key by key, so a file missing one (an older or newer version's)
     /// keeps what it does say rather than failing whole.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         level = try container.decodeIfPresent(ReportLevel.self, forKey: .level) ?? .basic
+        if try container.decodeIfPresent(Bool.self, forKey: .off) == true {
+            level = .off
+        }
         promptShown = try container.decodeIfPresent(Bool.self, forKey: .promptShown) ?? false
         successReports = try container.decodeIfPresent(Bool.self, forKey: .successReports)
+    }
+
+    /// Off is saved as Manual with `off` beside it. Wrapps built by an older
+    /// Second Chance read the same file and know no `off` level: one they
+    /// can't read would leave them sending at their defaults, where Manual
+    /// leaves them asking first.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(level == .off ? .manual : level, forKey: .level)
+        if level == .off { try container.encode(true, forKey: .off) }
+        try container.encode(promptShown, forKey: .promptShown)
+        try container.encodeIfPresent(successReports, forKey: .successReports)
     }
 
     /// The most private setting: ask before sending anything, and count
@@ -64,14 +86,9 @@ nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
     /// the person may have chosen exactly that.
     static let mostPrivate = ReportingPreferences(level: .manual, promptShown: true, successReports: false)
 
-    /// The answer to the first-failure question: send at `detail` from now
-    /// on, or (nil, Don't Send) ask each time.
-    mutating func answerFirstQuestion(_ detail: ReportDetail?) {
-        level = switch detail {
-        case .detailed: .detailed
-        case .basic: .basic
-        case nil: .manual
-        }
+    /// The answer to the first-failure question: send at `detail` from now on.
+    mutating func answerFirstQuestion(_ detail: ReportDetail) {
+        level = detail == .detailed ? .detailed : .basic
         promptShown = true
     }
 
@@ -101,6 +118,11 @@ nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
         try encoder.encode(self).write(to: directory.appendingPathComponent(Self.fileName), options: .atomic)
     }
 
+    /// Posted to every process (a distributed notification) when the
+    /// settings are saved, so an error screen in Second Chance or any wrapp
+    /// still asking about a report can follow a choice made in Settings.
+    static let changedNotification = Notification.Name("au.gare.callum.second-chance.ReportingPreferencesChanged")
+
     /// Load, change and save in one step, logging rather than throwing: a
     /// setting that fails to save is not worth interrupting anyone over.
     @discardableResult
@@ -109,6 +131,8 @@ nonisolated public struct ReportingPreferences: Codable, Equatable, Sendable {
         change(&preferences)
         do {
             try preferences.save(to: directory)
+            DistributedNotificationCenter.default().postNotificationName(changedNotification, object: directory.path,
+                                                                         userInfo: nil, deliverImmediately: true)
         } catch {
             logger.error("Can't save the failure report settings: \(error.localizedDescription)")
         }

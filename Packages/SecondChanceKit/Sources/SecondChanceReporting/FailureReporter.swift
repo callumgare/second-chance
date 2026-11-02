@@ -44,7 +44,8 @@ nonisolated public enum FailureReporter {
         /// it is dropped rather than sent round for ever.
         var heldBack: Set<String> = []
         /// A first failure whose screen is asking how detailed to send it.
-        /// Sent basic if the process leaves before it is answered.
+        /// Sent basic if the process leaves before it is answered, unless
+        /// Settings has since said otherwise (`unansweredDetail`).
         var unanswered: FailureReport?
     }
     private static let state = OSAllocatedUnfairLock(initialState: State())
@@ -149,11 +150,17 @@ nonisolated public enum FailureReporter {
         logger.notice("Failure reports are on (\(ReportingPreferences.load().level.rawValue))")
     }
 
-    /// The source, kept for the life of the process, and whether it has
-    /// seen the critical level yet.
-    private static let memoryPressure = OSAllocatedUnfairLock<(source: DispatchSourceMemoryPressure?, critical: Bool)>(
-        uncheckedState: (nil, false)
+    /// The source, kept for the life of the process, and the worst level it
+    /// has seen: `normal`, `warning` or `critical`, as the tag says.
+    private static let memoryPressure = OSAllocatedUnfairLock<(source: DispatchSourceMemoryPressure?, worst: String)>(
+        uncheckedState: (nil, "normal")
     )
+
+    /// What the `memory_pressure` tag says now.
+    static var worstMemoryPressure: String { memoryPressure.withLockUnchecked { $0.worst } }
+
+    /// This process: the app or a wrapp.
+    static var process: Process? { state.withLock { $0.process } }
 
     /// Keep the `memory_pressure` tag at the worst the Mac has been under
     /// in this run, so a crash's report (the SDK stores the scope with it)
@@ -165,8 +172,9 @@ nonisolated public enum FailureReporter {
             let level = critical ? "critical" : "warning"
             logger.warning("The Mac is short of memory (pressure: \(level))")
             let worse = memoryPressure.withLockUnchecked { state -> Bool in
-                defer { state.critical = state.critical || critical }
-                return !state.critical
+                guard state.worst != "critical", state.worst != level else { return false }
+                state.worst = level
+                return true
             }
             if worse { SentrySDK.configureScope { $0.setTag(value: level, key: "memory_pressure") } }
         }
@@ -181,12 +189,12 @@ nonisolated public enum FailureReporter {
     }
 
     /// What a crash from the previous run is sent as without asking: the
-    /// setting's detail, or nil when the setting is to ask.
+    /// setting's detail, or nil when the setting is to ask or is off.
     static func defaultCrashDetail(for level: ReportLevel) -> ReportDetail? {
         switch level {
         case .detailed: return .detailed
         case .basic: return .basic
-        case .manual: return nil
+        case .manual, .off: return nil
         }
     }
 
@@ -214,16 +222,21 @@ nonisolated public enum FailureReporter {
     /// Report a failure at the detail the setting asks for. Nothing is sent
     /// for the first failure (the error screen asks how detailed to send it)
     /// or with the setting at Manual (it asks whether to): the screen calls
-    /// `send` with the answer.
+    /// `send` with the answer. With it Off, nothing is sent or asked.
     public static func report(_ report: FailureReport) async -> ReportOutcome {
         guard isEnabled else { return .disabled }
         let preferences = ReportingPreferences.load()
+        if preferences.level == .off {
+            logger.notice("Not sending a failure report: they are turned off in Settings")
+            return .declined
+        }
         if !preferences.promptShown {
             state.withLock { $0.unanswered = report }
             return .askingHowDetailed
         }
         switch preferences.level {
         case .manual: return .awaitingChoice
+        case .off: return .declined
         case .basic: return await send(report, detail: .basic)
         case .detailed: return await send(report, detail: .detailed)
         }
@@ -283,7 +296,11 @@ nonisolated public enum FailureReporter {
             let diagnostics = await report.diagnostics?()
             do {
                 try FileManager.default.createDirectory(at: workDirectory, withIntermediateDirectories: true)
-                let screenshots = await WindowScreenshots.capture(into: workDirectory)
+                let screenshots: [URL] = if let taken = report.screenshots {
+                    taken.files
+                } else {
+                    await WindowScreenshots.capture(into: workDirectory)
+                }
                 let zip = try ReportBundle.make(log: LogExporter.render(), diagnostics: diagnostics,
                                                 screenshots: screenshots, redactor: redactor, in: workDirectory)
                 attachment = Attachment(path: zip.path, filename: "failure-report.zip", contentType: "application/zip")
@@ -318,17 +335,31 @@ nonisolated public enum FailureReporter {
         state.withLock { if $0.unanswered?.id == report.id { $0.unanswered = nil } }
     }
 
-    /// Posted, on the main queue, when a report is sent basic because the
-    /// person quit without answering how detailed to send it; the object is
-    /// the report's `id`, for its error screen to show it being sent.
+    /// Posted, on the main queue, when a report is sent because the person
+    /// quit without answering how detailed to send it; the object is the
+    /// report's `id`, for its error screen to show it being sent.
     static let sendingUnansweredOnQuit = Notification.Name("FailureReporterSendingUnansweredOnQuit")
 
-    /// Leaving with the first-failure question unanswered: send it basic.
+    /// What an unanswered first failure is sent as on the way out: basic,
+    /// unless the setting was chosen in Settings while the question was up,
+    /// in which case the setting decides — nothing, if it is now Off or
+    /// Manual.
+    static func unansweredDetail(_ preferences: ReportingPreferences) -> ReportDetail? {
+        preferences.promptShown ? preferences.detailWithoutAsking : .basic
+    }
+
+    /// Leaving with the first-failure question unanswered: send it basic,
+    /// or as Settings now says.
     @discardableResult
-    private static func sendUnansweredAsBasic() -> Task<ReportOutcome, Never>? {
+    private static func sendUnanswered() -> Task<ReportOutcome, Never>? {
         guard let report = state.withLock({ $0.unanswered }) else { return nil }
-        logger.notice("Leaving before choosing how detailed a report to send: sending it basic")
-        let task = sendInBackground(report, detail: .basic)
+        guard let detail = unansweredDetail(ReportingPreferences.load()) else {
+            logger.notice("Leaving before choosing how detailed a report to send, with reports since set not to send: sending nothing")
+            decline(report)
+            return nil
+        }
+        logger.notice("Leaving before choosing how detailed a report to send: sending it \(detail.rawValue)")
+        let task = sendInBackground(report, detail: detail)
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: sendingUnansweredOnQuit, object: report.id)
         }
@@ -347,7 +378,7 @@ nonisolated public enum FailureReporter {
     /// itself for ever.
     @MainActor
     public static func sendUnansweredBeforeQuitting(then quitAgain: @escaping @MainActor () -> Void) -> Bool {
-        guard let task = sendUnansweredAsBasic() else { return false }
+        guard let task = sendUnanswered() else { return false }
         let started = Date()
         Task.detached {
             _ = await task.value
@@ -408,7 +439,7 @@ nonisolated public enum FailureReporter {
                 logger.warning("Gave up waiting \(Int(timeout))s for a failure report to be ready")
             }
         }
-        sendUnansweredAsBasic()
+        sendUnanswered()
         if sending.wait(timeout: deadline) == .timedOut {
             logger.warning("Gave up waiting \(Int(timeout))s for a failure report to be ready")
         }
@@ -440,24 +471,33 @@ nonisolated public enum FailureReporter {
         }
         logger.error("\(line)")
         let preferences = ReportingPreferences.load()
+        // What Show What's Sent… shows, put together only if asked for.
+        let tags = event.tags ?? [:]
+        let crashedRunLog = previousRunLog(crashedAt: event.timestamp)
+        let preview: @MainActor () -> ReportPreview = {
+            ReportPreview.previousRunCrash(exception: exception, tags: tags, log: crashedRunLog,
+                                           crashReport: crashReport, process: process)
+        }
         let detail: ReportDetail?
-        if !canAsk(environment: ProcessInfo.processInfo.environment) {
+        if preferences.level == .off {
+            detail = nil
+        } else if !canAsk(environment: ProcessInfo.processInfo.environment) {
             detail = defaultCrashDetail(for: preferences.level)
             logger.notice("Nobody to ask about the previous run's crash: going by the setting (\(preferences.level))")
         } else if !preferences.promptShown {
-            let answer = CrashReportPrompt.askHowDetailed(process: process)
+            let answer = CrashReportPrompt.askHowDetailed(process: process, preview: preview)
             ReportingPreferences.update { $0.answerFirstQuestion(answer) }
             detail = answer
         } else if let fixed = defaultCrashDetail(for: preferences.level) {
             detail = fixed
         } else {
-            detail = CrashReportPrompt.askWhatToSend(process: process)
+            detail = CrashReportPrompt.askWhatToSend(process: process, preview: preview)
         }
         guard let detail else {
             logger.notice("Not sending the report of the previous run's crash, as asked")
             return
         }
-        let log = detail == .detailed ? previousRunLog(crashedAt: event.timestamp) : nil
+        let log = detail == .detailed ? crashedRunLog : nil
         let ips = detail == .detailed ? crashReport : nil
         sending.enter()
         DispatchQueue.global(qos: .utility).async {
@@ -538,10 +578,10 @@ nonisolated public enum FailureReporter {
             event.message = SentryMessage(formatted: redactor.redact(message))
         }
         for exception in event.exceptions ?? [] {
-            // A basic report says what kind of crash it was (the exception's
-            // type and mechanism) and where (its stack), but carries no
-            // message text, which can say anything.
-            exception.value = detail == .basic ? nil : exception.value.map { redactor.redact($0) }
+            // The crash's own message ("Unexpectedly found nil…", the
+            // fatalError text) is often all that says why, so both levels
+            // keep it, redacted like everything else.
+            exception.value = exception.value.map { redactor.redact($0) }
             redact(exception.stacktrace, with: redactor)
         }
         for thread in event.threads ?? [] {
