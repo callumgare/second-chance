@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/thornton-hall"
+version: 1
+title: "Ghost of Thornton Hall"
+series: "Nancy Drew"
+series-order: 29
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.thornton-hall"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Program Files (x86)/Her Interactive/Ghost of Thornton Hall/Thornton.exe", graphics: "direct-3d" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+    detect: { codes: ["GTH"] }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "her-mac"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "mac" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 226820, common-folder: "Nancy Drew The Ghost of Thornton Hall", exe: "Thornton.exe" }
+    drm: "launch-via-steam-only"
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 8778 }]
+
+notes:                                       # for people only; nothing reads these
+  quirks:
+    - "Her's Mac download hasn't been looked inside: it is taken to be a Cider build, as Trail of the Twister's is."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

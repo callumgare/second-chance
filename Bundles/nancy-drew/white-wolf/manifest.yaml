@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/white-wolf"
+version: 1
+title: "The White Wolf of Icicle Creek"
+series: "Nancy Drew"
+series-order: 17
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.white-wolf"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/The White Wolf of Icicle Creek/Game.exe", graphics: "direct-3d" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+      - { id: "disc-2" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 31930, common-folder: "Nancy Drew - The White Wolf of Icicle Creek", exe: "Game.exe" }
+    # drm left out: not known, so the game is started through Steam
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 2435 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/white-wolf.iss"
+  quirks:
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

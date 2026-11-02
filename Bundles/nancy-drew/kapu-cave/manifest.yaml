@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/kapu-cave"
+version: 1
+title: "The Creature of Kapu Cave"
+series: "Nancy Drew"
+series-order: 16
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.kapu-cave"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/The Creature of Kapu Cave/Game.exe", graphics: "direct-draw" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+      - { id: "disc-2" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 31900, common-folder: "Nancy Drew The Creature of Kapu Cave", exe: "Game.exe" }
+    # drm left out: not known, so the game is started through Steam
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 2491 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/kapu-cave.iss"
+  quirks:
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

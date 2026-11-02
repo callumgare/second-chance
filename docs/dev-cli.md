@@ -105,6 +105,11 @@ nobody to sign in, so `sc` passes the account to the app with
 builds the game's free trial instead, signed out, with no account needed
 ([big-fish.md](big-fish.md#testing)).
 
+**Bundles.** `sc bundle check [<folder>…]` checks program bundles against the
+manifest schema, `sc bundle list [--where <path>=<value>]` lists them by any
+manifest field, and `sc bundle catalog` regenerates GameCatalog's table of games
+from them ([program-bundles.md](program-bundles.md)).
+
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`
 works.

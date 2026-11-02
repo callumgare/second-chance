@@ -1,0 +1,321 @@
+//
+//  GameInfoProvider+Bundles.swift
+//  GameCatalog
+//
+//  Generated from the program bundles in Bundles/ by `sc bundle catalog`.
+//  Don't edit it: change the bundles and run that again. A test fails
+//  when this file isn't what the bundles make.
+
+nonisolated extension GameInfoProvider {
+    /// Every game a bundle describes, in the order lists show them.
+    static let bundledGames: [GameInfo] = [
+        GameInfo(
+            id: "secrets-can-kill",
+            title: "Secrets Can Kill",
+            diskCount: 2,
+            gameEngine: .scummvm
+        ),
+        GameInfo(
+            id: "secrets-can-kill-remastered",
+            title: "Secrets Can Kill Remastered",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew SCK/Secrets.exe",
+            steam: .init(appID: 42210, installDir: "Nancy Drew Secrets Can Kill", exe: "Secrets.exe"),
+            bigFish: 6180,
+            detectionAliases: ["nancy drew sck"]
+        ),
+        GameInfo(
+            id: "stay-tuned",
+            title: "Stay Tuned for Danger",
+            diskCount: 1,
+            gameEngine: .scummvm,
+            detectionCodes: ["STFD"]
+        ),
+        GameInfo(
+            id: "haunted-mansion",
+            title: "Message in a Haunted Mansion",
+            diskCount: 1,
+            gameEngine: .scummvm,
+            steamDRM: .no,
+            steam: .init(appID: 615770, installDir: "Nancy Drew Message in a Haunted Mansion", exe: "Game.exe"),
+            bigFish: 5517
+        ),
+        GameInfo(
+            id: "royal-tower",
+            title: "Treasure in the Royal Tower",
+            diskCount: 1,
+            gameEngine: .scummvm,
+            steamDRM: .no,
+            steam: .init(appID: 615780, installDir: "Nancy Drew Treasure in the Royal Tower", exe: "game.exe"),
+            bigFish: 5229
+        ),
+        GameInfo(
+            id: "final-scene",
+            title: "The Final Scene",
+            diskCount: 1,
+            gameEngine: .scummvm,
+            steam: .init(appID: 615730, installDir: "Nancy Drew The Final Scene", exe: "Game.exe"),
+            bigFish: 5230
+        ),
+        GameInfo(
+            id: "scarlet-hand",
+            title: "Secret of the Scarlet Hand",
+            diskCount: 1,
+            gameEngine: .scummvm,
+            steam: .init(appID: 31890, installDir: "Nancy Drew Secret of the Scarlet Hand", exe: "Game.exe"),
+            bigFish: 5087
+        ),
+        GameInfo(
+            id: "ghost-dogs",
+            title: "Ghost Dogs of Moon Lake",
+            diskCount: 1,
+            gameEngine: .scummvm,
+            steam: .init(appID: 31850, installDir: "Nancy Drew Ghost Dogs of Moon Lake", exe: "Game.exe"),
+            bigFish: 2493
+        ),
+        GameInfo(
+            id: "haunted-carousel",
+            title: "The Haunted Carousel",
+            diskCount: 1,
+            graphics: .directDraw,
+            internalGameExePath: "/Nancy Drew/The Haunted Carousel/Game.exe",
+            steam: .init(appID: 31820, installDir: "Nancy Drew The Haunted Carousel", exe: "Game.exe"),
+            bigFish: 2387,
+            doesNotExitInNonInteractiveMode: true
+        ),
+        GameInfo(
+            id: "deception-island",
+            title: "Danger on Deception Island",
+            diskCount: 1,
+            graphics: .directDraw,
+            internalGameExePath: "/Nancy Drew/Danger on Deception Island/Game.exe",
+            steam: .init(appID: 31840, installDir: "Nancy Drew Danger on Deception Island", exe: "Game.exe"),
+            bigFish: 1545,
+            doesNotExitInNonInteractiveMode: true
+        ),
+        GameInfo(
+            id: "shadow-ranch",
+            title: "The Secret of Shadow Ranch",
+            diskCount: 1,
+            graphics: .directDraw,
+            internalGameExePath: "/Nancy Drew/Secret of Shadow Ranch/Game.exe",
+            steamDRM: .no,
+            steam: .init(appID: 572740, installDir: "Nancy Drew The Secret of Shadow Ranch", exe: "Game.exe"),
+            bigFish: 7041,
+            doesNotExitInNonInteractiveMode: true
+        ),
+        GameInfo(
+            id: "blackmoor-manor",
+            title: "Curse of Blackmoor Manor",
+            diskCount: 1,
+            graphics: .directDraw,
+            internalGameExePath: "/Nancy Drew/The Curse of Blackmoor Manor/Game.exe",
+            steamDRM: .yesLaunchWhenSteamRunning,
+            steam: .init(appID: 31830, installDir: "Nancy Drew Curse of Blackmoor Manor", exe: "Game.exe"),
+            bigFish: 1439,
+            doesNotExitInNonInteractiveMode: true
+        ),
+        GameInfo(
+            id: "old-clock",
+            title: "Secret of the Old Clock",
+            diskCount: 1,
+            graphics: .directDraw,
+            internalGameExePath: "/Nancy Drew/Secret of the Old Clock/Game.exe",
+            steamDRM: .no,
+            steam: .init(appID: 31880, installDir: "Nancy Drew Secret of the Old Clock", exe: "Game.exe"),
+            bigFish: 1297,
+            doesNotExitInNonInteractiveMode: true
+        ),
+        GameInfo(
+            id: "blue-moon",
+            title: "Last Train to Blue Moon Canyon",
+            diskCount: 2,
+            graphics: .directDraw,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon/Game.exe",
+            steamDRM: .yesLaunchWhenSteamRunning,
+            steam: .init(appID: 31810, installDir: "Nancy Drew Last Train to Blue Moon Canyon", exe: "Game.exe"),
+            bigFish: 1111
+        ),
+        GameInfo(
+            id: "danger-by-design",
+            title: "Danger by Design",
+            diskCount: 2,
+            graphics: .directDraw,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/Danger by Design/Game.exe",
+            steam: .init(appID: 31800, installDir: "Nancy Drew Danger by Design", exe: "Game.exe"),
+            bigFish: 1207
+        ),
+        GameInfo(
+            id: "kapu-cave",
+            title: "The Creature of Kapu Cave",
+            diskCount: 2,
+            graphics: .directDraw,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/The Creature of Kapu Cave/Game.exe",
+            steam: .init(appID: 31900, installDir: "Nancy Drew The Creature of Kapu Cave", exe: "Game.exe"),
+            bigFish: 2491
+        ),
+        GameInfo(
+            id: "white-wolf",
+            title: "The White Wolf of Icicle Creek",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/The White Wolf of Icicle Creek/Game.exe",
+            steam: .init(appID: 31930, installDir: "Nancy Drew - The White Wolf of Icicle Creek", exe: "Game.exe"),
+            bigFish: 2435
+        ),
+        GameInfo(
+            id: "crystal-skull",
+            title: "Legend of the Crystal Skull",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/Legend of the Crystal Skull/Game.exe",
+            steam: .init(appID: 31860, installDir: "Nancy Drew Legend of The Crystal Skull", exe: "Game.exe"),
+            bigFish: 2234
+        ),
+        GameInfo(
+            id: "phantom-of-venice",
+            title: "The Phantom of Venice",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/The Phantom of Venice/PhantomOfVenice.exe",
+            steam: .init(appID: 31920, installDir: "Nancy Drew The Phantom of Venice", exe: "PhantomOfVenice.exe"),
+            bigFish: 2556
+        ),
+        GameInfo(
+            id: "castle-malloy",
+            title: "The Haunting of Castle Malloy",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/The Haunting of Castle Malloy/CastleMalloy.exe",
+            steam: .init(appID: 31910, installDir: "Nancy Drew The Haunting of Castle Malloy", exe: "CastleMalloy.exe"),
+            bigFish: 2699
+        ),
+        GameInfo(
+            id: "seven-ships",
+            title: "Ransom of the Seven Ships",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/Ransom of the Seven Ships/Ransom.exe",
+            steam: .init(appID: 31980, installDir: "Nancy Drew Ransom of the Seven Ships", exe: "Ransom.exe")
+        ),
+        GameInfo(
+            id: "waverly-academy",
+            title: "Warnings at Waverly Academy",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/Warnings at Waverly Academy/Waverly.exe",
+            steamDRM: .yesLaunchWhenSteamRunning,
+            steam: .init(appID: 43600, installDir: "Nancy Drew Warnings at Waverly Academy", exe: "Waverly.exe"),
+            bigFish: 5386
+        ),
+        GameInfo(
+            id: "trail-of-the-twister",
+            title: "Trail of the Twister",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/Trail of the Twister/Twister.exe",
+            steam: .init(appID: 42230, installDir: "Nancy Drew Trail of the Twister", exe: "Twister.exe"),
+            bigFish: 6262
+        ),
+        GameInfo(
+            id: "waters-edge",
+            title: "Shadow at the Water's Edge",
+            diskCount: 2,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/Shadow at the Water's Edge/Shadow.exe",
+            steamDRM: .yesLaunchWhenSteamRunning,
+            steam: .init(appID: 200080, installDir: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe"),
+            bigFish: 6327,
+            detectionAliases: ["shadow waters edge"]
+        ),
+        GameInfo(
+            id: "captive-curse",
+            title: "The Captive Curse",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Nancy Drew/The Captive Curse/Captive.exe",
+            steam: .init(appID: 42220, installDir: "Nancy Drew The Captive Curse", exe: "Captive.exe"),
+            bigFish: 7178,
+            detectionCodes: ["CAP"]
+        ),
+        GameInfo(
+            id: "alibi-in-ashes",
+            title: "Alibi in Ashes",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/Nancy Drew Alibi in Ashes/Alibi.exe",
+            steam: .init(appID: 202670, installDir: "Nancy Drew Alibi in Ashes", exe: "Alibi.exe"),
+            bigFish: 7313
+        ),
+        GameInfo(
+            id: "lost-queen",
+            title: "Tomb of the Lost Queen",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/Tomb of the Lost Queen/Tomb.exe",
+            steam: .init(appID: 210230, installDir: "Nancy Drew - Tomb of the Lost Queen", exe: "Tomb.exe"),
+            bigFish: 8059
+        ),
+        GameInfo(
+            id: "deadly-device",
+            title: "The Deadly Device",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/The Deadly Device/DeadlyDevice.exe",
+            steam: .init(appID: 220420, installDir: "Nancy Drew - TheDeadlyDevice", exe: "DeadlyDevice.exe"),
+            bigFish: 5587
+        ),
+        GameInfo(
+            id: "thornton-hall",
+            title: "Ghost of Thornton Hall",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/Ghost of Thornton Hall/Thornton.exe",
+            steamDRM: .yesLaunchViaSteamOnly,
+            steam: .init(appID: 226820, installDir: "Nancy Drew The Ghost of Thornton Hall", exe: "Thornton.exe"),
+            bigFish: 8778,
+            detectionCodes: ["GTH"]
+        ),
+        GameInfo(
+            id: "silent-spy",
+            title: "The Silent Spy",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/The Silent Spy/Spy.exe",
+            steam: .init(appID: 572730, installDir: "Nancy Drew The Silent Spy", exe: "Spy.exe"),
+            bigFish: 8862,
+            detectionCodes: ["SPY"]
+        ),
+        GameInfo(
+            id: "shattered-medallion",
+            title: "The Shattered Medallion",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/The Shattered Medallion/Medallion.exe",
+            steam: .init(appID: 572720, installDir: "Nancy Drew The Shattered Medallion", exe: "Medallion.exe"),
+            bigFish: 11150,
+            detectionCodes: ["MED"]
+        ),
+        GameInfo(
+            id: "labyrinth-of-lies",
+            title: "Labyrinth of Lies",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/Labyrinth of Lies/Labyrinth.exe",
+            steam: .init(appID: 572710, installDir: "Nancy Drew Labyrinth of Lies", exe: "Labyrinth.exe"),
+            bigFish: 14014,
+            detectionCodes: ["LIE"]
+        ),
+        GameInfo(
+            id: "sea-of-darkness",
+            title: "Sea of Darkness",
+            diskCount: 1,
+            graphics: .direct3D,
+            internalGameExePath: "/Program Files (x86)/Her Interactive/Sea of Darkness/SeaOfDarkness.exe",
+            steam: .init(appID: 572700, installDir: "Nancy Drew The Sea of Darkness", exe: "SeaOfDarkness.exe"),
+            bigFish: 18045,
+            detectionCodes: ["SEA"]
+        ),
+    ]
+}

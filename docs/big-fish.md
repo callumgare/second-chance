@@ -20,8 +20,9 @@ Chance's own window shows what it is doing.
 - **A game** is identified by its SKU, `F<product>T1L<language>`: `F2435T1L1` is
   product 2435 (The White Wolf of Icicle Creek) for Windows (`T1`) in English
   (`L1`); `L2` is German and `L4` French. The catalog keeps each game's product
-  number (`GameInfo.bigFishProduct`), so any language's edition maps to it
-  (`BigFishSKU`, `GameInfoProvider.game(forBigFish:)`).
+  number (`GameInfo.bigFishProduct`, from its bundle's `big-fish` edition), so
+  any language's edition maps to it (`BigFishSKU`,
+  `GameInfoProvider.game(forBigFish:)`).
 - The Game Manager downloads a game's installer (Big Fish's own NSIS wrapping
   tool) and a split 7z archive into `C:\BigFishCache\GameManager\GameDB\<SKU>`,
   and installs it into `C:\Program Files (x86)\Nancy Drew - <Title>`. The folder

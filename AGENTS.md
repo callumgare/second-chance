@@ -84,6 +84,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/SecondChanceKit/Sources/SecondChanceKit/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
+| [docs/program-bundles.md](docs/program-bundles.md) | You are adding or changing a game, or touching `Bundles/` — a program bundle's `manifest.yaml`, its JSON Schema, how bundles are read (YAML 1.2) and checked (ajv in JavaScriptCore), `Packages/WrappBuilder/`, the generated table of games (`GameInfoProvider+Bundles.swift`), or `sc bundle` |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`WrappTemplate/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
@@ -250,8 +251,11 @@ The rules that keep it working:
   by constructor injection with `.shared` defaults. Keep that pattern for new
   services: injectable for tests, convenient in production.
 - **`GameInfoProvider`** (`GameCatalog`): static database of all 30+ Nancy
-  Drew games with metadata (engine, disk count, exe paths, Steam DRM). Add new
-  games here.
+  Drew games with metadata (engine, disk count, exe paths, Steam DRM),
+  generated from the program bundles in `Bundles/`. A game is added or
+  changed in its bundle, then `sc bundle catalog` regenerates the table;
+  never edit `GameInfoProvider+Bundles.swift` by hand
+  ([docs/program-bundles.md](docs/program-bundles.md)).
 - **`GameInfo.GameEngine`** (`wine`, `scummvm`, `wineSteam`, `wineSteamSilent`,
   in `GameCatalog`): determines which engine the wrapp uses. The app, the
   wrapp and WrappPuppeteer all use it, and ask it `runsInWine`, `needsSteam`
@@ -528,7 +532,7 @@ The Nancy Drew games have a set of common abbrevations use for each game
 (<https://nancydrew.fandom.com/wiki/User_blog:BanaBerry/Nancy_Drew_Game_Abbreviations>). For example
 `Treasure in the Royal Tower` is `TRT` and `The Haunted Carousal` is `CAR`. These abbreviations are hard for me to
 remember so Second Chance avoids these whenever possible and instead uses our shortenings. The full list can be found in
-Packages/GameCatalog/Sources/GameCatalog/GameInfoProvider.swift where the id property is the shortening we use for each game. For us
+Bundles/nancy-drew/, where each game's folder name (and the part of its id after `nancy-drew/`) is the shortening we use for it. For us
 `Treasure in the Royal Tower` is `royal-tower` and `The Haunted Carousal` is `haunted-carousel`. Not as short but much
 more self-explanatory.
 

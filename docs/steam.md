@@ -194,7 +194,7 @@ exe's DRM.
 The choice (`offersSteamLaunchChoice`) is put to the user without naming
 engines: launching directly is quicker and more reliable, launching via Steam
 keeps Steam Cloud saves. A game whose DRM is worked out and set in
-`GameInfoProvider` gets the faster path from then on.
+its bundle's `drm` ([program-bundles.md](program-bundles.md)) gets the faster path from then on.
 
 ## Running
 

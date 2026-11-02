@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/royal-tower"
+version: 1
+title: "Treasure in the Royal Tower"
+series: "Nancy Drew"
+series-order: 5
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.royal-tower"]
+
+variants:
+  - id: "scummvm"
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 615780, common-folder: "Nancy Drew Treasure in the Royal Tower", exe: "game.exe" }
+    drm: "no"
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 5229 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/royal-tower.iss"
+  quirks:
+    - "Runs in ScummVM, which reads the installed data; Wine only installs it."
+    - "The disc answer file is copied in but never read, as ScummVM needs no install."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

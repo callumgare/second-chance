@@ -18,6 +18,8 @@ let package = Package(
         // The app's own game database, so slugs and titles can never drift
         // from the app.
         .package(path: "../../Packages/GameCatalog"),
+        // Loading and checking program bundles, for `sc bundle`.
+        .package(path: "../../Packages/WrappBuilder"),
     ],
     targets: [
         .executableTarget(
@@ -28,6 +30,7 @@ let package = Package(
             name: "SCKit",
             dependencies: [
                 .product(name: "GameCatalog", package: "GameCatalog"),
+                .product(name: "WrappBuilder", package: "WrappBuilder"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Subprocess", package: "swift-subprocess"),
                 .product(name: "Noora", package: "Noora"),

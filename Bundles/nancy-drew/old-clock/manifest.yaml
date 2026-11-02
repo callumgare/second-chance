@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/old-clock"
+version: 1
+title: "Secret of the Old Clock"
+series: "Nancy Drew"
+series-order: 13
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.old-clock"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Nancy Drew/Secret of the Old Clock/Game.exe", graphics: "direct-draw" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+    installer: { stubborn: true }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+    installer: { stubborn: true }
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock", exe: "Game.exe" }
+    drm: "no"
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 1297 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/old-clock.iss"
+  quirks:
+    - "The installer doesn't exit when it is run silently, so AutoIt closes it once the install is done."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

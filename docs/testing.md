@@ -99,6 +99,11 @@ run with `swift test --package-path Packages/SecondChanceKit`, which needs no
 Xcode build, in well under a second; `sc test unit` runs them as a step of its
 own, and CI with it.
 
+`Packages/WrappBuilder/Tests/` are the same kind: every program bundle checked
+against the manifest schema, the YAML 1.2 cases, and a check that GameCatalog's
+generated table is what the bundles make
+([program-bundles.md](program-bundles.md)). `sc test unit` runs them too.
+
 ### Unit tests (`SecondChanceTests/*.swift`)
 
 Fast, no installer ISOs required:

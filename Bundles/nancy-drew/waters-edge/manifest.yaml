@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/waters-edge"
+version: 1
+title: "Shadow at the Water's Edge"
+series: "Nancy Drew"
+series-order: 24
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.waters-edge"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/Shadow at the Water's Edge/Shadow.exe", graphics: "direct-3d" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+      - { id: "disc-2" }
+    detect: { aliases: ["shadow waters edge"] }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "her-mac"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "mac" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 200080, common-folder: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe" }
+    drm: "launch-when-steam-running"
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 6327 }]
+
+notes:                                       # for people only; nothing reads these
+  quirks:
+    - "Her's Mac download hasn't been looked inside: it is taken to be a Cider build, as Trail of the Twister's is."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

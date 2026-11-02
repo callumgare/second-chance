@@ -52,6 +52,9 @@ struct Repo: Sendable {
     /// which Xcode downloads with the package on the first build.
     var sparkleTools: URL { derivedData.appendingPathComponent("SourcePackages/artifacts/sparkle/Sparkle/bin") }
 
+    /// The program bundles Second Chance ships, and their schema.
+    var bundles: URL { root.appendingPathComponent("Bundles") }
+
     var defaultWrappsDir: URL { root.appendingPathComponent("built-apps") }
 
     /// `$INSTALLERS_DIR` when set, else `installers/`.

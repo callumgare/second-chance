@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/final-scene"
+version: 1
+title: "The Final Scene"
+series: "Nancy Drew"
+series-order: 6
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.final-scene"]
+
+variants:
+  - id: "scummvm"
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 615730, common-folder: "Nancy Drew The Final Scene", exe: "Game.exe" }
+    # drm left out: not known, so the game is started through Steam
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 5230 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/final-scene.iss"
+  quirks:
+    - "Runs in ScummVM, which reads the installed data; Wine only installs it."
+    - "The disc answer file is copied in but never read, as ScummVM needs no install."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

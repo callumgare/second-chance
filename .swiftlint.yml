@@ -14,6 +14,8 @@ excluded:
   # SwiftPM's checkouts and build products when a package is built on its own.
   - Packages/*/.build
   - Tools/sc/.build
+  # Generated: ajv's minified script, as a Swift string (Packages/WrappBuilder/JavaScript/build.sh).
+  - Packages/WrappBuilder/Sources/WrappBuilder/Bundles/AjvScript.swift
 
 disabled_rules:
   # Size and complexity metrics: much of the existing code is over them, and

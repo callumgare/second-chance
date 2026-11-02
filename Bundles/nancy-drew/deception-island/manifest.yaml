@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/deception-island"
+version: 1
+title: "Danger on Deception Island"
+series: "Nancy Drew"
+series-order: 10
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.deception-island"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Nancy Drew/Danger on Deception Island/Game.exe", graphics: "direct-draw" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+    installer: { stubborn: true }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+    installer: { stubborn: true }
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 31840, common-folder: "Nancy Drew Danger on Deception Island", exe: "Game.exe" }
+    # drm left out: not known, so the game is started through Steam
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 1545 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/deception-island.iss"
+  quirks:
+    - "The installer doesn't exit when it is run silently, so AutoIt closes it once the install is done."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/secrets-can-kill"
+version: 1
+title: "Secrets Can Kill"
+series: "Nancy Drew"
+series-order: 1
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.secrets-can-kill"]
+
+variants:
+  - id: "scummvm"
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+      - { id: "disc-2" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+
+notes:                                       # for people only; nothing reads these
+  quirks:
+    - "Runs in ScummVM, which reads the installed data; Wine only installs it."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

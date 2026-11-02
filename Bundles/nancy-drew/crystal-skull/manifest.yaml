@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/crystal-skull"
+version: 1
+title: "Legend of the Crystal Skull"
+series: "Nancy Drew"
+series-order: 18
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.crystal-skull"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/Legend of the Crystal Skull/Game.exe", graphics: "direct-3d" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+      - { id: "disc-2" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 31860, common-folder: "Nancy Drew Legend of The Crystal Skull", exe: "Game.exe" }
+    # drm left out: not known, so the game is started through Steam
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 2234 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/crystal-skull.iss"
+  quirks:
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

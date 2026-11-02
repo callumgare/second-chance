@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/phantom-of-venice"
+version: 1
+title: "The Phantom of Venice"
+series: "Nancy Drew"
+series-order: 19
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.phantom-of-venice"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/The Phantom of Venice/PhantomOfVenice.exe", graphics: "direct-3d" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+      - { id: "disc-2" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 31920, common-folder: "Nancy Drew The Phantom of Venice", exe: "PhantomOfVenice.exe" }
+    # drm left out: not known, so the game is started through Steam
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 2556 }]
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/phantom-of-venice.iss"
+  quirks:
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/waverly-academy"
+version: 1
+title: "Warnings at Waverly Academy"
+series: "Nancy Drew"
+series-order: 22
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.waverly-academy"]
+
+variants:
+  - id: "wine"
+    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/Warnings at Waverly Academy/Waverly.exe", graphics: "direct-3d" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    inputs:
+      - { id: "disc-1" }
+      - { id: "disc-2" }
+  - id: "her-windows"
+    source: "her-download"
+    inputs: [{ id: "installer", format: "windows" }]
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 43600, common-folder: "Nancy Drew Warnings at Waverly Academy", exe: "Waverly.exe" }
+    drm: "launch-when-steam-running"
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 5386 }]
+
+notes:                                       # for people only; nothing reads these
+  quirks:
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."
