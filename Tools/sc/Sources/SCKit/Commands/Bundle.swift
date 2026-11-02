@@ -7,8 +7,54 @@ struct BundleCommand: AsyncParsableCommand {
         commandName: "bundle",
         abstract: "Check, list and use the program bundles in Bundles/.",
         discussion: "docs/program-bundles.md describes a bundle and these commands.",
-        subcommands: [BundleCheckCommand.self, BundleListCommand.self]
+        subcommands: [BundleCheckCommand.self, BundleListCommand.self, BundlePlanCommand.self]
     )
+}
+
+struct BundlePlanCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "plan",
+        abstract: "Show what building one of a bundle's editions would run.",
+        discussion: """
+        The edition's stages, dependencies first, each step with its \
+        functions expanded, ${...} substituted and IFs decided for this Mac, \
+        and where each was written. docs/wrappfile.md has the syntax.
+        """
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    @Argument(help: "The bundle's id (nancy-drew/blue-moon) or a game's slug.")
+    var bundle: String
+
+    @Argument(help: "The edition's id (cd, her-windows, steam).")
+    var edition: String
+
+    func run() async throws {
+        let session = try Session.start(global)
+        let modules = try loadModules(session)
+        let id = bundle.contains("/") ? bundle : "nancy-drew/\(bundle)"
+        let folder = session.repo.bundles.appendingPathComponent(id)
+        let loaded: ProgramBundle
+        switch try ProgramBundleLoader(root: session.repo.bundles, modules: modules).load(folder) {
+        case .success(let found): loaded = found
+        case .failure(let problems):
+            for problem in problems.all { session.ui.line(problem.description) }
+            throw SCError("\(id) has problems.")
+        }
+        let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+        guard let plan = try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules)
+            .plan(edition: edition, conditions: .thisMac) else {
+            session.ui.result("\(edition) names no stage: a module's default stages build it.")
+            return
+        }
+        for stage in plan.stages {
+            session.ui.result("FROM \(stage.from) AS \(stage.name)   [\(stage.modules.joined(separator: ", "))]")
+            for step in stage.steps {
+                session.ui.result("  \(step)    # \(step.origin)")
+            }
+        }
+    }
 }
 
 struct BundleCheckCommand: AsyncParsableCommand {

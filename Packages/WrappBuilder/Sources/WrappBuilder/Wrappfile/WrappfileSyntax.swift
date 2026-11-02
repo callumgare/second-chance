@@ -49,7 +49,16 @@ public nonisolated struct Stage: Sendable, Equatable {
 }
 
 /// What a stage starts from.
-public nonisolated enum StageSource: Sendable, Equatable {
+public nonisolated enum StageSource: Sendable, Equatable, CustomStringConvertible {
+    /// As a Wrappfile writes it.
+    public var description: String {
+        switch self {
+        case .scratch: "scratch"
+        case .stage(let name): name
+        case .module(let id, let constraint, let stage): "\(id)\(constraint.map { "@\($0)" } ?? "")/\(stage)"
+        }
+    }
+
     /// The bare wrapp template.
     case scratch
     /// A stage of this Wrappfile, or one Second Chance supplies (`base`,

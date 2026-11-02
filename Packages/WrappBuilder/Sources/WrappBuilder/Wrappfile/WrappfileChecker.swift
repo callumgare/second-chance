@@ -347,6 +347,14 @@ public nonisolated struct WrappfileChecker {
         return (parts.first.map(String.init) ?? "") + parts.dropFirst().map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined()
     }
 
+    /// `launchMode` as `launch-mode`: a choice's name as written, from its
+    /// decoded key.
+    static func kebabCase(_ camel: String) -> String {
+        camel.reduce(into: "") { result, character in
+            if character.isUppercase { result += "-" + character.lowercased() } else { result.append(character) }
+        }
+    }
+
     static func duplicates(_ names: [String]) -> [String] {
         Dictionary(grouping: names, by: { $0 }).filter { $0.value.count > 1 }.keys.sorted()
     }

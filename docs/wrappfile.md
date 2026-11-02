@@ -87,6 +87,25 @@ and the modules (`WrappfileChecker`), naming each problem's line:
 - every edition's and variant's `build` names a stage, and the manifest's
   `setup` a function.
 
+## Plans
+
+Before a build runs anything, its edition's target is worked out into a plan
+(`BuildPlanner`): the stages it needs, dependencies first; each step with its
+functions expanded, `${…}` substituted and `IF`s decided for this build (the
+Mac's `arch` and `macos`, the edition's choices, the updates it applies); and
+each module's `assemble` steps after the target's own. A module function's
+`${data.<table>.<key>.<field>}` reads the module's table, where a key is an
+object's property or, in a list (or a table that is one list under one key,
+as `patches.json` is), the item with that `id`. `${assets/…}` becomes
+`asset:<path>`, for the step to mount. `sc bundle plan <game> <edition>` prints
+one, each step with where it was written:
+
+```text
+FROM prefix AS disc   [installer, nancy-drew, wine]
+  installer.RUN --answer-file=asset:…/blue-moon/assets/disc.iss --from=disc-1 --into=C:/…    # Wrappfile:15
+  EDIT --from-data=ini C:/…/*.ini    # nancy-drew/functions/configure-ini:9 from nancy-drew/module.yaml (assemble):2
+```
+
 `WrappfileTodayTests` checks each game's Wrappfile against what its builder
 does today: the discs it keeps, the installer's options and answer file, and
 the patches `GamePatchCatalog` applies, for the disc and Her download editions.

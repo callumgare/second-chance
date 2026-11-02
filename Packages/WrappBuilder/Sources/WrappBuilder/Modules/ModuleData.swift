@@ -20,6 +20,8 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     public let data: [String]?
     public let assets: [String]?
     public let functions: [String]?
+    /// Steps run after every final stage that `USE`s the module.
+    public let assemble: [String]?
 
     public struct Version: Decodable, Hashable, Sendable {
         public let version: String
