@@ -62,6 +62,12 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let build: Build?
         /// Its choices, by name: each an `ARG` its stages may read.
         public let choices: [String: Choice]?
+
+        /// The choice called `name` (`launch-mode`), however its key was
+        /// decoded.
+        public func choice(_ name: String) -> Choice? {
+            choices?[name] ?? choices?[WrappfileChecker.camelCase(name)]
+        }
     }
 
     public struct Choice: Decodable, Hashable, Sendable {

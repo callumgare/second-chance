@@ -6,6 +6,7 @@
 
 import Foundation
 import WrappBuilder
+import SecondChanceKit
 
 /// What every Nancy Drew game shares, from the `nancy-drew` module in Second
 /// Chance's resources (`Modules/nancy-drew`, docs/modules.md): Her
@@ -70,6 +71,53 @@ nonisolated enum DownloadCache {
 /// The program bundles Second Chance ships (`Contents/Resources/Bundles`,
 /// docs/program-bundles.md).
 nonisolated enum ShippedBundles {
+    /// What building `edition` of the Nancy Drew game `slug` runs, from its
+    /// shipped bundle, Wrappfile and the shipped modules; nil for an edition
+    /// with no stage of its own. Throws `buildRecipeProblem` when the bundle
+    /// can't be loaded or planned.
+    static func plan(forGame slug: String, edition: String, in bundle: Bundle = .main) throws -> BuildPlan? {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
+        do {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+            return try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).plan(edition: edition, conditions: .thisMac)
+        } catch let error as WrappBuildError {
+            throw error
+        } catch {
+            throw WrappBuildError.buildRecipeProblem("\(slug) \(edition): \(error)")
+        }
+    }
+
+    /// What a wrapp of `edition` of the game `slug` is built from: its
+    /// bundle's version, and the modules its plan's target stage has (or,
+    /// for an edition built by a module's own stages, the composition's),
+    /// each at the release and version shipped.
+    static func lock(forGame slug: String, edition: String, source: WrappSource, composition: Composition,
+                     in bundle: Bundle = .main) throws -> WrappLock {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
+        do {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let folder = resources.appendingPathComponent("Bundles/nancy-drew/\(slug)")
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let planned = try plan(forGame: slug, edition: edition, in: bundle)?.target?.modules
+            let used = planned ?? composition.modules.map(\.rawValue)
+            let refs = used.compactMap { id in
+                modules.first { $0.manifest.id == id }.map {
+                    WrappLock.ModuleRef(id: id, release: $0.manifest.release, version: $0.manifest.versions.first?.version)
+                }
+            }
+            let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+            return WrappLock(bundle: .init(id: loaded.manifest.id, version: loaded.manifest.version), edition: edition,
+                             source: source.rawValue, composition: composition, modules: refs, builtBy: version)
+        } catch let error as WrappBuildError {
+            throw error
+        } catch {
+            throw WrappBuildError.buildRecipeProblem("\(slug) \(edition) lock: \(error)")
+        }
+    }
+
     /// A file in the assets of the Nancy Drew game `slug`'s bundle, if it has it.
     static func asset(_ name: String, ofGame slug: String, in bundle: Bundle = .main) -> URL? {
         guard let file = bundle.resourceURL?.appendingPathComponent("Bundles/nancy-drew/\(slug)/assets/\(name)"),

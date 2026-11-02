@@ -25,7 +25,7 @@ editions:
     inputs: [{ id: "installer", format: "windows" }]
   - id: "her-mac"
     source: "her-download"
-    build: { target: "her-download" }
+    build: { target: "her-mac" }
     inputs: [{ id: "installer", format: "mac" }]
   - id: "steam"
     source: "steam"

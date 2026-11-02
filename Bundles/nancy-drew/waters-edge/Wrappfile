@@ -24,4 +24,12 @@ USE nancy-drew
 her-download.INSTALL installer --into=${install-dir}
 DO nancy-drew.patch --id=waters-edge-recorder-tea-ceremony --into=${install-dir}
 
+# Her Interactive's Mac download: a Cider app, whose Windows game is taken
+# out where Cider had it. Her's patches update older builds than it, so none
+# apply.
+FROM prefix AS her-mac
+USE her-download
+USE nancy-drew
+her-download.INSTALL installer
+
 # Steam's edition names no stage: the steam module's default stages build it.

@@ -290,7 +290,7 @@ public nonisolated struct WrappfileChecker {
     }
 
     func isChoice(_ name: String) -> Bool {
-        manifest.editions.contains { $0.choices?.keys.contains(Self.camelCase(name)) == true }
+        manifest.editions.contains { $0.choice(name) != nil }
     }
 
     func addModule(_ id: String, as alias: String?, to scope: inout Scope) {

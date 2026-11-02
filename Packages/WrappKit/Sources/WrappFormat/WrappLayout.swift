@@ -25,6 +25,8 @@ nonisolated public struct WrappLayout: Sendable, Hashable {
     public var resources: URL { app.appendingPathComponent("Contents/Resources") }
     /// What the build says about the game (`WrappSettings`).
     public var settingsFile: URL { resources.appendingPathComponent("AppSettings.plist") }
+    /// What the wrapp was built from (`WrappLock`).
+    public var lockFile: URL { resources.appendingPathComponent("WrappLock.json") }
     public var frameworks: URL { app.appendingPathComponent("Contents/Frameworks") }
     /// ScummVM, for a game it runs.
     public var scummvm: URL { app.appendingPathComponent("Contents/MacOS/scummvm") }

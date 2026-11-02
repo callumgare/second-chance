@@ -86,56 +86,86 @@ extension GameInstallerRunner {
             return
         }
 
-        let driveCPath = WrappLayout(app: wrappPath).driveC
-
         logger.notice("🔧 Applying \(patches.count) patch(es) for '\(gameSlug)' (\(source.rawValue))...")
 
         for patch in patches {
-            try Task.checkCancellation()
-            logger.notice("📦 Patch: \(patch.id) — \(patch.title)")
-            do {
-                // A walk over every file of the game, off the main thread.
-                let before = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }
-                try await apply(
-                    patch,
-                    wrappPath: wrappPath,
-                    driveCPath: driveCPath,
-                    gameInstallDir: gameInstallDir
-                )
-                let changed = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }.changes(since: before)
-                if changed.isEmpty {
-                    // A driven patcher's exit code is only AutoIt's: it has
-                    // once exited 0 without the patcher ever running.
-                    guard patch.automation == nil else {
-                        throw GamePatchError.changedNothing(id: patch.id)
-                    }
-                    logger.warning("   → \(patch.id) changed no files in \(gameInstallDir.lastPathComponent)")
-                } else {
-                    logger.notice("   → changed: \(changed.joined(separator: ", "))")
-                }
-                logger.notice("✅ Applied patch: \(patch.id)")
-                await bus.publishWrappBuild(.patchApplied(id: patch.id))
-            } catch {
-                // Cancelling the build stops a patcher part way; that isn't
-                // the patch failing.
-                if Task.isCancelled || error is CancellationError { throw CancellationError() }
-                logger.error("❌ Patch failed: \(patch.id): \(error.localizedDescription)")
-                await bus.publishWrappBuild(.patchFailed(id: patch.id, message: error.localizedDescription))
-                _ = FailureReporter.sendWithoutAsking(FailureReport(
-                    what: "Applying a game patch", kind: ErrorChain.identifier(error),
-                    game: gameInfo.id, source: source.rawValue, engine: gameInfo.composition.engineTag,
-                    tags: ["patch": patch.id]
-                ))
-                let continueInstall = await confirmFailure(patch, error)
-                if continueInstall {
-                    logger.notice("⚠️  Continuing without patch: \(patch.id)")
-                } else {
-                    throw WrappBuildError.userCancelled
-                }
-            }
+            try await applyGamePatch(patch, wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameInstallDir,
+                                     source: source, confirmFailure: confirmFailure)
         }
 
         logger.notice("✅ Finished applying patches for '\(gameSlug)'")
+    }
+
+    /// Apply one patch, by its id in the catalogue: a step of a Wrappfile
+    /// build (`DO nancy-drew.patch --id=…`). Nil when the catalogue has no
+    /// such patch.
+    func applyGamePatch(
+        id: String,
+        wrappPath: URL,
+        gameInfo: GameInfo,
+        gameInstallDir: URL,
+        source: WrappSource,
+        confirmFailure: PatchFailureConfirmation
+    ) async throws -> Bool {
+        guard let patch = catalog.allPatches(forGame: gameInfo.id).first(where: { $0.id == id }) else { return false }
+        try await applyGamePatch(patch, wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameInstallDir,
+                                 source: source, confirmFailure: confirmFailure)
+        return true
+    }
+
+    /// Apply one patch, reporting a failure and asking `confirmFailure`
+    /// whether to carry on without it.
+    private func applyGamePatch(
+        _ patch: GamePatch,
+        wrappPath: URL,
+        gameInfo: GameInfo,
+        gameInstallDir: URL,
+        source: WrappSource,
+        confirmFailure: PatchFailureConfirmation
+    ) async throws {
+        let driveCPath = WrappLayout(app: wrappPath).driveC
+        try Task.checkCancellation()
+        logger.notice("📦 Patch: \(patch.id) — \(patch.title)")
+        do {
+            // A walk over every file of the game, off the main thread.
+            let before = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }
+            try await apply(
+                patch,
+                wrappPath: wrappPath,
+                driveCPath: driveCPath,
+                gameInstallDir: gameInstallDir
+            )
+            let changed = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }.changes(since: before)
+            if changed.isEmpty {
+                // A driven patcher's exit code is only AutoIt's: it has
+                // once exited 0 without the patcher ever running.
+                guard patch.automation == nil else {
+                    throw GamePatchError.changedNothing(id: patch.id)
+                }
+                logger.warning("   → \(patch.id) changed no files in \(gameInstallDir.lastPathComponent)")
+            } else {
+                logger.notice("   → changed: \(changed.joined(separator: ", "))")
+            }
+            logger.notice("✅ Applied patch: \(patch.id)")
+            await bus.publishWrappBuild(.patchApplied(id: patch.id))
+        } catch {
+            // Cancelling the build stops a patcher part way; that isn't
+            // the patch failing.
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            logger.error("❌ Patch failed: \(patch.id): \(error.localizedDescription)")
+            await bus.publishWrappBuild(.patchFailed(id: patch.id, message: error.localizedDescription))
+            _ = FailureReporter.sendWithoutAsking(FailureReport(
+                what: "Applying a game patch", kind: ErrorChain.identifier(error),
+                game: gameInfo.id, source: source.rawValue, engine: gameInfo.composition.engineTag,
+                tags: ["patch": patch.id]
+            ))
+            let continueInstall = await confirmFailure(patch, error)
+            if continueInstall {
+                logger.notice("⚠️  Continuing without patch: \(patch.id)")
+            } else {
+                throw WrappBuildError.userCancelled
+            }
+        }
     }
 
     /// Unpack one patch archive and apply its payload to the installed game.

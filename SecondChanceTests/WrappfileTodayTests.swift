@@ -58,4 +58,39 @@ struct WrappfileTodayTests {
         let patches = GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .herDownload).map(\.id)
         #expect(patchIDs(steps) == patches)
     }
+
+    /// Every bundle, loaded once: checking them runs ajv, which is too slow
+    /// to do for each game on the main actor.
+    nonisolated static let bundles: [String: ProgramBundle] = {
+        let root = TestPaths.repoRoot
+        guard let modules = try? ModuleLoader(root: root.appendingPathComponent("Modules")).loadAll().get(),
+              let all = try? ProgramBundleLoader(root: root.appendingPathComponent("Bundles"), modules: modules).loadAll().get()
+        else { return [:] }
+        return Dictionary(uniqueKeysWithValues: all.map { ($0.manifest.name, $0) })
+    }()
+
+    /// The games Her also sold for the Mac.
+    nonisolated static let herMacGames = games.filter { game in
+        let manifest = TestPaths.repoRoot.appendingPathComponent("Bundles/nancy-drew/\(game.id)/manifest.yaml")
+        return (try? String(contentsOf: manifest, encoding: .utf8))?.contains("id: \"her-mac\"") == true
+    }
+
+    @Test("Her's Mac download takes the game out of the Cider app and patches nothing", arguments: herMacGames)
+    func herMacEditionIsTodays(_ game: GameInfo) throws {
+        let steps = try instructions(try wrappfile(game), stage: "her-mac")
+        #expect(steps.contains { $0.keyword == "her-download.INSTALL" })
+        #expect(patchIDs(steps).isEmpty)
+    }
+
+    @Test("Steam's launch mode is a choice exactly where today's Steam build asks it", arguments: games)
+    func steamLaunchModeIsAChoice(_ game: GameInfo) throws {
+        let bundle = try #require(Self.bundles[game.id])
+        let steam = bundle.manifest.editions.first { $0.source == .steam }
+        let choice = steam?.choice("launch-mode")
+        #expect((choice != nil) == game.offersSteamLaunchChoice)
+        if let choice {
+            #expect(choice.options == ["direct", "steam"])
+            #expect(choice.default == "direct", "a headless build launches directly")
+        }
+    }
 }

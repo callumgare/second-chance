@@ -16,6 +16,9 @@ import SecondChanceKit
 
 enum WrappBuildError: LocalizedError, Equatable {
     case unsupportedEngine
+    /// The game's bundle can't be planned, or its plan has a step this
+    /// builder can't run; the detail is for the log.
+    case buildRecipeProblem(String)
     /// The signed-in Steam account doesn't own the game.
     case steamGameNotOwned(title: String)
     /// The signed-in Steam account owns none of the games on Steam.
@@ -173,6 +176,8 @@ enum WrappBuildError: LocalizedError, Equatable {
         switch self {
         case .unsupportedEngine:
             return String(localized: "Second Chance doesn't know how to run this game yet.")
+        case .buildRecipeProblem:
+            return String(localized: "Second Chance's instructions for building this game have a problem. Updating Second Chance may fix it.")
         case .steamGameNotOwned(let title):
             return String(localized: "Your Steam account doesn't own \(title)")
         case .steamNoGamesOwned:

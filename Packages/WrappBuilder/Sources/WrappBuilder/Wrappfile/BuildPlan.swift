@@ -116,7 +116,7 @@ public nonisolated struct BuildPlanner {
         choices.merge(conditions.choices) { $1 }
         var effective = conditions
         effective.choices = choices
-        var context = Context(planner: self, edition: edition, conditions: effective)
+        let context = Context(planner: self, edition: edition, conditions: effective)
         var order: [String] = []
         try context.collect(target, into: &order)
         var stages: [PlannedStage] = []

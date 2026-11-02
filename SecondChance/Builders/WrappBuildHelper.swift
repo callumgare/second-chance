@@ -211,37 +211,14 @@ class WrappBuildHelper {
         }
     }
 
-    // MARK: - Installer Answer Files
-
-    /// Copy the InstallShield answer file for `gameSlug` to `setup.iss` in
-    /// `installerBaseDir` (the wrapp's `drive_c/nancy-drew-installer`), where
-    /// `GameInstallerRunner` looks for one to run the installer silently.
-    ///
-    /// Answer files are the game's bundle's assets (`Bundles/nancy-drew/<slug>/assets/`,
-    /// shipped in Second Chance's resources, which its Wrappfile names): the
-    /// disc's `disc.iss`, and a download's `her-download.iss`, since a
-    /// download's installer asks different questions from the disc's.
-    /// Returns whether there was one to copy; a game without one installs
-    /// interactively.
-    @discardableResult
-    func installAnswerFile(forGame gameSlug: String, source: WrappSource, into installerBaseDir: URL) -> Bool {
-        let name = source == .disk ? "disc.iss" : "\(source.rawValue).iss"
-        guard let issPath = ShippedBundles.asset(name, ofGame: gameSlug)?.path else {
-            logger.notice("ℹ️ No \(name) in \(gameSlug)'s bundle")
-            return false
-        }
-        let destination = installerBaseDir.appendingPathComponent("setup.iss")
-        do {
-            try fileManager.createDirectory(at: installerBaseDir, withIntermediateDirectories: true)
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
-            }
-            try fileManager.copyItem(atPath: issPath, toPath: destination.path)
-            logger.notice("✅ Copied \(gameSlug)'s \(name) to setup.iss")
-            return true
-        } catch {
-            logger.warning("⚠️ Failed to copy setup.iss: \(error)")
-            return false
+    /// The edition a build from `source` is, where the builder doesn't say:
+    /// the disc's `cd`, Her's Windows download, Steam's or Big Fish's.
+    static func edition(of source: WrappSource) -> String {
+        switch source {
+        case .disk: "cd"
+        case .herDownload: "her-windows"
+        case .steam: "steam"
+        case .bigFish: "big-fish"
         }
     }
 
@@ -260,7 +237,8 @@ class WrappBuildHelper {
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
-        bigFishTrial: Bool? = nil
+        bigFishTrial: Bool? = nil,
+        configureINI: Bool = true
     ) async throws {
         await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
@@ -320,14 +298,15 @@ class WrappBuildHelper {
         )
 
         // Configure game INI files for LCD mode and save path
-        try configureGameINI(at: wrappPath, gameExePath: gameExePath)
+        if configureINI {
+            try configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
+        }
     }
 
     /// Configure game INI files
-    private func configureGameINI(at wrappPath: URL, gameExePath: String) throws {
-        // Build the full path to the game directory within the wrapp
-        let gameDir = WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent()
-
+    /// Give every .ini in `gameDir` the nancy-drew module's settings
+    /// (`DO nancy-drew.configure-ini`).
+    func configureGameINI(in gameDir: URL) throws {
         logger.notice("Configuring game INI files in: \(gameDir.path)")
 
         // Check if directory exists
@@ -525,13 +504,25 @@ class WrappBuildHelper {
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,
+        configureINI: Bool = true,
+        edition: String? = nil,
         input: WrappBuildInput
     ) async throws -> URL {
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,
-            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
+            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial,
+            configureINI: configureINI
         )
+        // What it was built from, for updating it and for reports.
+        let edition = edition ?? Self.edition(of: source)
+        // Checking the bundle runs ajv: off the main thread.
+        let slug = gameInfo.id, composition = composition ?? gameInfo.composition
+        let lock = try await Blocking.run {
+            try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: composition)
+        }
+        try lock.write(to: WrappLayout(app: wrappPath))
+        logger.notice("Built from \(lock.summary)")
         await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: installerDir, gameInfo: gameInfo))
         let finalPath = try await finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
         unregisterTemporaryWrapp(wrappPath)
