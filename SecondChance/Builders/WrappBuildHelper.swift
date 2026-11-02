@@ -259,7 +259,10 @@ class WrappBuildHelper {
         installerDir: String,
         steamID: String? = nil,
         gameEngine: GameInfo.GameEngine? = nil,
-        steamLaunchMode: GameInfo.SteamLaunchMode? = nil
+        steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        bigFishLaunchFile: String? = nil,
+        bigFishSKU: String? = nil,
+        bigFishTrial: Bool? = nil
     ) async throws {
         await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
@@ -300,7 +303,8 @@ class WrappBuildHelper {
         // What the wrapp reads about its game when it starts.
         let settings = WrappSettings(
             gameExePath: gameExePath, engine: gameEngine ?? gameInfo.gameEngine, gameSlug: gameInfo.id,
-            source: source, installerDir: installerDir, steamAppID: steamID, steamLaunchMode: steamLaunchMode
+            source: source, installerDir: installerDir, steamAppID: steamID, steamLaunchMode: steamLaunchMode,
+            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
         )
         try settings.write(to: WrappLayout(app: wrappPath))
         logger.notice("Created AppSettings.plist with engine: \(settings.engine.rawValue)")
@@ -508,11 +512,15 @@ class WrappBuildHelper {
         steamID: String? = nil,
         gameEngine: GameInfo.GameEngine? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        bigFishLaunchFile: String? = nil,
+        bigFishSKU: String? = nil,
+        bigFishTrial: Bool? = nil,
         input: WrappBuildInput
     ) async throws -> URL {
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
-            steamID: steamID, gameEngine: gameEngine, steamLaunchMode: steamLaunchMode
+            steamID: steamID, gameEngine: gameEngine, steamLaunchMode: steamLaunchMode,
+            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
         )
         await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: installerDir, gameInfo: gameInfo))
         let finalPath = try await finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)

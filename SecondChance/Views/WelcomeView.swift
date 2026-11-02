@@ -11,7 +11,7 @@ struct WelcomeView: View {
     @Environment(WrappBuildViewModel.self) var viewModel
     @State private var selection: WrappSource? = .disk
 
-    private let sources: [WrappSource] = [.disk, .steam, .herDownload]
+    private let sources: [WrappSource] = [.disk, .steam, .bigFish, .herDownload]
 
     var body: some View {
         InstallerPage(title: LaunchHistory.isReturning ? "Welcome back, Detective" : "Welcome, Detective") {
@@ -117,11 +117,12 @@ struct WrappSourceRow: View {
 private extension WrappSource {
     /// An SF Symbol, or the source's logo (a template image in the asset
     /// catalog: Steam's from Simple Icons, Her Interactive's H), drawn at
-    /// the same size.
+    /// the same size. Big Fish Games has a fish: its logo isn't one we may use.
     var icon: Image {
         switch self {
         case .disk: return Image(systemName: "opticaldisc")
         case .steam: return Image("SteamLogo")
+        case .bigFish: return Image(systemName: "fish")
         case .herDownload: return Image("HerLogo")
         }
     }
@@ -130,6 +131,7 @@ private extension WrappSource {
         switch self {
         case .disk: return "installSourceDisk"
         case .steam: return "installSourceSteam"
+        case .bigFish: return "installSourceBigFish"
         case .herDownload: return "installSourceHerDownload"
         }
     }

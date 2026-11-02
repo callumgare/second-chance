@@ -14,6 +14,15 @@
         }
       }
     },
+    "%@ (in French)" : {
+
+    },
+    "%@ (in German)" : {
+
+    },
+    "%@ (in another language)" : {
+
+    },
     "%@ didn't quit." : {
 
     },
@@ -129,6 +138,9 @@
         }
       }
     },
+    "%lld%% done" : {
+
+    },
     "A %@ failure report was sent." : {
 
     },
@@ -186,6 +198,30 @@
     "Basic Report" : {
 
     },
+    "Big Fish's Game Manager closed unexpectedly. Try again." : {
+
+    },
+    "Big Fish's Game Manager couldn't download the game. Check that this Mac is connected to the internet, then try again." : {
+
+    },
+    "Big Fish's Game Manager couldn't install the game. Try again." : {
+
+    },
+    "Big Fish's Game Manager downloads the game, so how long this takes depends on your internet connection. You can leave it running and do something else." : {
+
+    },
+    "Big Fish's Game Manager has opened in its own window. Sign in there with your Big Fish Games account, and installing carries on by itself. You're signed out again once the game is installed, so the game's app doesn't keep your sign-in." : {
+
+    },
+    "Big Fish's Game Manager installed the game, but couldn't unlock it to play on this Mac. Check that this Mac is connected to the internet, then try again." : {
+
+    },
+    "Big Fish's Game Manager waited for you to sign in, but nobody did. Try again when you're ready, and sign in when its window appears." : {
+
+    },
+    "Big Fish's Game Manager, which downloads the game, couldn't be set up. Check that this Mac is connected to the internet, then try again." : {
+
+    },
     "Cancel" : {
 
     },
@@ -196,6 +232,9 @@
 
     },
     "Check for Updates…" : {
+
+    },
+    "Checking which games your Big Fish Games account has" : {
 
     },
     "Checking which games your Steam account owns" : {
@@ -220,6 +259,9 @@
 
     },
     "Close" : {
+
+    },
+    "Closing Big Fish's Game Manager" : {
 
     },
     "Compact" : {
@@ -295,6 +337,9 @@
 
     },
     "Done" : {
+
+    },
+    "Downloading the game" : {
 
     },
     "Eject Disc 1" : {
@@ -379,6 +424,9 @@
     "Install from" : {
 
     },
+    "Install from Big Fish Games…" : {
+
+    },
     "Install from Game Discs…" : {
 
     },
@@ -400,6 +448,9 @@
     "Installing %@" : {
 
     },
+    "Installing Big Fish's Game Manager" : {
+
+    },
     "Installing Rosetta" : {
 
     },
@@ -410,6 +461,9 @@
 
     },
     "Installing Steam's update…" : {
+
+    },
+    "Installing the game" : {
 
     },
     "It may be a disc Second Chance doesn't know, such as a special edition or one in another language. You can choose another disc, or try a program on it to install the game, though it may not work." : {
@@ -722,6 +776,9 @@
     "Signed out of Steam" : {
 
     },
+    "Signing in to Big Fish Games" : {
+
+    },
     "Skip Installer" : {
 
     },
@@ -735,6 +792,9 @@
 
     },
     "Starting %@…" : {
+
+    },
+    "Starting Big Fish's Game Manager" : {
 
     },
     "Starting Steam" : {
@@ -759,6 +819,9 @@
 
     },
     "Steam couldn't install the game. Try again." : {
+
+    },
+    "Steam downloads the game, so how long this takes depends on your internet connection. You can leave it running and do something else." : {
 
     },
     "Steam is starting %@…" : {
@@ -867,6 +930,9 @@
         }
       }
     },
+    "These are the Nancy Drew games your Big Fish Games account has. Second Chance installs the one you pick through Big Fish's Game Manager." : {
+
+    },
     "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam." : {
 
     },
@@ -895,6 +961,9 @@
     "This is a game that's already installed, not its installer. Second Chance needs to install the game itself: choose the game's disc, or the installer you downloaded from Her Interactive." : {
 
     },
+    "This usually takes a few minutes. You can leave it running and do something else." : {
+
+    },
     "Time" : {
 
     },
@@ -905,6 +974,9 @@
 
     },
     "Try It" : {
+
+    },
+    "Unlocking the game" : {
 
     },
     "Unpacking the game" : {
@@ -926,6 +998,12 @@
 
     },
     "Waiting for a previous copy of the game to finish closing…" : {
+
+    },
+    "Waiting for the download to start" : {
+
+    },
+    "Waiting for you to sign in to Big Fish Games" : {
 
     },
     "Waiting for you to sign in to Steam" : {
@@ -958,6 +1036,9 @@
     "Where it happened" : {
 
     },
+    "Which game do you want from Big Fish Games?" : {
+
+    },
     "Which game do you want from Steam?" : {
 
     },
@@ -977,6 +1058,12 @@
 
     },
     "You cancelled installing the game." : {
+
+    },
+    "Your Big Fish Games account doesn't have %@." : {
+
+    },
+    "Your Big Fish Games account doesn't have any of the Nancy Drew games that Second Chance can install." : {
 
     },
     "Your Mac couldn't open that file. If you downloaded it, try downloading it again." : {

@@ -71,4 +71,29 @@ extension WrappBuildInput {
         }
         self.init(environment: environment, viewModel: viewModel)
     }
+
+    /// A headless input for a Big Fish build of `slug`: its free trial, or
+    /// the full game, which needs the test harness's sign-in
+    /// (`BIG_FISH_TEST_SIGN_IN` with `BIG_FISH_EMAIL` and `BIG_FISH_PASSWORD`,
+    /// taken from the test's own environment).
+    convenience init(
+        bigFishGame slug: String,
+        trial: Bool,
+        outputDir: URL,
+        viewModel: WrappBuildViewModel? = nil
+    ) {
+        var environment = [
+            "BIG_FISH_GAME_SLUG": slug,
+            "OUTPUT_PATH": outputDir.path,
+        ]
+        if trial {
+            environment["BIG_FISH_TRIAL"] = "1"
+        } else {
+            let own = ProcessInfo.processInfo.environment
+            for name in ["BIG_FISH_TEST_SIGN_IN", "BIG_FISH_EMAIL", "BIG_FISH_PASSWORD"] {
+                environment[name] = own[name]
+            }
+        }
+        self.init(environment: environment, viewModel: viewModel)
+    }
 }

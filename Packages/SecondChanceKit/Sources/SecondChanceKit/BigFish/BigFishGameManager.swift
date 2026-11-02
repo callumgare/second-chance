@@ -31,12 +31,18 @@ nonisolated public protocol BigFishGameManaging: Sendable {
     /// Ask it to download (then install and activate) `sku`: the full game,
     /// or its free trial.
     func download(_ sku: BigFishSKU, fullVersion: Bool) async throws
+    /// Start the installed `sku`, as its Play button does: for a trial, the
+    /// only way to start it (bfgprocess just opens the Game Manager).
+    func play(_ sku: BigFishSKU) async throws
     /// Where it has got to with `sku`; nil while it has no entry for it.
     func status(of sku: BigFishSKU) async throws -> BigFishGameStatus?
     /// The game once installed.
     func installedGame(_ sku: BigFishSKU) -> BigFishInstalledGame?
     func isRunning() -> Bool
     func signOut() async throws
+    /// For test harnesses only (`BIG_FISH_TEST_SIGN_IN`): fill in and send the
+    /// Game Manager's own sign-in form. A person always signs in themselves.
+    func signInForTesting(email: String, password: String) async throws
     /// Quit it and end the prefix's Wine session.
     func shutdown(timeout: TimeInterval) async
 }
@@ -82,7 +88,7 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         while true {
             do {
                 if await !page.isConnected {
-                    try await page.connect { $0.contains("Game%20Manager/resources") || $0.contains("Game Manager/resources") }
+                    try await page.connect(matching: Self.isUIPage)
                 }
                 if try await page.evaluate(Script.ready, as: Bool.self, timeout: 10) { break }
             } catch {
@@ -124,6 +130,11 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         logger.notice("Asked the Game Manager to download \(sku)\(fullVersion ? "" : " (free trial)")")
     }
 
+    public func play(_ sku: BigFishSKU) async throws {
+        try await currentPage().run(Script.play(sku: sku.description))
+        logger.notice("Asked the Game Manager to start \(sku)")
+    }
+
     public func status(of sku: BigFishSKU) async throws -> BigFishGameStatus? {
         try await currentPage().evaluate(Script.status(sku: sku.description), as: BigFishGameStatus?.self)
     }
@@ -139,6 +150,21 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         logger.notice("Signed the Game Manager out")
     }
 
+    public func signInForTesting(email: String, password: String) async throws {
+        let page = try await currentPage()
+        try await page.run(Script.openSignIn)
+        let deadline = Date().addingTimeInterval(60)
+        while try await !page.evaluate(Script.signInFormShown, as: Bool.self) {
+            guard Date() < deadline else { throw BigFishError.couldNotStart("its sign-in form didn't appear") }
+            try await Task.sleep(for: .milliseconds(500))
+        }
+        // The expression holds the password: never log it.
+        guard try await page.evaluate(Script.fillSignIn(email: email, password: password), as: Bool.self) else {
+            throw BigFishError.couldNotStart("its sign-in form has changed")
+        }
+        logger.notice("Sent the Game Manager's sign-in form (test sign-in)")
+    }
+
     public func shutdown(timeout: TimeInterval) async {
         let start = Date()
         if let page = state.withLock({ page }) { await page.close() }
@@ -149,10 +175,19 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         logger.notice(stopped ? "The Game Manager and its Wine session stopped" : "The Game Manager's Wine session was still running after \(Int(timeout))s")
     }
 
-    private func currentPage() throws -> DevToolsPage {
+    /// The page, connected again if it has gone away since (a reload drops
+    /// the connection, and nothing reconnects it by itself).
+    private func currentPage() async throws -> DevToolsPage {
         guard let page = state.withLock({ page }) else { throw BigFishError.notStarted }
+        if await !page.isConnected {
+            try await page.connect(matching: Self.isUIPage)
+            logger.notice("Connected to the Game Manager's page again")
+        }
         return page
     }
+
+    /// Whether a DevTools page URL is the Game Manager's own window.
+    static let isUIPage: @Sendable (String) -> Bool = { $0.contains("Game%20Manager/resources") || $0.contains("Game Manager/resources") }
 
     /// The scripts run in the Game Manager's page. They use what its own
     /// buttons call (site_output.js / global_output.js under
@@ -163,6 +198,27 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         static let signedIn = "GM.data.userData.isLoggedIn === true"
         static let openSignIn = "(() => { const a = document.querySelector('li.sign_in a'); if (a) jQuery(a).trigger('click'); return !!a; })()"
         static let signOut = "GM.auth.logout(); true"
+        static let signInFormShown = "!!document.querySelector('#o_login_email') && !!document.querySelector('#o_login_submit a.btn_login')"
+
+        /// Fill in the sign-in form and press its button, as a person would.
+        static func fillSignIn(email: String, password: String) -> String {
+            """
+            (() => {
+              const set = (selector, value) => {
+                const field = document.querySelector(selector);
+                if (!field) return false;
+                field.value = value;
+                jQuery(field).trigger('input').trigger('change');
+                return true;
+              };
+              if (!set('#o_login_email', \(quoted(email))) || !set('#o_login_password', \(quoted(password)))) return false;
+              const button = document.querySelector('#o_login_submit a.btn_login');
+              if (!button) return false;
+              jQuery(button).trigger('click');
+              return true;
+            })()
+            """
+        }
         /// The page's own library request (it adds the sign-in token and
         /// refreshes it), then what it filled in; null when it never answered.
         static let ownedGames = """
@@ -177,6 +233,10 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
 
         static func download(sku: String, fullVersion: Bool) -> String {
             "GM.controller.event_to_native('downloadNewGame', {wrappingID: \(quoted(sku)), downloadFullVersion: \(fullVersion)}); true"
+        }
+
+        static func play(sku: String) -> String {
+            "GM.extendedFunctions.playGame(\(quoted(sku)), 'second-chance'); true"
         }
 
         static func status(sku: String) -> String {

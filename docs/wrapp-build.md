@@ -16,9 +16,9 @@ WrappBuildViewModel (GUI)  ←  CLIBuilder (headless)
           └───────────────┐
                   WrappBuildStrategy
                           │
-    ┌─────────────────────┼──────────────────────┐
-DiskWrappBuilder   HerDownloadWrappBuilder   SteamWrappBuilder
-    └─────────────────────┼──────────────────────┘
+    ┌──────────────────┬──┴─────────────────┬─────────────────────┐
+DiskWrappBuilder  HerDownloadWrappBuilder  SteamWrappBuilder  BigFishWrappBuilder
+    └──────────────────┴──┬─────────────────┴─────────────────────┘
                           ↓
       WrappBuildHelper · GameInstallerRunner · ISOMounter
 ```
@@ -197,6 +197,10 @@ user is prompted.
 | `getDisk1Path()` | `DISK_1_PATH` | NSOpenPanel (disk/ISO) |
 | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: it is ejected, and an alert asks for disc 2, answered by disc 2 being put in (`DiscMountWatcher`, as Disk Arbitration reports the mount even while the alert is up), or by Continue; else NSOpenPanel |
 | `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe, .dmg, or the installer .app in an opened .dmg) |
+| `bigFishGameFromEnvironment(among:)` | `BIG_FISH_GAME_SLUG` | nil: the game is picked once the Game Manager has signed in |
+| `chooseBigFishGame(from:)` | — (headless always names the game) | NSAlert with a popup of the editions the account owns |
+| `isBigFishTrial` | `BIG_FISH_TRIAL=1` (tests only) | false: the full game |
+| `bigFishTestSignIn` | `BIG_FISH_TEST_SIGN_IN=1` with `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD` (tests only) | nil: the person signs in in the Game Manager's window |
 | `getSaveLocation(for:)` | `OUTPUT_PATH` (an app already there is replaced) | NSOpenPanel save dialog, opening in `/Applications`, or `~/Applications` for someone who can't write there; it turns down a folder that can't be written to while it is still open. Cancelling it doesn't throw the install away: the person is asked whether to choose a place again or start over. A folder that already has the game's app asks before replacing it, and while that copy is open, asks them to quit it first |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
 | `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | NSAlert |
@@ -421,12 +425,16 @@ The window stays hidden (the app's activation policy is `.prohibited`) unless
 going through the screens a person building the game would see. Either way
 nothing asks: every answer still comes from the environment.
 
-Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
+Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam` | `big-fish`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`, `her-download` needs
 `HER_INSTALLER_PATH` (the `.exe` or `.dmg`), and `steam` needs
 `STEAM_GAME_SLUG` (plus `STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game,
 default `direct`) and a saved Steam sign-in, since a headless build can't sign
-in — it fails with `steamSignInRequired` rather than wait.
+in — it fails with `steamSignInRequired` rather than wait. `big-fish` needs
+`BIG_FISH_GAME_SLUG`, and either `BIG_FISH_TRIAL=1` (the game's free trial,
+with no sign-in) or the test harness's account (`BIG_FISH_TEST_SIGN_IN=1` with
+`BIG_FISH_EMAIL` and `BIG_FISH_PASSWORD`), or it fails with
+`bigFishSignInRequired` ([big-fish.md](big-fish.md#the-build)).
 
 An installer or patcher that prints Wine's `nodrv_CreateWindow` error found
 no desktop to open its windows on, so `Wine.run` throws `WineError.noDisplay`
@@ -565,7 +573,9 @@ game's own process name — so the target can be renamed without touching it.
 1. Add a case to `WrappSource`.
 2. Add a builder conforming to `WrappBuildStrategy`, owning its own resources on
    both paths.
-3. Add a `buildFrom…` method on the ViewModel that calls `runBuild(_:)`.
+3. Add the builder to the ViewModel and a case to its `build(from:)` that
+   calls `runBuild(_:)`; the welcome screen's list (`WelcomeView`) and the
+   File menu (`InstallCommands`) offer the source.
 4. Publish the same events the disk flow does — that is what the UI and tests
    read.
 5. Add any new prompt to `WrappBuildInput` with an env-var override, or headless
@@ -575,4 +585,5 @@ Do **not** ship a partial source. A builder that creates a temp wrapp and then
 gives up has to remove it: an early Steam builder installed the Steam client
 and then threw, leaking the wrapp every time. `SteamWrappBuilder` also stops
 Steam on its failure path, as anything left running would hold the Wine
-session (and the Steam lock) open.
+session (and the Steam lock) open; `BigFishWrappBuilder` likewise shuts down
+Big Fish's Game Manager.

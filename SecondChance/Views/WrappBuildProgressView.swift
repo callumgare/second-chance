@@ -155,14 +155,23 @@ struct WrappBuildProgressView: View {
         }
     }
 
-    /// How long to expect: a Steam build downloads the game, which takes as
-    /// long as the connection makes it.
+    /// How long to expect: a Steam or Big Fish build downloads the game,
+    /// which takes as long as the connection makes it.
     static func howLong(from source: WrappSource?) -> String {
-        let leave = "You can leave it running and do something else."
-        if source == .steam {
-            return "Steam downloads the game, so how long this takes depends on your internet connection. \(leave)"
+        switch source {
+        case .steam:
+            return String(localized: """
+                Steam downloads the game, so how long this takes depends on your internet connection. \
+                You can leave it running and do something else.
+                """)
+        case .bigFish:
+            return String(localized: """
+                Big Fish's Game Manager downloads the game, so how long this takes depends on your internet connection. \
+                You can leave it running and do something else.
+                """)
+        default:
+            return String(localized: "This usually takes a few minutes. You can leave it running and do something else.")
         }
-        return "This usually takes a few minutes. \(leave)"
     }
 
     /// What the build is doing, for the person watching: the step's

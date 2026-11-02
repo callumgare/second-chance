@@ -39,6 +39,10 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
+/// | `bigFishGameFromEnvironment`  | `BIG_FISH_GAME_SLUG`                    | nil: asked after sign-in       |
+/// | `chooseBigFishGame(from:)`    | — (only asked when the above is nil)    | NSAlert with the owned games   |
+/// | `isBigFishTrial`              | `BIG_FISH_TRIAL=1` (tests only)         | false: the full game           |
+/// | `bigFishTestSignIn`           | `BIG_FISH_TEST_SIGN_IN=1`, `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD` (tests only) | nil: the person signs in |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
 /// | `getSaveLocation(for:)`       | `OUTPUT_PATH` (replaces an older app)    | NSOpenPanel; cancelling asks to choose again or start over; asks before replacing |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
@@ -322,6 +326,60 @@ class WrappBuildInput {
         guard let viewModel, !isHeadlessRun else { return false }
         defer { viewModel.steamSignInAfreshRequested = false }
         return viewModel.steamSignInAfreshRequested
+    }
+
+    /// The Big Fish game `BIG_FISH_GAME_SLUG` names, or nil when it isn't
+    /// set; a headless run must set it, as there's no one to ask.
+    func bigFishGameFromEnvironment(among games: [GameInfo]) throws -> GameInfo? {
+        guard let slug = environment["BIG_FISH_GAME_SLUG"] else {
+            if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("BIG_FISH_GAME_SLUG") }
+            return nil
+        }
+        guard let game = games.first(where: { $0.id == slug && $0.isOnBigFish }) else {
+            throw WrappBuildError.invalidPath("BIG_FISH_GAME_SLUG \(slug) isn't a game on Big Fish Games")
+        }
+        return game
+    }
+
+    /// Build the free trial of the game named by `BIG_FISH_GAME_SLUG` rather
+    /// than the full game: no sign-in, no library. For the integration tests,
+    /// which can then try every game Big Fish sells.
+    var isBigFishTrial: Bool { environment["BIG_FISH_TRIAL"] == "1" }
+
+    /// The test harness's Big Fish account, for a headless build to sign in
+    /// with (`BIG_FISH_TEST_SIGN_IN=1` with `BIG_FISH_EMAIL` and
+    /// `BIG_FISH_PASSWORD`). Nil otherwise: a person signs in themselves.
+    var bigFishTestSignIn: (email: String, password: String)? {
+        guard environment["BIG_FISH_TEST_SIGN_IN"] == "1",
+              let email = environment["BIG_FISH_EMAIL"], !email.isEmpty,
+              let password = environment["BIG_FISH_PASSWORD"], !password.isEmpty else { return nil }
+        return (email, password)
+    }
+
+    /// Whether a person is there to sign in to Big Fish's Game Manager.
+    var canSignInToBigFish: Bool { !isHeadlessRun }
+
+    /// Which of the games the signed-in Big Fish account owns to build, each
+    /// edition it owns a choice of its own. Asked once it has signed in.
+    @MainActor
+    func chooseBigFishGame(from owned: [BigFishGameChoice]) async throws -> BigFishGameChoice {
+        if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("BIG_FISH_GAME_SLUG") }
+        let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
+        menu.addItems(withTitles: owned.map(\.displayName))
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Which game do you want from Big Fish Games?")
+        alert.informativeText = String(localized: """
+            These are the Nancy Drew games your Big Fish Games account has. \
+            Second Chance installs the one you pick through Big Fish's Game Manager.
+            """)
+        alert.accessoryView = menu
+        alert.addButton(withTitle: String(localized: "Continue"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
+            // The first question the person is asked: back to the welcome screen.
+            throw WrappBuildError.userCancelledBeforeStart
+        }
+        return owned[menu.indexOfSelectedItem]
     }
 
     // MARK: - Output Choices
@@ -705,7 +763,8 @@ class WrappBuildInput {
     /// NON_INTERACTIVE flag present).
     private var isHeadlessRun: Bool {
         anyDiskPathFromEnv || environment["HER_INSTALLER_PATH"] != nil
-            || environment["STEAM_GAME_SLUG"] != nil || environment["NON_INTERACTIVE"] == "true"
+            || environment["STEAM_GAME_SLUG"] != nil || environment["BIG_FISH_GAME_SLUG"] != nil
+            || environment["BIG_FISH_TRIAL"] != nil || environment["NON_INTERACTIVE"] == "true"
     }
 
     /// Resolve a disk path (a folder, or any file, which is mounted as a disc

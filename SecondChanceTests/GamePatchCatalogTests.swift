@@ -96,7 +96,7 @@ struct GamePatchCatalogTests {
 
     @Test("Edition 'any' applies to every source Her's patches can update")
     func anyEditionMatchesAll() {
-        for source in WrappSource.allCases where source != .steam {
+        for source in WrappSource.allCases where source != .steam && source != .bigFish {
             #expect(GamePatch.Edition.any.matches(source))
         }
     }

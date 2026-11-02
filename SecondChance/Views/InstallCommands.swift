@@ -16,6 +16,7 @@ struct InstallCommands: Commands {
                 Button("Install from Game Discs…") { start(.disk) }
                     .keyboardShortcut("o")
                 Button("Install from Steam…") { start(.steam) }
+                Button("Install from Big Fish Games…") { start(.bigFish) }
                 Button("Install from Her Interactive Download…") { start(.herDownload) }
             }
             .disabled(InstallerStep(viewModel.currentState) != .source)

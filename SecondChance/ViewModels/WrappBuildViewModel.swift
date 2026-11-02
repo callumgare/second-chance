@@ -89,6 +89,7 @@ class WrappBuildViewModel {
     private let diskBuilder: DiskWrappBuilder
     private let herDownloadBuilder: HerDownloadWrappBuilder
     private let steamBuilder: SteamWrappBuilder
+    private let bigFishBuilder: BigFishWrappBuilder
     /// Where this view model's builds report, and where it follows them.
     let bus: EventBus<AppEvent>
     private let cacheManager = CacheManager.shared
@@ -122,6 +123,7 @@ class WrappBuildViewModel {
         diskBuilder = DiskWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
         herDownloadBuilder = HerDownloadWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
         steamBuilder = SteamWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
+        bigFishBuilder = BigFishWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
 
         // Subscribe to the build's bus so wrapp-build events drive the observed properties.
         // (A headless run is this view model too: CLIBuilder starts its build.)
@@ -264,6 +266,7 @@ class WrappBuildViewModel {
         case .disk: await runBuild(diskBuilder, from: source)
         case .herDownload: await runBuild(herDownloadBuilder, from: source)
         case .steam: await runBuild(steamBuilder, from: source)
+        case .bigFish: await runBuild(bigFishBuilder, from: source)
         }
     }
 

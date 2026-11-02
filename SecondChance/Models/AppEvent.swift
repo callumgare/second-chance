@@ -72,6 +72,9 @@ enum WrappBuildEvent {
     /// build has checked. The integration tests use it to skip the games the
     /// account doesn't own without signing in to Steam for each.
     case steamGamesOwned([GameInfo])
+    /// The Nancy Drew games the signed-in Big Fish account owns, in any
+    /// language's edition, once a Big Fish build has checked.
+    case bigFishGamesOwned([GameInfo])
 
     // Official game patches. A failed patch doesn't fail the build (headless
     // runs continue past it), so this is the only record of it beyond the log.

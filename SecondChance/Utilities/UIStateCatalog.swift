@@ -31,6 +31,15 @@ enum UIStateCatalog {
                 setUp(viewModel)
             }
         }
+        // A Big Fish build of The White Wolf of Icicle Creek.
+        func bigFish(_ substep: String, _ setUp: @escaping @MainActor (WrappBuildViewModel) -> Void = { _ in }) -> @MainActor (WrappBuildViewModel) -> Void {
+            { viewModel in
+                viewModel.selectedWrappSource = .bigFish
+                viewModel.detectedGame = GameInfoProvider.shared.gameInfo(for: "white-wolf")
+                viewModel.currentState = .installingGame(substep: substep, elapsedSeconds: 75)
+                setUp(viewModel)
+            }
+        }
         let inAMinuteAndAHalf = Date().addingTimeInterval(100)
         return [
             window("welcome") { _ in },
@@ -51,6 +60,12 @@ enum UIStateCatalog {
             }),
             window("steam-stuck", steam(SteamStartupStage.connecting.message) {
                 $0.steamSignInNotice = .stuck
+            }),
+            window("big-fish-sign-in", bigFish(String(localized: "Waiting for you to sign in to Big Fish Games")) {
+                $0.instructions = BigFishWrappBuilder.signInInstructions
+            }),
+            window("big-fish-downloading", bigFish(String(localized: "Downloading the game")) {
+                $0.stepProgress = StepProgress(fraction: 0.42, text: "42% done")
             }),
             window("error-steam-stuck") {
                 $0.selectedWrappSource = .steam

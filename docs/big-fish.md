@@ -36,6 +36,71 @@ activates it.
   activate the game for this computer (DRM1, against
   `activation.bigfishgames.com`). A trial's 60 minutes are kept in the prefix.
 
+## The build
+
+`BigFishWrappBuilder` (`SecondChance/Builders/`), step by step:
+
+1. **The game named up front**, if any: `BIG_FISH_GAME_SLUG`, which a headless
+   run must set. `BIG_FISH_TRIAL=1` builds that game's free trial instead (its
+   English edition), with no sign-in and no library: it is for the
+   integration tests, which can then try every game Big Fish sells. A trial
+   wrapp records `BigFishTrial` in its settings.
+2. **The Game Manager is installed** in a fresh wrapp's prefix
+   (`BigFishWrappPreparer`). `bfginstaller35.exe` is downloaded once into
+   `~/Library/Caches/SecondChance/` over https; as it's always the current
+   version it can't be checked against a hash, so it is only checked for
+   being a Windows program of about the right size. Its `/S` isn't silent: it
+   relaunches itself for administrator rights, and the relaunch stops on its
+   licence page. `big-fish-game-manager-setup.au3` (in the app's Resources)
+   clicks whichever of its buttons is live (`I Agree`, then `Next`, `Install`,
+   `Finish` or `Close` if a build of it shows them) until `bfgclient.exe` is
+   there and the wizard has gone. The installer starts the Game Manager as it
+   finishes; only one runs in a prefix (a second hands over to the first and
+   exits, so its DevTools port never answers), so the session is ended there.
+   AutoIt and the installer are staged under `C:\second-chance-big-fish` and
+   removed after.
+3. **It starts** with its DevTools port (`BigFishGameManager.start`).
+4. **Sign-in.** Already signed in is fine. Otherwise, from the app, the
+   Game Manager's sign-in form is opened and its window brought forward, the
+   progress screen tells the person to sign in there, and the build looks
+   every 2 s for up to 30 minutes, failing if the Game Manager quits. The
+   person's password never passes through Second Chance. A headless build
+   can't ask anyone, so it fails (`bigFishSignInRequired`) unless it's the
+   test harness's: `BIG_FISH_TEST_SIGN_IN=1` with `BIG_FISH_EMAIL` and
+   `BIG_FISH_PASSWORD` fills in and sends the Game Manager's own form
+   (`signInForTesting`).
+5. **The game.** The account's library (`ownedGames`) is matched to the
+   catalog by product number, so every language edition is a choice of its
+   own, labelled with its language when it isn't English; they're offered in
+   the order the games came out, and the build publishes
+   `.bigFishGamesOwned`. A game named up front takes its English edition if
+   the account has it, else any edition it has.
+6. **Download, install, activate.** `downloadNewGame` with
+   `downloadFullVersion` false for a trial; then the game's state is read every
+   2 s for up to 4 hours. Downloading and installing show their progress; the
+   wait after installing, and a ready state before the game's folder has its
+   `bfgstate.xml`, is activation ("Unlocking the game"). A failed state fails
+   the build as a download, install or activation failure, and so does the
+   Game Manager quitting. Meanwhile `big-fish-directx-cancel.au3` cancels
+   Microsoft's DirectX web setup, which each game's installer starts and would
+   otherwise sit on its licence page.
+7. **Sign out**, and wait until the page says so: the wrapp mustn't carry the
+   person's sign-in, and an owned, activated game plays signed out. (Not for
+   a trial, which never signed in.) Then the Game Manager is shut down.
+8. **Configure.** The game's program is the one in its folder the catalog
+   knows by name (its Steam release's `.exe`, or the disc's), or else the only
+   one that isn't Big Fish's. The wrapp records `BigFishLaunchFile` (the
+   folder's `LaunchGame.bfg`, from the root of C:) and `BigFishSKU`, and keeps
+   the Game Manager: its `bfgprocess.exe` and `bfggameservices.exe` start the
+   game. A game ScummVM runs (Haunted Mansion, Royal Tower) is a ScummVM wrapp
+   of the installed folder, as from Steam: no launch file, and the Game
+   Manager and its download cache are taken out. No official Her Interactive
+   patch applies to a Big Fish copy (`GamePatch.Edition.matches`).
+
+A failure anywhere shuts the Game Manager down and removes the half-made
+wrapp. `BigFishWrappBuilderTests` drives all of this with a fake Game Manager
+and a fake preparer.
+
 ## Armadillo under Rosetta
 
 Every Armadillo-wrapped program crashed at once under Wine on Apple silicon,

@@ -83,7 +83,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
-| [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`WrappTemplate/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run |
+| [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`WrappTemplate/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
 | [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits; or Wine's desktop (`WineDesktop`) and ending a Wine session, how Wine behaves under load, a launch's diagnostics bundles, or scripting a launch past the save warning |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
@@ -350,11 +350,15 @@ direct assignment.
 ## Gotchas
 
 - **Non-interactive mode**: `NON_INTERACTIVE=true` plus `INSTALLATION_SOURCE`
-  (`disk` | `her-download` | `steam`) and `OUTPUT_PATH`; `disk` also needs
+  (`disk` | `her-download` | `steam` | `big-fish`) and `OUTPUT_PATH`; `disk` also needs
   `DISK_1_PATH` (and optionally `DISK_2_PATH`), and `steam` needs
   `STEAM_GAME_SLUG` (`STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game) and
   a saved Steam sign-in ([docs/steam.md](docs/steam.md)); `her-download` needs
-  `HER_INSTALLER_PATH`, the `.exe` or `.dmg` ([docs/her-download.md](docs/her-download.md)).
+  `HER_INSTALLER_PATH`, the `.exe` or `.dmg` ([docs/her-download.md](docs/her-download.md));
+  `big-fish` needs `BIG_FISH_GAME_SLUG` and, as nobody can sign in, either
+  `BIG_FISH_TRIAL=1` (the free trial) or the test harness's account
+  (`BIG_FISH_TEST_SIGN_IN=1`, `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD`)
+  ([docs/big-fish.md](docs/big-fish.md#the-build)).
   `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`, `PATCH_FAILURE_POLICY` and
   `EXPECTED_GAME_SLUG` (fail if the disc is another game) are read by
   `WrappBuildInput` when the corresponding prompt would appear. **`CLIBuilder`

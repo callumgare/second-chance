@@ -36,6 +36,10 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     public var bigFishLaunchFile: String?
     /// The Big Fish SKU of the edition installed (`F2435T1L1`).
     public var bigFishSKU: String?
+    /// The game is Big Fish's free trial, which only the integration tests
+    /// build: launching it opens the Game Manager, whose Play Now the wrapp
+    /// presses itself (docs/big-fish.md).
+    public var bigFishTrial: Bool?
 
     enum CodingKeys: String, CodingKey {
         case gameExePath = "GameExePath"
@@ -47,12 +51,13 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         case steamLaunchMode = "SteamLaunchMode"
         case bigFishLaunchFile = "BigFishLaunchFile"
         case bigFishSKU = "BigFishSKU"
+        case bigFishTrial = "BigFishTrial"
     }
 
     public init(
         gameExePath: String, engine: GameInfo.GameEngine, gameSlug: String?, source: WrappSource?,
         installerDir: String, steamAppID: String? = nil, steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
-        bigFishLaunchFile: String? = nil, bigFishSKU: String? = nil
+        bigFishLaunchFile: String? = nil, bigFishSKU: String? = nil, bigFishTrial: Bool? = nil
     ) {
         self.gameExePath = gameExePath
         self.engine = engine
@@ -63,6 +68,7 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         self.steamLaunchMode = steamLaunchMode
         self.bigFishLaunchFile = bigFishLaunchFile
         self.bigFishSKU = bigFishSKU
+        self.bigFishTrial = bigFishTrial
     }
 
     /// The settings of the wrapp at `layout`.

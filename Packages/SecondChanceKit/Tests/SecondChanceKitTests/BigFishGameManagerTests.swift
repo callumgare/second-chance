@@ -105,6 +105,13 @@ struct BigFishGameManagerTests {
             .contains(#"{wrappingID: "F2435T1L1", downloadFullVersion: false}"#))
     }
 
+    @Test func fillsTheSignInFormWithQuotedValues() {
+        let script = BigFishGameManager.Script.fillSignIn(email: "a@example.com", password: #"p"w\d"#)
+        #expect(script.contains(#"set('#o_login_email', "a@example.com")"#))
+        #expect(script.contains(#"set('#o_login_password', "p\"w\\d")"#))
+        #expect(script.contains("#o_login_submit a.btn_login"))
+    }
+
     @Test func findsAFreePort() throws {
         let port = try #require(DevToolsPage.freePort())
         #expect((1024...65535).contains(port))
