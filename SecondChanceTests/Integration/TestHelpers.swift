@@ -37,11 +37,15 @@ enum SystemLogReader {
     }
 
     /// Fetch log lines emitted by the wrapp itself (the game container) since
-    /// `start`. Unlike `fetch(pid:since:)` this is not pid-scoped: the wrapp is
-    /// launched by WrappPuppeteer, so its pid is not known here.
+    /// `start`: its own, and the shared package's that it logged (the Steam
+    /// sign-in, Wine's desktop), whose subsystem is `…Shared`. Unlike
+    /// `fetch(pid:since:)` this is not pid-scoped: the wrapp is launched by
+    /// WrappPuppeteer, so its pid is not known here; its executable is
+    /// always WrappTemplate.
     static func fetchGame(since start: Date) -> Data {
         fetch(
-            predicate: "subsystem == 'au.gare.callum.second-chance.WrappTemplate'",
+            predicate: "subsystem == 'au.gare.callum.second-chance.WrappTemplate'"
+                + " OR (subsystem == 'au.gare.callum.second-chance.Shared' AND process == 'WrappTemplate')",
             since: start
         )
     }
