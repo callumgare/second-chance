@@ -26,6 +26,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     private let gameDetector: GameDetector
     private let gameInfoProvider: GameInfoProvider
     private let isoMounter: ISOMounter
+    private let wineManager: WineManager
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.HerDownloadWrappBuilder")
     private let fileManager = FileManager.default
@@ -36,6 +37,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         gameDetector: GameDetector = .shared,
         gameInfoProvider: GameInfoProvider = .shared,
         isoMounter: ISOMounter = ISOMounter(),
+        wineManager: WineManager = .shared,
         bus: EventBus<AppEvent> = .app
     ) {
         self.helper = helper
@@ -43,6 +45,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         self.gameDetector = gameDetector
         self.gameInfoProvider = gameInfoProvider
         self.isoMounter = isoMounter
+        self.wineManager = wineManager
         self.bus = bus
     }
 
@@ -120,35 +123,49 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "her-windows") }) else {
                 throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-windows edition names no stage")
             }
-            var gameExePath: String?
-            var configuredINI = false
-            for step in plan.stages.flatMap(\.steps) {
-                logger.debug("Plan step: \(step) (\(step.origin))")
-                switch (step.module, step.instruction) {
-                case ("her-download", "INSTALL"):
-                    gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
-                                                                   answerFile: step.option("answer-file"), input: input)
-                case _ where step.name.map(isPatch(of: gameInfo)) == true:
-                    guard let gameExePath else {
-                        throw WrappBuildError.buildRecipeProblem("\(step.origin): a patch before the game is installed")
+            // The same download, plan and modules install the same game: a
+            // build after the first clones its install (docs/wrapp-build.md#the-layer-cache).
+            let key: LayerKey? = DebugSettings.shared.skipInstaller ? nil : try await Blocking.run {
+                try InstallLayer.key(slot: "\(gameInfo.id) \(plan.edition): install", plan: plan, wrappPath: wrappPath, inputs: [
+                    .init("download", try LayerKey.hash(file: installer)),
+                ])
+            }
+            let installed = try await InstallLayer(store: wineManager.layers, bus: bus).run(
+                key: key, wrappPath: wrappPath, gameInfo: gameInfo, disk1: nil
+            ) { () async throws -> InstallLayer.Installed in
+                var gameExePath: String?
+                var configuredINI = false
+                for step in plan.stages.flatMap(\.steps) {
+                    logger.debug("Plan step: \(step) (\(step.origin))")
+                    switch (step.module, step.instruction) {
+                    case ("her-download", "INSTALL"):
+                        gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
+                                                                       answerFile: step.option("answer-file"), input: input)
+                    case _ where step.name.map(isPatch(of: gameInfo)) == true:
+                        guard let gameExePath else {
+                            throw WrappBuildError.buildRecipeProblem("\(step.origin): a patch before the game is installed")
+                        }
+                        _ = try await installerRunner.applyGamePatch(
+                            id: step.name ?? "", wrappPath: wrappPath, gameInfo: gameInfo,
+                            gameInstallDir: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent(),
+                            source: .herDownload, confirmFailure: input.confirmPatchFailure
+                        )
+                    case (nil, "EDIT") where step.option("from-data") == "ini":
+                        if let gameExePath {
+                            try helper.configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
+                        }
+                        configuredINI = true
+                    default:
+                        throw WrappBuildError.buildRecipeProblem("\(step.origin): the Her download flow can't run \(step)")
                     }
-                    _ = try await installerRunner.applyGamePatch(
-                        id: step.name ?? "", wrappPath: wrappPath, gameInfo: gameInfo,
-                        gameInstallDir: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent(),
-                        source: .herDownload, confirmFailure: input.confirmPatchFailure
-                    )
-                case (nil, "EDIT") where step.option("from-data") == "ini":
-                    if let gameExePath {
-                        try helper.configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
-                    }
-                    configuredINI = true
-                default:
-                    throw WrappBuildError.buildRecipeProblem("\(step.origin): the Her download flow can't run \(step)")
                 }
+                guard let gameExePath else {
+                    throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-windows plan installs nothing")
+                }
+                return InstallLayer.Installed(gameExePath: gameExePath, installerDir: "", configuredINI: configuredINI)
             }
-            guard let gameExePath else {
-                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-windows plan installs nothing")
-            }
+            let gameExePath = installed.gameExePath
+            let configuredINI = installed.configuredINI
 
             if !DebugSettings.shared.skipInstaller {
                 try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
