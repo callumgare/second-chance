@@ -207,7 +207,7 @@ class WrappBuildViewModel: ObservableObject {
         case .idle, .completed, .error: break
         default:
             // Scheduled on the main run loop, so it fires on the main thread.
-            stepTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            stepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.tickStepTimer() }
             }
         }
@@ -218,7 +218,7 @@ class WrappBuildViewModel: ObservableObject {
         stepTimer = nil
     }
 
-    /// Called every 5 s by the step timer — reveals substep + increments elapsed.
+    /// Called every second by the step timer — reveals substep + increments elapsed.
     private func tickStepTimer() {
         guard let state = lastProgressState, let startTime = stepStartTime else { return }
         if case .error = currentState { stopStepTimer(); return }
