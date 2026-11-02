@@ -19,6 +19,10 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     public let steamInstallDir: String?
     /// The Windows executable Steam launches, relative to `steamInstallDir`.
     public let steamExePath: String?
+    /// The game's product number on Big Fish Games, the number in each of its
+    /// SKUs (`F2435T1L1`: product 2435, English). One for every language
+    /// edition it's sold in.
+    public let bigFishProduct: Int?
     public let internalGameExePath: String?
     public let doesNotExitInNonInteractiveMode: Bool
     public let installInstructions: String?
@@ -82,6 +86,8 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
 
     public var isOnSteam: Bool { steamAppID != nil }
 
+    public var isOnBigFish: Bool { bigFishProduct != nil }
+
     /// Only a game known to have no DRM can run without Steam — and the games
     /// ScummVM runs always do (see `steamEngine`), so they offer no choice.
     public var offersSteamLaunchChoice: Bool { isOnSteam && steamDRM == .no && gameEngine != .scummvm }
@@ -111,6 +117,7 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         internalGameExePath: String? = nil,
         steamDRM: SteamDRM? = nil,
         steam: SteamApp? = nil,
+        bigFish: Int? = nil,
         doesNotExitInNonInteractiveMode: Bool = false,
         installInstructions: String? = nil,
         failedInstallInfo: String? = nil,
@@ -125,6 +132,7 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         self.steamAppID = steam?.appID
         self.steamInstallDir = steam?.installDir
         self.steamExePath = steam?.exe
+        self.bigFishProduct = bigFish
         self.internalGameExePath = internalGameExePath
         self.doesNotExitInNonInteractiveMode = doesNotExitInNonInteractiveMode
         self.installInstructions = installInstructions
