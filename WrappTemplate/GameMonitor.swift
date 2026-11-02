@@ -98,7 +98,16 @@ class GameMonitor {
     /// exited first.
     @discardableResult
     func activateGameWindow(gamePid: Int32, infoWindow: InfoWindowController?) async -> Bool {
-        await waitForWindowAndActivate(pid: gamePid, infoWindow: infoWindow)
+        await waitForWindowAndActivate(pid: gamePid, infoWindow: infoWindow) != nil
+    }
+
+    /// As `activateGameWindow`, but a window of any process of this session
+    /// running `exeName` counts too, and returns the pid of the one that showed
+    /// it. A game wrapped in Armadillo (Big Fish's) runs as two processes of
+    /// the same exe, and the window is the second's: the first runs it under
+    /// its own debugger.
+    func activateGameWindow(gamePid: Int32, infoWindow: InfoWindowController?, anyRunning exeName: String) async -> Int32? {
+        await waitForWindowAndActivate(pid: gamePid, infoWindow: infoWindow, anyRunning: exeName)
     }
 
     // MARK: - Process Detection (Wine Games)
@@ -179,11 +188,13 @@ class GameMonitor {
         return gamePid
     }
 
-    /// Wait for game window to appear and activate it
-    private func waitForWindowAndActivate(pid: Int32, infoWindow: InfoWindowController?) async -> Bool {
+    /// Wait for game window to appear and activate it. Returns the pid that
+    /// showed it, nil when the game exited first.
+    private func waitForWindowAndActivate(pid: Int32, infoWindow: InfoWindowController?, anyRunning exeName: String? = nil) async -> Int32? {
         logger.notice("[Game Monitor] Monitoring for windows...")
 
         var windowDetected = false
+        var shownBy: Int32?
         // For as long as the game runs: on a loaded machine its window has
         // taken minutes, and the game is only brought to the front once it's
         // up. The loading window says meanwhile whether that looks stuck, and
@@ -194,13 +205,21 @@ class GameMonitor {
             guard isProcessRunning(pid: pid) else {
                 let waited = SubprocessWatch.duration(Date().timeIntervalSince(windowStartTime))
                 logger.error("[Game Monitor] The game exited \(waited) into waiting for its window, without showing one")
-                return false
+                return nil
             }
             let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
 
+            var owners: Set<Int32> = [pid]
+            if let exeName {
+                let server = config.wine.server
+                for process in await getAllWineProcesses()
+                    where process.name.lowercased() == exeName.lowercased() && !server.isElsewhere(process.pid) {
+                    owners.insert(process.pid)
+                }
+            }
             let gameWindows = windowList.filter { window in
                 if let windowPID = window[kCGWindowOwnerPID as String] as? Int32 {
-                    return windowPID == pid
+                    return owners.contains(windowPID)
                 }
                 return false
             }
@@ -233,7 +252,8 @@ class GameMonitor {
                 }
 
                 // Activate the game process
-                if let gameApp = NSRunningApplication(processIdentifier: pid_t(pid)) {
+                shownBy = gameWindows.first?[kCGWindowOwnerPID as String] as? Int32 ?? pid
+                if let gameApp = NSRunningApplication(processIdentifier: pid_t(shownBy ?? pid)) {
                     logger.notice("[Game Monitor] Activating game process...")
                     let activated = gameApp.activate(options: [.activateAllWindows])
                     if activated {
@@ -247,7 +267,7 @@ class GameMonitor {
 
             try? await Task.sleep(for: .milliseconds(200)) // Check every 200ms
         }
-        return windowDetected
+        return windowDetected ? (shownBy ?? pid) : nil
     }
 
     /// Hide the wrapp from the Dock, for a ScummVM game, as it always has:
