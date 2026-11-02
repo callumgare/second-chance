@@ -12,7 +12,7 @@ import WrappModules
 /// whose composition doesn't use it. The Wrappfile builder adds what a
 /// stage that `USE`s it does (its base layer, its instructions, running
 /// programs).
-public protocol BuildModule {
+public nonisolated protocol BuildModule {
     static var id: ModuleID { get }
 
     /// The list, in the template's Resources, of the files this module owns
@@ -21,31 +21,64 @@ public protocol BuildModule {
     static var templateFiles: String? { get }
 }
 
-public enum WineBuild: BuildModule {
+public nonisolated enum WineBuild: BuildModule {
     public static let id = ModuleID.wine
     public static let templateFiles: String? = "wine-files"
+
+    /// How the wine module sets a new prefix up, after wineboot
+    /// (`Modules/wine/prefix.yaml`), in order.
+    public struct PrefixSetup: Decodable, Sendable {
+        public let setup: [Step]
+
+        /// One step: exactly one of its actions, which the schema checks.
+        public struct Step: Decodable, Sendable {
+            public let registry: RegistryValue?
+            public let winetricks: String?
+            public let ddrawIni: [String: String]?
+            /// What the build's progress says meanwhile: display, graphics or disc.
+            public let progress: String?
+        }
+
+        public struct RegistryValue: Decodable, Sendable {
+            /// x11-driver, mac-driver or direct3d.
+            public let key: String
+            public let name: String
+            public let value: String
+        }
+    }
+
+    /// The prefix set-up in the wine module in `modules`.
+    public static func prefixSetup(modules root: URL) throws -> PrefixSetup {
+        let loader = try ModuleLoader(root: root)
+        switch loader.load(root.appendingPathComponent(id.rawValue)) {
+        case .success(let module):
+            return try ModuleLoader.table("prefix.yaml", of: module, as: PrefixSetup.self)
+        case .failure(let problems):
+            throw ModuleReleases.RecordError(description: "The wine module has problems: \(problems)")
+        }
+    }
 }
 
-public enum ScummVMBuild: BuildModule {
+public nonisolated enum ScummVMBuild: BuildModule {
     public static let id = ModuleID.scummvm
     public static let templateFiles: String? = "scummvm-files"
 }
 
 /// Steam is installed into a wrapp's Wine by its build, so the template
 /// holds nothing of its.
-public enum SteamBuild: BuildModule {
+public nonisolated enum SteamBuild: BuildModule {
     public static let id = ModuleID.steam
     public static let templateFiles: String? = nil
 }
 
 /// Big Fish's Game Manager is installed into a wrapp's Wine by its build,
 /// so the template holds nothing of its either.
-public enum BigFishBuild: BuildModule {
+public nonisolated enum BigFishBuild: BuildModule {
     public static let id = ModuleID.bigFish
     public static let templateFiles: String? = nil
 }
 
-public enum BuildModules {
+public nonisolated enum BuildModules {
     /// Every module a build knows.
     public static let known: [any BuildModule.Type] = [WineBuild.self, ScummVMBuild.self, SteamBuild.self, BigFishBuild.self]
 

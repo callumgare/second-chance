@@ -118,9 +118,9 @@ matches its folder, no two editions share an id), are in
 `GameCatalog` stays Foundation-only, so the apps, the wrapps, WrappPuppeteer and
 `sc` never read YAML. Its table of games,
 `Packages/GameCatalog/Sources/GameCatalog/GameInfoProvider+Bundles.swift`, is
-generated from the bundles by `sc bundle catalog` and checked in, and a test
+generated from the bundles by `sc generate` and checked in, and a test
 (`ProgramBundleTests`) fails when it isn't what the bundles make. So **a game is
-added or changed in its bundle**, followed by `sc bundle catalog`; the generated
+added or changed in its bundle**, followed by `sc generate`; the generated
 file is never edited by hand.
 
 Loading and checking bundles lives in `Packages/WrappBuilder/`, the package that
@@ -133,7 +133,7 @@ will hold everything that turns a bundle into a wrapp, kept apart from the app.
 ./sc bundle check Bundles/nancy-drew/old-clock
 ./sc bundle list --where notes.installer=installshield
 ./sc bundle list --where editions.source=steam --where series="Nancy Drew"
-./sc bundle catalog                       # regenerate GameCatalog's table
+./sc generate                             # regenerate GameCatalog's table (and modules' Swift)
 ```
 
 `--where` takes a path into the manifest and a value; a list along the path

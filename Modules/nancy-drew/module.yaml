@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "nancy-drew"
+release: 1
+versions:
+  - { version: "1" }
+depends-on: ["wine@10"]                      # its installers and patches run in Wine
+notes:
+  about: "What every Nancy Drew game shares: Her Interactive's installers, patches, settings and screens."

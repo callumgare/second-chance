@@ -7,7 +7,7 @@
 import Foundation
 import GameCatalog
 
-/// GameCatalog's table, made from the bundles: `sc bundle catalog` writes
+/// GameCatalog's table, made from the bundles: `sc generate` writes
 /// it to `GameInfoProvider+Bundles.swift`, and a test fails when the file
 /// there isn't what the bundles make. Generated and checked in, rather than
 /// made by a build plugin, so GameCatalog stays Foundation-only and the apps,
@@ -77,7 +77,7 @@ public nonisolated enum GameCatalogSource {
             "//  GameInfoProvider+Bundles.swift",
             "//  GameCatalog",
             "//",
-            "//  Generated from the program bundles in Bundles/ by `sc bundle catalog`.",
+            "//  Generated from the program bundles in Bundles/ by `sc generate`.",
             "//  Don't edit it: change the bundles and run that again. A test fails",
             "//  when this file isn't what the bundles make.",
             "",

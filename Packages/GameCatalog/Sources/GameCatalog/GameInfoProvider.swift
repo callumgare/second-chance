@@ -16,7 +16,7 @@ public nonisolated final class GameInfoProvider: Sendable {
     }
 
     /// Every game a bundle in Bundles/ describes, in the order lists show
-    /// them: generated from the bundles by `sc bundle catalog`
+    /// them: generated from the bundles by `sc generate`
     /// (GameInfoProvider+Bundles.swift).
     private let gamesList: [GameInfo] = bundledGames
 

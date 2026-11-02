@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=prefix.schema.json
+# How every Wine prefix a build makes is set up, in order, after wineboot.
+# WineManager runs these; a prefix made before a change here stays cached
+# until `sc clean wine-prefixes`.
+setup:
+  # Have Wine say yes to a game's display mode switch without making it,
+  # and scale the game up to the real display instead. Old games quit when
+  # the switch fails, as it does on a display with no mode of the size they
+  # ask for (a MacBook's built-in display has no 4:3 modes). Wine 10 reads
+  # this from the X11 Driver key whatever the driver. The wrapp's mode
+  # scaling helper scales what Direct3D draws to match.
+  # See docs/wine-in-process-helpers.md#mode-scaling.
+  - registry: { key: "x11-driver", name: "EmulateModeset", value: "Y" }
+    progress: "display"
+
+  # cnc-ddraw, for better DirectDraw compatibility.
+  - winetricks: "cnc_ddraw"
+    progress: "graphics"
+
+  # cnc-ddraw keeping the aspect ratio. windowed=true is what lets native
+  # fullscreen adopt the window, but it also makes cnc-ddraw swallow the
+  # first click; the wrapp's cursor-lock helper works around that. See
+  # docs/wine-in-process-helpers.md before changing these settings. Without
+  # them, every game drawn through cnc-ddraw runs fullscreen and stretched,
+  # so a prefix where they couldn't be set is never cached.
+  - ddraw-ini: { maintas: "true", windowed: "true" }
+
+  # Unlinks the prefix's user folders from the Mac's home folder.
+  - winetricks: "isolate_home"
+    progress: "disc"

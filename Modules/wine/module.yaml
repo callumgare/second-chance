@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "wine"
+release: 1
+native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
+versions:
+  - { version: "10.0_8" }                    # Sikarugir's Wine 10.0, packaging 8 (setup-wine.sh)
+runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
+data: ["prefix.yaml", "routine-errors.yaml"]

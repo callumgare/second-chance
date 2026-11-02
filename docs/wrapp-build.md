@@ -359,8 +359,9 @@ prefix by itself. Caching a prefix removes every other key's. Builds in one
 process that find the cache empty make the prefix one at a time
 (`WineManager.prefixCreation`): the first makes and caches it, and the rest
 then copy it; a prefix is renamed into the cache whole, so none is ever taken
-half-copied. Other changes to how the prefix is set up (winetricks verbs,
-`ddraw.ini`, registry settings such as `EmulateModeset`) don't change the key:
+half-copied. Other changes to how the prefix is set up — the wine module's
+`Modules/wine/prefix.yaml`: winetricks verbs, `ddraw.ini`, registry settings
+such as `EmulateModeset` — don't change the key:
 run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after
 those, or if Wine setup misbehaves after code changes.
 

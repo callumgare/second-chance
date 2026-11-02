@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/module.json",
+  "title": "Second Chance module",
+  "description": "A module's module.yaml: its id, its release and the versions that release provides, what it depends on, and the data it carries. docs/modules.md describes every field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "id", "release", "versions"],
+  "properties": {
+    "format": { "const": 1 },
+    "id": {
+      "description": "A shipped module's is one name (wine); one someone adds is namespaced (someone/directx9).",
+      "type": "string",
+      "pattern": "^([a-z0-9]+(-[a-z0-9]+)*/)?[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "release": {
+      "description": "Our fixes beneath its versions: counts up, and is never written in a Wrappfile. Changing anything in the module's folder means raising it.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "native": {
+      "description": "The Swift implementation compiled into Second Chance this module's code is; only a shipped module may name one.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "versions": {
+      "description": "What this release provides, as a bundle constrains it with @: an engine's own version (10.0_8), or a plain number of the module's own.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version"],
+        "properties": {
+          "version": { "type": "string", "pattern": "^[0-9A-Za-z._-]+$" },
+          "preview": { "description": "Used only where a constraint names it.", "type": "boolean" },
+          "withdrawn": { "type": "boolean" },
+          "replaced-by": { "type": "string" }
+        }
+      }
+    },
+    "depends-on": {
+      "description": "Modules installed with it, with an optional constraint (wine@10).",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^([a-z0-9-]+/)?[a-z0-9-]+(@.+)?$" },
+      "uniqueItems": true
+    },
+    "installs-after": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "options-schema": { "type": "string" },
+    "stages": { "type": "array", "items": { "type": "string" } },
+    "functions": { "type": "array", "items": { "type": "string" } },
+    "data": {
+      "description": "Tables of the module's own, each a YAML file in its folder, read as ${data.<table>.<key>.<field>}.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.yaml$" },
+      "uniqueItems": true
+    },
+    "assets": {
+      "description": "Files the module carries for builds, tests or the wrapp, in its folder.",
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "assemble": { "type": "array", "items": { "type": "string" } },
+    "runtime": {
+      "description": "Defaults for the runtime settings of the stages that use it.",
+      "type": "object"
+    },
+    "volumes": { "type": "object" },
+    "updates": { "type": "array" },
+    "invalidates": { "type": "object" },
+    "notes": { "description": "For people only; never read." }
+  }
+}

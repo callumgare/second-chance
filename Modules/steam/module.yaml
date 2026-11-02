@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "steam"
+release: 1
+native: "steam"                              # its Swift: the Steam client, SteamRuntime, SteamBuild
+versions:
+  - { version: "1" }                         # Steam updates itself, so the version is the module's own
+depends-on: ["wine@10"]                      # Steam runs in the wrapp's Wine
+data: ["routine-errors.yaml"]

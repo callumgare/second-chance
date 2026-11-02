@@ -84,7 +84,13 @@ nonisolated extension Manifest {
     /// Decodes JSON-shaped values a schema has checked, with the manifest's
     /// kebab-case keys (`display-name`) as Swift's camel case.
     static func decode(_ document: Any) throws -> Manifest {
-        let data = try JSONSerialization.data(withJSONObject: document)
+        try decodeKebab(Manifest.self, from: document)
+    }
+
+    /// Decodes JSON-shaped values into `T`, with kebab-case keys as camel
+    /// case: how every YAML file a bundle or module has is read.
+    static func decodeKebab<T: Decodable>(_ type: T.Type, from document: Any) throws -> T {
+        let data = try JSONSerialization.data(withJSONObject: document, options: [.fragmentsAllowed])
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .custom { path in
             let key = path.last?.stringValue ?? ""
@@ -92,7 +98,7 @@ nonisolated extension Manifest {
             let camel = (parts.first.map(String.init) ?? "") + parts.dropFirst().map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined()
             return KebabKey(camel)
         }
-        return try decoder.decode(Manifest.self, from: data)
+        return try decoder.decode(T.self, from: data)
     }
 
     private struct KebabKey: CodingKey {

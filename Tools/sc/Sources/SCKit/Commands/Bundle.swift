@@ -7,7 +7,7 @@ struct BundleCommand: AsyncParsableCommand {
         commandName: "bundle",
         abstract: "Check, list and use the program bundles in Bundles/.",
         discussion: "docs/program-bundles.md describes a bundle and these commands.",
-        subcommands: [BundleCheckCommand.self, BundleListCommand.self, BundleCatalogCommand.self]
+        subcommands: [BundleCheckCommand.self, BundleListCommand.self]
     )
 }
 
@@ -72,39 +72,5 @@ struct BundleListCommand: AsyncParsableCommand {
             let id = (document as? [String: Any])?["id"] as? String
             session.ui.result(id ?? session.repo.display(folder))
         }
-    }
-}
-
-struct BundleCatalogCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "catalog",
-        abstract: "Write GameCatalog's table of games from the bundles.",
-        discussion: """
-        GameCatalog stays Foundation-only, so its table is generated from the \
-        bundles and checked in rather than read at run time. Run this after \
-        changing a bundle; a test fails while the file is stale.
-        """
-    )
-
-    @OptionGroup var global: GlobalOptions
-
-    func run() async throws {
-        let session = try Session.start(global)
-        let loader = try ProgramBundleLoader(root: session.repo.bundles)
-        let bundles: [ProgramBundle]
-        switch try loader.loadAll() {
-        case .success(let loaded): bundles = loaded
-        case .failure(let problems):
-            for problem in problems.all { session.ui.line(problem.description) }
-            throw SCError("Some bundles have problems; fix them first.")
-        }
-        let file = session.repo.root.appendingPathComponent(GameCatalogSource.path)
-        let source = GameCatalogSource.source(for: GameCatalogSource.games(from: bundles))
-        if (try? String(contentsOf: file, encoding: .utf8)) == source {
-            session.ui.success("\(session.repo.display(file)) is already up to date.")
-            return
-        }
-        try source.write(to: file, atomically: true, encoding: .utf8)
-        session.ui.success("Wrote \(session.repo.display(file)) from \(bundles.count) bundles.")
     }
 }

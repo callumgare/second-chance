@@ -1,0 +1,21 @@
+# Wine's err: lines that say nothing is wrong, so they don't make a game's
+# quit look like a failure (GameQuitCheck). Each matches anywhere in a line.
+# A new routine Wine error that trips the quit check belongs here. The
+# wrapp has these compiled in (`sc generate`).
+- pattern: ":err:vulkan:"
+  why: "this Wine has no Vulkan, and carries on without it"
+- pattern: ":err:environ:init_peb"
+  why: "a note that a 32-bit game runs in wow64 mode"
+- pattern: ":err:hid:"
+  why: "a USB device that isn't a game controller"
+- pattern: ":err:winediag:ntlm_check_version"
+  why: "network sign-in, unused"
+- pattern: ":err:ntlm:"
+  why: "network sign-in, unused"
+- pattern: ":err:kerberos:"
+  why: "network sign-in, unused"
+- pattern: "NtUserChangeDisplaySettings Changing (null) display settings"
+  why: >-
+    Wine's desktop restoring the saved mode as it starts, refused on a 120 Hz
+    display (the emulated modes are 60 Hz). A game asking for its own mode
+    names the display instead.

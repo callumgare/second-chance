@@ -1,0 +1,79 @@
+{
+  "modules" : {
+    "nancy-drew" : [
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "32acff6dafed08005a5a8d7d89f86af58b03ea34d22f5e1ae85e954a241598bd"
+        },
+        "functions" : [
+
+        ],
+        "release" : 1,
+        "versions" : [
+          "1"
+        ]
+      }
+    ],
+    "scummvm" : [
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "62a24a684a698da1956062fcbd683c892167697092e6c3a67f4c10a9e77ae7e7"
+        },
+        "functions" : [
+
+        ],
+        "release" : 1,
+        "versions" : [
+          "2026.3.0"
+        ]
+      }
+    ],
+    "steam" : [
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "module.yaml" : "540da0cbcfc5dbaee8c5c20ed0587d3a5832bbd100369ab291da49b6797733cd",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "39570faa9291b3d0d0d8e9ba0eb4650fc8520ac8736624093401bca780e5f01c"
+        },
+        "functions" : [
+
+        ],
+        "release" : 1,
+        "versions" : [
+          "1"
+        ]
+      }
+    ],
+    "wine" : [
+      {
+        "data" : [
+          "prefix.yaml",
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "module.yaml" : "2ec0fa9f8f1b6138488e7523ea7ad1ecc913271d69b0b4cbf5d4bc409c21d0bb",
+          "prefix.schema.json" : "ee33a1a23374169e96cd949eb997359b9ecea37ce3f8ef937c684521b979736f",
+          "prefix.yaml" : "233a4310b7cb6300f3431de7cecdc00feae8761652ac7f85f61fae21f445b966",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "00c90907ce7e9e1298be2dfcef8ae80a68e668ae5c56c57d1c85ca3a5ce8623b"
+        },
+        "functions" : [
+
+        ],
+        "release" : 1,
+        "versions" : [
+          "10.0_8"
+        ]
+      }
+    ]
+  }
+}

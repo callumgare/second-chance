@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/routine-errors.json",
+  "title": "Output lines that say nothing is wrong",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["pattern", "why"],
+    "properties": {
+      "pattern": { "description": "Matched anywhere in a line.", "type": "string", "minLength": 1 },
+      "why": { "type": "string", "minLength": 1 }
+    }
+  }
+}

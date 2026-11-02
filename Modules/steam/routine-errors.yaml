@@ -1,0 +1,9 @@
+# What Steam logs as it starts, as well as Wine's routine errors, for a game
+# launched through it: none of it says the game has failed (GameQuitCheck).
+# The wrapp has these compiled in (`sc generate`).
+- pattern: ":err:combase:RoGetActivationFactory"
+  why: "Windows notification and pen APIs Wine lacks"
+- pattern: ":err:ole:"
+  why: "COM classes Steam asks for that Wine lacks"
+- pattern: "gldriverquery.exe"
+  why: "Steam's graphics probe, which needs a DLL it doesn't ship"

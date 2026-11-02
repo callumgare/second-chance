@@ -54,6 +54,9 @@ struct Repo: Sendable {
 
     /// The program bundles Second Chance ships, and their schema.
     var bundles: URL { root.appendingPathComponent("Bundles") }
+    /// The modules Second Chance ships, their schema and their releases' record.
+    var modules: URL { root.appendingPathComponent("Modules") }
+    var moduleReleases: URL { modules.appendingPathComponent("releases.json") }
 
     var defaultWrappsDir: URL { root.appendingPathComponent("built-apps") }
 

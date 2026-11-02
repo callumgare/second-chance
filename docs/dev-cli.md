@@ -107,8 +107,11 @@ builds the game's free trial instead, signed out, with no account needed
 
 **Bundles.** `sc bundle check [<folder>…]` checks program bundles against the
 manifest schema, `sc bundle list [--where <path>=<value>]` lists them by any
-manifest field, and `sc bundle catalog` regenerates GameCatalog's table of games
-from them ([program-bundles.md](program-bundles.md)).
+manifest field, and `sc generate` writes the Swift made from bundles and
+modules' data: GameCatalog's table of games, and the wrapp's routine Wine
+errors ([program-bundles.md](program-bundles.md), [modules.md](modules.md)).
+`sc module check [<id>…]` checks modules and their recorded releases, and `sc
+module release <id>` records one ([modules.md](modules.md#releases)).
 
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`

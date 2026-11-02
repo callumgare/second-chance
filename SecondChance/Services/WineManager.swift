@@ -8,6 +8,7 @@
 import Foundation
 import Logging
 import SecondChanceKit
+import WrappBuilder
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WineManager")
 
@@ -186,6 +187,61 @@ class WineManager {
         Wine(wrapp: wrappPath).drives.block("z")
     }
 
+    /// The wine module's prefix set-up, from the modules in Second Chance's
+    /// resources.
+    nonisolated static func prefixSetup() throws -> WineBuild.PrefixSetup {
+        guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
+        return try WineBuild.prefixSetup(modules: resources.appendingPathComponent("Modules"))
+    }
+
+    /// What the build's progress says during a step of the set-up.
+    nonisolated static func progressText(_ key: String) -> String? {
+        switch key {
+        case "display": String(localized: "Setting up the game's display")
+        case "graphics": String(localized: "Setting up the game's graphics")
+        case "disc": String(localized: "Setting up where the game finds its disc")
+        default: nil
+        }
+    }
+
+    /// A registry key the set-up names.
+    static func registryKey(_ name: String) -> WineRegistry.Key {
+        switch name {
+        case "mac-driver": #"HKEY_CURRENT_USER\Software\Wine\Mac Driver"#
+        case "direct3d": #"HKEY_CURRENT_USER\Software\Wine\Direct3D"#
+        default: .x11Driver
+        }
+    }
+
+    /// Set `settings` in cnc-ddraw's ddraw.ini, each `key=value` line
+    /// replaced. Whether every one is now set. See
+    /// docs/wine-in-process-helpers.md before changing them.
+    nonisolated static func configureDdrawIni(_ file: URL, settings: [String: String]) -> Bool {
+        do {
+            var lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
+            var found = Set<String>()
+            for index in lines.indices {
+                let line = lines[index]
+                guard let equals = line.firstIndex(of: "=") else { continue }
+                let key = String(line[..<equals])
+                guard let value = settings[key] else { continue }
+                lines[index] = "\(key)=\(value)"
+                found.insert(key)
+            }
+            try lines.joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
+            let missing = Set(settings.keys).subtracting(found)
+            guard missing.isEmpty else {
+                logger.error("cnc-ddraw's ddraw.ini doesn't have the \(missing.sorted().joined(separator: ", ")) settings to change: is this another cnc-ddraw?")
+                return false
+            }
+            logger.notice("✓ Configured cnc-ddraw: \(settings.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ", "))")
+            return true
+        } catch {
+            logger.error("Couldn't configure cnc-ddraw (\(file.path)): \(error.localizedDescription)")
+            return false
+        }
+    }
+
     /// Make the prefix from scratch, and cache it.
     private func makeWinePrefix(at wrappPath: URL, prefixPath: URL, buildId: String, bus: EventBus<AppEvent>) async throws {
 
@@ -198,47 +254,25 @@ class WineManager {
         // Wait for wineserver to finish
         try await wine.server.waitUntilProgramsExit(timeout: nil)
 
-        // Have Wine say yes to a game's display mode switch without making it,
-        // and scale the game up to the real display instead. Old games quit
-        // when the switch fails, as it does on a display with no mode of the
-        // size they ask for (a MacBook's built-in display has no 4:3 modes).
-        // Wine 10 reads this from the X11 Driver key whatever the driver. The
-        // wrapp's mode scaling helper scales what Direct3D draws to match.
-        // See docs/wine-in-process-helpers.md#mode-scaling.
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Setting up the game's display"))))
-        try await wine.registry.set(.string("Y"), for: "EmulateModeset", in: .x11Driver)
-
-        // Install cnc-ddraw for better DirectDraw compatibility
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Setting up the game's graphics"))))
-        try await winetricks.install(.cncDdraw)
-
-        // Configure cnc-ddraw to maintain aspect ratio. windowed=true is what lets
-        // native fullscreen adopt the window, but it also makes cnc-ddraw swallow
-        // the first click; the wrapp's cursor-lock helper works around that.
-        // See docs/wine-in-process-helpers.md before changing these settings.
-        // Without them, every game drawn through cnc-ddraw runs fullscreen and
-        // stretched, so a prefix that couldn't be set up is never cached for
-        // the builds after this one (`configured`).
-        let ddrawIniPath = wine.driveC.appendingPathComponent("windows/syswow64/ddraw.ini")
-        var configured = false
-        do {
-            let contents = try String(contentsOf: ddrawIniPath, encoding: .utf8)
-            var updated = contents.replacingOccurrences(of: "maintas=false", with: "maintas=true")
-            updated = updated.replacingOccurrences(of: "windowed=false", with: "windowed=true")
-            try updated.write(to: ddrawIniPath, atomically: true, encoding: .utf8)
-            configured = updated.contains("windowed=true") && updated.contains("maintas=true")
-            if configured {
-                logger.notice("✓ Configured cnc-ddraw to maintain aspect ratio and run in windowed mode")
-            } else {
-                logger.error("cnc-ddraw's ddraw.ini doesn't have the windowed and maintas settings to change: is this another cnc-ddraw?")
+        // The rest is the wine module's data (Modules/wine/prefix.yaml), in
+        // order. A prefix where cnc-ddraw's settings couldn't be made is
+        // never cached for the builds after this one (`configured`).
+        var configured = true
+        for step in try Self.prefixSetup().setup {
+            if let progress = step.progress.flatMap(Self.progressText) {
+                await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: progress)))
             }
-        } catch {
-            logger.error("Couldn't configure cnc-ddraw (\(ddrawIniPath.path)): \(error.localizedDescription)")
+            if let value = step.registry {
+                try await wine.registry.set(.string(value.value), for: value.name, in: Self.registryKey(value.key))
+            }
+            if let verb = step.winetricks {
+                try await winetricks.install(verb)
+            }
+            if let settings = step.ddrawIni {
+                configured = Self.configureDdrawIni(wine.driveC.appendingPathComponent("windows/syswow64/ddraw.ini"),
+                                                    settings: settings) && configured
+            }
         }
-
-        // Install isolate_home to remove unnecessary mounts
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Setting up where the game finds its disc"))))
-        try await winetricks.install(.isolateHome)
 
         // Only the drives a game needs (WineDrives has what each is for),
         // and no Z: showing the whole Mac. The A: drive's place in /tmp

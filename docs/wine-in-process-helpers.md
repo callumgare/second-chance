@@ -323,8 +323,8 @@ that size: Wine only offers modes the display really has, and a MacBook's
 built-in display has no 4:3 modes at all. On a monitor that does have the mode
 the switch works, but really switches the monitor.
 
-So the prefix has Wine's `EmulateModeset` on (`WineManager`, as it creates
-the prefix; Wine 10 reads it from `HKCU\Software\Wine\X11 Driver` whatever
+So the prefix has Wine's `EmulateModeset` on (the wine module's
+`Modules/wine/prefix.yaml`, which `WineManager` follows as it creates the prefix; Wine 10 reads it from `HKCU\Software\Wine\X11 Driver` whatever
 the driver). win32u then says yes to any common mode without touching the
 display, and maps the game's windows up to the display's real size, at the
 same scale on both axes: on a 1512×945 display the game's 800×600 window
@@ -478,7 +478,7 @@ failure if nothing asked the game to quit and the game:
   window the wrapp missed);
 - draws with Direct3D, and quit before its first frame;
 - quit within 1 s of a Wine error that isn't one of the routine ones every
-  launch logs (`GameQuitCheck.routineErrors`: Vulkan, wow64, HID devices,
+  launch logs (`Modules/wine/routine-errors.yaml`: Vulkan, wow64, HID devices,
   NTLM and Kerberos, the desktop's `(null)` mode refusal, and for a game
   started through Steam, the COM lookups and graphics probe Steam does as it
   starts).
@@ -517,7 +517,9 @@ A game that quits unexpectedly logs, after the usual `■ Game exited …` line:
 ```
 
 A healthy launch that gets reported this way has met a Wine error that's
-routine after all: the line it names belongs in `GameQuitCheck.routineErrors`.
+routine after all: the line it names belongs in `Modules/wine/routine-errors.yaml`
+(or `Modules/steam/`'s, for a line only Steam's launches log), then `sc
+generate`, which compiles them into the wrapp (`GameQuitCheck+RoutineErrors.swift`).
 
 ## Cocoa start wait
 

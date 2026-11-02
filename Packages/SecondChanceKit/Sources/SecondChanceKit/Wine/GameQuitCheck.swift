@@ -47,25 +47,9 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// stays just above the quickest real one.
     static let errorWindow: TimeInterval = 1
 
-    /// Wine errors that healthy launches log, and that say nothing about why a
-    /// game quit. Matched anywhere in the line.
-    static let routineErrors = [
-        ":err:vulkan:",                    // this Wine has no Vulkan, and carries on without it
-        ":err:environ:init_peb",           // a note that a 32-bit game runs in wow64 mode
-        ":err:hid:",                       // a USB device that isn't a game controller
-        ":err:winediag:ntlm_check_version", ":err:ntlm:", ":err:kerberos:",  // network sign-in, unused
-        // Wine's desktop restoring the saved mode as it starts, refused on a
-        // 120 Hz display (the emulated modes are 60 Hz). A game asking for its
-        // own mode names the display instead.
-        "NtUserChangeDisplaySettings Changing (null) display settings",
-    ]
-
-    /// What Steam logs as it starts, as well, for a game launched through it.
-    static let routineSteamErrors = [
-        ":err:combase:RoGetActivationFactory",  // Windows notification and pen APIs Wine lacks
-        ":err:ole:",                            // COM classes Steam asks for that Wine lacks
-        "gldriverquery.exe",                    // Steam's graphics probe, which needs a DLL it doesn't ship
-    ]
+    // `routineErrors` and `routineSteamErrors`, the Wine errors healthy
+    // launches log that say nothing about why a game quit, are the wine and
+    // steam modules' data (GameQuitCheck+RoutineErrors.swift).
 
     private let drawsWithDirect3D: Bool
     private let routine: [String]

@@ -26,7 +26,7 @@ struct ProgramBundleTests {
         let bundles = try loader.loadAll().get()
         let generated = GameCatalogSource.source(for: GameCatalogSource.games(from: bundles))
         let checkedIn = try String(contentsOf: repoRoot.appendingPathComponent(GameCatalogSource.path), encoding: .utf8)
-        #expect(generated == checkedIn, "\(GameCatalogSource.path) is stale: run `sc bundle catalog`")
+        #expect(generated == checkedIn, "\(GameCatalogSource.path) is stale: run `sc generate`")
     }
 
     @Test func theCatalogueRoundTripsThroughTheSourceItIsMadeOf() throws {

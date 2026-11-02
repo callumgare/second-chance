@@ -2,7 +2,7 @@
 //  GameInfoProvider+Bundles.swift
 //  GameCatalog
 //
-//  Generated from the program bundles in Bundles/ by `sc bundle catalog`.
+//  Generated from the program bundles in Bundles/ by `sc generate`.
 //  Don't edit it: change the bundles and run that again. A test fails
 //  when this file isn't what the bundles make.
 

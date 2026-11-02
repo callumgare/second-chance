@@ -85,6 +85,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
 | [docs/program-bundles.md](docs/program-bundles.md) | You are adding or changing a game, or touching `Bundles/` — a program bundle's `manifest.yaml`, its JSON Schema, how bundles are read (YAML 1.2) and checked (ajv in JavaScriptCore), `Packages/WrappBuilder/`, the generated table of games (`GameInfoProvider+Bundles.swift`), or `sc bundle` |
+| [docs/modules.md](docs/modules.md)                 | You are touching `Modules/` — a module's `module.yaml` or its data (the wine module's prefix set-up, routine Wine errors), its releases and `sc module`, or the Swift generated from modules' data (`sc generate`) |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`WrappTemplate/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
@@ -270,7 +271,7 @@ The rules that keep it working:
 - **`GameInfoProvider`** (`GameCatalog`): static database of all 30+ Nancy
   Drew games with metadata (engine, disk count, exe paths, Steam DRM),
   generated from the program bundles in `Bundles/`. A game is added or
-  changed in its bundle, then `sc bundle catalog` regenerates the table;
+  changed in its bundle, then `sc generate` regenerates the table;
   never edit `GameInfoProvider+Bundles.swift` by hand
   ([docs/program-bundles.md](docs/program-bundles.md)).
 - **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
@@ -469,12 +470,13 @@ direct assignment.
   since those never use cnc-ddraw and its clicks close their menus; both live in
   `WrappTemplate/InProcessHelpers/`. Read
   [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before
-  touching either, or cnc-ddraw's `ddraw.ini` settings in `WineManager`.
+  touching either, or cnc-ddraw's `ddraw.ini` settings in the wine module's
+  `Modules/wine/prefix.yaml`.
 - **Wine fakes a game's display mode switch.** Old games switch the display
   to the mode they were made for and quit (exit 0, a few seconds in) when
   Wine says `NtUserChangeDisplaySettings … returned -2`, which it does for a
   mode the Mac display lacks — every 4:3 mode on a MacBook's built-in one.
-  So the prefix has `EmulateModeset` on (`WineManager`): Wine says yes, leaves
+  So the prefix has `EmulateModeset` on (`Modules/wine/prefix.yaml`): Wine says yes, leaves
   the display alone, and scales the game's windows up. Wine 10's Mac driver
   doesn't scale what Direct3D draws, so the wrapp's mode scaling helper does
   ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#mode-scaling)).
@@ -482,7 +484,8 @@ direct assignment.
   after a Wine error, with nothing asking it to, is reported as a failure
   rather than a clean quit (`GameQuitCheck`,
   [quit watch](docs/wine-in-process-helpers.md#quit-watch)); a new routine
-  Wine error that trips it belongs in `GameQuitCheck.routineErrors`.
+  Wine error that trips it belongs in `Modules/wine/routine-errors.yaml`
+  (then `sc generate`).
 - - **Wrapps start Wine's desktop before the game**, and builds before each
   installer, waiting until it has registered the display devices
   (`WineDesktop`): left to Wine, a loaded Mac runs out its 10 s wait and the

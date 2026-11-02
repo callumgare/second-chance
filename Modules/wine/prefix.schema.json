@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/wine/prefix.json",
+  "title": "How the wine module sets a prefix up",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["setup"],
+  "properties": {
+    "setup": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "registry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "name", "value"],
+            "properties": {
+              "key": { "enum": ["x11-driver", "mac-driver", "direct3d"] },
+              "name": { "type": "string", "minLength": 1 },
+              "value": { "type": "string" }
+            }
+          },
+          "winetricks": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "ddraw-ini": {
+            "description": "Settings in cnc-ddraw's ddraw.ini, each line key=value replaced.",
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          },
+          "progress": {
+            "description": "What the build's progress says while this step runs.",
+            "enum": ["display", "graphics", "disc"]
+          }
+        }
+      }
+    }
+  }
+}
