@@ -14,6 +14,7 @@
 //  there before it and re-raises, so the crash report is still written.
 
 import Foundation
+import Synchronization
 import Logging
 
 nonisolated public enum CrashMarker {
@@ -30,11 +31,20 @@ nonisolated public enum CrashMarker {
     /// The action each signal had before ours, to hand the crash on to.
     nonisolated(unsafe) private static let previousActions = UnsafeMutablePointer<sigaction>.allocate(capacity: slots)
 
-    private static var armed = false
+    private static let armed = Atomic<Bool>(false)
+    private static let sentryHandles = Atomic<Bool>(false)
 
     /// Set by `FailureReporter.start` when Sentry handles crashes in this
     /// run, which it does from its own module, out of this one's sight.
-    public static var sentryHandlesCrashes = false
+    public static var sentryHandlesCrashes: Bool {
+        get { sentryHandles.load(ordering: .relaxed) }
+        set { sentryHandles.store(newValue, ordering: .relaxed) }
+    }
+
+    /// Where the handler runs: a stack of its own, as a stack overflow (the
+    /// commonest silent crash) leaves none on the thread's own to run it on.
+    /// Per thread, so it covers the main thread, where the app's code runs.
+    private static let alternateStackSize = 64 * 1024
 
     /// Install the handler — unless Sentry is handling crashes in this run
     /// (`sentryHandlesCrashes`). Sentry takes a real crash first,
@@ -45,9 +55,12 @@ nonisolated public enum CrashMarker {
     /// `FailureReporter.start`. Until `install(in:)` names the marker file, a
     /// crash is written to stderr only.
     public static func arm() {
-        guard !armed else { return }
-        armed = true
+        guard !armed.exchange(true, ordering: .relaxed) else { return }
         guard !sentryHandlesCrashes else { return }
+        if let stack = malloc(alternateStackSize) {
+            var alternate = stack_t(ss_sp: stack, ss_size: alternateStackSize, ss_flags: 0)
+            sigaltstack(&alternate, nil)
+        }
         let process = ProcessInfo.processInfo.processName
         messageTexts.initialize(repeating: nil, count: slots)
         messageLengths.initialize(repeating: 0, count: slots)
@@ -62,7 +75,7 @@ nonisolated public enum CrashMarker {
 
             var action = sigaction()
             action.__sigaction_u.__sa_handler = CrashMarker.handle
-            action.sa_flags = SA_RESETHAND
+            action.sa_flags = SA_RESETHAND | SA_ONSTACK
             sigemptyset(&action.sa_mask)
             sigaction(sig, &action, previousActions + Int(sig))
         }

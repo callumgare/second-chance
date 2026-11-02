@@ -246,8 +246,14 @@ nonisolated struct CiderPackage {
         }
         defer { reporter.cancel() }
 
+        // Cancelling the build stops tar rather than waiting out a gigabyte.
         var status: Int32 = -1
-        for await code in exit { status = code }
+        await withTaskCancellationHandler {
+            for await code in exit { status = code }
+        } onCancel: {
+            if process.isRunning { process.terminate() }
+        }
+        try Task.checkCancellation()
         guard status == 0 else {
             logger.error("tar exited \(status) extracting \(payload.path)")
             throw WrappBuildError.unsupportedMacDownload(

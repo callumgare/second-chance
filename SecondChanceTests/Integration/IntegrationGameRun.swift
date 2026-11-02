@@ -19,8 +19,6 @@ struct IntegrationGameRun {
     /// Which suite: `disk`, `her-download` or `steam`.
     let source: String
     let progress: ProgressFileWriter?
-    /// How long WrappPuppeteer gets: Steam starts and signs in before the game does.
-    var launchTimeout: TimeInterval = 90
 
     /// What a suite tells the run about its build.
     struct Build {
@@ -31,7 +29,7 @@ struct IntegrationGameRun {
         var installers: [URL] = []
         /// The input for its view model, given the test's output directory.
         let makeInput: @MainActor (URL, WrappBuildViewModel) -> WrappBuildInput
-        /// Starts the build: `buildFromDisk()` and the like.
+        /// Starts the build: `build(from: .disk)` and the like.
         let start: @MainActor (WrappBuildViewModel) async -> Void
     }
 
@@ -116,7 +114,7 @@ struct IntegrationGameRun {
             guard screenAllows(outcome), await loadAllows(outcome) else { return }
             outcome.phase("launching")
             let exitCode = try await outcome.timed(.launch) {
-                try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout) { outcome.warn($0) }
+                try await AppPuppetRunner.run(wrappURL: wrapp, game: game) { outcome.warn($0) }
             }
             outcome.puppeteerExit = exitCode
             outcome.expect(exitCode == 0, "WrappPuppeteer exited with \(exitCode) for \(label)")
@@ -127,7 +125,7 @@ struct IntegrationGameRun {
             if exitCode == 0, VMTarget.current == nil {
                 outcome.phase("relaunching to quit from the menu")
                 let menuExit = try await outcome.timed(.launch) {
-                    try await AppPuppetRunner.run(wrappURL: wrapp, game: game, timeout: launchTimeout, quitFromMenu: true) { outcome.warn($0) }
+                    try await AppPuppetRunner.run(wrappURL: wrapp, game: game, quitFromMenu: true) { outcome.warn($0) }
                 }
                 outcome.expect(menuExit == 0, "WrappPuppeteer exited with \(menuExit) quitting \(label) from its menu")
             }

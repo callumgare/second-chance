@@ -26,10 +26,13 @@ nonisolated public struct WindowsExecutable: Sendable {
         let rawOffset: Int
     }
 
-    /// Mapped rather than read in, since an installer can be hundreds of MB.
+    /// Mapped rather than read in, since an installer can be hundreds of MB,
+    /// but only where that is safe: a file on a disc is read in, since a
+    /// mapped file whose disc is ejected crashes the reader (SIGBUS) rather
+    /// than failing, and this keeps its bytes for later reads.
     /// Nil if the file can't be read or isn't a PE image.
     public init?(contentsOf url: URL) {
-        guard let data = try? Data(contentsOf: url, options: .alwaysMapped) else { return nil }
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
         self.init(data: data)
     }
 

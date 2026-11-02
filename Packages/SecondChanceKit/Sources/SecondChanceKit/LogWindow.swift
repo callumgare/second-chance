@@ -232,6 +232,16 @@ public class LogWindow: ObservableObject {
     var displayedTextForTesting: String {
         display.rows.map(\.compactLine).joined(separator: "\n")
     }
+
+    /// Wait until everything logged so far is shown, for a test to look at
+    /// rather than sleeping out the coalesced flush: the store hands its
+    /// pending entries to this window's subscription (which hops onto the
+    /// main actor), those hops run, and what they queued is drawn now.
+    func waitUntilShownForTesting() async {
+        await Blocking.run { LogStore.shared.flush() }
+        for _ in 0..<20 { await Task.yield() }
+        flush()
+    }
 }
 
 // MARK: - Log Window Controller
@@ -248,7 +258,8 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
     /// view's bounds-change notifications so new batches can follow the tail
     /// (Console.app style) without yanking a user who has scrolled up.
     private var isPinnedToBottom = true
-    private var boundsObserver: NSObjectProtocol?
+    // Set on the main thread; read again only by deinit, when nothing else can.
+    nonisolated(unsafe) private var boundsObserver: NSObjectProtocol?
     /// The scroll view currently observed. Compact-mode toggles rebuild the
     /// table (and its scroll view), so the observer must re-attach.
     private weak var observedScrollView: NSScrollView?
@@ -376,9 +387,9 @@ private class LogWindowController: NSWindowController, NSWindowDelegate {
             object: clipView,
             queue: .main
         ) { [weak self] notification in
-            guard let clipView = notification.object as? NSClipView,
-                  let scrollView = clipView.enclosingScrollView else { return }
+            guard let clipView = notification.object as? NSClipView else { return }
             MainActor.assumeIsolated {
+                guard let scrollView = clipView.enclosingScrollView else { return }
                 self?.updatePinnedState(in: scrollView)
             }
         }

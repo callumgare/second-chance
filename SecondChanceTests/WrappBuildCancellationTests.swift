@@ -9,7 +9,6 @@
 //
 
 import Testing
-import Combine
 @testable import SecondChance
 
 @MainActor
@@ -48,7 +47,9 @@ struct WrappBuildCancellationTests {
             Issue.record("Expected error state after failure, got \(viewModel.currentState)")
             return
         }
-        #expect(message == "boom")
+        // The detail is for the log: the screen says it plainly.
+        #expect(message == WrappBuildError.internalError("boom").playerMessage)
+        #expect(!message.contains("boom"))
     }
 
     @Test("The initial-dialog cancel is a distinct error from later cancels")
@@ -61,9 +62,8 @@ struct WrappBuildCancellationTests {
         let viewModel = WrappBuildViewModel()
 
         // Observe every state SwiftUI would render.
-        var observed: [WrappBuildState] = []
-        var cancellables = Set<AnyCancellable>()
-        viewModel.$currentState.sink { observed.append($0) }.store(in: &cancellables)
+        var observed: [WrappBuildState] = [viewModel.currentState]
+        viewModel.onStateChangeForTesting = { observed.append($0) }
 
         // Mirror the exact event order the builder's catch publishes on
         // cancellation: an error progress state followed by the typed failure.

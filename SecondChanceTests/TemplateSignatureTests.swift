@@ -55,7 +55,7 @@ struct TemplateSignatureTests {
         await #expect {
             try await WrappBuildHelper.shared.verifyTemplateSignatures(bundle)
         } throws: { error in
-            guard case WrappError.templateSignaturesLost = error else { return false }
+            guard case WrappBuildError.templateSignaturesLost = error else { return false }
             return true
         }
     }

@@ -26,7 +26,17 @@ nonisolated struct OSLogHandler: LogHandler {
     nonisolated func log(event: Logging.LogEvent) {
         // Emit with privacy: .public — this is the single most consequential line in the change.
         // Getting this wrong redacts everything in release builds and breaks every log show test.
-        let text = event.message.description
+        // With the line's metadata (a Wine line's pid and program) and error,
+        // as the other copies of the log have them: `log show` is how the
+        // integration tests read a wrapp's log.
+        var text = event.message.description
+        let merged = metadata.merging(event.metadata ?? [:]) { $1 }
+        if !merged.isEmpty {
+            text += " {" + merged.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " ") + "}"
+        }
+        if let error = event.error {
+            text += " [error: \(error)]"
+        }
         osLogger.log(level: Self.mapLevel(event.level), "\(text, privacy: .public)")
     }
 

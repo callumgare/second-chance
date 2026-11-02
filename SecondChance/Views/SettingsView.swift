@@ -82,7 +82,7 @@ struct SettingsView: View {
             } header: {
                 Text("Success Reports")
             } footer: {
-                Text("Reports go to the developer through Sentry.")
+                Text("Reports go to the developer, through Sentry, a service that collects reports like these.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)

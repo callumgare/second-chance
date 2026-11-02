@@ -97,6 +97,9 @@ enum ReleaseNotes {
             "-p", "--output-format", "stream-json", "--verbose", "--json-schema", schema,
             "--tools", "Bash,Read,Grep,Glob",
             "--allowedTools", "Bash(git show:*)", "Bash(git log:*)", "Bash(git diff:*)", "Read(./**)", "Grep", "Glob",
+            // The repo's code, but not this Mac's settings: .env holds the
+            // Sentry DSN and slugs, which have nothing to do with the notes.
+            "--disallowedTools", "Read(./.env)", "Read(./.env.*)", "Read(./.local/**)",
             "--permission-mode", "dontAsk",
             "--strict-mcp-config", "--no-session-persistence",
         ]

@@ -22,8 +22,9 @@ import Synchronization
 /// different one. Outside a build there is just the process's stage.
 nonisolated public enum LogContext {
     private static let lock = NSLock()
-    private static var _stage: String?
-    private static var _stageStart: UInt64 = 0
+    // Both guarded by `lock`.
+    nonisolated(unsafe) private static var _stage: String?
+    nonisolated(unsafe) private static var _stageStart: UInt64 = 0
 
     /// The build the current task is working for, if any. Work that leaves
     /// the task — a detached task, a dispatch queue, a pipe's reader — loses
@@ -108,6 +109,21 @@ nonisolated public enum ErrorChain {
             depth += 1
         }
         return parts.joined(separator: "\n  ")
+    }
+
+    /// Whether `error`, or one it was caused by, is the disk being full:
+    /// Foundation's out-of-space error or POSIX's `ENOSPC`.
+    public static func isOutOfSpace(_ error: Error) -> Bool {
+        var next: Error? = error
+        var depth = 0
+        while let current = next, depth < 6 {
+            let ns = current as NSError
+            if ns.domain == NSCocoaErrorDomain && ns.code == NSFileWriteOutOfSpaceError { return true }
+            if ns.domain == NSPOSIXErrorDomain && ns.code == Int(ENOSPC) { return true }
+            next = ns.userInfo[NSUnderlyingErrorKey] as? Error
+            depth += 1
+        }
+        return false
     }
 
     /// The error's type and case and nothing else — `WrappBuildError.installIncomplete`,

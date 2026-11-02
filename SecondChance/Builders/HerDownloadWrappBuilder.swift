@@ -82,7 +82,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// recognises and the person would rather choose another download.
     private func checkRecognised(_ gameInfo: GameInfo, input: WrappBuildInput) async throws {
         guard gameInfo.id == GameInfo.unknownGame.id else { return }
-        if try await input.askAboutUnrecognisedGame(.herDownload) == .chooseAnother {
+        if try input.askAboutUnrecognisedGame(.herDownload) == .chooseAnother {
             throw ChooseAnotherDownload()
         }
     }
@@ -110,14 +110,17 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
+            // Unpacked, then installed: the installer's own size each time,
+            // and as much again for what it was compressed from.
+            try await helper.ensureRoomToBuild(from: installer, copies: 3)
             try await helper.createBaseWrapp(at: wrappPath)
             let driveCPath = WrappLayout(app: wrappPath).driveC
-            let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
+            let installerBaseDir = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
 
             // An InstallShield launcher unpacks into the layout a disc has,
             // and then installs silently from an answer file as a disc does.
             // Anything else runs as it is, and asks its questions itself.
-            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: "Unpacking the installer")))
+            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Unpacking the installer"))))
             let unpacked = try await installerRunner.unpackInstallShieldLauncher(installer, at: wrappPath)
             if unpacked {
                 helper.installAnswerFile(forGame: gameInfo.id, source: .herDownload, into: installerBaseDir)
@@ -134,7 +137,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 source: .herDownload,
-                installerPath: unpacked ? nil : installer
+                installerPath: unpacked ? nil : installer,
+                unattended: input.isUnattended,
+                confirmPatchFailure: input.confirmPatchFailure
             )
 
             // Unlike a disc, nothing reads the installer once the game is in.
@@ -202,10 +207,11 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
+            try await helper.ensureRoomToBuild(from: image, copies: 3)
             try await helper.createBaseWrapp(at: wrappPath)
             let driveCPath = WrappLayout(app: wrappPath).driveC
 
-            await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game")))
+            await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Unpacking the game"))))
             try await publishEngineRoute(for: gameInfo)
 
             // Staged inside the wrapp, so moving the game out of it into
@@ -214,7 +220,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let bus = self.bus
             let wineDLLs = WrappLayout(app: wrappPath).wine.appendingPathComponent("lib/wine/i386-windows")
             let gameExe = try await package.extractGame(into: driveCPath, staging: staging, wineDLLs: wineDLLs) { percent in
-                await bus.publishWrappBuild(.progress(.installingGame(substep: "Unpacking the game (\(percent)%)")))
+                // On the progress bar: a substep changing every percent
+                // would start the step's clock again each time.
+                await bus.publishWrappBuild(.stepProgress(StepProgress(fraction: Double(percent) / 100, text: "\(percent)% unpacked")))
             }
             await removeQuietly(staging, what: "the rest of the Cider app")
             await isoMounter.unmountAll()
@@ -265,33 +273,18 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         input: WrappBuildInput
     ) async throws -> URL {
         let gameDir = (gameExePath as NSString).deletingLastPathComponent
-        try helper.configureWrapp(
-            at: wrappPath,
-            gameInfo: gameInfo,
-            source: .herDownload,
-            gameExePath: gameExePath,
-            installerDir: gameDir
+        let finalPath = try await helper.completeBuild(
+            wrapp: wrappPath, gameInfo: gameInfo, source: .herDownload,
+            gameExePath: gameExePath, installerDir: gameDir, input: input
         )
-        await bus.publishWrappBuild(.wrappConfigured(
-            exePath: gameExePath,
-            installerDir: gameDir,
-            gameInfo: gameInfo
-        ))
-
-        let finalPath = try await helper.finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
-        helper.unregisterTemporaryWrapp(wrappPath)
-
-        let (shouldLaunch, args) = await input.shouldLaunchGame()
-        if shouldLaunch {
-            try await helper.launchGame(at: finalPath, with: args)
-        }
+        await helper.launchIfAsked(finalPath, input: input)
         return finalPath
     }
 
     private func publishFailure(_ error: Error) async {
         // Not a failure: the build carries on with another download.
         guard !(error is ChooseAnotherDownload) else { return }
-        let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+        let buildError = WrappBuildError(error)
         await bus.publishWrappBuild(.failed(buildError))
     }
 

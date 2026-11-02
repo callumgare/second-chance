@@ -8,51 +8,29 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 echo "🔍 Setting up Wine for SecondChance..."
 
-# Configuration
+# Configuration. Each download is pinned to the file it was tested with:
+# fetch_verified (download-verified.sh) checks its SHA-256 before it is cached
+# or used. Changing a URL means changing its hash too.
 WINE_URL="https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz"
+WINE_SHA256="2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68"
 WINESKIN_URL="https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"
-WINETRICKS_URL="https://raw.githubusercontent.com/Kegworks-App/winetricks/kegworks/src/winetricks"
+WINESKIN_SHA256="9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a"
+# winetricks isn't fetched here: only Second Chance runs it (when it makes a
+# prefix), from the copy in SecondChance/Resources, so a wrapp has no use for one.
 
-# Download cache (persistent across builds)
+# Download cache (persistent across builds). Named after each URL's own
+# versioned file name, so changing a URL downloads the new file rather than
+# reusing whichever was cached first.
 DOWNLOAD_CACHE_DIR="$HOME/Library/Caches/SecondChance"
-# Named after the engine, so changing WINE_URL downloads the new one rather
-# than reusing whichever engine was cached first.
 WINE_ARCHIVE="$DOWNLOAD_CACHE_DIR/$(basename "$WINE_URL")"
-WINESKIN_ARCHIVE="$DOWNLOAD_CACHE_DIR/wineskin.tar.xz"
-WINETRICKS_FILE="$DOWNLOAD_CACHE_DIR/winetricks"
+WINESKIN_ARCHIVE="$DOWNLOAD_CACHE_DIR/wineskin-$(basename "$WINESKIN_URL")"
 
 WRAPPER_CONTENTS_DIR="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents"
 
-mkdir -p "$DOWNLOAD_CACHE_DIR"
-
-# Download archives if not cached
-if [ ! -f "$WINE_ARCHIVE" ]; then
-    echo "📥 Downloading Wine engine..."
-    curl -L -o "$WINE_ARCHIVE.tmp" "$WINE_URL"
-    mv "$WINE_ARCHIVE.tmp" "$WINE_ARCHIVE"
-    echo "✓ Downloaded Wine"
-else
-    echo "✓ Using cached Wine archive"
-fi
-
-if [ ! -f "$WINESKIN_ARCHIVE" ]; then
-    echo "📥 Downloading Wineskin frameworks..."
-    curl -L -o "$WINESKIN_ARCHIVE.tmp" "$WINESKIN_URL"
-    mv "$WINESKIN_ARCHIVE.tmp" "$WINESKIN_ARCHIVE"
-    echo "✓ Downloaded Wineskin"
-else
-    echo "✓ Using cached Wineskin archive"
-fi
-
-if [ ! -f "$WINETRICKS_FILE" ]; then
-    echo "📥 Downloading winetricks..."
-    curl -L -o "$WINETRICKS_FILE.tmp" "$WINETRICKS_URL"
-    chmod +x "$WINETRICKS_FILE.tmp"
-    mv "$WINETRICKS_FILE.tmp" "$WINETRICKS_FILE"
-    echo "✓ Downloaded winetricks"
-else
-    echo "✓ Using cached winetricks"
-fi
+# shellcheck source=download-verified.sh
+source "${SCRIPT_DIR}/download-verified.sh"
+fetch_verified "$WINE_URL" "$WINE_ARCHIVE" "$WINE_SHA256"
+fetch_verified "$WINESKIN_URL" "$WINESKIN_ARCHIVE" "$WINESKIN_SHA256"
 
 # Create single temp directory with final structure
 TEMP_DIR="${DERIVED_FILE_DIR}/wine-bundle-temp"
@@ -60,7 +38,6 @@ rm -rf "${TEMP_DIR}"
 echo "📋 Creating temp directory structure..."
 mkdir -p "${TEMP_DIR}/SharedSupport/wine"
 mkdir -p "${TEMP_DIR}/Frameworks"
-mkdir -p "${TEMP_DIR}/Resources"
 
 # Extract Wine
 echo "📦 Extracting Wine..."
@@ -74,11 +51,6 @@ tar -xf "$WINESKIN_ARCHIVE" -C "${FRAMEWORKS_TEMP}" --strip-components=1
 ditto --rsrc "${FRAMEWORKS_TEMP}/Contents/Frameworks" "${TEMP_DIR}/Frameworks"
 rm -rf "${FRAMEWORKS_TEMP}"
 
-# Copy winetricks
-echo "📋 Installing winetricks..."
-ditto --rsrc "$WINETRICKS_FILE" "${TEMP_DIR}/Resources/winetricks"
-chmod +x "${TEMP_DIR}/Resources/winetricks"
-    
 # Build the in-process helpers and hook them into Wine's Mac driver.
 #
 # The helpers have to run inside the Wine process that owns the game window:
@@ -175,7 +147,7 @@ OUTPUT_LIST="${SCRIPT_DIR}/Resources/wine-files"
 echo "📝 Creating output files list..."
 {
     find "${TEMP_DIR}" -type f | while read -r file; do
-        echo "${file#${TEMP_DIR}/}"
+        echo "${file#"${TEMP_DIR}"/}"
     done
 } | grep -v -x "Frameworks/in_process_helpers.dylib" > "${OUTPUT_LIST}"
 
@@ -189,7 +161,7 @@ rm -rf "${TEMP_DIR}"
 mkdir -p "$WRAPPER_CONTENTS_DIR/Resources"
 cp "${OUTPUT_LIST}" "$WRAPPER_CONTENTS_DIR/Resources/"
 
-echo "✅ Wine, frameworks, and winetricks embedded in ${PRODUCT_NAME}.app"
+echo "✅ Wine and frameworks embedded in ${PRODUCT_NAME}.app"
 echo "✅ Output files list created at ${OUTPUT_LIST}"
 
 # Stamp named to match the input declared on the "Check for collisions" phase, so

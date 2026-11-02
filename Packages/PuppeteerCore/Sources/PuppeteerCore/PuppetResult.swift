@@ -1,0 +1,30 @@
+//
+//  PuppetResult.swift
+//  WrappPuppeteer
+//
+//  Result and exit-code types shared by every scenario.
+
+import Foundation
+
+/// Process exit codes. The integration tests read these, so the numbers are a
+/// contract — see docs/testing.md.
+nonisolated public enum PuppetExitCode: Int32 {
+    case passed = 0
+    case failed = 1
+    case forcedQuit = 2
+}
+
+/// Typed result of running a scenario.
+nonisolated public enum PuppetResult {
+    case passed
+    case forcedQuit
+    case failed(String)
+
+    public var exitCode: Int32 {
+        switch self {
+        case .passed: return PuppetExitCode.passed.rawValue
+        case .forcedQuit: return PuppetExitCode.forcedQuit.rawValue
+        case .failed: return PuppetExitCode.failed.rawValue
+        }
+    }
+}

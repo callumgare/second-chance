@@ -117,27 +117,37 @@ nonisolated struct SteamDownloadMeter {
 
     /// "1.2 GB of 2.4 GB, about 3 minutes left".
     func text(now: Date = Date()) -> String {
-        let figures = "\(Self.bytes.string(fromByteCount: min(received, total))) of \(Self.bytes.string(fromByteCount: total))"
-        guard let rate = bytesPerSecond(now: now), rate > 0 else { return figures }
-        return "\(figures), \(Self.timeLeft(Double(max(total - received, 0)) / rate))"
+        let rate = bytesPerSecond(now: now).flatMap { $0 > 0 ? $0 : nil }
+        return Self.text(done: Self.bytes.string(fromByteCount: min(received, total)),
+                         of: Self.bytes.string(fromByteCount: total),
+                         secondsLeft: rate.map { Double(max(total - received, 0)) / $0 })
+    }
+
+    /// "1.2 GB of 2.4 GB, about 3 minutes left", the time left in round
+    /// figures: each case a whole sentence, so that it translates whole.
+    static func text(done: String, of size: String, secondsLeft seconds: TimeInterval?) -> String {
+        guard let seconds else { return String(localized: "\(done) of \(size)") }
+        switch seconds {
+        case ..<60:
+            return String(localized: "\(done) of \(size), less than a minute left")
+        case ..<90:
+            return String(localized: "\(done) of \(size), about a minute left")
+        case ..<(60 * 60):
+            return String(localized: "\(done) of \(size), about \(Int((seconds / 60).rounded())) minutes left")
+        case ..<(90 * 60):
+            return String(localized: "\(done) of \(size), about an hour left")
+        default:
+            return String(localized: "\(done) of \(size), about \(Int((seconds / 3600).rounded())) hours left")
+        }
     }
 
     /// Sizes as figures, "0 bytes" included rather than "Zero KB".
-    private static let bytes: ByteCountFormatter = {
+    /// Set up once, then only read: formatters are safe to share.
+    nonisolated(unsafe) private static let bytes: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         formatter.allowsNonnumericFormatting = false
         return formatter
     }()
 
-    /// "about 3 minutes left", in round figures.
-    static func timeLeft(_ seconds: TimeInterval) -> String {
-        switch seconds {
-        case ..<60: return "less than a minute left"
-        case ..<90: return "about a minute left"
-        case ..<(60 * 60): return "about \(Int((seconds / 60).rounded())) minutes left"
-        case ..<(90 * 60): return "about an hour left"
-        default: return "about \(Int((seconds / 3600).rounded())) hours left"
-        }
-    }
 }

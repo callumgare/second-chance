@@ -9,7 +9,7 @@ import GameCatalog
 import SecondChanceKit
 
 struct WrappBuildProgressView: View {
-    @EnvironmentObject var viewModel: WrappBuildViewModel
+    @Environment(WrappBuildViewModel.self) var viewModel
 
     var body: some View {
         if case .completed = viewModel.currentState {
@@ -42,7 +42,10 @@ struct WrappBuildProgressView: View {
             } leading: {
                 EmptyView()
             } trailing: {
+                // Esc: the answer that sends nothing, so the question can
+                // be answered from the keyboard without leaning towards yes.
                 Button("Don't Send") { viewModel.answerSuccessReports(false) }
+                    .keyboardShortcut(.cancelAction)
                 Button("Send") { viewModel.answerSuccessReports(true) }
             }
             .accessibilityIdentifier("success-reports-question")
@@ -93,14 +96,18 @@ struct WrappBuildProgressView: View {
                 // A step that can measure itself (a download) fills the bar
                 // as it goes; otherwise the bar shows how far through the
                 // build's steps it is.
-                if let fraction = viewModel.stepProgress?.fraction {
-                    ProgressView(value: min(max(fraction, 0), 1), total: 1.0)
-                } else if let progress = viewModel.currentState.progress {
-                    ProgressView(value: progress, total: 1.0)
-                } else {
-                    ProgressView()
-                        .progressViewStyle(.linear)
+                Group {
+                    if let fraction = viewModel.stepProgress?.fraction {
+                        ProgressView(value: min(max(fraction, 0), 1), total: 1.0)
+                    } else if let progress = viewModel.currentState.progress {
+                        ProgressView(value: progress, total: 1.0)
+                    } else {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                    }
                 }
+                .accessibilityLabel("Installing \(gameName ?? "the game")")
+                .accessibilityValue(viewModel.isCancelling ? "Stopping" : Self.status(of: viewModel.currentState))
 
                 HStack(alignment: .firstTextBaseline) {
                     Text(viewModel.isCancelling ? "Stopping…" : Self.status(of: viewModel.currentState))
@@ -187,7 +194,7 @@ struct WrappBuildProgressView: View {
                     .accessibilityHidden(true)
                 Text("\(gameName ?? "The game") is ready to play.")
                     .font(.headline)
-                Text("Open it from the folder you saved it in, like any other app.")
+                Text(Self.whereSaved(viewModel.builtWrappURL))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
@@ -200,11 +207,29 @@ struct WrappBuildProgressView: View {
                 }
             }
         } trailing: {
-            Button("Done") {
-                viewModel.reset()
+            HStack {
+                Button("Done") {
+                    viewModel.reset()
+                }
+                if let url = viewModel.builtWrappURL {
+                    Button("Play Now") {
+                        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+                        viewModel.reset()
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
             }
-            .keyboardShortcut(.defaultAction)
         }
+    }
+
+    /// Where the finished app was saved, by the folder's name as the Finder
+    /// shows it.
+    static func whereSaved(_ url: URL?) -> String {
+        guard let folder = url?.deletingLastPathComponent() else {
+            return "Open it from the folder you saved it in, like any other app."
+        }
+        let name = FileManager.default.displayName(atPath: folder.path)
+        return "It's in your \(name) folder, where you can open it like any other app."
     }
 }
 
@@ -243,7 +268,7 @@ struct SteamSignInNoticeBox: View {
 
 #Preview("Progress") {
     WrappBuildProgressView()
-        .environmentObject({
+        .environment({
             let vm = WrappBuildViewModel()
             vm.currentState = .installingGame(substep: "Running the installer", elapsedSeconds: 42)
             vm.detectedGame = GameInfo(id: "blackmoor-manor", title: "Curse of Blackmoor Manor")
@@ -254,7 +279,7 @@ struct SteamSignInNoticeBox: View {
 
 #Preview("Completed") {
     WrappBuildProgressView()
-        .environmentObject({
+        .environment({
             let vm = WrappBuildViewModel()
             vm.currentState = .completed
             vm.detectedGame = GameInfo(id: "blackmoor-manor", title: "Curse of Blackmoor Manor")

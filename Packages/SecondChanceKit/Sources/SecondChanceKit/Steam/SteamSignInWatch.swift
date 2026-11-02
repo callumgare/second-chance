@@ -152,7 +152,8 @@ public nonisolated struct SteamSignInWatch: Sendable {
             if !reportedQuiet, quiet >= limit / 2 * factor {
                 reportedQuiet = true
                 let stuckAt = lastLogActivity.addingTimeInterval(limit * factor)
-                logger.notice("[Sign-in] Nothing in Steam's logs for \(Self.duration(quiet)): it counts as stuck in \(Self.duration(stuckAt.timeIntervalSince(now))) unless it writes something")
+                let untilStuck = Self.duration(stuckAt.timeIntervalSince(now))
+                logger.notice("[Sign-in] Nothing in Steam's logs for \(Self.duration(quiet)): it counts as stuck in \(untilStuck) unless it writes something")
                 events.append(.quiet(stuckAt: stuckAt))
             }
             if quiet >= limit * factor {

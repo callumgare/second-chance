@@ -77,9 +77,11 @@ class InfoWindowController: NSWindowController {
     }
 
     /// Say Steam is slow or stuck signing in, or no longer. Any thread.
-    func setSteamNotice(_ notice: SteamSignInNotice?) {
+    nonisolated func setSteamNotice(_ notice: SteamSignInNotice?) {
         DispatchQueue.main.async {
-            self.viewModel.steamNotice = notice
+            MainActor.assumeIsolated {
+                self.viewModel.steamNotice = notice
+            }
         }
     }
 
@@ -107,11 +109,6 @@ class InfoWindowController: NSWindowController {
         viewModel.confirm()
     }
 
-    /// Whether the game has successfully loaded (info window was dismissed).
-    var hasGameLoaded: Bool {
-        viewModel.gameHasLoaded
-    }
-
     /// `stage` is what the launch waits on first: Steam, for a game that
     /// needs it, or else the game.
     init(stage: LoadingStage, appSupportPath: URL, gameSlug: String = "nancy-drew", gameTitle: String = "Nancy Drew",
@@ -136,6 +133,12 @@ class InfoWindowController: NSWindowController {
         window.contentView = NSHostingView(rootView: InfoWindowView(viewModel: viewModel))
 
         super.init(window: window)
+
+        // A launch can take minutes on a busy Mac: floating above every app
+        // all that time would cover whatever the player went off to do.
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(updateLevel), name: name, object: nil)
+        }
 
         // Wire up the confirm callback: save pref then notify caller
         viewModel.onConfirm = { [weak self] in
@@ -171,21 +174,36 @@ class InfoWindowController: NSWindowController {
     }
 
     /// A sign the launch is getting somewhere. Safe from any thread.
-    func noteProgress(_ sign: LaunchProgressSign) {
+    nonisolated func noteProgress(_ sign: LaunchProgressSign) {
         DispatchQueue.main.async {
-            self.viewModel.noteProgress(sign)
+            MainActor.assumeIsolated {
+                self.viewModel.noteProgress(sign)
+            }
         }
     }
 
     /// Show that the launch has moved on to `stage`. Safe from any thread.
-    func setStage(_ stage: LoadingStage) {
+    nonisolated func setStage(_ stage: LoadingStage) {
         DispatchQueue.main.async {
-            self.viewModel.setStage(stage)
-            // While Steam waits on the player in its own window, this one
-            // mustn't float over it: both open in the middle of the screen,
-            // and this one would hide the sign-in's QR code.
-            self.window?.level = stage.isWaitingOnThePlayer ? .normal : .floating
+            MainActor.assumeIsolated {
+                self.viewModel.setStage(stage)
+                // While Steam waits on the player in its own window, this one
+                // mustn't float over it: both open in the middle of the screen,
+                // and this one would hide the sign-in's QR code.
+                self.updateLevel()
+            }
         }
+    }
+
+    /// Above other windows while the game app is the one in front (Wine's
+    /// own windows open over it otherwise), and not while the player is in
+    /// another app. Nor while Steam waits on the player in its own window:
+    /// both open in the middle of the screen, and this one would hide the
+    /// sign-in's QR code. The closing window floats regardless
+    /// (`showQuitting`).
+    @objc private func updateLevel() {
+        guard let window, !viewModel.phase.isQuitting else { return }
+        window.level = NSApp.isActive && !viewModel.stage.isWaitingOnThePlayer ? .floating : .normal
     }
 
     func notifyGameLoaded() {
@@ -196,11 +214,6 @@ class InfoWindowController: NSWindowController {
             self.viewModel.markGameLoaded()
             self.close()
         }
-    }
-
-    func hideWarning() {
-        viewModel.phase = .loading
-        viewModel.startStageTimers()
     }
 
     /// The wrapp is quitting, and has got as far as `step`. Safe from any
@@ -260,15 +273,14 @@ class InfoWindowController: NSWindowController {
         }
     }
 
-    /// Safe to call from any thread: the game launcher calls it from its
-    /// background queue when the game exits, and AppKit traps (SIGILL) on a
-    /// window closed off the main thread. Off-main calls are queued, so they
-    /// stay in order with `showError`, which is queued the same way.
+    /// Queued, as `showError` is, so the two stay in order.
     override func close() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { self.close() }
-            return
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { self.closeNow() }
         }
+    }
+
+    private func closeNow() {
         viewModel.stopTimer()
         loadMonitor?.observe(nil)
         activity?.stop()

@@ -81,11 +81,7 @@ nonisolated enum InstallCompletion {
     /// Reads an installer log, which may be UTF-8, Latin-1 or (msiexec on
     /// Windows) UTF-16.
     static func readLog(at url: URL) -> String? {
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) {
-            return String(data: data, encoding: .utf16)
-        }
-        return String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1)
+        TextFile.text(of: url)
     }
 
     private static func lastLine(of log: String) -> String {

@@ -33,7 +33,7 @@ final class BuildWindow {
         )
         window.title = title
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: ContentView().environmentObject(viewModel))
+        window.contentView = NSHostingView(rootView: ContentView().environment(viewModel))
         if nextTopLeft == .zero {
             window.center()
             nextTopLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)

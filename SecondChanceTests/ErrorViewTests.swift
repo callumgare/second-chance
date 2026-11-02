@@ -37,9 +37,13 @@ struct ErrorViewTests {
             LogWindow.shared.showLogWindow(title: "Test - Installation Log")
         }
 
-        // The snapshot is delivered synchronously on show; allow a brief hop
-        // for the collector tasks.
-        try await Task.sleep(for: .milliseconds(200))
+        // The snapshot is delivered on show; wait for it to be drawn and for
+        // the collector's hops, rather than a fixed time.
+        await LogWindow.shared.waitUntilShownForTesting()
+        let deadline = Date().addingTimeInterval(2)
+        while await collector.lines.isEmpty && Date() < deadline {
+            await Task.yield()
+        }
 
         await MainActor.run {
             LogWindow.shared.onLine = nil

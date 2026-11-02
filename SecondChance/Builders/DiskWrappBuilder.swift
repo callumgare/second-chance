@@ -68,6 +68,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
 
         do {
+            // Each disc is copied, and the game installed from the copies.
+            try await helper.ensureRoomToBuild(from: disk1Root, copies: 2 * max(gameInfo.diskCount, 1))
             try await helper.createBaseWrapp(at: wrappPath)
 
             // Disk-specific layout + CD-ROM mounting stays in the builder —
@@ -90,14 +92,17 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     wrappPath: wrappPath,
                     gameInfo: gameInfo,
                     source: .disk,
-                    installerName: installerName
+                    installerName: installerName,
+                    unattended: input.isUnattended,
+                    confirmPatchFailure: input.confirmPatchFailure
                 )
             case .scummvm:
                 await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
                 (gameExePath, installerDir) = try await installerRunner.installGameWithScummVM(
                     wrappPath: wrappPath,
                     gameInfo: gameInfo,
-                    source: .disk
+                    source: .disk,
+                    confirmPatchFailure: input.confirmPatchFailure
                 )
             default:
                 throw WrappBuildError.unsupportedEngine
@@ -109,40 +114,23 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
             }
 
-            try helper.configureWrapp(
-                at: wrappPath,
-                gameInfo: gameInfo,
-                source: .disk,
-                gameExePath: gameExePath,
-                installerDir: installerDir
+            // ── Shared tail: configure → sign → save → notify ──────────────
+            let finalPath = try await helper.completeBuild(
+                wrapp: wrappPath, gameInfo: gameInfo, source: .disk,
+                gameExePath: gameExePath, installerDir: installerDir, input: input
             )
-            await bus.publishWrappBuild(.wrappConfigured(
-                exePath: gameExePath,
-                installerDir: installerDir,
-                gameInfo: gameInfo
-            ))
-
-            // ── Shared tail: sign → save → notify. The move in here makes ──
-            // the temp wrapp non-temporary, so unregister on success.
-            let finalPath = try await helper.finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
-            helper.unregisterTemporaryWrapp(wrappPath)
 
             // Builder-owned resources: unmount now the build is complete.
             await isoMounter.unmountAll()
 
-            // Launch if requested (headless automation).
-            let (shouldLaunch, args) = await input.shouldLaunchGame()
-            if shouldLaunch {
-                try await helper.launchGame(at: finalPath, with: args)
-            }
-
+            await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
             // Tear down builder-owned resources before rethrowing.
             await helper.removeTempWrapp(wrappPath)
             await isoMounter.unmountAll()
 
-            let installError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            let installError = WrappBuildError(error)
             await bus.publishWrappBuild(.failed(installError))
             throw error
         }
@@ -198,7 +186,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
                 logger.notice("Detected game: \(gameInfo.title)")
                 if gameInfo.id == GameInfo.unknownGame.id,
-                   try await input.askAboutUnrecognisedGame(.disk) == .chooseAnother {
+                   try input.askAboutUnrecognisedGame(.disk) == .chooseAnother {
                     await isoMounter.unmountAll()
                     disk1 = try await input.getDisk1Path()
                     continue
@@ -213,7 +201,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     case .none:
                         throw WrappBuildError.installerNotFound
                     case .unrecognised(let programs):
-                        switch try await input.askAboutUnidentifiedInstaller(programs: programs) {
+                        switch try input.askAboutUnidentifiedInstaller(programs: programs) {
                         case .tryProgram(let program):
                             installerName = program
                         case .chooseAnother:
@@ -229,7 +217,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             }
         } catch {
             await isoMounter.unmountAll()
-            let buildError = (error as? WrappBuildError) ?? .internalError(error.localizedDescription)
+            let buildError = WrappBuildError(error)
             await bus.publishWrappBuild(.failed(buildError))
             throw error
         }
@@ -269,38 +257,25 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 await bus.publishWrappBuild(.disksResolved(disk1: disk1, disk2: nil))
                 return
             } else {
-                throw WrappError.cachedGameMismatch
+                throw WrappBuildError.cachedGameMismatch
             }
         }
 
         await bus.publishWrappBuild(.progress(.copyingInstaller(substep: nil)))
 
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
+        let installerPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
 
         try fileManager.createDirectory(at: installerPath, withIntermediateDirectories: true)
 
-        // Copy disk 1 on background queue
         let disk1Dest = installerPath.appendingPathComponent("disk-1")
-        try await Task.detached {
-            try FileManager.default.copyItem(at: disk1, to: disk1Dest)
-        }.value
-
-        // Remove extended attributes, resource forks, and Finder info that would cause codesign to fail
-        try await removeExtendedAttributes(from: disk1Dest)
-        await makeWritable(disk1Dest)
+        try await copyDisc(disk1, to: disk1Dest)
 
         // Copy disk 2 if present
         if let disk2 = try await resolveDisk2() {
-            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: "Copying disc 2")))
+            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Copying disc 2"))))
             let disk2Dest = installerPath.appendingPathComponent("disk-2")
-            try await Task.detached {
-                try FileManager.default.copyItem(at: disk2, to: disk2Dest)
-            }.value
-
-            // Remove extended attributes from disk 2 as well
-            try await removeExtendedAttributes(from: disk2Dest)
-            await makeWritable(disk2Dest)
+            try await copyDisc(disk2, to: disk2Dest)
 
             // Create combined disk directory with symlinks
             let combinedDest = installerPath.appendingPathComponent("disk-combined")
@@ -342,7 +317,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// Mount game disk directories as CD-ROM drives
     private func mountGameDisksIntoWine(wrappPath: URL) async throws {
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        let installerPath = driveCPath.appendingPathComponent("nancy-drew-installer")
+        let installerPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
 
         // Find all disk-* directories and sort them
         guard let contents = try? fileManager.contentsOfDirectory(at: installerPath, includingPropertiesForKeys: [.isDirectoryKey]) else {
@@ -396,25 +371,19 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// delete the copy afterwards: not a failed build's cleanup, not the
     /// integration test's, and not a user deleting the wrapp. Each such copy
     /// left behind is gigabytes, and they had filled a test machine's disk.
-    private func makeWritable(_ path: URL) async {
-        do {
-            let chmod = try await Process.output(of: "/bin/chmod", ["-R", "u+w", path.path])
-            if !chmod.succeeded {
-                logger.warning("⚠️ Could not make \(path.lastPathComponent) writable: \(chmod.errorOutput)")
-            }
-        } catch {
-            logger.warning("⚠️ Could not run chmod on \(path.lastPathComponent): \(error.localizedDescription)")
-        }
-    }
-
-    /// Remove extended attributes, resource forks, and Finder info that
-    /// would cause codesign to fail.
-    private func removeExtendedAttributes(from path: URL) async throws {
-        logger.notice("Removing extended attributes from \(path.lastPathComponent)...")
-        let xattr = try await Process.output(of: "/usr/bin/xattr", ["-cr", path.path])
-        if !xattr.succeeded {
-            logger.warning("⚠️ Failed to remove extended attributes: \(xattr.errorOutput)")
-            // Don't throw - this is not critical, codesign will just fail later with a better message
+    /// Copy a disc into the wrapp (`DiscCopy`): contents only, writable,
+    /// cancellable, with how much is done on the progress screen.
+    private func copyDisc(_ disc: URL, to destination: URL) async throws {
+        let total = await Blocking.run { FreeSpace.size(of: disc) }
+        logger.notice("Copying \(disc.path) (\(total.map(FreeSpace.describe) ?? "size unknown"))")
+        let bus = bus
+        try await DiscCopy.copy(from: disc, to: destination, total: total) { progress in
+            let copied = FreeSpace.describe(progress.copied)
+            let measured = StepProgress(
+                fraction: progress.total.map { min(1, Double(progress.copied) / Double(max($0, 1))) },
+                text: progress.total.map { "\(copied) of \(FreeSpace.describe($0))" } ?? "\(copied) copied"
+            )
+            Task { await bus.publishWrappBuild(.stepProgress(measured)) }
         }
     }
 }

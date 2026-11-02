@@ -102,8 +102,11 @@ Wine decides which windows may go fullscreen from the game's Win32 window
 style, and it decides again whenever the window's style or state changes,
 which happens when the game loses and regains focus. A Space given to a
 borderless window would last only until the player first switched away. So
-for the window it takes over, the helper replaces three of Wine's own
-`WineWindow` methods at run time (`method_setImplementation`):
+for the window it takes over, the helper replaces five of Wine's own
+`WineWindow` methods at run time (`replaceOwnMethod`, in `helper_common.h`,
+which every helper replaces Wine's methods through: a method the Wine class
+only inherits is first given to that class as its own, so replacing it never
+changes `NSWindow`'s, and every other window's, along with it):
 
 | Wine method | What it does for that window instead |
 | --- | --- |

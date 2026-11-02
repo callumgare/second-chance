@@ -134,14 +134,19 @@ rollback above takes them back out if either fails. Unless you said at the
 start to publish once built, it then asks whether to push the branch and tag to `origin` and create the GitHub release with `gh`,
 with the zip and `appcast.xml` attached. Publishing the release is what offers
 the update to installed copies, since their feed is the latest release's
-appcast.
+appcast, so the release is created as a draft, and made public only once both
+files are seen on it: a published release missing its appcast would break
+every installed copy's update check. Before packaging, the app's signature is
+checked with `codesign --verify --deep --strict`.
 Answering no, or running with no terminal to ask, prints those commands
 instead. A failed push or `gh release create` leaves the commit and tag in
 place and names what is left to run.
 
 So that last step can't be the first to find out the account is wrong, the
 preflight checks that the account `gh` is signed in as can write to the repo,
-and stops before anything is written if not. GitHub answers a release created
+and stops before anything is written if not. For the same reason it fetches the
+branch from `origin` and stops if the branch is behind it, which the push
+would otherwise only refuse after the tests, the build and the symbols upload. GitHub answers a release created
 without that access with a 404, which `gh` blames on a missing `workflow`
 scope — the check names the account and its permission instead.
 

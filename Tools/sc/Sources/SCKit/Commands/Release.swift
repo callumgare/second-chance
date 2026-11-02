@@ -286,6 +286,12 @@ private struct Release {
             throw SCError("The build reported success but \(repo.display(app)) is missing.")
         }
         try checkSentryDSN(in: app)
+        // A bundle whose signature doesn't hold up (a file changed after
+        // signing, a nested one unsigned) installs, then won't open.
+        let verified = try await Proc.collect("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path])
+        guard verified.succeeded else {
+            throw SCError("\(repo.display(app))'s code signature doesn't verify.", hints: [verified.error])
+        }
         try await ui.progressStep("Package", success: "Packaged \(repo.display(zip))") { _ in
             try? FileManager.default.removeItem(at: zip)
             // ditto, not zip: the Wine and ScummVM payloads inside
@@ -598,9 +604,14 @@ private struct Release {
     private func publish(version: String, branch: String, ask: Bool) async throws {
         let tag = "v\(version)"
         let push = ["git", "push", "origin", branch, tag]
-        let release = ["gh", "release", "create", tag, repo.display(zip), repo.display(appcast), "--title", tag, "--notes-file", repo.display(notesFile)]
+        // As a draft, published only once both files are seen on it: the
+        // apps' update feed is releases/latest/download/appcast.xml, so a
+        // published release missing its appcast breaks every update check.
+        let release = ["gh", "release", "create", tag, repo.display(zip), repo.display(appcast), "--title", tag,
+                       "--notes-file", repo.display(notesFile), "--draft"]
+        let undraft = ["gh", "release", "edit", tag, "--draft=false"]
         let pushLine = push.map(Self.shellQuoted).joined(separator: " ")
-        let releaseLine = release.map(Self.shellQuoted).joined(separator: " ")
+        let releaseLine = (release + ["&&"] + undraft).map(Self.shellQuoted).joined(separator: " ")
 
         guard try !ask || ui.confirm("Push \(branch) and \(tag) to origin, and create the GitHub release?") == true else {
             ui.success("\(tag) is committed and tagged locally. To publish:", takeaways: [TerminalText(stringLiteral: pushLine), TerminalText(stringLiteral: releaseLine)])
@@ -619,6 +630,18 @@ private struct Release {
             let created = try await gh(Array(release.dropFirst()))
             guard created.succeeded else {
                 throw SCError("gh release create failed — \(tag) is pushed.", hints: [created.error, "Then run: \(releaseLine)"])
+            }
+            let assets = try await gh(["release", "view", tag, "--json", "assets", "--jq", ".assets[].name"])
+            let names = Set(assets.output.split(separator: "\n").map(String.init))
+            let expected = [zip.lastPathComponent, appcast.lastPathComponent]
+            guard assets.succeeded, expected.allSatisfy(names.contains) else {
+                throw SCError("The \(tag) draft release is missing \(expected.filter { !names.contains($0) }.joined(separator: " and ")), so it wasn't published.",
+                              hints: ["Upload what's missing to the draft (gh release upload \(tag) <file>), then: \(undraft.joined(separator: " "))"])
+            }
+            let published = try await gh(Array(undraft.dropFirst()))
+            guard published.succeeded else {
+                throw SCError("The \(tag) release was created as a draft, but publishing it failed.",
+                              hints: [published.error, "Then run: \(undraft.joined(separator: " "))"])
             }
             return created
         }
@@ -653,6 +676,12 @@ private struct Release {
         let branch = try await git(["rev-parse", "--abbrev-ref", "HEAD"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
         if branch != "main" { warnings.append(("On branch '\(branch)', not main.", nil)) }
 
+        // The push comes last, after the tests, the build, the symbols and
+        // the commit and tag: find out now if it would be refused.
+        if !dryRun && !buildOnly {
+            try await checkInStepWithOrigin(branch: branch)
+        }
+
         let hookPath = try await git(["rev-parse", "--git-path", "hooks/commit-msg"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
         let hook = hookPath.hasPrefix("/") ? hookPath : repo.root.appendingPathComponent(hookPath).path
         if !FileManager.default.isExecutableFile(atPath: hook) {
@@ -669,6 +698,24 @@ private struct Release {
                              TerminalText(stringLiteral: bad.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: "\n"))))
         }
         return branch
+    }
+
+    /// Fail unless `branch` can be pushed as it is: not behind origin's, nor
+    /// gone its own way. Ahead is fine, and what a release usually is.
+    private func checkInStepWithOrigin(branch: String) async throws {
+        let fetched = try await git(["fetch", "origin", branch])
+        guard fetched.succeeded else {
+            throw SCError("Couldn't fetch \(branch) from origin to check the release can be pushed.", hints: [fetched.error])
+        }
+        let counts = try await git(["rev-list", "--left-right", "--count", "HEAD...origin/\(branch)"])
+        let parts = counts.output.split(whereSeparator: \.isWhitespace).compactMap { Int($0) }
+        guard counts.succeeded, parts.count == 2 else {
+            throw SCError("Couldn't compare \(branch) with origin's.", hints: [counts.error])
+        }
+        if parts[1] > 0 {
+            throw SCError("\(branch) is \(parts[1]) commit\(parts[1] == 1 ? "" : "s") behind origin's, so the release couldn't be pushed.",
+                          hints: ["Pull (or rebase onto origin/\(branch)) first, then release."])
+        }
     }
 
     /// Publishing ends with `gh release create`, after the tag is pushed, so

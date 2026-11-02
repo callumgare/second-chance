@@ -77,7 +77,7 @@ nonisolated public enum SystemLoad {
     /// builds (their copies, disc mounts and signing) aren't other programs
     /// the Mac is busy with.
     public static func read(excludingDescendants: Bool = false) -> SystemLoadReading? {
-        guard let processes = ProcessList.current() else { return nil }
+        guard let processes = ProcessList.recent(maxAge: .seconds(2)) else { return nil }
         return reading(from: processes, excluding: ProcessInfo.processInfo.processIdentifier,
                        andDescendants: excludingDescendants, fastCores: fastCoreCount)
     }

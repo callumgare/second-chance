@@ -18,6 +18,7 @@
 //
 
 import Foundation
+import Synchronization
 import Logging
 import AppKit
 import SecondChanceKit
@@ -46,16 +47,31 @@ class WrappBuildHelper {
 
     // MARK: - Base Wrapp Construction
 
-    /// Copy directory using shell command with symlink preservation.
-    /// This works around VirtualBuddy shared folder symlink issues.
-    private func copyItemDerefencingSymlinks(at source: URL, to destination: URL) async throws {
+    /// Copy the template to `destination` with `cp`, which keeps its
+    /// symlinks as links (FileManager's copy works around a VirtualBuddy
+    /// shared-folder symlink problem less well) and its extended attributes,
+    /// where the template's files keep their code signatures.
+    ///
+    /// `-c` clones each file (APFS `clonefile`) rather than copying its
+    /// bytes, which makes the copy near instant and takes no space until a
+    /// file changes. On a volume that can't clone, the copy is made in full.
+    private func copyTemplate(at source: URL, to destination: URL) async throws {
         let executable = "/bin/cp"
-        // -a: recursive, preserving symlinks (not following them) and attributes
+        let clone = try await Process.output(of: executable, ["-ac", source.path, destination.path])
+        if clone.succeeded { return }
+        logger.notice("Couldn't clone the template (\(clone.errorOutput.trimmingCharacters(in: .whitespacesAndNewlines))); copying it in full")
+        await Blocking.run { try? FileManager.default.removeItem(at: destination) }
+
         let arguments = ["-a", source.path, destination.path]
         let copy = try await Process.output(of: executable, arguments)
         if !copy.succeeded {
             let command = formatShellCommand(executable: executable, arguments: arguments)
-            throw WrappError.copyFailed(message: "cp command failed", command: command, output: copy.errorOutput)
+            logger.notice("   Command: \(command)")
+            logger.notice("   Output: \(copy.errorOutput)")
+            if copy.errorOutput.contains("No space left on device") {
+                throw WrappBuildError.notEnoughSpace(needed: nil, available: nil)
+            }
+            throw WrappBuildError.copyFailed("\(command): \(copy.errorOutput)")
         }
     }
 
@@ -63,7 +79,7 @@ class WrappBuildHelper {
     func createBaseWrapp(at path: URL) async throws {
         // Find the pre-built unified template
         guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
-            throw WrappError.templateNotFound("WrappTemplate.app not found in Second Chance.app bundle")
+            throw WrappBuildError.templateDamaged("WrappTemplate.app not found in Second Chance.app bundle")
         }
         // Before the cache too: a cached base wrapp came from this template.
         try await verifyTemplateSignatures(templatePath)
@@ -79,15 +95,9 @@ class WrappBuildHelper {
 
         // Copy the entire template (includes both Wine and ScummVM)
         do {
-            try await copyItemDerefencingSymlinks(at: templatePath, to: path)
+            try await copyTemplate(at: templatePath, to: path)
         } catch {
-            if let wrappError = error as? WrappError, let output = wrappError.copyOutput {
-                logger.notice("Copy output: \(output)")
-            }
             logger.critical("❌ Failed to copy wrapp template: \(error.localizedDescription)")
-            if let wrappError = error as? WrappError, let command = wrappError.copyCommand {
-                logger.notice("   Command: \(command)")
-            }
             throw error
         }
 
@@ -121,7 +131,7 @@ class WrappBuildHelper {
         let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
         if detail.contains("code object is not signed at all") {
             logger.critical("❌ The wrapp template has files without their code signatures: \(detail)")
-            throw WrappError.templateSignaturesLost(detail)
+            throw WrappBuildError.templateSignaturesLost(detail)
         }
         logger.warning("codesign --verify reports a problem with the wrapp template, carrying on: \(detail)")
     }
@@ -250,30 +260,30 @@ class WrappBuildHelper {
         steamID: String? = nil,
         gameEngine: GameInfo.GameEngine? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil
-    ) throws {
-        Task { await bus.publishWrappBuild(.progress(.configuringWrapp(substep: "Adjusting the game's settings"))) }
+    ) async throws {
+        await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
         let infoPlistPath = WrappLayout(app: wrappPath).infoPlist
 
         // Update Info.plist
         guard let plistData = try? Data(contentsOf: infoPlistPath),
               var plist = try? PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any] else {
-            throw WrappError.invalidInfoPlist
+            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
         // Update bundle identifier by replacing WrappTemplate with game ID
         guard let currentBundleID = plist["CFBundleIdentifier"] as? String else {
-            throw WrappError.invalidInfoPlist
+            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
         guard currentBundleID.contains("WrappTemplate") else {
-            throw WrappError.invalidInfoPlist
+            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
         let newBundleID = currentBundleID.replacingOccurrences(of: "WrappTemplate", with: "nancy-drew." + gameInfo.id)
         plist["CFBundleIdentifier"] = newBundleID
-        plist["CFBundleName"] = "Nancy Drew - \(gameInfo.title)"
-        plist["CFBundleDisplayName"] = "Nancy Drew - \(gameInfo.title)"
+        plist["CFBundleName"] = gameInfo.appName
+        plist["CFBundleDisplayName"] = gameInfo.appName
         plist["GameExePath"] = gameExePath
         plist["Program Name and Path"] = gameExePath
         // Where a failed launch looks for a newer Second Chance (NewerRelease).
@@ -351,7 +361,8 @@ class WrappBuildHelper {
         for iniFile in iniFiles {
             logger.notice("  Processing: \(iniFile.lastPathComponent)")
 
-            guard let originalContent = try? String(contentsOf: iniFile, encoding: .utf8) else {
+            // Written back in the encoding it came in: the game reads it.
+            guard let (originalContent, encoding) = TextFile.read(iniFile) else {
                 logger.warning("    ⚠️ Failed to read file")
                 continue
             }
@@ -373,15 +384,9 @@ class WrappBuildHelper {
 
             // Set save path to Documents
             let savePath = "LoadSavePath=\\\\users\\\\crossover\\\\Documents"
-            let savePathPattern = #"LoadSavePath=.*"#
-            if let regex = try? NSRegularExpression(pattern: savePathPattern, options: []),
-               let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)) {
-                let oldValue = String(content[Range(match.range, in: content)!])
-                content = regex.stringByReplacingMatches(
-                    in: content,
-                    range: NSRange(content.startIndex..., in: content),
-                    withTemplate: savePath
-                )
+            if let match = content.firstMatch(of: /LoadSavePath=.*/) {
+                let oldValue = String(match.output)
+                content = content.replacing(/LoadSavePath=.*/) { _ in savePath }
                 logger.notice("    ✅ Updated LoadSavePath")
                 logger.notice("       Old: \(oldValue)")
                 logger.notice("       New: \(savePath)")
@@ -393,7 +398,7 @@ class WrappBuildHelper {
             // Write back if modified
             if modified {
                 do {
-                    try content.write(to: iniFile, atomically: true, encoding: .utf8)
+                    try content.write(to: iniFile, atomically: true, encoding: encoding)
                     logger.notice("    ✅ Saved changes to \(iniFile.lastPathComponent)")
                 } catch {
                     logger.warning("    ⚠️ Failed to save changes: \(error)")
@@ -436,7 +441,7 @@ class WrappBuildHelper {
             return
         }
 
-        await bus.publishWrappBuild(.progress(.installingGame(substep: "Installing Steam")))
+        await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Installing Steam"))))
 
         let wine = Wine(wrapp: wrappPath)
         await wine.server.stop()
@@ -481,18 +486,51 @@ class WrappBuildHelper {
         await input.askAboutSuccessReports()
         try Task.checkCancellation()
         await bus.publishWrappBuild(.progress(.savingApp(substep: nil)))
-        let outputDir = try await input.getOutputPath(gameName: gameInfo.title)
+        let finalPath = try await input.getSaveLocation(for: gameInfo)
         try Task.checkCancellation()
-        let finalPath = try await saveWrapp(
-            from: wrappPath,
-            to: outputDir,
-            gameName: gameInfo.title
-        )
+        try await saveWrapp(from: wrappPath, to: finalPath)
 
         await input.onWrappBuildComplete(finalPath)
         await bus.publishWrappBuild(.completed(wrappPath: finalPath))
 
         return finalPath
+    }
+
+    /// The tail every builder ends with: configure the wrapp, publish that,
+    /// then sign and save it (`finalize`), after which it is no longer
+    /// temporary. One place, so no builder can drop one of its events.
+    func completeBuild(
+        wrapp wrappPath: URL,
+        gameInfo: GameInfo,
+        source: WrappSource,
+        gameExePath: String,
+        installerDir: String,
+        steamID: String? = nil,
+        gameEngine: GameInfo.GameEngine? = nil,
+        steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        input: WrappBuildInput
+    ) async throws -> URL {
+        try await configureWrapp(
+            at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
+            steamID: steamID, gameEngine: gameEngine, steamLaunchMode: steamLaunchMode
+        )
+        await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: installerDir, gameInfo: gameInfo))
+        let finalPath = try await finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
+        unregisterTemporaryWrapp(wrappPath)
+        return finalPath
+    }
+
+    /// Launch the saved wrapp when the run asked for it (`LAUNCH_GAME`). The
+    /// build has already succeeded, so a launch that fails is logged, not
+    /// thrown: it would otherwise fail a build that had completed.
+    func launchIfAsked(_ finalPath: URL, input: WrappBuildInput) async {
+        let (shouldLaunch, args) = await input.shouldLaunchGame()
+        guard shouldLaunch else { return }
+        do {
+            try await launchGame(at: finalPath, with: args)
+        } catch {
+            logger.error("The game was built, but launching it failed: \(ErrorChain.describe(error))")
+        }
     }
 
     /// Sign the wrapp app (ad-hoc codesign).
@@ -509,49 +547,110 @@ class WrappBuildHelper {
             let command = "\(codesignPath) \(arguments.joined(separator: " "))"
             logger.error("⚠️ Code signing failed: \(sign.errorOutput)")
             logger.notice("   Command: \(command)")
-            throw WrappError.signingFailed(sign.errorOutput)
+            throw WrappBuildError.signingFailed(sign.errorOutput)
         }
     }
 
-    /// Move the finished wrapp to its output location and unregister it from
-    /// cleanup tracking (it's no longer temporary).
-    func saveWrapp(
-        from wrappPath: URL,
-        to outputPath: URL,
-        gameName: String
-    ) async throws -> URL {
-        let finalPath = outputPath.appendingPathComponent("Nancy Drew - \(gameName).app")
-
+    /// Move the finished wrapp to `finalPath`, replacing an app already
+    /// there only once the new one is in place beside it.
+    ///
+    /// The new app is first moved in under a hidden name in the same folder
+    /// (a copy, when the folder is on another volume, and the step most
+    /// likely to fail), then swapped in with `replaceItemAt`. So a failure
+    /// leaves any earlier copy of the game's app as it was, rather than
+    /// having deleted it first.
+    func saveWrapp(from wrappPath: URL, to finalPath: URL) async throws {
         logger.notice("Saving wrapp: \(finalPath.path)")
+        let staged = finalPath.deletingLastPathComponent()
+            .appendingPathComponent(".\(finalPath.lastPathComponent).saving-\(UUID().uuidString)")
 
         // Name the destination in any failure: Foundation's own message names
         // the temp bundle ("NancyDrew-<UUID>.app couldn't be moved…"), which
         // says nothing about where it was going.
-        // A copy, not a rename, when the destination is on another volume.
         do {
             try await Blocking.run {
-                // Remove existing if present
-                if FileManager.default.fileExists(atPath: finalPath.path) {
-                    try FileManager.default.removeItem(at: finalPath)
+                let fileManager = FileManager.default
+                do {
+                    try fileManager.moveItem(at: wrappPath, to: staged)
+                    if fileManager.fileExists(atPath: finalPath.path) {
+                        _ = try fileManager.replaceItemAt(finalPath, withItemAt: staged)
+                    } else {
+                        try fileManager.moveItem(at: staged, to: finalPath)
+                    }
+                } catch {
+                    if fileManager.fileExists(atPath: staged.path) {
+                        do {
+                            try fileManager.removeItem(at: staged)
+                        } catch {
+                            logger.warning("Couldn't remove the half-saved app at \(staged.path): \(error.localizedDescription)")
+                        }
+                    }
+                    throw error
                 }
-                try FileManager.default.moveItem(at: wrappPath, to: finalPath)
             }
         } catch {
             logger.error("Couldn't save the wrapp to \(finalPath.path): \(ErrorChain.describe(error))")
+            if ErrorChain.isOutOfSpace(error) {
+                throw WrappBuildError.notEnoughSpace(needed: nil, available: nil)
+            }
             throw WrappBuildError.saveFailed(destination: finalPath.path, reason: error.localizedDescription)
         }
 
         logger.notice("Wrapp saved: \(finalPath.path)")
-
-        return finalPath
     }
 
     // MARK: - Temp Wrapp Tracking (cleanup primitives)
 
     // Process-wide, not per helper: each build has a helper of its own (for
     // its own bus), and the app's quit cleans up through `.shared`.
-    private static var temporaryWrapps: Set<URL> = []
-    private static let wrappsLock = NSLock()
+    private struct Tracking {
+        var wrapps: Set<URL> = []
+        /// Run once no build has a temporary wrapp (`whenNoBuildIsRunning`).
+        var whenNone: [@Sendable () -> Void] = []
+    }
+    private static let tracking = Mutex(Tracking())
+
+    /// The file beside a temporary wrapp naming the process building it, so
+    /// a sweep for ones left behind never takes a build that's still going.
+    /// Beside it, not in it, where it would break the wrapp's signature.
+    static func ownerFile(of wrapp: URL) -> URL {
+        URL(fileURLWithPath: wrapp.path + ".owner")
+    }
+
+    /// Run `block` once no build has a temporary wrapp: at once if none
+    /// does. For what mustn't happen mid-build, such as an update's relaunch.
+    static func whenNoBuildIsRunning(_ block: @escaping @Sendable () -> Void) {
+        let now = tracking.withLock { tracking in
+            if tracking.wrapps.isEmpty { return true }
+            tracking.whenNone.append(block)
+            return false
+        }
+        if now { block() }
+    }
+
+    /// Stop tracking `path`, and run what was waiting for no builds if it
+    /// was the last.
+    private static func untrack(_ path: URL) {
+        try? FileManager.default.removeItem(at: ownerFile(of: path))
+        let waiting = tracking.withLock { tracking -> [@Sendable () -> Void] in
+            tracking.wrapps.remove(path)
+            guard tracking.wrapps.isEmpty else { return [] }
+            defer { tracking.whenNone.removeAll() }
+            return tracking.whenNone
+        }
+        waiting.forEach { $0() }
+    }
+
+    /// Fail at the start, in plain words, unless there looks to be room for
+    /// a build from `source` (a disc, or a download) where temporary wrapps
+    /// are made: `copies` of it (what is copied and unpacked, and the game
+    /// it installs) plus the engine and prefix (`FreeSpace.buildOverhead`).
+    /// An estimate, so it only catches a build sure to run out of space.
+    func ensureRoomToBuild(from source: URL, copies: Int) async throws {
+        guard let size = await Blocking.run({ FreeSpace.size(of: source) }) else { return }
+        let needed = size * Int64(copies) + FreeSpace.buildOverhead
+        try FreeSpace.ensure(needed, at: fileManager.temporaryDirectory)
+    }
 
     /// Create a fresh temporary wrapp path and register it for cleanup.
     func createTemporaryWrappPath() -> URL {
@@ -564,22 +663,23 @@ class WrappBuildHelper {
 
     /// Register a temporary wrapp for tracking
     private func registerTemporaryWrapp(_ path: URL) {
-        Self.wrappsLock.lock()
-        defer { Self.wrappsLock.unlock() }
-        Self.temporaryWrapps.insert(path)
+        Self.tracking.withLock { _ = $0.wrapps.insert(path) }
+        do {
+            try Data("\(getpid())".utf8).write(to: Self.ownerFile(of: path))
+        } catch {
+            logger.warning("Couldn't mark \(path.lastPathComponent) as this build's: \(error.localizedDescription)")
+        }
     }
 
     /// Unregister a temporary wrapp (call after successful move/save)
     func unregisterTemporaryWrapp(_ path: URL) {
-        Self.wrappsLock.lock()
-        defer { Self.wrappsLock.unlock() }
-        Self.temporaryWrapps.remove(path)
+        Self.untrack(path)
     }
 
     /// Remove one tracked temp wrapp — a cleanup *primitive* the builder
     /// calls on its error path. No-op if already moved or removed.
     func removeTempWrapp(_ path: URL) async {
-        Self.wrappsLock.withLock { _ = Self.temporaryWrapps.remove(path) }
+        defer { Self.untrack(path) }
 
         guard fileManager.fileExists(atPath: path.path) else { return }
 
@@ -636,9 +736,16 @@ class WrappBuildHelper {
         for wrapp in candidates where wrapp.lastPathComponent.hasPrefix("NancyDrew-") && wrapp.pathExtension == "app" {
             guard let modified = (try? wrapp.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
                   modified < cutoff else { continue }
+            // A long build (Steam allows hours) barely touches the folder
+            // itself: one whose builder is still running is still in use.
+            if let owner = try? String(contentsOf: Self.ownerFile(of: wrapp), encoding: .utf8),
+               let pid = pid_t(owner.trimmingCharacters(in: .whitespacesAndNewlines)), kill(pid, 0) == 0 || errno == EPERM {
+                continue
+            }
             let size = DirectorySize.measure(wrapp)
             do {
                 try Self.removeWrappDirectory(wrapp)
+                try? fileManager.removeItem(at: Self.ownerFile(of: wrapp))
                 logger.notice("🧹 Removed a temp wrapp left by an earlier run: \(wrapp.lastPathComponent) (\(size.description), last changed \(modified))")
             } catch {
                 logger.warning("Can't remove the stale temp wrapp \(wrapp.path): \(error.localizedDescription)")
@@ -648,7 +755,7 @@ class WrappBuildHelper {
 
     /// Whether a build has a temporary wrapp that quitting would delete.
     static var hasTemporaryWrapps: Bool {
-        wrappsLock.withLock { !temporaryWrapps.isEmpty }
+        tracking.withLock { !$0.wrapps.isEmpty }
     }
 
     /// End the Wine running in each temporary wrapp, before quitting deletes
@@ -657,7 +764,7 @@ class WrappBuildHelper {
     /// for it. Each session is asked to stop first and forced only if it
     /// won't (`WineServer.shutDown`), all at once.
     static func endWineInTemporaryWrapps() async {
-        let wrapps = wrappsLock.withLock { Array(temporaryWrapps) }
+        let wrapps = tracking.withLock { Array($0.wrapps) }
         await withTaskGroup(of: Void.self) { group in
             for wrapp in wrapps {
                 group.addTask {
@@ -671,10 +778,10 @@ class WrappBuildHelper {
     }
 
     func cleanupTemporaryWrapps() {
-        Self.wrappsLock.lock()
-        let wrapps = Array(Self.temporaryWrapps)
-        Self.temporaryWrapps.removeAll()
-        Self.wrappsLock.unlock()
+        let wrapps = Self.tracking.withLock { tracking in
+            defer { tracking.wrapps.removeAll() }
+            return Array(tracking.wrapps)
+        }
 
         guard !wrapps.isEmpty else { return }
 
@@ -689,6 +796,7 @@ class WrappBuildHelper {
 
         logger.notice("🧹 Cleaning up \(wrapps.count) temporary wrapp(s)...")
         for wrapp in wrapps {
+            try? fileManager.removeItem(at: Self.ownerFile(of: wrapp))
             do {
                 if fileManager.fileExists(atPath: wrapp.path) {
                     logger.notice("   Removing: \(wrapp.path)")
@@ -722,50 +830,5 @@ class WrappBuildHelper {
                 NSLocalizedDescriptionKey: "Failed to launch game: open command exited with status \(open.status)"
             ])
         }
-    }
-}
-
-// MARK: - Errors
-
-enum WrappError: LocalizedError {
-    case cachedGameMismatch
-    case invalidInfoPlist
-    case wineNotFound
-    case templateNotFound(String)
-    case copyFailed(message: String, command: String?, output: String?)
-    case signingFailed(String)
-    /// Files in the template have lost the code signatures they keep in
-    /// extended attributes (`verifyTemplateSignatures`).
-    case templateSignaturesLost(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .cachedGameMismatch:
-            return "Cached wrapp belongs to a different game"
-        case .invalidInfoPlist:
-            return "Part of Second Chance is damaged (the game app template). Download Second Chance again and try once more."
-        case .wineNotFound:
-            return "Part of Second Chance is missing (Wine). Download Second Chance again and try once more."
-        case .templateNotFound(let message):
-            return message
-        case .copyFailed(let message, _, _):
-            return message
-        case .signingFailed(let message):
-            return "Code signing failed: \(message)"
-        case .templateSignaturesLost:
-            return "Second Chance's copy of the game template is damaged: some of its files have lost their code signatures, "
-                + "so no game could be signed. This happens when Second Chance is copied with a tool that leaves out "
-                + "extended attributes. Download Second Chance again, or copy it with Finder."
-        }
-    }
-
-    var copyCommand: String? {
-        if case let .copyFailed(_, command, _) = self { return command }
-        return nil
-    }
-
-    var copyOutput: String? {
-        if case let .copyFailed(_, _, output) = self { return output }
-        return nil
     }
 }

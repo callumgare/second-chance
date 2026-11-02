@@ -79,11 +79,20 @@ failures|always|never`. In a terminal the run is shown live — a progress bar,
 what's running now, and a table of suites (or games) — with the full xcodebuild
 output kept in `DerivedData/sc-logs/`.
 
-Never run a bare `./sc test` or an unfiltered `xcodebuild test` by accident:
-with real ISOs present in `installers/`, the integration suite does not skip
-and the run takes hours.
+A bare `./sc test` is `./sc test unit`. `./sc test all` and an unfiltered
+`xcodebuild test` run the integration suite too, which with real ISOs present
+in `installers/` doesn't skip, and takes hours.
 
 ## Test structure
+
+### Package tests (`Packages/SecondChanceKit/Tests/SecondChanceKitTests/`)
+
+What needs neither app: the VDF, Windows-program and MSI readers, process
+listings and names, the subprocess line reader and watch, load measurement,
+the quit check, loading stages, shell quoting and the wrapp's settings. They
+run with `swift test --package-path Packages/SecondChanceKit`, which needs no
+Xcode build, in well under a second; `sc test unit` runs them as a step of its
+own, and CI with it.
 
 ### Unit tests (`SecondChanceTests/*.swift`)
 
@@ -345,7 +354,7 @@ Mac: the save warning shows, and no setting the player chose changes the
 test. Before, Warnings at Waverly Academy failed every run on one Mac whose
 `Waverly.INI` there said to play in a window.
 
-Its exit codes (`WrappPuppeteer/Core/PuppetResult.swift`):
+Its exit codes (`Packages/PuppeteerCore/Sources/PuppeteerCore/PuppetResult.swift`):
 
 | Code | Meaning |
 | --- | --- |
@@ -388,8 +397,13 @@ window ends early if the game's process exits first: after 10 s more to see
 whether the same exe starts again (a launcher stub, such as Steam's DRM, can
 re-launch it), the run fails with `<exe> exited before showing a window`
 rather than waiting out the 300 s. A zombie (exited, not yet reaped) counts as
-exited (`ProcessControl.isAlive`). The `--timeout` that
-`AppPuppetRunner.run(timeout:)` passes is only logged. The wrapp's "save
+exited (`ProcessControl.isAlive`). The phases' limits are bounded together
+by `--max-runtime` (2700 s, `AppPuppetRunner.maxRuntime`): a run still going
+then fails, killing the wrapp, so a wedged game can't hold up the whole
+integration run, and the test gives up waiting for WrappPuppeteer two minutes
+after that. WrappPuppeteer writes its exit code to the file the test names
+(`--exit-code-file`), as the test, which launched it through LaunchServices,
+isn't its parent and can't read its exit status; no file reads as a failure. The wrapp's "save
 regularly" warning counts as dismissed only once the wrapp says it has gone
 (the window itself stays up, showing a loading message, until the game has
 loaded); if the wrapp's click on the button doesn't take, it confirms the
@@ -449,7 +463,8 @@ is no accessibility tree to query: WrappPuppeteer finds things on screen with OC
 and template matching and clicks by coordinates. It is split in two, and the
 dependency only runs one way:
 
-- **`WrappPuppeteer/Core/`** — reusable automation with no knowledge of Nancy
+- **`Packages/PuppeteerCore`** (a local package, so its matching can be tested
+  with `swift test`, in `Tests/PuppeteerCoreTests`) — reusable automation with no knowledge of Nancy
   Drew, wrapps or engines: the control-socket client (`InProcessControl`),
   OCR (`TextRecognizer`), template matching (`TemplateMatcher`), screen
   fingerprints (`ImageFingerprint`), checking a picture's bars
@@ -572,9 +587,16 @@ meant for. The Direct3D and ScummVM games have no lock to wait for.
 
 From the game's window appearing to the Exit click took 3.3–13 s across all
 33 games, 4.1 s for half of them, where waiting out the screens took up to a
-minute (Labyrinth of Lies' and Sea of Darkness's intros run 50 s). The slowest
-is Secrets Can Kill Remastered, black for its first six seconds with nothing
-there to click.
+minute (Labyrinth of Lies' and Sea of Darkness's intros run 50 s).
+
+**A black start can take a click too.** Secrets Can Kill Remastered from disc
+is black for its first five seconds, then shows its logo and title card for
+fifteen more. A click in the black skips the lot: its menu came up 4.4 s in,
+against 28.6 s unclicked. A game listed in `SplashScreen.blankStartTakesClick`
+has a black capture clicked as a splash screen is, again every 2 s while it
+stays black. Whether a game's black start takes a click is found with
+`--record-click-at` (below); one whose splash screens come within a second or
+two gains little.
 
 A screen is recognised by its **fingerprint** (`ImageFingerprint`): the dark
 bars around the picture are trimmed off, so the display's shape doesn't
@@ -620,6 +642,10 @@ $WP --make-splash-reference /tmp/rec/004960.png \
 # Check every frame: SPLASH, the nearest reference and its distance, and
 # anything light where the bars beside a 4:3 picture should be
 $WP --classify <slug> /tmp/rec
+
+# What a click skips: click the picture 1.5 s after the window goes
+# fullscreen (a comma-separated list for more), and see when the menu comes
+$WP "built-apps/Nancy Drew - <game>.app" --record /tmp/rec-click --record-seconds 40 --record-click-at 1.5
 ```
 
 Some of the splash frames should say `SPLASH`, early on, and every frame from

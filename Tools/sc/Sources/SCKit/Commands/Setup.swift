@@ -17,7 +17,7 @@ struct SetupCommand: AsyncParsableCommand {
 
     static let tools: [(name: String, formula: String, purpose: String)] = [
         ("xcbeautify", "xcbeautify", "formats xcodebuild output"),
-        ("xchtmlreport", "xctest-html-report", "HTML test reports"),
+        ("xchtmlreport", "xctesthtmlreport", "HTML test reports"),
         ("cog", "cocogitto", "versions, changelog, commit lint"),
         ("swiftlint", "swiftlint", "lints the Swift code (sc lint)"),
         ("npx", "node", "runs markdownlint on the docs (sc lint)"),
@@ -76,7 +76,9 @@ struct CleanCommand: AsyncParsableCommand {
         build: DerivedData. wrapps: the wrapps dir. test-results: reports and result bundles. \
         steam-session: the saved Steam sign-in (signs every Steam wrapp out, like Sign Out of Steam). \
         steam-client: the cached Steam client (the next Steam build downloads Steam's update again). \
-        With no target in a terminal, asks which.
+        downloads: what building Second Chance downloaded (Wine, AutoIt, ScummVM, game patches), \
+        fetched and checked again by the next build. \
+        With no target in a terminal, asks which. Without a terminal, deletes only with -y.
         """
     )
 
@@ -87,6 +89,7 @@ struct CleanCommand: AsyncParsableCommand {
         case testResults = "test-results"
         case steamSession = "steam-session"
         case steamClient = "steam-client"
+        case downloads
         var description: String { rawValue }
     }
 
@@ -96,22 +99,33 @@ struct CleanCommand: AsyncParsableCommand {
     @Flag(name: [.customLong("yes"), .customShort("y")], help: "Don't ask before deleting.")
     var yes = false
 
-    @Argument(help: "What to delete: wine-prefixes, build, wrapps, test-results, steam-session, steam-client.")
+    @Argument(help: "What to delete: wine-prefixes, build, wrapps, test-results, steam-session, steam-client, downloads.")
     var targets: [Target] = []
 
     func run() async throws {
         let session = try Session.start(global)
         let ui = session.ui
-        let paths: [Target: URL] = [
-            .winePrefixes: Repo.winePrefixCache,
-            .build: session.repo.derivedData,
-            .wrapps: wrapps.resolve(session.repo),
-            .testResults: session.repo.testResults,
-            .steamSession: Repo.steamSession,
-            .steamClient: Repo.steamClientCache,
+        let paths: [Target: [URL]] = [
+            .winePrefixes: [Repo.winePrefixCache],
+            .build: [session.repo.derivedData],
+            .wrapps: [wrapps.resolve(session.repo)],
+            .testResults: [session.repo.testResults],
+            .steamSession: [Repo.steamSession],
+            .steamClient: [Repo.steamClientCache],
+            .downloads: Repo.downloads,
         ]
+        // Only what's on offer is measured: everything when asking which,
+        // else just what was named.
+        let measured = targets.isEmpty ? Target.allCases : targets
         let sizes = await withTaskGroup(of: (Target, Int64).self) { group in
-            for (target, url) in paths { group.addTask { (target, await Self.size(of: url)) } }
+            for target in measured {
+                let urls = paths[target] ?? []
+                group.addTask {
+                    var total: Int64 = 0
+                    for url in urls { total += await Self.size(of: url) }
+                    return (target, total)
+                }
+            }
             var result: [Target: Int64] = [:]
             for await (target, size) in group { result[target] = size }
             return result
@@ -130,20 +144,29 @@ struct CleanCommand: AsyncParsableCommand {
             chosen = picked.map(\.target)
         }
 
-        if !yes, let confirmed = try ui.confirm("Delete \(chosen.map(\.rawValue).joined(separator: ", "))?"), !confirmed {
-            ui.line("Nothing deleted.")
-            return
+        if !yes {
+            // No terminal to ask on (nil) is no answer, not a yes.
+            guard let confirmed = try ui.confirm("Delete \(chosen.map(\.rawValue).joined(separator: ", "))?") else {
+                throw SCError("Nothing deleted: there's no terminal to confirm on.", hints: ["Pass -y to delete without asking."])
+            }
+            if !confirmed {
+                ui.line("Nothing deleted.")
+                return
+            }
         }
 
         var rows: [[String]] = []
         for target in chosen {
-            guard let url = paths[target] else { continue }
-            if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
-                rows.append([target.rawValue, session.repo.display(url), ByteCountFormatter.string(fromByteCount: sizes[target] ?? 0, countStyle: .file)])
-            } else {
-                rows.append([target.rawValue, session.repo.display(url), "(nothing there)"])
+            let urls = (paths[target] ?? []).filter { FileManager.default.fileExists(atPath: $0.path) }
+            if urls.isEmpty {
+                rows.append([target.rawValue, "", "(nothing there)"])
+                continue
             }
+            for url in urls {
+                try FileManager.default.removeItem(at: url)
+            }
+            let shown = urls.count == 1 ? session.repo.display(urls[0]) : "\(urls.count) items in \(session.repo.display(urls[0].deletingLastPathComponent()))"
+            rows.append([target.rawValue, shown, ByteCountFormatter.string(fromByteCount: sizes[target] ?? 0, countStyle: .file)])
         }
         await ui.table(headers: ["Deleted", "Path", "Freed"], rows: rows)
     }

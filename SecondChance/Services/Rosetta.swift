@@ -58,7 +58,9 @@ nonisolated enum Rosetta {
     static func install() async -> InstallOutcome {
         logger.notice("Installing Rosetta")
         let command = "/usr/sbin/softwareupdate --install-rosetta --agree-to-license"
-        let prompt = "Second Chance wants to install Rosetta, which the games need."
+        // In an AppleScript string, so a translation's quotes are escaped.
+        let prompt = String(localized: "Second Chance wants to install Rosetta, which the games need.")
+            .replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         let script = "do shell script \"\(command)\" with administrator privileges with prompt \"\(prompt)\""
         let result: ProcessOutput
         do {

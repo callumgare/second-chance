@@ -32,7 +32,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | Method                        | Env var override                        | Fallback (no env var)          |
 /// |-------------------------------|-----------------------------------------|--------------------------------|
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
-/// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | NSAlert to swap discs, else NSOpenPanel |
+/// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | Ejects disc 1; NSAlert answered by disc 2 going in, else NSOpenPanel |
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
@@ -40,7 +40,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
-/// | `getOutputPath(gameName:)`    | `OUTPUT_PATH`                           | NSOpenPanel save dialog        |
+/// | `getSaveLocation(for:)`       | `OUTPUT_PATH` (replaces an older app)    | NSOpenPanel; cancelling asks to choose again or start over; asks before replacing |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
 /// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
 /// | `askAboutUnrecognisedGame(_:)` | — (headless: installs it anyway)       | NSAlert: choose another, install anyway, cancel |
@@ -70,18 +70,20 @@ class WrappBuildInput {
         if let url = try diskPathFromEnv("DISK_1_PATH", label: "Disk 1") {
             return url
         }
+        if let url = takeRetryInstaller() { return url }
         guard let url = await selectDisc(message: "Put the first game disc in your Mac's disc drive, then select it here.") else {
             // Cancelling the very first dialog means the user never started —
             // distinct from cancelling a later prompt mid-install.
             throw WrappBuildError.userCancelledBeforeStart
         }
+        viewModel?.chosenInstaller = url
         return url
     }
 
     /// Second game disk, only asked for multi-disk games, and only once disk 1
-    /// has been copied. When disk 1 is a disc in the drive, the person is
-    /// asked to swap it for disc 2 (with an Eject button), and a disc that
-    /// then appears is used without asking where it is.
+    /// has been copied. When disk 1 is a disc in the drive, it is ejected
+    /// and the person asked for disc 2; a disc that then goes in is used
+    /// without anyone clicking anything.
     @MainActor
     func getDisk2Path(gameInfo: GameInfo, disk1: URL) async throws -> URL? {
         guard gameInfo.diskCount > 1 else { return nil }
@@ -96,17 +98,35 @@ class WrappBuildInput {
         }
 
         let volumesBefore = Self.ejectableVolumes()
-        var ejectFailed = false
+        // Disc 1 is done with: out it comes, rather than asking for a click.
+        var ejectFailed = !(await Self.eject(disc1Volume))
         while true {
             let alert = NSAlert()
-            alert.messageText = "Now put in disc 2"
+            alert.messageText = String(localized: "Now put in disc 2")
             alert.informativeText = ejectFailed
-                ? "Disc 1 couldn't be ejected. Eject it from the Finder, put in disc 2, then click Continue."
-                : "\(gameInfo.title) comes on two discs, and disc 1 has been copied. Take it out, put in disc 2, then click Continue."
-            alert.addButton(withTitle: "Continue")
-            alert.addButton(withTitle: "Eject Disc 1")
-            alert.addButton(withTitle: "Cancel")
-            switch alert.runModal() {
+                ? "Disc 1 couldn't be ejected. Eject it from the Finder and put in disc 2: installing carries on by itself once it's in."
+                : "\(gameInfo.title) comes on two discs, and disc 1 has been copied. Take it out and put in disc 2: installing carries on by itself once it's in."
+            alert.addButton(withTitle: String(localized: "Continue"))
+            if ejectFailed {
+                alert.addButton(withTitle: String(localized: "Eject Disc 1"))
+            }
+            alert.addButton(withTitle: String(localized: "Cancel"))
+            // A new disc going in answers the alert: Disk Arbitration says
+            // when it has mounted, which is what Continue was waiting for.
+            var inserted: URL?
+            let watcher = DiscMountWatcher { volume in
+                guard volume != disc1Volume, !volumesBefore.contains(volume),
+                      Self.ejectableVolumes().contains(volume) else { return }
+                inserted = volume
+                NSApp.abortModal()
+            }
+            let response = alert.runModalAskingForAttention()
+            watcher.stop()
+            if let inserted {
+                logger.notice("Disc 2 went in: \(inserted.path)")
+                return inserted
+            }
+            switch response {
             case .alertFirstButtonReturn:
                 // A disc that wasn't there before, other than disc 1, is disc 2.
                 let new = Self.ejectableVolumes().filter { $0 != disc1Volume && !volumesBefore.contains($0) }
@@ -116,17 +136,24 @@ class WrappBuildInput {
                 }
                 guard let url = await selectDisc(message: pickerMessage) else { throw WrappBuildError.userCancelled }
                 return url
-            case .alertSecondButtonReturn:
-                do {
-                    try NSWorkspace.shared.unmountAndEjectDevice(at: disc1Volume)
-                    ejectFailed = false
-                } catch {
-                    logger.warning("Couldn't eject disc 1 (\(disc1Volume.path)): \(error.localizedDescription)")
-                    ejectFailed = true
-                }
+            case .alertSecondButtonReturn where ejectFailed:
+                ejectFailed = !(await Self.eject(disc1Volume))
             default:
                 throw WrappBuildError.userCancelled
             }
+        }
+    }
+
+    /// Eject the disc at `volume`, off the main thread (it can take a few
+    /// seconds); whether it went.
+    private static func eject(_ volume: URL) async -> Bool {
+        do {
+            try await Blocking.run { try NSWorkspace.shared.unmountAndEjectDevice(at: volume) }
+            logger.notice("Ejected disc 1 (\(volume.path))")
+            return true
+        } catch {
+            logger.warning("Couldn't eject disc 1 (\(volume.path)): \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -148,6 +175,21 @@ class WrappBuildInput {
         return volumes.filter {
             (try? $0.resourceValues(forKeys: Set(keys)))?.volumeIsEjectable == true && !ISOMounter.isDiskImageVolume($0)
         }.map(\.standardizedFileURL)
+    }
+
+    /// What Try Again started this build from (`WrappBuildViewModel.retryBuild`),
+    /// if it's still there: the disc or download the failed build used.
+    @MainActor
+    func takeRetryInstaller() -> URL? {
+        guard let viewModel, let url = viewModel.retryInstaller else { return nil }
+        viewModel.retryInstaller = nil
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            logger.notice("Trying again, but \(url.path) has gone: asking for it again")
+            return nil
+        }
+        logger.notice("Trying again from \(url.path)")
+        viewModel.chosenInstaller = url
+        return url
     }
 
     /// The extensions a Her Interactive download comes as: a Windows
@@ -172,8 +214,13 @@ class WrappBuildInput {
             return url
         }
 
+        if let url = takeRetryInstaller() { return url }
+
         let panel = NSOpenPanel()
-        panel.message = "Select the game you downloaded from Her Interactive: the .exe file for Windows, or for Mac the .dmg file or the installer app inside it."
+        panel.message = String(localized: """
+            Select the game you downloaded from Her Interactive: the .exe file for Windows, \
+            or for Mac the .dmg file or the installer app inside it.
+            """)
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = Self.herDownloadExtensions.compactMap { UTType(filenameExtension: $0) }
@@ -183,6 +230,7 @@ class WrappBuildInput {
             // The first question asked: back to the welcome screen.
             throw WrappBuildError.userCancelledBeforeStart
         }
+        viewModel?.chosenInstaller = url
         return url
     }
 
@@ -212,12 +260,12 @@ class WrappBuildInput {
         let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
         menu.addItems(withTitles: games.map(\.title))
         let alert = NSAlert()
-        alert.messageText = "Which game do you want from Steam?"
-        alert.informativeText = "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."
+        alert.messageText = String(localized: "Which game do you want from Steam?")
+        alert.informativeText = String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam.")
         alert.accessoryView = menu
-        alert.addButton(withTitle: "Continue")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        alert.addButton(withTitle: String(localized: "Continue"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
             // The first question the user is asked: back to the welcome screen.
             throw WrappBuildError.userCancelledBeforeStart
         }
@@ -238,16 +286,16 @@ class WrappBuildInput {
         if isHeadlessRun { return .direct }
 
         let alert = NSAlert()
-        alert.messageText = "How should \(game.title) start?"
-        alert.informativeText = """
+        alert.messageText = String(localized: "How should \(game.title) start?")
+        alert.informativeText = String(localized: """
         Launch directly: starts faster and is more reliable, but saves stay on this Mac.
 
         Launch via Steam: keeps your saves in Steam Cloud, but starts slower.
-        """
-        alert.addButton(withTitle: "Launch Directly")
-        alert.addButton(withTitle: "Launch via Steam")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
+        """)
+        alert.addButton(withTitle: String(localized: "Launch Directly"))
+        alert.addButton(withTitle: String(localized: "Launch via Steam"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        switch alert.runModalAskingForAttention() {
         case .alertFirstButtonReturn: return .direct
         case .alertSecondButtonReturn: return .steam
         default: throw WrappBuildError.userCancelled
@@ -262,7 +310,7 @@ class WrappBuildInput {
     @MainActor
     func askAboutSteamInUse(_ holder: SteamLockHolder) async -> SteamLockHolder.Choice? {
         if isHeadlessRun { return nil }
-        return holder.ask(blocked: "the game you're adding can't be installed until it quits.")
+        return holder.ask(blocked: String(localized: "The game you're adding can't be installed until it quits."))
     }
 
     /// Whether the person has asked, from the progress screen's notice that
@@ -277,19 +325,46 @@ class WrappBuildInput {
 
     // MARK: - Output Choices
 
-    /// Where to save the finished wrapp.
+    /// Where to save the finished wrapp: the app's full path. An app already
+    /// there is replaced (`saveWrapp`), after asking, in the GUI.
+    ///
+    /// This is asked once the game is installed, so cancelling the panel
+    /// doesn't throw the install away at once: the person is asked whether
+    /// to choose a place again or start over.
     @MainActor
-    func getOutputPath(gameName: String) async throws -> URL {
+    func getSaveLocation(for gameInfo: GameInfo) async throws -> URL {
         if let path = environment["OUTPUT_PATH"] {
             let url = URL(fileURLWithPath: path)
-            // Create directory if it doesn't exist
-            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-            return url
+            do {
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            } catch {
+                logger.error("Couldn't make the output folder \(url.path): \(error.localizedDescription)")
+                throw WrappBuildError.saveFailed(destination: url.path, reason: error.localizedDescription)
+            }
+            return url.appendingPathComponent(gameInfo.appBundleName)
         }
 
+        while true {
+            guard let folder = await chooseOutputFolder(for: gameInfo) else {
+                if askChooseAgainOrStartOver(gameInfo) { continue }
+                throw WrappBuildError.userCancelled
+            }
+            let destination = folder.appendingPathComponent(gameInfo.appBundleName)
+            if FileManager.default.fileExists(atPath: destination.path), !askToReplace(destination, gameInfo) {
+                continue
+            }
+            return destination
+        }
+    }
+
+    @MainActor
+    private func chooseOutputFolder(for gameInfo: GameInfo) async -> URL? {
         let panel = NSOpenPanel()
-        panel.message = "Choose where to save the app for \(gameName). Your Applications folder is a good place: you'll find it there with your other apps."
-        panel.prompt = "Save Here"
+        panel.message = String(localized: """
+            Choose where to save the app for \(gameInfo.title). \
+            Your Applications folder is a good place: you'll find it there with your other apps.
+            """)
+        panel.prompt = String(localized: "Save Here")
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
@@ -300,10 +375,44 @@ class WrappBuildInput {
 
         let url = await runOpenPanel(panel)
         withExtendedLifetime(validator) {}
-        guard let url else {
-            throw WrappBuildError.userCancelled
-        }
         return url
+    }
+
+    /// The save panel was cancelled with the game installed: true to choose
+    /// a place again, false to start over and throw the install away.
+    @MainActor
+    private func askChooseAgainOrStartOver(_ gameInfo: GameInfo) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "\(gameInfo.title) is installed, but not saved yet")
+        alert.informativeText = String(localized: "Choose where to save the game's app to keep it. Starting over throws away the game that was just installed.")
+        alert.addButton(withTitle: String(localized: "Choose Where to Save"))
+        alert.addButton(withTitle: String(localized: "Start Over"))
+        return alert.runModalAskingForAttention() == .alertFirstButtonReturn
+    }
+
+    /// The game's app is already at `destination`: true to replace it,
+    /// false to choose somewhere else. A copy that's open is asked about
+    /// until it has been quit, since replacing it would pull the game out
+    /// from under the player.
+    @MainActor
+    private func askToReplace(_ destination: URL, _ gameInfo: GameInfo) -> Bool {
+        while true {
+            let isOpen = NSWorkspace.shared.runningApplications.contains {
+                $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL
+            }
+            let alert = NSAlert()
+            alert.messageText = String(localized: "\(gameInfo.appName) is already in \(FileManager.default.displayName(atPath: destination.deletingLastPathComponent().path))")
+            alert.informativeText = isOpen
+                ? "It's open right now. Quit it, then click Replace to put the new one in its place. Your saved games are kept."
+                : "Replace it with the one just installed? Your saved games are kept."
+            alert.addButton(withTitle: String(localized: "Replace"))
+            alert.addButton(withTitle: String(localized: "Choose Another Place"))
+            guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else { return false }
+            let stillOpen = NSWorkspace.shared.runningApplications.contains {
+                $0.bundleURL?.standardizedFileURL == destination.standardizedFileURL
+            }
+            if !stillOpen { return true }
+        }
     }
 
     /// /Applications, or for someone who isn't an administrator, and so can't
@@ -340,8 +449,10 @@ class WrappBuildInput {
     /// A modal alert under a `.prohibited` activation policy (non-interactive
     /// mode) is invisible and unfocusable — and would hang the build forever —
     /// so headless runs never prompt.
+    /// The error itself is only logged: the person is told what the patch
+    /// would have fixed, in Her Interactive's words, not why it failed.
     @MainActor
-    func confirmPatchFailure(patchName: String, error: Error) async -> Bool {
+    func confirmPatchFailure(_ patch: GamePatch, error: Error) async -> Bool {
         switch environment["PATCH_FAILURE_POLICY"]?.lowercased() {
         case "continue": return true
         case "cancel": return false
@@ -351,12 +462,17 @@ class WrappBuildInput {
         if isHeadlessRun { return true }
 
         let alert = NSAlert()
-        alert.messageText = "Game patch failed"
-        alert.informativeText = "The patch \"\(patchName)\" failed to apply:\n\n\(error.localizedDescription)\n\nDo you want to continue installing without the patch?"
+        alert.messageText = String(localized: "A fix for the game couldn't be added")
+        alert.informativeText = String(localized: """
+            Her Interactive made a fix for this game, "\(patch.title)", and Second Chance couldn't add it. \
+            The game will still work without it. What it fixes:
+
+            \(patch.fixes)
+            """)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Continue Without Patch")
-        alert.addButton(withTitle: "Cancel Installation")
-        return alert.runModal() == .alertFirstButtonReturn
+        alert.addButton(withTitle: String(localized: "Continue Without It"))
+        alert.addButton(withTitle: String(localized: "Stop Installing"))
+        return alert.runModalAskingForAttention() == .alertFirstButtonReturn
     }
 
     /// What to do with a disc or download whose game wasn't recognised.
@@ -377,14 +493,25 @@ class WrappBuildInput {
 
         let what = source == .disk ? "disc" : "download"
         let alert = NSAlert()
-        alert.messageText = "Second Chance doesn't recognise this game"
-        alert.informativeText = "It may be the wrong \(what), or a game Second Chance doesn't know. "
-            + "You can choose another \(what), or install it anyway, though it may not work."
+        alert.messageText = String(localized: "Second Chance doesn't recognise this game")
+        // Whole sentences for each, so each translates whole.
+        if source == .disk {
+            alert.informativeText = String(localized: """
+                It may be the wrong disc, or a game Second Chance doesn't know. \
+                You can choose another disc, or install it anyway, though it may not work.
+                """)
+        } else {
+            alert.informativeText = String(localized: """
+                It may be the wrong download, or a game Second Chance doesn't know. \
+                You can choose another download, or install it anyway, though it may not work.
+                """)
+        }
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Choose Another \(what.capitalized)…")
-        alert.addButton(withTitle: "Install Anyway")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
+        alert.addButton(withTitle: source == .disk
+                        ? String(localized: "Choose Another Disc…") : String(localized: "Choose Another Download…"))
+        alert.addButton(withTitle: String(localized: "Install Anyway"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        switch alert.runModalAskingForAttention() {
         case .alertFirstButtonReturn:
             logger.notice("Unrecognised game: choosing another \(what)")
             return .chooseAnother
@@ -418,18 +545,19 @@ class WrappBuildInput {
         }
 
         let alert = NSAlert()
-        alert.messageText = "Second Chance couldn't find this disc's installer"
-        alert.informativeText = "It may be a disc Second Chance doesn't know, such as a special edition "
-            + "or one in another language. You can choose another disc, or try a program on it "
-            + "to install the game, though it may not work."
+        alert.messageText = String(localized: "Second Chance couldn't find this disc's installer")
+        alert.informativeText = String(localized: """
+            It may be a disc Second Chance doesn't know, such as a special edition or one in another language. \
+            You can choose another disc, or try a program on it to install the game, though it may not work.
+            """)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Try It")
-        alert.addButton(withTitle: "Choose Another Disc…")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: "Try It"))
+        alert.addButton(withTitle: String(localized: "Choose Another Disc…"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
 
         var picker: NSPopUpButton?
         if programs.count > 1 {
-            let label = NSTextField(labelWithString: "Which program should it try?")
+            let label = NSTextField(labelWithString: String(localized: "Which program should it try?"))
             let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
             popUp.addItems(withTitles: programs)
             let stack = NSStackView(views: [label, popUp])
@@ -440,7 +568,7 @@ class WrappBuildInput {
             picker = popUp
         }
 
-        switch alert.runModal() {
+        switch alert.runModalAskingForAttention() {
         case .alertFirstButtonReturn:
             let program = picker?.titleOfSelectedItem ?? first
             logger.notice("No installer recognised: trying \(program)")
@@ -465,18 +593,19 @@ class WrappBuildInput {
         if isHeadlessRun { throw WrappBuildError.rosettaMissing }
 
         let alert = NSAlert()
-        alert.messageText = "Second Chance needs Rosetta"
-        alert.informativeText = "The games were made for Windows, and what lets them run on this Mac needs "
-            + "Rosetta, a free part of macOS from Apple. Installing it takes a minute or two, and means "
-            + "agreeing to Apple's licence for it. Your Mac will ask for your password."
-        alert.addButton(withTitle: "Install Rosetta")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        alert.messageText = String(localized: "Second Chance needs Rosetta")
+        alert.informativeText = String(localized: """
+            The games were made for Windows, and what lets them run on this Mac needs Rosetta, a free part of macOS from Apple. \
+            Installing it takes a minute or two, and means agreeing to Apple's licence for it. Your Mac will ask for your password.
+            """)
+        alert.addButton(withTitle: String(localized: "Install Rosetta"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
             logger.notice("Rosetta is missing, and the person chose not to install it")
             throw WrappBuildError.userCancelledBeforeStart
         }
 
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: "Installing Rosetta")))
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Rosetta"))))
         let outcome = await Rosetta.install()
         // Back to the welcome screen, where the source's prompts appear.
         await bus.publishWrappBuild(.progress(.idle))
@@ -521,9 +650,12 @@ class WrappBuildInput {
     /// environment and no view model then deletes its output, and Finder's
     /// window fell back to the temporary folder, one left open per run.
     @MainActor
+    /// The build is done: bounce the Dock icon if the person has gone off
+    /// to do something else. The completion page offers to play it and to
+    /// show it in the Finder; nothing opens over it.
     func onWrappBuildComplete(_ wrappPath: URL) async {
         guard viewModel != nil, !isHeadlessRun else { return }
-        NSWorkspace.shared.selectFile(wrappPath.path, inFileViewerRootedAtPath: "")
+        await MainActor.run { NSApp.askForAttention() }
     }
 
     // MARK: - Env Helpers
@@ -533,6 +665,11 @@ class WrappBuildInput {
     private var anyDiskPathFromEnv: Bool {
         environment["DISK_1_PATH"] != nil
     }
+
+    /// Whether nobody is there to answer the installer's own wizard: a
+    /// headless run. The installer runner asks this rather than reading the
+    /// environment itself, so the two never disagree.
+    var isUnattended: Bool { isHeadlessRun }
 
     /// True when running headless (any build input env var set or the
     /// NON_INTERACTIVE flag present).
@@ -572,9 +709,12 @@ class WrappBuildInput {
     }
 
     private func runOpenPanel(_ panel: NSOpenPanel) async -> URL? {
+        // A sheet on Second Chance's own window, never on Settings or the
+        // log window, whichever happens to be key.
+        NSApp.askForAttention()
         let response: NSApplication.ModalResponse
-        if let keyWindow = NSApp.keyWindow {
-            response = await panel.beginSheetModal(for: keyWindow)
+        if let window = NSApp.installerWindow {
+            response = await panel.beginSheetModal(for: window)
         } else {
             response = panel.runModal()
         }

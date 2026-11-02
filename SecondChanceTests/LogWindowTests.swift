@@ -9,6 +9,7 @@ import Logging
 @testable import SecondChanceKit
 
 @Suite("LogWindow streaming", .serialized)
+@MainActor
 struct LogWindowTests {
 
     actor LineCollector {
@@ -35,9 +36,13 @@ struct LogWindowTests {
             window.showLogWindow(title: "Test - Log Window")
         }
 
-        // The snapshot is delivered synchronously on show; allow a brief hop
-        // for the collector tasks, then assert.
-        try await Task.sleep(for: .milliseconds(200))
+        // The snapshot is delivered on show; once it's drawn, the collector's
+        // own hops may still be in flight, so wait for them too.
+        await window.waitUntilShownForTesting()
+        let deadline = Date().addingTimeInterval(2)
+        while !(await collector.contains(text: marker)) && Date() < deadline {
+            await Task.yield()
+        }
 
         await MainActor.run {
             window.hideLogWindow()
@@ -88,7 +93,7 @@ struct LogWindowTests {
             window.showLogWindow(title: "Test - Reopen")
         }
         // Allow the coalesced flush (100 ms deadline) to render the snapshot.
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
         let firstOpenCount = occurrences(of: marker, in: await MainActor.run { window.displayedTextForTesting })
         #expect(firstOpenCount == 1, "marker appeared \(firstOpenCount)× on first open — expected exactly 1")
 
@@ -98,7 +103,7 @@ struct LogWindowTests {
             window.hideLogWindow()
             window.showLogWindow(title: "Test - Reopen")
         }
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
         let secondOpenCount = occurrences(of: marker, in: await MainActor.run { window.displayedTextForTesting })
         #expect(secondOpenCount == 1, "marker appeared \(secondOpenCount)× after reopen — history duplicated")
 
@@ -107,7 +112,7 @@ struct LogWindowTests {
             window.hideLogWindow()
             window.showLogWindow(title: "Test - Reopen")
         }
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
         let thirdOpenCount = occurrences(of: marker, in: await MainActor.run { window.displayedTextForTesting })
         #expect(thirdOpenCount == 1, "marker appeared \(thirdOpenCount)× after second reopen — history duplicated")
 
@@ -257,14 +262,14 @@ struct LogWindowTests {
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(liveMarker)")
 
         await MainActor.run { window.showLogWindow(title: "Test - Import") }
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
 
         let url = try makeLogFile(marker: fileMarker)
         defer { try? FileManager.default.removeItem(at: url) }
 
         let ok = await MainActor.run { window.display.importLogFile(at: url) }
         #expect(ok)
-        try await Task.sleep(for: .milliseconds(200))
+        await window.waitUntilShownForTesting()
 
         var text = await MainActor.run { window.displayedTextForTesting }
         #expect(text.contains(fileMarker), "imported marker missing after import")
@@ -272,7 +277,7 @@ struct LogWindowTests {
 
         // Live emissions while in file mode stay hidden.
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").error("\(duringMarker)")
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
         text = await MainActor.run { window.displayedTextForTesting }
         #expect(!text.contains(duringMarker), "live line leaked into the imported-file view")
 
@@ -289,18 +294,18 @@ struct LogWindowTests {
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(liveMarker)")
 
         await MainActor.run { window.showLogWindow(title: "Test - Resume") }
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
 
         let url = try makeLogFile(marker: fileMarker)
         defer { try? FileManager.default.removeItem(at: url) }
         _ = await MainActor.run { window.display.importLogFile(at: url) }
 
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").error("\(duringMarker)")
-        try await Task.sleep(for: .milliseconds(200))
+        await window.waitUntilShownForTesting()
 
         // Close the imported-file bar.
         await MainActor.run { window.display.source = .live }
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
 
         let text = await MainActor.run { window.displayedTextForTesting }
         #expect(!text.contains(fileMarker), "file rows must be gone after closing the bar")
@@ -320,7 +325,7 @@ struct LogWindowTests {
 
         Logger(label: "au.gare.callum.second-chance.SecondChance.test").notice("\(liveMarker)")
         await MainActor.run { window.showLogWindow(title: "Test - Reopen File") }
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
 
         let url = try makeLogFile(marker: fileMarker)
         defer { try? FileManager.default.removeItem(at: url) }
@@ -330,7 +335,7 @@ struct LogWindowTests {
             window.hideLogWindow()
             window.showLogWindow(title: "Test - Reopen File")
         }
-        try await Task.sleep(for: .milliseconds(400))
+        await window.waitUntilShownForTesting()
 
         let text = await MainActor.run { window.displayedTextForTesting }
         #expect(occurrences(of: fileMarker, in: text) == 1, "imported rows duplicated on reopen")

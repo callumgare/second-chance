@@ -18,7 +18,7 @@ enum UIStateCatalog {
             UIStateShot(name, title: "Second Chance", width: size.width, height: size.height) {
                 let viewModel = WrappBuildViewModel(bus: EventBus<AppEvent>())
                 setUp(viewModel)
-                return ContentView().environmentObject(viewModel)
+                return ContentView().environment(viewModel)
             }
         }
         // A Steam build of Ghost Dogs, a minute and a quarter into signing in.
@@ -53,13 +53,11 @@ enum UIStateCatalog {
             }),
             window("error-steam-stuck") {
                 $0.selectedWrappSource = .steam
-                $0.steamBuildCanRetry = true
-                $0.currentState = .error(WrappBuildError.steamStoppedResponding.localizedDescription)
+                $0.currentState = .error(WrappBuildError.steamStoppedResponding.playerMessage)
             },
             window("error-steam-sign-in-timed-out") {
                 $0.selectedWrappSource = .steam
-                $0.steamBuildCanRetry = true
-                $0.currentState = .error(WrappBuildError.steamSignInTimedOut.localizedDescription)
+                $0.currentState = .error(WrappBuildError.steamSignInTimedOut.playerMessage)
             },
             window("completed") {
                 $0.selectedWrappSource = .steam

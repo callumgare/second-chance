@@ -11,9 +11,10 @@
 import Foundation
 import Logging
 import SecondChanceKit
+import SecondChanceReporting
 import GameCatalog
 
-private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.Wine")
+nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.Wine")
 
 /// Runs the game's own installer (setup.exe / .msi) inside the Wine prefix
 /// and finds what it installed.
@@ -24,18 +25,15 @@ private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-
 class GameInstallerRunner {
     static let shared = GameInstallerRunner()
 
-    /// Ask the user whether to continue after a patch failed.
-    ///
-    /// Confirmation is injected via `patchFailureConfirmation` (default:
-    /// continue without prompting). The GUI supplies an NSAlert-based
-    /// handler through `WrappBuildInput.confirmPatchFailure`; headless runs
-    /// default to continuing (a modal alert under a `.prohibited` activation
-    /// policy is invisible and would hang the build forever).
-    var patchFailureConfirmation: (@MainActor (String, Error) async -> Bool)?
+    /// Asked whether to carry on without a patch that failed: true to go on,
+    /// false to stop the build. Each build passes its own input's
+    /// (`WrappBuildInput.confirmPatchFailure`), which answers from
+    /// `PATCH_FAILURE_POLICY`, carries on in a headless run and asks in the GUI.
+    typealias PatchFailureConfirmation = @MainActor (GamePatch, Error) async -> Bool
 
-    private let fileManager = FileManager.default
-    private let catalog: GamePatchCatalog
-    private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner")
+    let fileManager = FileManager.default
+    let catalog: GamePatchCatalog
+    nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner")
     let bus: EventBus<AppEvent>
 
     init(
@@ -54,7 +52,9 @@ class GameInstallerRunner {
         gameInfo: GameInfo,
         source: WrappSource,
         installerPath: URL? = nil,
-        installerName: String? = nil
+        installerName: String? = nil,
+        unattended: Bool,
+        confirmPatchFailure: PatchFailureConfirmation
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
@@ -80,15 +80,15 @@ class GameInstallerRunner {
 
             // Show what command would have been run using the same code path
             let installerType = await detectInstallerType(installerExe)
-            let command = buildInstallerCommand(
+            let plan = installerPlan(
                 installerPath: installerExe,
                 installerType: installerType,
                 gameInfo: gameInfo,
                 wrappPath: wrappPath,
                 attemptNumber: 0
             )
-            logger.notice("DEBUG: Would have run: \(command.commandDescription)")
-            if let underlyingCommand = command.underlyingCommandDescription {
+            logger.notice("DEBUG: Would have run: \(plan.description)")
+            if let underlyingCommand = plan.automatedDescription {
                 logger.notice("DEBUG:    Automating: \(underlyingCommand)")
             }
 
@@ -106,8 +106,10 @@ class GameInstallerRunner {
         // click through it: never in strict mode, and never headless or under
         // test, where it would wait for ever (an integration run's builds
         // held a build slot for 50 minutes on a wizard nobody clicked).
+        // `unattended` is the build's own answer (`WrappBuildInput.isUnattended`),
+        // so the runner and the prompts agree on whether anyone is there.
         let strictInstall = ProcessInfo.processInfo.environment["STRICT_INSTALL"] == "true"
-        let unattended = ProcessInfo.processInfo.environment["NON_INTERACTIVE"] == "true" || TestHost.isRunning
+        let unattended = unattended || TestHost.isRunning
         let maxAttempts = (strictInstall || unattended) ? 1 : 2
         if unattended && !strictInstall {
             logger.notice("Unattended build: no interactive installer retry if the silent install fails")
@@ -159,10 +161,13 @@ class GameInstallerRunner {
                 } catch let error as WrappBuildError where error.isIncompleteInstall {
                     throw error
                 } catch {
+                    try Task.checkCancellation()
                     // Game executable not found
                     if installAttempt + 1 < maxAttempts {
                         logger.warning("Game exe not found after silent install — retrying with interactive mode...")
                         installAttempt += 1
+                        await bus.publishWrappBuild(.progress(.installingGame(substep: Self.retryingInstallSubstep)))
+                        await Wine(wrapp: wrappPath).server.stop()
                     } else {
                         // Strict mode or second attempt failed, throw the error
                         if strictInstall {
@@ -175,6 +180,9 @@ class GameInstallerRunner {
                 }
             } catch {
                 await bus.publishWrappBuild(.instructions(nil))
+                // A cancelled build stops here: it is not a failed attempt
+                // to retry with the installer's own wizard.
+                if Task.isCancelled || error is CancellationError { throw CancellationError() }
                 installAttempt += 1
                 if installAttempt >= maxAttempts {
                     if strictInstall {
@@ -190,9 +198,11 @@ class GameInstallerRunner {
                     throw error
                 }
 
-                if case WineError.stalled = error {
-                    await bus.publishWrappBuild(.progress(.installingGame(substep: Self.stalledInstallSubstep)))
-                }
+                // Say why the installer's own wizard is about to appear.
+                let isStall: Bool
+                if case WineError.stalled = error { isStall = true } else { isStall = false }
+                await bus.publishWrappBuild(.progress(.installingGame(
+                    substep: isStall ? Self.stalledInstallSubstep : Self.retryingInstallSubstep)))
                 logger.warning("Silent install failed: \(error) — retrying with interactive mode...")
                 // Start the next attempt in a fresh Wine session: what the
                 // failed one left running is no use to it, and its desktop
@@ -219,18 +229,13 @@ class GameInstallerRunner {
         await bus.publishWrappBuild(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
 
         // Apply any available game patches
-        do {
-            try await applyGamePatches(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameInstallDir: gameExe.deletingLastPathComponent(),
-                source: source
-            )
-        } catch WrappBuildError.userCancelled {
-            throw WrappBuildError.userCancelled
-        } catch {
-            logger.warning("⚠️  Failed to apply patches: \(error)")
-        }
+        try await applyGamePatches(
+            wrappPath: wrappPath,
+            gameInfo: gameInfo,
+            gameInstallDir: gameExe.deletingLastPathComponent(),
+            source: source,
+            confirmFailure: confirmPatchFailure
+        )
 
         // Only logged: it says why a launch will likely fail, and which
         // editions of a game carry it.
@@ -316,7 +321,8 @@ class GameInstallerRunner {
     func installGameWithScummVM(
         wrappPath: URL,
         gameInfo: GameInfo,
-        source: WrappSource
+        source: WrappSource,
+        confirmPatchFailure: PatchFailureConfirmation
     ) async throws -> (gameExePath: String, installerDir: String) {
         // For ScummVM games, the "installation" is simply having the disk files available
         // The disk files were already copied by wrappBuilder.copyGameDisks()
@@ -338,426 +344,42 @@ class GameInstallerRunner {
         // still Windows installers that rewrite the game's data files. Wine is
         // still in the wrapp at this point — `cleanupUnusedEngine` strips it
         // one step later — so the patches can be applied here and nowhere else.
-        do {
-            try await applyGamePatches(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameInstallDir: gameDir,
-                source: source
-            )
-        } catch WrappBuildError.userCancelled {
-            throw WrappBuildError.userCancelled
-        } catch {
-            logger.warning("⚠️  Failed to apply patches: \(error)")
-        }
+        try await applyGamePatches(
+            wrappPath: wrappPath,
+            gameInfo: gameInfo,
+            gameInstallDir: gameDir,
+            source: source,
+            confirmFailure: confirmPatchFailure
+        )
 
         return ("/" + relativePath, "/" + relativeInstallerDir)
     }
 
     // MARK: - Disk Directory Resolution
 
-    /// Find the directory containing the installer: prefer disk-combined, else
-    /// disk-1, else fail. Centralizes a lookup that was previously duplicated.
-    private func findInstallerDirectory(in driveCPath: URL) throws -> URL {
-        let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
-        let combinedDir = installerBaseDir.appendingPathComponent("disk-combined")
-        let disk1Dir = installerBaseDir.appendingPathComponent("disk-1")
+    /// The folder the game installs from: `disk-combined` for a game on two
+    /// discs, else `disk-1`; nil if neither is there.
+    private func installerDirectory(in driveCPath: URL) -> URL? {
+        let base = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
+        return ["disk-combined", "disk-1"].map { base.appendingPathComponent($0) }
+            .first { fileManager.fileExists(atPath: $0.path) }
+    }
 
-        if fileManager.fileExists(atPath: combinedDir.path) {
-            logger.notice("Using combined disk directory")
-            return combinedDir
-        } else if fileManager.fileExists(atPath: disk1Dir.path) {
-            logger.notice("Using disk-1 directory")
-            return disk1Dir
-        } else {
-            logger.critical("Could not find disk directory — expected at \(disk1Dir.path) or \(combinedDir.path)")
+    /// `installerDirectory`, or `diskNotFound`.
+    private func findInstallerDirectory(in driveCPath: URL) throws -> URL {
+        guard let directory = installerDirectory(in: driveCPath) else {
+            logger.critical("Could not find disk directory — expected disk-1 or disk-combined in \(driveCPath.appendingPathComponent(WrappLayout.installersFolder).path)")
             throw WrappBuildError.diskNotFound
         }
+        logger.notice("Installing from \(directory.lastPathComponent)")
+        return directory
     }
 
     /// The installer directory as a Windows-style path relative to drive_c
     /// (e.g. "/nancy-drew-installer/disk-1").
     private func installerDirectoryPath(in driveCPath: URL) -> String {
-        let installerBaseDir = driveCPath.appendingPathComponent("nancy-drew-installer")
-        let combinedDir = installerBaseDir.appendingPathComponent("disk-combined")
-        let disk1Dir = installerBaseDir.appendingPathComponent("disk-1")
-
-        if fileManager.fileExists(atPath: combinedDir.path) {
-            return "/nancy-drew-installer/disk-combined"
-        } else if fileManager.fileExists(atPath: disk1Dir.path) {
-            return "/nancy-drew-installer/disk-1"
-        } else {
-            return "/nancy-drew-installer"
-        }
-    }
-
-    // MARK: - Game Patches
-
-    /// How long a single patch installer gets before it is assumed to be
-    /// sitting on a dialog that nobody can answer. Most take seconds, but with
-    /// every core busy one has needed minutes just to start its Wine session.
-    private static let patchInstallerTimeout: TimeInterval = 900
-
-    /// Something that went wrong applying one patch. Every case is recoverable:
-    /// the build continues without that patch unless the user says otherwise.
-    enum GamePatchError: LocalizedError {
-        case archiveMissing(String)
-        case payloadMissing(payload: String, archive: String)
-        case unzipFailed(String)
-        case timedOut(String)
-        case installerFailed(id: String, exitCode: Int32)
-        case installerDidNotFinish(id: String, reason: String)
-        case automationFailed(id: String, script: String)
-        case changedNothing(id: String)
-
-        var errorDescription: String? {
-            switch self {
-            case .archiveMissing(let archive):
-                return "The patch archive \(archive) was not bundled with Second Chance. It may have failed to download when Second Chance was built."
-            case .payloadMissing(let payload, let archive):
-                return "\(archive) did not contain the expected file \(payload)."
-            case .unzipFailed(let archive):
-                return "Could not unzip \(archive)."
-            case .timedOut(let id):
-                return "The patch installer for \(id) did not finish in time and was stopped."
-            case .installerFailed(let id, let exitCode):
-                return "The patch installer for \(id) exited with code \(exitCode)."
-            case .installerDidNotFinish(let id, let reason):
-                return "The patch installer for \(id) exited cleanly but didn't finish: \(reason)"
-            case .automationFailed(let id, let script):
-                return "\(script).au3 couldn't get the patch installer for \(id) to finish; its last lines above say where it stopped."
-            case .changedNothing(let id):
-                return "The patch installer for \(id) reported success but changed no game files."
-            }
-        }
-    }
-
-    /// Apply the official Her Interactive patches for this game.
-    ///
-    /// Which patches apply depends on the game *and* on the edition the wrapp
-    /// was built from — Her Interactive shipped separate CD and
-    /// digital-download builds of several patches, and the wrong one does
-    /// nothing useful. Patches the manifest marks non-automatic (puzzle
-    /// solvers, difficulty tweaks, superseded updaters) are logged but never
-    /// applied. See `docs/game-patches.md`.
-    ///
-    /// A failing patch never fails the build on its own: it routes through
-    /// `confirmPatchFailure`, which continues by default.
-    func applyGamePatches(
-        wrappPath: URL,
-        gameInfo: GameInfo,
-        gameInstallDir: URL,
-        source: WrappSource
-    ) async throws {
-        let gameSlug = gameInfo.id
-        let patches = catalog.automaticPatches(forGame: gameSlug, source: source)
-
-        for skipped in catalog.optionalPatches(forGame: gameSlug, source: source) {
-            logger.notice("⏭️  Optional patch not applied: \(skipped.id) — \(skipped.title)")
-        }
-
-        guard !patches.isEmpty else {
-            logger.notice("ℹ️  No patches to apply for game '\(gameSlug)'")
-            return
-        }
-
-        let driveCPath = WrappLayout(app: wrappPath).driveC
-
-        logger.notice("🔧 Applying \(patches.count) patch(es) for '\(gameSlug)' (\(source.rawValue))...")
-
-        for patch in patches {
-            logger.notice("📦 Patch: \(patch.id) — \(patch.title)")
-            do {
-                // A walk over every file of the game, off the main thread.
-                let before = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }
-                try await apply(
-                    patch,
-                    wrappPath: wrappPath,
-                    driveCPath: driveCPath,
-                    gameInstallDir: gameInstallDir
-                )
-                let changed = await Blocking.run { GameFileSnapshot(of: gameInstallDir) }.changes(since: before)
-                if changed.isEmpty {
-                    // A driven patcher's exit code is only AutoIt's: it has
-                    // once exited 0 without the patcher ever running.
-                    guard patch.automation == nil else {
-                        throw GamePatchError.changedNothing(id: patch.id)
-                    }
-                    logger.warning("   → \(patch.id) changed no files in \(gameInstallDir.lastPathComponent)")
-                } else {
-                    logger.notice("   → changed: \(changed.joined(separator: ", "))")
-                }
-                logger.notice("✅ Applied patch: \(patch.id)")
-                await bus.publishWrappBuild(.patchApplied(id: patch.id))
-            } catch {
-                logger.error("❌ Patch failed: \(patch.id): \(error.localizedDescription)")
-                await bus.publishWrappBuild(.patchFailed(id: patch.id, message: error.localizedDescription))
-                let continueInstall = await confirmPatchFailure(patchName: patch.title, error: error)
-                if continueInstall {
-                    logger.notice("⚠️  Continuing without patch: \(patch.id)")
-                } else {
-                    throw WrappBuildError.userCancelled
-                }
-            }
-        }
-
-        logger.notice("✅ Finished applying patches for '\(gameSlug)'")
-    }
-
-    /// Unpack one patch archive and apply its payload to the installed game.
-    private func apply(
-        _ patch: GamePatch,
-        wrappPath: URL,
-        driveCPath: URL,
-        gameInstallDir: URL
-    ) async throws {
-        guard let archiveURL = Bundle.main.url(
-            forResource: patch.archive,
-            withExtension: nil,
-            subdirectory: "game-patches/\(patch.game)"
-        ) else {
-            throw GamePatchError.archiveMissing(patch.archive)
-        }
-
-        let tempDir = fileManager.temporaryDirectory
-            .appendingPathComponent("patch-\(UUID().uuidString)")
-        try fileManager.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        defer { try? fileManager.removeItem(at: tempDir) }
-
-        try await unzipPatchArchive(archiveURL, into: tempDir)
-
-        // The manifest names the payload exactly, so there is no guessing at
-        // filenames — they follow no pattern worth pattern-matching.
-        let payload = tempDir.appendingPathComponent(patch.payload)
-        guard fileManager.fileExists(atPath: payload.path) else {
-            throw GamePatchError.payloadMissing(payload: patch.payload, archive: patch.archive)
-        }
-
-        switch patch.action {
-        case .copyIntoGameDir:
-            let destinationDir = patch.destinationSubdirectory.map {
-                gameInstallDir.appendingPathComponent($0)
-            } ?? gameInstallDir
-            try fileManager.createDirectory(at: destinationDir, withIntermediateDirectories: true)
-
-            let destination = destinationDir.appendingPathComponent(patch.payload)
-            // Overwrite rather than fail: rebuilding a wrapp must be idempotent.
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
-            }
-            try fileManager.copyItem(at: payload, to: destination)
-            logger.notice("   → copied \(patch.payload) into \(destinationDir.lastPathComponent)")
-
-        case .extractIntoGameDir:
-            let destinationDir = patch.destinationSubdirectory.map {
-                gameInstallDir.appendingPathComponent($0)
-            } ?? gameInstallDir
-            try fileManager.createDirectory(at: destinationDir, withIntermediateDirectories: true)
-            // A self-extracting zip is a zip with an exe in front, which unzip
-            // reads as is. -o overwrites, so a rebuild is idempotent.
-            try await unzipPatchArchive(payload, into: destinationDir)
-            logger.notice("   → extracted \(patch.payload) into \(destinationDir.lastPathComponent)")
-
-        case .runInstaller:
-            // Stage the installer next to the game: these old patchers default
-            // to their own directory when asked where the game lives.
-            let staged = gameInstallDir.appendingPathComponent(patch.payload)
-            if fileManager.fileExists(atPath: staged.path) {
-                try fileManager.removeItem(at: staged)
-            }
-            try fileManager.copyItem(at: payload, to: staged)
-            // Leave the game directory as we found it, patched or not.
-            defer { try? fileManager.removeItem(at: staged) }
-
-            let winePath = Self.windowsPath(of: staged, driveC: driveCPath)
-            try await runPatchInstaller(patch, at: wrappPath, hostPath: staged, winePath: winePath)
-        }
-    }
-
-    /// The Windows path (`C:\\…`) of a file inside the prefix's `drive_c`.
-    ///
-    /// Wine reads a path that starts with `/` as a Unix path, so cutting the
-    /// `drive_c` prefix off alone leaves a path that names nothing.
-    static func windowsPath(of file: URL, driveC: URL) -> String {
-        let relative = file.standardizedFileURL.path.dropFirst(driveC.standardizedFileURL.path.count)
-        return "C:" + relative.replacingOccurrences(of: "/", with: "\\")
-    }
-
-    /// Extract a patch archive with `/usr/bin/unzip`.
-    private func unzipPatchArchive(_ archive: URL, into directory: URL) async throws {
-        let unzip = try await Process.output(of: "/usr/bin/unzip", ["-q", "-o", archive.path, "-d", directory.path])
-        guard unzip.succeeded else {
-            throw GamePatchError.unzipFailed(archive.lastPathComponent)
-        }
-    }
-
-    /// Run a patch installer under Wine, silently where the installer type
-    /// supports it, and bounded by a timeout.
-    ///
-    /// Wine execution has no timeout of its own and these are twenty-year-old
-    /// wizard installers, so one that decides to show a dialog would otherwise
-    /// hang the build forever. On timeout the prefix's wineserver is killed and
-    /// the patch is reported failed, which routes through the normal
-    /// patch-failure confirmation.
-    private func runPatchInstaller(
-        _ patch: GamePatch,
-        at wrappPath: URL,
-        hostPath: URL,
-        winePath: String
-    ) async throws {
-        try await retryingIfNoDisplay(at: wrappPath, "\(patch.id)'s patcher") {
-            try await self.runPatchInstallerOnce(patch, at: wrappPath, hostPath: hostPath, winePath: winePath)
-        }
-    }
-
-    private func runPatchInstallerOnce(
-        _ patch: GamePatch,
-        at wrappPath: URL,
-        hostPath: URL,
-        winePath: String
-    ) async throws {
-        if let automation = patch.automation {
-            try await runAutomatedPatchInstaller(patch, script: automation, at: wrappPath, winePath: winePath)
-            return
-        }
-
-        let installerType = await detectInstallerType(hostPath.path)
-        // An Inno Setup patcher keeps a log that says whether it finished;
-        // the self-extracting updaters most patches are don't.
-        let installerLog = installerType == .innoSetup
-            ? try? prepareInstallerLog(in: wrappPath, format: .inno)
-            : nil
-        defer {
-            if let installerLog, !DebugSettings.shared.debugMode {
-                try? fileManager.removeItem(at: installerLog.hostPath)
-            }
-        }
-        let arguments = silentPatchArguments(for: installerType, logPath: installerLog?.windowsPath)
-        logger.notice("   → running \(patch.payload) (\(installerType)) \(arguments.joined(separator: " "))")
-
-        // Wine.run stops the prefix's wineserver on timeout, which is the only
-        // thing that ends the Windows process.
-        let desktop = await startDesktop(at: wrappPath)
-        defer { desktop?.release() }
-        do {
-            try await Wine(wrapp: wrappPath).run(.program(winePath, arguments), timeout: Self.patchInstallerTimeout)
-        } catch WineError.executionFailed(let code) {
-            throw GamePatchError.installerFailed(id: patch.id, exitCode: code)
-        } catch WineError.timedOut {
-            throw GamePatchError.timedOut(patch.id)
-        }
-        do {
-            try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.patchInstallerTimeout)
-        } catch WineError.timedOut {
-            throw GamePatchError.timedOut(patch.id)
-        }
-        if let installerLog {
-            try checkInstallerLog(installerLog, failure: { GamePatchError.installerDidNotFinish(id: patch.id, reason: $0) })
-        }
-    }
-
-    /// Run a patcher that has no silent mode through its AutoIt script, which
-    /// clicks through the wizard and exits 0 only once the patcher says the
-    /// game was updated. The script's output lands in the log.
-    private func runAutomatedPatchInstaller(
-        _ patch: GamePatch,
-        script: String,
-        at wrappPath: URL,
-        winePath: String
-    ) async throws {
-        let driveCPath = WrappLayout(app: wrappPath).driveC
-        let scriptPath = try await stageAutoIt(script: script, inDriveC: driveCPath)
-        defer { removeAutoIt(script: scriptPath, inDriveC: driveCPath) }
-
-        let scriptWinePath = Self.windowsPath(of: scriptPath, driveC: driveCPath)
-        logger.notice("   → running \(patch.payload) through AutoIt (\(script).au3)")
-        let desktop = await startDesktop(at: wrappPath)
-        defer { desktop?.release() }
-        let autoIt = Self.windowsPath(of: driveCPath.appendingPathComponent("autoit/AutoIt3.exe"), driveC: driveCPath)
-        // The script failing still waits for what the patcher started.
-        let exitCode: Int32
-        do {
-            do {
-                // /ErrorStdOut: a script error is printed (and logged) rather than
-                // shown in a message box nobody will close.
-                try await Wine(wrapp: wrappPath).run(.program(autoIt, ["/ErrorStdOut", scriptWinePath, winePath]),
-                                                     timeout: Self.patchInstallerTimeout)
-                exitCode = 0
-            } catch WineError.executionFailed(let code) {
-                exitCode = code
-            }
-            try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: Self.patchInstallerTimeout)
-        } catch WineError.timedOut {
-            throw GamePatchError.timedOut(patch.id)
-        }
-        guard exitCode == 0 else {
-            throw GamePatchError.automationFailed(id: patch.id, script: script)
-        }
-    }
-
-    /// Copy AutoIt and a `patch-automation` script into the prefix, returning
-    /// the script's host path.
-    private func stageAutoIt(script: String, inDriveC driveCPath: URL) async throws -> URL {
-        guard AutoItService.shared.isAvailable else {
-            throw WrappBuildError.autoItNotAvailable
-        }
-        guard let source = Bundle.main.url(forResource: script, withExtension: "au3", subdirectory: "patch-automation") else {
-            throw WrappBuildError.autoItScriptNotFound
-        }
-        let autoitDestDir = driveCPath.appendingPathComponent("autoit")
-        if !fileManager.fileExists(atPath: autoitDestDir.path) {
-            // Tens of MB, so off the main thread.
-            let autoitDir = AutoItService.shared.autoitDir
-            try await Blocking.run { try FileManager.default.copyItem(at: autoitDir, to: autoitDestDir) }
-        }
-        let destination = driveCPath.appendingPathComponent("\(script).au3")
-        if fileManager.fileExists(atPath: destination.path) {
-            try fileManager.removeItem(at: destination)
-        }
-        try fileManager.copyItem(at: source, to: destination)
-        return destination
-    }
-
-    /// Remove what `stageAutoIt` copied, so the wrapp doesn't ship AutoIt.
-    private func removeAutoIt(script: URL, inDriveC driveCPath: URL) {
-        for item in [driveCPath.appendingPathComponent("autoit"), script] {
-            do {
-                try fileManager.removeItem(at: item)
-            } catch {
-                logger.warning("Couldn't remove \(item.lastPathComponent) from the prefix: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    /// Best-effort silent-install flags for a patch installer.
-    ///
-    /// Unlike the game installers there is no recorded `.iss` answer file for
-    /// patches, so this is the generic flag set for each installer family. If
-    /// an installer ignores them and shows a wizard, the timeout catches it.
-    private func silentPatchArguments(for installerType: InstallerType, logPath: String?) -> [String] {
-        switch installerType {
-        case .msi:
-            return ["/qn"]
-        case .installShield:
-            return ["/s", "/sms"]
-        case .innoSetup:
-            return ["/verysilent", "/norestart"] + (logPath.map { ["/LOG=\($0)"] } ?? [])
-        case .unknown:
-            return []
-        }
-    }
-
-    /// Route a patch-failure confirmation through the injected handler when
-    /// present, otherwise continue without prompting (headless default —
-    /// a modal alert under a `.prohibited` activation policy would be
-    /// invisible and hang the build forever).
-    @MainActor
-    private func confirmPatchFailure(patchName: String, error: Error) async -> Bool {
-        if let confirmation = patchFailureConfirmation {
-            return await confirmation(patchName, error)
-        }
-        logger.notice("No patch-failure handler installed — continuing without patch '\(patchName)'")
-        return true
+        guard let directory = installerDirectory(in: driveCPath) else { return "/" + WrappLayout.installersFolder }
+        return "/\(WrappLayout.installersFolder)/\(directory.lastPathComponent)"
     }
 
     // MARK: - AutoIt Automation
@@ -821,26 +443,15 @@ class GameInstallerRunner {
 
     // MARK: - Installer Command Building
 
-    /// Information about how to execute an installer
-    private struct InstallerCommand {
-        let exePath: String
-        let arguments: [String]
-        let useStartCommand: Bool
-        let commandDescription: String
-        /// Non-nil when AutoIt automates an underlying installer command.
-        /// This is the single source of truth for "is AutoIt being used".
-        let underlyingCommandDescription: String?
-    }
-
     /// Host and Windows paths for an installer's own log file.
-    private struct InstallerLogFile {
+    struct InstallerLogFile {
         let format: InstallerLogFormat
         let hostPath: URL
         let windowsPath: String
     }
 
     /// Build a unique installer log file path in the Wine prefix temp directory.
-    private func prepareInstallerLog(in wrappPath: URL, format: InstallerLogFormat) throws -> InstallerLogFile {
+    func prepareInstallerLog(in wrappPath: URL, format: InstallerLogFormat) throws -> InstallerLogFile {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let windowsTempDir = driveCPath.appendingPathComponent("windows/temp")
         try fileManager.createDirectory(at: windowsTempDir, withIntermediateDirectories: true)
@@ -864,67 +475,23 @@ class GameInstallerRunner {
         return streamer
     }
 
-    /// Build the installer command that should be executed
-    private func buildInstallerCommand(
+    /// The plan for one attempt at running the installer (`InstallerPlan`).
+    private func installerPlan(
         installerPath: String,
         installerType: InstallerType,
         gameInfo: GameInfo,
         wrappPath: URL,
         attemptNumber: Int,
         logPath: String? = nil
-    ) -> InstallerCommand {
-        // Get installer arguments
-        let args = getInstallerArguments(
-            installerPath: installerPath,
-            installerType: installerType,
-            gameInfo: gameInfo,
-            wrappPath: wrappPath,
-            attemptNumber: attemptNumber,
-            logPath: logPath
-        )
+    ) -> InstallerPlan {
+        InstallerPlan(installerPath: installerPath, type: installerType, attempt: attemptNumber,
+                      hasAnswerFile: hasAnswerFile(in: wrappPath), game: gameInfo, logPath: logPath)
+    }
 
-        // Check if we need to use AutoIt for this installer
-        let driveCPath = WrappLayout(app: wrappPath).driveC
-        let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
-        let useAutoIt = installerType == .installShield &&
-                       attemptNumber == 0 &&
-                       fileManager.fileExists(atPath: setupIssPath.path) &&
-                       gameInfo.doesNotExitInNonInteractiveMode
-
-        if useAutoIt {
-            let autoitArgs = [
-                "C:\\installshield-custom-dialog-automate.au3",
-                installerPath,
-                gameInfo.title
-            ]
-            let underlyingCommand = installerType == .msi
-                ? "msiexec \(args.joined(separator: " "))"
-                : "wine start /wait \(installerPath) \(args.joined(separator: " "))"
-
-            return InstallerCommand(
-                exePath: "C:\\autoit\\AutoIt3.exe",
-                arguments: autoitArgs,
-                useStartCommand: false,
-                commandDescription: "C:\\autoit\\AutoIt3.exe \(autoitArgs.joined(separator: " "))",
-                underlyingCommandDescription: underlyingCommand
-            )
-        } else if installerType == .msi {
-            return InstallerCommand(
-                exePath: "msiexec",
-                arguments: args,
-                useStartCommand: false,
-                commandDescription: "msiexec \(args.joined(separator: " "))",
-                underlyingCommandDescription: nil
-            )
-        } else {
-            return InstallerCommand(
-                exePath: installerPath,
-                arguments: args,
-                useStartCommand: true,
-                commandDescription: "wine start /wait \(installerPath) \(args.joined(separator: " "))",
-                underlyingCommandDescription: nil
-            )
-        }
+    /// Whether the disc's InstallShield answer file was copied in.
+    private func hasAnswerFile(in wrappPath: URL) -> Bool {
+        let setupIss = WrappLayout(app: wrappPath).installers.appendingPathComponent("setup.iss")
+        return fileManager.fileExists(atPath: setupIss.path)
     }
 
     // MARK: - Install Checks
@@ -972,12 +539,11 @@ class GameInstallerRunner {
         await bus.publishWrappBuild(.installerResolved(exePath: installerPath, type: installerType))
 
         // Diagnostic logging for the AutoIt decision (the decision itself is
-        // made once, inside buildInstallerCommand).
+        // made once, in `InstallerPlan`).
         logger.debug("Attempt number: \(attemptNumber)")
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
-        let setupIssExists = fileManager.fileExists(atPath: setupIssPath.path)
-        logger.debug("Setup.iss path: \(setupIssPath.path), exists: \(setupIssExists)")
+        let setupIssExists = hasAnswerFile(in: wrappPath)
+        logger.debug("Setup.iss exists: \(setupIssExists)")
         logger.debug("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
 
         let installerLog = InstallerLogFormat(installerType)
@@ -987,7 +553,7 @@ class GameInstallerRunner {
         }
 
         // Build and print the command that will be executed
-        let command = buildInstallerCommand(
+        let plan = installerPlan(
             installerPath: installerPath,
             installerType: installerType,
             gameInfo: gameInfo,
@@ -995,8 +561,8 @@ class GameInstallerRunner {
             attemptNumber: attemptNumber,
             logPath: installerLog?.windowsPath
         )
-        logger.notice("Running: \(command.commandDescription)")
-        if let underlyingCommand = command.underlyingCommandDescription {
+        logger.notice("Running: \(plan.description)")
+        if let underlyingCommand = plan.automatedDescription {
             logger.notice("   Automating: \(underlyingCommand)")
         }
 
@@ -1011,7 +577,7 @@ class GameInstallerRunner {
         // Stream the installer's own log independently from Wine stdout/stderr.
         var logStreamer: InstallerLogStreamer?
         if let installerLog {
-            logStreamer = try startInstallerLogStreaming(installerLog, onLine: stallWatch.map { watch in { _ in watch.sawOutput() } })
+            logStreamer = try startInstallerLogStreaming(installerLog, onLine: stallWatch.map { watch in { @Sendable _ in watch.sawOutput() } })
         }
         defer {
             if let logStreamer {
@@ -1022,15 +588,26 @@ class GameInstallerRunner {
             }
         }
 
-        // Setup AutoIt if needed
-        if command.underlyingCommandDescription != nil {
+        // Setup AutoIt if needed. Removed however this attempt ends, so a
+        // failed one doesn't leave it in the wrapp (an interactive retry
+        // doesn't use it), except in debug mode, to allow manual re-runs.
+        let usesAutoIt = plan.usesAutoIt
+        if usesAutoIt {
             try await setupAutoItForInstall(in: wrappPath)
+        }
+        defer {
+            if usesAutoIt {
+                if DebugSettings.shared.debugMode {
+                    logger.notice("DEBUG: Keeping AutoIt files for manual re-run")
+                } else {
+                    cleanupAutoItAfterInstall(in: wrappPath)
+                }
+            }
         }
 
         // An installer nothing drives shows its own wizard, for the person
         // to click through: say so, and what to choose.
-        let interactive = command.underlyingCommandDescription == nil && runsInteractively(
-            installerType: installerType, attemptNumber: attemptNumber, setupIssExists: setupIssExists)
+        let interactive = plan.runsInteractively
         if interactive {
             logger.notice("The installer runs interactively: showing the install instructions")
             await bus.publishWrappBuild(.instructions(Self.interactiveInstallInstructions(for: gameInfo)))
@@ -1048,9 +625,9 @@ class GameInstallerRunner {
         defer { stallWatch?.stop() }
         // A non-zero exit code usually means the install failed, and throws
         // `executionFailed`, so the caller's silent→interactive retry can kick in.
-        let program: WineCommand = command.useStartCommand
-            ? .start(command.exePath, command.arguments)
-            : .program(command.exePath, command.arguments)
+        let program: WineCommand = plan.usesStart
+            ? .start(plan.program, plan.arguments)
+            : .program(plan.program, plan.arguments)
         try await Wine(wrapp: wrappPath).run(program, timeout: timeout, watchdog: stallWatch)
 
         try await waitForInstallerProcesses(at: wrappPath, releasing: desktop, timeout: timeout, watchdog: stallWatch)
@@ -1059,15 +636,6 @@ class GameInstallerRunner {
         // installer's own log says it did.
         if let installerLog {
             try checkInstallerLog(installerLog, failure: { WrappBuildError.installIncomplete(reason: $0) })
-        }
-
-        // Cleanup AutoIt if it was used (skip in debug mode to allow manual re-runs)
-        if command.underlyingCommandDescription != nil {
-            if DebugSettings.shared.debugMode {
-                logger.notice("DEBUG: Keeping AutoIt files for manual re-run")
-            } else {
-                cleanupAutoItAfterInstall(in: wrappPath)
-            }
         }
         return installerType
     }
@@ -1084,8 +652,8 @@ class GameInstallerRunner {
     /// session, and so this wait, going for ever.
     /// `watchdog` too, as an InstallShield `setup.exe` can exit in seconds and
     /// leave the whole install to the processes it started.
-    private func waitForInstallerProcesses(at wrappPath: URL, releasing desktop: WineDesktop?, timeout: TimeInterval?,
-                                           watchdog: WineWatchdog? = nil) async throws {
+    func waitForInstallerProcesses(at wrappPath: URL, releasing desktop: WineDesktop?, timeout: TimeInterval?,
+                                   watchdog: WineWatchdog? = nil) async throws {
         desktop?.release()
         logger.notice("Waiting for the installer's remaining Wine processes to finish")
         try await Wine(wrapp: wrappPath).server.waitUntilProgramsExit(timeout: timeout, watchdog: watchdog)
@@ -1099,7 +667,7 @@ class GameInstallerRunner {
     /// session then stays that way: the next program fails the same way
     /// within a second. Restarting the session is the surest way to a fresh
     /// desktop.
-    private func retryingIfNoDisplay<T>(
+    func retryingIfNoDisplay<T>(
         at wrappPath: URL,
         _ what: String,
         _ step: () async throws -> T
@@ -1118,13 +686,13 @@ class GameInstallerRunner {
     /// to start", which once failed Stay Tuned's patch). See `WineDesktop`.
     /// A program run without it is sure to fail: AutoIt then can't open its
     /// window and exits 0 without having run its script.
-    private func startDesktop(at wrappPath: URL) async -> WineDesktop? {
+    func startDesktop(at wrappPath: URL) async -> WineDesktop? {
         await WineDesktop.start(Wine(wrapp: wrappPath), logger: logger, outputLogger: wineOutputLogger)
     }
 
     /// Throw `failure(reason)` unless the installer's log records it
     /// finishing; log the verdict either way.
-    private func checkInstallerLog(_ log: InstallerLogFile, failure: (String) -> Error) throws {
+    func checkInstallerLog(_ log: InstallerLogFile, failure: (String) -> Error) throws {
         let text = InstallCompletion.readLog(at: log.hostPath) ?? ""
         let problem: String?
         switch log.format {
@@ -1164,17 +732,13 @@ class GameInstallerRunner {
     }
 
     /// Whether the installer shows its own wizard rather than installing
-    /// silently: what `getInstallerArguments` chooses, from the person's side.
+    /// silently (`InstallerPlan.runsInteractively`), for a game AutoIt
+    /// doesn't drive.
     func runsInteractively(installerType: InstallerType, attemptNumber: Int, setupIssExists: Bool) -> Bool {
-        switch installerType {
-        case .msi, .innoSetup: return attemptNumber > 0
-        case .installShield: return attemptNumber > 0 || !setupIssExists
-        case .unknown: return true
-        }
+        InstallerPlan(installerPath: "", type: installerType, attempt: attemptNumber, hasAnswerFile: setupIssExists,
+                      game: GameInfo.unknownGame).runsInteractively
     }
 
-    /// The progress screen's instructions while an installer's own window is
-    /// up for the person to click through.
     /// The progress screen's instructions while an unattended install has
     /// gone quiet with one of its windows on screen.
     static let installerQuestionInstructions =
@@ -1183,13 +747,17 @@ class GameInstallerRunner {
     /// The progress screen's step while the stalled unattended install gives
     /// way to the installer's own window.
     static let stalledInstallSubstep = "The install got stuck, so the installer is opening for you to finish it"
+    /// Shown when installing by itself didn't work for any other reason.
+    static let retryingInstallSubstep = "Installing by itself didn't work, so the installer is opening for you to finish it"
 
+    /// The progress screen's instructions while an installer's own window is
+    /// up for the person to click through.
     static func interactiveInstallInstructions(for gameInfo: GameInfo) -> String {
         let tips = gameInfo.installInstructions ?? GameInfo.defaultInstallInstructions
         return "The game's installer has opened in its own window. Click through it to install the game. \(tips)"
     }
 
-    /// Get installer arguments based on type and attempt number
+    /// The installer's own arguments for an attempt (`InstallerPlan`).
     func getInstallerArguments(
         installerPath: String,
         installerType: InstallerType,
@@ -1198,51 +766,8 @@ class GameInstallerRunner {
         attemptNumber: Int,
         logPath: String? = nil
     ) -> [String] {
-        switch installerType {
-        case .msi:
-            let logPath = logPath ?? "nancy-drew-install-log.txt"
-            if attemptNumber == 0 {
-                // Silent install with logging
-                return ["/qn", "/l*", logPath, "/i", installerPath]
-            } else {
-                // Interactive install (still collect installer logs)
-                return ["/l*", logPath, "/i", installerPath]
-            }
-
-        case .installShield:
-            // Check for setup.iss file for silent install
-            let driveCPath = WrappLayout(app: wrappPath).driveC
-            let setupIssPath = driveCPath.appendingPathComponent("nancy-drew-installer/setup.iss")
-
-            if attemptNumber == 0 && fileManager.fileExists(atPath: setupIssPath.path) {
-                // Use AutoIt for games that don't exit properly in non-interactive mode
-                if gameInfo.doesNotExitInNonInteractiveMode {
-                    // Return empty array - AutoIt will be handled specially in runInstaller
-                    return []
-                } else {
-                    // Silent install with .iss response file
-                    let windowsIssPath = "C:\\nancy-drew-installer\\setup.iss"
-                    return ["/s", "/sms", "/f1\(windowsIssPath)"]
-                }
-            } else {
-                // Interactive install with record mode
-                return ["/r"]
-            }
-
-        case .innoSetup:
-            let log = logPath.map { ["/LOG=\($0)"] } ?? []
-            if attemptNumber == 0 {
-                // Very silent install
-                return ["/verysilent", "/norestart"] + log
-            } else {
-                // Interactive install
-                return log
-            }
-
-        case .unknown:
-            // No special arguments
-            return []
-        }
+        installerPlan(installerPath: installerPath, installerType: installerType, gameInfo: gameInfo,
+                      wrappPath: wrappPath, attemptNumber: attemptNumber, logPath: logPath).installerArguments
     }
 
     // MARK: - Executable Discovery
@@ -1259,48 +784,21 @@ class GameInstallerRunner {
             logger.warning("The installer chosen for this disc, \(preferred), isn't in \(directory.path)")
         }
 
-        let contents = try fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil,
-            options: []
-        )
-
+        // The same lookup that recognised the game, so the installer run is
+        // the one detection found (`GameDetector.installerLookup`).
         logger.notice("Searching for installer executable in: \(directory.path)")
-
-        // First look for .msi files
-        for file in contents where file.pathExtension.lowercased() == "msi" {
-            return file.path
+        switch try GameDetector.installerLookup(in: directory) {
+        case .recognised(let name):
+            return directory.appendingPathComponent(name).path
+        case .unrecognised(let programs):
+            guard let first = programs.first else { break }
+            logger.notice("No installer by name; running the first program there: \(first)")
+            return directory.appendingPathComponent(first).path
+        case .none:
+            break
         }
-
-        // Then look for setup.exe
-        for file in contents {
-            let name = file.lastPathComponent.lowercased()
-            if name == "setup.exe" {
-                return file.path
-            }
-        }
-
-        // Then look for install.exe
-        for file in contents {
-            let name = file.lastPathComponent.lowercased()
-            if name == "install.exe" {
-                return file.path
-            }
-        }
-
-        // Look for any other .exe files
-        let exeFiles = contents.filter { $0.pathExtension.lowercased() == "exe" }
-
-        if let exe = exeFiles.first {
-            return exe.path
-        }
-
-        logger.critical("ERROR: No installer executable found!")
+        logger.critical("ERROR: No installer executable found in \(directory.path)")
         logger.notice("Expected to find .msi, setup.exe, install.exe, or any .exe file")
-        logger.notice("Found \(contents.count) files/folders:")
-        for file in contents {
-            logger.notice("  - \(file.lastPathComponent)")
-        }
         throw WrappBuildError.installerNotFound
     }
 
@@ -1378,10 +876,12 @@ class GameInstallerRunner {
         }
         logger.notice("✗ No 'game.exe' found in new executables")
 
-        // Return first new executable
-        if let first = newExes.first {
-            logger.notice("Using first new executable as fallback: \(first)")
-            return URL(fileURLWithPath: first)
+        // Otherwise the likeliest of what's new: never an uninstaller or a
+        // setup program, and of the rest the largest (a game's exe dwarfs its
+        // helpers), so the choice is the same every time.
+        if let likeliest = Self.likeliestGameExe(among: newExes) {
+            logger.notice("Using the likeliest new executable: \(likeliest.path)")
+            return likeliest
         }
 
         logger.critical("ERROR: Could not determine game executable")
@@ -1394,152 +894,21 @@ class GameInstallerRunner {
     }
 }
 
-/// Which installer log `InstallerLogStreamer` is following.
-nonisolated enum InstallerLogFormat: Sendable {
-    case msi
-    case inno
+extension GameInstallerRunner {
+    /// Names of the programs an installer leaves beside a game that aren't it.
+    nonisolated private static let notTheGame = ["unins", "uninst", "setup", "install", "update", "patch", "readme", "dxsetup", "vcredist"]
 
-    /// Nil for installers whose log Second Chance doesn't read.
-    init?(_ installerType: InstallerType) {
-        switch installerType {
-        case .msi: self = .msi
-        case .innoSetup: self = .inno
-        case .installShield, .unknown: return nil
+    /// The new executable most likely to be the game, or nil if every one
+    /// is an uninstaller, a setup program or the like.
+    nonisolated static func likeliestGameExe(among paths: some Collection<String>) -> URL? {
+        let candidates = paths.map { URL(fileURLWithPath: $0) }.filter { url in
+            let name = url.lastPathComponent.lowercased()
+            return !notTheGame.contains { name.hasPrefix($0) }
         }
-    }
-
-    var name: String {
-        switch self {
-        case .msi: return "MSI"
-        case .inno: return "Inno Setup"
+        func size(_ url: URL) -> Int { (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
+        return candidates.max { lhs, rhs in
+            let (left, right) = (size(lhs), size(rhs))
+            return left != right ? left < right : lhs.path > rhs.path
         }
-    }
-}
-
-/// Follows an installer's own log (`tail -F`) into the log. msiexec writes a
-/// line or two for every file it installs — 97% of the lines in a run that
-/// installed several games — and Inno Setup four, so those go in at debug,
-/// and the lines that say how the install went (failed actions, errors, the
-/// final verdict) at notice or error. `stop()` logs a one-line summary.
-nonisolated final class InstallerLogStreamer: @unchecked Sendable {
-    private let logPath: URL
-    private let format: InstallerLogFormat
-    private let process = Process()
-    private let logger: Logger
-    private let lock = NSLock()
-    private var lines = 0
-    private var files = 0
-    private var errors = 0
-    /// Called with each line too, after it is counted. Set before `start()`.
-    var onLine: (@Sendable (String) -> Void)?
-
-    init(logPath: URL, format: InstallerLogFormat) {
-        self.logPath = logPath
-        self.format = format
-        let suffix = format == .msi ? "msi-log" : "inno-log"
-        self.logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameInstallerRunner.\(suffix)")
-    }
-
-    func start() throws {
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/tail")
-        process.arguments = ["-n", "+1", "-F", logPath.path]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        let format = format
-        ProcessLineLogger.attach(
-            to: pipe, logger: logger, level: .debug,
-            levelFor: { Self.notableLevel(of: $0, format: format) ?? .debug },
-            onLine: { [weak self, onLine] line in
-                self?.count(line)
-                onLine?(line)
-            }
-        )
-        try process.run()
-    }
-
-    func stop() {
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-        }
-        let (lines, files, errors) = lock.withLock { (self.lines, self.files, self.errors) }
-        logger.notice("\(format.name) log: \(lines) lines, \(files) files installed, \(errors) error line\(errors == 1 ? "" : "s")")
-    }
-
-    /// The level a line deserves beyond the debug copy it already got.
-    static func notableLevel(of line: String, format: InstallerLogFormat) -> Logger.Level? {
-        switch format {
-        case .msi:
-            if line.contains("Return value 3") || line.hasPrefix("Error ") || line.contains("Installation failed")
-                || line.contains("-- Installation operation failed") {
-                return .error
-            }
-            if line.contains("Installation completed successfully") || line.contains("-- Installation operation completed")
-                || line.hasPrefix("MSI (") && line.contains("Product:") || line.contains(": INSTALL. Return value") {
-                return .notice
-            }
-        case .inno:
-            // Lines start with a timestamp: "2026-10-16 20:25:22.993   …".
-            if line.contains("Exception message:") || line.contains("Installation process failed")
-                || line.contains("Fatal exception") || line.contains("Setup is aborting") {
-                return .error
-            }
-            if line.contains(InstallCompletion.innoSuccessLine) || line.contains("Setup version: ")
-                || line.contains("Original Setup EXE: ") {
-                return .notice
-            }
-        }
-        return nil
-    }
-
-    private func count(_ line: String) {
-        let isFile = switch format {
-        case .msi: line.hasPrefix("File: ") && line.contains("Size:")
-        case .inno: line.contains("Successfully installed the file.")
-        }
-        let isError = Self.notableLevel(of: line, format: format) == .error
-        lock.withLock {
-            lines += 1
-            if isFile { files += 1 }
-            if isError { errors += 1 }
-        }
-    }
-}
-
-/// The files under a game directory, by size and modification date, so a
-/// patch's effect can be logged. Archive extraction keeps a file's original
-/// date, so a file a patch adds shows up as new rather than as newer.
-nonisolated struct GameFileSnapshot: Sendable {
-    private var files: [String: (size: Int, modified: Date)] = [:]
-
-    init(of directory: URL, fileManager: FileManager = .default) {
-        let root = directory.resolvingSymlinksInPath().path
-        guard let walker = fileManager.enumerator(
-            at: directory.resolvingSymlinksInPath(),
-            includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
-        ) else { return }
-        for case let url as URL in walker {
-            guard let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]),
-                  values.isRegularFile == true else { continue }
-            let relative = String(url.resolvingSymlinksInPath().path.dropFirst(root.count + 1))
-            files[relative] = (values.fileSize ?? 0, values.contentModificationDate ?? .distantPast)
-        }
-    }
-
-    /// Paths added, changed or removed since `earlier`, each marked `+`, `~` or `-`.
-    func changes(since earlier: GameFileSnapshot) -> [String] {
-        var result: [String] = []
-        for (path, now) in files {
-            if let then = earlier.files[path] {
-                if then.size != now.size || then.modified != now.modified { result.append("~\(path)") }
-            } else {
-                result.append("+\(path)")
-            }
-        }
-        for path in earlier.files.keys where files[path] == nil {
-            result.append("-\(path)")
-        }
-        return result.sorted { $0.dropFirst() < $1.dropFirst() }
     }
 }

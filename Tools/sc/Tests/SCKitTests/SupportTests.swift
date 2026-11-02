@@ -672,6 +672,14 @@ struct DotEnvTests {
     @Test("Each Mac keeps its own: --on doesn't sync it")
     func notSynced() {
         #expect(Remote.excludes.contains(".env"))
+        // Absolute-path build state, like DerivedData's intermediates.
+        #expect(Remote.excludes.contains("Packages/*/.build"))
+    }
+
+    @Test("--on sends installers, but never deletes the other Mac's")
+    func installersProtected() {
+        #expect(Remote.protects.contains("/installers/***"))
+        #expect(!Remote.excludes.contains("installers"))
     }
 
     @Test("Of DerivedData, --on syncs only the built products")

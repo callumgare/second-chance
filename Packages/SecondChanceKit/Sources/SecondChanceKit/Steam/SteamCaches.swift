@@ -77,6 +77,11 @@ nonisolated enum SteamCaches {
             // v29 moved keys into a string table at the end of the file.
             var table = BinaryReader(data: data, offset: Int(Int64(bitPattern: try reader.uint64())))
             let count = Int(try table.uint32())
+            // Each string takes at least its NUL, so a count beyond that is
+            // a corrupt file, not a table to make room for.
+            guard count <= data.count else {
+                throw VDFError.badBinary("a string table of \(count) in \(data.count) bytes", offset: table.offset)
+            }
             strings = try (0..<count).map { _ in try table.cString() }
         }
         var apps: [Int: SteamAppInfo] = [:]

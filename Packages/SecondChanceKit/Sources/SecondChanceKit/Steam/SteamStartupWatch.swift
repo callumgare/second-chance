@@ -24,11 +24,11 @@ public nonisolated enum SteamStartupStage: Equatable, Sendable {
     /// What Steam is doing, in a few words, without a trailing "…".
     public var message: String {
         switch self {
-        case .starting: return "Starting Steam"
-        case .updating(.extracting), .updating(.installing): return "Installing Steam's update"
-        case .updating(.restarting): return "Starting the updated Steam"
-        case .updating: return "Updating Steam"
-        case .connecting: return "Connecting to Steam"
+        case .starting: return String(localized: "Starting Steam")
+        case .updating(.extracting), .updating(.installing): return String(localized: "Installing Steam's update")
+        case .updating(.restarting): return String(localized: "Starting the updated Steam")
+        case .updating: return String(localized: "Updating Steam")
+        case .connecting: return String(localized: "Connecting to Steam")
         }
     }
 
@@ -41,7 +41,7 @@ public nonisolated enum SteamStartupStage: Equatable, Sendable {
 
     /// The download's figures: "217 of 255 MB".
     public var downloadText: String? {
-        download.map { "\($0.doneKB / 1024) of \($0.totalKB / 1024) MB" }
+        download.map { String(localized: "\($0.doneKB / 1024) of \($0.totalKB / 1024) MB") }
     }
 }
 

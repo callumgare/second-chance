@@ -13,6 +13,8 @@ echo "🔍 Setting up ScummVM for SecondChance..."
 # ScummVM download settings
 SCUMMVM_VERSION="2026.3.0"
 SCUMMVM_URL="https://downloads.scummvm.org/frs/scummvm/${SCUMMVM_VERSION}/scummvm-${SCUMMVM_VERSION}-macosx.dmg"
+# Checked before the DMG is cached or used (download-verified.sh).
+SCUMMVM_SHA256="d483f41a67d389a3bf50832b9a1a054fbeded56fc148216e4f84a06d330d2172"
 
 # Download cache (persistent across builds)
 DOWNLOAD_CACHE_DIR="$HOME/Library/Caches/SecondChance"
@@ -24,15 +26,9 @@ WRAPPER_CONTENTS_DIR="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents"
 # Create download cache directory if needed
 mkdir -p "${DOWNLOAD_CACHE_DIR}"
 
-# Download if not cached
-if [ ! -f "${SCUMMVM_DMG}" ]; then
-    echo "📥 Downloading ScummVM ${SCUMMVM_VERSION}..."
-    curl -fL "${SCUMMVM_URL}" -o "${SCUMMVM_DMG}.tmp"
-    mv "${SCUMMVM_DMG}.tmp" "${SCUMMVM_DMG}"
-    echo "✓ Downloaded ScummVM"
-else
-    echo "✓ Using cached ScummVM DMG"
-fi
+# shellcheck source=download-verified.sh
+source "${SCRIPT_DIR}/download-verified.sh"
+fetch_verified "${SCUMMVM_URL}" "${SCUMMVM_DMG}" "${SCUMMVM_SHA256}"
 
 # Remove old mount if it exists
 if [ -d "${SCUMMVM_MOUNT_PATH}" ]; then
@@ -81,7 +77,7 @@ OUTPUT_LIST="${SCRIPT_DIR}/Resources/scummvm-files"
 echo "📝 Creating output files list..."
 {
     find "${TEMP_DIR}" -type f | while read -r file; do
-        echo "${file#${TEMP_DIR}/}"
+        echo "${file#"${TEMP_DIR}"/}"
     done
 } > "${OUTPUT_LIST}"
 

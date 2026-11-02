@@ -45,6 +45,9 @@ echo ""
 rm -rf "${PATCHES_DEST}"
 mkdir -p "${PATCHES_DEST}"
 
+# shellcheck source=download-verified.sh
+source "${SCRIPT_DIR}/download-verified.sh"
+
 downloaded=0
 cached=0
 failed=0
@@ -55,9 +58,10 @@ while [ "${index}" -lt "${PATCH_COUNT}" ]; do
     archive=$(read_field "${index}" archive)
     url=$(read_field "${index}" url)
     patch_id=$(read_field "${index}" id)
+    sha256=$(read_field "${index}" sha256)
     index=$((index + 1))
 
-    if [ -z "${game}" ] || [ -z "${archive}" ] || [ -z "${url}" ]; then
+    if [ -z "${game}" ] || [ -z "${archive}" ] || [ -z "${url}" ] || [ -z "${sha256}" ]; then
         echo "⚠️  Skipping malformed manifest entry at index $((index - 1))"
         failed=$((failed + 1))
         continue
@@ -69,21 +73,18 @@ while [ "${index}" -lt "${PATCH_COUNT}" ]; do
 
     echo "📦 ${game} / ${patch_id} (${archive})"
 
-    if [ -f "${cache_file}" ]; then
-        echo "   ✓ Using cached download"
-        cached=$((cached + 1))
-    else
-        echo "   ↓ Downloading ${url}"
-        if curl -fsSL --retry 2 "${url}" -o "${cache_file}.tmp"; then
-            mv "${cache_file}.tmp" "${cache_file}"
-            echo "   ✓ Downloaded"
-            downloaded=$((downloaded + 1))
+    was_cached=false
+    if [ -f "${cache_file}" ]; then was_cached=true; fi
+    if fetch_verified "${url}" "${cache_file}" "${sha256}"; then
+        if ${was_cached}; then
+            cached=$((cached + 1))
         else
-            echo "   ❌ Download failed — the wrapp will be built without this patch"
-            rm -f "${cache_file}.tmp"
-            failed=$((failed + 1))
-            continue
+            downloaded=$((downloaded + 1))
         fi
+    else
+        echo "   ❌ The wrapp will be built without this patch"
+        failed=$((failed + 1))
+        continue
     fi
 
     bundle_game_dir="${PATCHES_DEST}/${game}"
@@ -98,6 +99,11 @@ done
 echo ""
 echo "✅ Game patches ready — ${downloaded} downloaded, ${cached} cached, ${failed} failed"
 
-# A failed patch download must not break the build: the wrapp still works, it
-# just ships without that fix, and GameInstallerRunner tolerates the gap.
+# A failed patch download doesn't break a Debug build: the wrapp still works,
+# it just ships without that fix, and GameInstallerRunner tolerates the gap.
+# A Release must ship every patch, so there it fails the build.
+if [ "${failed}" -gt 0 ] && [ "${CONFIGURATION:-}" = "Release" ]; then
+    echo "❌ ${failed} patch(es) are missing, and a Release must ship them all"
+    exit 1
+fi
 exit 0

@@ -34,15 +34,17 @@ code shows that, and I hope to keep cleaning it up over time.
 
 You'll need:
 
-- **Xcode 16** or later, which provides `xcodebuild`, Swift and the macOS SDK.
+- **Xcode 26** or later, which provides `xcodebuild`, Swift and the macOS SDK. The packages need Swift 6.2's tools
+  (`swift-tools-version: 6.2`, default actor isolation), which Xcode 26 is the first to have.
 - **Homebrew** packages:
 
   ```bash
-  brew install xcbeautify xctesthtmlreport cocogitto
+  brew install xcbeautify xctesthtmlreport cocogitto swiftlint node
   ```
 
-  `xcbeautify` tidies build and test output, `xctest-html-report` makes HTML test reports, and `cocogitto` checks
-  commit messages and works out release versions.
+  `xcbeautify` tidies build and test output, `xctesthtmlreport` makes HTML test reports, `cocogitto` checks
+  commit messages and works out release versions, and `swiftlint` and `node` (for markdownlint, through `npx`) run
+  `./sc lint`. `./sc setup` checks for each of them and says what's missing.
 
 Then, once per clone:
 
@@ -55,8 +57,10 @@ installs the commit-message hook (see [Commit messages](#commit-messages)). `./s
 [docs/dev-cli.md](docs/dev-cli.md) explains them. The first run also builds `sc` itself (a Swift package in
 `Tools/sc/`), which takes half a minute.
 
-Everything else — Wine, ScummVM, winetricks, AutoIt — is downloaded and cached in
-`~/Library/Caches/SecondChance/` during the build, so you don't need to install it yourself.
+Everything else — Wine, ScummVM, AutoIt and the game patches — is downloaded and cached in
+`~/Library/Caches/SecondChance/` during the build, so you don't need to install it yourself. Each download is pinned
+to a version and checked against its SHA-256 (`WrappTemplate/download-verified.sh`), so updating one means changing
+its hash in the setup script (or the patch manifest) too. winetricks is committed, in `SecondChance/Resources/`.
 
 ## Building and running
 

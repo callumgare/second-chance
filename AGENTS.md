@@ -51,9 +51,10 @@ instead: the process architecture does not reliably decide what the build
 system picks for the package products, which made it work on some machines and
 fail on others.
 
-**Never run a bare `./sc test`** (or an unfiltered `xcodebuild test`): it runs the
-integration suite too, which with real ISOs in `installers/` takes hours. Name
-the suite — `./sc test unit`, or `./sc test integration <game-slug>`.
+**Never run `./sc test all`** (or an unfiltered `xcodebuild test`) by accident:
+it runs the integration suite too, which with real ISOs in `installers/` takes
+hours. A bare `./sc test` is `./sc test unit`; name the game for an integration
+run — `./sc test integration <game-slug>`.
 
 Build output lands in `DerivedData/Build/Products/Debug/Second Chance.app`. Game
 wrapps are built into `built-apps/`. See [docs/testing.md](docs/testing.md) for
@@ -74,7 +75,7 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`) |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the Wine prefix cache |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/SecondChanceKit/Sources/SecondChanceKit/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
@@ -83,7 +84,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
-| [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits |
+| [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits; or Wine's desktop (`WineDesktop`) and ending a Wine session, how Wine behaves under load, a launch's diagnostics bundles, or scripting a launch past the save warning |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Packages/SecondChanceKit/Sources/SecondChanceReporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, adding a failure that should be reported, or the success reports that count builds and launches |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
@@ -141,7 +142,8 @@ when it applies across the repo. Link between them rather than repeating.
 
 ## Tech Stack
 
-- **Swift 5.0** / **SwiftUI**, deployment target **macOS 15.0** (some targets 15.6)
+- **Swift 6** language mode for every target, the tests and the packages.
+  **SwiftUI**, deployment target **macOS 15.0** (some targets 15.6)
 - Xcode project (`SecondChance.xcodeproj`), with the shared code in local Swift packages (`Packages/`)
 - Uses Swift Testing framework (`@Test`, `#expect`) — not XCTest
 - Unsandboxed app (required for Wine); entitlements enable dyld env vars, unsigned executable memory, and disable library validation
@@ -163,7 +165,7 @@ Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)  ←  CLIBuilder (headles
                                                  ↓
                     WrappBuildHelper · GameInstallerRunner · ISOMounter
                                                  ↓
-        WineManager · CacheManager · GameDetector · AutoItService · ScummVMService
+        WineManager · CacheManager · GameDetector · AutoItService
                                                  ↓
                   Models (GameInfo, WrappBuildState, WrappSource, AppEvent, …)
 ```
@@ -201,11 +203,10 @@ The rules that keep it working:
 - **`SecondChanceKit` never depends on reporting.** When it needs to know
   something only reporting knows, reporting tells it (as
   `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
-- **Each `Package.swift` mirrors the app targets' Swift settings** — Swift 5
-  mode, `MainActor` default isolation, approachable concurrency,
-  `MemberImportVisibility`, bare `/regex/` literals. Change a target's Swift
-  settings and the packages' together, or the same code means different
-  things in each.
+- **Each `Package.swift` mirrors the app targets' Swift settings** —
+  Swift 6, `MainActor` default isolation, approachable concurrency,
+  `MemberImportVisibility`. Change a target's Swift settings and the
+  packages' together, or the same code means different things in each.
 - **A new file is picked up by being in the folder**; nothing to tick in
   Xcode. A file in an app's folder can't be used by the package.
 - **Products stay static.** Don't mark a library `.dynamic`: a wrapp's
@@ -272,25 +273,58 @@ direct assignment.
   files, freezes the window until it's done. Run a program with
   `Process.output(of:_:)` and other blocking work in `Blocking.run`
   (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
-  Code on a plain thread — the wrapp's `main()` and GCD queues — calls async
-  code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
+  Code on a plain thread — a GCD queue, a `Thread`, a signal handler — calls
+  async code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
+- **Main-actor code that runs off the main thread crashes.** Swift 6 checks
+  at run time, closures included, and stops the process with SIGILL
+  (`dispatch_assert_queue`) — a crash only a launch shows, as the compiler
+  can't see every thread a callback is called on. So what a GCD queue, a
+  `Thread`, a `Process` handler or a dispatch source calls is `nonisolated`,
+  or hops to the main thread first (`DispatchQueue.main.async` with
+  `MainActor.assumeIsolated`), and code that waits, as the wrapp's launch
+  does, is `async` and awaits rather than holding a thread of its own.
   A Debug build logs `[Hang]` whenever the main thread stalls for more than
   0.25 s (`MainThreadWatchdog`), so a build's log shows any step that still
   blocks.
-- **Logging**: All logging goes through [swift-log](https://github.com/apple/swift-log) — `import Logging`, then `private nonisolated let logger = Logger(label: "<subsystem>.<Category>")`. Subsystems: `au.gare.callum.second-chance.SecondChance` (main app), `au.gare.callum.second-chance.WrappTemplate`, `au.gare.callum.second-chance.WrappPuppeteer` — all siblings under the `au.gare.callum.second-chance` prefix. Levels mean something — [docs/logging.md](docs/logging.md#levels) has the rules: `.debug` for detail only useful when digging (it is kept everywhere but not shown on the terminal), `.notice` for the normal story of a run, `.warning` for something unusual the run survives, `.error` for a failure, `.critical` for one that ends the build or the game (no `.fault` — that's the OSLog name). No `privacy:` annotations, no `os.Logger`, no `print()`. Every executable calls `AppLogging.bootstrap(subsystem:)` as its **first** statement (`SecondChanceApp.init()`, `WrappTemplate`'s `main()`, `WrappPuppeteer`'s top of `main.swift`) — a `Logger` created before bootstrap is silently orphaned to swift-log's default stdout handler and never reaches the store. Log records fan out in-process via `MultiplexLogHandler` to `LogStore` (in-memory ring, 50k entries) and OSLog (crash-durable, the only place `privacy: .public` still exists — inside `OSLogHandler`) — except when `OS_ACTIVITY_DT_MODE` is set (Xcode, `xcodebuild test`), where os_log would copy every entry to stderr a second time, so only LogStore's copy is written — and the variable is unset at bootstrap, so the wrapp and WrappPuppeteer started from a test still write to OSLog. Terminal stderr, the floating log window (`LogWindow`, instant history + live batches), and Save Log… (`LogExporter`, lossless where `log show` dropped `.debug` entries) all read from `LogStore`; no process shells out to `/usr/bin/log` except `SystemLogReader.fetch(pid:since:)` in integration tests. A wrapp build's entries carry its id through the task-local `LogContext.$build`; code that logs for a build from a detached task, a dispatch queue or a pipe's reader re-binds it, as `Blocking.run` and `ProcessLineLogger` do ([docs/logging.md](docs/logging.md#which-build-an-entry-is-from)). Subprocess output (Wine, ScummVM, winetricks) is captured line-by-line via `ProcessLineLogger`/`TaggedProcess` in `Packages/SecondChanceKit/Sources/SecondChanceKit/Logging/`, each line at the level `SubprocessLineClassifier` picks from its content rather than from the pipe it came down. Integration tests still read WrappPuppeteer's and the wrapp's OSLog via `log show` (rendered in the compact format, with the process in front of the category) — that's why OSLog stays in the multiplex; the test host's own build log is attached straight from `LogStore`.
+- - **Logging**: All logging goes through [swift-log](https://github.com/apple/swift-log) — `import Logging`, then
+  `private nonisolated let logger = Logger(label: "<subsystem>.<Category>")`, with the subsystems
+  `au.gare.callum.second-chance.SecondChance`, `.WrappTemplate` and `.WrappPuppeteer`. Levels mean something
+  ([docs/logging.md](docs/logging.md#levels)): `.debug` for digging, `.notice` for the normal story, `.warning`
+  for the unusual that's survived, `.error` for a failure, `.critical` for one that ends the build or game. No
+  `privacy:`, no `os.Logger`, no `print()`. Every executable calls `AppLogging.bootstrap(subsystem:)` as its
+  **first** statement, or its loggers are orphaned. Code that logs for a build from a queue or a detached task
+  re-binds `LogContext.$build`. How the store, OSLog, the window and the files fit together is
+  [docs/logging.md](docs/logging.md#how-the-log-is-plumbed).
 - **Error handling**: The codebase has many `try?` that silently swallow errors. For new code, prefer explicit `do/catch` and log failures. Cleanup operations may use `try?` but should log.
 - **No force unwraps (`!`)** in new code — use `guard let` / `compactMap`. Existing force unwraps are flagged for removal.
 - **File paths**: Never hardcode absolute user paths (e.g. `/Users/...`). Use `Bundle.main.url(forResource:)`, `FileManager` search paths, or environment variables.
 - **Text people see is plain and friendly.** Anything shown to the person
   using the app — window and alert text, open and save panels, progress
-  steps, error messages (`errorDescription`s reach the error screen), the
-  wrapp's windows — is written for someone who isn't into computers. Say what
+  steps, error messages, the wrapp's windows — is written for someone who
+  isn't into computers. The build's error screen shows
+  `WrappBuildError.playerMessage`, and every error becomes a `WrappBuildError`
+  through `WrappBuildError(_:)`, which gives anything unexpected a plain
+  "something went wrong" message; `errorDescription` may carry detail for the
+  log and `sc`. Say what
   is happening and what they can do, in everyday words: "disc", not "disk";
   "the game's app", not "wrapp"; no "Wine", "prefix", "cnc-ddraw", "ISO",
   "executable", "headless" or bare exit codes. Disc images stay a hidden
   extra that is never offered in text. Internal names are fine in code and
   in logs, which are for us. Keep a step's progress text short; what the
   person must _do_ goes in an `.instructions` event, shown at once.
+- **Text people see can be translated.** The app is English only, but write
+  it so it needn't stay so: whole sentences for each case, never one built
+  from fragments, a noun dropped in, `.capitalized` or a plural `s`
+  (`SteamDownloadMeter.text`), and `String(localized:)` for text that isn't a
+  SwiftUI literal; text only the logs or `sc` read stays plain. Each app has
+  a string catalog — `SecondChance/Localizable.xcstrings` and
+  `WrappTemplate/Resources/Localizable.xcstrings` — and the package's text
+  (`SecondChanceKit` declares English for this) is looked up in the catalog
+  of the app showing it, so it belongs in both. Xcode fills an app's catalog
+  from its own code when it builds it, not the package's: after changing
+  text, sync both with `xcrun xcstringstool sync <catalog> --stringsdata
+  <file>…`, from the `.stringsdata` the build left for the app's target and
+  for `SecondChanceKit` under `DerivedData/Build/Intermediates.noindex/`.
 - **Lint passes.** `./sc lint` runs SwiftLint (`--strict`, `.swiftlint.yml`)
   and markdownlint (`.markdownlint.jsonc`), CI fails on either, and
   `sc release` asks before releasing with failures. Fix what they find
@@ -310,7 +344,7 @@ direct assignment.
   `ps` listing with each process's parent, CPU and command; don't run and
   parse `ps` yourself. `ProcessList.isWine` is the one test for which
   processes are Wine's, so the build, the wrapp and WrappPuppeteer agree.
-- **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. Mark tests needing fixtures with `#skip("reason")` rather than silent early-return.
+- **Swift Testing**: Write tests with `@Test func`, `#expect`, `#require`. A test that can only run with something it may not have (real installers, a Steam sign-in) says so with a trait — `.enabled(if:)` / `.disabled(if:)` with a comment, as the integration suites do — rather than returning early; a fixture that is committed is `#require`d, so a missing one fails.
 
 ## Gotchas
 
@@ -342,7 +376,11 @@ direct assignment.
   must be logged in at that Mac's console. That run is a LaunchAgent, so it
   outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
   picks it up again.
-- **Wine prefix caching**: `WineManager` caches prefixes in `~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or `"dev"` in DEBUG) plus the bundled Wine engine's version (`Contents/SharedSupport/wine/version`), so a Wine upgrade starts a fresh prefix by itself. Caching a prefix removes every other key's. Builds in one process that find the cache empty make the prefix one at a time (`WineManager.prefixCreation`): the first makes and caches it, and the rest then copy it; a prefix is renamed into the cache whole, so none is ever taken half-copied. Other changes to how the prefix is set up (winetricks verbs, `ddraw.ini`, registry settings such as `EmulateModeset`) don't change the key: run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after those, or if Wine setup misbehaves after code changes.
+- - **Wine prefix caching**: the build caches its Wine prefix, keyed by
+  version and Wine engine. A change to how the prefix is set up (winetricks
+  verbs, `ddraw.ini`, registry settings) doesn't change the key: run
+  `./sc clean wine-prefixes` after one
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-prefix-cache)).
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
   and builds under test (the integration tests) never take it either, since the
@@ -406,112 +444,27 @@ direct assignment.
   rather than a clean quit (`GameQuitCheck`,
   [quit watch](docs/wine-in-process-helpers.md#quit-watch)); a new routine
   Wine error that trips it belongs in `GameQuitCheck.routineErrors`.
-- **Wrapps start Wine's desktop before the game.** Left to Wine, a game's
-  first desktop access starts `explorer.exe /desktop` and waits only 10 s for
-  it; on a loaded machine under Rosetta that runs out, and the game carries on
-  with no display adapters — Secrets Can Kill Remastered then crashes on a null
-  Direct3D object exactly 10 s in. `WineDesktop` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) starts the
-  desktop itself and waits until it has registered the display devices,
-  which it detects through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key.
-  A build waits up to 600 s, since with every core busy a fresh session has
-  taken two and a half minutes to bring it up, and what runs without it is
-  sure to fail; a wrapp waits for as long as the desktop's `explorer.exe` is
-  still running, as its loading window says meanwhile whether that looks
-  stuck ([docs/wrapp-launch.md](docs/wrapp-launch.md)). Each check is itself a Wine program and gets 120 s, because one cut
-  short at 20 s never saw the desktop ready, and the checks back off to one
-  every 10 s as the wait grows, so they don't take the CPU the desktop needs. `GameLauncher` does this
-  before the game, and `GameInstallerRunner` before every installer and
-  patcher, which fail the same way: with an exit code rather than a crash, or
-  for AutoIt with no window and an exit 0 before its script runs. A program
-  that still prints `nodrv_CreateWindow` fails with `WineError.noDisplay`,
-  and a build then restarts the Wine session and retries that step once
-  ([docs/wrapp-build.md](docs/wrapp-build.md)). Wine runs that
-  desktop through `start.exe /exec`, which is itself a Windows program waiting
-  on explorer, so the two would keep the whole Wine session alive after the
-  game quits; `WineDesktop.release()` ends the `start.exe` once the programs
-  are done and explorer then closes normally. A build releases it before
-  `wineserver -w`, which would otherwise wait for ever, and so does a wrapp,
-  which then waits for the session to end before it quits — whether the game
-  ended or the player quit — and kills Wine only if it won't end
-  (`wine.server.shutDown`), with three times as long at each step while the
-  Mac is heavily loaded; even its 15 s quit fallback (later on a busy Mac)
-  kills Wine before exiting. **Killing Wine means killing its programs too:**
-  `wineserver -k9` kills the server alone, and Wine's programs, waiting on
-  it, are left running for good — so `wine.server.kill()` then kills every
-  Wine program working in the prefix's folder (`WineServer.programs`), and a
-  launch first clears any a killed session left behind
-  (`clearLeftovers`), as the game monitor would otherwise take that
-  session's game for its own and wait for ever for its window. Never run
-  `wineserver -k9` by hand without doing the same. A launch that still finds Wine running in the
-  prefix waits for it in the loading window (`LoadingStage.lastSessionClosing`),
-  which after 3 s also offers to stop it, and drops that offer and carries on
-  if Wine finishes first; opening a
-  wrapp while it is closing down (macOS reactivates the running copy) starts
-  it again once Wine has finished. `SECOND_CHANCE_PRESTART_DESKTOP=0`
-  restores Wine's on-demand start, for comparison. Anything that runs `wine`
-  and reads its output must not wait for EOF on a pipe: Wine's background
-  services inherit the child's stdout and hold the pipe open.
-- **Wine slows sharply once every core is busy.** With other programs on
-  every core (at the priority a Terminal's or a browser's run), Wine 10 takes
-  20–30 s to bring its desktop up and a game 25–50 s to start, and Steam
-  minutes to sign in; with a performance core or two free it starts in
-  seconds, so it is a cliff, not a slope. Wine 9 was worse: its desktop
-  waited minutes, or never came up, with Wine almost idle — a wrapp still on
-  it should be rebuilt. Load at a lower priority (20, a LaunchAgent with no
-  `ProcessType`) doesn't slow Wine at all, which matters when making load
-  to test with ([docs/wrapp-launch.md](docs/wrapp-launch.md#measurements)),
-  as does making it with loops that compute rather than call the kernel.
-  Work that must happen under load can't run at `.utility`, which waits a
-  minute at a time there (the log's drain queue did), and the wrapp keeps
-  App Nap off: napped behind the game, at priority 4, it didn't run at all
-  ([docs/wrapp-launch.md](docs/wrapp-launch.md#the-dock)).
-  `SystemLoad` (`SecondChanceKit`) measures it — other programs'
-  CPU in cores, against the performance-core count, heavy at all but one;
-  the load average is useless here, since starved Wine threads push it past
-  100. Every log header carries a `load:` line, `SystemLoadMonitor` logs
-  `[Load]` lines while the Mac is heavily loaded during a build or wrapp run, and a failure summary
-  gives the load now and over the last ten minutes; a wrapp's loading window says
-  so while the Mac is heavily loaded (`SystemLoadMonitor`), and gives the launch
-  three times as long before it says it may have failed
-  ([docs/wrapp-launch.md](docs/wrapp-launch.md)); and the integration test reports such a game as
-  `overloaded` rather than testing it, unless run with `--ignore-load`.
-- **A badly starting Wine game leaves a diagnostics bundle** in
-  `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/`
-  (`StartupDiagnostics`): no window 8 s after the game process appears
-  (`slow-start`), Wine's unhandled-exception line (`crash`), still no window at
-  25 s (`hang`), an exit before any window (`exited-before-window`), Wine's
-  launcher exiting before the game's exe appears (`exited-before-game`), or the
-  game quitting within 15 s of its window (`quit-early`) — and, at any stage,
-  Wine's desktop included, when the loading window says the launch may have
-  failed (`stalled`), or whenever the wrapp gets SIGUSR1 (`manual`; sent twice
-  a minute apart, the same stacks tell stuck from slow). Each holds a `sample` of the game
-  process's thread stacks and of every other Wine process (`explorer.exe`,
-  `wineserver`, …) taken at the same moment, `top`, the process list (taken
-  first, before a crashing game can exit), display/lock/screen-sharing
-  state, the game's system log, the last 300 Wine output lines and the wrapp's
-  whole log so far; the newest 10 are kept (none under 15 minutes old, which
-  may be another game's still being written) and the wrapp log names the
-  folder. **No `winedbg` in a capture:** it attaches to every program in the
-  session, and one stopped while attached (it took minutes on a loaded Mac)
-  ended the game it was looking at, or left it suspended.
-  Every launch also keeps its log in
-  `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` (newest 10). `SECOND_CHANCE_DIAGNOSTICS=0`
-  turns it off and `SECOND_CHANCE_DIAG_SLOW_SECONDS` moves the threshold — set
-  it to `1` to force a bundle and check the capture works.
-- **A Wine wrapp waits on a dialog before it starts the game.** Launched by
-  hand (`open`, its `Contents/MacOS/WrappTemplate`, `sc wrapp run`), a wrapp
-  whose engine is Wine (Steam's included) shows a save-progress warning and
-  doesn't start the game until someone clicks **I Understand** — Wine's
-  desktop, and Steam for a game that needs it, start behind it — so a script
-  that launches a wrapp and waits for the game waits for ever on an
-  unattended Mac. The wrapp skips the dialog
-  when `~/Library/Application Support/<bundle id>/dont-show-save-warning`
-  exists (`InfoWindowController`). Create it for the experiment and remove it
-  afterwards, as it is the player's own setting. `SECOND_CHANCE_DATA_DIR`
-  moves that folder, with the game's saves and the settings some games keep
-  beside them, somewhere else (`Configuration.swift`); WrappPuppeteer sets
-  it to an empty folder for each launch, so a test always meets the dialog
-  and never reads or changes the player's saves and settings.
+- - **Wrapps start Wine's desktop before the game**, and builds before each
+  installer, waiting until it has registered the display devices
+  (`WineDesktop`): left to Wine, a loaded Mac runs out its 10 s wait and the
+  game starts with no display. Ending a session means releasing the desktop
+  and, if it must be killed, killing its programs too (`wine.server.kill()`);
+  never `wineserver -k9` by hand alone. Read
+  [docs/wrapp-launch.md](docs/wrapp-launch.md#wines-desktop) first.
+- - **Wine slows sharply once every core is busy** — a cliff, not a slope —
+  and the build, the wrapp and the integration tests allow for it through
+  `SystemLoad` and `SystemLoadMonitor`; the load average is useless here.
+  Work that must run under load can't be `.utility`
+  ([docs/wrapp-launch.md](docs/wrapp-launch.md#under-load)).
+- - **A badly starting Wine game leaves a diagnostics bundle** in
+  `~/Library/Logs/SecondChance/diagnostics/` (`StartupDiagnostics`): stacks,
+  processes and logs, captured when the launch is slow, crashes, hangs or is
+  sent SIGUSR1. No `winedbg` in a capture
+  ([docs/wrapp-launch.md](docs/wrapp-launch.md#diagnostics-bundles)).
+- - **A Wine wrapp waits on its save warning before it starts the game**, so
+  a script that launches one waits for ever on an unattended Mac. How to skip
+  it, and keep the player's saves out of an experiment, is in
+  [docs/wrapp-launch.md](docs/wrapp-launch.md#the-save-warning-when-scripting-a-launch).
 - **Disk path resolution**: installers land in
   `Contents/SharedSupport/prefix/drive_c/nancy-drew-installer/{disk-1,disk-combined}`,
   with multi-disk games merged into `disk-combined`. This lives in
@@ -575,7 +528,11 @@ more self-explanatory.
 **[docs/testing.md](docs/testing.md) is the detailed guide** — suites,
 filtering, how WrappPuppeteer drives a game and its exit codes, reports. In short:
 
-- **Unit tests** live in `SecondChanceTests/`, using Swift Testing.
+- **Unit tests** live in `SecondChanceTests/`, using Swift Testing, except
+  those that need neither app, which live in the package beside the code
+  (`Packages/SecondChanceKit/Tests/SecondChanceKitTests/`: parsers, process
+  listings, line handling) and run with `swift test`, in seconds and with no
+  Xcode build; `sc test unit` runs both. Put a new test there when it can.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new
   suite runs in `sc test unit` automatically — the unit run excludes a short
   list (`TestRunner.unitExclusions` in `Tools/sc`) rather than listing what to
@@ -603,15 +560,22 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
   ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#puppet-control)).
   Don't give it Screen Recording or Accessibility to fix a failure: look for
   `[Helpers] Puppet control armed` in the wrapp's log instead.
-- **WrappPuppeteer keeps its utilities generic.** `WrappPuppeteer/Core/` must not
+- **WrappPuppeteer keeps its utilities generic.** Its core, the local package
+  `Packages/PuppeteerCore` (so it can be tested, with `swift test`), must not
   know about Nancy Drew, wrapps or engines; what is specific to driving a game
-  lives in `WrappPuppeteer/NancyDrew/` and configures Core through parameters.
+  lives in `WrappPuppeteer/NancyDrew/` and configures it through parameters.
   [docs/testing.md](docs/testing.md#wrapppuppeteer) has the details.
 - **Test fixtures** are in `TestFixtures/` and `installers/`. Make skips
   explicit rather than returning early, so a skipped test reads as skipped.
-- **Priority test targets** (untested but high-value): `CacheManager`,
-  `WrappBuildInput`'s env-var resolution and validation, `WrappBuildHelper` path
-  helpers.
+- **Priority test targets** (untested but high-value): `WineDesktop`,
+  `HerDownloadWrappBuilder`, `AutoItService`, `AppUpdater`, the installer's
+  silent→interactive retry and its AutoIt decision, the rest of
+  `WrappBuildInput`'s env-var resolution (`INSTALLATION_SOURCE`,
+  `DISK_2_PATH`, `LAUNCH_GAME`), WrappTemplate's launch logic, which lives in
+  an executable target, and WrappPuppeteer's matching (`TemplateMatcher`,
+  `SplashScreen`). A test that waits waits on a signal: poll for the
+  condition with a deadline, or use a hook such as
+  `LogWindow.waitUntilShownForTesting`, never a fixed sleep.
 
 ## Releasing
 

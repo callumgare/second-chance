@@ -55,9 +55,7 @@ struct SteamInstallIntegrationTests {
 
     private func buildAndLaunch(_ game: GameInfo, launchMode: GameInfo.SteamLaunchMode?, label: String? = nil) async throws {
         let engine = game.steamEngine(launchMode: launchMode)
-        var run = IntegrationGameRun(game: game, label: label ?? game.id, source: "steam", progress: Self.progress)
-        // Steam starts and signs in before the game does.
-        run.launchTimeout = 300
+        let run = IntegrationGameRun(game: game, label: label ?? game.id, source: "steam", progress: Self.progress)
         try await run.run { outcome in
             if let owned = Self.ownedSlugs.withLock({ $0 }), !owned.contains(game.id) {
                 outcome.skipped = "The Steam account doesn't own \(game.title) (checked by an earlier build in this run)"
@@ -68,7 +66,7 @@ struct SteamInstallIntegrationTests {
                 makeInput: { outputDir, viewModel in
                     WrappBuildInput(steamGame: game.id, launchMode: launchMode, outputDir: outputDir, viewModel: viewModel)
                 },
-                start: { await $0.buildFromSteam() }
+                start: { await $0.build(from: .steam) }
             )
         } afterBuild: { recorder, outcome in
             if let owned = recorder.steamGamesOwned {

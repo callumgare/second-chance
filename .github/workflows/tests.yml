@@ -1,29 +1,46 @@
 name: Tests
 
 on:
+  # Branches other than main are tested through their pull requests, so a
+  # push to one doesn't run everything twice.
   push:
+    branches: [main]
   pull_request:
+
+# A newer push to the same branch or PR makes an older run moot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   lint:
     name: Lint
     runs-on: macos-26
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install SwiftLint
+      - name: Install tools
         # markdownlint runs through npx, and the runner has Node already.
-        run: brew install swiftlint
+        run: brew install swiftlint shellcheck
 
       - name: Lint
         # SwiftLint (strict) over the Swift code and markdownlint over the
         # docs, exactly as `./sc lint` runs them on a Mac.
         run: ./sc lint --logs raw
 
+      - name: Shellcheck
+        # The build phases' scripts and ./sc itself (.shellcheckrc applies).
+        run: shellcheck sc WrappTemplate/*.sh
+
   unit-tests:
     name: Swift Unit Tests
     runs-on: macos-26
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,39 +49,31 @@ jobs:
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26'
-      
-      - name: Install xcbeautify
-        run: brew install xcbeautify
 
-      - name: Build and test
-        run: |
-          set -o pipefail
-          # ONLY_ACTIVE_ARCH=NO is required, not an optimisation. The runner is
-          # arm64 and the WrappTemplate target is ARCHS = x86_64 (Wine is
-          # 32-bit). With only the active arch built, SPM emits swift-log for
-          # arm64 alone and WrappTemplate then fails with
-          #   "unable to resolve module dependency: 'Logging'"
-          # because only Logging.swiftmodule/arm64-apple-macos.swiftmodule
-          # exists. Building all archs gives Logging an x86_64 slice too, and
-          # the tests still run natively (no Rosetta needed).
-          #
-          # The project signs automatically with the developer's team, whose
-          # certificate the runner doesn't have ("No signing certificate 'Mac
-          # Development' found"), so CI signs ad hoc instead.
-          xcodebuild test \
-            -scheme SecondChance \
-            -destination 'platform=macOS' \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
-            -resultBundlePath TestResults.xcresult
-      
-      - name: sc's own tests
-        # The developer CLI (./sc, Tools/sc) is a separate Swift package.
-        run: swift test --package-path Tools/sc
+      - name: Install tools
+        run: brew install xcbeautify xctesthtmlreport
+
+      - name: Cache downloads
+        # Wine, Wineskin, AutoIt, ScummVM and the game patches, which the
+        # build downloads and checks against their pinned SHA-256s
+        # (WrappTemplate/download-verified.sh): keyed by those pins, so a
+        # changed one is fetched afresh.
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/SecondChance
+          key: downloads-${{ hashFiles('WrappTemplate/setup-*.sh', 'WrappTemplate/game-patches.json') }}
+
+      - name: Unit tests
+        # The same run as `./sc test unit` on a Mac: the app's unit suites
+        # (TestRunner.unitExclusions leaves out the integration ones) and
+        # sc's own tests. sc builds with ONLY_ACTIVE_ARCH=NO, which
+        # WrappTemplate needs, and signs ad hoc on CI (CI=true), as the
+        # runner has no development certificate.
+        run: ./sc test unit --logs raw
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: TestResults.xcresult
+          path: test-results

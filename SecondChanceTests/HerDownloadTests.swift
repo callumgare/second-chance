@@ -5,6 +5,7 @@ import Foundation
 /// Her Interactive downloads: telling the game from the file, and taking the
 /// game out of a Mac (Cider) download. docs/her-download.md has the formats.
 @Suite("Her Interactive downloads")
+@MainActor
 struct HerDownloadTests {
     private let base = FileManager.default.temporaryDirectory
         .appendingPathComponent("HerDownloadTests-\(UUID().uuidString)")

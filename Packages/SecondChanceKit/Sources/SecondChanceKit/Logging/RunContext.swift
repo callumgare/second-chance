@@ -114,8 +114,8 @@ nonisolated public enum RunContext {
     private static func machineModel() -> String {
         var size = 0
         guard sysctlbyname("hw.model", nil, &size, nil, 0) == 0, size > 0 else { return "unknown Mac" }
-        var buffer = [CChar](repeating: 0, count: size)
+        var buffer = [UInt8](repeating: 0, count: size)
         guard sysctlbyname("hw.model", &buffer, &size, nil, 0) == 0 else { return "unknown Mac" }
-        return String(cString: buffer)
+        return String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
     }
 }

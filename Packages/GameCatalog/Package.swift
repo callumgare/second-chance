@@ -20,14 +20,10 @@ let package = Package(
         .target(
             name: "GameCatalog",
             swiftSettings: [
-                .swiftLanguageMode(.v5),
+                .swiftLanguageMode(.v6),
                 .defaultIsolation(MainActor.self),
                 .enableUpcomingFeature("MemberImportVisibility"),
-                .enableUpcomingFeature("BareSlashRegexLiterals"),
-                .enableUpcomingFeature("DisableOutwardActorInference"),
-                .enableUpcomingFeature("GlobalActorIsolatedTypesUsability"),
                 .enableUpcomingFeature("InferIsolatedConformances"),
-                .enableUpcomingFeature("InferSendableFromCaptures"),
                 .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
             ]
         ),

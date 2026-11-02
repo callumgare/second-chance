@@ -26,7 +26,7 @@ struct BuildLogContextTests {
     func entriesCarryTheirBuild() async {
         let build = BuildLogContext()
         let marker = UUID().uuidString
-        await LogContext.$build.withValue(build) {
+        LogContext.$build.withValue(build) {
             LogContext.enterStage("Installing the game")
             logger.notice("inside \(marker)")
         }

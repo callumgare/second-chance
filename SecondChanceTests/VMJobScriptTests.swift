@@ -25,7 +25,7 @@ struct VMJobScriptTests {
     @Test("The job script is valid bash and opens the wrapp once before WrappPuppeteer")
     func jobScript() throws {
         let script = VMPuppetRunner.jobScript(job: "/tmp/sc-vm-test-abcd1234", bundleID: "au.gare.callum.SecondChance.nancy-drew.ghost-dogs",
-                                              gameSlug: "ghost-dogs", timeout: 90)
+                                              gameSlug: "ghost-dogs")
         #expect(try parses(script))
         #expect(script.contains("Logs/SecondChance/ghost-dogs"))
         let warmUp = try #require(script.range(of: "open -g -j -n \"$wrapp\""))

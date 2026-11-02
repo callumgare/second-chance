@@ -86,5 +86,6 @@ static void cocoaStartWaitInit(void) {
         helperReport("CocoaStart", "warning", "no -[NSConditionLock lockWhenCondition:beforeDate:]; Wine's 5 s limit on starting Cocoa stays");
         return;
     }
-    gLockWhenConditionBeforeDate = method_setImplementation(method, (IMP)waitingLockWhenConditionBeforeDate);
+    gLockWhenConditionBeforeDate = replaceOwnMethod([NSConditionLock class], @selector(lockWhenCondition:beforeDate:),
+                                                    (IMP)waitingLockWhenConditionBeforeDate);
 }

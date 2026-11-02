@@ -11,7 +11,7 @@
 import Foundation
 
 /// Installer types for different game installers
-enum InstallerType {
+nonisolated enum InstallerType: Sendable {
     case msi
     case installShield
     case innoSetup

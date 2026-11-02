@@ -52,15 +52,17 @@ public enum LoadingStage: Equatable {
 
     public var message: String {
         switch self {
-        case .startingGame(let title): return "Starting \(title)…"
-        case .startingSteam: return SteamStartupStage.starting.message + "…"
-        case .updatingSteam(let phase): return SteamStartupStage.updating(phase).message + "…"
-        case .connectingToSteam: return SteamStartupStage.connecting.message + "…"
-        case .signingInToSteam: return "Sign in to Steam"
-        case .steamStartingGame(let title): return "Steam is starting \(title)…"
-        case .steamPlayingElsewhere: return "Your Steam account is playing on another computer"
-        case .steamWaitingForPlayer: return "Steam is waiting for you"
-        case .lastSessionClosing: return "Waiting for a previous copy of the game to finish closing…"
+        case .startingGame(let title): return String(localized: "Starting \(title)…")
+        case .startingSteam: return String(localized: "Starting Steam…")
+        case .updatingSteam(.extracting), .updatingSteam(.installing): return String(localized: "Installing Steam's update…")
+        case .updatingSteam(.restarting): return String(localized: "Starting the updated Steam…")
+        case .updatingSteam: return String(localized: "Updating Steam…")
+        case .connectingToSteam: return String(localized: "Connecting to Steam…")
+        case .signingInToSteam: return String(localized: "Sign in to Steam")
+        case .steamStartingGame(let title): return String(localized: "Steam is starting \(title)…")
+        case .steamPlayingElsewhere: return String(localized: "Your Steam account is playing on another computer")
+        case .steamWaitingForPlayer: return String(localized: "Steam is waiting for you")
+        case .lastSessionClosing: return String(localized: "Waiting for a previous copy of the game to finish closing…")
         }
     }
 
@@ -68,7 +70,7 @@ public enum LoadingStage: Equatable {
     /// where that needs the player to do something: nil to keep `message`.
     public var messageOnceStalled: String? {
         switch self {
-        case .lastSessionClosing: return "A previous copy of the game is still running…"
+        case .lastSessionClosing: return String(localized: "A previous copy of the game is still running…")
         default: return nil
         }
     }
@@ -77,17 +79,17 @@ public enum LoadingStage: Equatable {
     public var detail: String? {
         switch self {
         case .startingSteam:
-            return "The game runs through Steam, so Steam is starting up first."
+            return String(localized: "The game runs through Steam, so Steam is starting up first.")
         case .updatingSteam:
-            return "Steam is updating itself, as it does now and then. The game starts once it's done."
+            return String(localized: "Steam is updating itself, as it does now and then. The game starts once it's done.")
         case .connectingToSteam:
-            return "This game needs Steam signed in, which needs the internet."
+            return String(localized: "This game needs Steam signed in, which needs the internet.")
         case .signingInToSteam:
-            return "Use Steam's window, or scan its QR code with the Steam app on your phone."
+            return String(localized: "Use Steam's window, or scan its QR code with the Steam app on your phone.")
         case .steamPlayingElsewhere:
-            return "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here."
+            return String(localized: "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here.")
         case .steamWaitingForPlayer:
-            return "Answer the question in Steam's window, and the game will carry on starting."
+            return String(localized: "Answer the question in Steam's window, and the game will carry on starting.")
         case .lastSessionClosing, .startingGame, .steamStartingGame:
             return nil
         }
@@ -107,7 +109,7 @@ public enum LoadingStage: Equatable {
     }
 
     /// The stage for where a starting Steam has got to.
-    public init(steam stage: SteamStartupStage) {
+    public nonisolated init(steam stage: SteamStartupStage) {
         switch stage {
         case .starting: self = .startingSteam
         case .updating(let phase): self = .updatingSteam(phase)
@@ -189,7 +191,7 @@ public enum LoadingStage: Equatable {
 
     /// How much longer a stage gets, before it may count as failed, while the
     /// Mac is heavily loaded — if it's one whose speed depends on the CPU.
-    public static let heavyLoadFactor: TimeInterval = 3
+    nonisolated public static let heavyLoadFactor: TimeInterval = 3
 
     /// Whether how long the stage takes depends on the CPU, so that a busy
     /// Mac gives it longer. Not a download, a connection, or Wine's last

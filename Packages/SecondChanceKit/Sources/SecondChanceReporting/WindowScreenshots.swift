@@ -17,7 +17,7 @@ import AppKit
 import Foundation
 import Logging
 import os
-import ScreenCaptureKit
+@preconcurrency import ScreenCaptureKit
 import SecondChanceKit
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.Reporting")

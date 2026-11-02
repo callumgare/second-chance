@@ -20,6 +20,6 @@ func showAlert(message: String, informativeText: String) {
     alert.messageText = message
     alert.informativeText = informativeText
     alert.alertStyle = .critical
-    alert.addButton(withTitle: "OK")
+    alert.addButton(withTitle: String(localized: "OK"))
     alert.runModal()
 }

@@ -123,13 +123,14 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
             // missed it (it looks only for so long).
             if !windowAppeared, !drewFrame {
                 summary = "it quit before its window appeared"
-                situation = "The game quit before its window appeared."
+                situation = String(localized: "The game quit before its window appeared.")
             } else if drawsWithDirect3D, quitWatchArmed, !drewFrame {
                 summary = "it quit before it drew anything"
-                situation = "The game quit before it showed anything."
+                situation = String(localized: "The game quit before it showed anything.")
             } else if let last = errors.last, exitTime.timeIntervalSince(last.at) <= Self.errorWindow {
                 summary = String(format: "it quit %.1f s after Wine reported an error", exitTime.timeIntervalSince(last.at))
-                situation = "The game quit just after Wine reported an error."
+                // For the player, so no "Wine": the summary, for the log, has that.
+                situation = String(localized: "The game quit just after something went wrong in it.")
             } else {
                 return nil
             }
@@ -148,14 +149,14 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
     /// game; nil for the rest.
     static func knownCause(of line: String) -> String? {
         if line.contains("NtUserChangeDisplaySettings"), line.contains("DISPLAY") {
-            return "The game asked for a display mode this Mac doesn't have, and quit when it couldn't have it."
+            return String(localized: "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it.")
         }
         if line.contains("Unhandled page fault") || line.contains("Unhandled exception")
             || line.contains("Unhandled stack overflow") {
-            return "The game crashed."
+            return String(localized: "Something went wrong inside the game, and it had to close.")
         }
         if line.contains(":err:module:import_dll") {
-            return "The game couldn't load a file it needs."
+            return String(localized: "The game couldn't load a file it needs.")
         }
         return nil
     }

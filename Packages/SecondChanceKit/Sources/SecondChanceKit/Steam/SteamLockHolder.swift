@@ -62,33 +62,34 @@ nonisolated public struct SteamLockHolder: Sendable, Equatable {
     /// Quit the wrapp, as Cmd-Q would; then SIGTERM; then SIGKILL — each
     /// once the one before has had its time. A wrapp that didn't quit itself
     /// leaves its Wine session (the game, Steam signed in) running, which
-    /// would keep the account busy, so that is stopped too. Blocks; call it
-    /// off the main thread. Returns whether the wrapp has gone.
-    public func quit(patience: Patience = Patience()) -> Bool {
+    /// would keep the account busy, so that is stopped too. The waits for
+    /// it to exit run on a GCD thread (`Blocking.run`). Returns whether the
+    /// wrapp has gone.
+    public func quit(patience: Patience = Patience()) async -> Bool {
         guard let app = runningApp, let pid else { return true }
         let name = app.localizedName ?? bundleID ?? "the wrapp"
         let appURL = app.bundleURL
         logger.notice("[Steam] Quitting \(name) (pid \(pid)), which holds Steam")
 
         app.terminate()
-        if Self.waitForExit(of: pid, timeout: patience.quit) {
+        if await Blocking.run({ Self.waitForExit(of: pid, timeout: patience.quit) }) {
             logger.notice("[Steam] \(name) quit")
             return true
         }
         logger.warning("[Steam] \(name) didn't quit within \(Int(patience.quit))s; sending it SIGTERM")
         kill(pid, SIGTERM)
-        var gone = Self.waitForExit(of: pid, timeout: patience.terminate)
+        var gone = await Blocking.run { Self.waitForExit(of: pid, timeout: patience.terminate) }
         if !gone {
             logger.warning("[Steam] \(name) didn't end within \(Int(patience.terminate))s of SIGTERM; killing it")
             kill(pid, SIGKILL)
-            gone = Self.waitForExit(of: pid, timeout: patience.kill)
+            gone = await Blocking.run { Self.waitForExit(of: pid, timeout: patience.kill) }
         }
         if let appURL {
             for wine in Self.wines(of: appURL, bundleID: bundleID) {
                 let server = wine.server
-                if Blocking.wait({ await server.isRunning }) {
+                if await server.isRunning {
                     logger.notice("[Steam] Stopping the Wine session \(name) left running in \(wine.prefix.path)")
-                    Blocking.wait { await server.stop() }
+                    await server.stop()
                 }
             }
         }
@@ -144,37 +145,45 @@ nonisolated public struct SteamLockHolder: Sendable, Equatable {
 
     /// The alert `ask` shows, and what each of its buttons chooses.
     @MainActor
+    ///
+    /// `blocked` is a whole sentence saying what is waiting: "Old Clock
+    /// can't start until it quits." The alert's text is whole sentences
+    /// either side of it, so each can be translated as one.
     func alert(blocked: String) -> (NSAlert, [Choice]) {
         let alert = NSAlert()
         alert.alertStyle = .warning
+        let oneAtATime = String(localized: "Only one game can use Steam at a time.")
+        let tryAgain = String(localized: "Try Again"), cancel = String(localized: "Cancel")
         if isBuild {
-            alert.messageText = "Second Chance is adding a game from Steam"
-            alert.informativeText = "Only one game can use Steam at a time, so \(blocked) Wait for Second Chance to finish, then try again."
-            alert.addButton(withTitle: "Try Again")
-            alert.addButton(withTitle: "Cancel")
+            alert.messageText = String(localized: "Second Chance is adding a game from Steam")
+            alert.informativeText = [oneAtATime, blocked, String(localized: "Wait for Second Chance to finish, then try again.")]
+                .joined(separator: " ")
+            alert.addButton(withTitle: tryAgain)
+            alert.addButton(withTitle: cancel)
             return (alert, [.tryAgain, .cancel])
         }
-        alert.messageText = "\(name.map(Self.quoted) ?? "Another game") is using Steam"
-        alert.informativeText = "Only one game can use Steam at a time, so \(blocked)"
+        if let name = name.map(Self.quoted) {
+            alert.messageText = String(localized: "\(name) is using Steam")
+        } else {
+            alert.messageText = String(localized: "Another game is using Steam")
+        }
         if canQuit, let name = name.map(Self.quoted) {
             // Quitting it themselves comes first: they can save before it
             // goes. Having it quit for them is the fallback, offered last.
-            alert.informativeText += """
-             Save your game in \(name) and quit it, then click Try Again.
-
-            If \(name) won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost.
-            """
-            alert.addButton(withTitle: "Try Again")
-            alert.addButton(withTitle: "Cancel")
+            alert.informativeText = [oneAtATime, blocked, String(localized: "Save your game in \(name) and quit it, then click Try Again.")]
+                .joined(separator: " ") + "\n\n"
+                + String(localized: "If \(name) won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost.")
+            alert.addButton(withTitle: tryAgain)
+            alert.addButton(withTitle: cancel)
             // Destructive, as macOS marks a button that loses work. It's the
             // only warning style an alert button takes: macOS 26 ignores a
             // red title (`contentTintColor`, `attributedTitle`).
-            alert.addButton(withTitle: "Quit It Without Saving").hasDestructiveAction = true
+            alert.addButton(withTitle: String(localized: "Quit It Without Saving")).hasDestructiveAction = true
             return (alert, [.tryAgain, .cancel, .quitHolder])
         }
-        alert.informativeText += " Quit it, then click Try Again."
-        alert.addButton(withTitle: "Try Again")
-        alert.addButton(withTitle: "Cancel")
+        alert.informativeText = [oneAtATime, blocked, String(localized: "Quit it, then click Try Again.")].joined(separator: " ")
+        alert.addButton(withTitle: tryAgain)
+        alert.addButton(withTitle: cancel)
         return (alert, [.tryAgain, .cancel])
     }
 }

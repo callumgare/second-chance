@@ -207,8 +207,14 @@ nonisolated struct BinaryReader {
         self.offset = offset
     }
 
+    /// Objects nested deeper than this are taken for a corrupt file rather
+    /// than read until the stack runs out.
+    static let maxDepth = 64
+
     private func check(_ count: Int) throws {
-        guard offset >= 0, offset + count <= data.count else {
+        // Subtracted rather than added, so an offset read from a corrupt
+        // file can't overflow (which traps) instead of failing the check.
+        guard offset >= 0, count >= 0, offset <= data.count, count <= data.count - offset else {
             throw VDFError.badBinary("read of \(count) bytes past the end", offset: offset)
         }
     }
@@ -242,6 +248,7 @@ nonisolated struct BinaryReader {
 
     /// A NUL-terminated UTF-8 string.
     mutating func cString() throws -> String {
+        try check(1)
         let start = data.startIndex + offset
         guard let end = data[start...].firstIndex(of: 0) else {
             throw VDFError.badBinary("unterminated string", offset: offset)
@@ -250,7 +257,10 @@ nonisolated struct BinaryReader {
         return String(decoding: data[start..<end], as: UTF8.self)
     }
 
-    mutating func readEntries(strings: [String]?) throws -> [VDFEntry] {
+    mutating func readEntries(strings: [String]?, depth: Int = 0) throws -> [VDFEntry] {
+        guard depth < Self.maxDepth else {
+            throw VDFError.badBinary("objects nested more than \(Self.maxDepth) deep", offset: offset)
+        }
         var entries: [VDFEntry] = []
         while true {
             let type = try uint8()
@@ -267,7 +277,7 @@ nonisolated struct BinaryReader {
             }
             let value: VDFValue
             switch type {
-            case 0x00: value = .object(try readEntries(strings: strings))
+            case 0x00: value = .object(try readEntries(strings: strings, depth: depth + 1))
             case 0x01: value = .string(try cString())
             case 0x02, 0x04, 0x06: value = .int(Int64(Int32(bitPattern: try uint32())))  // int32, pointer, colour
             case 0x03: value = .float(Double(Float(bitPattern: try uint32())))

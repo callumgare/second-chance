@@ -6,7 +6,7 @@
 
 import Foundation
 import SwiftUI
-import Combine
+import Observation
 import Logging
 import SecondChanceKit
 import SecondChanceReporting
@@ -21,43 +21,57 @@ typealias WrappBuildInputFactory = @MainActor (WrappBuildViewModel) -> WrappBuil
 
 /// Main ViewModel for coordinating the wrapp build process
 @MainActor
-class WrappBuildViewModel: ObservableObject {
-    @Published var currentState: WrappBuildState = .idle
-    @Published var selectedWrappSource: WrappSource?
+@Observable
+class WrappBuildViewModel {
+    var currentState: WrappBuildState = .idle {
+        didSet {
+            if let step = InstallerStep(currentState) { lastStep = step }
+            onStateChangeForTesting?(currentState)
+        }
+    }
+    /// Hears every state the window would render, in order (a test's
+    /// stand-in for the publisher an ObservableObject had).
+    @ObservationIgnored var onStateChangeForTesting: ((WrappBuildState) -> Void)?
+    /// The step the build last reached, so a failure can mark it. Kept here
+    /// rather than in the window, which may be closed and opened again.
+    private(set) var lastStep: InstallerStep = .source
+    var selectedWrappSource: WrappSource?
     /// The game holding Steam, when a Steam build failed because of it: the
     /// error screen offers to try again, and to quit it as a fallback.
-    @Published var steamInUseHolder: SteamLockHolder?
+    var steamInUseHolder: SteamLockHolder?
     /// Quitting `steamInUseHolder` for the person is under way.
-    @Published var isQuittingSteamHolder = false
+    var isQuittingSteamHolder = false
     /// It was asked to quit, and didn't.
-    @Published var steamHolderDidNotQuit = false
-    /// A Steam build failed in a way trying again may fix: Steam got stuck
-    /// signing in, or nobody signed in. The error screen offers Try Again.
-    @Published var steamBuildCanRetry = false
+    var steamHolderDidNotQuit = false
+    /// The disc or download the last build was started from, so Try Again
+    /// can use it again rather than asking for it.
+    @ObservationIgnored var chosenInstaller: URL?
+    /// Set by Try Again for the next build's input to take
+    /// (`WrappBuildInput.takeRetryInstaller`).
+    @ObservationIgnored var retryInstaller: URL?
     /// Steam kept getting stuck signing in, so Try Again signs out of Steam
     /// first, in case the saved sign-in is what it's stuck on.
-    @Published var steamRetrySignsOut = false
+    var steamRetrySignsOut = false
     /// Steam is slow or stuck signing in, as the progress screen says.
-    @Published var steamSignInNotice: SteamSignInNotice?
+    var steamSignInNotice: SteamSignInNotice?
     /// The person chose to sign in to Steam afresh, from the notice that it's
     /// stuck; the build takes it (`WrappBuildInput.takeSteamSignInAfreshRequest`).
-    var steamSignInAfreshRequested = false
-    @Published var detectedGame: GameInfo?
+    @ObservationIgnored var steamSignInAfreshRequested = false
+    var detectedGame: GameInfo?
     /// Where the finished wrapp was saved, for Show in Finder.
-    @Published var builtWrappURL: URL?
+    var builtWrappURL: URL?
     /// What the last build failed with, for a headless run's exit
     /// (`CLIBuilder`). Nil once a build succeeds, or starts.
-    private(set) var lastBuildError: Error?
+    @ObservationIgnored private(set) var lastBuildError: Error?
     /// What the person has to do for the build to go on, if anything: the
     /// latest `.instructions` event.
-    @Published var instructions: String?
+    var instructions: String?
     /// The person asked to stop the build, which is winding down.
-    @Published private(set) var isCancelling = false
+    private(set) var isCancelling = false
 
-    @Published var progress: Double = 0.0
     /// How far the current step has got, when the build can measure it
     /// (`WrappBuildEvent.stepProgress`). Cleared at each new step.
-    @Published var stepProgress: StepProgress?
+    var stepProgress: StepProgress?
 
     /// Where the success reports question is, while a build waits on it:
     /// the main window shows it in place of the build's progress.
@@ -66,8 +80,8 @@ class WrappBuildViewModel: ObservableObject {
         /// They said yes, and are being thanked.
         case thanking
     }
-    @Published private(set) var successReportsQuestion: SuccessReportsQuestion?
-    private var successReportsAnswered: CheckedContinuation<Void, Never>?
+    private(set) var successReportsQuestion: SuccessReportsQuestion?
+    @ObservationIgnored private var successReportsAnswered: CheckedContinuation<Void, Never>?
 
     /// The failed build's report, for the error screen.
     let failureReport = FailureReportModel()
@@ -78,23 +92,19 @@ class WrappBuildViewModel: ObservableObject {
     /// Where this view model's builds report, and where it follows them.
     let bus: EventBus<AppEvent>
     private let cacheManager = CacheManager.shared
-    private var busSubscriptionToken: EventBus<AppEvent>.Token?
+    @ObservationIgnored private var busSubscriptionToken: EventBus<AppEvent>.Token?
     private let makeInput: WrappBuildInputFactory
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildViewModel")
 
     // Elapsed-time tracking — mirrors the original AsyncProgressReporter timer behaviour.
     // The UI only shows substep and elapsed time after 5 s so fast sub-steps don't flash.
-    private var stepStartTime: Date?
-    private var lastProgressState: WrappBuildState?
-    private var stepTimer: Timer?
-    private var shouldShowElapsed = false
-    private var isBuilding = false
+    @ObservationIgnored private var stepStartTime: Date?
+    @ObservationIgnored private var lastProgressState: WrappBuildState?
+    @ObservationIgnored private var stepTimer: Task<Void, Never>?
+    @ObservationIgnored private var shouldShowElapsed = false
+    @ObservationIgnored private var isBuilding = false
     /// The build under way, for `cancelBuild`.
-    private var buildTask: Task<Void, Never>?
-
-    // Development settings
-    var enableCaching = false
-    var stagesToRestore: Set<CacheStage> = []
+    @ObservationIgnored private var buildTask: Task<Void, Never>?
 
     /// `bus` is `EventBus.app` for the app's window. A test gives each build
     /// a bus of its own, so builds running side by side don't hear each
@@ -113,11 +123,7 @@ class WrappBuildViewModel: ObservableObject {
         herDownloadBuilder = HerDownloadWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
         steamBuilder = SteamWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
 
-        // Configure cache manager based on settings
-        cacheManager.cachingEnabled = enableCaching
-        cacheManager.stagesToRestore = stagesToRestore
-
-        // Subscribe to the build's bus so wrapp-build events drive our @Published properties.
+        // Subscribe to the build's bus so wrapp-build events drive the observed properties.
         // (A headless run is this view model too: CLIBuilder starts its build.)
         Task { @MainActor in
             let token = await bus.subscribe { [weak self] event in
@@ -129,7 +135,7 @@ class WrappBuildViewModel: ObservableObject {
 
     // MARK: - Bus Event Handling
 
-    /// Handle bus events — drives @Published properties from typed events.
+    /// Handle bus events — drives the observed properties from typed events.
     /// Internal (not private) so unit tests can drive it directly without
     /// racing the async subscription set up in `init`.
     func handleBusEvent(_ event: AppEvent) async {
@@ -200,21 +206,24 @@ class WrappBuildViewModel: ObservableObject {
 
         // Initially show state without elapsed time (substep hidden until 5 s)
         currentState = withElapsedSeconds(state, elapsed: nil)
-        progress = state.progress ?? 0.0
 
         // Start the timer unless the state doesn't need one
         switch state {
         case .idle, .completed, .error: break
         default:
-            // Scheduled on the main run loop, so it fires on the main thread.
-            stepTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.tickStepTimer() }
+            // On the main actor, as this class is: every second until stopped.
+            stepTimer = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    self?.tickStepTimer()
+                }
             }
         }
     }
 
     private func stopStepTimer() {
-        stepTimer?.invalidate()
+        stepTimer?.cancel()
         stepTimer = nil
     }
 
@@ -248,9 +257,9 @@ class WrappBuildViewModel: ObservableObject {
     /// Start a build from `source`.
     func build(from source: WrappSource) async {
         switch source {
-        case .disk: await buildFromDisk()
-        case .herDownload: await buildFromHerDownload()
-        case .steam: await buildFromSteam()
+        case .disk: await runBuild(diskBuilder, from: source)
+        case .herDownload: await runBuild(herDownloadBuilder, from: source)
+        case .steam: await runBuild(steamBuilder, from: source)
         }
     }
 
@@ -271,6 +280,9 @@ class WrappBuildViewModel: ObservableObject {
     /// answered (and a yes thanked) or the build is cancelled.
     func askAboutSuccessReports() async {
         await withCheckedContinuation { continuation in
+            // Never two builds waiting on one question: the first would
+            // otherwise wait for good.
+            successReportsAnswered?.resume()
             successReportsAnswered = continuation
             successReportsQuestion = .asking
             // The build may have been left running in the background.
@@ -295,29 +307,17 @@ class WrappBuildViewModel: ObservableObject {
         successReportsAnswered = nil
     }
 
-    /// Start a build from disk (interactive mode)
-    func buildFromDisk() async {
-        await runBuild(diskBuilder)
-    }
-
-    /// Start a build from a Her Interactive download
-    func buildFromHerDownload() async {
-        await runBuild(herDownloadBuilder)
-    }
-
-    /// Start a build from Steam
-    func buildFromSteam() async {
-        await runBuild(steamBuilder)
-    }
-
     /// Drive any builder: build → completed, or route the failure. The bus
     /// already routed `.failed` to `handleBusEvent`; the local catch mirrors
     /// the same early-cancel rule for throws that bypassed it.
-    private func runBuild(_ builder: WrappBuildStrategy) async {
+    private func runBuild(_ builder: WrappBuildStrategy, from source: WrappSource) async {
         // The source's prompts are sheets, which leave the menu bar's
         // Install commands free to start a second build.
         guard !isBuilding else { return }
         isBuilding = true
+        // What the progress screen's hints and every report of this build
+        // say it was built from.
+        selectedWrappSource = source
         instructions = nil
         // Its own task, so that Cancel can cancel just the build.
         let task = Task { await self.performBuild(builder) }
@@ -387,11 +387,6 @@ class WrappBuildViewModel: ObservableObject {
         return buildError == .userCancelled || buildError == .userCancelledBeforeStart
     }
 
-    /// Handle errors
-    private func handleError(_ error: Error) {
-        currentState = .error(error.localizedDescription)
-    }
-
     /// Route build failures. Cancelling the initial disk-selection
     /// dialog means the user never really started — quietly return to the
     /// welcome screen. Cancelling any later prompt (disk 2, save location)
@@ -401,12 +396,12 @@ class WrappBuildViewModel: ObservableObject {
         if case .steamInUse(let holder) = buildError {
             steamInUseHolder = holder
         }
-        steamBuildCanRetry = buildError == .steamStoppedResponding || buildError == .steamSignInTimedOut
         steamRetrySignsOut = buildError == .steamStoppedResponding
         if buildError == WrappBuildError.userCancelledBeforeStart {
             currentState = .idle
         } else {
-            handleError(error)
+            // Plain words only: what went wrong in detail is in the log.
+            currentState = .error(WrappBuildError(error).playerMessage)
         }
     }
 
@@ -416,8 +411,9 @@ class WrappBuildViewModel: ObservableObject {
         selectedWrappSource = nil
         detectedGame = nil
         builtWrappURL = nil
-        progress = 0.0
         instructions = nil
+        stepProgress = nil
+        chosenInstaller = nil
         stopStepTimer()
         lastProgressState = nil
         failureReport.clear()
@@ -425,7 +421,6 @@ class WrappBuildViewModel: ObservableObject {
         steamInUseHolder = nil
         isQuittingSteamHolder = false
         steamHolderDidNotQuit = false
-        steamBuildCanRetry = false
         steamRetrySignsOut = false
         steamSignInNotice = nil
         steamSignInAfreshRequested = false
@@ -439,10 +434,13 @@ class WrappBuildViewModel: ObservableObject {
         steamSignInNotice = nil
     }
 
-    /// Start the Steam build again, from the error screen: signed out of
-    /// Steam first, when it kept getting stuck signing in.
-    func retrySteamBuild() {
-        let signOut = steamRetrySignsOut
+    /// Start the build again from the error screen, from the same source:
+    /// the same disc or download when it's still there, and for Steam,
+    /// signed out first when it kept getting stuck signing in.
+    func retryBuild() {
+        guard let source = selectedWrappSource else { return }
+        let signOut = source == .steam && steamRetrySignsOut
+        let installer = chosenInstaller
         reset()
         if signOut {
             logger.notice("Trying the Steam build again, signed out of Steam, as it kept getting stuck signing in")
@@ -452,10 +450,10 @@ class WrappBuildViewModel: ObservableObject {
                 logger.error("Couldn't sign out of Steam before trying again: \(error)")
             }
         } else {
-            logger.notice("Trying the Steam build again")
+            logger.notice("Trying the build again, from \(source.rawValue)")
         }
-        selectedWrappSource = .steam
-        Task { await build(from: .steam) }
+        retryInstaller = installer
+        Task { await build(from: source) }
     }
 
     /// The fallback the error screen offers: quit the game holding Steam
@@ -465,10 +463,10 @@ class WrappBuildViewModel: ObservableObject {
         isQuittingSteamHolder = true
         steamHolderDidNotQuit = false
         Task {
-            let gone = await Task.detached { holder.quit() }.value
+            let gone = await holder.quit()
             isQuittingSteamHolder = false
             if gone {
-                retrySteamBuild()
+                retryBuild()
             } else {
                 steamHolderDidNotQuit = true
             }

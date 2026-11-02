@@ -9,6 +9,7 @@ import Foundation
 import GameCatalog
 import SecondChanceKit
 import Logging
+import PuppeteerCore
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.Wrapp")
 
@@ -100,15 +101,33 @@ extension Wrapp {
         switch engine {
         case .wine, .wineSteam, .wineSteamSilent:
             let wineserver = layout.wine.appendingPathComponent("bin/wineserver").path
-            return [
-                ["/usr/bin/env", "WINEPREFIX=\(winePrefix.path)", wineserver, "-k"],
-                ["/usr/bin/pkill", "-9", "-f", "^" + Self.extendedRegexEscaped(layout.wine.path + "/")],
-            ]
+            return [["/usr/bin/env", "WINEPREFIX=\(winePrefix.path)", wineserver, "-k"]]
+                + Self.pkillCommand(matchingFrom: layout.wine.path + "/")
         case .scummvm:
-            return [["/usr/bin/pkill", "-9", "-f", "^" + Self.extendedRegexEscaped(layout.scummvm.path)]]
+            return Self.pkillCommand(matchingFrom: layout.scummvm.path)
         case nil:
             return []
         }
+    }
+
+    /// `pkill -9` of whatever runs from `path`, or nothing for a path that
+    /// isn't inside an app bundle: a pattern that came out empty or short
+    /// (as a failed substitution once made `pkill -f '^'`, which killed every
+    /// process of the user's) must never reach pkill.
+    static func pkillCommand(matchingFrom path: String) -> [[String]] {
+        guard Self.isSafeToKill(from: path) else {
+            Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.Wrapp")
+                .error("Not killing processes by \"\(path)\": it isn't a path inside an app")
+            return []
+        }
+        return [["/usr/bin/pkill", "-9", "-f", "^" + extendedRegexEscaped(path)]]
+    }
+
+    /// Whether `path` is specific enough to kill everything running from it:
+    /// absolute, inside a `.app`, and longer than any path that could match
+    /// unrelated processes.
+    static func isSafeToKill(from path: String) -> Bool {
+        path.hasPrefix("/") && path.contains(".app/") && path.count >= 20
     }
 
     /// End what the wrapp left of its engine once it has gone, firmly only if
@@ -127,8 +146,10 @@ extension Wrapp {
             if !Blocking.wait({ await wine.server.shutDown() }) {
                 logger.error("❌ The wrapp's Wine session didn't end")
             }
+            guard Self.isSafeToKill(from: layout.wine.path + "/") else { return }
             leftovers = "^" + Self.extendedRegexEscaped(layout.wine.path + "/")
         case .scummvm:
+            guard Self.isSafeToKill(from: layout.scummvm.path) else { return }
             leftovers = "^" + Self.extendedRegexEscaped(layout.scummvm.path)
             if ProcessControl.anyRunning(matching: leftovers),
                ProcessControl.end(matching: leftovers, signal: SIGTERM, timeout: 5) {

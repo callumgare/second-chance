@@ -85,7 +85,7 @@ struct DiskInstallIntegrationTests {
                 makeInput: { outputDir, viewModel in
                     WrappBuildInput(disk1: disk1, disk2: disk2, outputDir: outputDir, viewModel: viewModel)
                 },
-                start: { await $0.buildFromDisk() }
+                start: { await $0.build(from: .disk) }
             )
         } check: { recorder, wrapp, outcome in
             if let expectedExe = game.internalGameExePath {

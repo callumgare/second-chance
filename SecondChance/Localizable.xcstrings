@@ -1,0 +1,836 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "%@ didn't quit." : {
+
+    },
+    "%@ is already in %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is already in %2$@"
+          }
+        }
+      }
+    },
+    "%@ is installed, but not saved yet" : {
+
+    },
+    "%@ is ready to play." : {
+
+    },
+    "%@ is using Steam" : {
+
+    },
+    "%@ is using Steam, and only one game can use it at a time. Save your game in %@ and quit it, then click Try Again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ is using Steam, and only one game can use it at a time. Save your game in %2$@ and quit it, then click Try Again."
+          }
+        }
+      }
+    },
+    "%@ of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "%@ of %@, about %lld hours left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about %3$lld hours left"
+          }
+        }
+      }
+    },
+    "%@ of %@, about %lld minutes left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about %3$lld minutes left"
+          }
+        }
+      }
+    },
+    "%@ of %@, about a minute left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about a minute left"
+          }
+        }
+      }
+    },
+    "%@ of %@, about an hour left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, about an hour left"
+          }
+        }
+      }
+    },
+    "%@ of %@, less than a minute left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@, less than a minute left"
+          }
+        }
+      }
+    },
+    "%lld earlier lines hidden" : {
+
+    },
+    "%lld of %lld MB" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld MB"
+          }
+        }
+      }
+    },
+    "%lld of %lld lines" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld lines"
+          }
+        }
+      }
+    },
+    "A fix for the game couldn't be added" : {
+
+    },
+    "A game is still being installed" : {
+
+    },
+    "A previous copy of the game is still running…" : {
+
+    },
+    "Adds a menu with the log of what Second Chance is doing, and settings for testing it." : {
+
+    },
+    "Adjusting the game's settings" : {
+
+    },
+    "Advanced" : {
+
+    },
+    "Another game is using Steam" : {
+
+    },
+    "Another game is using Steam, and only one game can use it at a time. Quit it and try again." : {
+
+    },
+    "Answer the question in Steam's window, and the game will carry on starting." : {
+
+    },
+    "Applying game patches" : {
+
+    },
+    "Ask me each time" : {
+
+    },
+    "Basic" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Category" : {
+
+    },
+    "Check for Updates…" : {
+
+    },
+    "Checking which games your Steam account owns" : {
+
+    },
+    "Choose Another Disc…" : {
+
+    },
+    "Choose Another Download…" : {
+
+    },
+    "Choose Another Place" : {
+
+    },
+    "Choose Where to Save" : {
+
+    },
+    "Choose where to save the app for %@. Your Applications folder is a good place: you'll find it there with your other apps." : {
+
+    },
+    "Choose where to save the game's app to keep it. Starting over throws away the game that was just installed." : {
+
+    },
+    "Close" : {
+
+    },
+    "Compact" : {
+
+    },
+    "Connecting to Steam" : {
+
+    },
+    "Connecting to Steam…" : {
+
+    },
+    "Continue" : {
+
+    },
+    "Continue Without It" : {
+
+    },
+    "Copy %lld Lines" : {
+
+    },
+    "Copy All Visible Lines" : {
+
+    },
+    "Copy Line" : {
+
+    },
+    "Copy Message" : {
+
+    },
+    "Copy the game's files but don't run its installer, for testing a wrapp's set-up without waiting for an install." : {
+
+    },
+    "Copying disc 2" : {
+
+    },
+    "Couldn't find the files copied from the game disc. Try again." : {
+
+    },
+    "Couldn't find the game's installer. Check that it's the first disc of a Nancy Drew game, or the file you downloaded from Her Interactive." : {
+
+    },
+    "Couldn't save the game's app in %@. Try again, and choose another folder, such as Applications." : {
+
+    },
+    "Couldn't sign out of Steam" : {
+
+    },
+    "Crash Now…" : {
+
+    },
+    "Current step" : {
+
+    },
+    "Debug" : {
+
+    },
+    "Detailed" : {
+
+    },
+    "Don't Send" : {
+
+    },
+    "Done" : {
+
+    },
+    "Eject Disc 1" : {
+
+    },
+    "Export" : {
+
+    },
+    "Export Failed" : {
+
+    },
+    "Exporting…" : {
+
+    },
+    "Failed" : {
+
+    },
+    "Failure Reports" : {
+
+    },
+    "Her Interactive made a fix for this game, \"%@\", and Second Chance couldn't add it. The game will still work without it. What it fixes:\n\n%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Her Interactive made a fix for this game, \"%1$@\", and Second Chance couldn't add it. The game will still work without it. What it fixes:\n\n%2$@"
+          }
+        }
+      }
+    },
+    "How should %@ start?" : {
+
+    },
+    "If %@ won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost." : {
+
+    },
+    "If it hasn't signed in by then, it will be started again in %@." : {
+
+    },
+    "If you quit now, installing stops, and you'll need to start again from the beginning." : {
+
+    },
+    "Import" : {
+
+    },
+    "Import Failed" : {
+
+    },
+    "In a basic report" : {
+
+    },
+    "In a detailed report" : {
+
+    },
+    "Install Anyway" : {
+
+    },
+    "Install Rosetta" : {
+
+    },
+    "Install from" : {
+
+    },
+    "Install from Game Discs…" : {
+
+    },
+    "Install from Her Interactive Download…" : {
+
+    },
+    "Install from Steam…" : {
+
+    },
+    "Installation steps" : {
+
+    },
+    "Installing %@" : {
+
+    },
+    "Installing Rosetta" : {
+
+    },
+    "Installing Steam" : {
+
+    },
+    "Installing Steam's update" : {
+
+    },
+    "Installing Steam's update…" : {
+
+    },
+    "It may be a disc Second Chance doesn't know, such as a special edition or one in another language. You can choose another disc, or try a program on it to install the game, though it may not work." : {
+
+    },
+    "It may be the wrong disc, or a game Second Chance doesn't know. You can choose another disc, or install it anyway, though it may not work." : {
+
+    },
+    "It may be the wrong download, or a game Second Chance doesn't know. You can choose another download, or install it anyway, though it may not work." : {
+
+    },
+    "It's now in your Applications folder. Quit it and open it from there." : {
+
+    },
+    "It's still trying, and this goes away if it gets going. Or you can sign in to Steam again from scratch: you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too." : {
+
+    },
+    "It's still trying. If it doesn't get going, you'll be able to sign in to Steam again from scratch." : {
+
+    },
+    "Keep Installing" : {
+
+    },
+    "Launch Directly" : {
+
+    },
+    "Launch directly: starts faster and is more reliable, but saves stay on this Mac.\n\nLaunch via Steam: keeps your saves in Steam Cloud, but starts slower." : {
+
+    },
+    "Launch via Steam" : {
+
+    },
+    "Level" : {
+
+    },
+    "Log lines will appear here as the app runs." : {
+
+    },
+    "Message" : {
+
+    },
+    "Move Second Chance to your Applications folder" : {
+
+    },
+    "Move to Applications" : {
+
+    },
+    "No Logs" : {
+
+    },
+    "No Matching Lines" : {
+
+    },
+    "Not Now" : {
+
+    },
+    "Not in a basic report" : {
+
+    },
+    "Nothing at the selected level — switch back to All." : {
+
+    },
+    "Nothing will be saved, and you can start again from the beginning." : {
+
+    },
+    "Now put in disc 2" : {
+
+    },
+    "OK" : {
+
+    },
+    "Only one game can use Steam at a time." : {
+
+    },
+    "Only the most recent %lld lines are kept in view. Use Save Logs for the full history." : {
+
+    },
+    "Open a previously saved log file and show it here instead of the live logs." : {
+
+    },
+    "Part of Second Chance is damaged. Download Second Chance again and try once more." : {
+
+    },
+    "Part of Second Chance is missing. Download Second Chance again and try once more." : {
+
+    },
+    "Play Now" : {
+
+    },
+    "Quit" : {
+
+    },
+    "Quit It Without Saving" : {
+
+    },
+    "Quit Second Chance, drag it from %@ into your Applications folder, then open it from there.\n\n%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Quit Second Chance, drag it from %1$@ into your Applications folder, then open it from there.\n\n%2$@"
+          }
+        }
+      }
+    },
+    "Quit it, then click Try Again." : {
+
+    },
+    "Quitting %@…" : {
+
+    },
+    "Replace" : {
+
+    },
+    "Reports go to the developer, through Sentry, a service that collects reports like these." : {
+
+    },
+    "Reset Debug Settings" : {
+
+    },
+    "Restarting Steam to install %@" : {
+
+    },
+    "Rosetta, which the games need, couldn't be installed. Check that your Mac is connected to the internet, then try again." : {
+
+    },
+    "Save Failed" : {
+
+    },
+    "Save Here" : {
+
+    },
+    "Save Log…" : {
+
+    },
+    "Save the displayed file's logs to a new file." : {
+
+    },
+    "Save the full in-memory log history to a file." : {
+
+    },
+    "Save your game in %@ and quit it, then click Try Again." : {
+
+    },
+    "Saving…" : {
+
+    },
+    "Second Chance" : {
+
+    },
+    "Second Chance can't install the game from that. Choose the game's disc, or the file you downloaded from Her Interactive." : {
+
+    },
+    "Second Chance can't use this Mac download. It may not have finished downloading: download it again, or download the Windows version from Her Interactive instead." : {
+
+    },
+    "Second Chance couldn't find this disc's installer" : {
+
+    },
+    "Second Chance couldn't move itself" : {
+
+    },
+    "Second Chance couldn't reopen itself" : {
+
+    },
+    "Second Chance doesn't know how to run this game yet." : {
+
+    },
+    "Second Chance doesn't recognise this game" : {
+
+    },
+    "Second Chance is adding a game from Steam" : {
+
+    },
+    "Second Chance is already adding a game from Steam, and only one game can use Steam at a time. Wait for it to finish and try again." : {
+
+    },
+    "Second Chance is running from where it was downloaded, where macOS keeps it from making games that work.\n\nMoving Second Chance to your Applications folder fixes this. It will reopen from there, and you won't be asked again." : {
+
+    },
+    "Second Chance makes a Nancy Drew game playable on this Mac. Choose where to install it from." : {
+
+    },
+    "Second Chance needs Rosetta" : {
+
+    },
+    "Second Chance wants to install Rosetta, which the games need." : {
+
+    },
+    "Select the game you downloaded from Her Interactive: the .exe file for Windows, or for Mac the .dmg file or the installer app inside it." : {
+
+    },
+    "Send" : {
+
+    },
+    "Send a basic report" : {
+
+    },
+    "Send a detailed report" : {
+
+    },
+    "Send success reports" : {
+
+    },
+    "Setting up the game's display" : {
+
+    },
+    "Setting up the game's graphics" : {
+
+    },
+    "Setting up where the game finds its disc" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show Debug menu" : {
+
+    },
+    "Show Log" : {
+
+    },
+    "Show Log Window" : {
+
+    },
+    "Show Run Log in Finder" : {
+
+    },
+    "Show all lines, only warnings and above, or only errors and above." : {
+
+    },
+    "Show in Finder" : {
+
+    },
+    "Show only the Level and Message columns." : {
+
+    },
+    "Showing logs from **%@** — live logs from this process are paused" : {
+
+    },
+    "Sign In Again" : {
+
+    },
+    "Sign Out of Steam" : {
+
+    },
+    "Sign in to Steam" : {
+
+    },
+    "Signed out of Steam" : {
+
+    },
+    "Skip Installer" : {
+
+    },
+    "Something went wrong inside the game, and it had to close." : {
+
+    },
+    "Something went wrong while installing the game. Try again, and if it happens again, the failure report helps get it fixed." : {
+
+    },
+    "Start Over" : {
+
+    },
+    "Starting %@…" : {
+
+    },
+    "Starting Steam" : {
+
+    },
+    "Starting Steam…" : {
+
+    },
+    "Starting the updated Steam" : {
+
+    },
+    "Starting the updated Steam…" : {
+
+    },
+    "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here." : {
+
+    },
+    "Steam closed unexpectedly while it was downloading the game. Try again." : {
+
+    },
+    "Steam closed unexpectedly while it was starting up. Try again." : {
+
+    },
+    "Steam couldn't install the game. Try again." : {
+
+    },
+    "Steam is starting %@…" : {
+
+    },
+    "Steam is taking longer than usual to sign in" : {
+
+    },
+    "Steam is updating itself, as it does now and then. The game starts once it's done." : {
+
+    },
+    "Steam is waiting for you" : {
+
+    },
+    "Steam kept getting stuck while it was signing in. Check that this Mac is connected to the internet.\n\nTrying again signs you out of Steam to start afresh: you'll need to sign in once more, and your other Nancy Drew games from Steam will ask you to sign in again once too." : {
+
+    },
+    "Steam seems to be stuck signing in" : {
+
+    },
+    "Steam stopped downloading the game. Check that this Mac is connected to the internet, then try again." : {
+
+    },
+    "Steam waited for you to sign in, but nobody did. Try again when you're ready, and sign in when Steam's window appears." : {
+
+    },
+    "Stop Installing" : {
+
+    },
+    "Stop installing the game?" : {
+
+    },
+    "Stop showing the imported file and resume the in-memory logs of the current process." : {
+
+    },
+    "Success Reports" : {
+
+    },
+    "That file is a copy of a game disc in a form a Mac can't open. Choose the game's disc instead." : {
+
+    },
+    "That file is only part of a game disc: it may not have finished downloading or copying. Copy it again, then try again." : {
+
+    },
+    "That file isn't a copy of a game disc. Choose the game's disc instead." : {
+
+    },
+    "The file could not be read as a text log file." : {
+
+    },
+    "The game asked for a screen setting this Mac doesn't have, and quit when it couldn't have it." : {
+
+    },
+    "The game couldn't load a file it needs." : {
+
+    },
+    "The game didn't install completely. Try again." : {
+
+    },
+    "The game quit before it showed anything." : {
+
+    },
+    "The game quit before its window appeared." : {
+
+    },
+    "The game quit just after something went wrong in it." : {
+
+    },
+    "The game runs through Steam, so Steam is starting up first." : {
+
+    },
+    "The game you're adding can't be installed until it quits." : {
+
+    },
+    "The game's installer stopped responding, so installing was stopped. Try again." : {
+
+    },
+    "The games were made for Windows, and what lets them run on this Mac needs Rosetta, a free part of macOS from Apple. Installing it takes a minute or two, and means agreeing to Apple's licence for it. Your Mac will ask for your password." : {
+
+    },
+    "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests." : {
+
+    },
+    "The log file could not be saved. Please try again." : {
+
+    },
+    "There isn't enough free space on your Mac to install the game. It needs about %@, and %@ is free. Free up some space, then try again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "There isn't enough free space on your Mac to install the game. It needs about %1$@, and %2$@ is free. Free up some space, then try again."
+          }
+        }
+      }
+    },
+    "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam." : {
+
+    },
+    "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license" : {
+
+    },
+    "This copy of Second Chance always shows the Debug menu." : {
+
+    },
+    "This copy of Second Chance doesn't send reports (%@)." : {
+
+    },
+    "This disc is %@, not %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This disc is %1$@, not %2$@."
+          }
+        }
+      }
+    },
+    "This game needs Steam signed in, which needs the internet." : {
+
+    },
+    "This is a game that's already installed, not its installer. Second Chance needs to install the game itself: choose the game's disc, or the installer you downloaded from Her Interactive." : {
+
+    },
+    "Time" : {
+
+    },
+    "To help identify which games run correctly and which need work Second Chance can notify the developer on a successful run. Only very basic info is sent like the title of the game and macOS version. Nothing about you or your files will ever be sent." : {
+
+    },
+    "Try Again" : {
+
+    },
+    "Try It" : {
+
+    },
+    "Unpacking the game" : {
+
+    },
+    "Unpacking the installer" : {
+
+    },
+    "Updating Steam" : {
+
+    },
+    "Updating Steam…" : {
+
+    },
+    "Use Steam's window, or scan its QR code with the Steam app on your phone." : {
+
+    },
+    "Wait for Second Chance to finish, then try again." : {
+
+    },
+    "Waiting for a previous copy of the game to finish closing…" : {
+
+    },
+    "Waiting for you to sign in to Steam" : {
+
+    },
+    "What's in a report?" : {
+
+    },
+    "When a build or a game fails" : {
+
+    },
+    "When a game is set up or played, say whether it worked: which game, where it came from, and the Second Chance and macOS versions. Nothing about you or your files is sent. It shows which games are known to work." : {
+
+    },
+    "Which game do you want from Steam?" : {
+
+    },
+    "Which program should it try?" : {
+
+    },
+    "You can change this any time in Settings." : {
+
+    },
+    "You cancelled before installing started." : {
+
+    },
+    "You cancelled installing the game." : {
+
+    },
+    "Your Mac couldn't open that file. If you downloaded it, try downloading it again." : {
+
+    },
+    "Your Mac ran out of space while installing the game. Free up some space, then try again." : {
+
+    },
+    "Your Steam account doesn't own %@" : {
+
+    },
+    "Your Steam account doesn't own any of the Nancy Drew games on Steam" : {
+
+    },
+    "Your Steam account is playing on another computer" : {
+
+    },
+    "Your games will ask you to sign in to Steam again the next time they need it." : {
+
+    },
+    "Your success reports will help show which games work." : {
+
+    }
+  },
+  "version" : "1.0"
+}

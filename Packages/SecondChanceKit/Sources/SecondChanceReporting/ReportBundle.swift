@@ -57,7 +57,7 @@ nonisolated enum ReportBundle {
 
         if let crashReport {
             do {
-                try redactor.redactFile(at: crashReport, to: staging.appendingPathComponent(crashReport.lastPathComponent))
+                try redactor.redactCrashReport(at: crashReport, to: staging.appendingPathComponent(crashReport.lastPathComponent))
             } catch {
                 logger.warning("Left the crash report out of the failure report: \(error.localizedDescription)")
             }

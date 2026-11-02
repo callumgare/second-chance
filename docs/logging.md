@@ -7,9 +7,10 @@ to tell why. It has two readers, a person scanning for what went wrong and an
 agent grepping for it, and both need the cause to be on a line that says so,
 at a level that stands out, near the end.
 
-The plumbing (swift-log → `MultiplexLogHandler` → `LogStore` and OSLog) is
-described in the logging bullet of [AGENTS.md](../AGENTS.md). This page covers
-what goes into the log and where it ends up.
+The conventions for logging are in [AGENTS.md](../AGENTS.md); the plumbing
+(swift-log → `MultiplexLogHandler` → `LogStore` and OSLog) is
+[below](#how-the-log-is-plumbed). This page covers what goes into the log and
+where it ends up.
 
 ## Where each log lives
 
@@ -21,7 +22,7 @@ what goes into the log and where it ends up.
 | `DerivedData/sc-logs/<time>-wrapp-build-<slug>.jsonl` | The same as JSON lines (`SECOND_CHANCE_LOG_JSONL`). |
 | `~/Library/Logs/SecondChance/<slug>/launch-<time>.log` | Each wrapp launch's whole log, every level; the newest 10 are kept. The header names it. |
 | `~/Library/Logs/SecondChance/app/run-<time>.log` | Each run of Second Chance's whole log, every level; the newest 10 are kept. The header names it, and Debug → Show Run Log in Finder opens it. Not written under test, or when `SECOND_CHANCE_LOG_FILE` or `--mirror-logs` chose a file instead. |
-| `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/` | A bundle from a launch that started badly (see AGENTS.md): stacks, process lists, Wine's output and the wrapp's log. |
+| `~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/` | A bundle from a launch that started badly ([wrapp-launch.md](wrapp-launch.md#diagnostics-bundles)): stacks, process lists, Wine's output and the wrapp's log. |
 | Save Log…, `--mirror-logs` | The app's in-memory ring (the last 50,000 entries), or the whole session, to a file you choose or `~/Downloads`. |
 | OSLog (`log show`) | Every entry, crash-durable, under the `au.gare.callum.second-chance` subsystems. |
 
@@ -29,6 +30,36 @@ In Second Chance the log window and Save Log… are on the error screen, and at
 any time in the Debug menu (Show Log Window, ⌥⌘L). That menu is in every
 Debug build, in a Release one launched with ⌥ held, and whenever **Show
 Debug menu** is on in Settings (`DebugCommands`).
+
+## How the log is plumbed
+
+Every executable calls `AppLogging.bootstrap(subsystem:)` as its **first**
+statement (`SecondChanceApp.init()`, `WrappTemplate`'s `main()`,
+`WrappPuppeteer`'s top of `main.swift`) — a `Logger` created before bootstrap
+is silently orphaned to swift-log's default stdout handler and never reaches
+the store. Log records fan out in-process via `MultiplexLogHandler` to
+`LogStore` (in-memory ring, 50k entries) and OSLog (crash-durable, the only
+place `privacy: .public` still exists — inside `OSLogHandler`) — except when
+`OS_ACTIVITY_DT_MODE` is set (Xcode, `xcodebuild test`), where os_log would
+copy every entry to stderr a second time, so only LogStore's copy is written —
+and the variable is unset at bootstrap, so the wrapp and WrappPuppeteer started
+from a test still write to OSLog. Terminal stderr, the floating log window
+(`LogWindow`, instant history + live batches), and Save Log… (`LogExporter`,
+lossless where `log show` dropped `.debug` entries) all read from `LogStore`;
+no process shells out to `/usr/bin/log` except
+`SystemLogReader.fetch(pid:since:)` in integration tests. A wrapp build's
+entries carry its id through the task-local `LogContext.$build`; code that logs
+for a build from a detached task, a dispatch queue or a pipe's reader re-binds
+it, as `Blocking.run` and `ProcessLineLogger` do
+([docs/logging.md](docs/logging.md#which-build-an-entry-is-from)). Subprocess
+output (Wine, ScummVM, winetricks) is captured line-by-line via
+`ProcessLineLogger`/`TaggedProcess` in
+`Packages/SecondChanceKit/Sources/SecondChanceKit/Logging/`, each line at the
+level `SubprocessLineClassifier` picks from its content rather than from the
+pipe it came down. Integration tests still read WrappPuppeteer's and the
+wrapp's OSLog via `log show` (rendered in the compact format, with the process
+in front of the category) — that's why OSLog stays in the multiplex; the test
+host's own build log is attached straight from `LogStore`.
 
 ## Levels
 

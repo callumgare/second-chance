@@ -27,13 +27,15 @@ public nonisolated final class GameInfoProvider: Sendable {
             title: "Secrets Can Kill Remastered",
             diskCount: 1,
             internalGameExePath: "/Program Files (x86)/Nancy Drew SCK/Secrets.exe",
-            steam: .init(appID: 42210, installDir: "Nancy Drew Secrets Can Kill", exe: "Secrets.exe")
+            steam: .init(appID: 42210, installDir: "Nancy Drew Secrets Can Kill", exe: "Secrets.exe"),
+            detectionAliases: ["nancy drew sck"]
         ),
         GameInfo(
             id: "stay-tuned",
             title: "Stay Tuned for Danger",
             diskCount: 1,
-            gameEngine: .scummvm
+            gameEngine: .scummvm,
+            detectionCodes: ["STFD"]
         ),
         GameInfo(
             id: "haunted-mansion",
@@ -193,14 +195,16 @@ public nonisolated final class GameInfoProvider: Sendable {
             diskCount: 2,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/Shadow at the Water's Edge/Shadow.exe",
             steamDRM: .yesLaunchWhenSteamRunning,
-            steam: .init(appID: 200080, installDir: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe")
+            steam: .init(appID: 200080, installDir: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe"),
+            detectionAliases: ["shadow waters edge"]
         ),
         GameInfo(
             id: "captive-curse",
             title: "The Captive Curse",
             diskCount: 1,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/The Captive Curse/Captive.exe",
-            steam: .init(appID: 42220, installDir: "Nancy Drew The Captive Curse", exe: "Captive.exe")
+            steam: .init(appID: 42220, installDir: "Nancy Drew The Captive Curse", exe: "Captive.exe"),
+            detectionCodes: ["CAP"]
         ),
         GameInfo(
             id: "alibi-in-ashes",
@@ -229,35 +233,40 @@ public nonisolated final class GameInfoProvider: Sendable {
             diskCount: 1,
             internalGameExePath: "/Program Files (x86)/Her Interactive/Ghost of Thornton Hall/Thornton.exe",
             steamDRM: .yesLaunchViaSteamOnly,
-            steam: .init(appID: 226820, installDir: "Nancy Drew The Ghost of Thornton Hall", exe: "Thornton.exe")
+            steam: .init(appID: 226820, installDir: "Nancy Drew The Ghost of Thornton Hall", exe: "Thornton.exe"),
+            detectionCodes: ["GTH"]
         ),
         GameInfo(
             id: "silent-spy",
             title: "The Silent Spy",
             diskCount: 1,
             internalGameExePath: "/Program Files (x86)/Her Interactive/The Silent Spy/Spy.exe",
-            steam: .init(appID: 572730, installDir: "Nancy Drew The Silent Spy", exe: "Spy.exe")
+            steam: .init(appID: 572730, installDir: "Nancy Drew The Silent Spy", exe: "Spy.exe"),
+            detectionCodes: ["SPY"]
         ),
         GameInfo(
             id: "shattered-medallion",
             title: "The Shattered Medallion",
             diskCount: 1,
             internalGameExePath: "/Program Files (x86)/Her Interactive/The Shattered Medallion/Medallion.exe",
-            steam: .init(appID: 572720, installDir: "Nancy Drew The Shattered Medallion", exe: "Medallion.exe")
+            steam: .init(appID: 572720, installDir: "Nancy Drew The Shattered Medallion", exe: "Medallion.exe"),
+            detectionCodes: ["MED"]
         ),
         GameInfo(
             id: "labyrinth-of-lies",
             title: "Labyrinth of Lies",
             diskCount: 1,
             internalGameExePath: "/Program Files (x86)/Her Interactive/Labyrinth of Lies/Labyrinth.exe",
-            steam: .init(appID: 572710, installDir: "Nancy Drew Labyrinth of Lies", exe: "Labyrinth.exe")
+            steam: .init(appID: 572710, installDir: "Nancy Drew Labyrinth of Lies", exe: "Labyrinth.exe"),
+            detectionCodes: ["LIE"]
         ),
         GameInfo(
             id: "sea-of-darkness",
             title: "Sea of Darkness",
             diskCount: 1,
             internalGameExePath: "/Program Files (x86)/Her Interactive/Sea of Darkness/SeaOfDarkness.exe",
-            steam: .init(appID: 572700, installDir: "Nancy Drew The Sea of Darkness", exe: "SeaOfDarkness.exe")
+            steam: .init(appID: 572700, installDir: "Nancy Drew The Sea of Darkness", exe: "SeaOfDarkness.exe"),
+            detectionCodes: ["SEA"]
         )
     ]
 

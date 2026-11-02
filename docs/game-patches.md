@@ -33,6 +33,7 @@ with macOS — so the build needs no `jq`, no Python, no extra tooling.
   "title": "Walk-in-place and Kyler freeze (CD)",
   "url": "https://www.herinteractive.com/wp-content/uploads/HAU-1.1-patch1.zip",
   "archive": "HAU-1.1-patch1.zip",  // filename as staged in the bundle
+  "sha256": "…",                    // the archive's SHA-256, checked on download
   "payload": "HAU 1.1 patch.exe",   // the single file inside the archive
   "action": "run-installer",        // or "copy-into-game-dir"
   "edition": "cd",                  // "any" | "cd" | "digital-download"
@@ -115,7 +116,11 @@ The `Download And Copy Game Patches` build phase runs
 `setup-game-patches.sh`, which for every manifest entry:
 
 1. Downloads the archive to `~/Library/Caches/SecondChance/game-patches/<game>/`,
-   skipping anything already cached, so rebuilds do not re-fetch ~10 MB.
+   skipping anything already cached, so rebuilds do not re-fetch ~10 MB. A
+   download, or a cached copy, whose SHA-256 isn't the manifest's `sha256` is
+   discarded (`download-verified.sh`, shared with the Wine, AutoIt and ScummVM
+   downloads), so an error page or a re-uploaded file never ships. A new patch
+   needs its hash: `shasum -a 256 <archive>`.
 2. Copies it into the bundle at `Contents/Resources/game-patches/<game>/`.
 3. Copies the manifest itself to `Contents/Resources/game-patches/manifest.json`,
    which is what `GamePatchCatalog` reads at runtime.
@@ -123,10 +128,11 @@ The `Download And Copy Game Patches` build phase runs
 The bundle directory is rebuilt from scratch each time, so a patch removed from
 the manifest does not linger in an incremental build.
 
-**A failed download never fails the build.** The script reports it and exits 0.
-The resulting Second Chance simply ships without that patch, and the applier
-treats a missing archive as a patch failure like any other. Second Chance
-building is more important than any one patch being present.
+**A failed download fails only a Release build.** In Debug the script reports
+it and exits 0: the resulting Second Chance simply ships without that patch,
+and the applier treats a missing archive as a patch failure like any other, so
+a flaky download never stops development. A Release (`CONFIGURATION=Release`,
+which `sc release` builds) must ship every patch, so there the script exits 1.
 
 ## Wrapp build time: applying
 
@@ -200,11 +206,18 @@ ends a Windows process — and the patch is reported as failed.
 
 ### Failure is not fatal
 
-A patch that fails routes through `confirmPatchFailure`, the same seam described
-in [wrapp-build.md](wrapp-build.md): the GUI asks whether to continue, and
-headless runs continue without prompting, because a modal alert under a
-`.prohibited` activation policy would be invisible and hang the build. Only an
-explicit "don't continue" turns a patch failure into a cancelled build.
+A patch that fails is reported (`FailureReporter.sendWithoutAsking`, tagged
+with the patch's id, when the reporting setting sends without asking) and then
+routes through the build's `WrappBuildInput.confirmPatchFailure`, the seam
+described in [wrapp-build.md](wrapp-build.md), which each builder passes to
+`applyGamePatches` (it isn't state on the shared runner, since builds run side
+by side). `PATCH_FAILURE_POLICY=continue|cancel` answers it; otherwise the GUI
+asks whether to carry on without the fix, naming what it fixes rather than why
+it failed, and headless runs continue without prompting, because a modal alert
+under a `.prohibited` activation policy would be invisible and hang the build.
+Only an explicit "don't continue" turns a patch failure into a cancelled
+build. Cancelling the build while a patcher runs stops the build there; it
+isn't counted as the patch failing.
 
 Each patch publishes `.patchApplied` or `.patchFailed` on the bus (and a
 `patch-failed` record in the headless progress file). The integration test

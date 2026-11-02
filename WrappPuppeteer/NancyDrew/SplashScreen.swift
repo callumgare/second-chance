@@ -14,6 +14,7 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import Logging
+import PuppeteerCore
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.SplashScreen")
 
@@ -26,6 +27,13 @@ struct SplashScreen {
     /// screen. Tuned against recordings of every game, where a game's
     /// splashes and its menu sit well either side of it.
     static let matchDistance: Float = 0.08
+
+    /// Games that start on a black screen a click skips, along with every
+    /// splash screen after it: clicked there, they reach the menu sooner
+    /// than by clicking past each splash. Secrets Can Kill Remastered from
+    /// disc is black for 5 s, then shows its logo and title card for 15 s
+    /// more; a click 1.5 s in brought its menu up at 4.4 s, not 28.6 s.
+    static let blankStartTakesClick: Set<String> = ["secrets-can-kill-remastered"]
 
     /// A capture recognised as one of a game's splash screens.
     struct Match {

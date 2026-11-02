@@ -5,13 +5,13 @@ import Noora
 struct TestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test",
-        abstract: "Run the tests. With no subcommand: unit tests, then integration tests.",
+        abstract: "Run the tests. With no subcommand: the unit tests.",
         discussion: """
-        Bare `sc test` runs everything, including the integration suite, which \
-        installs every game for real and takes hours. `sc test unit` is the fast loop.
+        Bare `sc test` runs the unit tests, the fast loop. `sc test integration` installs \
+        games for real and takes hours for all of them; `sc test all` runs both.
         """,
         subcommands: [TestAllCommand.self, TestUnitCommand.self, TestIntegrationCommand.self],
-        defaultSubcommand: TestAllCommand.self
+        defaultSubcommand: TestUnitCommand.self
     )
 }
 
@@ -177,7 +177,7 @@ struct TestAllCommand: AsyncParsableCommand {
 struct TestUnitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unit",
-        abstract: "Run the unit tests (seconds), plus sc's own tests.",
+        abstract: "Run the unit tests (seconds): the app's, the shared package's and sc's own.",
         discussion: "Every suite except the integration ones — a new suite runs by default."
     )
 
@@ -192,8 +192,10 @@ struct TestUnitCommand: AsyncParsableCommand {
         let runner = TestRunner(session: session)
         try await runner.xcode.ensureTestBuild(appBuild)
         let unit = try await runner.unit(stamp: stamp)
+        let packageStatus = try await TestCommandSupport.runPackageTests(session)
         let toolStatus = try await TestCommandSupport.runToolTests(session)
-        try await TestCommandSupport.finish([unit], stamp: stamp, policy: report.openReport, session: session, extraFailure: toolStatus)
+        try await TestCommandSupport.finish([unit], stamp: stamp, policy: report.openReport, session: session,
+                                            extraFailure: packageStatus != 0 ? packageStatus : toolStatus)
     }
 }
 
@@ -245,10 +247,30 @@ enum TestCommandSupport {
 
     static func requireTools() throws {
         try Proc.require("xcbeautify", brew: "xcbeautify")
-        try Proc.require("xchtmlreport", brew: "xctest-html-report")
+        try Proc.require("xchtmlreport", brew: "xctesthtmlreport")
     }
 
     /// sc's own Swift tests (Tools/sc).
+    /// The local packages that have tests of their own: what needs neither
+    /// app, run by SwiftPM with no Xcode build.
+    static let testedPackages = ["SecondChanceKit", "PuppeteerCore"]
+
+    /// Each of `testedPackages`' tests; the first failure's status, or 0.
+    static func runPackageTests(_ session: Session) async throws -> Int32 {
+        var status: Int32 = 0
+        for name in testedPackages {
+            let package = session.repo.root.appendingPathComponent("Packages/\(name)")
+            do {
+                try await session.ui.logStep("\(name)'s tests", log: "test-\(name.lowercased())", success: "\(name)'s tests passed") { sink in
+                    try await Proc.stream("swift", ["test", "--package-path", package.path], cwd: session.repo.root) { await sink.line($0) }
+                }
+            } catch let error as SCError where error.alreadyReported {
+                if status == 0 { status = error.exitCode }
+            }
+        }
+        return status
+    }
+
     static func runToolTests(_ session: Session) async throws -> Int32 {
         let package = session.repo.root.appendingPathComponent("Tools/sc")
         do {

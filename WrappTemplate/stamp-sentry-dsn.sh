@@ -19,8 +19,13 @@ if [ -f "${ENV_FILE}" ]; then
         | tail -n 1 | sed -E -e 's/[[:space:]]+$//' -e 's/^"(.*)"$/\1/' -e "s/^'(.*)'$/\1/")"
 fi
 
-/usr/libexec/PlistBuddy -c "Delete :SentryDSN" "${PLIST}" >/dev/null 2>&1 || true
-/usr/libexec/PlistBuddy -c "Add :SentryDSN string ${DSN}" "${PLIST}"
+# Only when it changes: this phase runs on every build, and rewriting the
+# Info.plist each time made every incremental build sign the app again.
+CURRENT="$(/usr/libexec/PlistBuddy -c "Print :SentryDSN" "${PLIST}" 2>/dev/null || echo "<unset>")"
+if [ "${CURRENT}" != "${DSN}" ]; then
+    /usr/libexec/PlistBuddy -c "Delete :SentryDSN" "${PLIST}" >/dev/null 2>&1 || true
+    /usr/libexec/PlistBuddy -c "Add :SentryDSN string ${DSN}" "${PLIST}"
+fi
 
 if [ -n "${DSN}" ]; then
     echo "SentryDSN set from .env"

@@ -173,7 +173,7 @@ nonisolated final class InstallStallWatch: WineWatchdog, @unchecked Sendable {
     }
 
     private static func wineProcessIDs() -> Set<pid_t> {
-        guard let processes = ProcessList.current() else {
+        guard let processes = ProcessList.recent(maxAge: .seconds(2)) else {
             logger.warning("[Install] Couldn't list processes to look for the installer's window")
             return []
         }

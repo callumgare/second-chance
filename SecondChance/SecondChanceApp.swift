@@ -28,7 +28,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Keep running with no window open. SwiftUI quits an app whose only
+    /// scene is a `Window` once its last window closes, which under test
+    /// (where each build has a window of its own, `BuildWindow`) quit the
+    /// test host as soon as a build's window closed; and for anyone else,
+    /// closing the window isn't a request to quit.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Quitting part way through installing a game throws the install
+        // away: check that's meant. (An update's relaunch waits for the
+        // build instead: `AppUpdater`.)
+        if WrappBuildHelper.hasTemporaryWrapps, !CLIBuilder.isEnabled, !TestHost.isRunning, !Self.confirmQuitDuringBuild() {
+            return .terminateCancel
+        }
         // Quitting with the first-failure question unanswered: send the
         // report basic, the error screen saying so, then quit again.
         if FailureReporter.sendUnansweredBeforeQuitting(then: {
@@ -56,6 +71,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    /// Whether to quit with a game still being installed.
+    private static func confirmQuitDuringBuild() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "A game is still being installed")
+        alert.informativeText = String(localized: "If you quit now, installing stops, and you'll need to start again from the beginning.")
+        alert.addButton(withTitle: String(localized: "Keep Installing"))
+        alert.addButton(withTitle: String(localized: "Quit"))
+        alert.buttons[1].hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
     private func finishTerminating() {
         WrappBuildHelper.shared.cleanupTemporaryWrapps()
         // A failure report sent from the error screen moments ago.
@@ -67,8 +93,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
 @main
 struct SecondChanceApp: App {
+    /// The main window's scene id, by which `NSApp.installerWindow` finds it.
+    static let mainWindowID = "main"
+
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var wrappBuildViewModel: WrappBuildViewModel
+    @State private var wrappBuildViewModel: WrappBuildViewModel
     @AppStorage(DebugCommands.settingKey) private var showDebugMenu = false
 
     private let appStartTime = Date()
@@ -114,7 +143,7 @@ struct SecondChanceApp: App {
 
         // The window's view model, which a headless run builds with too.
         let viewModel = WrappBuildViewModel()
-        _wrappBuildViewModel = StateObject(wrappedValue: viewModel)
+        _wrappBuildViewModel = State(initialValue: viewModel)
 
         if CLIBuilder.isEnabled {
             if !CLIBuilder.showsUI {
@@ -170,9 +199,11 @@ struct SecondChanceApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // One window, not a group: a second would show the same build, and
+        // closing it mid-build would leave the build running out of sight.
+        Window("Second Chance", id: Self.mainWindowID) {
             ContentView()
-                .environmentObject(wrappBuildViewModel)
+                .environment(wrappBuildViewModel)
         }
         .windowResizability(.contentSize)
         // Under test, each integration-test build has a window of its own
@@ -203,11 +234,11 @@ struct SecondChanceApp: App {
         let alert = NSAlert()
         do {
             try SteamSessionStore().signOut()
-            alert.messageText = "Signed out of Steam"
-            alert.informativeText = "Your games will ask you to sign in to Steam again the next time they need it."
+            alert.messageText = String(localized: "Signed out of Steam")
+            alert.informativeText = String(localized: "Your games will ask you to sign in to Steam again the next time they need it.")
         } catch {
             logger.error("Couldn't sign out of Steam: \(error.localizedDescription)")
-            alert.messageText = "Couldn't sign out of Steam"
+            alert.messageText = String(localized: "Couldn't sign out of Steam")
             alert.informativeText = error.localizedDescription
             alert.alertStyle = .warning
         }

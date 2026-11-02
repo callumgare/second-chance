@@ -74,7 +74,7 @@ nonisolated public struct WineServer: Sendable {
         logger.warning("[Wine Cleanup] Killing Wine (wineserver -k9)")
         _ = try? await wine.output(of: .wineserver(["-k9"]))
         let server = self
-        await Blocking.run { server.killPrograms("after wineserver -k9") }
+        _ = await Blocking.run { server.killPrograms("after wineserver -k9") }
     }
 
     /// The Wine programs running in this prefix, found by the folder each is
@@ -203,7 +203,8 @@ nonisolated public struct WineServer: Sendable {
             return true
         case .idle:
             // Routine, so not a step for the closing window to tell.
-            logger.notice("[Wine Cleanup] Wine's programs all ended after \(SubprocessWatch.duration(Date().timeIntervalSince(started))): stopping its server and services rather than waiting for them to linger (wineserver -k)")
+            let ran = SubprocessWatch.duration(Date().timeIntervalSince(started))
+            logger.notice("[Wine Cleanup] Wine's programs all ended after \(ran): stopping its server and services rather than waiting for them to linger (wineserver -k)")
         case .timedOut:
             logger.warning("[Wine Cleanup] Wine was still running after \(Int(gracePeriod)) s: stopping it (wineserver -k)")
             onStep(.stopping)

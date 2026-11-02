@@ -3,7 +3,9 @@
 What a wrapp does between being opened and the game's window appearing,
 what its loading window says meanwhile, and when it says the launch may
 have failed. The code is `WrappTemplate/main.swift` and `GameLauncher`
-(the steps), `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingStage.swift` and `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingClock.swift`
+(the steps), `LastSession.swift` (the first of them), `AppDelegate.swift`
+(quitting, and opening the game again with the arguments in
+`WrappLaunchOptions`), `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingStage.swift` and `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingClock.swift`
 (what the window says, and when), and `Packages/SecondChanceKit/Sources/SecondChanceKit/LaunchActivityMonitor.swift`
 (the signs it watches for).
 
@@ -14,7 +16,7 @@ have failed. The code is `WrappTemplate/main.swift` and `GameLauncher`
    (`.lastSessionClosing`), offering after a few seconds to stop it.
 2. **Wine, and Steam, get going.** A Wine game's wrapp starts Wine's
    desktop and waits until it has registered the display devices
-   (`WineDesktop`; AGENTS.md has why). A game that needs Steam starts Steam
+   (`WineDesktop`, [below](#wines-desktop)). A game that needs Steam starts Steam
    instead, which starts the desktop itself, and waits for it to sign in
    ([steam.md](steam.md#running)). ScummVM has nothing to start.
 3. **The save warning.** A Wine game shows a warning to save often until
@@ -45,6 +47,55 @@ longer arrive: Wine's launcher exits before the game appears, the game
 exits before its window does, Steam exits, or Wine's desktop launcher exits
 with no `explorer.exe` left to finish the job.
 
+## Wine's desktop
+
+Left to Wine, a game's first
+desktop access starts `explorer.exe /desktop` and waits only 10 s for it; on a
+loaded machine under Rosetta that runs out, and the game carries on with no
+display adapters — Secrets Can Kill Remastered then crashes on a null Direct3D
+object exactly 10 s in. `WineDesktop`
+(`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) starts the desktop
+itself and waits until it has registered the display devices, which it detects
+through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key. A build waits up to
+600 s, since with every core busy a fresh session has taken two and a half
+minutes to bring it up, and what runs without it is sure to fail; a wrapp waits
+for as long as the desktop's `explorer.exe` is still running, as its loading
+window says meanwhile whether that looks stuck
+([docs/wrapp-launch.md](docs/wrapp-launch.md)). Each check is itself a Wine
+program and gets 120 s, because one cut short at 20 s never saw the desktop
+ready, and the checks back off to one every 10 s as the wait grows, so they
+don't take the CPU the desktop needs. `GameLauncher` does this before the game,
+and `GameInstallerRunner` before every installer and patcher, which fail the
+same way: with an exit code rather than a crash, or for AutoIt with no window
+and an exit 0 before its script runs. A program that still prints
+`nodrv_CreateWindow` fails with `WineError.noDisplay`, and a build then
+restarts the Wine session and retries that step once
+([docs/wrapp-build.md](docs/wrapp-build.md)). Wine runs that desktop through
+`start.exe /exec`, which is itself a Windows program waiting on explorer, so
+the two would keep the whole Wine session alive after the game quits;
+`WineDesktop.release()` ends the `start.exe` once the programs are done and
+explorer then closes normally. A build releases it before `wineserver -w`,
+which would otherwise wait for ever, and so does a wrapp, which then waits for
+the session to end before it quits — whether the game ended or the player quit
+— and kills Wine only if it won't end (`wine.server.shutDown`), with three
+times as long at each step while the Mac is heavily loaded; even its 15 s quit
+fallback (later on a busy Mac) kills Wine before exiting. **Killing Wine means
+killing its programs too:** `wineserver -k9` kills the server alone, and Wine's
+programs, waiting on it, are left running for good — so `wine.server.kill()`
+then kills every Wine program working in the prefix's folder
+(`WineServer.programs`), and a launch first clears any a killed session left
+behind (`clearLeftovers`), as the game monitor would otherwise take that
+session's game for its own and wait for ever for its window. Never run
+`wineserver -k9` by hand without doing the same. A launch that still finds Wine
+running in the prefix waits for it in the loading window
+(`LoadingStage.lastSessionClosing`), which after 3 s also offers to stop it,
+and drops that offer and carries on if Wine finishes first; opening a wrapp
+while it is closing down (macOS reactivates the running copy) starts it again
+once Wine has finished. `SECOND_CHANCE_PRESTART_DESKTOP=0` restores Wine's
+on-demand start, for comparison. Anything that runs `wine` and reads its output
+must not wait for EOF on a pipe: Wine's background services inherit the child's
+stdout and hold the pipe open.
+
 ## The loading window
 
 Each step shows as a `LoadingStage`, with its own message, and its own
@@ -52,7 +103,7 @@ clock (`LoadingClock`), which starts when the stage does — or, behind the
 save warning, when the warning is confirmed:
 
 - **"Taking longer than usual"** comes after the stage's `slowNoteAfter`.
-- **"Possible launch failure"** needs two things: the stage has run for its
+- **"The game may not be starting"** needs two things: the stage has run for its
   `possibleFailureAfter`, longer than it takes on a busy Mac, and the launch
   has shown no sign of getting anywhere for the stage's `stallAfter`. A
   launch that is merely slow keeps showing signs, so it is left be; one that
@@ -158,6 +209,97 @@ the Mac is heavily loaded each step waits three times as long
 against 5 s before it is asked to stop. It never replaces the error window: someone reading why the game
 failed keeps that. Quitting from the error window still waits for Wine, but
 says nothing more.
+
+A quit lets the pre-started desktop go first (`releaseDesktop`, as the
+game's own end does): its `start.exe` keeps the Wine session alive, so
+without that a quit could never end by itself in its grace period.
+
+## How a launch ends
+
+`GameLauncher.launchGame` returns a `LaunchOutcome`, and `main` decides from
+it what to show: `.notStarted` (the player left another game holding Steam,
+or quit first) and `.failedAndTold` (Steam's alert already said why) show
+nothing more; `.ended` carries the exit code, whether the run ended badly
+(`handleGameTermination`'s judgement, which also reports it) and whether the
+game's window ever appeared. The loading window closes only once the game's
+window appears, so a game that dies before then (ScummVM included, which has
+no quit check) gets the error window in its place, rather than the wrapp
+vanishing. A game that fails after its window appeared is reported but shows
+nothing, as before. Steam and the desktop are finished (`finishSession`)
+after the error is up, so it isn't held back while Steam closes, and the
+wrapp counts as closing (opening it again starts it again once Wine has
+finished) from the moment the game has gone.
+
+## Under load
+
+With other programs on every core
+(at the priority a Terminal's or a browser's run), Wine 10 takes 20–30 s to
+bring its desktop up and a game 25–50 s to start, and Steam minutes to sign in;
+with a performance core or two free it starts in seconds, so it is a cliff, not
+a slope. Wine 9 was worse: its desktop waited minutes, or never came up, with
+Wine almost idle — a wrapp still on it should be rebuilt. Load at a lower
+priority (20, a LaunchAgent with no `ProcessType`) doesn't slow Wine at all,
+which matters when making load to test with
+([docs/wrapp-launch.md](docs/wrapp-launch.md#measurements)), as does making it
+with loops that compute rather than call the kernel. Work that must happen
+under load can't run at `.utility`, which waits a minute at a time there (the
+log's drain queue did), and the wrapp keeps App Nap off: napped behind the
+game, at priority 4, it didn't run at all
+([docs/wrapp-launch.md](docs/wrapp-launch.md#the-dock)). `SystemLoad`
+(`SecondChanceKit`) measures it — other programs' CPU in cores, against the
+performance-core count, heavy at all but one; the load average is useless here,
+since starved Wine threads push it past 100. Every log header carries a `load:`
+line, `SystemLoadMonitor` logs `[Load]` lines while the Mac is heavily loaded
+during a build or wrapp run, and a failure summary gives the load now and over
+the last ten minutes; a wrapp's loading window says so while the Mac is heavily
+loaded (`SystemLoadMonitor`), and gives the launch three times as long before
+it says it may have failed ([docs/wrapp-launch.md](docs/wrapp-launch.md)); and
+the integration test reports such a game as `overloaded` rather than testing
+it, unless run with `--ignore-load`.
+
+## Diagnostics bundles
+
+A badly starting Wine game leaves a diagnostics bundle in
+`~/Library/Logs/SecondChance/diagnostics/<slug>-<time>-<reason>/`
+(`StartupDiagnostics`): no window 8 s after the game process appears (each
+threshold stretched by `LoadingStage.heavyLoadFactor` on a heavily loaded Mac)
+(`slow-start`), Wine's unhandled-exception line (`crash`), still no window at
+25 s (`hang`), an exit before any window (`exited-before-window`), Wine's
+launcher exiting before the game's exe appears (`exited-before-game`), or the
+game quitting within 15 s of its window (`quit-early`) — and, at any stage,
+Wine's desktop included, when the loading window says the launch may have
+failed (`stalled`), or whenever the wrapp gets SIGUSR1 (`manual`; sent twice a
+minute apart, the same stacks tell stuck from slow). Each holds a `sample` of
+the game process's thread stacks and of every other Wine process
+(`explorer.exe`, `wineserver`, …) taken at the same moment, `top`, the process
+list (taken first, before a crashing game can exit),
+display/lock/screen-sharing state, the game's system log, the last 300 Wine
+output lines and the wrapp's whole log so far; the newest 10 are kept (none
+under 15 minutes old, which may be another game's still being written) and the
+wrapp log names the folder. **No `winedbg` in a capture:** it attaches to every
+program in the session, and one stopped while attached (it took minutes on a
+loaded Mac) ended the game it was looking at, or left it suspended. Every
+launch also keeps its log in
+`~/Library/Logs/SecondChance/<slug>/launch-<time>.log` (newest 10).
+`SECOND_CHANCE_DIAGNOSTICS=0` turns it off and
+`SECOND_CHANCE_DIAG_SLOW_SECONDS` moves the threshold — set it to `1` to force
+a bundle and check the capture works.
+
+## The save warning when scripting a launch
+
+Launched by hand
+(`open`, its `Contents/MacOS/WrappTemplate`, `sc wrapp run`), a wrapp whose
+engine is Wine (Steam's included) shows a save-progress warning and doesn't
+start the game until someone clicks **I Understand** — Wine's desktop, and
+Steam for a game that needs it, start behind it — so a script that launches a
+wrapp and waits for the game waits for ever on an unattended Mac. The wrapp
+skips the dialog when `~/Library/Application Support/<bundle
+id>/dont-show-save-warning` exists (`InfoWindowController`). Create it for the
+experiment and remove it afterwards, as it is the player's own setting.
+`SECOND_CHANCE_DATA_DIR` moves that folder, with the game's saves and the
+settings some games keep beside them, somewhere else (`Configuration.swift`);
+WrappPuppeteer sets it to an empty folder for each launch, so a test always
+meets the dialog and never reads or changes the player's saves and settings.
 
 ## Measurements
 

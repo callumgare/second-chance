@@ -14,7 +14,10 @@ the UI.
 ## Levels
 
 One setting covers Second Chance and every wrapp (`ReportingPreferences`). It
-is a JSON file, `~/Library/Application Support/SecondChance/failure-reporting.json`,
+is a JSON file, `~/Library/Application Support/SecondChance/failure-reporting.json`
+(read key by key, so a file missing a key keeps the rest; one that can't be
+read at all stands for the most private setting, Manual with success reports
+off, as the person may have chosen exactly that),
 because each wrapp is its own bundle with its own `UserDefaults`. It is read
 afresh at each failure, so a change made in Second Chance reaches wrapps that
 are already running.
@@ -28,10 +31,11 @@ are already running.
 **The first failure anywhere sends nothing until it is asked.** Until
 `promptShown` is set, `FailureReporter.report` returns
 `ReportOutcome.askingHowDetailed`, and the error screen asks whether to send
-a basic or a detailed report. The question makes the case that a detailed
-report is usually what it takes to fix the problem. The answer sends this
-report and becomes the setting, Basic or Detailed. The screen's way out (Quit,
-Launch Directly, Start Over) stays hidden until then
+a basic or a detailed report, or none. The question makes the case that a
+detailed report is usually what it takes to fix the problem. The answer sends
+this report (or not) and becomes the setting: Basic, Detailed, or for Don't
+Send, Manual, so each later failure asks again. The screen's way out (Quit,
+Start Without Steam, Start Over) stays hidden until then
 (`HiddenUntilReportAnswered`). Leaving anyway sends the report basic on the
 way out: `FailureReporter.wait`, which every exit path calls, sends any
 unanswered first failure as basic before it waits. That covers Cmd-Q, a run
@@ -103,12 +107,18 @@ Every event, ours or the SDK's, passes through `scrub` in `beforeSend`:
 
 `ReportRedactor` replaces:
 
-- the home folder (as a path, a `file://` URL and percent-encoded) with `~`;
-- any other `/Users/<name>` with `/Users/<user>`;
-- the user's short and full names, and the Steam account and persona names
-  from the saved sign-in, with `<user>`;
+- the home folder (as a path, a `file://` URL, percent-encoded, and as Wine
+  shows it, `Z:\Users\<name>`) with `~`;
+- any other `/Users/<name>` or `\Users\<name>` with `/Users/<user>`;
+- the user's short and full names, the home folder's name, and the Steam
+  account and persona names from the saved sign-in, with `<user>`; the
+  given and family names on their own too, as they are capitalised;
 - the computer's names with `<computer>`;
-- SteamID64s with `<steam-id>`.
+- SteamID64s, and the `[U:1:…]` Steam3 IDs in Steam's logs, with `<steam-id>`.
+
+It is made afresh for each report, so a Steam sign-in made since the last one
+is covered. A basic report also drops a crash's exception message, keeping its
+type and stack.
 
 The zip's text files go through the same redactor (`ReportBundle`), and a
 text file that isn't UTF-8 is left out rather than sent unchecked.
@@ -150,7 +160,7 @@ that outcome for `FailureReportCallout`.
   `applicationShouldTerminate` asks `InfoWindowController.giveUpIfStuck`,
   which sends it through `GameLauncher.reportStuckLaunch`, shows it being
   sent or asks about it as the error window would, and quits again once
-  it has gone or been declined. Launch Directly is not a give-up and quits
+  it has gone or been declined. Start Without Steam is not a give-up and quits
   without one. Most people walk away from a stuck launch rather than quit
   it while it says so, so a launch still saying it may have failed 5
   minutes after its loading window first showed
@@ -170,7 +180,8 @@ that outcome for `FailureReportCallout`.
   A detailed crash report carries the log of the run that crashed
   (`setRunLogs`: a wrapp's launch logs, the app's run logs) and macOS's own
   crash report, the `.ips` in `~/Library/Logs/DiagnosticReports`
-  (`CrashMarker.crashReport`), redacted. The `.ips` has the stack of every
+  (`CrashMarker.crashReport`), redacted, with the keys that identify the Mac
+  or its boot (`ReportRedactor.crashReportIdentifiers`) emptied. The `.ips` has the stack of every
   thread, which matters when the SDK's own capture comes out short: one
   crash came in with a single frame on the crashed thread.
 

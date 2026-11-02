@@ -126,6 +126,9 @@ public struct FailureReportCallout: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
+                // Esc: the choice that sends nothing.
+                Button("Don't Send") { model.choose(nil) }
+                    .keyboardShortcut(.cancelAction)
                 Button("Send Basic Report") { model.choose(.basic) }
                 // The default while the question holds the screen's way out back.
                 Button("Send Detailed Report") { model.choose(.detailed) }

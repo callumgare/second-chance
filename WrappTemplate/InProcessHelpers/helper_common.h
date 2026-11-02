@@ -166,4 +166,42 @@ int nativeFullscreenSettled(void);
 /// notch when display_below_notch.m is showing it that, else the whole display.
 CGSize wineMainDisplaySize(void);
 
+// ## Replacing one of Wine's methods
+//
+// class_getInstanceMethod also finds a method a class only inherits, and
+// method_setImplementation on that changes the superclass's: if a Wine class
+// stopped overriding, say, -constrainFrameRect:toScreen:, replacing "its"
+// method would change NSWindow's, for every window in the process. So the
+// class is given its own copy of an inherited method first (calling the
+// superclass's, as before), and only that copy is replaced.
+
+#ifdef __OBJC__
+#include <objc/runtime.h>
+
+/// Whether `cls` itself defines `selector`, rather than inheriting it.
+static inline int classDefinesMethod(Class cls, SEL selector) {
+    unsigned int count = 0;
+    Method *methods = class_copyMethodList(cls, &count);
+    int found = 0;
+    for (unsigned int i = 0; i < count && !found; i++) {
+        found = method_getName(methods[i]) == selector;
+    }
+    free(methods);
+    return found;
+}
+
+/// Replace `cls`'s own `selector` with `replacement`, and return what it
+/// did before (to call on), or NULL if `cls` has no such method at all.
+static inline IMP replaceOwnMethod(Class cls, SEL selector, IMP replacement) {
+    if (!cls) return NULL;
+    Method method = class_getInstanceMethod(cls, selector);
+    if (!method) return NULL;
+    if (!classDefinesMethod(cls, selector)) {
+        class_addMethod(cls, selector, method_getImplementation(method), method_getTypeEncoding(method));
+        method = class_getInstanceMethod(cls, selector);
+    }
+    return method_setImplementation(method, replacement);
+}
+#endif
+
 #endif

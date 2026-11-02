@@ -6,26 +6,25 @@
 
 import PackageDescription
 
-/// The settings every Xcode target uses, so code reads the same here as in
-/// the apps: Swift 5 mode, main-actor isolation by default (everything
-/// meant to run elsewhere says `nonisolated`), what Xcode's
-/// SWIFT_APPROACHABLE_CONCURRENCY and
-/// SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY turn on, and the
-/// `/regex/` literals Xcode allows by default.
+/// Swift 6 mode, as every Xcode target is; with the settings every Xcode
+/// target uses, so code means the same here as in the apps: main-actor
+/// isolation by default (everything meant to run elsewhere says
+/// `nonisolated`), and what Xcode's SWIFT_APPROACHABLE_CONCURRENCY and
+/// SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY turn on beyond what Swift
+/// 6 does by itself.
 let swiftSettings: [SwiftSetting] = [
-    .swiftLanguageMode(.v5),
+    .swiftLanguageMode(.v6),
     .defaultIsolation(MainActor.self),
     .enableUpcomingFeature("MemberImportVisibility"),
-    .enableUpcomingFeature("BareSlashRegexLiterals"),
-    .enableUpcomingFeature("DisableOutwardActorInference"),
-    .enableUpcomingFeature("GlobalActorIsolatedTypesUsability"),
     .enableUpcomingFeature("InferIsolatedConformances"),
-    .enableUpcomingFeature("InferSendableFromCaptures"),
     .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
 ]
 
 let package = Package(
     name: "SecondChanceKit",
+    // English, so Xcode extracts the text people see (String(localized:)) for the
+    // apps' string catalogs. The text is looked up in the app showing it.
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
         // Left to Xcode to link statically: a wrapp's Contents/Frameworks
@@ -36,7 +35,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
-        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.30.2"),
+        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.32.0"),
         .package(path: "../GameCatalog"),
     ],
     targets: [
@@ -58,6 +57,18 @@ let package = Package(
                 "SecondChanceKit",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Sentry", package: "sentry-cocoa"),
+            ],
+            swiftSettings: swiftSettings
+        ),
+        // Tests of SecondChanceKit alone, which need neither app: parsers,
+        // the log's line handling, process listings and the like. They run
+        // with `swift test` in seconds, with no Xcode build (sc test unit
+        // runs them too). Tests that need an app stay in SecondChanceTests.
+        .testTarget(
+            name: "SecondChanceKitTests",
+            dependencies: [
+                "SecondChanceKit",
+                .product(name: "Logging", package: "swift-log"),
             ],
             swiftSettings: swiftSettings
         ),
