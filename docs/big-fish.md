@@ -101,6 +101,57 @@ A failure anywhere shuts the Game Manager down and removes the half-made
 wrapp. `BigFishWrappBuilderTests` drives all of this with a fake Game Manager
 and a fake preparer.
 
+## Testing
+
+`BigFishWrappBuilderTests` runs the whole build against a fake Game Manager in
+the unit run. Real builds come from `sc`:
+
+```bash
+./sc wrapp build white-wolf --from big-fish                    # the full game, as the test account
+./sc wrapp build white-wolf --from big-fish --big-fish-trial   # its free trial, signed out
+./sc test integration --source big-fish [<slug>…]              # owned games
+./sc test integration --source big-fish-trial [<slug>…]        # every game's free trial
+```
+
+**The test account.** A headless build has nobody to sign in, so the full
+game signs in with the account in the repo's `.env`, `BIG_FISH_EMAIL` and
+`BIG_FISH_PASSWORD` (`.env.example`). `sc wrapp build` reads them and hands
+them to the app with `BIG_FISH_TEST_SIGN_IN=1`; `sc test integration` passes
+them to the test host as `TEST_RUNNER_BIG_FISH_EMAIL` and `_PASSWORD`, and
+only when the owned suite runs, and `IntegrationTestInput` sets
+`BIG_FISH_TEST_SIGN_IN` for its builds. Neither is ever printed. Without them
+`--from big-fish` refuses to start (unless `--big-fish-trial`), and the owned
+suite skips itself and says why.
+
+The two suites, in `BigFishInstallIntegrationTests.swift`, go through
+`IntegrationGameRun` like the others and reserve disk as a Steam build does,
+since the download's size isn't known beforehand:
+
+- **Big Fish install — per game (owned)** (`BigFishOwnedInstallIntegrationTests`,
+  `--source big-fish`) builds each game Big Fish sells that the account owns,
+  one at a time, build and launch together (`IntegrationStages.bigFish`):
+  each build signs the one account in and out. The first build's
+  `.bigFishGamesOwned` event tells the suite which games the account owns,
+  and the rest of the run skips the others without building, as the Steam
+  suite does. It checks the build's log has the sign-in, the library and the
+  installed game in it; that the wrapp records `GameSource` `big-fish`, the
+  game's `BigFishSKU` and, for a Wine game, a `BigFishLaunchFile` that is
+  there; and that **no sign-in shipped**: the account's address (as it is,
+  lower-cased, URL-encoded or UTF-16) is in none of the prefix's registry
+  files nor anything up to 32 MB under `drive_c/BigFishCache`,
+  `drive_c/ProgramData/Big Fish` or `drive_c/users`.
+- **Big Fish install — per game (trial)** (`BigFishTrialInstallIntegrationTests`,
+  `--source big-fish-trial`) builds every game's free trial, signed out, side
+  by side with other builds. Each build's prefix is new, so each trial has
+  its full 60 minutes; the launch only goes as far as the menu, which the
+  wrapp reaches by pressing the Game Manager's Play Now. It checks the
+  wrapp records `BigFishTrial` and the English edition's SKU.
+
+Both download the Game Manager's installer once, before the first build
+(`IntegrationStages.bigFishInstaller`), so builds side by side don't each
+fetch it and race to save it. `sc clean downloads` deletes it with the rest
+of `~/Library/Caches/SecondChance`'s downloads.
+
 ## Armadillo under Rosetta
 
 Every Armadillo-wrapped program crashed at once under Wine on Apple silicon,

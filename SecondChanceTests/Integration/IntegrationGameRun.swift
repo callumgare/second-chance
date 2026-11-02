@@ -16,7 +16,7 @@ struct IntegrationGameRun {
     let game: GameInfo
     /// The row `sc` shows for it: the slug, or for a Her Mac download "<slug> mac".
     let label: String
-    /// Which suite: `disk`, `her-download` or `steam`.
+    /// Which suite: `disk`, `her-download`, `steam`, `big-fish` or `big-fish-trial`.
     let source: String
     let progress: ProgressFileWriter?
 
@@ -336,7 +336,7 @@ struct IntegrationGameRun {
 /// failed one is counted here as well as recorded as an issue.
 final class GameOutcome: @unchecked Sendable {
     let slug: String
-    /// Which suite: `disk`, `her-download` or `steam`, so `sc` keeps one row
+    /// Which suite: `disk`, `her-download`, `steam`, `big-fish` or `big-fish-trial`, so `sc` keeps one row
     /// per game per source.
     let source: String
     let progress: ProgressFileWriter?

@@ -9,6 +9,28 @@ struct TestRun: Sendable {
     let summary: TestReports.Summary?
 }
 
+/// What `sc test integration --source` picks: a build source's suite. Big
+/// Fish has two, the full games the test account owns and every game's free
+/// trial, which `wrapp build` tells apart with `--big-fish-trial` instead.
+enum IntegrationSource: String, CaseIterable, Sendable {
+    case disk
+    case steam
+    case herDownload = "her-download"
+    case bigFish = "big-fish"
+    case bigFishTrial = "big-fish-trial"
+
+    /// Whether the source's suite tests `game`, given the games with Her
+    /// downloads in installers/.
+    func tests(_ game: CatalogGame, herDownloads: Set<String>) -> Bool {
+        switch self {
+        case .disk: true
+        case .steam: game.isOnSteam
+        case .herDownload: herDownloads.contains(game.slug)
+        case .bigFish, .bigFishTrial: game.isOnBigFish
+        }
+    }
+}
+
 /// Runs the unit and integration suites and shows them live: a progress bar,
 /// a line saying what's running now, and a table that fills in as suites or
 /// games finish. Without a live terminal the same runs print plain lines and
@@ -28,6 +50,9 @@ struct TestRunner {
         "SteamInstallIntegrationTests",
         // Real installs from Her downloads: `sc test integration --source her-download`.
         "HerDownloadInstallIntegrationTests",
+        // Real Big Fish downloads: `sc test integration --source big-fish` and `big-fish-trial`.
+        "BigFishOwnedInstallIntegrationTests",
+        "BigFishTrialInstallIntegrationTests",
     ]
 
     static var unitSelection: [String] {
@@ -35,15 +60,17 @@ struct TestRunner {
     }
 
     /// The suite that tests each source's builds.
-    static func integrationSuite(_ source: WrappSourceKind) -> String {
+    static func integrationSuite(_ source: IntegrationSource) -> String {
         switch source {
         case .disk: "DiskInstallIntegrationTests"
         case .steam: "SteamInstallIntegrationTests"
         case .herDownload: "HerDownloadInstallIntegrationTests"
+        case .bigFish: "BigFishOwnedInstallIntegrationTests"
+        case .bigFishTrial: "BigFishTrialInstallIntegrationTests"
         }
     }
 
-    static func integrationSelection(_ sources: [WrappSourceKind]) -> [String] {
+    static func integrationSelection(_ sources: [IntegrationSource]) -> [String] {
         ["-parallel-testing-worker-count", "1"] + sources.map { "-only-testing:SecondChanceTests/\(integrationSuite($0))" }
     }
 
@@ -57,6 +84,15 @@ struct TestRunner {
     static func hostEnvironment(dotEnv: [String: String]) -> [String: String] {
         guard let value = dotEnv[hideUISetting], !value.isEmpty else { return [:] }
         return ["TEST_RUNNER_\(hideUISetting)": value]
+    }
+
+    /// The Big Fish test account from `.env`, for the owned Big Fish suite
+    /// only: the test host signs in with it (`BIG_FISH_EMAIL`,
+    /// `BIG_FISH_PASSWORD`). Nothing when the suite isn't run or the account
+    /// isn't there, in which case the suite skips itself.
+    static func bigFishEnvironment(dotEnv: [String: String], sources: [IntegrationSource]) -> [String: String] {
+        guard sources.contains(.bigFish), let account = BigFishSourceOptions.testAccount(dotEnv: dotEnv) else { return [:] }
+        return Dictionary(uniqueKeysWithValues: account.map { ("TEST_RUNNER_\($0.key)", $0.value) })
     }
 
     // MARK: - Unit
@@ -98,29 +134,30 @@ struct TestRunner {
     // MARK: - Integration
 
     func integration(
-        games requested: [CatalogGame], sources: [WrappSourceKind] = [.disk], refresh: WrappRefresh, wrappsDir: URL,
+        games requested: [CatalogGame], sources: [IntegrationSource] = [.disk], refresh: WrappRefresh, wrappsDir: URL,
         ignoreLoad: Bool = false, buildConcurrency: Int = 1, diskMargin: Double = 10, vm: TestVM.Prepared? = nil, stamp: String
     ) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
-        // Steam; the Her suite, those with a Her download in installers/.
+        // Steam; the Her suite, those with a Her download in installers/; the
+        // Big Fish suites, those Big Fish sells.
         let withHerDownloads = Set(Games.withHerDownloads(in: repo.defaultInstallersDir).map(\.slug))
         let entries = sources.flatMap { source in
-            games.filter { game in
-                switch source {
-                case .disk: true
-                case .steam: game.isOnSteam
-                case .herDownload: withHerDownloads.contains(game.slug)
-                }
-            }.map { (source: source.rawValue, game: $0) }
+            games.filter { source.tests($0, herDownloads: withHerDownloads) }.map { (source: source.rawValue, game: $0) }
         }
         if entries.isEmpty {
             throw SCError("None of those games can be built from \(sources.map(\.rawValue).joined(separator: " or ")).",
                           hints: ["Games on Steam: \(Catalog.games.filter(\.isOnSteam).map(\.slug).joined(separator: ", "))",
-                                  "Games with Her downloads: \(withHerDownloads.sorted().joined(separator: ", "))"])
+                                  "Games with Her downloads: \(withHerDownloads.sorted().joined(separator: ", "))",
+                                  "Games on Big Fish: \(Catalog.games.filter(\.isOnBigFish).map(\.slug).joined(separator: ", "))"])
         }
-        // The prebuilt wrapps --refresh-wrapp reuses are disk builds; the Steam
-        // and Her suites always build their own.
+        let dotEnv = DotEnv.load(repo)
+        if sources.contains(.bigFish) && BigFishSourceOptions.testAccount(dotEnv: dotEnv) == nil {
+            ui.warning("The owned Big Fish suite will skip every game: .env has no Big Fish test account.",
+                       next: "Set \(BigFishSourceOptions.accountKeys.joined(separator: " and ")) in .env, or test the free trials with --source big-fish-trial.")
+        }
+        // The prebuilt wrapps --refresh-wrapp reuses are disk builds; the
+        // other sources' suites always build their own.
         if refresh != .full && sources.contains(.disk) {
             let builder = WrappBuilder(session: session)
             let wrapps = try games.map { try builder.existingWrapp($0, in: wrappsDir) }
@@ -149,7 +186,8 @@ struct TestRunner {
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
-        env.merge(Self.hostEnvironment(dotEnv: DotEnv.load(repo))) { _, new in new }
+        env.merge(Self.hostEnvironment(dotEnv: dotEnv)) { _, new in new }
+        env.merge(Self.bigFishEnvironment(dotEnv: dotEnv, sources: sources)) { _, new in new }
         // The test launches each game in the VM instead (VMPuppetRunner).
         if let vm {
             env.merge(vm.testEnvironment) { _, new in new }
@@ -160,7 +198,7 @@ struct TestRunner {
         // The Her suite reports a game once per download, as the slug for the
         // Windows one and "<slug> mac" for the Mac one (HerDownloadCase.label).
         let board = GameBoard(rows: entries.flatMap { entry -> [(source: String, slug: String, engine: String)] in
-            guard entry.source == WrappSourceKind.herDownload.rawValue else {
+            guard entry.source == IntegrationSource.herDownload.rawValue else {
                 return [(source: entry.source, slug: entry.game.slug, engine: entry.game.engine)]
             }
             return Games.herDownloads(for: entry.game.slug, in: repo.defaultInstallersDir).map { file in

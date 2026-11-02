@@ -28,6 +28,15 @@ enum IntegrationStages {
     /// while another wrapp holds it fails with `steamInUse`.
     static let steam = AsyncMutex()
 
+    /// One owned Big Fish game at a time, built and launched: each build
+    /// signs the Game Manager in to the one test account, and out again.
+    static let bigFish = AsyncMutex()
+
+    /// The first Big Fish build to need the Game Manager's installer
+    /// downloads it into the caches; the rest wait, rather than each
+    /// downloading it and racing to put it there.
+    static let bigFishInstaller = AsyncMutex()
+
     // MARK: - How much disk a build takes
 
     /// What each game's build took at most in earlier runs, by `source/label`
@@ -48,7 +57,7 @@ enum IntegrationStages {
     /// How much disk to reserve for a game's build: a quarter more than it
     /// took before, or before it has been measured, the engine and four times
     /// its installers (White Wolf: 0.9 GB of disc images made a 3.5 GB wrapp),
-    /// or for a Steam game, whose download isn't known beforehand, 8 GB.
+    /// or for a Steam or Big Fish game, whose download isn't known beforehand, 8 GB.
     static func reservation(source: String, label: String, installers: [URL]) -> Int64 {
         if let measured = measuredSizes["\(source)/\(label)"] {
             return measured + measured / 4

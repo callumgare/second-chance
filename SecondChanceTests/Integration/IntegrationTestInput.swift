@@ -73,9 +73,10 @@ extension WrappBuildInput {
     }
 
     /// A headless input for a Big Fish build of `slug`: its free trial, or
-    /// the full game, which needs the test harness's sign-in
-    /// (`BIG_FISH_TEST_SIGN_IN` with `BIG_FISH_EMAIL` and `BIG_FISH_PASSWORD`,
-    /// taken from the test's own environment).
+    /// the full game, which signs in as the test harness
+    /// (`BIG_FISH_TEST_SIGN_IN`) with the test account's `BIG_FISH_EMAIL` and
+    /// `BIG_FISH_PASSWORD`, taken from the test's own environment (`sc`
+    /// passes them from `.env`).
     convenience init(
         bigFishGame slug: String,
         trial: Bool,
@@ -89,8 +90,9 @@ extension WrappBuildInput {
         if trial {
             environment["BIG_FISH_TRIAL"] = "1"
         } else {
+            environment["BIG_FISH_TEST_SIGN_IN"] = "1"
             let own = ProcessInfo.processInfo.environment
-            for name in ["BIG_FISH_TEST_SIGN_IN", "BIG_FISH_EMAIL", "BIG_FISH_PASSWORD"] {
+            for name in ["BIG_FISH_EMAIL", "BIG_FISH_PASSWORD"] {
                 environment[name] = own[name]
             }
         }
