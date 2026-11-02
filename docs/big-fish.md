@@ -92,6 +92,12 @@ activates it.
 7. **Sign out**, and wait until the page says so: the wrapp mustn't carry the
    person's sign-in, and an owned, activated game plays signed out. (Not for
    a trial, which never signed in.) Then the Game Manager is shut down.
+   Signing out isn't enough on its own: the Game Manager keeps the account's
+   access and refresh tokens and email in
+   `HKCU\Software\Big Fish Games\Client`, and its browser profile
+   (`C:\ProgramData\Big Fish\cef`) keeps the store's session cookies, so
+   `BigFishWrappPreparer.forgetAccount` deletes those values and the profile
+   (which the launch doesn't need; the Game Manager makes a new one if it runs).
 8. **Configure.** The game's program is the one in its folder the catalog
    knows by name (its Steam release's `.exe`, or the disc's), or else the only
    one that isn't Big Fish's. The wrapp records `BigFishLaunchFile` (the
