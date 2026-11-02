@@ -75,6 +75,12 @@ nonisolated public struct Wine: Sendable {
             "GST_PLUGIN_PATH": frameworksDir.appendingPathComponent("GStreamer.framework/Libraries/gstreamer-1.0").path,
             "WINETRICKS_FALLBACK_LIBRARY_PATH": dyldFallbackLibraryPath,
             "WINEBOOT_HIDE_DIALOG": "1",
+            // winemenubuilder turns each Start menu entry and file association
+            // an installer makes into a Linux `.desktop` file in
+            // ~/.local/share/applications and ~/.config/menus — outside the
+            // wrapp, and of no use on a Mac. Winetricks adds its own overrides
+            // to this rather than replacing it.
+            "WINEDLLOVERRIDES": "winemenubuilder.exe=d",
             "CX_ROOT": wineDir.path,
             "MVK_CONFIG_RESUME_LOST_DEVICE": "1",
             // MoltenVK logs at info by default: ~160 lines of extension and

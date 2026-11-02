@@ -154,6 +154,12 @@ struct WineLauncherTests {
         #expect(wine.environment.keys.filter { $0.hasPrefix("DYLD_") } == ["DYLD_FALLBACK_LIBRARY_PATH"])
     }
 
+    @Test("Wine's menu builder is off, so nothing is written outside the wrapp")
+    func noMenuBuilder() {
+        let wine = Wine(wrapp: URL(fileURLWithPath: "/nonexistent/Game.app"))
+        #expect(wine.environment["WINEDLLOVERRIDES"] == "winemenubuilder.exe=d")
+    }
+
     @Test("Blocking.wait returns what the work returns, and rethrows what it throws")
     func blockingWait() async throws {
         let value = await Task.detached { Blocking.wait { await Task.yield(); return 42 } }.value
