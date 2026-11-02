@@ -50,28 +50,81 @@ struct WineServerTests {
     func shutDownGracefully() async throws {
         let fake = try Self.fake()
         defer { fake.remove() }
+        // Still running as the session ends, so it isn't stopped for being idle.
+        let program = try WineLeftoverTests.startProgram(fake, in: fake.wine.prefix)
+        defer { program.terminate() }
+        try await Task.sleep(for: .milliseconds(200))
         Task {
             try await Task.sleep(for: .milliseconds(300))
             Self.endSession(of: fake)
         }
-        #expect(await fake.wine.server.shutDown(gracePeriod: 10))
+        let steps = StepRecorder()
+        #expect(await fake.wine.server.shutDown(gracePeriod: 10) { steps.append($0) })
         #expect(fake.recorded("wineserver") == ["[-w]"])
+        #expect(steps.values == [.waiting])
+    }
+
+    @Test("Shutting down stops a server left lingering once its programs end, without waiting out the grace period")
+    func shutDownIdle() async throws {
+        let fake = try Self.fake()
+        defer { fake.remove() }
+        let program = try WineLeftoverTests.startProgram(fake, in: fake.wine.prefix)
+        defer { program.terminate() }
+        try await Task.sleep(for: .milliseconds(200))
+        Task {
+            try await Task.sleep(for: .milliseconds(300))
+            program.terminate()
+        }
+        let started = Date()
+        let steps = StepRecorder()
+        #expect(await fake.wine.server.shutDown(gracePeriod: 60) { steps.append($0) })
+        // Well short of the grace period; generous, as the suite runs in parallel.
+        #expect(Date().timeIntervalSince(started) < 30)
+        #expect(fake.recorded("wineserver").filter { $0 != "[-w]" } == ["[-k]"])
+        // Routine, so the closing window isn't told it's taking long.
+        #expect(steps.values == [.waiting])
+    }
+
+    @Test("Wine's services, which linger with the server, don't keep a shutdown waiting")
+    func shutDownIdleWithServices() async throws {
+        let fake = try Self.fake()
+        defer { fake.remove() }
+        let program = try WineLeftoverTests.startProgram(fake, in: fake.wine.prefix)
+        let service = try WineLeftoverTests.startProgram(fake, in: fake.wine.prefix, named: "services.exe")
+        defer { [program, service].forEach { $0.terminate() } }
+        try await Task.sleep(for: .milliseconds(200))
+        Task {
+            try await Task.sleep(for: .milliseconds(300))
+            program.terminate()
+        }
+        let started = Date()
+        #expect(await fake.wine.server.shutDown(gracePeriod: 60))
+        #expect(Date().timeIntervalSince(started) < 30)
+        #expect(fake.recorded("wineserver").filter { $0 != "[-w]" } == ["[-k]"])
     }
 
     @Test("Shutting down stops a session that outlives its grace period")
     func shutDownStops() async throws {
         let fake = try Self.fake()
         defer { fake.remove() }
-        #expect(await fake.wine.server.shutDown(gracePeriod: 0.3))
+        let program = try WineLeftoverTests.startProgram(fake, in: fake.wine.prefix)
+        defer { program.terminate() }
+        try await Task.sleep(for: .milliseconds(200))
+        let steps = StepRecorder()
+        #expect(await fake.wine.server.shutDown(gracePeriod: 0.3) { steps.append($0) })
         // The waits aren't counted: one stopped at 0.3 s may not have got as
         // far as recording itself.
         #expect(fake.recorded("wineserver").filter { $0 != "[-w]" } == ["[-k]"])
+        #expect(steps.values == [.waiting, .stopping])
     }
 
     @Test("Shutting down kills a session that ignores being stopped")
     func shutDownKills() async throws {
         let fake = try Self.fake(ignoresTerm: true)
         defer { fake.remove() }
+        let program = try WineLeftoverTests.startProgram(fake, in: fake.wine.prefix)
+        defer { program.terminate() }
+        try await Task.sleep(for: .milliseconds(200))
         #expect(await fake.wine.server.shutDown(gracePeriod: 0.3, stopPeriod: 0.5))
         #expect(fake.recorded("wineserver").filter { $0 != "[-w]" } == ["[-k]", "[-k9]"])
     }
@@ -136,6 +189,14 @@ private nonisolated final class Counter: @unchecked Sendable {
     var value: Int { lock.withLock { count } }
 }
 
+private nonisolated final class StepRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var steps: [WineServer.ShutdownStep] = []
+
+    func append(_ step: WineServer.ShutdownStep) { lock.withLock { steps.append(step) } }
+    var values: [WineServer.ShutdownStep] { lock.withLock { steps } }
+}
+
 /// A prefix's programs found by the folder they work in, as they are when
 /// `wineserver -k9` has left them running with no server.
 @Suite("Wine programs left behind")
@@ -144,8 +205,8 @@ struct WineLeftoverTests {
     /// Wine's bin, which `ps` names it by (so `ProcessList.isWine` counts it),
     /// working in `directory`. A link, as a copy of a system program is
     /// killed as it starts.
-    private static func startProgram(_ fake: FakeWine, in directory: URL) throws -> Process {
-        let program = fake.wrapp.appendingPathComponent("Contents/SharedSupport/wine/bin/sleep")
+    static func startProgram(_ fake: FakeWine, in directory: URL, named name: String = "sleep") throws -> Process {
+        let program = fake.wrapp.appendingPathComponent("Contents/SharedSupport/wine/bin/\(name)")
         if !FileManager.default.fileExists(atPath: program.path) {
             try FileManager.default.createSymbolicLink(at: program, withDestinationURL: URL(fileURLWithPath: "/bin/sleep"))
         }
