@@ -2,6 +2,76 @@
 
 All notable changes to Second Chance.
 
+## 1.1.0 — 2026-11-02
+
+### New
+
+- Add a choice about crash and failure reports. When something goes wrong you can send a basic or detailed report, see exactly what would be sent, or turn reports off in Settings.
+- Add a Try Again button when a game may not be starting. It closes the stuck game and opens it again.
+- Keep you informed while a game installs. Quitting mid-install asks first, the Dock icon bounces when something needs you, and disc 2 is picked up by itself once you put it in.
+- Add a Play Now button when your game's app is ready, and tell you which folder it was saved in.
+- Offer Try Again on every build failure, using the same disc or download if it's still there.
+
+### Improved
+
+- Make quitting a game faster. Closing a game now finishes in under a second instead of waiting several seconds.
+- Show errors in plain words. Failed builds now say what went wrong in everyday language and check for free space before copying a disc.
+- Handle a Steam that gets stuck signing in. Second Chance restarts it by itself, then offers to sign in afresh, and fails with a clear message if it still won't start.
+- Ask first if saving your game's app is cancelled. You can choose a place again instead of losing the finished install, and an existing app is only replaced once the new one is safely saved.
+- Add VoiceOver support for the progress bar, new instructions, and the finished and failed screens.
+- Count the time a step has taken up every second instead of every five.
+- Say more clearly when a previous copy of the game is still closing, with simpler buttons.
+
+### Fixed
+
+- Fix games crashing as they quit, and apps crashing right at start-up after an internal update.
+- Fix games not starting on a very busy Mac. Games now wait for the display to be ready, and start again by themselves if it wasn't.
+- Fix games hanging on the next launch after being force-closed.
+- Fix a busy Mac stopping a game's app from quitting.
+- Fix the official game patch prompt never appearing when a patch failed to install.
+- Fix Second Chance quitting when its window was closed.
+- Fix a game's app showing an error screen or vanishing when the game failed before its window opened.
+- Fix a Steam build waiting up to 20 minutes with no way out when Steam went quiet while signing in.
+- Fix some games' folder names with apostrophes breaking when opened.
+- Fix the first-failure report question having no way to say no.
+- Fix the game's app sometimes failing to notice a stuck launch because another game was running.
+- Fix some game setup files with special characters being read or saved wrongly.
+
+<details>
+<summary>Behind the scenes</summary>
+
+- Wine's server is now stopped as soon as only it and Wine's system programs remain in the prefix, rather than waiting out its 3 s linger. On the test Mac a game's Wine ended 0.55 s after exit instead of 6.3 to 6.8 s.
+- Moved the packages, Second Chance, the wrapp, WrappPuppeteer and the tests to Swift 6 language mode. This produced two crash fixes along the way: run-time isolation traps at launch and in the game-exit handler (SIGILL).
+- Wine's Cocoa start wait is now 10 minutes via a new in-process helper, and a launch that still loses its display driver is reported and restarted once. SECOND_CHANCE_COCOA_START_WAIT=0 restores Wine's limit.
+- Shutdowns now kill every Wine program left in the prefix, including after wineserver -k9. A launch clears leftovers first, and the game monitor ignores games in another prefix.
+- The wrapp holds a user-initiated activity to stay out of App Nap, which had starved its threads on a busy Mac. The log's drain queue moved off .utility.
+- Stalled launches now leave a diagnostics bundle and can be captured with SIGUSR1. winedbg was dropped from bundles because attaching ended games on loaded Macs, and bundles under 15 minutes old are no longer pruned.
+- A launch stuck for 5 minutes now reports itself without waiting for a quit, and its diagnostics are included even if the game never started.
+- SteamStallPolicy and a shared sign-in watch now handle a quiet Steam for both builds and wrapps: notice at 2 minutes, restart at 4, then offer Sign In Again, with all times tripled under heavy load.
+- Added SECOND_CHANCE_WINE_SYNC (sc --debug wine-sync=) to turn off Wine's msync or esync when diagnosing hangs.
+- Reporting: an unreadable settings file now means the most private setting, the redactor is rebuilt per report and removes more (Steam3 IDs, Z: paths, home folder names), crash .ips files lose Mac-identifying keys, and a basic report keeps a crash's redacted message again. Settings changes answer a pending report question at once through a distributed notification.
+- Fixed selectedWrappSource never being set, so reports went out without their source and the Steam timing hint never showed on a first Steam build.
+- Cancelling a build now stops running programs, discs are copied in one cancellable pass (DiscCopy), and the event bus gives each subscriber its own queue so events stay in order.
+- Blocking.run now uses GCD instead of detached tasks so it no longer starves Swift concurrency's thread pool. ProcessLineLogger, the VDF reader, CrashMarker and LogStore were hardened against bad input and races.
+- GameInstallerRunner's attempts are now decided by InstallerPlan, patches moved to their own file, and the patch-failure prompt is actually connected.
+- Game detection now matches the catalogue's titles instead of a 33-branch if/else, so a new catalogue entry is recognised automatically. Builders share WrappBuildHelper.completeBuild.
+- Headless builds now run through the app window's view model (SECOND_CHANCE_SHOW_UI=1 shows it). Integration test builds get their own BuildWindow, and SECOND_CHANCE_HIDE_TEST_UI hides them.
+- WrappBuildViewModel is now @Observable, so the step timer no longer re-renders every view. The main window is a single Window scene.
+- The wrapp's main.swift was split into several files, with WrappLaunchOptions and SavesLink tested in SecondChanceKit. A real Documents folder is moved aside, never deleted.
+- New test targets: SecondChanceKitTests (runs with swift test in a fraction of a second) and PuppeteerCore (WrappPuppeteer's generic core, now a package). sc test unit runs both.
+- Puppeteer: --max-runtime bounds a run, the real exit code is reported through --exit-code-file, and a stuck ScummVM from another run is no longer mistaken for the game. Secrets Can Kill Remastered's black start is now clicked through, and a flaky quick-switch test was dropped.
+- sc changes: bare sc test now runs unit tests only (sc test all is the long run), sc clean only deletes without a terminal when given -y and has a downloads target, --on no longer sends build state or deletes remote installers, sc screenshot replaces sc app screenshot and sc app states, and sc release retakes README pictures only when more than 8 pixels change.
+- sc release publishes as a draft until the zip and appcast are both uploaded, checks the branch isn't behind origin, and verifies the app's signature before zipping. Release notes are now sorted by how a player would see each change and ordered by size.
+- Build downloads (Wine, Wineskin, AutoIt, ScummVM, game patches) are pinned to SHA-256 hashes through download-verified.sh, and a Release build fails if any patch is missing.
+- CI runs ./sc test unit, caches downloads, shellchecks scripts, and uses Dependabot. The Sentry DSN stamp no longer re-signs the app when nothing changed. Lint now covers the shared packages again.
+- Updated Sentry to 9.32.0 and moved success-report counting to its current metrics call. An earlier attempt was reverted.
+- Prepared player-facing text for translation with String Catalogs for the app and the wrapp, using whole sentences.
+- Removed unused code (ScummVMService, ProgressTracker, DebugUtils, FileUtilities and others), shared one process listing between monitors, and shellQuote now quotes anything outside a small safe set.
+- Docs: moved AGENTS.md's long essays into the feature docs (56 KB down to 47 KB), documented required Xcode and tools, and froze the plan for Wine hanging under load.
+- Integration test fixes: Steam sign-in markers are read from the shared package's log lines, fixtures are found from the repo, and two tests that passed vacuously now check real cases.
+
+</details>
+
 ## 1.0.0 — 2026-11-01
 
 ### New
