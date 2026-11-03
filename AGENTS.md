@@ -21,7 +21,7 @@ package in `Tools/sc/` — [docs/dev-cli.md](docs/dev-cli.md)). The project uses
 ./sc app run                       # Build (incrementally) and launch it
 ./sc wrapp build <game-slug>       # Build a game's wrapp headlessly
 ./sc wrapp run <game-slug>         # Launch it (building it first if needed)
-./sc clean wine-prefixes           # Clear the cached Wine prefix
+./sc clean layers                  # Clear the layer cache (the cached Wine prefix)
 
 ./sc test unit                     # Unit tests (~6s) — fast feedback loop
 ./sc lint                          # SwiftLint (strict) and markdownlint, as CI runs them
@@ -78,15 +78,18 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the Wine prefix cache |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/WrappKit/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the layer cache (`LayerStore`, `LayerKey`) and the Wine prefix it keeps, or updating a wrapp from itself (`UpdateWrappBuilder`, `UpdatePlanner`, `WrappLock`), or the hidden download source (`DownloadWrappBuilder`, `Downloader`) |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, or the progress stream it reads from the app |
-| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
-| [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/SecondChanceKit/Sources/SecondChanceKit/Logging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
+| [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, needles and scenarios (a bundle's `tests`), how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
+| [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/WrappKit/Sources/WrappLogging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
+| [docs/program-bundles.md](docs/program-bundles.md) | You are adding or changing a game, or touching `Bundles/` — a program bundle's `manifest.yaml`, its JSON Schema, how bundles are read (YAML 1.2) and checked (ajv in JavaScriptCore), `Packages/WrappBuilder/`, the generated table of games (`GameInfoProvider+Bundles.swift`), or `sc bundle` |
+| [docs/wrappfile.md](docs/wrappfile.md)             | You are writing or changing a bundle's `Wrappfile`, or touching how one is parsed or checked (`WrappfileParser`, `WrappfileChecker`), the instructions a module declares, or `WrappfileTodayTests` |
+| [docs/modules.md](docs/modules.md)                 | You are touching `Modules/` — a module's `module.yaml` or its data (the wine module's prefix set-up, routine Wine errors), its releases and `sc module`, an engine's package and how it is prepared (`EnginePreparer`, `MachOPatch`, `sc engine prepare`), or the Swift generated from modules' data (`sc generate`); or what the nancy-drew module holds: Her patches' list, the AutoIt scripts, the .ini settings, the clean-exit log, WrappPuppeteer's needles |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
-| [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`WrappTemplate/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
+| [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`Packages/WrappBuilder/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
 | [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits; or Wine's desktop (`WineDesktop`) and ending a Wine session, how Wine behaves under load, a launch's diagnostics bundles, or scripting a launch past the save warning |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
@@ -185,12 +188,28 @@ step by step, including the resource-ownership rules and both injection seams.
 Code more than one app uses lives in `Packages/`, in local Swift packages
 the Xcode project depends on. `Packages/SecondChanceKit/` has two modules:
 
-- **`SecondChanceKit`** (`Packages/SecondChanceKit/Sources/SecondChanceKit/`): logging, Wine,
-  Steam, the loading window's stages and the rest. Second Chance,
-  WrappTemplate and WrappPuppeteer all link it.
+- **`SecondChanceKit`** (`Packages/SecondChanceKit/Sources/SecondChanceKit/`):
+  Steam, the loading and log windows, crash markers and the rest of Second
+  Chance's own, and it re-exports `WrappKit`'s modules (next paragraph), so
+  an app imports `SecondChanceKit` alone. Second Chance, WrappTemplate and
+  WrappPuppeteer all link it.
 - **`SecondChanceReporting`** (`Packages/SecondChanceKit/Sources/SecondChanceReporting/`):
   failure and success reports, and the only code that imports Sentry.
   Second Chance and WrappTemplate link it; WrappPuppeteer doesn't.
+
+`Packages/WrappKit/` holds what any program that builds or runs wrapps
+needs, with nothing of Second Chance's own, one module each: `WrappLogging`
+(the swift-log handlers, `LogStore`, `LogContext`, `RunContext`),
+`ProcessKit` (`Blocking`, `ProcessList`, `ChildProcess`, `SystemLoad`,
+running and logging subprocesses), `WindowsFormats` (`WindowsExecutable`,
+`MSISummary`, `CopyProtection`, `GameGraphicsAPI`), `WineKit` (the Wine
+library) and `WrappFormat` (`WrappLayout`, `WrappSettings`,
+`WrappSource`). It depends only on swift-log and `GameCatalog`, so the
+builder (`Packages/WrappBuilder/`, [docs/program-bundles.md](docs/program-bundles.md)),
+which may one day be a command-line tool, can use it without fetching
+Sentry, as anything depending on the `SecondChanceKit` package does. Code
+that names Second Chance, shows a window or knows Nancy Drew stays in
+`SecondChanceKit`.
 
 `Packages/GameCatalog/` is a package of its own: `GameInfo`, the engine and
 `GameInfoProvider`, with nothing but Foundation. Every app links it, and
@@ -203,7 +222,8 @@ The rules that keep it working:
   module) uses must be `public`; everything else stays `internal`. Make a
   declaration public when the compiler asks, not ahead of time. A `public`
   function's default argument values must be public too. Tests reach the
-  rest with `@testable import SecondChanceKit`.
+  rest with `@testable import SecondChanceKit`, and `@testable import` of
+  the `WrappKit` module that declares it (`WineKit`, `ProcessKit`, …).
 - **`SecondChanceKit` never depends on reporting.** When it needs to know
   something only reporting knows, reporting tells it (as
   `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
@@ -213,9 +233,10 @@ The rules that keep it working:
   packages' together, or the same code means different things in each.
 - **A new file is picked up by being in the folder**; nothing to tick in
   Xcode. A file in an app's folder can't be used by the package.
-- **Products stay static.** Don't mark a library `.dynamic`: a wrapp's
-  `Contents/Frameworks` is replaced by the engine's
-  (`check-output-collisions.sh` checks).
+- **Products stay static.** Don't mark a library `.dynamic`: engines are
+  installed into a wrapp's `Contents/Frameworks` beside the launcher's
+  files, and a launcher framework there could collide with one
+  (`check-static-linking.sh` checks).
 
 ### Key abstractions
 
@@ -250,12 +271,24 @@ The rules that keep it working:
   by constructor injection with `.shared` defaults. Keep that pattern for new
   services: injectable for tests, convenient in production.
 - **`GameInfoProvider`** (`GameCatalog`): static database of all 30+ Nancy
-  Drew games with metadata (engine, disk count, exe paths, Steam DRM). Add new
-  games here.
-- **`GameInfo.GameEngine`** (`wine`, `scummvm`, `wineSteam`, `wineSteamSilent`,
-  in `GameCatalog`): determines which engine the wrapp uses. The app, the
-  wrapp and WrappPuppeteer all use it, and ask it `runsInWine`, `needsSteam`
-  and `launchedBySteam` rather than comparing its raw values.
+  Drew games with metadata (engine, disk count, exe paths, Steam DRM),
+  generated from the program bundles in `Bundles/`. A game is added or
+  changed in its bundle, then `sc generate` regenerates the table;
+  never edit `GameInfoProvider+Bundles.swift` by hand
+  ([docs/program-bundles.md](docs/program-bundles.md)).
+- **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
+  wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
+  `dosbox`, `steam` or `big-fish`) and the services started before it — read from a wrapp's
+  settings or a game's `GameInfo.GameEngine`, which it replaces as the
+  question every process asks: `composition.has(.wine)`, `launcher ==
+  .steam`, never the engine's raw values. Each module does its own part in
+  each process — `RuntimeModule`s in the wrapp (`WrappTemplate/Modules/`),
+  `TestModule`s in WrappPuppeteer (`WrappPuppeteer/Modules/`),
+  `BuildModule`s in the build (`Packages/WrappBuilder`) — so the launch code
+  asks the module that would know rather than branching on an engine.
+  Reports and the build's events still carry today's engine name as
+  `engine` (`Composition.engineTag`), so dashboards and recorded event
+  streams read as before ([docs/wrapp-launch.md](docs/wrapp-launch.md#modules)).
 
 ### Wrapp build state machine
 
@@ -276,7 +309,7 @@ direct assignment.
   waited for with `waitUntilExit()`, or a big copy, removal or walk over
   files, freezes the window until it's done. Run a program with
   `Process.output(of:_:)` and other blocking work in `Blocking.run`
-  (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
+  (`Packages/WrappKit/Sources/ProcessKit/Blocking.swift`); what such a closure calls must be `nonisolated`.
   Code on a plain thread — a GCD queue, a `Thread`, a signal handler — calls
   async code through `Blocking.wait`, never from inside an async function. Wine still starts through `runWithoutCrashHandler()`.
 - **Main-actor code that runs off the main thread crashes.** Swift 6 checks
@@ -338,7 +371,7 @@ direct assignment.
   `privacy:`) and its Wine ones (`wine_without_crash_handler`,
   `wine_path_outside_library`) ([docs/dev-cli.md](docs/dev-cli.md#lint)).
 - **Every Wine program starts through the Wine library.** `Wine.run`,
-  `output(of:)` and `start` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/WineProcess.swift`) take a
+  `output(of:)` and `start` (`Packages/WrappKit/Sources/WineKit/WineProcess.swift`) take a
   `WineCommand`; `wine.registry`, `wine.server` and `Winetricks` cover the
   registry, the session and winetricks. Don't build a `Process` for Wine,
   `wineserver` or winetricks: the launcher is what clears Sentry's exception
@@ -353,7 +386,7 @@ direct assignment.
 ## Gotchas
 
 - **Non-interactive mode**: `NON_INTERACTIVE=true` plus `INSTALLATION_SOURCE`
-  (`disk` | `her-download` | `steam` | `big-fish`) and `OUTPUT_PATH`; `disk` also needs
+  (`disk` | `her-download` | `steam` | `big-fish` | `download`) and `OUTPUT_PATH`; `disk` also needs
   `DISK_1_PATH` (and optionally `DISK_2_PATH`), and `steam` needs
   `STEAM_GAME_SLUG` (`STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game) and
   a saved Steam sign-in ([docs/steam.md](docs/steam.md)); `her-download` needs
@@ -361,7 +394,9 @@ direct assignment.
   `big-fish` needs `BIG_FISH_GAME_SLUG` and, as nobody can sign in, either
   `BIG_FISH_TRIAL=1` (the free trial) or the test harness's account
   (`BIG_FISH_TEST_SIGN_IN=1`, `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD`)
-  ([docs/big-fish.md](docs/big-fish.md#the-build)).
+  ([docs/big-fish.md](docs/big-fish.md#the-build)); and `download` needs
+  `DOWNLOAD_PROGRAM`, a bundle id with a download edition
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-download-source)).
   `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`, `PATCH_FAILURE_POLICY` and
   `EXPECTED_GAME_SLUG` (fail if the disc is another game) are read by
   `WrappBuildInput` when the corresponding prompt would appear. **`CLIBuilder`
@@ -384,11 +419,12 @@ direct assignment.
   must be logged in at that Mac's console. That run is a LaunchAgent, so it
   outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
   picks it up again.
-- - **Wine prefix caching**: the build caches its Wine prefix, keyed by
-  version and Wine engine. A change to how the prefix is set up (winetricks
-  verbs, `ddraw.ini`, registry settings) doesn't change the key: run
-  `./sc clean wine-prefixes` after one
-  ([docs/wrapp-build.md](docs/wrapp-build.md#the-prefix-cache)).
+- - **The Wine prefix is a cached layer**, keyed on the engine, the wine
+  module's release and `prefix.yaml`, and winetricks, so changing the set-up's
+  data makes a fresh prefix by itself. The Swift that makes it isn't a file
+  the key can read: raise `WineBuild.prefixCodeRevision` when
+  `WineManager.makeWinePrefix` changes what it makes
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-layer-cache)).
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
   and builds under test (the integration tests) never take it either, since the
@@ -439,12 +475,13 @@ direct assignment.
   since those never use cnc-ddraw and its clicks close their menus; both live in
   `WrappTemplate/InProcessHelpers/`. Read
   [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before
-  touching either, or cnc-ddraw's `ddraw.ini` settings in `WineManager`.
+  touching either, or cnc-ddraw's `ddraw.ini` settings in the wine module's
+  `Modules/wine/prefix.yaml`.
 - **Wine fakes a game's display mode switch.** Old games switch the display
   to the mode they were made for and quit (exit 0, a few seconds in) when
   Wine says `NtUserChangeDisplaySettings … returned -2`, which it does for a
   mode the Mac display lacks — every 4:3 mode on a MacBook's built-in one.
-  So the prefix has `EmulateModeset` on (`WineManager`): Wine says yes, leaves
+  So the prefix has `EmulateModeset` on (`Modules/wine/prefix.yaml`): Wine says yes, leaves
   the display alone, and scales the game's windows up. Wine 10's Mac driver
   doesn't scale what Direct3D draws, so the wrapp's mode scaling helper does
   ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#mode-scaling)).
@@ -452,7 +489,8 @@ direct assignment.
   after a Wine error, with nothing asking it to, is reported as a failure
   rather than a clean quit (`GameQuitCheck`,
   [quit watch](docs/wine-in-process-helpers.md#quit-watch)); a new routine
-  Wine error that trips it belongs in `GameQuitCheck.routineErrors`.
+  Wine error that trips it belongs in `Modules/wine/routine-errors.yaml`
+  (then `sc generate`).
 - - **Wrapps start Wine's desktop before the game**, and builds before each
   installer, waiting until it has registered the display devices
   (`WineDesktop`): left to Wine, a loaded Mac runs out its 10 s wait and the
@@ -489,8 +527,11 @@ direct assignment.
 - **The template is `WrappTemplate.app`**, embedded in
   `Second Chance.app/Contents/Resources/`. `WrappBuildHelper` copies it per game
   and rewrites `CFBundleIdentifier` from
-  `au.gare.callum.SecondChance.WrappTemplate` to
-  `au.gare.callum.SecondChance.nancy-drew.<slug>`. Because
+  `au.gare.callum.SecondChance.WrappTemplate` to the program's,
+  `au.gare.callum.second-chance.program.nancy-drew.<slug>` (`WrappLock.wrappBundleID`),
+  which names where the wrapp keeps the person's files; a launch moves them in
+  from the folder of the id wrapps had before
+  ([docs/wrapp-launch.md](docs/wrapp-launch.md#user-files)). Because
   `PRODUCT_NAME = $(TARGET_NAME)`, the produced game's executable is
   `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't depend on that name: it
   finds the wrapp by the PID it launched and the game by its own process name,
@@ -519,8 +560,12 @@ direct assignment.
   build settings can't express, and Xcode merges it with the generated keys.
   Other keys still go in build settings. The file is excluded from the
   target's synchronized folder, so it isn't copied in as a resource.
-- **Bundled resources**: `WrappTemplate.app` template, Wine engine, `winetricks`, AutoIt, and ScummVM are bundled. Test
+- **Bundled resources**: the `WrappTemplate.app` template (the launcher alone), `winetricks` and AutoIt are bundled. Test
   that features work with bundled paths, not just system-installed equivalents.
+- **Engines aren't bundled.** Wine and ScummVM are fetched from their makers and prepared the first time a build
+  on that Mac needs one, then kept in the engine store, and each wrapp holds its own copy
+  ([docs/modules.md](docs/modules.md#engine-packages)). Nothing fetches one ahead of a build. `sc engine fetch` fills
+  the store, so a test needn't wait for it.
 
 ## Terminology
 
@@ -528,7 +573,7 @@ The Nancy Drew games have a set of common abbrevations use for each game
 (<https://nancydrew.fandom.com/wiki/User_blog:BanaBerry/Nancy_Drew_Game_Abbreviations>). For example
 `Treasure in the Royal Tower` is `TRT` and `The Haunted Carousal` is `CAR`. These abbreviations are hard for me to
 remember so Second Chance avoids these whenever possible and instead uses our shortenings. The full list can be found in
-Packages/GameCatalog/Sources/GameCatalog/GameInfoProvider.swift where the id property is the shortening we use for each game. For us
+Bundles/nancy-drew/, where each game's folder name (and the part of its id after `nancy-drew/`) is the shortening we use for it. For us
 `Treasure in the Royal Tower` is `royal-tower` and `The Haunted Carousal` is `haunted-carousel`. Not as short but much
 more self-explanatory.
 
@@ -539,7 +584,8 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
 
 - **Unit tests** live in `SecondChanceTests/`, using Swift Testing, except
   those that need neither app, which live in the package beside the code
-  (`Packages/SecondChanceKit/Tests/SecondChanceKitTests/`: parsers, process
+  (`Packages/WrappKit/Tests/WrappKitTests/` and
+  `Packages/SecondChanceKit/Tests/SecondChanceKitTests/`: parsers, process
   listings, line handling) and run with `swift test`, in seconds and with no
   Xcode build; `sc test unit` runs both. Put a new test there when it can.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new
@@ -631,6 +677,13 @@ backed up as a Passwords entry and imported once on each releasing Mac.
   download has an answer file so far (others install with their wizard), and
   Mac downloads that aren't Cider builds are refused until a sample shows
   what they are.
+- **Free games download, hidden.** The download source
+  (`DownloadWrappBuilder`) builds a program its makers give away from the URLs
+  its bundle names, and appears on the welcome screen only after a double-click
+  on the icon above the steps. Its programs are SkiFree, Lure of the
+  Temptress and Tyrian 2000 (`Bundles/freeware/`), the first beyond Nancy
+  Drew, one for each engine
+  ([docs/program-bundles.md](docs/program-bundles.md#download-editions)).
 - The produced game app's process is named `WrappTemplate` in Activity Monitor.
   Renaming the executable per-game during configuration would read better.
 

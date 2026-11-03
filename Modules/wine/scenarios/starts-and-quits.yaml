@@ -1,0 +1,9 @@
+# The simplest test of a Wine program: it starts, shows what its bundle's
+# `running` needles say it shows, and quits when asked to, as ⌘Q asks.
+# For a program with no menu to quit from (docs/testing.md#scenarios).
+goal: "program-ends"
+timeout: 120
+handlers:
+  - id: "running"
+    when: "running"
+    do: ["quit"]

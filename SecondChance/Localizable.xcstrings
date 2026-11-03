@@ -23,6 +23,9 @@
     "%@ (in another language)" : {
 
     },
+    "%@ can't be downloaded right now. The places that had it don't have it any more, or aren't answering. Try again later." : {
+
+    },
     "%@ comes on two discs, and disc 1 has been copied. Take it out and put in disc 2: installing carries on by itself once it's in. If disc 2 is already on this Mac, choose it instead." : {
 
     },
@@ -38,6 +41,9 @@
           }
         }
       }
+    },
+    "%@ is free." : {
+
     },
     "%@ is installed, but not saved yet" : {
 
@@ -57,6 +63,9 @@
           }
         }
       }
+    },
+    "%@ isn't sold any more." : {
+
     },
     "%@ of %@" : {
       "localizations" : {
@@ -354,7 +363,13 @@
     "Done" : {
 
     },
+    "Download" : {
+
+    },
     "Downloading the game" : {
+
+    },
+    "Downloading the game. This is a big download and may take a while" : {
 
     },
     "Either way it's the same game. They differ in how quickly it starts and where your saves are kept." : {
@@ -442,6 +457,9 @@
     "In a detailed report" : {
 
     },
+    "Install Again" : {
+
+    },
     "Install Anyway" : {
 
     },
@@ -511,6 +529,12 @@
     "It's still trying. If it doesn't get going, you'll be able to sign in to Steam again from scratch." : {
 
     },
+    "Its makers have given it away and say anyone may share it. Second Chance will download it, check it's the genuine file, and set it up for you." : {
+
+    },
+    "Its makers let anyone share it for free, as long as it isn't changed. The rest of the game was sold separately. Second Chance will download the free part, from the Internet Archive if the makers' website no longer has it, and check it's the genuine, unchanged file." : {
+
+    },
     "Keep Installing" : {
 
     },
@@ -560,6 +584,9 @@
 
     },
     "No failure report was sent." : {
+
+    },
+    "Nobody has sold it for a long time, and its makers haven't said whether it may be shared. Second Chance will download a copy kept by the Internet Archive, a library that keeps copies of old software, and check it's the genuine file first." : {
 
     },
     "Not Now" : {
@@ -683,6 +710,9 @@
     "Second Chance can't use this Mac download. It may not have finished downloading: download it again, or download the Windows version from Her Interactive instead." : {
 
     },
+    "Second Chance couldn't download what the game needs to run. Check that you're connected to the internet, then try again." : {
+
+    },
     "Second Chance couldn't find this disc's installer" : {
 
     },
@@ -717,6 +747,9 @@
 
     },
     "Second Chance wants to install Rosetta, which the games need." : {
+
+    },
+    "Second Chance's instructions for building this game have a problem. Updating Second Chance may fix it." : {
 
     },
     "Select the game you downloaded from Her Interactive: the .exe file for Windows, or for Mac the .dmg file or the installer app inside it." : {
@@ -920,6 +953,12 @@
     "That file isn't a copy of a game disc. Choose the game's disc instead." : {
 
     },
+    "The app for %@ is already up to date" : {
+
+    },
+    "The app for %@ is already up to date." : {
+
+    },
     "The file could not be read as a text log file." : {
 
     },
@@ -968,6 +1007,9 @@
     "The next game you get from Big Fish Games will ask you to sign in. The games you have already play as before." : {
 
     },
+    "The people who made it now give it away. Second Chance will download it from their website. If their website doesn't have it any more, Second Chance gets the same file from the Internet Archive, a library that keeps copies of old websites. Either way, it checks it's the genuine file first." : {
+
+    },
     "There isn't enough free space on your Mac to install the game. It needs about %@, and %@ is free. Free up some space, then try again." : {
       "localizations" : {
         "en" : {
@@ -978,10 +1020,28 @@
         }
       }
     },
+    "There's nothing new for it. You can install the game again from the start, by downloading it again." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, from Big Fish Games." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, from Steam." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, which needs its discs." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, which needs the file you downloaded from Her Interactive." : {
+
+    },
     "These are the Nancy Drew games your Big Fish Games account has. Second Chance installs the one you pick through Big Fish's Game Manager." : {
 
     },
     "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam." : {
+
+    },
+    "These games are free: their makers give them away. Second Chance downloads the one you pick." : {
 
     },
     "This Mac doesn't have Rosetta, which the games need. Install it with: softwareupdate --install-rosetta --agree-to-license" : {
@@ -1006,7 +1066,25 @@
     "This game needs Steam signed in, which needs the internet." : {
 
     },
+    "This game's app can't be brought up to date by itself. Add the game from Big Fish Games again, and Second Chance will make the app again." : {
+
+    },
+    "This game's app can't be brought up to date by itself. Add the game from Steam again, and Second Chance will make the app again." : {
+
+    },
+    "This game's app can't be brought up to date by itself. Choose the file you downloaded from Her Interactive instead, and Second Chance will make the app again." : {
+
+    },
+    "This game's app can't be brought up to date by itself. Download the game again, and Second Chance will make the app again." : {
+
+    },
+    "This game's app can't be brought up to date without the game's disc. Choose the game's first disc instead, and Second Chance will make the app again." : {
+
+    },
     "This is a game that's already installed, not its installer. Second Chance needs to install the game itself: choose the game's disc, or the installer you downloaded from Her Interactive." : {
+
+    },
+    "This is the free first part of %@." : {
 
     },
     "This usually takes a few minutes. You can leave it running and do something else." : {
@@ -1016,6 +1094,21 @@
 
     },
     "To help identify which games run correctly and which need work Second Chance can notify the developer on a successful run. Only very basic info is sent like the title of the game and macOS version. Nothing about you or your files will ever be sent." : {
+
+    },
+    "To install the game again, add it from Big Fish Games again." : {
+
+    },
+    "To install the game again, add it from Steam again." : {
+
+    },
+    "To install the game again, choose its first disc." : {
+
+    },
+    "To install the game again, choose the file you downloaded from Her Interactive." : {
+
+    },
+    "To install the game again, download it again." : {
 
     },
     "Try Again" : {
@@ -1034,6 +1127,9 @@
 
     },
     "Updating Steam…" : {
+
+    },
+    "Updating the game's Windows files" : {
 
     },
     "Use Steam's window, or scan its QR code with the Steam app on your phone." : {
@@ -1087,10 +1183,16 @@
     "Where it happened" : {
 
     },
+    "Where its makers say so: %@." : {
+
+    },
     "Which game do you want from Big Fish Games?" : {
 
     },
     "Which game do you want from Steam?" : {
+
+    },
+    "Which game do you want?" : {
 
     },
     "Which part of the code each thread was running when it crashed" : {

@@ -1,6 +1,11 @@
 import Foundation
 import Testing
+@testable import ProcessKit
 @testable import SecondChanceKit
+@testable import WindowsFormats
+@testable import WineKit
+@testable import WrappFormat
+@testable import WrappLogging
 
 @Suite("A wrapp's command line")
 struct WrappLaunchOptionsTests {

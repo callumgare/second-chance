@@ -18,6 +18,7 @@ import Logging
 import GameCatalog
 import SecondChanceKit
 import Synchronization
+import WrappBuilder
 
 /// Builds a wrapp from game disks.
 ///
@@ -32,6 +33,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     private let gameInfoProvider: GameInfoProvider
     private let isoMounter: ISOMounter
     private let wineManager: WineManager
+    private let updater: UpdateWrappBuilder
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.DiskWrappBuilder")
 
@@ -51,6 +53,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         self.isoMounter = isoMounter
         self.wineManager = wineManager
         self.bus = bus
+        updater = UpdateWrappBuilder(helper: helper, installerRunner: installerRunner, gameInfoProvider: gameInfoProvider,
+                                     wineManager: wineManager, bus: bus)
     }
 
     // MARK: - Build Flow
@@ -58,9 +62,25 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     func build(input: WrappBuildInput) async throws -> URL {
         await bus.publishWrappBuild(.started(source: .disk))
 
+        // A game's app chosen where its disc would go is updated from
+        // itself (docs/wrapp-build.md#updating-a-wrapp): the disc source is
+        // the way to it until updating is a source of its own.
+        var chosen = try await input.getDisk1Path()
+        if UpdateWrappBuilder.isWrapp(chosen) {
+            switch try await updater.update(wrapp: chosen, input: input) {
+            case .updated(let wrapp):
+                return wrapp
+            case .reinstallFromDisc:
+                // It was up to date, and the person chose to install the
+                // game again: from its disc, as any disc build.
+                chosen = try await input.getDisk1Path()
+                guard !UpdateWrappBuilder.isWrapp(chosen) else { throw WrappBuildError.reinstallNeedsSource(source: .disk) }
+            }
+        }
+
         // ── Resolve disk 1 and detect the game ONCE ──────────────────────
         // GameInfo threads through from here.
-        let (disk1Root, gameSlug, gameInfo, installerName) = try await resolveGame(input: input)
+        let (disk1Root, _, gameInfo, installerName) = try await resolveGame(disk1: chosen, input: input)
 
         // ── Build ──────────────────────────────────────────────────────
         // The builder owns the temp wrapp lifecycle: removed on both the
@@ -71,55 +91,42 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         do {
             // Each disc is copied, and the game installed from the copies.
             try await helper.ensureRoomToBuild(from: disk1Root, copies: 2 * max(gameInfo.diskCount, 1))
-            try await helper.createBaseWrapp(at: wrappPath)
+            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
 
-            // Disk-specific layout + CD-ROM mounting stays in the builder —
-            // no other source uses it. Disc 2 is asked for only once disc 1
-            // has been copied: a Mac has one drive, so disc 1 comes out first.
-            try await copyGameDisks(
-                disk1: disk1Root,
-                to: wrappPath,
-                gameSlug: gameSlug,
-                disk2: { try await self.resolveDisk2(gameInfo: gameInfo, disk1: disk1Root, input: input) }
-            )
-
-            // Install the game via the engine it actually uses.
-            await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
-            let (gameExePath, installerDir): (String, String)
-            switch gameInfo.gameEngine {
-            case .wine:
-                await bus.publishWrappBuild(.engineRouted(engine: .wine, gameInfo: gameInfo))
-                (gameExePath, installerDir) = try await installerRunner.installGameWithWine(
-                    wrappPath: wrappPath,
-                    gameInfo: gameInfo,
-                    source: .disk,
-                    installerName: installerName,
-                    unattended: input.isUnattended,
-                    confirmPatchFailure: input.confirmPatchFailure,
-                    chooseGameProgram: input.chooseGameProgram(among:)
-                )
-            case .scummvm:
-                await bus.publishWrappBuild(.engineRouted(engine: .scummvm, gameInfo: gameInfo))
-                (gameExePath, installerDir) = try await installerRunner.installGameWithScummVM(
-                    wrappPath: wrappPath,
-                    gameInfo: gameInfo,
-                    source: .disk,
-                    confirmPatchFailure: input.confirmPatchFailure
-                )
-            default:
-                throw WrappBuildError.unsupportedEngine
+            // The game's bundle says what its disc edition's build runs
+            // (its Wrappfile's `disc` stage); each step is run here, as the
+            // disc flow always has.
+            guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "cd") }) else {
+                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s disc edition names no stage")
+            }
+            let composition = gameInfo.composition
+            // The same disc, plan and modules install the same game: a
+            // build after the first clones its install (docs/wrapp-build.md#the-layer-cache).
+            // On disc 1's listing alone, so a rebuild needs only disc 1.
+            let key: LayerKey? = DebugSettings.shared.skipInstaller ? nil : try await Blocking.run {
+                try InstallLayer.key(slot: "\(gameInfo.id) \(plan.edition): install", plan: plan, wrappPath: wrappPath, inputs: [
+                    .init("disc 1", try LayerKey.listing(of: disk1Root)),
+                    .init("installer program", installerName ?? "found by name"),
+                ])
+            }
+            let installed = try await InstallLayer(store: wineManager.layers, bus: bus).run(
+                key: key, wrappPath: wrappPath, gameInfo: gameInfo, disk1: disk1Root
+            ) {
+                try await run(plan, wrappPath: wrappPath, disk1Root: disk1Root, gameInfo: gameInfo,
+                              installerName: installerName, input: input)
             }
 
             // Clean up unused engine unless we skipped the installer — wine
             // might be needed to run the installer later.
             if !DebugSettings.shared.skipInstaller {
-                try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+                try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
             }
 
             // ── Shared tail: configure → sign → save → notify ──────────────
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .disk,
-                gameExePath: gameExePath, installerDir: installerDir, input: input
+                gameExePath: installed.gameExePath, installerDir: installed.installerDir,
+                configureINI: !installed.configuredINI, input: input
             )
 
             // Builder-owned resources: unmount now the build is complete.
@@ -136,6 +143,116 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.failed(installError))
             throw error
         }
+    }
+
+    // MARK: - Running the plan
+
+    /// Run the disc edition's plan: each step through what has always done
+    /// it — the discs copied and given drives, the installer run, each patch
+    /// applied, the games' .ini settings made. A step the disc flow can't
+    /// run fails the build before anything is copied wrongly.
+    private func run(
+        _ plan: BuildPlan, wrappPath: URL, disk1Root: URL, gameInfo: GameInfo,
+        installerName: String?, input: WrappBuildInput
+    ) async throws -> InstallLayer.Installed {
+        let layout = WrappLayout(app: wrappPath)
+        let composition = gameInfo.composition
+        var installed: (gameExePath: String, installerDir: String)?
+        var configuredINI = false
+
+        func announceInstall() async {
+            await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
+            await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
+        }
+        // A ScummVM game is its disc's data: "installed" once the discs are
+        // copied, before its patches rewrite that data.
+        func dataInstalled() async throws -> (gameExePath: String, installerDir: String) {
+            if let installed { return installed }
+            await announceInstall()
+            let result = try await installerRunner.installGameWithScummVM(
+                wrappPath: wrappPath, gameInfo: gameInfo, source: .disk,
+                confirmPatchFailure: input.confirmPatchFailure, applyPatches: false
+            )
+            installed = result
+            return result
+        }
+
+        for step in plan.stages.flatMap(\.steps) {
+            logger.debug("Plan step: \(step) (\(step.origin))")
+            switch (step.module, step.instruction) {
+            case ("wine", "KEEP-DISCS") where step.option("into") == "C:/" + WrappLayout.installersFolder:
+                try await copyGameDisks(
+                    disk1: disk1Root,
+                    to: wrappPath,
+                    gameSlug: gameInfo.id,
+                    disk2: { try await self.resolveDisk2(gameInfo: gameInfo, disk1: disk1Root, input: input) }
+                )
+            case ("installer", "RUN") where step.option("from") == "disc-1" && step.arguments.isEmpty:
+                if let answerFile = step.option("answer-file") {
+                    try installAnswerFile(answerFile, into: layout.driveC.appendingPathComponent(WrappLayout.installersFolder))
+                }
+                await announceInstall()
+                installed = try await installerRunner.installGameWithWine(
+                    wrappPath: wrappPath,
+                    gameInfo: gameInfo,
+                    source: .disk,
+                    installerName: installerName,
+                    unattended: input.isUnattended,
+                    confirmPatchFailure: input.confirmPatchFailure,
+                    chooseGameProgram: input.chooseGameProgram(among:),
+                    applyPatches: false,
+                    stubborn: step.has("stubborn")
+                )
+            case _ where step.name.map(isPatch(of: gameInfo)) == true:
+                let gameDir: URL
+                if composition.launcher == .scummvm {
+                    gameDir = layout.onDriveC(try await dataInstalled().installerDir)
+                } else if let installed {
+                    gameDir = layout.onDriveC(installed.gameExePath).deletingLastPathComponent()
+                } else {
+                    throw WrappBuildError.buildRecipeProblem("\(step.origin): a patch before the game is installed")
+                }
+                _ = try await installerRunner.applyGamePatch(
+                    id: step.name ?? "", wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameDir,
+                    source: .disk, confirmFailure: input.confirmPatchFailure
+                )
+            case (nil, "EXPORT"):
+                _ = try await dataInstalled()
+            case (nil, "EDIT") where step.option("from-data") == "ini":
+                // The nancy-drew module's .ini settings, in the folder its
+                // assemble step names: the game's, for a game Wine installs.
+                if let installed, composition.launcher != .scummvm {
+                    try helper.configureGameINI(in: layout.onDriveC(installed.gameExePath).deletingLastPathComponent())
+                }
+                configuredINI = true
+            default:
+                throw WrappBuildError.buildRecipeProblem("\(step.origin): the disc flow can't run \(step)")
+            }
+        }
+        guard let result = installed else {
+            throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s disc plan installs nothing")
+        }
+        return InstallLayer.Installed(gameExePath: result.gameExePath, installerDir: result.installerDir, configuredINI: configuredINI)
+    }
+
+    /// Whether `name` is one of the game's patches: a step `DO
+    /// nancy-drew.patch` made.
+    private func isPatch(of gameInfo: GameInfo) -> (String) -> Bool {
+        let ids = Set(GamePatchCatalog.shared.allPatches(forGame: gameInfo.id).map(\.id))
+        return { ids.contains($0) }
+    }
+
+    /// Put the plan's answer file (`asset:<path>`) where the installer
+    /// runner looks for one: `setup.iss` among the installer's discs.
+    private func installAnswerFile(_ asset: String, into installers: URL) throws {
+        let source = URL(fileURLWithPath: asset.hasPrefix("asset:") ? String(asset.dropFirst("asset:".count)) : asset)
+        let destination = installers.appendingPathComponent("setup.iss")
+        try fileManager.createDirectory(at: installers, withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.copyItem(at: source, to: destination)
+        logger.notice("✅ Copied \(source.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent)'s \(source.lastPathComponent) to setup.iss")
     }
 
     /// Disc 2 of a two-disc game, mounted if it's an ISO, or nil for a
@@ -166,9 +283,9 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// disc, the wrong game) still unmounts what it mounted and reports
     /// itself, like a failure in the build.
     private func resolveGame(
-        input: WrappBuildInput
+        disk1 chosen: URL, input: WrappBuildInput
     ) async throws -> (disk1Root: URL, gameSlug: String, gameInfo: GameInfo, installerName: String?) {
-        var disk1 = try await input.getDisk1Path()
+        var disk1 = chosen
         do {
             while true {
                 logger.notice("Disk 1: \(disk1.path)")
@@ -196,7 +313,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 // Asked about before the disc is copied, so choosing another
                 // costs nothing. ScummVM runs a game from the disc's files.
                 var installerName: String?
-                if gameInfo.gameEngine == .wine {
+                if gameInfo.composition.launcher == .wine {
                     switch try GameDetector.installerLookup(in: disk1Root) {
                     case .recognised:
                         break
@@ -288,8 +405,6 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Getting the discs ready"))))
         }
         try await marking.wait()
-
-        helper.installAnswerFile(forGame: gameSlug, source: .disk, into: installerPath)
 
         // Mount the disk directories as CD-ROM drives
         // (Don't report progress again - would cause duplicate print)

@@ -6,6 +6,7 @@ import SwiftUI
 import Logging
 import SecondChanceKit
 import SecondChanceReporting
+import WrappBuilder
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.App")
 
@@ -126,15 +127,22 @@ struct SecondChanceApp: App {
         CrashMarker.install(in: appLogs, logger: logger)
         WrappBuildHelper.shared.sweepStaleTemporaryWrapps()
         LaunchHistory.record()
+        // Layers unused for a month, or beyond the cache's size, go: at most
+        // once a day, and never one a build is using.
+        let layers = WineManager.shared.layers
+        Task.detached(priority: .utility) {
+            let removed = layers.prune()
+            if !removed.isEmpty { logger.notice("Removed \(removed.count) cached layers no build has used lately") }
+        }
 
-        // Clear the Wine prefix cache before anything else touches it. Works in
+        // Clear the layer cache, the Wine prefix among it, before anything else touches it. Works in
         // both GUI and headless launches (`--clear-wine-cache`).
         if CommandLine.arguments.contains("--clear-wine-cache") {
-            logger.notice("Clearing Wine prefix cache...")
+            logger.notice("Clearing the layer cache...")
             do {
                 try WineManager.shared.clearCache()
             } catch {
-                logger.critical("Failed to clear Wine prefix cache: \(error.localizedDescription)")
+                logger.critical("Failed to clear the layer cache: \(error.localizedDescription)")
                 LogStore.shared.flush()
                 exit(1)
             }

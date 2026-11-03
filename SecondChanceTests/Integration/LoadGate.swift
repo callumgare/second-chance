@@ -5,8 +5,10 @@
 //  Holding a game's integration test back while the Mac is too busy.
 
 import Foundation
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 /// Decides whether the Mac is calm enough to test a game.
 ///

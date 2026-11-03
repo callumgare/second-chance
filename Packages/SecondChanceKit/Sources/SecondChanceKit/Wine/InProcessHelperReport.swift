@@ -82,20 +82,11 @@ nonisolated public final class InProcessHelperReport: @unchecked Sendable {
         }
     }
 
-    /// The level any helper's status line states, a helper armed per game or
-    /// not (cocoa_start_wait.m runs in every Wine process); nil for any
-    /// other line.
+    /// The level any helper's status line states, or nil for any other line
+    /// (`SubprocessLineClassifier.helperStatusLevel`, which every
+    /// subprocess's lines go through).
     static func statusLevel(of line: String) -> Logger.Level? {
-        let prefix = "second-chance-helper["
-        guard line.hasPrefix(prefix), let close = line.firstIndex(of: "]") else { return nil }
-        let rest = line[line.index(after: close)...].drop(while: { $0 == " " })
-        guard let colon = rest.firstIndex(of: ":") else { return nil }
-        switch rest[..<colon] {
-        case "notice": return .notice
-        case "warning": return .warning
-        case "error": return .error
-        default: return nil
-        }
+        SubprocessLineClassifier.helperStatusLevel(of: line)
     }
 
     /// How long after the game's window appears a helper has to report

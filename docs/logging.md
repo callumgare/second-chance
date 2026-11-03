@@ -54,7 +54,7 @@ it, as `Blocking.run` and `ProcessLineLogger` do
 ([docs/logging.md](docs/logging.md#which-build-an-entry-is-from)). Subprocess
 output (Wine, ScummVM, winetricks) is captured line-by-line via
 `ProcessLineLogger`/`TaggedProcess` in
-`Packages/SecondChanceKit/Sources/SecondChanceKit/Logging/`, each line at the
+`Packages/WrappKit/Sources/ProcessKit/`, each line at the
 level `SubprocessLineClassifier` picks from its content rather than from the
 pipe it came down. Integration tests still read WrappPuppeteer's and the
 wrapp's OSLog via `log show` (rendered in the compact format, with the process

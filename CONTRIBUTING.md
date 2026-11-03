@@ -15,10 +15,13 @@ There are two main parts:
   needed to run one game — Wine or ScummVM, their settings, and the installed game itself.
 
 Second Chance copies the wrapper from inside itself for each game and installs the game into the copy. Code both apps
-use (logging, running Wine, driving Steam, failure reports) is in `Packages/SecondChanceKit/`, a local Swift package with two modules:
-`SecondChanceKit`, and `SecondChanceReporting`, which holds everything that uses Sentry. WrappPuppeteer, the tool the
-integration tests drive games with, uses `SecondChanceKit` too. The list of games Second Chance knows is a package of its
-own, `Packages/GameCatalog/`, which the developer CLI uses as well.
+use is in local Swift packages: what any program that builds or runs wrapps needs (logging, running processes and Wine,
+reading Windows programs) in `Packages/WrappKit/`, and Second Chance's own (driving Steam, its windows, failure reports)
+in `Packages/SecondChanceKit/`, which has two modules: `SecondChanceKit`, and `SecondChanceReporting`, which holds
+everything that uses Sentry. WrappPuppeteer, the tool the
+integration tests drive games with, uses `SecondChanceKit` too. Each game Second Chance knows is described by a program bundle in `Bundles/`
+([docs/program-bundles.md](docs/program-bundles.md)), and the list made from them is a package of its own,
+`Packages/GameCatalog/`, which the developer CLI uses as well.
 [docs/wrapp-build.md](docs/wrapp-build.md) walks through a build step by step, and [AGENTS.md](AGENTS.md) has the
 architecture, code conventions, and the gotchas that have caught people out. Read it before making a non-trivial
 change — it's written for AI coding agents, but it's just as useful for people.
@@ -72,7 +75,7 @@ its hash in the setup script (or the patch manifest) too. winetricks is committe
 ```
 
 The app lands in `DerivedData/Build/Products/Debug/Second Chance.app` and wrapps in `built-apps/`. Game slugs are the
-`id`s in [GameInfoProvider.swift](Packages/GameCatalog/Sources/GameCatalog/GameInfoProvider.swift), such as `scarlet-hand`.
+folder names in [Bundles/nancy-drew/](Bundles/nancy-drew/), such as `scarlet-hand`.
 
 ### Building without `sc`
 

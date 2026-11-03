@@ -11,7 +11,12 @@ struct WelcomeView: View {
     @Environment(WrappBuildViewModel.self) var viewModel
     @State private var selection: WrappSource? = .disk
 
-    private let sources: [WrappSource] = [.disk, .steam, .bigFish, .herDownload]
+    /// Free games are a hidden extra until updating and other programs are
+    /// offered on screen: a double-click on the icon above the steps shows
+    /// them (`revealsHiddenSources`).
+    private var sources: [WrappSource] {
+        [.disk, .steam, .bigFish, .herDownload] + (viewModel.revealsHiddenSources ? [.download] : [])
+    }
 
     var body: some View {
         InstallerPage(title: LaunchHistory.isReturning ? "Welcome back, Detective" : "Welcome, Detective") {
@@ -124,6 +129,7 @@ private extension WrappSource {
         case .steam: return Image("SteamLogo")
         case .bigFish: return Image("BigFishLogo")
         case .herDownload: return Image("HerLogo")
+        case .download: return Image(systemName: "arrow.down.circle")
         }
     }
 
@@ -133,6 +139,7 @@ private extension WrappSource {
         case .steam: return "installSourceSteam"
         case .bigFish: return "installSourceBigFish"
         case .herDownload: return "installSourceHerDownload"
+        case .download: return "installSourceDownload"
         }
     }
 }

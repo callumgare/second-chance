@@ -42,6 +42,7 @@ enum InstallerStep: Int, CaseIterable {
 }
 
 struct InstallerSidebar: View {
+    @Environment(WrappBuildViewModel.self) private var viewModel
     let current: InstallerStep
     /// The step a failure interrupted, marked as failed.
     let failed: InstallerStep?
@@ -56,6 +57,9 @@ struct InstallerSidebar: View {
                 .padding(.leading, -6)
                 .padding(.bottom, 14)
                 .accessibilityHidden(true)
+                // Shows the sources not offered yet (free games), for
+                // whoever knows to look.
+                .onTapGesture(count: 2) { viewModel.revealsHiddenSources = true }
 
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(InstallerStep.allCases, id: \.self) { step in

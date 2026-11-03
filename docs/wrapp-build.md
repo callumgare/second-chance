@@ -62,12 +62,12 @@ other builders are the same shape with less in the middle.
 | 1 | — | `.started(source: .disk)` |
 | 2 | `input.getDisk1Path()`; mount it if it's a file rather than a folder | `.isoMounted` |
 | 3 | Turn down an installed game (`GameDetector.isInstalledGame`), then `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo`, then, for a Wine game, find its installer (`GameDetector.installerLookup`) | `.progress(.detectingGame)`, `.gameDetected` |
-| 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
+| 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` and installs Wine, which runs the installer, and the engine the game runs, from the engine store ([the template](#the-template)) | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). Cancelling stops it, and the bytes copied show on the progress bar, full once it's done (the total is how full the disc is, which counts its file system too). Meanwhile, one Wine run marks D: on as CD drives (`DriveMarking`, `WineDrives.setKind(_:of:)` with several letters): each run starts Wine's session afresh, and marking each drive after the copy left the screen still for 8 to 18 s a drive; a wait that's left once the copy is done says "Getting the discs ready". The copies stay in the finished wrapp, mounted as CD drives, because some games check for their disc before they will play | `.progress(.copyingInstaller)`, `.stepProgress` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
-| 7 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
-| 8 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
-| 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` / game INI | `.progress(.configuringWrapp)`, `.wrappConfigured` |
+| 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `wine.KEEP-DISCS` is steps 5–6; `installer.RUN --from=disc-1` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (`--stubborn` from the plan); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each `DO nancy-drew.patch` step applies that one patch (`applyGamePatch`); the module's `EDIT --from-data=ini` sets the game's .ini files. A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
+| 8 | `cleanupUnusedEngine` takes out each engine the composition doesn't run (`EngineInstall.remove`): Wine, for a ScummVM game | — |
+| 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` (and the game INI, when the plan didn't) | `.progress(.configuringWrapp)`, `.wrappConfigured` |
 | 10 | `helper.finalize` — take the quarantine off, sign, ask where to save (`getSaveLocation`), move it there (`saveWrapp`) | `.signed`, `.progress(.savingApp)`, `.completed` |
 | 11 | Unmount ISOs; launch if requested | — |
 
@@ -92,16 +92,24 @@ Second Chance made the wrapp itself, so the quarantine guards nothing.
 **Step 3 happens exactly once.** `GameInfo` is threaded through every later
 step; nothing downstream re-detects. (An earlier design detected twice.)
 
-**How a game is recognised.** `GameDetector` gathers the names a disc gives
-itself into one fingerprint and matches it against the games' titles: the
-product name in `setup.exe`'s version info (`WindowsExecutable`), the
-subject of an `.msi`'s summary information (`MSISummary`), `setup.ini`'s
-`AppName` and `Product`, `autorun.inf`'s label, and the volume name. Some
-discs name the game in only one of these: Castle Malloy's only in its MSI's
-subject. A Her download adds the names its installer carries as plain text
-(`embeddedInstallerSignals`). The same version info tells InstallShield from
+**How a game is recognised.** `GameDetector` gathers what a disc says of
+itself (a `DetectionSource`): the product name in `setup.exe`'s version info
+(`WindowsExecutable`), the subject of an `.msi`'s summary information
+(`MSISummary`), `setup.ini`'s `AppName` and `Product`, `autorun.inf`'s label,
+the folder's and volume's names, and the disc's files. Some discs name the
+game in only one of these: Castle Malloy's only in its MSI's subject. A Her
+download adds the names its installer carries as plain text
+(`embeddedInstallerSignals`). It is matched against every shipped bundle's
+matchers, compiled once into a `DetectionIndex` (`Packages/WrappBuilder`,
+loaded off the main thread on first use): each bundle's title, aliases and
+codes, and any `detect.matchers` it writes
+([program-bundles.md](program-bundles.md#detection)). The most specific match
+wins; a true tie between two bundles is treated as a game nothing
+recognised, and reported. A source nothing recognises that nearly matched a
+bundle is reported as a near miss ([failure-reports.md](failure-reports.md)),
+so editions not recognised yet show up. The same version info tells InstallShield from
 Inno Setup (`GameInstallerRunner.detectInstallerType`). Both readers are
-Swift, in `Packages/SecondChanceKit/Sources/SecondChanceKit/Windows/` and `SecondChance/Services/`, and read only as
+Swift, in `Packages/WrappKit/Sources/WindowsFormats/` and `SecondChance/Services/`, and read only as
 much of the file as they need.
 
 A disc or Her download whose game isn't recognised (`GameInfo.unknownGame`,
@@ -178,8 +186,6 @@ The division that keeps this from re-tangling:
   mounting live in `DiskWrappBuilder` because no other source has disks.
   Taking a game out of a Her Interactive Mac download lives in `CiderPackage`,
   used only by `HerDownloadWrappBuilder` ([her-download.md](her-download.md)).
-  The helper's part in a Her build is a primitive both builders use:
-  `installAnswerFile` copies the answer file for the build's source.
   Driving Steam lives in `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/` and `SteamWrappBuilder`
   ([steam.md](steam.md)); the helper only installs the Steam client
   (`installSteamClient`), as it installs Wine's other pieces.
@@ -209,7 +215,8 @@ There are **no separate interactive/non-interactive classes**. Headless is just
 "every env var set, so nothing prompts."
 
 A question the build asks part way through — which game to get from a store,
-how a DRM-free Steam game starts, disc 2, a disc or game it doesn't
+which free game to download and where it comes from, how a DRM-free Steam
+game starts, disc 2, a disc or game it doesn't
 recognise, which program is the game, a patch that failed, Steam in use,
 whether to start over rather than save — is a `BuildQuestion`, which the main
 window shows as a page of its own (`BuildQuestionView`) in place of the
@@ -313,7 +320,7 @@ record, which `sc wrapp build` shows after the stage.
 ## Running Wine
 
 Every Wine, `wineserver` and winetricks process — the build's and the wrapp's
-— starts in one place, `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/WineProcess.swift`. `Wine(wrapp:prefix:)`
+— starts in one place, `Packages/WrappKit/Sources/WineKit/WineProcess.swift`. `Wine(wrapp:prefix:)`
 names one wrapp's Wine and the prefix it runs in (the wrapp's own unless given
 another), and a `WineCommand` says what to run: `.program(exe, args)`,
 `.start(exe, args)` for `wine start /wait`, `.wine(args)` for a builtin such as
@@ -344,25 +351,135 @@ left, rather than wait out their 3 s linger; `kill()` follows
 killing the server alone, leaves running for good), and `Winetricks` (app only, as only Second Chance bundles it)
 installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,
 which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
-GCD queues call it through `Blocking.wait` (`Packages/SecondChanceKit/Sources/SecondChanceKit/Blocking.swift`), the
+GCD queues call it through `Blocking.wait` (`Packages/WrappKit/Sources/ProcessKit/Blocking.swift`), the
 build's blocking work goes the other way through `Blocking.run`, and a
 SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
-`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`.
+`Packages/WrappKit/Sources/WineKit/`.
 
-## The prefix cache
+## The layer cache
 
-`WineManager` caches prefixes in
-`~/Library/Caches/SecondChance/wine-prefix-cache`, keyed by bundle version (or
-`"dev"` in DEBUG) plus the bundled Wine engine's version
-(`Contents/SharedSupport/wine/version`), so a Wine upgrade starts a fresh
-prefix by itself. Caching a prefix removes every other key's. Builds in one
-process that find the cache empty make the prefix one at a time
-(`WineManager.prefixCreation`): the first makes and caches it, and the rest
-then copy it; a prefix is renamed into the cache whole, so none is ever taken
-half-copied. Other changes to how the prefix is set up (winetricks verbs,
-`ddraw.ini`, registry settings such as `EmulateModeset`) don't change the key:
-run `./sc clean wine-prefixes` (or pass the app `--clear-wine-cache`) after
-those, or if Wine setup misbehaves after code changes.
+What a build makes that the next build would make the same is kept as a
+*layer* (`LayerStore`, in `Packages/WrappBuilder/Sources/WrappBuilder/Layers/`),
+in `~/Library/Caches/SecondChance/layers/<key>/`: the layer's folder as
+`content/`, with `key.json`, `meta.json` (made, last used, size) and the
+events its steps published beside it. Two layers are cached so far: the new
+Wine prefix (`USE wine`), and on top of it the install of a disc or a
+Windows download from Her (`InstallLayer`) — the discs copied, the installer run, the patches applied
+and the .ini settings made, which is everything the plan's stages do. A
+rebuild from the same disc clones that prefix and publishes the install's
+`disksResolved`, `engineRouted`, `installerResolved`, `gameExeDetected` and
+`patchApplied` again, so the screens and tests see what they would have. A
+Her download is keyed on a hash of the installer in place of a disc's
+listing. Her's Mac downloads and Steam aren't cached yet (Steam's key needs
+the app's build id, from a signed-in Steam).
+
+- **What is cached is a policy** (`LayerCachePolicy`,
+  `SECOND_CHANCE_LAYER_CACHE`, `sc … --debug layer-cache=<policy>`): `all`
+  by default, `prefix` alone under test, so an integration run installs every
+  game for real, and `off`. An install with a failed patch isn't kept, so the
+  next build tries the patch again.
+- **The install's key** is the prefix's, then the edition and the plan's
+  steps as written out, a hash of each bundle asset they read (by its path in
+  the bundle), each module the plan uses (its release and a hash of its whole
+  folder), disc 1's listing (every path and size, `LayerKey.listing`), the
+  program that was picked as the installer, the Mac's architecture and
+  `InstallLayer.codeRevision`, raised by hand when the Swift that installs
+  changes what it makes. Disc 2 isn't in it, as it is asked for only once
+  disc 1 is copied, so a rebuild needs only disc 1.
+
+- **A key is a hash of what the layer was made from** (`LayerKey`): its
+  parent's key, and each input by name. The prefix's
+  (`WineBuild.prefixLayerKey`) is the engine's version and prepared hash
+  (`Contents/Resources/engines/wine.json`), the wine module's release, a hash of
+  `Modules/wine/prefix.yaml` and of winetricks, and
+  `WineBuild.prefixCodeRevision`, raised by hand when the Swift that makes a
+  prefix (`WineManager.makeWinePrefix`) changes what it makes. A new Wine, or
+  a changed winetricks verb, `ddraw.ini` or registry setting, makes a fresh
+  prefix with nothing to clear.
+- **Every layer keeps its key's inputs**, so a miss is explained: the build
+  logs which inputs differ from the layer last used for the same slot
+  (``No cached Wine prefix to use (`wine prefix.yaml` changed): making one``).
+- **One build makes a layer; the rest wait and clone it.** A build takes a
+  lock on the key (`flock`, so across processes too) before looking, makes the
+  layer under a hidden name and renames it into place whole, so none is ever
+  taken half made. A prefix whose cnc-ddraw settings couldn't be made isn't
+  kept, and a build whose caching fails carries on with the prefix it made.
+- **Restoring clones** (`clonefile`), which costs nothing until a file
+  changes; across volumes the layer is copied, and the log says so.
+- **Pruned by use**: Second Chance, at most once a day and off the main
+  thread, removes layers unused for 30 days, then the least recently used
+  beyond 40 GB. A layer's size is what it took when made; one that shares its
+  blocks with a wrapp frees less when it goes.
+
+`./sc clean layers` (or the app's `--clear-wine-cache`) removes every layer.
+The cache that came before, `wine-prefix-cache/`, is removed by the next
+build.
+
+## Updating a wrapp
+
+A wrapp built by an older Second Chance can be brought up to this one from
+itself, with no disc, when its bundle and modules say how. For now that is a
+hidden extra of the disc source, as disc images are: a game's app chosen
+where its first disc would go (or given as `DISK_1_PATH`) is updated by
+`UpdateWrappBuilder` rather than installed. Nothing on screen offers it yet.
+
+- **What it was built from is its lock** (`WrappLock.json`, `WrappLock`):
+  the bundle's version, each module's version and release and a hash of each
+  of its data files, an engine's prepared hash (`package`), the launcher's
+  revision, the Wrappfile's global `ARG`s (`install-dir`), and how it was
+  updated, if it was. A wrapp from before locks gets one made up from its
+  settings and its Wine's version file (`WrappLock.madeUp`), at bundle version
+  0, with the disc edition for a wrapp that never recorded its source.
+- **What to do is worked out before anything runs** (`UpdatePlanner`, in
+  `Packages/WrappBuilder/Sources/WrappBuilder/Updates/`), from the old lock and
+  the lock this build would write. The bundle's `updates` are tried in order,
+  then each module's own, as database migrations are: an update applies when
+  its `from` matches the program as the updates before it left it (`from: {
+  bundle: "<3" }`, `{ wine: "9" }`, `{ nancy-drew: { release: "<3" } }`), and
+  runs its `build.target` stage, or the edition's own when it names none,
+  after which nothing else applies. A module's default update applies only
+  when the wrapp's copy of the module is behind this build's, and, with
+  `when-changed`, only when one of those data files differs. A bundle entry
+  with only an id runs a module's default there instead.
+- **Or the wrapp is built afresh**, and choosing its app says the disc is
+  needed (`WrappBuildError.updateNeedsSource`): when an update says
+  `fresh-build: true`, when the wrapp is another edition or its game is in
+  another folder, or when Wine would cross a major version that no applied
+  update's `from` names. Wine within a major version is moved
+  (`wineboot -u`, `WineManager.movePrefix`).
+- **The shipped defaults**: the wine module's `wine-prefix`, when
+  `prefix.yaml` changed, applies this set-up over the old prefix
+  (`WineManager.applyPrefixSetup`) with the game left installed. The steam
+  module's `steam` builds afresh, from Steam, which needs no disc.
+- **Every wrapp has a launcher, which an update always brings.** The
+  launcher's revision is a hash of the sources the wrapp's own code is built
+  from (`stamp-launcher-revision.sh` writes it into the template's Info.plist
+  as `SecondChanceLauncherRevision`; a Debug build's starts `debug-`, so it
+  never matches a release's). With no update to apply, a wrapp that has this
+  revision and this build's engines (each `package`) is **up to date**
+  (`UpdatePlanner.Decision.upToDate`). Choosing it says so, and offers to
+  install the game again from the start, a question in the main window
+  (`WrappBuildInput.confirmReinstall`):
+  for a disc game the first disc is then asked for and the game built as
+  any disc build is; for another source the person is told which to choose
+  (`reinstallNeedsSource`). A headless run stops with `alreadyUpToDate`.
+- **The old wrapp's prefix is carried into a new one** made from this
+  template, so the launch code is always this Second Chance's, with the
+  engines from the store ([the template](#the-template)): another package of
+  the same engine version is simply this build's, and another version within
+  Wine's major version moves the prefix as above. Its
+  `Documents` and A: drive lead to the person's saves, so both are pointed at
+  an empty stand-in before anything runs (the first launch points them back),
+  and Z: is mounted for the update's Wine programs and taken away again as
+  the wrapp is finished. An update's stage runs patches and the .ini settings
+  over the installed game; a step that installs the game again makes it a
+  fresh build. Nothing carried over from the old wrapp is cached.
+- **The new lock records the chain** (`updated`: the old bundle version and
+  modules, the updates applied, and the Second Chance that built it).
+
+Telling the owner of a wrapp built with a fixed bug that updating it fixes
+the problem, and whether that needs the disc, is left for when updating is
+offered on screen; `ShippedBundles.updateDecision` is what it will ask.
 
 ## Cancelling
 
@@ -522,11 +639,27 @@ so the stderr mirror still fires) and pass back the output and exit code;
 ## The template
 
 `WrappTemplate.app` is built as its own target and embedded at
-`Second Chance.app/Contents/Resources/WrappTemplate.app`. `createBaseWrapp`
-copies it wholesale — both engines included — and `cleanupUnusedEngine` later
-strips whichever one this game doesn't need. The copy is `cp -ac`: each file is
-an APFS clone, so it is near instant and takes no space until a file changes;
-on a volume that can't clone, a full `cp -a` is made instead.
+`Second Chance.app/Contents/Resources/WrappTemplate.app`. It is the launcher
+alone, about 17 MB: no engine. `createBaseWrapp` copies it, and then installs
+the engines the build needs from the engine store
+([modules.md](modules.md#the-engine-store)), which fetches and prepares each
+the first time a build on that Mac needs it:
+
+- **Wine**, whenever the build runs a Windows program (an installer, a
+  patch) or the game runs in it. A download whose game isn't Wine's (Lure of
+  the Temptress, under ScummVM) needs none, and gets a bare C: drive.
+- **The engine the game runs**, from its composition (ScummVM).
+
+An engine is cloned in beside the launcher's files (`EngineInstall`), with its
+list of files and a record of which engine it is in `Resources/engines/`, and
+a file that is already the launcher's stops the build rather than being
+replaced. `cleanupUnusedEngine` takes out, by that list, each engine the game
+doesn't run. An engine nobody can fetch fails the build as
+`engineUnavailable`, which asks the person to check they are online.
+
+The template copy is `cp -ac`: each file is an APFS clone, so it is near
+instant and takes no space until a file changes; on a volume that can't
+clone, a full `cp -a` is made instead.
 
 `saveWrapp` never deletes an earlier copy of the game's app before the new one
 is safely beside it: it moves the new app into the destination folder under a
@@ -594,6 +727,41 @@ executable is `Contents/MacOS/WrappTemplate`. WrappPuppeteer doesn't rely on tha
 name — it tracks the wrapp by the PID it launched and finds the game by the
 game's own process name — so the target can be renamed without touching it.
 
+## The download source
+
+A program its makers give away is downloaded from where its bundle says
+(`DownloadWrappBuilder`). It is a fourth source on the welcome screen that
+only appears after a double-click on the icon above the build's steps
+(`WrappBuildViewModel.revealsHiddenSources`): nothing on screen offers it
+otherwise. Headless, it is `INSTALLATION_SOURCE=download` with
+`DOWNLOAD_PROGRAM` naming the bundle (`freeware/skifree`), or `sc wrapp build
+<slug> --from download`.
+
+- **The person picks a game and is told why it's free** before anything
+  downloads (`DownloadNotice`, by the edition's `licence`,
+  [program-bundles.md](program-bundles.md#download-editions)). The same words
+  are saved into the app as `Contents/Resources/Licence.txt`.
+- **The hash alone decides** (`Downloader`, in
+  `Packages/WrappBuilder/Sources/WrappBuilder/Downloads/`). The input's URLs are
+  tried in order, and the first whose file has the bundle's SHA-256 is used;
+  status codes are ignored, since an archived page that has gone can come back
+  200 with HTML. Downloads are kept in `~/Library/Caches/SecondChance/downloads/`
+  by their hash, so each is fetched once per Mac.
+- **Politely**: one download at a time from each site, a User-Agent naming
+  Second Chance, waiting as `Retry-After` says on a 429 or 503 (three times at
+  most), and an interrupted download resumed with `Range`. A download bigger
+  than 50 MB says in its progress step that it may take a while.
+- **Each URL that didn't have it is reported** (a `Downloading a free game`
+  report tagged with the site), not only a total failure, so a dead publisher
+  URL is noticed even when the archive's copy takes over. When none has it the
+  build fails with `WrappBuildError.downloadUnavailable`, which says so
+  plainly.
+- **Unpacking**: `unpack: none` puts the file itself in a folder named for the
+  input, `zip` that folder's contents (`ditto`). The edition's Wrappfile stage
+  then copies it in (`COPY --from=<input> . ${install-dir}/`), which is the only
+  instruction a download edition can run so far; an `install` program and other
+  archive formats come when an edition needs them.
+
 ## Adding a source
 
 1. Add a case to `WrappSource`.
@@ -601,7 +769,8 @@ game's own process name — so the target can be renamed without touching it.
    both paths.
 3. Add the builder to the ViewModel and a case to its `build(from:)` that
    calls `runBuild(_:)`; the welcome screen's list (`WelcomeView`) and the
-   File menu (`InstallCommands`) offer the source.
+   File menu (`InstallCommands`) offer the source. Add it to `sc`'s
+   `WrappSourceKind` too, with an integration suite of its own.
 4. Publish the same events the disk flow does — that is what the UI and tests
    read.
 5. Add any new prompt to `WrappBuildInput` with an env-var override, or headless

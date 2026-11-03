@@ -421,10 +421,10 @@ struct GameTests {
         let onBigFish = try #require(Catalog.game(slug: "white-wolf"))
         let notOnBigFish = try #require(Catalog.game(slug: "stay-tuned"))
         for source in [IntegrationSource.bigFish, .bigFishTrial] {
-            #expect(source.tests(onBigFish, herDownloads: []))
-            #expect(!source.tests(notOnBigFish, herDownloads: []))
+            #expect(source.tests(onBigFish, herDownloads: [], downloads: []))
+            #expect(!source.tests(notOnBigFish, herDownloads: [], downloads: []))
         }
-        #expect(Catalog.games.filter { IntegrationSource.bigFishTrial.tests($0, herDownloads: []) }.count == 30)
+        #expect(Catalog.games.filter { IntegrationSource.bigFishTrial.tests($0, herDownloads: [], downloads: []) }.count == 30)
 
         #expect(try IntegrationOptions.parseSources("big-fish-trial") == [.bigFishTrial])
         #expect(try IntegrationOptions.parseSources("big-fish,disk,big-fish-trial") == [.disk, .bigFish, .bigFishTrial])

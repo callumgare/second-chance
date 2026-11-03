@@ -3,7 +3,8 @@
 What a wrapp does between being opened and the game's window appearing,
 what its loading window says meanwhile, and when it says the launch may
 have failed. The code is `WrappTemplate/main.swift` and `GameLauncher`
-(the steps), `LastSession.swift` (the first of them), `AppDelegate.swift`
+(the steps), the modules in `WrappTemplate/Modules/` (what Wine, Steam and
+ScummVM each do in them, [below](#modules)), `LastSession.swift` (the first of them), `AppDelegate.swift`
 (quitting, and opening the game again with the arguments in
 `WrappLaunchOptions`), `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingStage.swift` and `Packages/SecondChanceKit/Sources/SecondChanceKit/LoadingClock.swift`
 (what the window says, and when), and `Packages/SecondChanceKit/Sources/SecondChanceKit/LaunchActivityMonitor.swift`
@@ -47,6 +48,38 @@ longer arrive: Wine's launcher exits before the game appears, the game
 exits before its window does, Steam exits, or Wine's desktop launcher exits
 with no `explorer.exe` left to finish the job.
 
+## Modules
+
+A wrapp runs a composition of modules (`Composition`, from its settings):
+the one that starts the game, and the services started before it. Wine
+alone, ScummVM alone, DOSBox alone, Wine with Steam running beside it,
+Steam starting the game in Wine, or Big Fish's DRM starting it in Wine
+(`BigFishRuntime`, [big-fish.md](big-fish.md)). `RuntimeModules` makes one `RuntimeModule` for each, in
+start order (a module's dependencies first: Steam and Big Fish run in Wine), and the
+launch asks them rather than asking which engine it has:
+
+| Step | What each module does |
+| --- | --- |
+| Before the window | `firstStage` (Steam: "Starting Steam"; Big Fish: the game, given longer), `showsSaveWarning` (Wine), `ownsProcess` (Wine: only this prefix's processes are the launch's progress), `connectSaves` (Wine: the A: drive and Documents) |
+| Getting going | `armWatchers` (Wine: the helpers' report, the quit check, copy protection; ScummVM: puppet control), then `prepare` in start order (Steam: start and sign in; Wine: the desktop, unless Steam started the session) |
+| The game | the launcher's `startGame`, and `findsGame`: a Wine program by its `.exe`, one Steam or Big Fish's DRM started (given up on when they go), or the launcher's own process (ScummVM, DOSBox); `windowMayBeAnotherProcess` for a game whose window is another process's of its `.exe` (Big Fish's, under Armadillo) |
+| After the game | `finishAfterGame`, last started first (Steam saves its sign-in, Wine lets its desktop go); then Wine's session is waited for |
+| Quitting | `finishForQuit`, last started first, on a background queue (Steam briefly, then Wine's server) |
+
+Every line any module's processes print reaches every watcher
+(`LaunchWatchers`), so Steam's output feeds Wine's quit check, as it always
+has. A new engine is a new module conforming to these, listed in
+`RuntimeModules.known`, with a `TestModule` for WrappPuppeteer and a
+`BuildModule` that prepares its engine
+([modules.md](modules.md#engine-packages)).
+
+**DOSBox** (`DOSBoxRuntime`) starts DOSBox Staging with none of the
+person's own DOSBox settings (`--noprimaryconf --nolocalconf`), full screen,
+and runs the game's DOS program from its folder in the wrapp, mounted as C:,
+with the saves volume laid over it (`mount c … -t overlay`): what the game
+writes goes there, and the wrapp is never written to. `--exit` ends DOSBox
+when the game does.
+
 ## Wine's desktop
 
 Left to Wine, a game's first
@@ -54,7 +87,7 @@ desktop access starts `explorer.exe /desktop` and waits only 10 s for it; on a
 loaded machine under Rosetta that runs out, and the game carries on with no
 display adapters — Secrets Can Kill Remastered then crashes on a null Direct3D
 object exactly 10 s in. `WineDesktop`
-(`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) starts the desktop
+(`Packages/WrappKit/Sources/WineKit/`) starts the desktop
 itself and waits until it has registered the display devices, which it detects
 through the volatile `HKLM\HARDWARE\DEVICEMAP\VIDEO` key. A build waits up to
 600 s, since with every core busy a fresh session has taken two and a half
@@ -294,12 +327,53 @@ start the game until someone clicks **I Understand** — Wine's desktop, and
 Steam for a game that needs it, start behind it — so a script that launches a
 wrapp and waits for the game waits for ever on an unattended Mac. The wrapp
 skips the dialog when `~/Library/Application Support/<bundle
-id>/dont-show-save-warning` exists (`InfoWindowController`). Create it for the
-experiment and remove it afterwards, as it is the player's own setting.
-`SECOND_CHANCE_DATA_DIR` moves that folder, with the game's saves and the
-settings some games keep beside them, somewhere else (`Configuration.swift`);
-WrappPuppeteer sets it to an empty folder for each launch, so a test always
-meets the dialog and never reads or changes the player's saves and settings.
+id>/wrapp-settings/dont-show-save-warning` exists (`InfoWindowController`; for
+a wrapp built before volumes, `<bundle id>/dont-show-save-warning`). Create it
+for the experiment and remove it afterwards, as it is the player's own setting.
+`SECOND_CHANCE_APP_SUPPORT_DIR` names a folder in place of
+`~/Library/Application Support`, where the wrapp keeps its folder, with the
+game's saves and the settings some games keep beside them
+([below](#user-files)); WrappPuppeteer sets it to an empty folder for each
+launch, so a test always meets the dialog and never reads or changes the
+player's saves and settings.
+
+## User files
+
+A wrapp built from a bundle keeps everything of the person's in one folder
+named by its bundle id (`au.gare.callum.second-chance.program.<namespace>.<name>`),
+as a Mac app does (`UserFilesLayout`):
+
+```text
+~/Library/Application Support/<bundle id>/
+  volumes/<volume>/    the game's saves, and the settings it keeps beside them
+  wrapp-settings/      Second Chance's settings for the wrapp
+```
+
+The volumes are the bundle's (`wine-documents`, a Wine game's Documents and
+A: drive; `scummvm-saves` and `scummvm-settings` for ScummVM), recorded in the
+wrapp's `WrappLock.json` with the patterns that say which files belong to
+each. Wrapps built before bundles had another id
+(`au.gare.callum.SecondChance.nancy-drew.<slug>`) and kept their saves loose in
+its folder, so every launch, and every build, moves that folder in
+(`UserFilesMove`) from each id the manifest lists in `former-bundle-ids`:
+
+- Its files go to the volume whose patterns they match, Second Chance's own
+  settings files to `wrapp-settings/`, and the rest to the volume the game
+  saves in. The old folder becomes a link to that volume, so an old wrapp
+  still installed carries on finding its saves.
+- A folder whose files all go to one volume is renamed whole; otherwise each
+  file moves on its own and the folder becomes the link once empty. A marker
+  says a move began, so a run cut short only makes the link next time.
+- Nothing is overwritten: a file whose name is taken stays, and the one coming
+  in is kept beside it as `<name> (from <date>).<ext>`.
+- One mover at a time (a lock in Application Support), and none while a game
+  with the old or the new id is running. ScummVM's settings, kept in
+  `~/Library/Preferences/<old id>.ini`, move into `scummvm-settings` too.
+
+With nothing to move it is one `lstat` per former id. A build under test moves
+files only in the folder `SECOND_CHANCE_APP_SUPPORT_DIR` names, never the real
+one. A wrapp with no lock, one built before bundles, keeps everything loose in
+its folder, as it always did.
 
 ## Measurements
 

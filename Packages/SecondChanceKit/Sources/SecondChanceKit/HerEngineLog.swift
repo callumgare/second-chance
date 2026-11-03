@@ -19,10 +19,10 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sha
 /// either way. The log's last word is the game's own verdict: it writes
 /// `ExitInstance(), good exit...` once its cleanup is done, and a run that
 /// crashes on the way out never gets there.
+///
+/// The log's name and its last line are the nancy-drew module's data
+/// (HerEngineLog+Data.swift).
 nonisolated public enum HerEngineLog {
-    static let fileName = "Debug.LOG"
-    static let cleanExitLine = "ExitInstance(), good exit..."
-
     /// Whether a log's contents say the game finished its cleanup.
     static func reportsCleanExit(_ contents: String) -> Bool {
         contents.split(whereSeparator: \.isNewline).contains { $0.hasSuffix(cleanExitLine) }

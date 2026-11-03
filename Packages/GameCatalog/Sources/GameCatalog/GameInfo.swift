@@ -38,20 +38,29 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     /// Short codes a disc calls it by ("STFD"), matched in capitals, as a
     /// whole word: in lower case they could be anything.
     public let detectionCodes: [String]
+    /// Its bundle's id when that isn't `nancy-drew/<id>`: a program beyond
+    /// Nancy Drew (`freeware/skifree`).
+    public let program: String?
+    /// What its app is called, when that isn't "Nancy Drew - <title>".
+    public let displayName: String?
+
+    /// Its program bundle's id: `nancy-drew/blue-moon`.
+    public var programID: String { program ?? "nancy-drew/\(id)" }
 
     /// The name of the game's app, as Finder and the Dock show it.
-    public var appName: String { "Nancy Drew - \(title)" }
+    public var appName: String { displayName ?? "Nancy Drew - \(title)" }
     /// The game's app's file name.
     public var appBundleName: String { appName + ".app" }
 
-    public enum GameEngine: String, Codable, Sendable {
+    public enum GameEngine: String, Codable, Sendable, CaseIterable {
         case wine
         case scummvm
         case wineSteam = "wine-steam"
         case wineSteamSilent = "wine-steam-silent"
+        case dosbox
 
-        /// Wine runs the game: every engine but ScummVM.
-        public var runsInWine: Bool { self != .scummvm }
+        /// Wine runs the game: every engine but ScummVM and DOSBox.
+        public var runsInWine: Bool { self != .scummvm && self != .dosbox }
 
         /// Steam has to be running, and signed in, before the game starts.
         public var needsSteam: Bool { self == .wineSteam || self == .wineSteamSilent }
@@ -133,7 +142,9 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         installInstructions: String? = nil,
         failedInstallInfo: String? = nil,
         detectionAliases: [String] = [],
-        detectionCodes: [String] = []
+        detectionCodes: [String] = [],
+        program: String? = nil,
+        displayName: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -151,6 +162,8 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         self.failedInstallInfo = failedInstallInfo
         self.detectionAliases = detectionAliases
         self.detectionCodes = detectionCodes
+        self.program = program
+        self.displayName = displayName
     }
 }
 nonisolated extension GameInfo {

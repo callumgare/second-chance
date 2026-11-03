@@ -19,13 +19,14 @@ wrapp does not have:
 ## How they get into the game process
 
 All of them are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
-by `WrappTemplate/setup-wine.sh` (an Xcode build phase of the WrappTemplate
-target — add any new source to that phase's input files too, or edits to it
-won't rebuild). `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
+by `WrappTemplate/build-in-process-helpers.sh` (an Xcode build phase of the
+WrappTemplate target — add any new source to that phase's input files too, or
+edits to it won't rebuild). `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
 its entry point before dyld runs initializers, so an inserted dylib is mapped
-but its constructor never runs. Instead `patch-winemac.swift` gives Wine's Mac
-driver, `winemac.so`, a weak dependency on the dylib. The header comment of
-`native_fullscreen.m` has the details.
+but its constructor never runs. Instead preparing Wine (`WineBuild.prepare`,
+[modules.md](modules.md#engine-packages)) gives Wine's Mac driver,
+`winemac.so`, a weak dependency on the dylib (`MachOPatch`). The header
+comment of `native_fullscreen.m` has the details.
 
 Every process that talks to the Mac driver loads `winemac.so` — `explorer.exe`
 as well as the game — so each helper checks whether it is in the game before
@@ -214,7 +215,7 @@ open from the menu bar closes it, and with nothing ever locking the cursor the
 helper kept clicking for its full 15 tries — again on every return to the app.
 
 So the wrapp arms it only where cnc-ddraw may be drawing. `GameGraphicsAPI`
-(`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) reads the DLLs the game's `.exe` imports, from its PE import
+(`Packages/WrappKit/Sources/WindowsFormats/`) reads the DLLs the game's `.exe` imports, from its PE import
 directory: `ddraw.dll` means DirectDraw; `d3d8.dll` or `d3d9.dll` without it
 means Direct3D, and cursor lock stays unarmed. Every game checked fell cleanly
 on one side, the Steam copies too: Steam's DRM wrapper leaves the imports
@@ -323,8 +324,8 @@ that size: Wine only offers modes the display really has, and a MacBook's
 built-in display has no 4:3 modes at all. On a monitor that does have the mode
 the switch works, but really switches the monitor.
 
-So the prefix has Wine's `EmulateModeset` on (`WineManager`, as it creates
-the prefix; Wine 10 reads it from `HKCU\Software\Wine\X11 Driver` whatever
+So the prefix has Wine's `EmulateModeset` on (the wine module's
+`Modules/wine/prefix.yaml`, which `WineManager` follows as it creates the prefix; Wine 10 reads it from `HKCU\Software\Wine\X11 Driver` whatever
 the driver). win32u then says yes to any common mode without touching the
 display, and maps the game's windows up to the display's real size, at the
 same scale on both axes: on a 1512×945 display the game's 800×600 window
@@ -478,7 +479,7 @@ failure if nothing asked the game to quit and the game:
   window the wrapp missed);
 - draws with Direct3D, and quit before its first frame;
 - quit within 1 s of a Wine error that isn't one of the routine ones every
-  launch logs (`GameQuitCheck.routineErrors`: Vulkan, wow64, HID devices,
+  launch logs (`Modules/wine/routine-errors.yaml`: Vulkan, wow64, HID devices,
   NTLM and Kerberos, the desktop's `(null)` mode refusal, and for a game
   started through Steam, the COM lookups and graphics probe Steam does as it
   starts).
@@ -517,7 +518,9 @@ A game that quits unexpectedly logs, after the usual `■ Game exited …` line:
 ```
 
 A healthy launch that gets reported this way has met a Wine error that's
-routine after all: the line it names belongs in `GameQuitCheck.routineErrors`.
+routine after all: the line it names belongs in `Modules/wine/routine-errors.yaml`
+(or `Modules/steam/`'s, for a line only Steam's launches log), then `sc
+generate`, which compiles them into the wrapp (`GameQuitCheck+RoutineErrors.swift`).
 
 ## Cocoa start wait
 
@@ -629,8 +632,8 @@ when the directory is set, `GameLauncher` starts it with
 `PUPPET_CONTROL_EXE=scummvm`; the other two helpers stay unarmed in it, their
 variables unset. dyld kills a process whose inserted dylib is missing, so the
 wrapp checks the file first and runs the game without puppet control if it
-isn't there. ScummVM wrapps keep the dylib for this: `setup-wine.sh` leaves it
-off `wine-files`, the list of what a ScummVM wrapp removes. If wrapps are ever
+isn't there. ScummVM wrapps keep the dylib for this: it is the launcher's, not
+Wine's, so taking Wine out of a ScummVM wrapp leaves it. If wrapps are ever
 signed with hardened runtime, `scummvm` will need the
 `com.apple.security.cs.allow-dyld-environment-variables` entitlement for this
 to keep working.

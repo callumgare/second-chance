@@ -1,7 +1,10 @@
 import Testing
 import Foundation
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
+@testable import WrappLogging
 
 @Suite("Run context header")
 struct RunContextTests {

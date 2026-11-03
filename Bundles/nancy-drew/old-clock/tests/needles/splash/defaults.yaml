@@ -1,0 +1,5 @@
+# Every splash screen in this folder: a whole-screen fingerprint, clicked
+# near the picture's top-left corner, where no game's menu has a button.
+kind: "screen"
+tags: ["splash"]
+click: { x: 0.08, y: 0.08 }

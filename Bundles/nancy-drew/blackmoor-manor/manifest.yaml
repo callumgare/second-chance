@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "nancy-drew/blackmoor-manor"
+version: 1
+title: "Curse of Blackmoor Manor"
+series: "Nancy Drew"
+series-order: 12
+former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.blackmoor-manor"]
+
+volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+  wine-documents:
+    display-name: "saved games"
+
+variants:
+  - id: "wine"
+    volumes:
+      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
+    launch: { wine: { exe: "C:/Nancy Drew/The Curse of Blackmoor Manor/Game.exe", graphics: "direct-draw" } }
+
+editions:
+  - id: "cd"
+    source: "disc"
+    build: { target: "disc" }
+    inputs:
+      - { id: "disc-1" }
+    installer: { stubborn: true }
+  - id: "her-windows"
+    source: "her-download"
+    build: { target: "her-download" }
+    inputs: [{ id: "installer", format: "windows" }]
+    installer: { stubborn: true }
+  - id: "steam"
+    source: "steam"
+    inputs:
+      - { id: "game", app-id: 31830, common-folder: "Nancy Drew Curse of Blackmoor Manor", exe: "Game.exe" }
+    drm: "launch-when-steam-running"
+  - id: "big-fish"
+    source: "big-fish"
+    inputs: [{ id: "game", product: 1439 }]
+
+tests:
+  scenario: "nancy-drew/quit-from-menu"
+
+notes:                                       # for people only; nothing reads these
+  installer: "installshield"
+  disc-answer-file: "installer-answer-files/blackmoor-manor.iss"
+  quirks:
+    - "The installer doesn't exit when it is run silently, so AutoIt closes it once the install is done."
+    - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

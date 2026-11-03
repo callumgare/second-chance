@@ -8,8 +8,11 @@
 
 import Foundation
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
+@testable import WrappLogging
 import GameCatalog
 
 struct IntegrationGameRun {

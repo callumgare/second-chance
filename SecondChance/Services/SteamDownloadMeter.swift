@@ -10,6 +10,7 @@
 //  has the measurements.
 
 import Foundation
+import SecondChanceKit
 import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.SteamDownloadMeter")

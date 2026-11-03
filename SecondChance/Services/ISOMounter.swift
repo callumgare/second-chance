@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SecondChanceKit
 import DiskArbitration
 import Logging
 

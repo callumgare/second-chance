@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "wine"
+release: 5
+native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
+versions:
+  # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
+  # template, prepared on the Mac that builds (WineBuild.prepare).
+  - version: "10.0_8"
+    package:
+      # EngineTree's hash of the prepared tree (`sc engine prepare`).
+      prepared: "c0e4d94e6f596d534a18b600856e390c8c00b97370fea8ad71ab98b17149d908"
+      sources:
+        - id: "wine"
+          sha256: "2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68"
+          size: 166321980
+          urls: ["https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz"]
+        - id: "wineskin"
+          sha256: "9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a"
+          size: 84533420
+          urls: ["https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"]
+runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
+data: ["prefix.yaml", "routine-errors.yaml"]
+assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program with no menu, started and quit
+updates:
+  # A wrapp whose prefix was set up from another prefix.yaml gets this
+  # one's set-up applied over it (registry settings, cnc-ddraw and its
+  # ddraw.ini), keeping the game installed. Not on every release: most only
+  # change what happens at launch, which a new wrapp brings anyway.
+  - { id: "wine-prefix", when-changed: ["prefix.yaml"] }

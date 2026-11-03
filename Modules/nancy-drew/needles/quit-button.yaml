@@ -1,0 +1,10 @@
+# The main menu's Exit, for games whose Exit is a graphic rather than text:
+# across the series a red button in the bottom-right corner, at roughly the
+# same size relative to the screen.
+kind: "region"
+tags: ["quit"]
+region:
+  search: { x: 0.6667, y: 0.8333, width: 0.3333, height: 0.1667 }
+  height-fraction: 0.0662
+  scales: [1.0]
+  grayscale: "red-emphasis"

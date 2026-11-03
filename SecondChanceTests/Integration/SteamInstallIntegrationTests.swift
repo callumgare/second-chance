@@ -13,8 +13,10 @@
 import Foundation
 import os
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 import GameCatalog
 
 @Suite("Steam install — per game",
@@ -50,6 +52,7 @@ struct SteamInstallIntegrationTests {
         case .scummvm: return "/Program Files (x86)/Nancy Drew/\(installDir)"
         case .wine: return "/Program Files (x86)/Nancy Drew/\(installDir)/\(exe)"
         case .wineSteam, .wineSteamSilent: return "/Program Files (x86)/Steam/steamapps/common/\(installDir)/\(exe)"
+        case .dosbox: return nil  // no Steam game runs in DOSBox
         }
     }
 

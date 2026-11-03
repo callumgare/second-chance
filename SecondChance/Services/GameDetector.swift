@@ -8,22 +8,76 @@ import Foundation
 import Logging
 import UniformTypeIdentifiers
 import SecondChanceKit
+import SecondChanceReporting
 import GameCatalog
+import WrappBuilder
 
-/// Detects Nancy Drew games from various installation sources
+/// Detects which game a disc or download is, by the shipped bundles'
+/// matchers (`DetectionIndex`, docs/program-bundles.md).
 class GameDetector {
     static let shared = GameDetector()
 
     private nonisolated static let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.GameDetector")
     private nonisolated var logger: Logger { Self.logger }
 
+    /// The matchers it was given, for tests; nil uses the shipped bundles'.
+    private let suppliedIndex: DetectionIndex?
+
+    /// The matchers of every bundle Second Chance ships, compiled once. The
+    /// first use loads them, which checks every bundle (a fraction of a
+    /// second), so it is reached off the main thread (`detect`).
+    private nonisolated var index: DetectionIndex { suppliedIndex ?? Self.shippedIndex }
+
+    /// What `index` comes from when nothing is given: the shipped bundles,
+    /// loaded on first use (a fraction of a second), or, should they fail
+    /// to load, which the unit tests rule out, the default matchers of
+    /// GameCatalog's table, which is generated from them.
+    nonisolated static let shippedIndex: DetectionIndex = {
+        do {
+            guard let root = Bundle.main.resourceURL?.appendingPathComponent("Bundles") else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            return try DetectionIndex.load(bundlesAt: root)
+        } catch {
+            logger.error("Couldn't load the shipped bundles' matchers, so recognising games by GameCatalog's titles alone: \(error)")
+            return catalogueIndex(GameInfoProvider.shared.allGames())
+        }
+    }()
+
+    /// The default matchers of `games`: their titles, aliases and codes.
+    nonisolated static func catalogueIndex(_ games: [GameInfo]) -> DetectionIndex {
+        let games = games.filter { $0.id != GameInfo.unknownGame.id }
+        let rules = games.flatMap { game -> [DetectionIndex.Rule] in
+            let id = game.programID
+            let title = game.title.lowercased()
+            let names = [title.hasPrefix("the ") ? String(title.dropFirst(4)) : title] + game.detectionAliases.map { $0.lowercased() }
+            return names.map { DetectionIndex.Rule(bundleID: id, matcher: .text($0)) }
+                + game.detectionCodes.map { DetectionIndex.Rule(bundleID: id, matcher: .word($0)) }
+        }
+        return DetectionIndex(rules: rules, programs: games.map {
+            .init(bundleID: $0.programID, title: $0.title, series: $0.program == nil ? "Nancy Drew" : nil)
+        })
+    }
+
+    init(index: DetectionIndex? = nil) {
+        suppliedIndex = index
+    }
+
     /// Detect game from disk path
     func detectGame(fromDisk diskPath: URL) async throws -> String {
         // Note: Progress should already be reported by caller before this method
+        let source = try await discSource(diskPath)
+        return await detect(source, from: diskPath.lastPathComponent, sourceKind: .disk)
+    }
+
+    /// What a disc shows of itself: the names it gives itself, in the
+    /// order today's fingerprint has always had them, its files and its
+    /// volume's name.
+    func discSource(_ diskPath: URL) async throws -> DetectionSource {
         let stepLogger = logger
         stepLogger.notice("Analyzing: \(diskPath.lastPathComponent)")
 
-        var fingerprint = ""
+        var signals: [DetectionSource.Signal] = []
 
         let contents = try FileManager.default.contentsOfDirectory(
             at: diskPath,
@@ -36,14 +90,14 @@ class GameDetector {
         if let setupExe = contents.first(where: { $0.lastPathComponent.lowercased() == "setup.exe" }) {
             if let productName = await versionStrings(of: setupExe)["ProductName"] {
                 stepLogger.notice("Product Name: \(productName)")
-                fingerprint += " \(productName)"
+                signals.append(.init(.exeVersion, productName))
             }
         }
 
         if let msiFile = contents.first(where: { $0.pathExtension.lowercased() == "msi" }) {
             if let subject = await Blocking.run({ MSISummary(contentsOf: msiFile)?.subject }) {
                 stepLogger.notice("MSI Subject: \(subject)")
-                fingerprint += " \(subject)"
+                signals.append(.init(.msi, subject))
             }
         }
 
@@ -51,11 +105,11 @@ class GameDetector {
             if let iniContent = TextFile.text(of: setupIni) {
                 if let appName = getPropertyFromIni(iniContent, property: "AppName") {
                     stepLogger.notice("AppName: \(appName)")
-                    fingerprint += " \(appName)"
+                    signals.append(.init(.setupIni, appName))
                 }
                 if let product = getPropertyFromIni(iniContent, property: "Product") {
                     stepLogger.notice("Product: \(product)")
-                    fingerprint += " \(product)"
+                    signals.append(.init(.setupIni, product))
                 }
             }
         }
@@ -64,23 +118,16 @@ class GameDetector {
             if let autorunContent = TextFile.text(of: autorunInf) {
                 if let label = getAutorunLabel(autorunContent) {
                     stepLogger.notice("Autorun label: \(label)")
-                    fingerprint += " \(label)"
+                    signals.append(.init(.autorun, label))
                 }
             }
         }
 
-        fingerprint += " \(diskPath.lastPathComponent)"
+        signals.append(.init(.folderName, diskPath.lastPathComponent))
 
-        stepLogger.notice("Fingerprint: '\(fingerprint)'")
-        let result = getGameSlugFromFingerprint(fingerprint)
-
-        if result == "unknown" {
-            stepLogger.critical("Detection failed for '\(diskPath.lastPathComponent)' fingerprint='\(fingerprint)'")
-        } else {
-            stepLogger.notice("Detected: \(result)")
-        }
-
-        return result
+        let volume = try? diskPath.resourceValues(forKeys: [.isVolumeKey, .volumeNameKey])
+        return DetectionSource(signals: signals, location: .folder(diskPath),
+                               volumeName: volume?.isVolume == true ? volume?.volumeName : nil)
     }
 
     /// Detect the game from a Windows installer bought from Her Interactive.
@@ -93,46 +140,107 @@ class GameDetector {
     func detectGame(fromHerInstaller installerPath: URL) async throws -> String {
         logger.notice("Analyzing: \(installerPath.lastPathComponent)")
 
-        var fingerprint = installerPath.deletingPathExtension().lastPathComponent
-            .replacingOccurrences(of: "_", with: " ")
+        var signals: [DetectionSource.Signal] = [
+            .init(.fileName, installerPath.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "_", with: " ")),
+        ]
 
         if let productName = await versionStrings(of: installerPath)["ProductName"] {
             logger.notice("Product Name: \(productName)")
-            fingerprint += " \(productName)"
+            signals.append(.init(.exeVersion, productName))
         }
 
         do {
             // Reads the whole installer, hundreds of MB, so off the main thread.
             for signal in try await Blocking.run({ try Self.embeddedInstallerSignals(in: installerPath) }) {
                 logger.notice("Embedded: \(signal)")
-                fingerprint += " \(signal)"
+                signals.append(.init(.embedded, signal))
             }
         } catch {
             logger.warning("Couldn't read \(installerPath.lastPathComponent) for embedded game names: \(error)")
         }
 
-        return detect(fingerprint: fingerprint, from: installerPath.lastPathComponent)
+        let source = DetectionSource(signals: signals, location: .file(installerPath))
+        return await detect(source, from: installerPath.lastPathComponent, sourceKind: .herDownload)
     }
 
     /// Detect the game from a Her Interactive Mac download, by the names its
     /// Cider installer gives it.
     func detectGame(fromCiderPackage package: CiderPackage) -> String {
         logger.notice("Analyzing: \(package.volumeName)")
-        let fingerprint = [package.volumeName, package.gameName, package.bundleIdentifier]
+        let source = DetectionSource(signals: [package.volumeName, package.gameName, package.bundleIdentifier]
             .compactMap { $0 }
-            .joined(separator: " ")
-        return detect(fingerprint: fingerprint, from: package.volumeName)
+            .map { .init(.cider, $0) })
+        // No files to read, so quick enough to do here.
+        return conclude(index.detect(source), source: source, from: package.volumeName, sourceKind: .herDownload)
     }
 
-    private func detect(fingerprint: String, from source: String) -> String {
-        logger.notice("Fingerprint: '\(fingerprint)'")
-        let result = getGameSlugFromFingerprint(fingerprint)
-        if result == "unknown" {
-            logger.critical("Detection failed for '\(source)' fingerprint='\(fingerprint)'")
-        } else {
-            logger.notice("Detected: \(result)")
+    /// The game `source` is, reading any files the matchers name off the
+    /// main thread.
+    private func detect(_ source: DetectionSource, from name: String, sourceKind: WrappSource) async -> String {
+        let result = await Blocking.run { self.index.detect(source) }
+        return conclude(result, source: source, from: name, sourceKind: sourceKind)
+    }
+
+    /// The game's slug, or `unknownGame`'s: for a tie too, which the person
+    /// is asked about as they are about a game nothing recognised. A near
+    /// miss or a tie is reported, as the reporting setting allows.
+    private func conclude(_ result: DetectionIndex.Result, source: DetectionSource, from name: String,
+                          sourceKind: WrappSource) -> String {
+        logger.notice("Fingerprint: '\(source.fingerprint)'")
+        switch result {
+        case .recognised(let match):
+            let slug = Self.slug(of: match.bundleID)
+            logger.notice("Detected: \(slug) (\(match.rule.matcher.description))")
+            return slug
+        case .ambiguous(let tied):
+            logger.critical("Detection failed for '\(name)': it matches \(tied.map { "\($0.bundleID) (\($0.rule.matcher.description))" }.joined(separator: " and ")) equally")
+            Self.report(.ambiguous(tied), source: source, sourceKind: sourceKind)
+            return GameInfo.unknownGame.id
+        case .unrecognised(let nearMiss):
+            logger.critical("Detection failed for '\(name)' fingerprint='\(source.fingerprint)'")
+            if let nearMiss {
+                logger.notice("Nearly \(nearMiss.bundleID ?? nearMiss.series ?? "?"), by \(nearMiss.reason.rawValue)")
+                Self.report(result, source: source, sourceKind: sourceKind)
+            }
+            return GameInfo.unknownGame.id
         }
-        return result
+    }
+
+    /// Today's slug for a bundle: the part of its id after the namespace.
+    nonisolated static func slug(of bundleID: String) -> String {
+        bundleID.split(separator: "/").last.map(String.init) ?? bundleID
+    }
+
+    /// Report a near miss or a tie, so editions not recognised yet show up
+    /// (docs/failure-reports.md). A basic report says which bundle nearly
+    /// matched, how, and the kinds of name the source had, never the names;
+    /// for a hash, the file's name on the disc, its size and its md5. A
+    /// detailed one has the names too, redacted.
+    nonisolated static func report(_ result: DetectionIndex.Result, source: DetectionSource, sourceKind: WrappSource) {
+        var tags = ["signals": source.signalKinds.map(\.rawValue).joined(separator: ",")]
+        let kind: String
+        switch result {
+        case .recognised:
+            return
+        case .ambiguous(let tied):
+            kind = "ambiguous"
+            tags["tied"] = tied.map(\.bundleID).joined(separator: ",")
+        case .unrecognised(let nearMiss):
+            guard let nearMiss else { return }
+            kind = "near-miss"
+            tags["near_miss"] = nearMiss.reason.rawValue
+            if let bundle = nearMiss.bundleID { tags["near_bundle"] = bundle }
+            if let series = nearMiss.series { tags["near_series"] = series }
+            if let file = nearMiss.file {
+                tags["file"] = file.name
+                tags["file_size"] = String(file.size)
+                tags["file_md5"] = file.md5
+            }
+        }
+        let summary = source.signals.map { "\($0.kind.rawValue): \($0.text)" }.joined(separator: "\n")
+        _ = FailureReporter.sendWithoutAsking(FailureReport(
+            what: "Recognising the game", kind: kind, source: sourceKind.rawValue, tags: tags, summary: summary
+        ))
     }
 
     /// The game names an installer carries as plain text: the values of
@@ -279,30 +387,13 @@ class GameDetector {
         return nil
     }
 
-    /// Match fingerprint to game slug using full game titles
+    /// The game a fingerprint alone names, by the shipped bundles' text
+    /// and word matchers.
     func getGameSlugFromFingerprint(_ fingerprint: String) -> String {
-        Self.slug(forFingerprint: fingerprint, among: GameInfoProvider.shared.allGames())
-    }
-
-    /// The game a fingerprint names, from the catalogue: its title (without
-    /// a leading "The", which discs leave off), or one of its aliases,
-    /// anywhere in the fingerprint whatever the case; or one of its codes, as
-    /// a whole word in capitals. Of several, the first in the catalogue's
-    /// order, unless another's title contains its title: "Secrets Can Kill
-    /// Remastered" is what a fingerprint naming both is. A game added to the
-    /// catalogue is recognised by its title with nothing added here.
-    nonisolated static func slug(forFingerprint fingerprint: String, among games: [GameInfo]) -> String {
-        let padded = " \(fingerprint) "
-        let lowercased = padded.lowercased()
-        let matched = games.filter { game in
-            guard game.id != GameInfo.unknownGame.id else { return false }
-            let title = game.title.lowercased()
-            let names = [title.hasPrefix("the ") ? String(title.dropFirst(4)) : title] + game.detectionAliases.map { $0.lowercased() }
-            return names.contains { lowercased.contains($0) } || game.detectionCodes.contains { padded.contains(" \($0) ") }
+        let source = DetectionSource(signals: [.init(.exeVersion, fingerprint)])
+        if case .recognised(let match) = index.detect(source) {
+            return Self.slug(of: match.bundleID)
         }
-        let mostSpecific = matched.first { game in
-            !matched.contains { $0.id != game.id && $0.title.lowercased().contains(game.title.lowercased()) }
-        }
-        return mostSpecific?.id ?? GameInfo.unknownGame.id
+        return GameInfo.unknownGame.id
     }
 }

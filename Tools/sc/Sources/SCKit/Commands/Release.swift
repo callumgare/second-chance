@@ -134,6 +134,19 @@ private struct Release {
         }
     }
 
+    /// Refuse to release while an engine's download has gone from where its
+    /// module says: Second Chance carries no engine, so nobody who hasn't
+    /// prepared it already could build a game that needs it.
+    private func checkEngineSources() async throws {
+        let problems = try await ui.progressStep("Engine downloads", success: "Engine downloads are where their modules say") { _ in
+            try await EngineSources.check(modules: repo.modules)
+        }
+        guard problems.isEmpty else {
+            throw SCError("Release stopped: an engine's download isn't where its module says.",
+                          hints: problems.map(\.description) + ["Point the module at where it is now (docs/modules.md#engine-packages)."])
+        }
+    }
+
     /// Run the linters. On a failure, ask whether to release anyway, defaulting
     /// to no; a dry run only reports it, and a run that can't ask stops.
     private func checkLint() async throws {
@@ -188,6 +201,7 @@ private struct Release {
         // Lint, before anything is generated: a release can go out with lint
         // failures, but only when someone says so.
         try await checkLint()
+        try await checkEngineSources()
 
         // Asked now, while someone is here to answer: the tests, build and
         // symbols upload take long enough that they may have walked away,
@@ -199,9 +213,7 @@ private struct Release {
         let lastTag = try await git(["describe", "--tags", "--abbrev=0", "--match", "v*"])
         let previous = lastTag.succeeded ? lastTag.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         let version = try await resolveVersion(override: versionOverride, previous: previous)
-        // CFBundleVersion, kept monotonic off the commit count, which also
-        // means it changes every release — WineManager keys its prefix cache
-        // on it, so a stale cache can't survive an upgrade.
+        // CFBundleVersion, kept monotonic off the commit count.
         let buildNumber = try await git(["rev-list", "--count", "HEAD"]).output.trimmingCharacters(in: .whitespacesAndNewlines)
         let origin = versionOverride != nil ? "from --version" : "up from \(previous ?? "no tag")"
         ui.line(ui.format("\(.primary("🏷  v\(version)"))") + ui.format("\(.muted("  build \(buildNumber), \(origin)"))"))
@@ -294,9 +306,8 @@ private struct Release {
         }
         try await ui.progressStep("Package", success: "Packaged \(repo.display(zip))") { _ in
             try? FileManager.default.removeItem(at: zip)
-            // ditto, not zip: the Wine and ScummVM payloads inside
-            // WrappTemplate.app are full of symlinks and extended attributes
-            // that `zip` would flatten.
+            // ditto, not zip: an app is full of symlinks and extended
+            // attributes (code signatures) that `zip` would flatten.
             let result = try await Proc.collect("/usr/bin/ditto", ["-c", "-k", "--keepParent", app.path, zip.path])
             guard result.succeeded else { throw SCError("ditto failed: \(result.error)") }
         }

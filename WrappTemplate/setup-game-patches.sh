@@ -2,21 +2,26 @@
 set -euo pipefail
 
 # Downloads the official Her Interactive game patches and stages them in the
-# app bundle so GameInstallerRunner can apply them at wrapp-build time.
+# app's download cache (Contents/Resources/downloads/<sha256>), so
+# GameInstallerRunner can apply them at wrapp-build time without
+# downloading anything.
 #
-# The patch list lives in game-patches.json next to this script — that manifest
-# is the single source of truth, shared with the Swift side (GamePatchCatalog).
-# Adding a patch means editing the manifest, not this script.
+# The patch list is the nancy-drew module's patches.json — that manifest is
+# the single source of truth, shared with the Swift side (GamePatchCatalog),
+# which the app reads from the module in its resources. Adding a patch means
+# editing the manifest, not this script.
 #
 # Downloads are cached per game under ~/Library/Caches/SecondChance so repeated
 # builds do not re-fetch. See docs/game-patches.md.
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-MANIFEST="${SCRIPT_DIR}/game-patches.json"
+MANIFEST="${SCRIPT_DIR}/../Modules/nancy-drew/patches.json"
 CACHE_DIR="${HOME}/Library/Caches/SecondChance"
 PATCHES_CACHE="${CACHE_DIR}/game-patches"
-PATCHES_DEST="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/game-patches"
+# Content-addressed: each download under its sha256, as later builds'
+# downloads are found.
+DOWNLOADS_DEST="${BUILT_PRODUCTS_DIR}/${PRODUCT_NAME}.app/Contents/Resources/downloads"
 
 echo "🔍 Setting up game patches for SecondChance..."
 
@@ -40,10 +45,10 @@ fi
 echo "📋 Manifest lists ${PATCH_COUNT} patch(es)"
 echo ""
 
-# Rebuild the bundle directory from scratch so patches dropped from the
-# manifest do not linger in an incremental build.
-rm -rf "${PATCHES_DEST}"
-mkdir -p "${PATCHES_DEST}"
+# Rebuild the cache from scratch so patches dropped from the manifest do not
+# linger in an incremental build.
+rm -rf "${DOWNLOADS_DEST}"
+mkdir -p "${DOWNLOADS_DEST}"
 
 # shellcheck source=download-verified.sh
 source "${SCRIPT_DIR}/download-verified.sh"
@@ -87,14 +92,8 @@ while [ "${index}" -lt "${PATCH_COUNT}" ]; do
         continue
     fi
 
-    bundle_game_dir="${PATCHES_DEST}/${game}"
-    mkdir -p "${bundle_game_dir}"
-    /usr/bin/ditto --rsrc "${cache_file}" "${bundle_game_dir}/${archive}"
+    /usr/bin/ditto --rsrc "${cache_file}" "${DOWNLOADS_DEST}/${sha256}"
 done
-
-# The app reads the manifest from the bundle to decide which patches apply to
-# the game and edition being built, so it ships alongside the archives.
-/usr/bin/ditto --rsrc "${MANIFEST}" "${PATCHES_DEST}/manifest.json"
 
 echo ""
 echo "✅ Game patches ready — ${downloaded} downloaded, ${cached} cached, ${failed} failed"

@@ -27,9 +27,10 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
-        // Left to Xcode to link statically: a wrapp's Contents/Frameworks
-        // is replaced by the engine's, so a dynamic library wouldn't
-        // survive (WrappTemplate/check-output-collisions.sh checks).
+        // Left to Xcode to link statically: engines are installed into a
+        // wrapp's Contents/Frameworks beside the launcher's files, where a
+        // framework of ours could collide with one of theirs
+        // (WrappTemplate/check-static-linking.sh checks).
         .library(name: "SecondChanceKit", targets: ["SecondChanceKit"]),
         .library(name: "SecondChanceReporting", targets: ["SecondChanceReporting"]),
     ],
@@ -37,15 +38,25 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
         .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.32.0"),
         .package(path: "../GameCatalog"),
+        .package(path: "../WrappKit"),
     ],
     targets: [
-        // Logging, Wine, Steam and the rest. No Sentry, so WrappPuppeteer
-        // can use all of it.
+        // Second Chance's own shared code: the loading and log windows,
+        // Steam and the rest, plus WrappKit's modules (logging, processes,
+        // Wine, Windows formats, the wrapp's layout), which it re-exports.
+        // No Sentry, so WrappPuppeteer can use all of it.
         .target(
             name: "SecondChanceKit",
             dependencies: [
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
+                // The generic parts, re-exported (Exports.swift).
+                .product(name: "WrappLogging", package: "WrappKit"),
+                .product(name: "ProcessKit", package: "WrappKit"),
+                .product(name: "WindowsFormats", package: "WrappKit"),
+                .product(name: "WineKit", package: "WrappKit"),
+                .product(name: "WrappFormat", package: "WrappKit"),
+                .product(name: "WrappModules", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings
         ),

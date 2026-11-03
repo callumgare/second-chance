@@ -1,0 +1,549 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/manifest.json",
+  "title": "Second Chance program bundle manifest",
+  "description": "A program bundle's manifest.yaml: what the program is, the editions it was sold as and the sources each comes from, the variants it can run as, and what it keeps outside its app. docs/program-bundles.md describes every field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "id", "version", "title", "editions"],
+  "properties": {
+    "format": {
+      "description": "The manifest format this is written in. A newer format than the app reads is refused.",
+      "const": 1
+    },
+    "id": {
+      "description": "<namespace>/<name>, unique on its own: nancy-drew/blue-moon.",
+      "$ref": "#/$defs/program-id"
+    },
+    "version": {
+      "description": "The bundle's own revision, which updates bring wrapps to.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "title": { "type": "string", "minLength": 1 },
+    "series": {
+      "description": "The series the program belongs to, if any, as people call it.",
+      "type": "string",
+      "minLength": 1
+    },
+    "series-order": {
+      "description": "Where the program comes in lists of its series: 1 first. A remake can share its original's place in the story, so this is the order of the list, not a number in the series.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "display-name": {
+      "description": "The app's name, with {title} and {series} filled in. Only to change the default: \"{series} - {title}\" with a series, \"{title}\" without.",
+      "type": "string",
+      "minLength": 1
+    },
+    "former-bundle-ids": {
+      "description": "Bundle ids wrapps of this program had before; their files are moved in and linked.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Za-z0-9.-]+$" },
+      "uniqueItems": true
+    },
+    "setup": {
+      "description": "A Wrappfile function the default stages run first.",
+      "$ref": "#/$defs/name"
+    },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "volumes": {
+      "description": "What is kept outside the app, by name.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/volume" }
+    },
+    "variants": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/variant" },
+      "minItems": 1
+    },
+    "editions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edition" },
+      "minItems": 1
+    },
+    "updates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/update" }
+    },
+    "tests": { "$ref": "#/$defs/tests" },
+    "notes": {
+      "description": "For people only: never read by a build, the app or a wrapp, and not checked."
+    }
+  },
+  "$defs": {
+    "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "program-id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$" },
+    "windows-path": {
+      "description": "A path in the wrapp's Windows, with forward slashes: C:/Program Files/Game/Game.exe.",
+      "type": "string",
+      "pattern": "^[A-Z]:/[^\\\\]*$"
+    },
+    "relative-path": {
+      "description": "A path relative to a folder, with forward slashes.",
+      "type": "string",
+      "pattern": "^[^/\\\\][^\\\\]*$"
+    },
+    "module-options": {
+      "description": "A module's options, checked against that module's schema.",
+      "type": "object"
+    },
+    "runtime": {
+      "description": "How the program runs: settings, not build steps. An edition's or variant's runtime is laid over the bundle's.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "aspect": { "type": "string", "pattern": "^[0-9]+:[0-9]+$" },
+        "save-warning": { "type": "boolean" },
+        "environment": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "wine": { "$ref": "#/$defs/module-options" },
+        "scummvm": { "$ref": "#/$defs/module-options" },
+        "steam": { "$ref": "#/$defs/module-options" },
+        "dosbox": { "$ref": "#/$defs/module-options" },
+        "when": {
+          "description": "Settings decided at launch, by the Mac the program runs on.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["mac"],
+            "properties": {
+              "mac": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "arch": { "enum": ["arm64", "x86_64"] },
+                  "macos": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "volume": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "in-use-when": {
+          "description": "When the volume holds something of the person's: any file in it (the default), never (only settings), or a file matching one of these patterns.",
+          "oneOf": [
+            { "enum": ["any-file", "never"] },
+            { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+          ]
+        },
+        "display-name": {
+          "description": "What people are told it holds: \"saved games\".",
+          "type": "string",
+          "minLength": 1
+        },
+        "convert-from": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["volume", "with"],
+          "properties": {
+            "volume": { "$ref": "#/$defs/name" },
+            "with": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "mount": {
+      "description": "A volume, mounted where the program wants it.",
+      "type": "object",
+      "required": ["source"],
+      "properties": {
+        "source": { "$ref": "#/$defs/name" },
+        "target": { "$ref": "#/$defs/windows-path" },
+        "wine": { "$ref": "#/$defs/module-options" },
+        "scummvm": { "$ref": "#/$defs/module-options" },
+        "dosbox": { "$ref": "#/$defs/module-options" }
+      },
+      "additionalProperties": false
+    },
+    "launch": {
+      "description": "What the wrapp starts: each engine module's own options.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wine": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exe": { "$ref": "#/$defs/windows-path" },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "graphics": {
+              "description": "What the game draws with, as its .exe's imports said in the editions that could be read: the wrapp goes by this when an .exe can't say, as an Armadillo-wrapped Big Fish edition's can't.",
+              "enum": ["direct-draw", "direct-3d"]
+            }
+          }
+        },
+        "scummvm": { "$ref": "#/$defs/module-options" },
+        "steam": { "$ref": "#/$defs/module-options" },
+        "dosbox": {
+          "description": "The DOS program DOSBox runs, on the game's C: drive.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exe": { "$ref": "#/$defs/windows-path" }
+          }
+        },
+        "when": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      }
+    },
+    "build": {
+      "description": "The Wrappfile stage to build (target), and the stage it starts from on a fresh build (base).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "properties": {
+        "target": { "$ref": "#/$defs/name" },
+        "base": { "$ref": "#/$defs/name" }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "editions": {
+          "description": "The editions this variant can be built from; every one when left out.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/name" },
+          "uniqueItems": true
+        },
+        "build": { "$ref": "#/$defs/build" },
+        "available": {
+          "description": "yes, existing-files-only (only for someone with files in its volumes), or no.",
+          "enum": ["yes", "existing-files-only", "no"]
+        },
+        "reason": {
+          "description": "Why it isn't available, for people.",
+          "type": "string"
+        },
+        "preference": {
+          "description": "The lowest is preferred for a first build.",
+          "type": "integer"
+        },
+        "volumes": { "type": "array", "items": { "$ref": "#/$defs/mount" } },
+        "launch": { "$ref": "#/$defs/launch" },
+        "runtime": { "$ref": "#/$defs/runtime" }
+      }
+    },
+    "detect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "aliases": {
+          "description": "Other names a disc or download calls the program by, matched as the title is: case aside, anywhere.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "codes": {
+          "description": "Short codes it is called by (STFD), matched as a word, case and all: the riskiest kind of matcher, as a volume label can have SEA or LIE in it.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z0-9]+$" },
+          "uniqueItems": true
+        },
+        "matchers": {
+          "description": "What tells this edition apart when its title, aliases and codes can't. Each is one kind; they have no order, and the most specific match wins (docs/program-bundles.md).",
+          "type": "array",
+          "items": { "$ref": "#/$defs/matcher" },
+          "minItems": 1
+        }
+      }
+    },
+    "file-glob": {
+      "description": "A file's path from the top of the disc or download, with forward slashes, matched case aside. * and ? don't cross a /.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/\\\\]([^\\\\]*[^/\\\\])?$"
+    },
+    "matcher": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "file-exists": {
+          "description": "A file is there.",
+          "$ref": "#/$defs/file-glob"
+        },
+        "file-contains": {
+          "description": "A file holds this text, exactly as written, in UTF-8 or UTF-16 (the first 16 MB are read).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "text"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob" },
+            "text": { "type": "string", "minLength": 1 }
+          }
+        },
+        "file-hash": {
+          "description": "A file's size and the md5 of its first bytes, as ScummVM's detection tables have them.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "size", "md5"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob" },
+            "size": { "type": "integer", "minimum": 0 },
+            "md5": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+            "bytes": {
+              "description": "How many bytes from the start the md5 is of: 5000 when left out, as ScummVM's usually are.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "exe-version": {
+          "description": "A Windows program's version information has this text in one of its strings, case aside.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["file", "key", "text"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob" },
+            "key": { "type": "string", "enum": ["ProductName", "FileDescription", "CompanyName", "InternalName", "OriginalFilename", "ProductVersion", "FileVersion", "LegalCopyright", "Comments"] },
+            "text": { "type": "string", "minLength": 1 }
+          }
+        },
+        "msi-summary": {
+          "description": "An MSI's summary information has this text in its subject, case aside.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["subject"],
+          "properties": {
+            "file": { "$ref": "#/$defs/file-glob", "description": "Which MSI: *.msi when left out." },
+            "subject": { "type": "string", "minLength": 1 }
+          }
+        },
+        "volume-name": {
+          "description": "The disc's volume name, whole, case aside; * and ? as in a file's path.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["options", "default", "prompt"],
+      "properties": {
+        "options": { "type": "array", "items": { "$ref": "#/$defs/name" }, "minItems": 2, "uniqueItems": true },
+        "default": { "$ref": "#/$defs/name" },
+        "prompt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "edition": {
+      "type": "object",
+      "required": ["id", "source"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "source": {
+          "description": "Where the edition comes from: brought by the person (disc, her-download) or chosen from a list (steam, big-fish, download).",
+          "enum": ["disc", "her-download", "steam", "big-fish", "download"]
+        },
+        "inputs": {
+          "description": "What the build brings in, each used in the Wrappfile by its id; the fields are the source's.",
+          "type": "array",
+          "minItems": 1
+        },
+        "build": { "$ref": "#/$defs/build" },
+        "patches": { "type": "array", "items": { "$ref": "#/$defs/name" }, "uniqueItems": true },
+        "detect": { "$ref": "#/$defs/detect" },
+        "installer": {
+          "description": "Options for the installer module (phase 1 keeps them here until Wrappfiles exist).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "stubborn": {
+              "description": "The installer doesn't exit when run silently, so it is watched and closed.",
+              "type": "boolean"
+            }
+          }
+        },
+        "choices": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/name" },
+          "additionalProperties": { "$ref": "#/$defs/choice" }
+        },
+        "runtime": { "$ref": "#/$defs/runtime" },
+        "tests": { "$ref": "#/$defs/tests" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "source": { "const": "disc" } } },
+          "then": {
+            "required": ["inputs"],
+            "properties": { "inputs": { "type": "array", "items": { "$ref": "#/$defs/disc-input" } } }
+          }
+        },
+        {
+          "if": { "properties": { "source": { "const": "her-download" } } },
+          "then": {
+            "required": ["inputs"],
+            "properties": { "inputs": { "type": "array", "items": { "$ref": "#/$defs/her-download-input" }, "maxItems": 1 } }
+          }
+        },
+        {
+          "if": { "properties": { "source": { "const": "steam" } } },
+          "then": {
+            "required": ["inputs"],
+            "properties": {
+              "inputs": { "type": "array", "items": { "$ref": "#/$defs/steam-input" }, "maxItems": 1 },
+              "drm": {
+                "description": "What the game's DRM needs; left out when not known.",
+                "enum": ["no", "launch-when-steam-running", "launch-via-steam-only"]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "source": { "const": "big-fish" } } },
+          "then": {
+            "required": ["inputs"],
+            "properties": { "inputs": { "type": "array", "items": { "$ref": "#/$defs/big-fish-input" }, "maxItems": 1 } }
+          }
+        },
+        {
+          "if": { "properties": { "source": { "const": "download" } } },
+          "then": {
+            "required": ["licence"],
+            "properties": {
+              "inputs": { "type": "array", "items": { "$ref": "#/$defs/download-input" } },
+              "licence": { "enum": ["freeware-licensed", "free-release", "shareware", "abandonware"] },
+              "licence-from": { "type": "string", "minLength": 1 },
+              "licence-file": {
+                "description": "The licence's own words, a file in the unpacked input, saved into the app after what the person is told.",
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "disc-input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "requires": {
+          "description": "A file only this disc has, to check the right disc was put in.",
+          "$ref": "#/$defs/relative-path"
+        },
+        "prompt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "her-download-input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "format"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "format": {
+          "description": "Which of Her Interactive's downloads: a Windows installer, or a Mac app.",
+          "enum": ["windows", "mac"]
+        }
+      }
+    },
+    "steam-input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "app-id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "app-id": { "type": "integer", "minimum": 1 },
+        "common-folder": {
+          "description": "The folder under steamapps/common/ Steam installs the app into, as its app info says.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\\\]+$"
+        },
+        "exe": {
+          "description": "The program Steam starts, relative to common-folder.",
+          "$ref": "#/$defs/relative-path"
+        }
+      }
+    },
+    "big-fish-input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "product"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "product": {
+          "description": "The game's product number on Big Fish Games, the number in each of its SKUs (F2435T1L1: product 2435), whichever its language.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "download-input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "urls", "sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "urls": { "type": "array", "items": { "type": "string", "pattern": "^https://" }, "minItems": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 1 },
+        "unpack": { "type": "string", "pattern": "^(none|zip|rar|zip:.+)$" },
+        "install": { "type": "string", "minLength": 1 },
+        "disc-image": { "$ref": "#/$defs/relative-path" }
+      }
+    },
+    "update": {
+      "description": "One way of bringing an old wrapp up to this bundle, run in order like a database's migrations. An entry with only an id names a module's default update, to run it there.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/name" },
+        "from": { "$ref": "#/$defs/versions" },
+        "to": { "$ref": "#/$defs/versions" },
+        "build": { "$ref": "#/$defs/build" },
+        "fresh-build": {
+          "description": "Wrapps matching `from` can't be brought forward and are built afresh from their source.",
+          "type": "boolean"
+        }
+      }
+    },
+    "versions": {
+      "description": "The bundle's version, or a module's, each a version or a constraint (\"<3\").",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "integer" },
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "version": { "type": ["integer", "string"] },
+              "release": { "type": ["integer", "string"] }
+            }
+          }
+        ]
+      }
+    },
+    "tests": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scenario": { "type": "string", "minLength": 1 },
+        "parameters": { "type": "object" }
+      }
+    }
+  }
+}

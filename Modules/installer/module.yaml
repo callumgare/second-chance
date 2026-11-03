@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "installer"
+release: 1
+native: "installer"                          # its Swift: InstallerPlan, GameInstallerRunner, InstallerBuild
+versions:
+  - { version: "1" }
+depends-on: ["wine@10"]                      # installers run in Wine
+notes:
+  about: "Runs a Windows installer: silently with an answer file, watched and closed when it won't exit, or under AutoIt."

@@ -10,8 +10,12 @@
 
 import Testing
 import Foundation
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WindowsFormats
+@testable import WineKit
+@testable import WrappLogging
 
 @Suite("LogStore", .serialized)
 struct LogStoreTests {

@@ -52,7 +52,14 @@ nonisolated extension Wine {
     public static func inProcessHelperVariables(
         gameExe exeURL: URL, game: GameInfo? = nil, environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
-        let gameExe = exeURL.lastPathComponent
+        inProcessHelperVariables(
+            gameExe: exeURL.lastPathComponent, graphicsAPI: GameGraphicsAPI(exeAt: exeURL, game: game), environment: environment)
+    }
+
+    /// The same, for the .exe called `gameExe` that draws with `graphicsAPI`.
+    static func inProcessHelperVariables(
+        gameExe: String, graphicsAPI: GameGraphicsAPI, environment: [String: String]
+    ) -> [String: String] {
         var env: [String: String] = [:]
         // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
         // debug switch for telling its main-thread polling apart from other causes.
@@ -63,7 +70,6 @@ nonisolated extension Wine {
         // cnc-ddraw's swallowed first click — for comparison. A Direct3D game
         // never goes through cnc-ddraw, and the lock's middle clicks would
         // only close the menus a player opens from the menu bar.
-        let graphicsAPI = GameGraphicsAPI(exeAt: exeURL, game: game)
         if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", graphicsAPI.mayUseCncDdraw {
             env["CURSOR_LOCK_EXE"] = gameExe
         }

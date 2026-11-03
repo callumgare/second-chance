@@ -16,7 +16,8 @@ import GameCatalog
 
 class GameMonitor {
     private let config: GameConfig
-    private let gameEngine: GameInfo.GameEngine
+    /// How the game is found and watched, as the module that starts it says.
+    private let discovery: GameDiscovery
     private var isMonitoring = false
     private let debugMode: Bool
     private let exitCodeLock = NSLock()
@@ -50,9 +51,9 @@ class GameMonitor {
         }
     }
 
-    init(config: GameConfig, debugMode: Bool = false) {
+    init(config: GameConfig, discovery: GameDiscovery, debugMode: Bool = false) {
         self.config = config
-        self.gameEngine = config.gameEngine
+        self.discovery = discovery
         self.debugMode = debugMode
     }
 
@@ -68,10 +69,10 @@ class GameMonitor {
     func waitForGameToStart(gameExeName: String, gamePid: Int32, launcher: Process? = nil,
                             abandonIf: ((Set<ProcessList.Entry>) -> String?)? = nil,
                             whileWaiting: (() -> Void)? = nil) async -> Int32? {
-        switch gameEngine {
-        case .wine, .wineSteam, .wineSteamSilent:
+        switch discovery {
+        case .wineProgram, .wineProgramStartedElsewhere:
             return await waitForWineGameToStart(gameExeName: gameExeName, launcher: launcher, abandonIf: abandonIf, whileWaiting: whileWaiting)
-        case .scummvm:
+        case .ownProcess:
             return waitForScummVMGameToStart(gamePid: gamePid)
         }
     }
@@ -85,10 +86,10 @@ class GameMonitor {
 
         isMonitoring = true
 
-        switch gameEngine {
-        case .wine, .wineSteam, .wineSteamSilent:
+        switch discovery {
+        case .wineProgram, .wineProgramStartedElsewhere:
             await waitForWineGameToStop(winePid: gamePid, process: process)
-        case .scummvm:
+        case .ownProcess:
             await waitForScummVMGameToStop(gamePid: gamePid, process: process)
         }
     }

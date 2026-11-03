@@ -33,61 +33,10 @@ struct GameLaunchInfo {
     }
 }
 
-/// What Big Fish's Game Manager opens a game's `.bfg` files with.
-nonisolated let bigFishProcessExe = #"C:\Program Files (x86)\bfgclient\bfgprocess.exe"#
-
+/// What the wrapp runs to start the game, from the module that starts it.
 nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
-    let driveC = config.wine.driveC
-    let gameExeUnixPath = WrappLayout.onDriveC(config.gameExePath, in: driveC).path
-    let gameInstallerDirUnixPath = WrappLayout.onDriveC(config.gameInstallerDir, in: driveC).path
-
-    let gameExeName = (gameExeUnixPath as NSString).lastPathComponent
-    let gameExeDir = (gameExeUnixPath as NSString).deletingLastPathComponent
-    switch config.gameEngine {
-    case .wine, .wineSteam, .wineSteamSilent:
-        // By name, from its own folder: games look for their files beside them.
-        var command = WineCommand.start(gameExeName, unixPath: false, in: URL(fileURLWithPath: gameExeDir))
-        if config.launchedByBigFish, let launchFile = config.bigFishLaunchFile {
-            // As Big Fish's own Play shortcut does: bfgprocess hands the file to
-            // Big Fish's DRM service, which runs its launcher, which runs the game.
-            command = .program(bigFishProcessExe, ["C:" + launchFile.replacingOccurrences(of: "/", with: "\\")])
-        }
-        let wine = config.wine
-        return GameLaunchInfo(
-            executable: command.executable(in: wine).path,
-            arguments: command.processArguments,
-            workingDirectory: gameExeDir,
-            gameExeName: gameExeName,
-            gameExePath: gameExeUnixPath,
-            wineCommand: command
-        )
-
-    case .scummvm:
-        // ScummVM game launch info
-        let layout = WrappLayout(app: config.appPath)
-        let resourcesPath = layout.resources
-        let scummvmBinary = layout.scummvm.path
-        let scummvmIni = resourcesPath.appendingPathComponent("scummvm.ini").path
-        let savePath = config.appSupportPath.path
-        let configPath = config.scummvmConfigPath.path
-
-        let arguments = [
-            "-f",                           // Fullscreen
-            "--config=\(configPath)",       // User config file location
-            "--initial-cfg=\(scummvmIni)",  // Configuration template to copy into configPath if there's no existing config
-            "--path=\(gameInstallerDirUnixPath)",           // Game files location
-            "--savepath=\(savePath)",       // Save files location
-            "--auto-detect"                 // Automatically detect and start game
-        ]
-
-        return GameLaunchInfo(
-            executable: scummvmBinary,
-            arguments: arguments,
-            workingDirectory: nil,
-            gameExeName: nil,  // ScummVM doesn't have a separate game exe
-            gameExePath: nil
-        )
-    }
+    // A wrapp's settings only name modules it can run (`RuntimeModules`).
+    (RuntimeModules.launcher(of: config.composition) ?? WineRuntime.self).launchInfo(config)
 }
 
 // MARK: - Game Launcher
@@ -109,10 +58,13 @@ enum LaunchOutcome: Equatable {
 class GameLauncher {
     private let config: GameConfig
     private let gameMonitor: GameMonitor
+    /// The modules the wrapp's composition has: what gets going, starts the
+    /// game and stops (`RuntimeModule`).
+    private let modules: RuntimeModules
     private var currentProcess: Process?
     private var cleanupCompleted = false
     /// Captures a diagnostics bundle if a Wine game starts badly; nil for
-    /// ScummVM. Made with the launcher, so a launch that stalls before the
+    /// ScummVM. Wine's, made with it, so a launch that stalls before the
     /// game starts (`captureDiagnostics`) can be captured too.
     private let startupDiagnostics: StartupDiagnostics?
     /// `startupDiagnostics`, once the game has been launched; nil before.
@@ -120,23 +72,11 @@ class GameLauncher {
     /// What the launch thread, the main thread (a stuck launch's report)
     /// and the cleanup queue all reach, so behind a lock.
     private struct Shared {
-        var desktop: WineDesktop?
-        var steam: WrappSteam?
         var launchCounted = false
         var failureReport: FailureReport?
         var reportTask: Task<ReportOutcome, Never>?
     }
     private let shared = Mutex(Shared())
-    /// The desktop `prepareDesktop` started, if it did. See `releaseDesktop`.
-    private var desktop: WineDesktop? {
-        get { shared.withLock { $0.desktop } }
-        set { shared.withLock { $0.desktop = newValue } }
-    }
-    /// Steam, for a game that needs it running (`wine-steam*`).
-    private var steam: WrappSteam? {
-        get { shared.withLock { $0.steam } }
-        set { shared.withLock { $0.steam = newValue } }
-    }
     /// Whether the game's window was ever seen.
     private var windowAppeared = false
     /// The process whose window is the game's, from when that window appears
@@ -149,32 +89,31 @@ class GameLauncher {
     /// Told how far a quit has got, for the window that says the game is
     /// closing. Called from the cleanup's background queue.
     var onQuitStep: (@Sendable (InfoWindowViewModel.QuitStep) -> Void)?
-    /// What the in-process helpers report from inside the game; Wine games only.
-    private var helperReport: InProcessHelperReport?
+    /// What watches the game while it runs, armed by its modules: the
+    /// in-process helpers' report, Wine's quit check (nil for ScummVM), and
+    /// copy protection.
+    private var watchers: LaunchWatchers?
+    /// What the in-process helpers report from inside the game.
+    private var helperReport: InProcessHelperReport? { watchers?.helperReport }
     /// Judges whether a Wine game's exit was a quit; nil for ScummVM.
-    private var quitCheck: GameQuitCheck?
+    private var quitCheck: GameQuitCheck? { watchers?.quitCheck }
     /// Set when the game's exit was no quit, but the game failing: it quit
     /// before it had started, or just after Wine reported an error.
     private(set) var unexpectedQuit: GameQuitCheck.Failure?
     /// The copy protection the game's .exe is wrapped in; Wine games only.
-    private(set) var copyProtection: CopyProtection?
+    var copyProtection: CopyProtection? { watchers?.copyProtection }
     /// The failure report for a run that ended badly, and its sending — for
     /// the error window to show, and for the wrapp to wait on before it exits.
     nonisolated var failureReport: FailureReport? { shared.withLock { $0.failureReport } }
     nonisolated var reportTask: Task<ReportOutcome, Never>? { shared.withLock { $0.reportTask } }
     private let cleanupQueue = DispatchQueue(label: "com.gamewrapper.cleanup")
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.GameLauncher")
-    /// What Wine and the game print, and what ScummVM prints: categories of
-    /// their own, so they read apart from the launcher's lines about them.
-    private nonisolated let wineOutputLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Wine")
-    private nonisolated let scummvmOutputLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.ScummVM")
 
-    init(config: GameConfig, gameMonitor: GameMonitor) {
+    init(config: GameConfig, gameMonitor: GameMonitor, modules: RuntimeModules) {
         self.config = config
         self.gameMonitor = gameMonitor
-        startupDiagnostics = config.gameEngine.runsInWine
-            ? StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
-            : nil
+        self.modules = modules
+        startupDiagnostics = modules.module(WineRuntime.self)?.diagnostics
     }
 
     /// Capture a diagnostics bundle now, whatever the launch is doing: when
@@ -234,49 +173,22 @@ class GameLauncher {
             process.terminate()
         }
 
-        // For Wine games, we need to ensure wineserver is stopped
-        if config.gameEngine.runsInWine {
-            logger.debug("[Cleanup/performCleanup] Dispatching Wine server cleanup to background queue...")
-            // .userInitiated: on a Mac with every core busy, .utility work
-            // waits for seconds at a time, and the quit with it.
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.logger.debug("[Cleanup/performCleanup] Inside Wine cleanup async block")
-                guard let self = self else {
-                    self?.logger.debug("[Cleanup/performCleanup] self is nil, calling completion handler")
-                    completion()
-                    return
-                }
-
-                // Steam would keep the Wine session alive, and its sign-in
-                // has to be saved and taken out of the wrapp on the way out.
-                // Briefly: the quit fallback kills everything after 15s, and
-                // Steam has been seen to ignore -shutdown when it's stuck.
-                if let steam = self.claimSteam() {
-                    onQuitStep?(.closingSteam)
-                    steam.finish(timeout: 8)
-                }
-                // The desktop's start.exe keeps the session going until it is
-                // let go, so the session could never end by itself in its
-                // grace period, and every quit waited it out.
-                self.releaseDesktop()
-                let server = self.config.wine.server
-                self.logger.debug("[Cleanup/performCleanup] Shutting down Wine...")
-                let periods = Self.quitPeriods()
-                Blocking.wait {
-                    await server.shutDown(gracePeriod: periods.grace, stopPeriod: periods.stop) { onQuitStep?(.init($0)) }
-                }
-                self.logger.debug("[Cleanup/performCleanup] Wine shut down")
-                self.logger.debug("[Cleanup/performCleanup] About to call completion handler")
-                completion()
-                logger.debug("[Cleanup/performCleanup] Completion handler called")
+        // Each module with something to stop (Wine's server, Steam), last
+        // started first, on a background queue: .userInitiated, as on a Mac
+        // with every core busy .utility work waits for seconds at a time,
+        // and the quit with it.
+        let stopping = modules.all.reversed().filter(\.stopsOnQuit)
+        guard !stopping.isEmpty else {
+            logger.debug("[Cleanup/performCleanup] Nothing to stop, cleanup is immediate")
+            completion()
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [logger] in
+            for module in stopping {
+                module.finishForQuit(onQuitStep: onQuitStep)
             }
-            logger.debug("[Cleanup/performCleanup] Wine cleanup dispatched, exiting performCleanup method")
-        } else {
-            // Non-Wine games, cleanup is immediate
-            logger.debug("[Cleanup/performCleanup] Non-Wine game, cleanup is immediate")
             logger.debug("[Cleanup/performCleanup] About to call completion handler")
             completion()
-            logger.debug("[Cleanup/performCleanup] Completion handler called, exiting performCleanup method")
         }
     }
 
@@ -285,20 +197,10 @@ class GameLauncher {
     var isQuitting: Bool { cleanupQueue.sync { cleanupCompleted } }
 
     /// After the game has ended by itself: wait for the rest of its Wine
-    /// session (explorer, Wine's services, the server) to finish, so the
-    /// wrapp never quits leaving Wine running in the prefix. Nothing to wait
-    /// for with ScummVM.
-    func waitForWineToEnd() async {
-        guard config.gameEngine.runsInWine else { return }
-        // Generous: it ends by itself in seconds, more on a loaded Mac, and
-        // only a session that is stuck reaches the kill. Not for a Big Fish
-        // game: its launcher outlives it, running the game's Big Fish
-        // launcher again and then opening the Game Manager, which kept the
-        // session going for the whole wait. None of that is needed now.
-        let server = config.wine.server
-        let onQuitStep = onQuitStep
-        let periods = Self.quitPeriods(grace: config.launchedByBigFish ? 0 : 30)
-        await server.shutDown(gracePeriod: periods.grace, stopPeriod: periods.stop) { onQuitStep?(.init($0)) }
+    /// session to finish, so the wrapp never quits leaving Wine running in
+    /// the prefix. Nothing to wait for with ScummVM.
+    func waitForSessionToEnd() async {
+        await modules.module(WineRuntime.self)?.waitForSessionToEnd(onQuitStep: onQuitStep)
     }
 
     /// How long a quit waits at each step of `WineServer.shutDown`, and when
@@ -398,7 +300,7 @@ class GameLauncher {
             recordLaunch(outcome: kind)
             report(FailureReport(
                 what: "Running the game", kind: kind,
-                game: config.gameSlug, engine: config.gameEngine.rawValue,
+                game: config.gameSlug, engine: config.composition.engineTag,
                 tags: failureTags(exitCode: exitCode, signal: signal), summary: summary,
                 diagnostics: diagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
             ))
@@ -460,7 +362,7 @@ class GameLauncher {
         var tags = failureTags(exitCode: nil, signal: nil)
         tags["no_display"] = final ? "after-retry" : "retrying"
         let noDisplay = FailureReport(
-            what: "Starting the game", kind: "no-display", game: config.gameSlug, engine: config.gameEngine.rawValue,
+            what: "Starting the game", kind: "no-display", game: config.gameSlug, engine: config.composition.engineTag,
             tags: tags, summary: summary,
             diagnostics: startupDiagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
         )
@@ -488,7 +390,7 @@ class GameLauncher {
         var tags = failureTags(exitCode: nil, signal: nil)
         tags["stuck_report"] = how
         return FailureReport(
-            what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.gameEngine.rawValue,
+            what: "Starting the game", kind: "stuck", game: config.gameSlug, engine: config.composition.engineTag,
             tags: tags, summary: summary,
             diagnostics: startupDiagnostics.map { diagnostics in { @Sendable in await diagnostics.bundleWhenComplete() } }
         )
@@ -504,7 +406,7 @@ class GameLauncher {
         guard first else { return }
         SuccessReporter.record(SuccessReport(
             event: .launch, outcome: outcome, game: config.gameSlug,
-            source: config.gameSource, engine: config.gameEngine.rawValue
+            source: config.gameSource, engine: config.composition.engineTag
         ))
     }
 
@@ -549,57 +451,21 @@ class GameLauncher {
         launchedAt = Date()
         gameStarted = false
         LogContext.enterStage("Starting the game")
-        if config.gameEngine.runsInWine,
-           let gameExePath = getGameLaunchInfo(config).gameExePath {
-            let gameExe = URL(fileURLWithPath: gameExePath)
-            let game = GameInfoProvider.shared.gameInfo(for: config.gameSlug)
-            let graphics = GameGraphicsAPI(exeAt: gameExe, game: game)
-            logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
-            helperReport = InProcessHelperReport(
-                armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe, game: game), logger: logger)
-            quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.gameEngine.needsSteam)
-            copyProtection = CopyProtection(exeAt: gameExe)
-            if let copyProtection {
-                logger.warning("[Game Launch] \(gameExe.lastPathComponent) is wrapped in \(copyProtection.name) copy protection, which may not run under Wine")
-            }
-        } else if config.gameEngine == .scummvm, !scummvmPuppetVariables.isEmpty {
-            helperReport = InProcessHelperReport(armingVariables: scummvmPuppetVariables, logger: logger)
+        let watchers = LaunchWatchers(onNoDisplay: onNoDisplay, activity: infoWindow?.activity)
+        self.watchers = watchers
+        let gameExe = getGameLaunchInfo(config).gameExePath.map(URL.init(fileURLWithPath:))
+        for module in modules.all {
+            module.armWatchers(watchers, gameExe: gameExe)
         }
-        if config.gameEngine.needsSteam {
-            LogContext.enterStage("Starting Steam")
-            do {
-                let helperReport = helperReport
-                let quitCheck = quitCheck
-                let activity = infoWindow?.activity
-                let status = steamStatusHandler(infoWindow)
-                let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
-                guard let lock = try await takeSteam() else {
-                    logger.notice("[Steam] Not starting: another game has Steam, and the player chose to leave it")
-                    return .notStarted
-                }
-                infoWindow?.onSignInToSteamAfresh = { [weak self] in self?.steam?.signInAfresh() }
-                let config = config
-                // Both block while Steam starts and signs in, so off the main thread.
-                let started = try await Blocking.run {
-                    try WrappSteam(lock: lock, config: config, status: status,
-                                   onOutputLine: {
-                                       helperReport?.observe(line: $0)
-                                       quitCheck?.observe(line: $0)
-                                       noDisplay.check($0)
-                                       activity?.noteOutput()
-                                   })
-                }
-                steam = started  // from here a quit can stop it
-                try await Blocking.run { try started.waitUntilSignedIn(status: status) }
-            } catch WrappSteam.Failure.cancelled {
-                logger.notice("[Steam] Quit while waiting for Steam to sign in")
-                return .notStarted
-            } catch {
-                reportSteamFailure(error)
-                return .failedAndTold
+        let launch = LaunchContext(config: config, infoWindow: infoWindow, watchers: watchers, modules: modules,
+                                   report: { [weak self] in self?.report($0) })
+        // Each gets going behind the save warning, in start order.
+        for module in modules.all {
+            switch await module.prepare(launch) {
+            case .ready: continue
+            case .notStarted: return .notStarted
+            case .failedAndTold: return .failedAndTold
             }
-        } else if config.gameEngine.runsInWine {
-            await prepareDesktop(config.wine)
         }
         await beforeTheGame()
         if isQuitting {
@@ -610,29 +476,18 @@ class GameLauncher {
         // The game's own start is timed from here, not from Steam's or the
         // time the player took over the warning.
         launchedAt = Date()
-        // Launch the game process (engine-specific)
-        let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
-        // Steam starts the game itself, and so does Big Fish's DRM service, so
-        // there's no launcher process of ours to watch: the game is found, and
-        // watched, by its exe.
-        let launchedBySteam = config.gameEngine.launchedBySteam
-        let launchedByBigFish = config.launchedByBigFish
-        let launchedByStore = launchedBySteam || launchedByBigFish
-
-        switch config.gameEngine {
-        case .wine where launchedByBigFish && config.bigFishTrial:
-            launchResult = await launchBigFishTrial(activity: infoWindow?.activity)
-        case .wine, .wineSteamSilent:
-            let started = launchWineProcess(activity: infoWindow?.activity)
-            // bfgprocess hands the launch on and exits within seconds.
-            launchResult = launchedByBigFish && started.gamePid > 0 ? (nil, 0, started.gameExeName) : started
-        case .wineSteam:
-            launchResult = await launchViaSteam()
-        case .scummvm:
-            launchResult = launchScummVMProcess(activity: infoWindow?.activity)
+        let launcher = modules.launcher
+        let launchResult = await launcher.startGame(launch)
+        currentProcess = launchResult.process
+        // Steam starts the game itself, and so does Big Fish's DRM service,
+        // so there's no launcher process of ours to watch: the game is
+        // found, and watched, by its exe.
+        let startedElsewhere = launcher.findsGame == .wineProgramStartedElsewhere
+        if launchResult.gamePid >= 0, launcher.findsGame != .ownProcess {
+            diagnostics = startupDiagnostics
         }
 
-        guard launchResult.gamePid > 0 || (launchedByStore && launchResult.gameExeName != nil) else {
+        guard launchResult.gamePid > 0 || (startedElsewhere && launchResult.gameExeName != nil) else {
             logger.critical("Failed to launch the game")
             handleGameTermination(exitCode: nil, signal: nil, infoWindow: nil)
             return .ended(exitCode: -1, failed: true, windowAppeared: false)
@@ -643,21 +498,19 @@ class GameLauncher {
         // Wait for game to start
         if let gameExeName = launchResult.gameExeName {
             logger.notice("[Game Launch] Waiting for game executable to start...")
-            let whileWaiting = launchedBySteam ? steamLaunchWatcher(infoWindow) : nil
-            let abandonIf = launchedBySteam ? Self.steamGone() : launchedByBigFish ? Self.bigFishGone() : nil
+            let whileWaiting = launcher.whileWaitingForGame(launch)
+            let abandonIf = launcher.abandonWaitingIf()
             if let detectedPid = await gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process,
                                                                        abandonIf: abandonIf, whileWaiting: whileWaiting) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
                 gameStarted = true
-                if launchedByStore { gamePid = detectedPid }
+                if startedElsewhere { gamePid = detectedPid }
                 diagnostics?.gameStarted(pid: detectedPid)
 
-                // Activate game window (Wine games only)
-                if config.gameEngine.runsInWine {
+                // Activate the game's window: a Wine program's own.
+                if launcher.findsGame != .ownProcess {
                     logger.notice("[Game Launch] Activating game window...")
-                    // Big Fish's games run under Armadillo as two processes of
-                    // the same exe; the window is the second's.
-                    let shownBy = launchedByBigFish
+                    let shownBy = launcher.windowMayBeAnotherProcess
                         ? await gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow, anyRunning: gameExeName)
                         : await gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) ? detectedPid : nil
                     if let shownBy {
@@ -668,8 +521,8 @@ class GameLauncher {
                         helperReport?.gameWindowAppeared()
                     }
                 }
-            } else if launchedByStore {
-                logger.error("[Game Launch] \(launchedBySteam ? "Steam" : "Big Fish's launcher") never started \(gameExeName)")
+            } else if startedElsewhere {
+                logger.error("[Game Launch] \(type(of: launcher).id) never started \(gameExeName)")
                 diagnostics?.gameExited(exitCode: -1)
                 handleGameTermination(exitCode: nil, signal: nil, infoWindow: nil)
                 return .ended(exitCode: -1, failed: true, windowAppeared: false)
@@ -678,10 +531,11 @@ class GameLauncher {
             }
         } else {
             gameStarted = true
-            // ScummVM is the game's own process, so there's nothing to find:
-            // wait for its window, as for a Wine game's.
-            _ = await gameMonitor.waitForGameToStart(gameExeName: "scummvm", gamePid: gamePid)
-            logger.notice("[Game Launch] Waiting for ScummVM's window...")
+            // ScummVM or DOSBox is the game's own process, so there's
+            // nothing to find: wait for its window, as for a Wine game's.
+            let engine = config.composition.launcher.rawValue
+            _ = await gameMonitor.waitForGameToStart(gameExeName: engine, gamePid: gamePid)
+            logger.notice("[Game Launch] Waiting for \(engine)'s window...")
             if await gameMonitor.activateGameWindow(gamePid: gamePid, infoWindow: infoWindow) {
                 windowAppeared = true
                 let pid = gamePid
@@ -736,397 +590,8 @@ class GameLauncher {
     /// release the desktop, so the Wine session can end. After whatever is
     /// to be shown has been: Steam can take a minute and a half.
     func finishSession() async {
-        if let steam = claimSteam() {
-            await Blocking.run { steam.finish(timeout: 90) }
-        }
-        releaseDesktop()
-    }
-
-    /// Steam, for whichever of the game's end and a quit gets to it first to
-    /// finish: never both. Any thread: the quit's cleanup claims it from its
-    /// background queue.
-    private nonisolated func claimSteam() -> WrappSteam? {
-        shared.withLock { shared in
-            defer { shared.steam = nil }
-            return shared.steam
-        }
-    }
-
-    // MARK: - Wine Game Launching
-
-    /// `activity` hears of each line Wine prints.
-    private func launchWineProcess(activity: LaunchActivityMonitor?) -> (process: Process?, gamePid: Int32, gameExeName: String?) {
-        // Get game launch info
-        let launchInfo = getGameLaunchInfo(config)
-
-        logger.notice("Launching game: \(launchInfo.executable) with arguments: \(launchInfo.arguments.joined(separator: " "))")
-        if let gameExeName = launchInfo.gameExeName {
-            logger.notice("Game executable name: \(gameExeName)")
-        }
-
-        let wine = config.wine
-
-        // Export commands for running Wine by hand against this prefix, as one
-        // entry at debug: needed when reproducing, noise otherwise.
-        logger.debug("Wine environment, for running Wine by hand:\n\(wine.shellExports)")
-
-        // Print full command with proper quoting
-        let fullCommand = launchInfo.formatLaunchCommand()
-        logger.debug("Full command: \(fullCommand)")
-
-        // Launch the game
-        logger.notice("[Wine] Launching game process...")
-
-        guard let command = launchInfo.wineCommand, let gameExeUnixPath = launchInfo.gameExePath else {
-            logger.critical("ERROR: no game program to run for a Wine game")
-            return (nil, -1, nil)
-        }
-
-        // Wine's output is logged line by line (reaching the terminal, the
-        // log window and the export). Diagnostics sees the same lines, to keep
-        // recent context and spot crashes.
-        guard let diagnostics = startupDiagnostics else {
-            logger.critical("ERROR: no diagnostics for a Wine game")
-            return (nil, -1, nil)
-        }
-        let helperReport = helperReport
-        let quitCheck = quitCheck
-        let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
-        let observe: @Sendable (String) -> Void = { line in
-            diagnostics.observe(line: line)
-            helperReport?.observe(line: line)
-            quitCheck?.observe(line: line)
-            noDisplay.check(line)
-            activity?.noteOutput()
-        }
-        let game: WineProcess
-        do {
-            var environment = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath),
-                                                            game: GameInfoProvider.shared.gameInfo(for: config.gameSlug))
-            if config.launchedByBigFish {
-                // Big Fish's launcher opens the Game Manager as the game ends:
-                // never seen, as its file to show it is never made.
-                let neverShown = FileManager.default.temporaryDirectory.appendingPathComponent("second-chance-never-shown")
-                environment.merge(Wine.hiddenWindowsVariables(exe: "bfgclient.exe", showFile: neverShown)) { game, _ in game }
-            }
-            game = try wine.start(command,
-                                  environment: environment,
-                                  output: .log(wineOutputLogger, onLine: observe))
-        } catch {
-            logger.critical("ERROR: Failed to launch game: \(error)")
-            return (nil, -1, nil)
-        }
-        diagnostics.wineLaunched()
-        self.diagnostics = diagnostics
-        let process = game.process
-
-        logger.notice("[Wine] Game process started with PID \(process.processIdentifier)")
-
-        // Store the process reference
-        self.currentProcess = process
-
-        return (process, process.processIdentifier, launchInfo.gameExeName)
-    }
-
-    // MARK: - Steam
-
-    /// Have Steam start the game (`-applaunch`), for DRM that insists on it.
-    private func launchViaSteam() async -> (process: Process?, gamePid: Int32, gameExeName: String?) {
-        let launchInfo = getGameLaunchInfo(config)
-        guard let steam, let appID = config.steamGameId.flatMap({ Int($0) }) else {
-            logger.critical("ERROR: no Steam app ID for a game launched through Steam")
-            return (nil, -1, nil)
-        }
-        do {
-            try await Blocking.run { try steam.client.launch(appID: appID) }
-        } catch {
-            logger.critical("ERROR: Couldn't ask Steam to launch the game: \(error.localizedDescription)")
-            return (nil, -1, nil)
-        }
-        startupDiagnostics?.wineLaunched()
-        diagnostics = startupDiagnostics
-        return (nil, 0, launchInfo.gameExeName)
-    }
-
-    /// While Steam starts the game there is no launcher of ours to watch,
-    /// so the wait for the game ends when Steam has gone: `steam.exe` missing
-    /// from three checks in a row (a second and a half), since it restarts
-    /// itself after an update.
-    private static func steamGone() -> (Set<ProcessList.Entry>) -> String? {
-        var missing = 0
-        return { processes in
-            let running = processes.contains { $0.name.lowercased() == "steam.exe" }
-            missing = running ? 0 : missing + 1
-            return missing >= 3 ? "Steam has exited without starting the game" : nil
-        }
-    }
-
-    // MARK: - Big Fish
-
-    /// Start a Big Fish free trial: through the Game Manager's Play Now, as
-    /// launching its `.bfg` file only opens the Game Manager for a trial. Only
-    /// the integration tests build trials (docs/big-fish.md).
-    private func launchBigFishTrial(activity: LaunchActivityMonitor?) async -> (process: Process?, gamePid: Int32, gameExeName: String?) {
-        let launchInfo = getGameLaunchInfo(config)
-        guard let sku = config.bigFishSKU.flatMap(BigFishSKU.init) else {
-            logger.critical("ERROR: no Big Fish SKU for a Big Fish trial")
-            return (nil, -1, nil)
-        }
-        // The game is the Game Manager's child, so it has the Game Manager's
-        // environment and output: the helpers are armed through them.
-        let helperReport = helperReport
-        let quitCheck = quitCheck
-        let startup = startupDiagnostics
-        let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
-        let manager = BigFishGameManager(wrappPath: config.appPath, prefixDir: config.winePrefix,
-                                         gameExe: launchInfo.gameExePath.map(URL.init(fileURLWithPath:)),
-                                         game: GameInfoProvider.shared.gameInfo(for: config.gameSlug),
-                                         onOutputLine: { line in
-                                             startup?.observe(line: line)
-                                             helperReport?.observe(line: line)
-                                             quitCheck?.observe(line: line)
-                                             noDisplay.check(line)
-                                             activity?.noteOutput()
-                                         })
-        do {
-            try await manager.start(timeout: 600)
-            try await manager.play(sku)
-        } catch {
-            logger.critical("ERROR: Couldn't have the Game Manager start the trial: \(error)")
-            return (nil, -1, nil)
-        }
-        startupDiagnostics?.wineLaunched()
-        diagnostics = startupDiagnostics
-        return (nil, 0, launchInfo.gameExeName)
-    }
-
-    /// While Big Fish's DRM service starts the game there's nothing of ours to
-    /// watch either: the wait ends when bfgprocess and the service have both
-    /// gone, three checks in a row, without the game appearing.
-    private static func bigFishGone() -> (Set<ProcessList.Entry>) -> String? {
-        var missing = 0
-        return { processes in
-            let running = processes.contains { ["bfgprocess.exe", "bfggameservices.exe"].contains($0.name.lowercased()) }
-            missing = running ? 0 : missing + 1
-            return missing >= 3 ? "Big Fish's launcher has exited without starting the game" : nil
-        }
-    }
-
-    /// The one-Steam-at-a-time lock, once Steam is free. While another
-    /// game holds it, the player can quit that game themselves and try
-    /// again, have it quit for them, or leave it be — nil, which is their
-    /// choice and no failure.
-    private func takeSteam() async throws -> SteamActiveLock? {
-        let title = config.gameTitle
-        let bundleID = config.bundleId
-        let taking = try await SteamActiveLock.take(bundleID: bundleID) { holder in
-            await MainActor.run {
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
-                let quoted = SteamLockHolder.quoted(title)
-                return holder.ask(blocked: String(localized: "\(quoted) can't start until it quits."))
-            }
-        }
-        switch taking {
-        case .acquired(let lock): return lock
-        case .cancelled: return nil
-        case .held(let holder): throw WrappSteam.Failure.inUse(holder)
-        }
-    }
-
-    private func reportSteamFailure(_ error: Error) {
-        let (title, detail): (String, String)
-        let game = config.gameTitle
-        switch error {
-        case WrappSteam.Failure.inUse(let holder):
-            let quotedGame = SteamLockHolder.quoted(game)
-            if let name = holder.name.map(SteamLockHolder.quoted) {
-                (title, detail) = (String(localized: "\(name) is using Steam"),
-                                   String(localized: "Only one game can use Steam at a time. Quit \(name), then open \(quotedGame) again."))
-            } else {
-                (title, detail) = (String(localized: "Another game is using Steam"),
-                                   String(localized: "Only one game can use Steam at a time. Quit it, then open \(quotedGame) again."))
-            }
-        case WrappSteam.Failure.exited:
-            (title, detail) = (String(localized: "Steam closed before it signed in"),
-                               String(localized: "\(game) needs Steam signed in to start. Open it again to have another go."))
-        case WrappSteam.Failure.stuck:
-            (title, detail) = (String(localized: "Steam got stuck signing in"), String(localized: """
-                \(game) needs Steam signed in to start. \
-                Check that this Mac is connected to the internet, then open it again to have another go.
-                """))
-        default:
-            (title, detail) = (String(localized: "Couldn't start Steam"), error.localizedDescription)
-        }
-        logger.critical("[Steam] \(title): \(detail)")
-        let summary = FailureSummary.log(logger, what: "Starting Steam for \(config.gameTitle)", files: [])
-        report(FailureReport(what: "Starting Steam", error: error, game: config.gameSlug,
-                             engine: config.gameEngine.rawValue, summary: summary))
-        showAlert(message: title, informativeText: detail)
-    }
-
-    /// Show Steam's progress in the loading window. Once signed in, what
-    /// starts the game is Steam (`wine-steam`) or the wrapp, with Steam
-    /// running (`wine-steam-silent`).
-    /// While Steam starts the game: say when its launch is waiting on the
-    /// player — the game only starts once they answer — so the loading
-    /// window says so and Steam's window comes forward. One such wait is
-    /// Steam asking whether to stop the game the account is playing on
-    /// another computer; any other wait that lasts, apart from the routine
-    /// ones Steam passes through by itself, is taken as a question too.
-    /// Reads Steam's log every couple of seconds.
-    private func steamLaunchWatcher(_ infoWindow: InfoWindowController?) -> (() -> Void)? {
-        guard let steam, let appID = config.steamGameId.flatMap({ Int($0) }) else { return nil }
-        let title = config.gameTitle
-        var lastCheck = Date.distantPast
-        var seen: (prompt: String, since: Date)?
-        var asking: String?
-        var step: String?
-        return { [logger] in
-            guard Date().timeIntervalSince(lastCheck) >= 2 else { return }
-            lastCheck = Date()
-            if let now = steam.client.launchStep(appID: appID), now != step {
-                logger.debug("[Steam] Launch step: \(now)")
-                step = now
-                infoWindow?.noteProgress(.steamLaunchStep)
-            }
-            let prompt = steam.client.launchPrompt(appID: appID)
-            if let prompt, prompt != seen?.prompt {
-                logger.debug("[Steam] Launch waiting on \(prompt)")
-                seen = (prompt, Date())
-            } else if prompt == nil {
-                seen = nil
-            }
-            let question = seen.flatMap { seen in
-                seen.prompt == SteamLogs.playingElsewherePrompt
-                    || (!SteamLogs.routineLaunchPrompts.contains(seen.prompt) && Date().timeIntervalSince(seen.since) >= 3)
-                    ? seen.prompt : nil
-            }
-            guard question != asking else { return }
-            let answered = asking != nil
-            asking = question
-            if question == SteamLogs.playingElsewherePrompt {
-                logger.error("[Steam] \(SteamLogs.playingElsewhereMarker)")
-                infoWindow?.setStage(.steamPlayingElsewhere)
-                Task { await SteamSignInWindow.bringForward(window: "question about the other computer") }
-            } else if let question {
-                logger.notice("[Steam] Steam's launch is waiting on the player (\(question)); bringing its window forward")
-                infoWindow?.setStage(.steamWaitingForPlayer)
-                Task { await SteamSignInWindow.bringForward(window: "question (\(question))") }
-            } else if answered {
-                logger.notice("[Steam] Answered: Steam is starting the game")
-                infoWindow?.setStage(.steamStartingGame(title: title))
-            }
-        }
-    }
-
-    /// Called from the thread Steam starts on, so it only uses what the
-    /// loading window lets any thread call.
-    private func steamStatusHandler(_ infoWindow: InfoWindowController?) -> @Sendable (WrappSteam.Status) -> Void {
-        let title = config.gameTitle
-        let launchedBySteam = config.gameEngine.launchedBySteam
-        return { status in
-            switch status {
-            case .startup(let stage): infoWindow?.setStage(LoadingStage(steam: stage))
-            case .waitingForSignIn: infoWindow?.setStage(.signingInToSteam)
-            case .signedIn: infoWindow?.setStage(launchedBySteam ? .steamStartingGame(title: title) : .startingGame(title: title))
-            case .notice(let notice): infoWindow?.setSteamNotice(notice)
-            }
-        }
-    }
-
-    // MARK: - Wine Desktop
-
-    /// Start Wine's desktop and wait until it has registered the display
-    /// devices, before the game runs — while the save warning shows, when it
-    /// does. There is no deadline: the loading window says meanwhile whether
-    /// the wait looks stuck. See `WineDesktop`.
-    private func prepareDesktop(_ wine: Wine) async {
-        // Debug switch, for comparing against Wine's own on-demand start.
-        guard ProcessInfo.processInfo.environment["SECOND_CHANCE_PRESTART_DESKTOP"] != "0" else {
-            logger.notice("[Desktop] Not pre-starting the desktop (SECOND_CHANCE_PRESTART_DESKTOP=0)")
-            return
-        }
-        LogContext.enterStage("Starting Wine")
-        let logger = logger, outputLogger = wineOutputLogger
-        desktop = await WineDesktop.start(wine, timeout: .infinity, logger: logger, outputLogger: outputLogger)
-    }
-
-    /// Let the pre-started desktop shut down once the game has exited, or it
-    /// keeps the whole Wine session alive. See `WineDesktop.release`. Any
-    /// thread, as `claimSteam`.
-    private nonisolated func releaseDesktop() {
-        let claimed = shared.withLock { shared in
-            defer { shared.desktop = nil }
-            return shared.desktop
-        }
-        guard let desktop = claimed else { return }
-        logger.notice("[Desktop] Game exited")
-        desktop.release()
-    }
-
-    // MARK: - ScummVM Game Launching
-
-    /// When WrappPuppeteer started the wrapp, what loads the in-process
-    /// helpers' puppet control into scummvm, so WrappPuppeteer can capture
-    /// and click the game without any permission. Wine games get it through
-    /// winemac.so; scummvm is an ordinary binary (ad-hoc signed, no hardened
-    /// runtime), so dyld inserts the dylib. The other helpers stay unarmed in
-    /// it, since their variables aren't set. Empty for every player's launch.
-    /// See docs/wine-in-process-helpers.md.
-    private var scummvmPuppetVariables: [String: String] {
-        guard Wine.puppetDirectory() != nil else { return [:] }
-        let dylib = config.appPath.appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib").path
-        // dyld kills a process whose inserted dylib is missing, so a wrapp
-        // built without it runs the game without puppet control instead.
-        guard FileManager.default.fileExists(atPath: dylib) else {
-            logger.error("[Helpers] Puppet control can't be loaded into scummvm: \(dylib) is missing")
-            return [:]
-        }
-        return ["DYLD_INSERT_LIBRARIES": dylib, "PUPPET_CONTROL_EXE": "scummvm"]
-    }
-
-    private func launchScummVMProcess(activity: LaunchActivityMonitor?) -> (process: Process?, gamePid: Int32, gameExeName: String?) {
-        // Get game launch info
-        let launchInfo = getGameLaunchInfo(config)
-
-        logger.notice("ScummVM binary: \(launchInfo.executable)")
-        logger.notice("Launching ScummVM with arguments:")
-        for arg in launchInfo.arguments {
-            logger.notice("  \(arg)")
-        }
-
-        // Print full command with proper quoting
-        let fullCommand = launchInfo.formatLaunchCommand()
-        logger.notice("Full command: \(fullCommand)")
-
-        // Execute ScummVM with output captured line-by-line through the
-        // logger (terminal users still see it via stderr when isatty, and it
-        // now also reaches the log window and the export).
-        let task = TaggedProcess(logger: scummvmOutputLogger)
-        task.executableURL = URL(fileURLWithPath: launchInfo.executable)
-        task.arguments = launchInfo.arguments
-        let puppetVariables = scummvmPuppetVariables
-        let helperReport = helperReport
-        if !puppetVariables.isEmpty {
-            task.environment = ProcessInfo.processInfo.environment.merging(puppetVariables) { $1 }
-        }
-        task.onLine = { line in
-            helperReport?.observe(line: line)
-            activity?.noteOutput()
-        }
-
-        do {
-            try task.run()
-            logger.notice("[ScummVM] Game process started with PID \(task.processIdentifier)")
-
-            // Store the process reference
-            self.currentProcess = task.process
-
-            return (task.process, task.processIdentifier, nil)  // No gameExeName for ScummVM
-        } catch {
-            logger.critical("ERROR: Failed to launch ScummVM: \(error.localizedDescription)")
-            return (nil, -1, nil)
+        for module in modules.all.reversed() {
+            await module.finishAfterGame()
         }
     }
 }

@@ -14,6 +14,12 @@ does ([dev-cli.md](dev-cli.md#lint)). If they find anything it shows what, and
 asks whether to release anyway, defaulting to no; a run that can't ask stops.
 A dry run only reports what they found.
 
+Then it checks that every engine's downloads are still where their modules
+say (`sc engine check`, [modules.md](modules.md#engine-packages)): Second
+Chance carries no engine, so a release whose engine can't be fetched builds
+nothing for anyone who hasn't prepared it already. One that has gone stops
+the release, naming it.
+
 Then, before the long part of the run, it asks whether to publish the release
 as soon as it's built rather than stop for you to check the build first,
 defaulting to no ([Publishing](#publishing)). The tests, build and symbol
@@ -25,9 +31,8 @@ still stop for review before any of that starts.
 - **The version.** `MARKETING_VERSION` goes into the `SecondChance` and
   `WrappTemplate` targets only; `WrappPuppeteer` and `SecondChanceTests` are
   never shipped and stay at 1.0. `CURRENT_PROJECT_VERSION` is set to the commit
-  count, which matters beyond bookkeeping: `WineManager` keys its prefix cache
-  on the bundle version, so a release that didn't change it would hand users a
-  stale Wine prefix.
+  count. The layer cache isn't keyed on either: its keys say what each layer
+  was made from ([wrapp-build.md](wrapp-build.md#the-layer-cache)).
 - **`CHANGELOG.md`.** Each release's section holds its release notes
   ([below](#release-notes)) and goes above the previous one. Don't edit it by
   hand: edit the notes when `sc release` pauses for them, or let it regenerate

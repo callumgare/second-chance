@@ -55,9 +55,13 @@ class GameInstallerRunner {
         installerName: String? = nil,
         unattended: Bool,
         confirmPatchFailure: PatchFailureConfirmation,
-        chooseGameProgram: ([String]) async throws -> String
+        chooseGameProgram: ([String]) async throws -> String,
+        applyPatches: Bool = true,
+        stubborn: Bool? = nil
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
+        // A Wrappfile's `installer.RUN --stubborn` says it, not the catalogue.
+        let gameInfo = stubborn.map { gameInfo.withInstallerStubborn($0) } ?? gameInfo
 
         // Find installer executable
         let installerExe: String
@@ -232,14 +236,17 @@ class GameInstallerRunner {
 
         await bus.publishWrappBuild(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
 
-        // Apply any available game patches
-        try await applyGamePatches(
-            wrappPath: wrappPath,
-            gameInfo: gameInfo,
-            gameInstallDir: gameExe.deletingLastPathComponent(),
-            source: source,
-            confirmFailure: confirmPatchFailure
-        )
+        // Apply any available game patches (a Wrappfile build applies them
+        // as steps of their own).
+        if applyPatches {
+            try await applyGamePatches(
+                wrappPath: wrappPath,
+                gameInfo: gameInfo,
+                gameInstallDir: gameExe.deletingLastPathComponent(),
+                source: source,
+                confirmFailure: confirmPatchFailure
+            )
+        }
 
         // Only logged: it says why a launch will likely fail, and which
         // editions of a game carry it.
@@ -328,7 +335,8 @@ class GameInstallerRunner {
         wrappPath: URL,
         gameInfo: GameInfo,
         source: WrappSource,
-        confirmPatchFailure: PatchFailureConfirmation
+        confirmPatchFailure: PatchFailureConfirmation,
+        applyPatches: Bool = true
     ) async throws -> (gameExePath: String, installerDir: String) {
         // For ScummVM games, the "installation" is simply having the disk files available
         // The disk files were already copied by wrappBuilder.copyGameDisks()
@@ -350,13 +358,15 @@ class GameInstallerRunner {
         // still Windows installers that rewrite the game's data files. Wine is
         // still in the wrapp at this point — `cleanupUnusedEngine` strips it
         // one step later — so the patches can be applied here and nowhere else.
-        try await applyGamePatches(
-            wrappPath: wrappPath,
-            gameInfo: gameInfo,
-            gameInstallDir: gameDir,
-            source: source,
-            confirmFailure: confirmPatchFailure
-        )
+        if applyPatches {
+            try await applyGamePatches(
+                wrappPath: wrappPath,
+                gameInfo: gameInfo,
+                gameInstallDir: gameDir,
+                source: source,
+                confirmFailure: confirmPatchFailure
+            )
+        }
 
         return ("/" + relativePath, "/" + relativeInstallerDir)
     }
@@ -412,8 +422,8 @@ class GameInstallerRunner {
         try await Blocking.run { try FileManager.default.copyItem(at: autoitSourceDir, to: autoitDestDir) }
         logger.notice("✅ Copied AutoIt to drive_c")
 
-        // Copy automation script from bundle
-        if let scriptPath = Bundle.main.path(forResource: "installshield-custom-dialog-automate", ofType: "au3") {
+        // Copy the nancy-drew module's script that clicks through the installer
+        if let scriptPath = NancyDrewModule.autoItScript("installshield-custom-dialog-automate")?.path {
             let scriptDestPath = driveCPath.appendingPathComponent("installshield-custom-dialog-automate.au3")
 
             // Remove existing script if present
@@ -956,5 +966,21 @@ extension GameInstallerRunner {
     nonisolated static func isNotTheGame(_ program: URL) -> Bool {
         let name = program.lastPathComponent.lowercased()
         return notTheGame.contains { name.hasPrefix($0) }
+    }
+}
+
+extension GameInfo {
+    /// This game, with its installer stubborn or not when run silently, as
+    /// a Wrappfile's `installer.RUN --stubborn` says.
+    nonisolated func withInstallerStubborn(_ stubborn: Bool) -> GameInfo {
+        GameInfo(
+            id: id, title: title, diskCount: diskCount, gameEngine: gameEngine, internalGameExePath: internalGameExePath,
+            steamDRM: steamDRM,
+            steam: steamAppID.flatMap { appID in
+                steamInstallDir.flatMap { dir in steamExePath.map { GameInfo.SteamApp(appID: appID, installDir: dir, exe: $0) } }
+            },
+            doesNotExitInNonInteractiveMode: stubborn, installInstructions: installInstructions,
+            failedInstallInfo: failedInstallInfo, detectionAliases: detectionAliases, detectionCodes: detectionCodes
+        )
     }
 }

@@ -5,8 +5,12 @@
 import Testing
 import Foundation
 import Logging
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WindowsFormats
+@testable import WineKit
+@testable import WrappLogging
 
 @Suite("LogWindow streaming", .serialized)
 @MainActor

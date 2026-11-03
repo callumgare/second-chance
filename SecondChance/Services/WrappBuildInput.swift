@@ -42,6 +42,9 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `bigFishGameFromEnvironment`  | `BIG_FISH_GAME_SLUG`                    | nil: asked after sign-in       |
 /// | `chooseBigFishGame(from:)`    | — (only asked when the above is nil)    | main window, the owned games   |
+/// | `chooseDownload(from:)`       | `DOWNLOAD_PROGRAM`                      | main window, the free games    |
+/// | `confirmDownload(_:)`         | — (headless: goes ahead)                | main window: where it's from   |
+/// | `confirmReinstall(_:source:)` | — (headless: fails, as up to date)      | main window: install again, cancel |
 /// | `isBigFishTrial`              | `BIG_FISH_TRIAL=1` (tests only)         | false: the full game           |
 /// | `bigFishTestSignIn`           | `BIG_FISH_TEST_SIGN_IN=1`, `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD` (tests only) | nil: the person signs in |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
@@ -341,6 +344,79 @@ class WrappBuildInput {
             throw cancelledBeforeStart()
         }
         return games[chosen]
+    }
+
+    /// Which free game to download: `DOWNLOAD_PROGRAM` (a bundle id,
+    /// `freeware/skifree`, or a game's id), else asked from the list.
+    @MainActor
+    func chooseDownload(from editions: [ShippedBundles.DownloadEdition]) async throws -> ShippedBundles.DownloadEdition {
+        if let wanted = environment["DOWNLOAD_PROGRAM"] {
+            guard let edition = editions.first(where: { $0.game.programID == wanted || $0.game.id == wanted }) else {
+                throw WrappBuildError.invalidPath("DOWNLOAD_PROGRAM \(wanted) has no download edition; there are: "
+                    + editions.map(\.game.programID).joined(separator: ", "))
+            }
+            return edition
+        }
+        if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("DOWNLOAD_PROGRAM") }
+        guard !editions.isEmpty else { throw WrappBuildError.internalError("No shipped bundle has a download edition") }
+
+        let question = Question(
+            title: String(localized: "Which game do you want?"),
+            detail: String(localized: "These games are free: their makers give them away. Second Chance downloads the one you pick."),
+            choicesLabel: String(localized: "Games"),
+            choices: editions.map { .init(title: $0.game.title) },
+            actions: Self.cancelOrContinue,
+            step: .source)
+        guard let answer = await ask(question), answer.action == 1, let chosen = answer.choice else {
+            // The first question the person is asked: back to the welcome screen.
+            throw cancelledBeforeStart()
+        }
+        return editions[chosen]
+    }
+
+    /// Whether to install the game of an app that is already up to date
+    /// again, from the start: returns when the person says so, and throws
+    /// `userCancelledBeforeStart` when they don't. A headless run has nobody
+    /// to ask, so it stops, saying the app is up to date.
+    @MainActor
+    func confirmReinstall(_ game: GameInfo, source: WrappSource) async throws {
+        if isHeadlessRun { throw WrappBuildError.alreadyUpToDate(title: game.title) }
+        // Whole sentences for each, so each translates whole.
+        let detail = switch source {
+        case .disk: String(localized: "There's nothing new for it. You can install the game again from the start, which needs its discs.")
+        case .herDownload: String(localized: """
+            There's nothing new for it. You can install the game again from the start, which needs the file \
+            you downloaded from Her Interactive.
+            """)
+        case .steam: String(localized: "There's nothing new for it. You can install the game again from the start, from Steam.")
+        case .bigFish: String(localized: "There's nothing new for it. You can install the game again from the start, from Big Fish Games.")
+        case .download: String(localized: "There's nothing new for it. You can install the game again from the start, by downloading it again.")
+        }
+        let question = Question(
+            title: String(localized: "The app for \(game.title) is already up to date"),
+            detail: detail,
+            actions: [.init(title: String(localized: "Cancel"), role: .cancel),
+                      .init(title: String(localized: "Install Again"), role: .primary)])
+        guard await ask(question)?.action == 1 else {
+            // Nothing has changed yet: back to the welcome screen.
+            throw cancelledBeforeStart()
+        }
+    }
+
+    /// Tell the person why the game is free and where it comes from before
+    /// it downloads. A headless run has nobody to tell, and goes ahead.
+    @MainActor
+    func confirmDownload(_ notice: DownloadNotice) async throws {
+        if isHeadlessRun { return }
+        let question = Question(
+            title: notice.title, detail: notice.body,
+            actions: [.init(title: String(localized: "Cancel"), role: .cancel),
+                      .init(title: String(localized: "Download"), role: .primary)],
+            step: .source)
+        guard await ask(question)?.action == 1 else {
+            // Nothing has been downloaded yet: back to the welcome screen.
+            throw cancelledBeforeStart()
+        }
     }
 
     /// How a DRM-free Steam game should start. Only asked when the game
@@ -812,7 +888,8 @@ class WrappBuildInput {
     private var isHeadlessRun: Bool {
         anyDiskPathFromEnv || environment["HER_INSTALLER_PATH"] != nil
             || environment["STEAM_GAME_SLUG"] != nil || environment["BIG_FISH_GAME_SLUG"] != nil
-            || environment["BIG_FISH_TRIAL"] != nil || environment["NON_INTERACTIVE"] == "true"
+            || environment["BIG_FISH_TRIAL"] != nil || environment["DOWNLOAD_PROGRAM"] != nil
+            || environment["NON_INTERACTIVE"] == "true"
     }
 
     /// Resolve a disk path (a folder, or any file, which is mounted as a disc
@@ -867,7 +944,9 @@ class WrappBuildInput {
         panel.canChooseFiles = true
         panel.canChooseDirectories = true
         panel.canCreateDirectories = false
-        panel.allowedContentTypes = [.folder] + [UTType(filenameExtension: "iso")].compactMap { $0 }
+        // A game's app is a hidden extra, as disc images are: updating it
+        // from itself (UpdateWrappBuilder) until it is a source of its own.
+        panel.allowedContentTypes = [.folder, .applicationBundle] + [UTType(filenameExtension: "iso")].compactMap { $0 }
         panel.directoryURL = URL(fileURLWithPath: "/Volumes")
 
         return await runOpenPanel(panel)

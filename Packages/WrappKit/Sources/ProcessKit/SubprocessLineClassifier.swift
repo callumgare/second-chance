@@ -1,0 +1,120 @@
+//
+//  SubprocessLineClassifier.swift
+//  ProcessKit
+//
+//  Picks the log level for one line of a subprocess's output from what the
+//  line says, not from which pipe it came down. Wine, MoltenVK and ScummVM
+//  all write routine chatter to stderr and real failures to stdout, so a
+//  stream-based level marks hundreds of harmless lines as errors and buries
+//  the few that matter.
+
+import Foundation
+import Logging
+import WrappLogging
+
+nonisolated public enum SubprocessLineClassifier {
+
+    /// The level a status line from one of the wrapp's in-process helpers
+    /// states ("second-chance-helper[CursorLock] notice: …"), a helper armed
+    /// per game or not (cocoa_start_wait.m runs in every Wine process); nil
+    /// for any other line.
+    public static func helperStatusLevel(of line: String) -> Logger.Level? {
+        let prefix = "second-chance-helper["
+        guard line.hasPrefix(prefix), let close = line.firstIndex(of: "]") else { return nil }
+        let rest = line[line.index(after: close)...].drop(while: { $0 == " " })
+        guard let colon = rest.firstIndex(of: ":") else { return nil }
+        switch rest[..<colon] {
+        case "notice": return .notice
+        case "warning": return .warning
+        case "error": return .error
+        default: return nil
+        }
+    }
+
+    /// The level to log `line` at. `fallback` is used when nothing about the
+    /// line says what it is — conventionally `.notice` for stdout and
+    /// `.warning` for stderr.
+    static func level(for line: String, fallback: Logging.Logger.Level) -> Logging.Logger.Level {
+        // The wrapp's in-process helpers state their own level:
+        // "second-chance-helper[CursorLock] notice: armed in Game.exe".
+        if let level = helperStatusLevel(of: line) { return level }
+
+        // Wine's debug classes: "0124:err:module:import_dll …".
+        if let wineClass = wineDebugClass(of: line) {
+            switch wineClass {
+            case "err":
+                return isKnownHarmlessWineError(line) ? .debug : .error
+            case "warn", "fixme", "trace":
+                return .debug
+            default:
+                break
+            }
+        }
+
+        // Wine's crash reports and loader failures. These are the lines that
+        // explain a game dying, so they are never quiet.
+        if line.hasPrefix("wine: Unhandled") || line.contains("Unhandled page fault")
+            || line.contains("Unhandled exception") || line.contains("Unhandled stack overflow") {
+            return .critical
+        }
+        if line.hasPrefix("wine: ") && (line.contains("could not load") || line.contains("cannot find")
+            || line.contains("failed") || line.contains("not found")) {
+            return .error
+        }
+        // `wine start` / ShellExecute failures arrive on stdout.
+        if line.hasPrefix("ShellExecuteEx failed") || line.hasPrefix("Application could not be started") {
+            return .error
+        }
+
+        // Wine's sync backends announce themselves on every process start.
+        if line.hasPrefix("msync:") || line.hasPrefix("esync:") || line.hasPrefix("fsync:") {
+            return .debug
+        }
+
+        // MoltenVK: "[mvk-info] …", "[mvk-warn] …", "[mvk-error] …", and the
+        // tab-indented detail lines that follow an info block.
+        if line.hasPrefix("[mvk-error]") { return .error }
+        if line.hasPrefix("[mvk-warn]") { return .warning }
+        if line.hasPrefix("[mvk-info]") || line.hasPrefix("[mvk-debug]") || line.hasPrefix("\t") {
+            return .debug
+        }
+
+        // ScummVM's own prefixes. It calls not finding the game a warning,
+        // but it then exits: that's the failure.
+        if line.hasPrefix("WARNING: Game data not found") || line.contains("ScummVM could not find any game") {
+            return .error
+        }
+        if line.hasPrefix("ERROR:") { return .error }
+        if line.hasPrefix("WARNING:") { return .warning }
+
+        return fallback
+    }
+
+    /// `err` in "0124:err:module:…" — the debug class of a Wine debug line.
+    private static func wineDebugClass(of line: String) -> Substring? {
+        // Optional "pid:tid:" or "tid:" prefix of hex digits, then the class.
+        let parts = line.split(separator: ":", maxSplits: 3, omittingEmptySubsequences: false)
+        guard parts.count >= 3 else { return nil }
+        var index = 0
+        while index < parts.count - 2,
+              !parts[index].isEmpty,
+              parts[index].utf8.allSatisfy({ isHexDigit($0) }) {
+            index += 1
+        }
+        let candidate = parts[index]
+        return debugClasses.contains(candidate) ? candidate : nil
+    }
+
+    /// Built once, not for every line Wine prints.
+    private static let debugClasses: Set<Substring> = ["err", "warn", "fixme", "trace"]
+
+    private static func isHexDigit(_ byte: UInt8) -> Bool {
+        (0x30...0x39).contains(byte) || (0x41...0x46).contains(byte) || (0x61...0x66).contains(byte)
+    }
+
+    /// `err:` lines Wine prints on every healthy run. Kept at debug so
+    /// turning the err class on by default costs nothing on a good launch.
+    private static func isKnownHarmlessWineError(_ line: String) -> Bool {
+        line.contains(":err:environ:init_peb") && line.contains("experimental wow64 mode")
+    }
+}

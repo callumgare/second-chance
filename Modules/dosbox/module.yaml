@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "dosbox"
+release: 1
+native: "dosbox"                             # its Swift: DOSBoxRuntime, DOSBoxBuild
+versions:
+  # DOSBox Staging's own Mac build, prepared on the Mac that builds
+  # (DOSBoxBuild.prepare).
+  - version: "0.83.0"
+    package:
+      # EngineTree's hash of the prepared tree (`sc engine prepare`).
+      prepared: "25199d20727a4befd2ad465c14e0cce2e986c9590f2db27bc2f2db21cf855e89"
+      sources:
+        - id: "dosbox"
+          sha256: "d8a771adfb8010fa6b5f7fb5351abfba659273ad01c89f03675a92bdbdae8167"
+          size: 44531761
+          urls: ["https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-macOS-v0.83.0.dmg"]
+runtime: { save-warning: false }             # DOSBox is as steady as ScummVM
+assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a game with no menu to quit from, started and quit

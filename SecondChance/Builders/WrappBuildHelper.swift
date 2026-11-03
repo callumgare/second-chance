@@ -23,6 +23,7 @@ import Logging
 import AppKit
 import SecondChanceKit
 import GameCatalog
+import WrappBuilder
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildHelper")
 
@@ -33,17 +34,27 @@ class WrappBuildHelper {
     private let fileManager = FileManager.default
     private let wineManager: WineManager
     private let cacheManager: CacheManager
+    private let engines: EngineStore
     let bus: EventBus<AppEvent>
 
     init(
         wineManager: WineManager = .shared,
         cacheManager: CacheManager = .shared,
+        engines: EngineStore = WrappBuildHelper.standardEngines,
         bus: EventBus<AppEvent> = .app
     ) {
         self.wineManager = wineManager
         self.cacheManager = cacheManager
+        self.engines = engines
         self.bus = bus
     }
+
+    /// The engine store every build shares: this Mac's, fetched with the
+    /// download source's downloader.
+    nonisolated static let standardEngines = EngineStore(
+        root: EngineStore.standardRoot(),
+        preparer: EnginePreparer(downloader: DownloadWrappBuilder.standardDownloader())
+    )
 
     // MARK: - Base Wrapp Construction
 
@@ -75,37 +86,75 @@ class WrappBuildHelper {
         }
     }
 
-    /// Create a base wrapp with both Wine and ScummVM support.
-    func createBaseWrapp(at path: URL) async throws {
-        // Find the pre-built unified template
+    /// A wrapp of the launcher alone (the template), with the engines the
+    /// build needs from the engine store: Wine whenever the build runs a
+    /// Windows program (`buildsWithWine`) or the game runs in it, and each
+    /// engine `composition` runs. Wine's prefix is made, or a bare C: drive
+    /// for a build without Wine. An engine the build used but the game
+    /// doesn't is removed again by `cleanupUnusedEngine`.
+    func createBaseWrapp(at path: URL, composition: Composition? = nil, buildsWithWine: Bool = true) async throws {
         guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
             throw WrappBuildError.templateDamaged("WrappTemplate.app not found in Second Chance.app bundle")
         }
         // Before the cache too: a cached base wrapp came from this template.
         try await verifyTemplateSignatures(templatePath)
         await bus.publishWrappBuild(.wrappStarted(path: path))
+        let engines = try engineModules(composition: composition, buildsWithWine: buildsWithWine)
 
-        // Check cache first
+        // The development cache's base is only good for a build that wants
+        // the same engines.
         if try cacheManager.restoreCache(stage: .base, to: path) != nil {
-            return
+            let restored = EngineInstall.installed(in: path.appendingPathComponent("Contents")).map(\.module)
+            if restored == engines.map(\.manifest.id).sorted() { return }
+            logger.notice("The cached base wrapp has \(restored), not the engines this build wants: building it afresh")
+            await Blocking.run { try? FileManager.default.removeItem(at: path) }
         }
 
-        logger.notice("Creating unified wrapp with both Wine and ScummVM support...")
+        logger.notice("Creating the wrapp from the template, with \(engines.map(\.manifest.id).joined(separator: " and "))")
         await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: nil)))
-
-        // Copy the entire template (includes both Wine and ScummVM)
         do {
             try await copyTemplate(at: templatePath, to: path)
         } catch {
             logger.critical("❌ Failed to copy wrapp template: \(error.localizedDescription)")
             throw error
         }
+        for module in engines {
+            try await installEngine(module, into: path)
+        }
 
-        // Create Wine prefix (ScummVM doesn't need initialization)
-        try await wineManager.createWinePrefix(at: path, bus: bus)
+        if engines.contains(where: { $0.manifest.id == ModuleID.wine.rawValue }) {
+            try await wineManager.createWinePrefix(at: path, bus: bus)
+        } else {
+            try fileManager.createDirectory(at: WrappLayout(app: path).driveC, withIntermediateDirectories: true)
+        }
 
-        // Save to cache
         try cacheManager.saveCache(wrappPath: path, stage: .base)
+    }
+
+    /// The engine modules a build needs, Wine first: it is what the prefix
+    /// is made with.
+    private func engineModules(composition: Composition?, buildsWithWine: Bool) throws -> [ModuleFolder] {
+        guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
+        let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+        var wanted: [ModuleID] = buildsWithWine ? [.wine] : []
+        for module in composition?.modules ?? [] where !wanted.contains(module) { wanted.append(module) }
+        return wanted.compactMap { id in modules.first { $0.manifest.id == id.rawValue && $0.manifest.package() != nil } }
+    }
+
+    /// Put `module`'s engine into the wrapp at `path`, from the store, which
+    /// fetches and prepares it the first time a build on this Mac needs it.
+    private func installEngine(_ module: ModuleFolder, into path: URL) async throws {
+        let id = module.manifest.id
+        let engine: EngineStore.Engine
+        do {
+            engine = try await engines.engine(module) { step in logger.notice("[Engine] \(step)") }
+        } catch let error as DownloadError {
+            logger.error("[Engine] Couldn't fetch \(id): \(error.description)")
+            for failure in error.failures { logger.error("[Engine]   \(failure)") }
+            throw WrappBuildError.engineUnavailable
+        }
+        logger.notice("[Engine] \(engine.prepared ? "Prepared" : "Using the stored") \(id) \(engine.version) (\(engine.hash.prefix(12))…)")
+        try await Blocking.run { try EngineInstall.install(engine, into: path.appendingPathComponent("Contents")) }
     }
 
     /// Fail now, rather than at signing minutes later, if the template's
@@ -136,114 +185,29 @@ class WrappBuildHelper {
         logger.warning("codesign --verify reports a problem with the wrapp template, carrying on: \(detail)")
     }
 
-    /// Remove the engine this game doesn't use from the wrapp.
-    func cleanupUnusedEngine(at wrappPath: URL, gameEngine: GameInfo.GameEngine) async throws {
-        logger.notice("Cleaning up unused game engine from wrapp...")
-
-        let resourcesPath = WrappLayout(app: wrappPath).resources
-
-        switch gameEngine {
-        case .wine, .wineSteam, .wineSteamSilent:
-            try await removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("scummvm-files"),
-                                  engine: "ScummVM", from: wrappPath)
-        case .scummvm:
-            try await removeEngineFiles(listedIn: resourcesPath.appendingPathComponent("wine-files"),
-                                  engine: "Wine", from: wrappPath)
-        }
-
-        logger.notice("Cleanup complete")
-    }
-
-    /// Remove what an engine list names. The lists are written by
-    /// `setup-wine.sh` and `setup-scummvm.sh` with the engine's files,
-    /// relative to the bundle's `Contents/`, and ship in the template's
-    /// Resources.
-    ///
-    /// They list regular files only, so removing just those would leave
-    /// framework skeletons and versioned-dylib symlinks behind, which
-    /// codesign rejects ("bundle format unrecognized"). Each listed entry is
-    /// removed whole at its top two levels (`Frameworks/GStreamer.framework`,
-    /// `SharedSupport/wine`, `MacOS/scummvm`) — the two engines share none of
-    /// those — and then any symlink left pointing at nothing.
-    func removeEngineFiles(listedIn list: URL, engine: String, from wrappPath: URL) async throws {
-        try await Blocking.run { try Self.removeEngineFilesNow(listedIn: list, engine: engine, from: wrappPath) }
-    }
-
-    /// Gigabytes, for Wine: `removeEngineFiles` runs it off the main thread.
-    private nonisolated static func removeEngineFilesNow(listedIn list: URL, engine: String, from wrappPath: URL) throws {
-        let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: list.path) else {
-            logger.warning("No \(engine) file list at \(list.path) — leaving \(engine) in the wrapp")
-            return
-        }
-        let content = try String(contentsOf: list, encoding: .utf8)
-        let entries = Set(content.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .map { $0.split(separator: "/").prefix(2).joined(separator: "/") })
+    /// Remove from the wrapp each engine its composition doesn't run: Wine,
+    /// for a ScummVM game whose installer ran under it.
+    func cleanupUnusedEngine(at wrappPath: URL, composition: Composition) async throws {
         let contents = wrappPath.appendingPathComponent("Contents")
-        let before = DirectorySize.measure(contents)
-        for entry in entries.sorted() {
-            let path = contents.appendingPathComponent(entry)
-            if (try? path.checkResourceIsReachable()) == true || isSymlink(path) {
-                try fileManager.removeItem(at: path)
-            }
-        }
-        for dir in ["Frameworks", "MacOS", "Resources", "SharedSupport"] {
-            removeDanglingSymlinks(in: contents.appendingPathComponent(dir))
-        }
-        let after = DirectorySize.measure(contents)
-        let freed = ByteCountFormatter.string(fromByteCount: before.bytes - after.bytes, countStyle: .file)
-        logger.notice("Removed \(engine), which the game doesn't use: \(entries.count) entries, \(freed)")
-    }
-
-    private nonisolated static func isSymlink(_ url: URL) -> Bool {
-        (try? FileManager.default.destinationOfSymbolicLink(atPath: url.path)) != nil
-    }
-
-    /// Remove symlinks directly in `directory` whose target no longer exists.
-    private nonisolated static func removeDanglingSymlinks(in directory: URL) {
-        let fileManager = FileManager.default
-        let items = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        for item in items where isSymlink(item) && !fileManager.fileExists(atPath: item.path) {
-            do {
-                try fileManager.removeItem(at: item)
-            } catch {
-                logger.warning("Can't remove the dangling symlink \(item.path): \(error.localizedDescription)")
+        for record in EngineInstall.installed(in: contents) where !composition.has(ModuleID(rawValue: record.module)) {
+            try await Blocking.run {
+                let before = DirectorySize.measure(contents)
+                try EngineInstall.remove(module: record.module, from: contents)
+                let freed = ByteCountFormatter.string(fromByteCount: before.bytes - DirectorySize.measure(contents).bytes, countStyle: .file)
+                logger.notice("Removed \(record.module), which the game doesn't use: \(freed)")
             }
         }
     }
 
-    // MARK: - Installer Answer Files
-
-    /// Copy the InstallShield answer file for `gameSlug` to `setup.iss` in
-    /// `installerBaseDir` (the wrapp's `drive_c/nancy-drew-installer`), where
-    /// `GameInstallerRunner` looks for one to run the installer silently.
-    ///
-    /// Answer files live in the bundle's `installer-answer-files`, the discs'
-    /// at its top level and other sources' in a subdirectory named after the
-    /// source (`her-download/`), since a download's installer asks different
-    /// questions from the disc's. Returns whether there was one to copy; a
-    /// game without one installs interactively.
-    @discardableResult
-    func installAnswerFile(forGame gameSlug: String, source: WrappSource, into installerBaseDir: URL) -> Bool {
-        let directory = source == .disk ? "installer-answer-files" : "installer-answer-files/\(source.rawValue)"
-        guard let issPath = Bundle.main.path(forResource: gameSlug, ofType: "iss", inDirectory: directory) else {
-            logger.notice("ℹ️ No setup.iss in \(directory) for \(gameSlug)")
-            return false
-        }
-        let destination = installerBaseDir.appendingPathComponent("setup.iss")
-        do {
-            try fileManager.createDirectory(at: installerBaseDir, withIntermediateDirectories: true)
-            if fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
-            }
-            try fileManager.copyItem(atPath: issPath, toPath: destination.path)
-            logger.notice("✅ Copied \(directory)/\(gameSlug).iss to setup.iss")
-            return true
-        } catch {
-            logger.warning("⚠️ Failed to copy setup.iss: \(error)")
-            return false
+    /// The edition a build from `source` is, where the builder doesn't say:
+    /// the disc's `cd`, Her's Windows download, Steam's or Big Fish's.
+    nonisolated static func edition(of source: WrappSource) -> String {
+        switch source {
+        case .disk: "cd"
+        case .herDownload: "her-windows"
+        case .steam: "steam"
+        case .bigFish: "big-fish"
+        case .download: "download"
         }
     }
 
@@ -258,11 +222,13 @@ class WrappBuildHelper {
         gameExePath: String,
         installerDir: String,
         steamID: String? = nil,
-        gameEngine: GameInfo.GameEngine? = nil,
+        composition: Composition? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
-        bigFishTrial: Bool? = nil
+        bigFishTrial: Bool? = nil,
+        configureINI: Bool = true,
+        bundleID: String? = nil
     ) async throws {
         await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
@@ -283,7 +249,9 @@ class WrappBuildHelper {
             throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
-        let newBundleID = currentBundleID.replacingOccurrences(of: "WrappTemplate", with: "nancy-drew." + gameInfo.id)
+        // The program's bundle's id (`au.gare.callum.second-chance.program.nancy-drew.<slug>`),
+        // which names where the wrapp keeps the person's files.
+        let newBundleID = bundleID ?? WrappLock.wrappBundleID(program: gameInfo.programID)
         plist["CFBundleIdentifier"] = newBundleID
         plist["CFBundleName"] = gameInfo.appName
         plist["CFBundleDisplayName"] = gameInfo.appName
@@ -300,33 +268,41 @@ class WrappBuildHelper {
         let updatedData = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try updatedData.write(to: infoPlistPath)
 
-        // What the wrapp reads about its game when it starts.
+        // What the wrapp reads about its game when it starts. Its settings
+        // still name the composition by its engine, as every wrapp's have.
+        let composition = composition ?? gameInfo.composition
+        guard let engine = composition.legacyEngine else { throw WrappBuildError.unsupportedEngine }
         let settings = WrappSettings(
-            gameExePath: gameExePath, engine: gameEngine ?? gameInfo.gameEngine, gameSlug: gameInfo.id,
+            gameExePath: gameExePath, engine: engine, gameSlug: gameInfo.id,
             source: source, installerDir: installerDir, steamAppID: steamID, steamLaunchMode: steamLaunchMode,
             bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
         )
         try settings.write(to: WrappLayout(app: wrappPath))
         logger.notice("Created AppSettings.plist with engine: \(settings.engine.rawValue)")
 
-        // Documents leads where the A: drive does (WineDrives has why). The
-        // wrapp points both at the player's saves each time it starts.
-        let wine = Wine(wrapp: wrappPath)
-        try? FileManager.default.removeItem(at: wine.documents)
-        try FileManager.default.createSymbolicLink(
-            atPath: wine.documents.path,
-            withDestinationPath: try wine.drives.target(of: "a")
-        )
+        // A build that ran Wine has a prefix with drives; one that didn't (a
+        // download ScummVM runs) has a bare C: drive, and nothing to point.
+        if fileManager.fileExists(atPath: WrappLayout(app: wrappPath).prefix.appendingPathComponent("dosdevices").path) {
+            // Documents leads where the A: drive does (WineDrives has why).
+            // The wrapp points both at the player's saves each time it starts.
+            let wine = Wine(wrapp: wrappPath)
+            try? FileManager.default.removeItem(at: wine.documents)
+            try FileManager.default.createSymbolicLink(
+                atPath: wine.documents.path,
+                withDestinationPath: try wine.drives.target(of: "a")
+            )
+        }
 
         // Configure game INI files for LCD mode and save path
-        try configureGameINI(at: wrappPath, gameExePath: gameExePath)
+        if configureINI {
+            try configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
+        }
     }
 
     /// Configure game INI files
-    private func configureGameINI(at wrappPath: URL, gameExePath: String) throws {
-        // Build the full path to the game directory within the wrapp
-        let gameDir = WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent()
-
+    /// Give every .ini in `gameDir` the nancy-drew module's settings
+    /// (`DO nancy-drew.configure-ini`).
+    func configureGameINI(in gameDir: URL) throws {
         logger.notice("Configuring game INI files in: \(gameDir.path)")
 
         // Check if directory exists
@@ -361,6 +337,7 @@ class WrappBuildHelper {
         }
 
         logger.notice("Found \(iniFiles.count) INI file\(iniFiles.count == 1 ? "" : "s") to configure")
+        let settings = try NancyDrewModule.iniSettings()
 
         for iniFile in iniFiles {
             logger.notice("  Processing: \(iniFile.lastPathComponent)")
@@ -374,29 +351,32 @@ class WrappBuildHelper {
             var content = originalContent
             var modified = false
 
-            // Set LCD mode (WindowMode=2)
-            let windowModeChanged = content.contains("WindowMode=0")
-            if windowModeChanged {
-                content = content.replacingOccurrences(of: "WindowMode=0", with: "WindowMode=2")
-                logger.notice("    ✅ Set WindowMode to 2 (LCD mode)")
-                modified = true
-            } else if content.contains("WindowMode=2") {
-                logger.notice("    ℹ️ WindowMode already set to 2")
-            } else {
-                logger.notice("    ℹ️ No WindowMode setting found")
+            // The nancy-drew module's settings (Modules/nancy-drew/ini.yaml):
+            // LCD mode, and saves in Documents.
+            for replacement in settings.replace ?? [] {
+                if content.contains(replacement.from) {
+                    content = content.replacingOccurrences(of: replacement.from, with: replacement.to)
+                    logger.notice("    ✅ Set \(replacement.to)")
+                    modified = true
+                } else if let already = replacement.already, content.contains(already) {
+                    logger.notice("    ℹ️ \(already) already")
+                } else {
+                    logger.notice("    ℹ️ No \(replacement.from) setting found")
+                }
             }
-
-            // Set save path to Documents
-            let savePath = "LoadSavePath=\\\\users\\\\crossover\\\\Documents"
-            if let match = content.firstMatch(of: /LoadSavePath=.*/) {
-                let oldValue = String(match.output)
-                content = content.replacing(/LoadSavePath=.*/) { _ in savePath }
-                logger.notice("    ✅ Updated LoadSavePath")
-                logger.notice("       Old: \(oldValue)")
-                logger.notice("       New: \(savePath)")
-                modified = true
-            } else {
-                logger.notice("    ℹ️ No LoadSavePath setting found")
+            for setting in settings.set ?? [] {
+                let line = "\(setting.key)=\(setting.value)"
+                let pattern = try Regex("\(setting.key)=.*")
+                if let match = content.firstMatch(of: pattern) {
+                    let oldValue = String(content[match.range])
+                    content = content.replacing(pattern) { _ in line }
+                    logger.notice("    ✅ Updated \(setting.key)")
+                    logger.notice("       Old: \(oldValue)")
+                    logger.notice("       New: \(line)")
+                    modified = true
+                } else {
+                    logger.notice("    ℹ️ No \(setting.key) setting found")
+                }
             }
 
             // Write back if modified
@@ -515,22 +495,58 @@ class WrappBuildHelper {
         gameExePath: String,
         installerDir: String,
         steamID: String? = nil,
-        gameEngine: GameInfo.GameEngine? = nil,
+        composition: Composition? = nil,
         steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,
+        configureINI: Bool = true,
+        edition: String? = nil,
+        updated: WrappLock.UpdateRecord? = nil,
         input: WrappBuildInput
     ) async throws -> URL {
+        // What it was built from, for updating it and for reports; its
+        // bundle names the wrapp's bundle id. Checking the bundle runs ajv:
+        // off the main thread.
+        let edition = edition ?? Self.edition(of: source)
+        let slug = gameInfo.id, lockComposition = composition ?? gameInfo.composition
+        var lock = try await Blocking.run {
+            try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: lockComposition)
+        }
+        lock.updated = updated
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
-            steamID: steamID, gameEngine: gameEngine, steamLaunchMode: steamLaunchMode,
-            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
+            steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,
+            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial,
+            configureINI: configureINI, bundleID: lock.wrappBundleID
         )
+        try lock.write(to: WrappLayout(app: wrappPath))
+        logger.notice("Built from \(lock.summary)")
+        moveUserFiles(for: lock)
         await bus.publishWrappBuild(.wrappConfigured(exePath: gameExePath, installerDir: installerDir, gameInfo: gameInfo))
         let finalPath = try await finalize(wrapp: wrappPath, gameInfo: gameInfo, input: input)
         unregisterTemporaryWrapp(wrappPath)
         return finalPath
+    }
+
+    /// Move the person's files from the folders the program's wrapps kept
+    /// under former bundle ids into this wrapp's layout, as every launch
+    /// does too (`UserFilesMove`); in the folder the environment names in
+    /// place of Application Support under test, so a test never touches a
+    /// player's files.
+    func moveUserFiles(for lock: WrappLock) {
+        guard let saves = lock.savesVolume, let former = lock.formerBundleIDs, !former.isEmpty else { return }
+        // A build under test moves files only in the folder it was given.
+        guard !TestHost.isRunning || ProcessInfo.processInfo.environment["SECOND_CHANCE_APP_SUPPORT_DIR"] != nil else {
+            logger.notice("[User files] Not moving anything: a build under test has no SECOND_CHANCE_APP_SUPPORT_DIR")
+            return
+        }
+        let move = UserFilesMove(
+            layout: UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: lock.wrappBundleID),
+            formerBundleIDs: former, volumes: lock.volumes ?? [], linkVolume: saves
+        )
+        let outcome = move.run(isRunning: { !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty })
+        for line in outcome.log { logger.notice("[User files] \(line)") }
     }
 
     /// Launch the saved wrapp when the run asked for it (`LAUNCH_GAME`). The

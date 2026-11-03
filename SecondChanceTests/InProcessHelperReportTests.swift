@@ -3,6 +3,7 @@ import Testing
 import Logging
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 @Suite("In-process helper report")
 struct InProcessHelperReportTests {

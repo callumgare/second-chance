@@ -1,0 +1,5 @@
+# What Tyrian 2000 shows as it starts: its title. To be checked against a
+# capture from a first launch.
+kind: "text"
+tags: ["running"]
+text: { strings: ["TYRIAN", "Tyrian", "EPIC"] }

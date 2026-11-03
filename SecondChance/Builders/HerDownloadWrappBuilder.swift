@@ -17,6 +17,7 @@ import Foundation
 import Logging
 import SecondChanceKit
 import GameCatalog
+import WrappBuilder
 
 /// Builds a wrapp from a Her Interactive download.
 final class HerDownloadWrappBuilder: WrappBuildStrategy {
@@ -25,6 +26,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     private let gameDetector: GameDetector
     private let gameInfoProvider: GameInfoProvider
     private let isoMounter: ISOMounter
+    private let wineManager: WineManager
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.HerDownloadWrappBuilder")
     private let fileManager = FileManager.default
@@ -35,6 +37,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         gameDetector: GameDetector = .shared,
         gameInfoProvider: GameInfoProvider = .shared,
         isoMounter: ISOMounter = ISOMounter(),
+        wineManager: WineManager = .shared,
         bus: EventBus<AppEvent> = .app
     ) {
         self.helper = helper
@@ -42,6 +45,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         self.gameDetector = gameDetector
         self.gameInfoProvider = gameInfoProvider
         self.isoMounter = isoMounter
+        self.wineManager = wineManager
         self.bus = bus
     }
 
@@ -113,49 +117,66 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             // Unpacked, then installed: the installer's own size each time,
             // and as much again for what it was compressed from.
             try await helper.ensureRoomToBuild(from: installer, copies: 3)
-            try await helper.createBaseWrapp(at: wrappPath)
-            let driveCPath = WrappLayout(app: wrappPath).driveC
-            let installerBaseDir = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
-
-            // An InstallShield launcher unpacks into the layout a disc has,
-            // and then installs silently from an answer file as a disc does.
-            // Anything else runs as it is, and asks its questions itself.
-            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Unpacking the installer"))))
-            let unpacked = try await installerRunner.unpackInstallShieldLauncher(installer, at: wrappPath)
-            if unpacked {
-                helper.installAnswerFile(forGame: gameInfo.id, source: .herDownload, into: installerBaseDir)
+            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
+            // The game's bundle says what building Her's Windows download
+            // runs (its Wrappfile's her-download stage).
+            guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "her-windows") }) else {
+                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-windows edition names no stage")
             }
-
-            // ── Install ──────────────────────────────────────────────────
-            // Both engines install under Wine: a ScummVM game's data is in
-            // the installer's cabinets too, and ScummVM plays it from where
-            // the installer put it. Wine is stripped from a ScummVM wrapp
-            // only once the installer and the patches have run.
-            await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
-            try await publishEngineRoute(for: gameInfo)
-            let (gameExePath, _) = try await installerRunner.installGameWithWine(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                source: .herDownload,
-                installerPath: unpacked ? nil : installer,
-                unattended: input.isUnattended,
-                confirmPatchFailure: input.confirmPatchFailure,
-                chooseGameProgram: input.chooseGameProgram(among:)
-            )
-
-            // Unlike a disc, nothing reads the installer once the game is in.
-            if unpacked && !DebugSettings.shared.skipInstaller {
-                await removeQuietly(installerBaseDir, what: "the unpacked installer")
+            // The same download, plan and modules install the same game: a
+            // build after the first clones its install (docs/wrapp-build.md#the-layer-cache).
+            let key: LayerKey? = DebugSettings.shared.skipInstaller ? nil : try await Blocking.run {
+                try InstallLayer.key(slot: "\(gameInfo.id) \(plan.edition): install", plan: plan, wrappPath: wrappPath, inputs: [
+                    .init("download", try LayerKey.hash(file: installer)),
+                ])
             }
+            let installed = try await InstallLayer(store: wineManager.layers, bus: bus).run(
+                key: key, wrappPath: wrappPath, gameInfo: gameInfo, disk1: nil
+            ) { () async throws -> InstallLayer.Installed in
+                var gameExePath: String?
+                var configuredINI = false
+                for step in plan.stages.flatMap(\.steps) {
+                    logger.debug("Plan step: \(step) (\(step.origin))")
+                    switch (step.module, step.instruction) {
+                    case ("her-download", "INSTALL"):
+                        gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
+                                                                       answerFile: step.option("answer-file"), input: input)
+                    case _ where step.name.map(isPatch(of: gameInfo)) == true:
+                        guard let gameExePath else {
+                            throw WrappBuildError.buildRecipeProblem("\(step.origin): a patch before the game is installed")
+                        }
+                        _ = try await installerRunner.applyGamePatch(
+                            id: step.name ?? "", wrappPath: wrappPath, gameInfo: gameInfo,
+                            gameInstallDir: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent(),
+                            source: .herDownload, confirmFailure: input.confirmPatchFailure
+                        )
+                    case (nil, "EDIT") where step.option("from-data") == "ini":
+                        if let gameExePath {
+                            try helper.configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
+                        }
+                        configuredINI = true
+                    default:
+                        throw WrappBuildError.buildRecipeProblem("\(step.origin): the Her download flow can't run \(step)")
+                    }
+                }
+                guard let gameExePath else {
+                    throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-windows plan installs nothing")
+                }
+                return InstallLayer.Installed(gameExePath: gameExePath, installerDir: "", configuredINI: configuredINI)
+            }
+            let gameExePath = installed.gameExePath
+            let configuredINI = installed.configuredINI
 
             if !DebugSettings.shared.skipInstaller {
-                try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+                try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
             }
 
             return try await finish(
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 gameExePath: gameExePath,
+                configureINI: !configuredINI,
+                edition: "her-windows",
                 input: input
             )
         } catch {
@@ -163,6 +184,58 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await publishFailure(error)
             throw error
         }
+    }
+
+    /// `her-download.INSTALL` for a Windows download: an InstallShield
+    /// launcher is unpacked into the layout a disc has and installed
+    /// silently with the answer file, as a disc is; anything else runs as it
+    /// is and asks its questions itself. Patches are steps of their own.
+    /// The game's program, from the root of drive C.
+    private func installWindowsDownload(
+        _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: String?, input: WrappBuildInput
+    ) async throws -> String {
+        let driveCPath = WrappLayout(app: wrappPath).driveC
+        let installerBaseDir = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
+        await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Unpacking the installer"))))
+        let unpacked = try await installerRunner.unpackInstallShieldLauncher(installer, at: wrappPath)
+        if unpacked, let answerFile {
+            let source = URL(fileURLWithPath: answerFile.hasPrefix("asset:") ? String(answerFile.dropFirst("asset:".count)) : answerFile)
+            let destination = installerBaseDir.appendingPathComponent("setup.iss")
+            try FileManager.default.createDirectory(at: installerBaseDir, withIntermediateDirectories: true)
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.copyItem(at: source, to: destination)
+            logger.notice("✅ Copied \(gameInfo.id)'s \(source.lastPathComponent) to setup.iss")
+        }
+
+        // Both engines install under Wine: a ScummVM game's data is in the
+        // installer's cabinets too, and ScummVM plays it from where the
+        // installer put it. Wine is stripped from a ScummVM wrapp only once
+        // the installer and the patches have run.
+        await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
+        try await publishEngineRoute(for: gameInfo)
+        let (gameExePath, _) = try await installerRunner.installGameWithWine(
+            wrappPath: wrappPath,
+            gameInfo: gameInfo,
+            source: .herDownload,
+            installerPath: unpacked ? nil : installer,
+            unattended: input.isUnattended,
+            confirmPatchFailure: input.confirmPatchFailure,
+            chooseGameProgram: input.chooseGameProgram(among:),
+            applyPatches: false
+        )
+
+        // Unlike a disc, nothing reads the installer once the game is in.
+        if unpacked && !DebugSettings.shared.skipInstaller {
+            await removeQuietly(installerBaseDir, what: "the unpacked installer")
+        }
+        return gameExePath
+    }
+
+    /// Whether `name` is one of the game's patches: a step `DO
+    /// nancy-drew.patch` made.
+    private func isPatch(of gameInfo: GameInfo) -> (String) -> Bool {
+        let ids = Set(GamePatchCatalog.shared.allPatches(forGame: gameInfo.id).map(\.id))
+        return { ids.contains($0) }
     }
 
     // MARK: - Mac download
@@ -209,8 +282,20 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
         do {
             try await helper.ensureRoomToBuild(from: image, copies: 3)
-            try await helper.createBaseWrapp(at: wrappPath)
+            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
             let driveCPath = WrappLayout(app: wrappPath).driveC
+            // The game's bundle says what building Her's Mac download runs
+            // (its Wrappfile's her-mac stage): taking the game out of the
+            // Cider app, and the games' .ini settings.
+            guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "her-mac") }) else {
+                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-mac edition names no stage")
+            }
+            let steps = plan.stages.flatMap(\.steps)
+            for step in steps where !(step.module == "her-download" && step.instruction == "INSTALL")
+                && !(step.module == nil && step.instruction == "EDIT" && step.option("from-data") == "ini") {
+                throw WrappBuildError.buildRecipeProblem("\(step.origin): the Mac download flow can't run \(step)")
+            }
+            let configuresINI = steps.contains { $0.instruction == "EDIT" }
 
             await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Unpacking the game"))))
             try await publishEngineRoute(for: gameInfo)
@@ -233,15 +318,18 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
             // Her Interactive's patches are Windows updaters that look for
             // the game their own installer registered; a Cider build never
-            // ran one, and it is a later build than they patch anyway.
+            // ran one, and it is a later build than they patch anyway, so the
+            // her-mac stage has none.
             logger.notice("Not applying game patches: a Mac download is a later build than Her Interactive's patches update")
 
-            try await helper.cleanupUnusedEngine(at: wrappPath, gameEngine: gameInfo.gameEngine)
+            try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
 
             return try await finish(
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 gameExePath: gameExePath,
+                configureINI: configuresINI,
+                edition: "her-mac",
                 input: input
             )
         } catch {
@@ -257,9 +345,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// Publish which engine the game runs under; a Her download is only ever
     /// a Wine or a ScummVM game.
     private func publishEngineRoute(for gameInfo: GameInfo) async throws {
-        switch gameInfo.gameEngine {
+        switch gameInfo.composition.launcher {
         case .wine, .scummvm:
-            await bus.publishWrappBuild(.engineRouted(engine: gameInfo.gameEngine, gameInfo: gameInfo))
+            await bus.publishWrappBuild(.engineRouted(composition: gameInfo.composition, gameInfo: gameInfo))
         default:
             throw WrappBuildError.unsupportedEngine
         }
@@ -271,12 +359,14 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         wrappPath: URL,
         gameInfo: GameInfo,
         gameExePath: String,
+        configureINI: Bool,
+        edition: String,
         input: WrappBuildInput
     ) async throws -> URL {
         let gameDir = (gameExePath as NSString).deletingLastPathComponent
         let finalPath = try await helper.completeBuild(
             wrapp: wrappPath, gameInfo: gameInfo, source: .herDownload,
-            gameExePath: gameExePath, installerDir: gameDir, input: input
+            gameExePath: gameExePath, installerDir: gameDir, configureINI: configureINI, edition: edition, input: input
         )
         await helper.launchIfAsked(finalPath, input: input)
         return finalPath

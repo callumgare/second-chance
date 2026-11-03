@@ -72,25 +72,32 @@ struct CleanCommand: AsyncParsableCommand {
         commandName: "clean",
         abstract: "Delete caches and build output.",
         discussion: """
-        wine-prefixes: the cached Wine prefix (start the next build from a fresh one). \
+        layers: the layer cache, the Wine prefix among it (start the next build from scratch; \
+        wine-prefixes is another name for it). \
         build: DerivedData. wrapps: the wrapps dir. test-results: reports and result bundles. \
         steam-session: the saved Steam sign-in (signs every Steam wrapp out, like Sign Out of Steam). \
         steam-client: the cached Steam client (the next Steam build downloads Steam's update again). \
-        downloads: what building Second Chance or a wrapp downloaded (Wine, AutoIt, ScummVM, game patches, \
-        Big Fish's Game Manager installer), fetched and checked again when next needed. \
+        engines: the engine store, the engines builds prepared (the next build that needs one prepares it \
+        again, from downloads when they are still there). \
+        downloads: what building Second Chance and its builds downloaded (AutoIt, game patches, engines' \
+        and free games' files, Big Fish's Game Manager installer), fetched and checked again when next needed. \
         With no target in a terminal, asks which. Without a terminal, deletes only with -y.
         """
     )
 
     enum Target: String, CaseIterable, ExpressibleByArgument, CustomStringConvertible {
+        case layers
+        /// What `layers` was called when the prefix was the only cache.
         case winePrefixes = "wine-prefixes"
         case build
         case wrapps
         case testResults = "test-results"
         case steamSession = "steam-session"
         case steamClient = "steam-client"
+        case engines
         case downloads
         var description: String { rawValue }
+        static var allCases: [Target] { [.layers, .build, .wrapps, .testResults, .steamSession, .steamClient, .engines, .downloads] }
     }
 
     @OptionGroup var global: GlobalOptions
@@ -99,19 +106,21 @@ struct CleanCommand: AsyncParsableCommand {
     @Flag(name: [.customLong("yes"), .customShort("y")], help: "Don't ask before deleting.")
     var yes = false
 
-    @Argument(help: "What to delete: wine-prefixes, build, wrapps, test-results, steam-session, steam-client, downloads.")
+    @Argument(help: "What to delete: layers, build, wrapps, test-results, steam-session, steam-client, engines, downloads.")
     var targets: [Target] = []
 
     func run() async throws {
         let session = try Session.start(global)
         let ui = session.ui
+        let targets = self.targets.map { $0 == .winePrefixes ? .layers : $0 }
         let paths: [Target: [URL]] = [
-            .winePrefixes: [Repo.winePrefixCache],
+            .layers: [Repo.layerStore, Repo.formerWinePrefixCache],
             .build: [session.repo.derivedData],
             .wrapps: [wrapps.resolve(session.repo)],
             .testResults: [session.repo.testResults],
             .steamSession: [Repo.steamSession],
             .steamClient: [Repo.steamClientCache],
+            .engines: [Repo.engineStore],
             .downloads: Repo.downloads,
         ]
         // Only what's on offer is measured: everything when asking which,

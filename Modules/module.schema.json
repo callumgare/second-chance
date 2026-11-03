@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://second-chance.invalid/schemas/module.json",
+  "title": "Second Chance module",
+  "description": "A module's module.yaml: its id, its release and the versions that release provides, what it depends on, and the data it carries. docs/modules.md describes every field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "id", "release", "versions"],
+  "properties": {
+    "format": { "const": 1 },
+    "id": {
+      "description": "A shipped module's is one name (wine); one someone adds is namespaced (someone/directx9).",
+      "type": "string",
+      "pattern": "^([a-z0-9]+(-[a-z0-9]+)*/)?[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "release": {
+      "description": "Our fixes beneath its versions: counts up, and is never written in a Wrappfile. Changing anything in the module's folder means raising it.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "native": {
+      "description": "The Swift implementation compiled into Second Chance this module's code is; only a shipped module may name one.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "versions": {
+      "description": "What this release provides, as a bundle constrains it with @: an engine's own version (10.0_8), or a plain number of the module's own.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version"],
+        "properties": {
+          "version": { "type": "string", "pattern": "^[0-9A-Za-z._-]+$" },
+          "preview": { "description": "Used only where a constraint names it.", "type": "boolean" },
+          "withdrawn": { "type": "boolean" },
+          "replaced-by": { "type": "string" },
+          "package": {
+            "description": "An engine's: the downloads it is made from, and the hash of the tree preparing them gives (docs/modules.md#engine-packages).",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sources"],
+            "properties": {
+              "prepared": { "description": "EngineTree's hash of the prepared tree, which preparing must give.", "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "sources": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "sha256", "urls"],
+                  "properties": {
+                    "id": { "description": "What the module's Swift knows it as (wine, wineskin).", "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+                    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                    "size": { "type": "integer", "minimum": 1 },
+                    "urls": { "description": "Where to look, in order; the sha256 decides.", "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^https://" } }
+                  }
+                }
+              },
+              "engine-data": { "description": "ScummVM's: the engine data files kept from its app's Resources.", "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+            }
+          }
+        }
+      }
+    },
+    "depends-on": {
+      "description": "Modules installed with it, with an optional constraint (wine@10).",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^([a-z0-9-]+/)?[a-z0-9-]+(@.+)?$" },
+      "uniqueItems": true
+    },
+    "installs-after": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "options-schema": { "type": "string" },
+    "stages": { "type": "array", "items": { "type": "string" } },
+    "functions": { "type": "array", "items": { "type": "string" } },
+    "data": {
+      "description": "Tables of the module's own, each a YAML file in its folder (or JSON, which YAML 1.2 reads too), read as ${data.<table>.<key>.<field>}.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.(yaml|json)$" },
+      "uniqueItems": true
+    },
+    "assets": {
+      "description": "Files the module carries for builds, tests or the wrapp, in its folder.",
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "assemble": { "type": "array", "items": { "type": "string" } },
+    "runtime": {
+      "description": "Defaults for the runtime settings of the stages that use it.",
+      "type": "object"
+    },
+    "volumes": { "type": "object" },
+    "updates": {
+      "description": "The module's default updates, run after a bundle's for a wrapp whose copy of this module is behind this release. One with no build is done by the module's own Swift.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "from": { "type": "object" },
+          "to": { "type": "object" },
+          "build": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target"],
+            "properties": { "target": { "type": "string" }, "base": { "type": "string" } }
+          },
+          "fresh-build": { "type": "boolean" },
+          "when-changed": {
+            "description": "It applies only when one of these data files differs from the one the old wrapp was built with.",
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          }
+        }
+      }
+    },
+    "invalidates": { "type": "object" },
+    "notes": { "description": "For people only; never read." }
+  }
+}

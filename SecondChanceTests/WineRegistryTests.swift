@@ -7,8 +7,10 @@
 
 import Foundation
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 @Suite("Wine registry and winetricks")
 struct WineRegistryTests {
@@ -65,7 +67,7 @@ struct WineRegistryTests {
         defer { fake.remove() }
         let calls = fake.wrapp.appendingPathComponent("winetricks-calls.txt")
         let script = try Self.script(in: fake, "echo \"$*\" > '\(calls.path)'")
-        try await Winetricks(wine: fake.wine, script: script).install(.cncDdraw)
+        try await Winetricks(wine: fake.wine, script: script).install("cnc_ddraw")
         #expect(try String(contentsOf: calls, encoding: .utf8) == "--unattended cnc_ddraw\n")
     }
 
@@ -75,10 +77,10 @@ struct WineRegistryTests {
         defer { fake.remove() }
         let script = try Self.script(in: fake, "exit 1")
         await #expect(throws: WineError.winetricksFailed(trick: "isolate_home")) {
-            try await Winetricks(wine: fake.wine, script: script).install(.isolateHome)
+            try await Winetricks(wine: fake.wine, script: script).install("isolate_home")
         }
         await #expect(throws: WineError.winetricksNotFound) {
-            try await Winetricks(wine: fake.wine, script: nil).install(.isolateHome)
+            try await Winetricks(wine: fake.wine, script: nil).install("isolate_home")
         }
     }
 

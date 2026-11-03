@@ -11,6 +11,7 @@
 import Foundation
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 struct FakeWine {
     let wrapp: URL

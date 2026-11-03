@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "her-download"
+release: 1
+native: "her-download"                       # its Swift: HerDownloadBuild, HerDownloadWrappBuilder, CiderPackage
+versions:
+  - { version: "1" }
+depends-on: ["wine@10"]
+notes:
+  about: "A source: a download from Her Interactive's store, a Windows installer or a Mac app."

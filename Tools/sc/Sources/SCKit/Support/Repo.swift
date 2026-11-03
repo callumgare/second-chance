@@ -52,6 +52,12 @@ struct Repo: Sendable {
     /// which Xcode downloads with the package on the first build.
     var sparkleTools: URL { derivedData.appendingPathComponent("SourcePackages/artifacts/sparkle/Sparkle/bin") }
 
+    /// The program bundles Second Chance ships, and their schema.
+    var bundles: URL { root.appendingPathComponent("Bundles") }
+    /// The modules Second Chance ships, their schema and their releases' record.
+    var modules: URL { root.appendingPathComponent("Modules") }
+    var moduleReleases: URL { modules.appendingPathComponent("releases.json") }
+
     var defaultWrappsDir: URL { root.appendingPathComponent("built-apps") }
 
     /// `$INSTALLERS_DIR` when set, else `installers/`.
@@ -62,8 +68,15 @@ struct Repo: Sendable {
         return root.appendingPathComponent("installers")
     }
 
-    /// The Wine prefix cache `WineManager` keeps (`~/Library/Caches/SecondChance/wine-prefix-cache`).
-    static var winePrefixCache: URL {
+    /// The layer cache builds keep (`LayerStore`, `~/Library/Caches/SecondChance/layers`).
+    static var layerStore: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/layers")
+    }
+
+    /// Where Wine prefixes were cached before the layer store; a build
+    /// removes it, as does `sc clean layers`.
+    static var formerWinePrefixCache: URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SecondChance/wine-prefix-cache")
     }
@@ -75,15 +88,21 @@ struct Repo: Sendable {
             .appendingPathComponent("SecondChance/Steam/session")
     }
 
-    /// What the build downloads into `~/Library/Caches/SecondChance` (Wine,
-    /// Wineskin, AutoIt, ScummVM, the game patches, Steam's installer, Big
-    /// Fish's Game Manager installer `bfginstaller35.exe`): every
-    /// entry there but the caches `sc clean` has targets of its own for, and
-    /// the app's wrapp cache.
+    /// The engine store: prepared engines (docs/modules.md#the-engine-store).
+    static var engineStore: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/engines")
+    }
+
+    /// What the build downloads into `~/Library/Caches/SecondChance` (AutoIt,
+    /// the game patches, Steam's installer, Big Fish's Game Manager installer
+    /// `bfginstaller35.exe`, engines' and free games' files): every entry
+    /// there but the caches `sc clean` has targets of its own for, and the
+    /// app's wrapp cache.
     static var downloads: [URL] {
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SecondChance")
-        let kept: Set = ["wine-prefix-cache", "steam-client", "wrapp-cache", "wrapper-cache"]
+        let kept: Set = ["layers", "wine-prefix-cache", "steam-client", "engines", "wrapp-cache", "wrapper-cache"]
         let entries = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
         return entries.filter { !kept.contains($0.lastPathComponent) }
     }

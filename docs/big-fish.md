@@ -20,8 +20,9 @@ Chance's own window shows what it is doing.
 - **A game** is identified by its SKU, `F<product>T1L<language>`: `F2435T1L1` is
   product 2435 (The White Wolf of Icicle Creek) for Windows (`T1`) in English
   (`L1`); `L2` is German and `L4` French. The catalog keeps each game's product
-  number (`GameInfo.bigFishProduct`), so any language's edition maps to it
-  (`BigFishSKU`, `GameInfoProvider.game(forBigFish:)`).
+  number (`GameInfo.bigFishProduct`, from its bundle's `big-fish` edition), so
+  any language's edition maps to it (`BigFishSKU`,
+  `GameInfoProvider.game(forBigFish:)`).
 - The Game Manager downloads a game's installer (Big Fish's own NSIS wrapping
   tool) and a split 7z archive into `C:\BigFishCache\GameManager\GameDB\<SKU>`,
   and installs it into `C:\Program Files (x86)\Nancy Drew - <Title>`. The folder
@@ -129,7 +130,8 @@ Chance's own window shows what it is doing.
    one that isn't Big Fish's. The wrapp records `BigFishLaunchFile` (the
    folder's `LaunchGame.bfg`, from the root of C:) and `BigFishSKU`, and keeps
    the Game Manager: its `bfgprocess.exe` and `bfggameservices.exe` start the
-   game. A game ScummVM runs (Haunted Mansion, Royal Tower) is a ScummVM wrapp
+   game, as the wrapp's `big-fish` module has them (`BigFishRuntime`,
+   [wrapp-launch.md](wrapp-launch.md#modules)). A game ScummVM runs (Haunted Mansion, Royal Tower) is a ScummVM wrapp
    of the installed folder, as from Steam: no launch file, and the Game
    Manager and its download cache are taken out. No official Her Interactive
    patch applies to a Big Fish copy (`GamePatch.Edition.matches`).
@@ -220,9 +222,11 @@ of `~/Library/Caches/SecondChance`'s downloads.
 Every Armadillo-wrapped program crashed at once under Wine on Apple silicon,
 with `virtual_setup_exception stack overflow … addr 0x7ffe4800`. Two things
 Rosetta 2 does differently from an Intel CPU running Windows cause it. Both are
-fixed in Wine's 32-bit `ntdll.dll`, which the build patches as it bundles the
-engine (`setup-wine.sh` → `WrappTemplate/RosettaFaultFix/`, the patcher in
-`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/RosettaFaultFix.swift`).
+fixed in Wine's 32-bit `ntdll.dll`, which is patched as Wine is prepared for
+the engine store (`WineBuild.prepare`, the patcher in
+`Packages/WrappBuilder/Sources/WrappBuilder/Engines/RosettaFaultFix.swift`, the
+code it adds in `Packages/WrappBuilder/RosettaFaultFix/`;
+[modules.md](modules.md#engine-packages)).
 
 1. **An `fs:` access with the `0x67` address-size prefix** (16-bit addressing in
    32-bit code). Armadillo removes each of its exception handlers with

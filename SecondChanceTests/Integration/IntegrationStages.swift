@@ -8,8 +8,10 @@
 //  lock on the launches, since a game runs full screen and must be in front.
 
 import Foundation
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 enum IntegrationStages {
     /// Builds at once (`sc test integration --build-concurrency`), and the
@@ -48,10 +50,13 @@ enum IntegrationStages {
         return sizes
     }()
 
-    /// The engine every wrapp carries: the template it's copied from.
+    /// What every wrapp carries besides its game: the template it's copied
+    /// from, and an engine, the largest of which (Wine and its frameworks)
+    /// is about 1.1 GB.
     static let engineBytes: Int64 = {
-        guard let template = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else { return 2_000_000_000 }
-        return DirectorySize.measure(template, within: template).bytes
+        let engine: Int64 = 1_100_000_000
+        guard let template = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else { return engine + 100_000_000 }
+        return DirectorySize.measure(template, within: template).bytes + engine
     }()
 
     /// How much disk to reserve for a game's build: a quarter more than it

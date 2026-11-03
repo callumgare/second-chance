@@ -1,0 +1,8 @@
+# Tyrian 2000: its DOS files, as the zip has them, for DOSBox to run.
+
+ARG install-dir="C:/Tyrian 2000"
+
+FROM scratch AS download
+ARG install-dir
+USE dosbox
+COPY --from=game tyrian2000 ${install-dir}/  # the zip's tyrian2000/ folder: the whole game

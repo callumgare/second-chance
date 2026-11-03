@@ -1,0 +1,9 @@
+{
+  "name": "wrapp-builder-ajv",
+  "private": true,
+  "description": "ajv, bundled for JavaScriptCore by build.sh",
+  "dependencies": {
+    "ajv": "8.20.0",
+    "esbuild": "0.28.2"
+  }
+}

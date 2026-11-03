@@ -61,7 +61,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/Library/Caches/SecondChance
-          key: downloads-${{ hashFiles('WrappTemplate/setup-*.sh', 'WrappTemplate/game-patches.json') }}
+          key: downloads-${{ hashFiles('WrappTemplate/setup-*.sh', 'Modules/nancy-drew/patches.json') }}
 
       - name: Unit tests
         # The same run as `./sc test unit` on a Mac: the app's unit suites

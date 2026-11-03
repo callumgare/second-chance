@@ -10,8 +10,13 @@ import Foundation
 import Darwin
 import AppKit
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WindowsFormats
+@testable import WineKit
+@testable import WrappFormat
+@testable import WrappLogging
 import GameCatalog
 
 // Rename the kevent C syscall so it doesn't collide with Swift's kevent struct init.

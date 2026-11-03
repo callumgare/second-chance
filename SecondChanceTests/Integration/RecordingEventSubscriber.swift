@@ -13,6 +13,7 @@
 import Foundation
 @testable import SecondChance
 import GameCatalog
+import WrappModules
 
 /// Records `WrappBuildEvent`s published to a bus. Thread-safe via a lock;
 /// tests read the recorded values after the build completes.
@@ -75,8 +76,8 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             detectedGame = info
         case .isoMounted(let url):
             mountedISOs.append(url)
-        case .engineRouted(let engine, _):
-            routedEngine = engine
+        case .engineRouted(let composition, _):
+            routedEngine = composition.legacyEngine
         case .installerResolved(let exePath, let type):
             resolvedInstaller = (exePath, type)
         case .gameExeDetected(let path, _):

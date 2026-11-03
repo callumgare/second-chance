@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=ini.schema.json
+# What every .ini file in a Nancy Drew game's folder has changed once it's
+# installed (WrappBuildHelper.configureGameINI). Each file is written back
+# in the encoding it came in, as the game reads it.
+replace:
+  # LCD mode: the games' own setting for a flat screen.
+  - { from: "WindowMode=0", to: "WindowMode=2", already: "WindowMode=2" }
+set:
+  # Saves go in Documents, which the wrapp links to the player's saves folder.
+  - { key: "LoadSavePath", value: '\\users\\crossover\\Documents' }

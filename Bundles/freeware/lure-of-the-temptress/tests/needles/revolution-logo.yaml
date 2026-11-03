@@ -1,0 +1,5 @@
+# Revolution Software's logo, the first thing the game shows: the word
+# under the castle.
+kind: "text"
+tags: ["running"]
+text: { strings: ["REVOLUTION", "Revolution"] }

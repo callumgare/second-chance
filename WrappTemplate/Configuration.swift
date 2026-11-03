@@ -8,6 +8,7 @@ import Foundation
 import GameCatalog
 import Logging
 import SecondChanceKit
+import AppKit
 
 private nonisolated let configLogger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.Configuration")
 
@@ -18,7 +19,8 @@ struct GameConfig {
     let winePrefix: URL
     let gameExePath: String
     let gameInstallerDir: String
-    let gameEngine: GameInfo.GameEngine
+    /// The modules the wrapp runs (`RuntimeModules`).
+    let composition: Composition
     let steamGameId: String?
     /// The user's choice, at build time, of how a DRM-free Steam game starts;
     /// nil for a game that offered no choice.
@@ -29,9 +31,14 @@ struct GameConfig {
     /// `unknown` for a wrapp built before it was recorded.
     let gameSource: String
     let bundleId: String
-    /// Where the player's saves, the game's settings that live beside them,
-    /// and the wrapp's own preferences are kept.
+    /// Where the player's saves, and the game's settings that live beside
+    /// them, are kept: the volume the game saves in
+    /// (`Application Support/<bundle id>/volumes/<volume>/`), or for a wrapp
+    /// built before volumes, its folder in Application Support.
     let appSupportPath: URL
+    /// Where Second Chance's own settings for this wrapp are kept (the save
+    /// warning's "don't show again").
+    let settingsPath: URL
     /// ScummVM's settings for this game.
     let scummvmConfigPath: URL
     /// For a game installed through Big Fish's Game Manager, its
@@ -45,9 +52,6 @@ struct GameConfig {
     /// starts.
     var bigFishTrial = false
 
-    /// Big Fish's programs start the game, not the wrapp.
-    nonisolated var launchedByBigFish: Bool { bigFishLaunchFile != nil && gameEngine == .wine }
-
     /// The wrapp's Wine, running in the prefix the game runs in.
     nonisolated var wine: Wine { Wine(wrapp: appPath, prefix: winePrefix) }
 
@@ -55,7 +59,7 @@ struct GameConfig {
     /// DRM-free game the user chose to launch through Steam. Its files are
     /// still in Steam's library, where Wine runs them just as well.
     var canLaunchWithoutSteam: Bool {
-        gameEngine == .wineSteam && steamLaunchMode == .steam
+        composition.launcher == .steam && steamLaunchMode == .steam
     }
 
     /// This configuration, launching the game's exe directly rather than
@@ -63,9 +67,10 @@ struct GameConfig {
     func withoutSteam() -> GameConfig {
         GameConfig(
             appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
-            gameInstallerDir: gameInstallerDir, gameEngine: .wine, steamGameId: nil,
+            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: .wine), steamGameId: nil,
             steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
-            gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, scummvmConfigPath: scummvmConfigPath
+            gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, settingsPath: settingsPath,
+            scummvmConfigPath: scummvmConfigPath
         )
     }
 }
@@ -264,42 +269,102 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
 
     let winePrefix = customWinePrefix ?? layout.prefix
 
-    // Setup app support directory. SECOND_CHANCE_DATA_DIR stands in for it,
-    // and for ScummVM's settings: WrappPuppeteer gives each test launch an
-    // empty one, so a test neither reads nor changes the player's saves and
-    // settings -- a game set to play in a window there fails the fullscreen
-    // check.
-    let appSupportPath: URL
-    let scummvmConfigPath: URL
-    if let dataDir = ProcessInfo.processInfo.environment["SECOND_CHANCE_DATA_DIR"], !dataDir.isEmpty {
-        appSupportPath = URL(fileURLWithPath: dataDir, isDirectory: true)
-        scummvmConfigPath = appSupportPath.appendingPathComponent("scummvm.ini")
-        configLogger.notice("Keeping saves and settings in \(dataDir) (SECOND_CHANCE_DATA_DIR)")
-    } else {
-        appSupportPath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(bundleId)
-        scummvmConfigPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences/\(bundleId).ini")
-    }
-
-    try? FileManager.default.createDirectory(at: appSupportPath, withIntermediateDirectories: true)
+    let files = userFiles(layout: layout, bundleId: bundleId)
 
     return GameConfig(
         appPath: appPath,
         winePrefix: winePrefix,
         gameExePath: settings.gameExePath,
         gameInstallerDir: settings.installerDir,
-        gameEngine: settings.engine,
+        composition: settings.composition,
         steamGameId: settings.steamAppID,
         steamLaunchMode: settings.steamLaunchMode,
         gameTitle: gameTitle,
         gameSlug: settings.gameSlug ?? "unknown",
         gameSource: settings.source?.rawValue ?? "unknown",
         bundleId: bundleId,
-        appSupportPath: appSupportPath,
-        scummvmConfigPath: scummvmConfigPath,
+        appSupportPath: files.saves,
+        settingsPath: files.settings,
+        scummvmConfigPath: files.scummvmConfig,
         bigFishLaunchFile: settings.bigFishLaunchFile,
         bigFishSKU: settings.bigFishSKU,
         bigFishTrial: settings.bigFishTrial ?? false
     )
+}
+
+/// Where the wrapp keeps what's the person's, moving it in first from the
+/// folders the program's wrapps kept under former bundle ids
+/// (`UserFilesMove`, docs/wrapp-launch.md#user-files).
+/// `SECOND_CHANCE_APP_SUPPORT_DIR` names a folder in place of Application
+/// Support: WrappPuppeteer gives each test launch an empty one, so a test
+/// neither reads nor changes the player's saves and settings -- a game set
+/// to play in a window there fails the fullscreen check.
+func userFiles(layout: WrappLayout, bundleId: String) -> (saves: URL, settings: URL, scummvmConfig: URL) {
+    let fileManager = FileManager.default
+    let underTest = ProcessInfo.processInfo.environment["SECOND_CHANCE_APP_SUPPORT_DIR"].map { !$0.isEmpty } ?? false
+    let userFiles = UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: bundleId)
+    let lock: WrappLock?
+    do {
+        lock = try WrappLock(of: layout)
+    } catch {
+        configLogger.error("Couldn't read what the wrapp was built from (\(layout.lockFile.lastPathComponent)): \(error)")
+        lock = nil
+    }
+    let preferences = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences")
+
+    // A program whose bundle declares no volumes (SkiFree keeps nothing)
+    // still has the wrapp's layout: its settings in wrapp-settings/, and a
+    // Wine program's Documents in the wine module's default volume.
+    if let lock, lock.savesVolume == nil, lock.volumes == nil {
+        let saves = userFiles.volume("wine-documents")
+        try? fileManager.createDirectory(at: saves, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: userFiles.settings, withIntermediateDirectories: true)
+        return (saves, userFiles.settings, userFiles.settings.appendingPathComponent("scummvm.ini"))
+    }
+
+    guard let lock, let savesVolume = lock.savesVolume else {
+        // Built before volumes: everything loose in its folder, ScummVM's
+        // settings in Preferences, as such a wrapp always had them.
+        let folder = userFiles.folder
+        try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        let scummvmConfig = underTest ? folder.appendingPathComponent("scummvm.ini")
+            : preferences.appendingPathComponent("\(bundleId).ini")
+        return (folder, folder, scummvmConfig)
+    }
+
+    // Another copy of this game running, under either id, could be saving
+    // through the folder being moved; this copy itself doesn't count.
+    let isRunning: (String) -> Bool = { id in
+        NSRunningApplication.runningApplications(withBundleIdentifier: id).contains { $0.processIdentifier != getpid() }
+    }
+    let move = UserFilesMove(layout: userFiles, formerBundleIDs: lock.formerBundleIDs ?? [],
+                             volumes: lock.volumes ?? [], linkVolume: savesVolume)
+    let outcome = move.run(isRunning: isRunning)
+    for line in outcome.log { configLogger.notice("[User files] \(line)") }
+
+    let saves = userFiles.volume(savesVolume)
+    try? fileManager.createDirectory(at: saves, withIntermediateDirectories: true)
+    try? fileManager.createDirectory(at: userFiles.settings, withIntermediateDirectories: true)
+    guard let settingsVolume = lock.scummvmSettingsVolume else {
+        return (saves, userFiles.settings, userFiles.settings.appendingPathComponent("scummvm.ini"))
+    }
+    let scummvmConfig = userFiles.volume(settingsVolume).appendingPathComponent("scummvm.ini")
+    try? fileManager.createDirectory(at: scummvmConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
+    // ScummVM's settings were kept in Preferences by the old id: moved in,
+    // and left as a link, when nothing is there yet. Not under test.
+    if !underTest, UserFilesMove.kind(of: scummvmConfig) == .missing {
+        for former in lock.formerBundleIDs ?? [] {
+            let old = preferences.appendingPathComponent("\(former).ini")
+            guard UserFilesMove.kind(of: old) == .other, !isRunning(former) else { continue }
+            do {
+                try fileManager.moveItem(at: old, to: scummvmConfig)
+                try fileManager.createSymbolicLink(at: old, withDestinationURL: scummvmConfig)
+                configLogger.notice("[User files] Moved ScummVM's settings from \(old.lastPathComponent), and left a link")
+            } catch {
+                configLogger.error("[User files] Couldn't move ScummVM's settings from \(old.lastPathComponent): \(error)")
+            }
+            break
+        }
+    }
+    return (saves, userFiles.settings, scummvmConfig)
 }

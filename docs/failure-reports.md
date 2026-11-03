@@ -199,6 +199,14 @@ that outcome for `FailureReportCallout`.
   and a quit after it reports nothing more. The `stuck_report` tag says
   which it was: `gave-up` or `automatic`. An automatic one isn't counted
   as the launch's outcome in the success reports, which may yet be a game.
+- **Recognising a game.** `GameDetector` sends, without asking, a source
+  nothing recognised that nearly matched a bundle (`Recognising the game` /
+  `near-miss`) and one two bundles matched equally (`ambiguous`). A basic
+  report says which kinds of signal the source had (`signals`), the bundle
+  it nearly matched (`near_bundle`, `near_series`) or the bundles tied
+  (`tied`), and for a file-hash matcher the file's name, size and md5 — never
+  the signals' text, which can hold whatever an installer put there. That
+  goes only in a detailed report's summary.
 - **A wrapp's own start-up errors.** The `exit(1)` paths in `main.swift` use
   `reportAndWait`.
 - **Crashes.** The SDK records a crash and finds it at the next start.
@@ -310,7 +318,7 @@ normally, with either arrangement.
 ### Child processes
 
 **Start Wine with `runWithoutCrashHandler()`, never a bare `run()`**
-(`Packages/SecondChanceKit/Sources/SecondChanceKit/ChildProcess.swift`). A child inherits its parent's task exception
+(`Packages/WrappKit/Sources/ProcessKit/ChildProcess.swift`). A child inherits its parent's task exception
 ports, so with reporting on, a child's bad memory accesses are sent to
 Sentry's Mach exception handler inside Second Chance or the wrapp, rather than
 becoming a signal in the child. Windows programs fault on purpose all the
@@ -336,10 +344,10 @@ puts them back, all under a lock. The child, and anything it starts, keeps
 the default ports, so its faults reach Wine. A crash on another of our threads
 in that moment still reaches Sentry's signal handler; only its Mach handler
 misses it. Every Wine, `wineserver` and winetricks process starts this way,
-as all of them start in one place (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/WineProcess.swift`), and so
+as all of them start in one place (`Packages/WrappKit/Sources/WineKit/WineProcess.swift`), and so
 does ScummVM (`TaggedProcess`). A
 SwiftLint rule (`wine_without_crash_handler`) rejects a bare `run()` in
-`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/` and `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, and `ChildProcessTests` checks that a
+`Packages/WrappKit/Sources/WineKit/`, `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/` and `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, and `ChildProcessTests` checks that a
 child started this way faults normally while one started with `run()`
 hangs.
 
@@ -370,9 +378,10 @@ button, for checking a crash end to end.
 ## Linking
 
 The static `Sentry` product is linked into Second Chance and WrappTemplate.
-**It must stay static in WrappTemplate**: a wrapp's `Contents/Frameworks` is
-replaced by the engine's (`setupWineFramework`), and the wrapp is only ad-hoc
-signed on the outer bundle. `check-output-collisions.sh` fails the build if
+**It must stay static in WrappTemplate**: engines are installed into a
+wrapp's `Contents/Frameworks` beside the launcher's files, which keeps nothing
+there of its own but the in-process helpers, and the wrapp is only ad-hoc
+signed on the outer bundle. `check-static-linking.sh` fails the build if
 Sentry is linked dynamically.
 
 Xcode still embeds an empty 52 KB `Sentry.framework` that only carries

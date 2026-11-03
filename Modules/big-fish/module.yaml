@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../module.schema.json
+format: 1
+id: "big-fish"
+release: 1
+native: "big-fish"                           # its Swift: Big Fish's Game Manager, BigFishRuntime, BigFishBuild
+versions:
+  - { version: "1" }                         # the Game Manager updates itself, so the version is the module's own
+depends-on: ["wine@10"]                      # Big Fish's programs run in the wrapp's Wine
+notes:
+  about: "A source: a game bought from Big Fish Games, installed and started by Big Fish's Game Manager."

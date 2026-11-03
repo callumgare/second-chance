@@ -29,8 +29,9 @@ nearest command's help.
 ./sc release --build-only              # Build and zip the next version, changing nothing
 ./sc lint                              # SwiftLint and markdownlint, as CI runs them
 ./sc setup                             # Once per clone: tools, commit hook, completions
-./sc clean wine-prefixes               # Start the next build from a fresh Wine prefix
-./sc clean downloads                   # Fetch (and check) Wine, AutoIt, ScummVM, the patches and Big Fish's installer afresh
+./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
+./sc clean engines                     # Prepare engines afresh, from their downloads
+./sc clean downloads                   # Fetch (and check) AutoIt, the patches, engines' files and Big Fish's installer afresh
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
 ./sc --on <host> attach                # Pick up a remote run after the connection dropped
 ```
@@ -70,7 +71,8 @@ is the only place xcodebuild is run from; see AGENTS.md for why the flag is
 load-bearing.
 
 **Sources.** `wrapp build --from disk` (the default), `--from steam`,
-`--from her-download` or `--from big-fish`. Each source is a case of `WrappSourceKind` with its own
+`--from her-download`, `--from big-fish` or `--from download` (a free game, downloaded from where
+its bundle says: [wrapp-build.md](wrapp-build.md#the-download-source)). Each source is a case of `WrappSourceKind` with its own
 options type conforming to `WrappSourceInput` (`Support/Wrapps.swift`), which
 turns the options into the app's `INSTALLATION_SOURCE` and inputs. Adding a
 source is a new case and a new type — the same shape as the app's
@@ -81,7 +83,7 @@ source is a new case and a new type — the same shape as the app's
 than one download needs `--her-download` to pick which
 ([her-download.md](her-download.md)).
 
-`sc test integration --source disk|steam|her-download|big-fish|big-fish-trial|all`
+`sc test integration --source disk|steam|her-download|big-fish|big-fish-trial|download|all`
 (comma-separated) picks which build sources' suites run; [testing.md](testing.md)
 has what each needs. These are `IntegrationSource`'s cases rather than
 `WrappSourceKind`'s, as Big Fish has two suites, the owned games and the free
@@ -104,6 +106,19 @@ nobody to sign in, so `sc` passes the account to the app with
 `BIG_FISH_TEST_SIGN_IN=1`, and refuses to start without it. `--big-fish-trial`
 builds the game's free trial instead, signed out, with no account needed
 ([big-fish.md](big-fish.md#testing)).
+
+**Bundles.** `sc bundle check [<folder>…]` checks program bundles against the
+manifest schema, `sc bundle list [--where <path>=<value>]` lists them by any
+manifest field, and `sc generate` writes the Swift made from bundles and
+modules' data: GameCatalog's table of games, and the wrapp's routine Wine
+errors ([program-bundles.md](program-bundles.md), [modules.md](modules.md)).
+`sc module check [<id>…]` checks modules and their recorded releases, and `sc
+module release <id>` records one ([modules.md](modules.md#releases)). `sc engine prepare <id>
+[--version <v>] [--into <folder>]` prepares an engine from its package's
+downloads as a build would, and checks or prints its hash, `sc engine
+fetch [<id>…]` puts engines in this Mac's engine store, and `sc engine check`
+asks each engine's downloads are still where their modules say
+([modules.md](modules.md#engine-packages)).
 
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`
@@ -166,6 +181,7 @@ They map onto the app's and wrapp's own switches:
 | `skip-installer`          | `--skip-installer`                    | ✓         | ✓             |             |
 | `strict-install`          | `STRICT_INSTALL=true`                 |           | ✓             |             |
 | `install-stall=<seconds>` | `SECOND_CHANCE_INSTALL_STALL_SECONDS` | ✓         | ✓             |             |
+| `layer-cache=<policy>`    | `SECOND_CHANCE_LAYER_CACHE=<policy>`  | ✓         | ✓             |             |
 | `settings-dialog`         | `--debug-options`                     |           |               | ✓           |
 | `wine=<channels>`         | `SECOND_CHANCE_WINEDEBUG=<channels>`  | ✓         | ✓             | ✓           |
 | `wine-sync=<mode>`        | `SECOND_CHANCE_WINE_SYNC=<mode>`      | ✓         | ✓             | ✓           |

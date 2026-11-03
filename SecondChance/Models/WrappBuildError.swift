@@ -16,6 +16,9 @@ import SecondChanceKit
 
 enum WrappBuildError: LocalizedError, Equatable {
     case unsupportedEngine
+    /// The game's bundle can't be planned, or its plan has a step this
+    /// builder can't run; the detail is for the log.
+    case buildRecipeProblem(String)
     /// The signed-in Steam account doesn't own the game.
     case steamGameNotOwned(title: String)
     /// The signed-in Steam account owns none of the games on Steam.
@@ -64,6 +67,21 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// The folder chosen holds a game that's already installed, with no
     /// installer beside it (`GameDetector.isInstalledGame`).
     case installedGameNotInstaller
+    /// A game's app was chosen to be updated, and it can only be built
+    /// afresh from its `source`, for `reason` (for the log).
+    case updateNeedsSource(reason: String, source: WrappSource = .disk)
+    /// The game's app chosen to update has nothing to update, and a
+    /// headless run can't ask whether to install it again.
+    case alreadyUpToDate(title: String)
+    /// The person chose to install an up-to-date app's game again, from a
+    /// source the update can't take them to yet.
+    case reinstallNeedsSource(source: WrappSource)
+    /// None of the places a free game's bundle names had its file, or
+    /// none answered (each is in the log and reported).
+    case downloadUnavailable(title: String)
+    /// What the game runs in (Wine, ScummVM) couldn't be fetched from any
+    /// of the places its module names (each is in the log).
+    case engineUnavailable
     case gameExecutableNotFound
     case userCancelled
     case userCancelledBeforeStart
@@ -173,6 +191,8 @@ enum WrappBuildError: LocalizedError, Equatable {
         switch self {
         case .unsupportedEngine:
             return String(localized: "Second Chance doesn't know how to run this game yet.")
+        case .buildRecipeProblem:
+            return String(localized: "Second Chance's instructions for building this game have a problem. Updating Second Chance may fix it.")
         case .steamGameNotOwned(let title):
             return String(localized: "Your Steam account doesn't own \(title)")
         case .steamNoGamesOwned:
@@ -243,6 +263,53 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: """
                 This is a game that's already installed, not its installer. Second Chance needs to install the game itself: \
                 choose the game's disc, or the installer you downloaded from Her Interactive.
+                """)
+        case .updateNeedsSource(_, .disk):
+            return String(localized: """
+                This game's app can't be brought up to date without the game's disc. \
+                Choose the game's first disc instead, and Second Chance will make the app again.
+                """)
+        case .updateNeedsSource(_, .herDownload):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Choose the file you downloaded \
+                from Her Interactive instead, and Second Chance will make the app again.
+                """)
+        case .updateNeedsSource(_, .download):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Download the game again, \
+                and Second Chance will make the app again.
+                """)
+        case .updateNeedsSource(_, .steam):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Add the game from Steam again, \
+                and Second Chance will make the app again.
+                """)
+        case .updateNeedsSource(_, .bigFish):
+            return String(localized: """
+                This game's app can't be brought up to date by itself. Add the game from Big Fish Games again, \
+                and Second Chance will make the app again.
+                """)
+        case .alreadyUpToDate(let title):
+            return String(localized: "The app for \(title) is already up to date.")
+        case .reinstallNeedsSource(.disk):
+            return String(localized: "To install the game again, choose its first disc.")
+        case .reinstallNeedsSource(.herDownload):
+            return String(localized: "To install the game again, choose the file you downloaded from Her Interactive.")
+        case .reinstallNeedsSource(.download):
+            return String(localized: "To install the game again, download it again.")
+        case .reinstallNeedsSource(.steam):
+            return String(localized: "To install the game again, add it from Steam again.")
+        case .reinstallNeedsSource(.bigFish):
+            return String(localized: "To install the game again, add it from Big Fish Games again.")
+        case .downloadUnavailable(let title):
+            return String(localized: """
+                \(title) can't be downloaded right now. The places that had it don't have it any more, \
+                or aren't answering. Try again later.
+                """)
+        case .engineUnavailable:
+            return String(localized: """
+                Second Chance couldn't download what the game needs to run. Check that you're connected \
+                to the internet, then try again.
                 """)
         case .gameExecutableNotFound:
             return String(localized: "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests.")

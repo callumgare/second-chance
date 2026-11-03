@@ -25,7 +25,7 @@ struct GamePatchCatalogTests {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()   // SecondChanceTests
             .deletingLastPathComponent()   // repo root
-            .appendingPathComponent("WrappTemplate/game-patches.json")
+            .appendingPathComponent("Modules/nancy-drew/patches.json")
     }
 
     private func catalog() -> GamePatchCatalog {
@@ -78,9 +78,8 @@ struct GamePatchCatalogTests {
 
     @Test("Every automated patch is an installer whose AutoIt script exists")
     func automationScriptsExist() {
-        let scripts = Self.sourceManifestURL
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("SecondChance/Resources/patch-automation")
+        // The manifest's own module's scripts.
+        let scripts = Self.sourceManifestURL.deletingLastPathComponent().appendingPathComponent("assets")
         let catalog = catalog()
         for slug in catalog.patchedGameSlugs {
             for patch in catalog.allPatches(forGame: slug) {

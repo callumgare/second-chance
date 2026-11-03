@@ -10,8 +10,10 @@
 import Darwin
 import Foundation
 import Testing
+@testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+@testable import WineKit
 
 private let python = "/usr/bin/python3"
 
