@@ -29,7 +29,7 @@ nearest command's help.
 ./sc release --notes-model opus        # Rewrite the notes with a model other than Sonnet
 ./sc release --build-only              # Build and zip the next version, changing nothing
 ./sc lint                              # SwiftLint and markdownlint, as CI runs them
-./sc setup                             # Once per clone: tools, commit hook, completions
+./sc setup                             # Once per clone: tools, commit hook, completions, Wrappfile highlighting
 ./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
 ./sc clean engines                     # Prepare engines afresh, from their downloads
 ./sc clean downloads                   # Fetch (and check) AutoIt, the patches, engines' files and Big Fish's installer afresh

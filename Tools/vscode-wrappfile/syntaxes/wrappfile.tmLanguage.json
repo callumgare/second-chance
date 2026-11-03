@@ -1,0 +1,175 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Wrappfile",
+    "scopeName": "source.wrappfile",
+    "comment": "The syntax is docs/wrappfile.md's; WrappfileGrammarTests checks the instructions here are InstructionSpec.core's.",
+    "patterns": [
+        { "include": "#comment" },
+        { "include": "#from" },
+        { "include": "#use" },
+        { "include": "#arg" },
+        { "include": "#function" },
+        { "include": "#do" },
+        { "include": "#condition" },
+        { "include": "#block" },
+        { "include": "#instruction" },
+        { "include": "#module-instruction" },
+        { "include": "#words" }
+    ],
+    "repository": {
+        "comment": {
+            "match": "(?<!\\S)#.*$",
+            "name": "comment.line.number-sign.wrappfile"
+        },
+        "from": {
+            "match": "^\\s*(FROM)\\s+([^\\s@/]+)(?:(@)([^\\s/]+))?(?:(/)(\\S+))?(?:\\s+(AS)\\s+(\\S+))?",
+            "captures": {
+                "1": { "name": "keyword.other.instruction.wrappfile" },
+                "2": { "name": "entity.name.type.stage.wrappfile" },
+                "3": { "name": "punctuation.separator.version.wrappfile" },
+                "4": { "name": "constant.numeric.version.wrappfile" },
+                "5": { "name": "punctuation.separator.stage.wrappfile" },
+                "6": { "name": "entity.name.type.stage.wrappfile" },
+                "7": { "name": "keyword.other.as.wrappfile" },
+                "8": { "name": "entity.name.type.stage.wrappfile" }
+            }
+        },
+        "use": {
+            "match": "^\\s*(USE)\\s+([^\\s@]+)(?:(@)(\\S+))?(?:\\s+(AS)\\s+(\\S+))?",
+            "captures": {
+                "1": { "name": "keyword.other.instruction.wrappfile" },
+                "2": { "name": "entity.name.namespace.module.wrappfile" },
+                "3": { "name": "punctuation.separator.version.wrappfile" },
+                "4": { "name": "constant.numeric.version.wrappfile" },
+                "5": { "name": "keyword.other.as.wrappfile" },
+                "6": { "name": "entity.name.namespace.module.wrappfile" }
+            }
+        },
+        "arg": {
+            "match": "^\\s*(ARG)\\s+([^\\s=]+)(=)?",
+            "captures": {
+                "1": { "name": "keyword.other.instruction.wrappfile" },
+                "2": { "name": "variable.other.readwrite.wrappfile" },
+                "3": { "name": "keyword.operator.assignment.wrappfile" }
+            }
+        },
+        "function": {
+            "match": "^\\s*(FUNCTION)\\s+(\\S+)",
+            "captures": {
+                "1": { "name": "storage.type.function.wrappfile" },
+                "2": { "name": "entity.name.function.wrappfile" }
+            }
+        },
+        "do": {
+            "match": "^\\s*(DO)\\s+(?:([^\\s.]+)(\\.))?([^\\s.]+)",
+            "captures": {
+                "1": { "name": "keyword.other.instruction.wrappfile" },
+                "2": { "name": "entity.name.namespace.module.wrappfile" },
+                "3": { "name": "punctuation.accessor.wrappfile" },
+                "4": { "name": "entity.name.function.wrappfile" }
+            }
+        },
+        "condition": {
+            "begin": "^\\s*(IF|ELSE\\s+IF)(?=\\s|$)",
+            "beginCaptures": {
+                "1": { "name": "keyword.control.conditional.wrappfile" }
+            },
+            "end": "(?<!\\\\)$",
+            "patterns": [
+                { "include": "#comment" },
+                {
+                    "match": "(?<!\\S)has(?!\\S)",
+                    "name": "keyword.operator.word.wrappfile"
+                },
+                {
+                    "match": "!=|>=|<=|=|>|<",
+                    "name": "keyword.operator.comparison.wrappfile"
+                },
+                { "include": "#words" }
+            ]
+        },
+        "block": {
+            "match": "^\\s*(ELSE|END|LAYER)(?=\\s|$)",
+            "captures": {
+                "1": { "name": "keyword.control.wrappfile" }
+            }
+        },
+        "instruction": {
+            "match": "^\\s*(RUN|COPY|ADD|EXPORT|MOVE|REMOVE|EDIT)(?=\\s|$)",
+            "captures": {
+                "1": { "name": "keyword.other.instruction.wrappfile" }
+            }
+        },
+        "module-instruction": {
+            "match": "^\\s*([a-z][a-z0-9-]*)(\\.)([A-Z][A-Z0-9-]*)(?=\\s|$)",
+            "captures": {
+                "1": { "name": "entity.name.namespace.module.wrappfile" },
+                "2": { "name": "punctuation.accessor.wrappfile" },
+                "3": { "name": "keyword.other.instruction.wrappfile" }
+            }
+        },
+        "words": {
+            "patterns": [
+                { "include": "#comment" },
+                { "include": "#string" },
+                { "include": "#substitution" },
+                { "include": "#option" },
+                {
+                    "match": "\\$\\$",
+                    "name": "constant.character.escape.dollar.wrappfile"
+                },
+                {
+                    "match": "\\\\$",
+                    "name": "constant.character.escape.line-continuation.wrappfile"
+                }
+            ]
+        },
+        "option": {
+            "match": "(?<!\\S)(--[a-z][a-z0-9-]*)(=)?",
+            "captures": {
+                "1": { "name": "variable.parameter.option.wrappfile" },
+                "2": { "name": "keyword.operator.assignment.wrappfile" }
+            }
+        },
+        "string": {
+            "begin": "\"",
+            "beginCaptures": {
+                "0": { "name": "punctuation.definition.string.begin.wrappfile" }
+            },
+            "end": "\"(?!\")",
+            "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.wrappfile" }
+            },
+            "name": "string.quoted.double.wrappfile",
+            "patterns": [
+                {
+                    "match": "\"\"",
+                    "name": "constant.character.escape.quote.wrappfile"
+                },
+                {
+                    "match": "\\$\\$",
+                    "name": "constant.character.escape.dollar.wrappfile"
+                },
+                { "include": "#substitution" }
+            ]
+        },
+        "substitution": {
+            "begin": "\\$\\{",
+            "beginCaptures": {
+                "0": { "name": "punctuation.definition.variable.begin.wrappfile" }
+            },
+            "end": "\\}",
+            "endCaptures": {
+                "0": { "name": "punctuation.definition.variable.end.wrappfile" }
+            },
+            "name": "variable.other.substitution.wrappfile",
+            "patterns": [
+                { "include": "#substitution" },
+                {
+                    "match": ":-",
+                    "name": "keyword.operator.default.wrappfile"
+                }
+            ]
+        }
+    }
+}

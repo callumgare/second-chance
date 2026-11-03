@@ -55,8 +55,9 @@ Then, once per clone:
 ./sc setup
 ```
 
-`./sc` is the developer CLI for building, running, testing and releasing. `sc setup` checks for the tools above and
-installs the commit-message hook (see [Commit messages](#commit-messages)). `./sc --help` lists every command, and
+`./sc` is the developer CLI for building, running, testing and releasing. `sc setup` checks for the tools above,
+installs the commit-message hook (see [Commit messages](#commit-messages)) and, if you use VS Code, links in
+Wrappfile highlighting ([docs/wrappfile.md](docs/wrappfile.md#highlighting-in-vs-code)). `./sc --help` lists every command, and
 [docs/dev-cli.md](docs/dev-cli.md) explains them. The first run also builds `sc` itself (a Swift package in
 `Tools/sc/`), which takes half a minute.
 

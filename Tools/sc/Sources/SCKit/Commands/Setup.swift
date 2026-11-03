@@ -5,11 +5,12 @@ import Noora
 struct SetupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "setup",
-        abstract: "One-time setup for a clone: tools, commit hook and shell completions.",
+        abstract: "One-time setup for a clone: tools, commit hook, shell completions and editor highlighting.",
         discussion: """
         Checks the tools sc uses are installed, installs cog's commit-msg hook \
-        (git hooks live in .git/ and can't be committed), and installs fish \
-        completions when fish is your shell. Safe to run again.
+        (git hooks live in .git/ and can't be committed), installs fish \
+        completions when fish is your shell, and links Wrappfile highlighting \
+        (Tools/vscode-wrappfile) into VS Code when it's installed. Safe to run again.
         """
     )
 
@@ -58,6 +59,23 @@ struct SetupCommand: AsyncParsableCommand {
             ui.line(ui.format("\(.success("✔︎ fish completions installed in \(file.path)"))"))
         } else if !shell.isEmpty {
             ui.detail("Completions: sc --generate-completion-script \(shell) (see its output for where to put it).")
+        }
+
+        // Wrappfile highlighting: a grammar with no code, linked rather than
+        // installed, so an edit to it shows on VS Code's next window reload.
+        let extensions = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".vscode/extensions")
+        if FileManager.default.fileExists(atPath: extensions.path) {
+            let link = extensions.appendingPathComponent("second-chance.wrappfile")
+            let target = session.repo.root.appendingPathComponent("Tools/vscode-wrappfile")
+            if (try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) != nil {
+                try FileManager.default.removeItem(at: link)
+            }
+            if FileManager.default.fileExists(atPath: link.path) {
+                ui.detail("VS Code: \(link.path) isn't a link to this clone; left alone.")
+            } else {
+                try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+                ui.line(ui.format("\(.success("✔︎ Wrappfile highlighting linked into VS Code (reload its window)"))"))
+            }
         }
 
         if !missing.isEmpty {

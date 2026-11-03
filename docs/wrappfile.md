@@ -87,6 +87,22 @@ and the modules (`WrappfileChecker`), naming each problem's line:
 - every edition's and variant's `build` names a stage, and the manifest's
   `setup` a function.
 
+## Highlighting in VS Code
+
+`Tools/vscode-wrappfile/` is a VS Code extension that is only a TextMate
+grammar (`syntaxes/wrappfile.tmLanguage.json`) and a language configuration:
+no code, no build and never published. `sc setup` links it into
+`~/.vscode/extensions/`, so it follows the clone and an edit to it shows on
+the next **Developer: Reload Window**. It highlights `Wrappfile`s and the
+modules' functions (`Modules/*/functions/*`), and folds `FUNCTION`, `IF` and
+`LAYER` blocks.
+
+It names the core's instructions itself, so an instruction added to
+`InstructionSpec.core` is added to its `instruction` rule too
+(`WrappfileGrammarTests` fails until it is). A module's instructions are
+highlighted by their shape (`name.INSTRUCTION`), so a new one needs nothing.
+A change to the syntax above means a change to the grammar.
+
 ## Plans
 
 Before a build runs anything, its edition's target is worked out into a plan

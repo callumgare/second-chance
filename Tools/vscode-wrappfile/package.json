@@ -1,0 +1,38 @@
+{
+    "name": "wrappfile",
+    "displayName": "Wrappfile",
+    "description": "Syntax highlighting for Second Chance's Wrappfiles (docs/wrappfile.md). Grammar only, never published: sc setup links it into VS Code.",
+    "publisher": "second-chance",
+    "version": "0.1.0",
+    "private": true,
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "wrappfile",
+                "aliases": [
+                    "Wrappfile"
+                ],
+                "filenames": [
+                    "Wrappfile"
+                ],
+                "filenamePatterns": [
+                    "**/Modules/*/functions/*"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "wrappfile",
+                "scopeName": "source.wrappfile",
+                "path": "./syntaxes/wrappfile.tmLanguage.json"
+            }
+        ]
+    }
+}
