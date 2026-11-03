@@ -380,7 +380,21 @@ capture and click its own windows without Screen Recording or Accessibility.
 [wine-in-process-helpers.md](wine-in-process-helpers.md#puppet-control) has
 how the helper gets into each engine and what the sockets accept. If
 WrappPuppeteer happens to have Screen Recording, a failed run also saves a
-full-screen screenshot; nothing else changes.
+full-screen screenshot, and the integration test's runs record the screen;
+nothing else changes.
+
+**With Screen Recording, a failed launch comes with a video of the whole
+screen.** The integration test passes `--screen-recording <file>.mp4`, and
+WrappPuppeteer, if it has Screen Recording, records the main display from
+the start of its run (`ScreenRecorder`, ScreenCaptureKit into an H.264
+video, at up to 30 frames a second so something that only flashes up is
+caught), stopping when the run ends or after `--screen-recording-limit`
+seconds (2 minutes): a launch that's fine takes seconds, and a long capture
+wears a test Mac down, as screenshots do. The test deletes the video when
+the launch passes and attaches it to the results when it fails, as
+`screen-recording-<attempt>-<slug>.mp4`. Without the permission there's no
+video and a log line says so. WrappPuppeteer is signed with the development
+team, so a grant in System Settings survives rebuilds.
 
 **It doesn't touch the player's saves and settings.** A wrapp keeps those in
 `~/Library/Application Support/<bundle id>/`

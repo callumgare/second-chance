@@ -42,6 +42,10 @@ func printUsage() {
         --record-click-at <s,…>  With --record-seconds, click the game's picture
                                near its top-left corner this many seconds after
                                its window went fullscreen: what a click skips
+        --screen-recording <f> Record the whole screen to the video <f> (.mp4) from
+                               the start, if WrappPuppeteer has Screen Recording
+        --screen-recording-limit <s>
+                               Stop that recording after <s> seconds (default: 120)
         --quit-from-menu       Once at the menu, quit with the game's Quit menu item
                                (as Cmd-Opt-Q does) rather than its Exit button
         --classify             Print each frame's nearest splash screen of the game,
@@ -62,6 +66,8 @@ func printUsage() {
 var appPath: String?
 var options = NancyDrewQuitScenario.Options()
 var analyzePath: String?
+var screenRecording: URL?
+var screenRecordingLimit: TimeInterval = 120
 var classifyArguments: [String]?
 var splashReferenceArguments: [String]?
 
@@ -108,6 +114,16 @@ while i < CommandLine.arguments.count {
         i += 1
         if i < CommandLine.arguments.count {
             options.watchClicks = CommandLine.arguments[i].split(separator: ",").compactMap { TimeInterval(String($0)) }.sorted()
+        }
+    case "--screen-recording":
+        i += 1
+        if i < CommandLine.arguments.count {
+            screenRecording = URL(fileURLWithPath: CommandLine.arguments[i])
+        }
+    case "--screen-recording-limit":
+        i += 1
+        if i < CommandLine.arguments.count, let seconds = TimeInterval(CommandLine.arguments[i]) {
+            screenRecordingLimit = seconds
         }
     case "--quit-from-menu":
         options.quitFromMenu = true
@@ -248,8 +264,13 @@ guard let path = appPath else {
 NSApplication.shared.setActivationPolicy(.accessory)
 
 ProcessCleanup.limitRuntime(to: options.maxRuntime)
+// The whole screen while the game starts, for working out a failure: a
+// launch that's fine takes seconds, so the limit stops it well before a long
+// run ends (ScreenRecorder).
+let recorder = screenRecording.flatMap { ScreenRecorder.start(to: $0, limit: screenRecordingLimit) }
 let scenario = NancyDrewQuitScenario(wrapp: Wrapp(appPath: path), options: options)
 let result = scenario.run()
+recorder?.stop()
 switch result {
 case .passed:
     logger.notice("WRAPP_PUPPETEER: run_succeeded")

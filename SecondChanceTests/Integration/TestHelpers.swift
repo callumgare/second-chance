@@ -476,23 +476,33 @@ enum AppPuppetRunner {
         let exitCodeFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("wrapp-puppeteer-exit-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: exitCodeFile) }
-        let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
-            appBundle: appBundle,
-            // So a stopped or crashed test run takes the puppeteer, and the
-            // wrapp it's driving, down with it.
-            arguments: [wrappURL.path, "--max-runtime", String(Int(Self.maxRuntime)), "--exit-code-file", exitCodeFile.path,
-                        "--parent-pid", String(getpid())] + extraArguments,
-            exitCodeFile: exitCodeFile
-        )
+        // The whole screen as the game starts, if WrappPuppeteer has Screen
+        // Recording: kept, as an attachment, only when the launch fails.
+        let screenRecording = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrapp-puppeteer-screen-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: screenRecording) }
+        do {
+            let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
+                appBundle: appBundle,
+                // So a stopped or crashed test run takes the puppeteer, and the
+                // wrapp it's driving, down with it.
+                arguments: [wrappURL.path, "--max-runtime", String(Int(Self.maxRuntime)), "--exit-code-file", exitCodeFile.path,
+                            "--parent-pid", String(getpid()), "--screen-recording", screenRecording.path] + extraArguments,
+                exitCodeFile: exitCodeFile
+            )
 
-        let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
-        // The game runs in its own process inside the wrapp, so it is not covered
-        // by the pid-scoped fetch above and needs its own subsystem query.
-        let gameLogData = SystemLogReader.fetchGame(since: launchTime)
-        attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
-        try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
-                  attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, requiredLines: requiredLines, onWarning: onWarning)
-        return (exitCode: observedExitCode, pid: pid)
+            let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
+            // The game runs in its own process inside the wrapp, so it is not covered
+            // by the pid-scoped fetch above and needs its own subsystem query.
+            let gameLogData = SystemLogReader.fetchGame(since: launchTime)
+            attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
+            try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
+                      attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, requiredLines: requiredLines, onWarning: onWarning)
+            return (exitCode: observedExitCode, pid: pid)
+        } catch {
+            attachScreenRecording(screenRecording, gameSlug: gameSlug, attemptLabel: attemptLabel)
+            throw error
+        }
     }
 
     /// Judge a run from WrappPuppeteer's log and the game's (compact lines,
@@ -622,6 +632,18 @@ enum AppPuppetRunner {
             let path = line[marker.upperBound...].components(separatedBy: ": ").last?
                 .trimmingCharacters(in: .whitespaces) ?? ""
             return path.hasPrefix("/") && path.hasSuffix(".png") ? path : nil
+        }
+    }
+
+    /// Attach the run's screen recording, for a launch that failed; nothing
+    /// when WrappPuppeteer had no Screen Recording, so made none.
+    private static func attachScreenRecording(_ file: URL, gameSlug: String, attemptLabel: String) {
+        guard FileManager.default.fileExists(atPath: file.path) else { return }
+        do {
+            Attachment.record(try Data(contentsOf: file), named: "screen-recording-\(attemptLabel)-\(gameSlug).mp4")
+        } catch {
+            Attachment.record(Data("Couldn't read \(file.path): \(error.localizedDescription)\n".utf8),
+                              named: "screen-recording-\(attemptLabel)-\(gameSlug).txt")
         }
     }
 
