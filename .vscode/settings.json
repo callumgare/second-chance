@@ -1,5 +1,13 @@
 {
     "cSpell.words": [
         "wrapp"
-    ]
+    ],
+    // Build and test output; the file watcher ignores .gitignore
+    "files.watcherExclude": {
+        "**/build/**": true,
+        "**/built-apps/**": true,
+        "**/installers/**": true,
+        "**/test-output/**": true,
+        "**/test-results/**": true
+    }
 }
