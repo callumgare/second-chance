@@ -53,7 +53,7 @@ build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 ./sc test integration --build-concurrency 3
 
 # Everything: unit, then integration (hours)
-./sc test
+./sc test all
 
 # Skip the rebuild and reuse the existing build
 ./sc test integration stay-tuned --skip-app-build
@@ -84,7 +84,8 @@ failures|always|never`. In a terminal the run is shown live — a progress bar,
 what's running now, and a table of suites (or games) — with the full xcodebuild
 output kept in `DerivedData/sc-logs/`.
 
-A bare `./sc test` is `./sc test unit`. `./sc test all` and an unfiltered
+A bare `./sc test` runs nothing but its help: name `unit`, `integration` or
+`all`. `./sc test all` and an unfiltered
 `xcodebuild test` run the integration suite too, which with real ISOs present
 in `installers/` doesn't skip, and takes hours.
 

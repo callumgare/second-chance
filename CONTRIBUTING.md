@@ -108,7 +108,7 @@ In Xcode, set **Build Settings → Build Active Architecture Only → Debug → 
 ```
 
 Integration tests need the game's installer in `installers/<game-slug>/`. Running them for every game takes hours and
-keeps bringing a full-screen game to the front, so name the suite rather than running a bare `./sc test`.
+keeps bringing a full-screen game to the front, so name the games rather than running them all.
 [docs/testing.md](docs/testing.md) covers it all.
 
 ## Writing for players

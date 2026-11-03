@@ -5,14 +5,21 @@ import Noora
 struct TestCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "test",
-        abstract: "Run the tests. With no subcommand: the unit tests.",
+        abstract: "Run the tests: name which.",
         discussion: """
-        Bare `sc test` runs the unit tests, the fast loop. `sc test integration` installs \
-        games for real and takes hours for all of them; `sc test all` runs both.
+        `sc test unit` runs the unit tests, the fast loop (or only the suites named). \
+        `sc test integration` installs games for real and takes hours for all of them; \
+        `sc test all` runs both. A bare `sc test` runs nothing: it shows this.
         """,
-        subcommands: [TestAllCommand.self, TestUnitCommand.self, TestIntegrationCommand.self],
-        defaultSubcommand: TestUnitCommand.self
+        subcommands: [TestAllCommand.self, TestUnitCommand.self, TestIntegrationCommand.self]
     )
+
+    /// Bare `sc test`: this help, and a failure, so a script that still runs
+    /// it expecting the unit tests doesn't take nothing for a pass.
+    func run() async throws {
+        FileHandle.standardError.write(Data((Self.helpMessage() + "\n").utf8))
+        throw ExitCode(64)
+    }
 }
 
 struct IntegrationOptions: ParsableArguments {

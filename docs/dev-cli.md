@@ -22,7 +22,7 @@ nearest command's help.
 ./sc test unit DocsTableTests          # Just that suite, wherever it's declared
 ./sc test integration stay-tuned       # Install, launch and quit one game for real
 ./sc test integration ghost-dogs --vm sc-sequoia  # …launching it in a tart VM
-./sc test                              # The unit tests, as sc test unit
+./sc test                              # Runs nothing: says to name unit, integration or all
 ./sc test all                          # Unit, then integration: hours
 ./sc release --dry-run                 # What the next release would contain
 ./sc release --plain-notes             # Release with the commit-message notes as they are
@@ -273,8 +273,9 @@ app's through xcodebuild's `-only-testing`, a package's or sc's own through
 `swift test --filter`, and the app is built for testing only when one of them
 is the app's. `Suite/test()` runs one test. `sc test integration [<slug>…]` runs the per-game integration
 suite with one worker; `sc test all` runs both, as two separate xcodebuild
-runs. A bare `sc test` is `sc test unit`, so the hours-long run is never had by
-accident.
+runs. A bare `sc test` runs nothing: it prints its help and exits 64, so a
+script that once relied on it meaning the unit tests fails rather than
+passing, and the hours-long run is never had by accident.
 Each run writes `test-results/<time>-<suite>.xcresult`, and an HTML report goes
 in `test-results/<time>/`. `--open-report` opens it on `failures` (the default),
 `always` or `never` — the terminal table covers a passing run.

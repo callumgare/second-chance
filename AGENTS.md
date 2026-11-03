@@ -54,8 +54,9 @@ fail on others.
 
 **Never run `./sc test all`** (or an unfiltered `xcodebuild test`) by accident:
 it runs the integration suite too, which with real ISOs in `installers/` takes
-hours. A bare `./sc test` is `./sc test unit`; name the game for an integration
-run — `./sc test integration <game-slug>`.
+hours. A bare `./sc test` runs nothing: it shows its help and fails, so name
+what to run — `./sc test unit`, or the game for an integration run,
+`./sc test integration <game-slug>`.
 
 Build output lands in `DerivedData/Build/Products/Debug/Second Chance.app`. Game
 wrapps are built into `built-apps/`. See [docs/testing.md](docs/testing.md) for

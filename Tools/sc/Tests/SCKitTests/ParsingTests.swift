@@ -7,12 +7,13 @@ import Testing
 /// validated, and pass-through arguments survive intact.
 @Suite("Command-line parsing")
 struct ParsingTests {
-    @Test("Bare `sc test` is the unit tests; `sc test all` runs everything, and takes integration games")
-    func bareTestIsUnit() throws {
-        #expect(try SC.parseAsRoot(["test"]) is TestUnitCommand)
+    @Test("Bare `sc test` runs nothing but its help; `sc test all` runs everything, and takes integration games")
+    func bareTestIsHelp() throws {
+        #expect(try SC.parseAsRoot(["test"]) is TestCommand)
+        #expect(throws: (any Error).self) { try SC.parseAsRoot(["test", "stay-tuned"]) }
         // Games belong to an integration run, never quietly to the unit one:
         // there a game is a suite's name, which no suite has.
-        let unit = try #require(try SC.parseAsRoot(["test", "stay-tuned"]) as? TestUnitCommand)
+        let unit = try #require(try SC.parseAsRoot(["test", "unit", "stay-tuned"]) as? TestUnitCommand)
         #expect(unit.suites == ["stay-tuned"])
         #expect(throws: SCError.self) {
             try UnitTestSelection.locate(unit.suites, root: FileManager.default.temporaryDirectory, packages: [], integrationSuites: [])
@@ -86,6 +87,8 @@ struct ParsingTests {
         ["build", "--help"],
         ["wrapp", "bild", "-h"],
         ["help", "build", "wrapp"],
+        // A game isn't something sc test takes, bare.
+        ["test", "stay-tuned", "--help"],
     ])
     func helpForUnknownCommand(arguments: [String]) {
         #expect(throws: SCError.self) { try HelpRequestCheck.validate(arguments) }
@@ -96,7 +99,7 @@ struct ParsingTests {
         ["wrapp", "--help"],
         ["wrapp", "build", "--help"],
         ["wrapp", "build", "royal-tower", "--from", "disk", "-h"],
-        ["test", "stay-tuned", "--help"],
+        ["test", "unit", "DocsTableTests", "--help"],
         ["help", "wrapp", "build"],
         ["build", "wrapp"],
         ["in-gui-session", "--", "x", "--help"],
