@@ -16,8 +16,8 @@ The generic-programs plan
 (`docs/historical-plans/2026-11-03-generic-programs.md`, draft 430) gives
 `RUN --mount` a `volume` type: an update that has to change the person's
 files mounts their volume into a build step, copied aside first, in a layer
-that's never cached. Nothing has used it, it's being removed with the
-module-extensions work, and it was the wrong place for that work:
+that's never cached. Nothing has used it, it's to be removed with the work
+this plan builds on, and it was the wrong place for that work:
 
 - **Docker has no such thing.** Its build mounts are `bind`, `cache`,
   `tmpfs`, `secret` and `ssh`. Named volumes exist only when a container
