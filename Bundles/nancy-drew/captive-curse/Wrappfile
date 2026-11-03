@@ -11,6 +11,7 @@ USE installer
 USE nancy-drew
 WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
 INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
 # Windows game is taken out
@@ -18,6 +19,7 @@ FROM prefix AS her-download
 USE her-download
 USE nancy-drew
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Her Interactive's Mac download: a Cider app, whose Windows game is taken
 # out where Cider had it. Her's patches update older builds than it, so none
@@ -26,4 +28,5 @@ FROM prefix AS her-mac
 USE her-download
 USE nancy-drew
 HER-DOWNLOAD.INSTALL ${input.installer}
+DO nancy-drew.configure-ini --into=${const.install-dir}
 

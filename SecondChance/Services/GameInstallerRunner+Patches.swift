@@ -54,48 +54,6 @@ extension GameInstallerRunner {
         }
     }
 
-    /// Apply the official Her Interactive patches for this game.
-    ///
-    /// Which patches apply depends on the game *and* on the edition the wrapp
-    /// was built from — Her Interactive shipped separate CD and
-    /// digital-download builds of several patches, and the wrong one does
-    /// nothing useful. Patches the manifest marks non-automatic (puzzle
-    /// solvers, difficulty tweaks, superseded updaters) are logged but never
-    /// applied. See `docs/game-patches.md`.
-    ///
-    /// A failing patch never fails the build on its own: it is reported, and
-    /// `confirmFailure` decides whether to carry on without it. So this only
-    /// throws to stop the build: `userCancelled` when the person chose to,
-    /// or `CancellationError` when the build was cancelled.
-    func applyGamePatches(
-        wrappPath: URL,
-        gameInfo: GameInfo,
-        gameInstallDir: URL,
-        source: WrappSource,
-        confirmFailure: PatchFailureConfirmation
-    ) async throws {
-        let gameSlug = gameInfo.id
-        let patches = catalog.automaticPatches(forGame: gameSlug, source: source)
-
-        for skipped in catalog.optionalPatches(forGame: gameSlug, source: source) {
-            logger.notice("⏭️  Optional patch not applied: \(skipped.id) — \(skipped.title)")
-        }
-
-        guard !patches.isEmpty else {
-            logger.notice("ℹ️  No patches to apply for game '\(gameSlug)'")
-            return
-        }
-
-        logger.notice("🔧 Applying \(patches.count) patch(es) for '\(gameSlug)' (\(source.rawValue))...")
-
-        for patch in patches {
-            try await applyGamePatch(patch, wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameInstallDir,
-                                     source: source, confirmFailure: confirmFailure)
-        }
-
-        logger.notice("✅ Finished applying patches for '\(gameSlug)'")
-    }
-
     /// Apply one patch, by its id in the catalogue: a step of a Wrappfile
     /// build (`DO nancy-drew.patch --id=…`). Nil when the catalogue has no
     /// such patch.

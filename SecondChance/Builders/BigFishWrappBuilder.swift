@@ -458,10 +458,6 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             let gameExePath = runsInScummVM ? gameDirPath : gameDirPath + "/" + exe
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
 
-            await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Applying game patches"))))
-            try await installerRunner.applyGamePatches(wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: installed.folder,
-                                                       source: .bigFish, confirmFailure: input.confirmPatchFailure)
-
             // ScummVM reads the game's files and runs nothing of Big Fish's.
             let launchFile: String?
             if runsInScummVM {

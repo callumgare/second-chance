@@ -24,7 +24,7 @@ struct WrappfileCheckerTests {
     USE installer
     USE nancy-drew AS nd
     WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
-    INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss --stubborn
+    INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss --automation=module:nancy-drew/assets/installshield-custom-dialog-automate.au3
     DO nd.patch --id=x --into=${const.install-dir}
     FROM prefix AS her-download
     USE her-download

@@ -1,0 +1,125 @@
+{
+  "_about": "Each Nancy Drew game's patches, for its disc and Her download editions, as patches.json's automatic and edition fields chose them before they went (2026-11-04). The Wrappfiles' DO nancy-drew.patch steps are checked against this: a change to which patches an edition applies is made here on purpose too.",
+  "games": {
+    "blackmoor-manor": {
+      "disc": [
+        "blackmoor-manor-full"
+      ],
+      "her-download": [
+        "blackmoor-manor-full"
+      ]
+    },
+    "blue-moon": {
+      "disc": [
+        "blue-moon-taffy-sort"
+      ],
+      "her-download": [
+        "blue-moon-taffy-sort"
+      ]
+    },
+    "castle-malloy": {
+      "disc": [
+        "castle-malloy-walk-in-place-cd"
+      ],
+      "her-download": [
+        "castle-malloy-walk-in-place-download"
+      ]
+    },
+    "crystal-skull": {
+      "disc": [
+        "crystal-skull-mushroom"
+      ],
+      "her-download": [
+        "crystal-skull-mushroom"
+      ]
+    },
+    "deception-island": {
+      "disc": [
+        "deception-island-wood-csound"
+      ],
+      "her-download": [
+        "deception-island-wood-csound"
+      ]
+    },
+    "final-scene": {
+      "disc": [],
+      "her-download": []
+    },
+    "ghost-dogs": {
+      "disc": [
+        "ghost-dogs-full"
+      ],
+      "her-download": [
+        "ghost-dogs-full"
+      ]
+    },
+    "haunted-mansion": {
+      "disc": [
+        "haunted-mansion-full"
+      ],
+      "her-download": [
+        "haunted-mansion-full"
+      ]
+    },
+    "lost-queen": {
+      "disc": [
+        "lost-queen-decode-puzzle"
+      ],
+      "her-download": [
+        "lost-queen-decode-puzzle"
+      ]
+    },
+    "scarlet-hand": {
+      "disc": [
+        "scarlet-hand-phone-monolith"
+      ],
+      "her-download": [
+        "scarlet-hand-phone-monolith"
+      ]
+    },
+    "secrets-can-kill": {
+      "disc": [],
+      "her-download": []
+    },
+    "shadow-ranch": {
+      "disc": [
+        "shadow-ranch-full"
+      ],
+      "her-download": [
+        "shadow-ranch-full"
+      ]
+    },
+    "stay-tuned": {
+      "disc": [
+        "stay-tuned-cabinet"
+      ],
+      "her-download": [
+        "stay-tuned-cabinet"
+      ]
+    },
+    "trail-of-the-twister": {
+      "disc": [
+        "trail-of-the-twister-doppler-radar"
+      ],
+      "her-download": [
+        "trail-of-the-twister-doppler-radar"
+      ]
+    },
+    "waters-edge": {
+      "disc": [
+        "waters-edge-recorder-tea-ceremony"
+      ],
+      "her-download": [
+        "waters-edge-recorder-tea-ceremony"
+      ]
+    },
+    "white-wolf": {
+      "disc": [
+        "white-wolf-updater-cd"
+      ],
+      "her-download": [
+        "white-wolf-updater-download"
+      ]
+    }
+  }
+}

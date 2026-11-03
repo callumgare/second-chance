@@ -13,7 +13,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "game", "title", "url", "archive", "sha256", "payload", "action", "edition", "automatic", "fixes", "sourceUrl"],
+        "required": ["id", "game", "title", "url", "archive", "sha256", "payload", "action", "fixes", "sourceUrl"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
           "game": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
@@ -28,8 +28,6 @@
             "type": "string",
             "default": ""
           },
-          "edition": { "enum": ["any", "cd", "digital-download"] },
-          "automatic": { "type": "boolean" },
           "fixes": { "type": "string" },
           "sourceUrl": { "type": "string", "pattern": "^https://" },
           "automation": {

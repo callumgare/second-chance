@@ -54,14 +54,10 @@ class GameInstallerRunner {
         installerPath: URL? = nil,
         installerName: String? = nil,
         unattended: Bool,
-        confirmPatchFailure: PatchFailureConfirmation,
         chooseGameProgram: ([String]) async throws -> String,
-        applyPatches: Bool = true,
-        stubborn: Bool? = nil
+        automation: URL? = nil
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
-        // A Wrappfile's `installer.RUN --stubborn` says it, not the catalogue.
-        let gameInfo = stubborn.map { gameInfo.withInstallerStubborn($0) } ?? gameInfo
 
         // Find installer executable
         let installerExe: String
@@ -90,9 +86,9 @@ class GameInstallerRunner {
             let plan = installerPlan(
                 installerPath: installerExe,
                 installerType: installerType,
-                gameInfo: gameInfo,
                 wrappPath: wrappPath,
-                attemptNumber: 0
+                attemptNumber: 0,
+                automation: automation
             )
             logger.notice("DEBUG: Would have run: \(plan.description)")
             if let underlyingCommand = plan.automatedDescription {
@@ -137,6 +133,7 @@ class GameInstallerRunner {
                         at: wrappPath,
                         installerPath: installerExe,
                         gameInfo: gameInfo,
+                        automation: automation,
                         attemptNumber: attempt
                     )
                 }
@@ -236,18 +233,6 @@ class GameInstallerRunner {
 
         await bus.publishWrappBuild(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
 
-        // Apply any available game patches (a Wrappfile build applies them
-        // as steps of their own).
-        if applyPatches {
-            try await applyGamePatches(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameInstallDir: gameExe.deletingLastPathComponent(),
-                source: source,
-                confirmFailure: confirmPatchFailure
-            )
-        }
-
         // Only logged: it says why a launch will likely fail, and which
         // editions of a game carry it.
         if let protection = await Blocking.run({ CopyProtection(exeAt: gameExe) }) {
@@ -334,9 +319,7 @@ class GameInstallerRunner {
     func installGameWithScummVM(
         wrappPath: URL,
         gameInfo: GameInfo,
-        source: WrappSource,
-        confirmPatchFailure: PatchFailureConfirmation,
-        applyPatches: Bool = true
+        source: WrappSource
     ) async throws -> (gameExePath: String, installerDir: String) {
         // For ScummVM games, the "installation" is simply having the disk files available
         // The disk files were already copied by wrappBuilder.copyGameDisks()
@@ -353,20 +336,6 @@ class GameInstallerRunner {
         let relativePath = gameDir.path(relativeTo: driveCPath)
         let relativeInstallerDir = gameDir.path(relativeTo: driveCPath)
         await bus.publishWrappBuild(.gameExeDetected(path: "/" + relativePath, gameInfo: gameInfo))
-
-        // The early games run under ScummVM, but their official patches are
-        // still Windows installers that rewrite the game's data files. Wine is
-        // still in the wrapp at this point — `cleanupUnusedEngine` strips it
-        // one step later — so the patches can be applied here and nowhere else.
-        if applyPatches {
-            try await applyGamePatches(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameInstallDir: gameDir,
-                source: source,
-                confirmFailure: confirmPatchFailure
-            )
-        }
 
         return ("/" + relativePath, "/" + relativeInstallerDir)
     }
@@ -400,8 +369,11 @@ class GameInstallerRunner {
 
     // MARK: - AutoIt Automation
 
-    /// Copy AutoIt and automation script to Wine prefix for installer automation
-    private func setupAutoItForInstall(in wrappPath: URL) async throws {
+    /// Where the step's AutoIt script is put in the prefix, as Wine names it.
+    nonisolated static let automationScriptPath = "C:\\automation.au3"
+
+    /// Copy AutoIt and the step's script (`--automation`) into the prefix.
+    private func setupAutoItForInstall(in wrappPath: URL, script: URL) async throws {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
         // Check if AutoIt is available
@@ -422,27 +394,21 @@ class GameInstallerRunner {
         try await Blocking.run { try FileManager.default.copyItem(at: autoitSourceDir, to: autoitDestDir) }
         logger.notice("✅ Copied AutoIt to drive_c")
 
-        // Copy the nancy-drew module's script that clicks through the installer
-        if let scriptPath = NancyDrewModule.autoItScript("installshield-custom-dialog-automate")?.path {
-            let scriptDestPath = driveCPath.appendingPathComponent("installshield-custom-dialog-automate.au3")
-
-            // Remove existing script if present
-            if fileManager.fileExists(atPath: scriptDestPath.path) {
-                try fileManager.removeItem(at: scriptDestPath)
-            }
-
-            try fileManager.copyItem(atPath: scriptPath, toPath: scriptDestPath.path)
-            logger.notice("✅ Copied AutoIt script to drive_c")
-        } else {
-            throw WrappBuildError.autoItScriptNotFound
+        // The script the step names, which clicks where the installer stops.
+        guard fileManager.fileExists(atPath: script.path) else { throw WrappBuildError.autoItScriptNotFound }
+        let scriptDestPath = driveCPath.appendingPathComponent("automation.au3")
+        if fileManager.fileExists(atPath: scriptDestPath.path) {
+            try fileManager.removeItem(at: scriptDestPath)
         }
+        try fileManager.copyItem(at: script, to: scriptDestPath)
+        logger.notice("✅ Copied \(script.lastPathComponent) to drive_c")
     }
 
     /// Remove AutoIt files from Wine prefix after installation
     private func cleanupAutoItAfterInstall(in wrappPath: URL) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let autoitDir = driveCPath.appendingPathComponent("autoit")
-        let scriptPath = driveCPath.appendingPathComponent("installshield-custom-dialog-automate.au3")
+        let scriptPath = driveCPath.appendingPathComponent("automation.au3")
 
         // Remove AutoIt directory
         if fileManager.fileExists(atPath: autoitDir.path) {
@@ -495,13 +461,14 @@ class GameInstallerRunner {
     private func installerPlan(
         installerPath: String,
         installerType: InstallerType,
-        gameInfo: GameInfo,
         wrappPath: URL,
         attemptNumber: Int,
+        automation: URL?,
         logPath: String? = nil
     ) -> InstallerPlan {
         InstallerPlan(installerPath: installerPath, type: installerType, attempt: attemptNumber,
-                      hasAnswerFile: hasAnswerFile(in: wrappPath), game: gameInfo,
+                      hasAnswerFile: hasAnswerFile(in: wrappPath),
+                      automationScript: automation == nil ? nil : Self.automationScriptPath,
                       driveC: WrappLayout(app: wrappPath).driveC, logPath: logPath)
     }
 
@@ -548,6 +515,7 @@ class GameInstallerRunner {
         at wrappPath: URL,
         installerPath: String,
         gameInfo: GameInfo,
+        automation: URL?,
         attemptNumber: Int
     ) async throws -> InstallerType {
         let installerType = await detectInstallerType(installerPath)
@@ -561,7 +529,7 @@ class GameInstallerRunner {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let setupIssExists = hasAnswerFile(in: wrappPath)
         logger.debug("Setup.iss exists: \(setupIssExists)")
-        logger.debug("Game doesNotExitInNonInteractiveMode: \(gameInfo.doesNotExitInNonInteractiveMode)")
+        logger.debug("AutoIt script: \(automation?.lastPathComponent ?? "none")")
 
         let installerLog = InstallerLogFormat(installerType)
             .map { try? prepareInstallerLog(in: wrappPath, format: $0) } ?? nil
@@ -573,9 +541,9 @@ class GameInstallerRunner {
         let plan = installerPlan(
             installerPath: installerPath,
             installerType: installerType,
-            gameInfo: gameInfo,
             wrappPath: wrappPath,
             attemptNumber: attemptNumber,
+            automation: automation,
             logPath: installerLog?.windowsPath
         )
         logger.notice("Running: \(plan.description)")
@@ -609,8 +577,8 @@ class GameInstallerRunner {
         // failed one doesn't leave it in the wrapp (an interactive retry
         // doesn't use it), except in debug mode, to allow manual re-runs.
         let usesAutoIt = plan.usesAutoIt
-        if usesAutoIt {
-            try await setupAutoItForInstall(in: wrappPath)
+        if usesAutoIt, let automation {
+            try await setupAutoItForInstall(in: wrappPath, script: automation)
         }
         defer {
             if usesAutoIt {
@@ -765,8 +733,7 @@ class GameInstallerRunner {
     /// silently (`InstallerPlan.runsInteractively`), for a game AutoIt
     /// doesn't drive.
     func runsInteractively(installerType: InstallerType, attemptNumber: Int, setupIssExists: Bool) -> Bool {
-        InstallerPlan(installerPath: "", type: installerType, attempt: attemptNumber, hasAnswerFile: setupIssExists,
-                      game: GameInfo.unknownGame).runsInteractively
+        InstallerPlan(installerPath: "", type: installerType, attempt: attemptNumber, hasAnswerFile: setupIssExists).runsInteractively
     }
 
     /// The progress screen's instructions while an unattended install has
@@ -796,8 +763,8 @@ class GameInstallerRunner {
         attemptNumber: Int,
         logPath: String? = nil
     ) -> [String] {
-        installerPlan(installerPath: installerPath, installerType: installerType, gameInfo: gameInfo,
-                      wrappPath: wrappPath, attemptNumber: attemptNumber, logPath: logPath).installerArguments
+        installerPlan(installerPath: installerPath, installerType: installerType,
+                      wrappPath: wrappPath, attemptNumber: attemptNumber, automation: nil, logPath: logPath).installerArguments
     }
 
     // MARK: - Executable Discovery
@@ -966,21 +933,5 @@ extension GameInstallerRunner {
     nonisolated static func isNotTheGame(_ program: URL) -> Bool {
         let name = program.lastPathComponent.lowercased()
         return notTheGame.contains { name.hasPrefix($0) }
-    }
-}
-
-extension GameInfo {
-    /// This game, with its installer stubborn or not when run silently, as
-    /// a Wrappfile's `installer.RUN --stubborn` says.
-    nonisolated func withInstallerStubborn(_ stubborn: Bool) -> GameInfo {
-        GameInfo(
-            id: id, title: title, diskCount: diskCount, gameEngine: gameEngine, internalGameExePath: internalGameExePath,
-            steamDRM: steamDRM,
-            steam: steamAppID.flatMap { appID in
-                steamInstallDir.flatMap { dir in steamExePath.map { GameInfo.SteamApp(appID: appID, installDir: dir, exe: $0) } }
-            },
-            doesNotExitInNonInteractiveMode: stubborn, installInstructions: installInstructions,
-            failedInstallInfo: failedInstallInfo, detectionAliases: detectionAliases, detectionCodes: detectionCodes
-        )
     }
 }

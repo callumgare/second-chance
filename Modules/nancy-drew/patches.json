@@ -1,5 +1,5 @@
 {
-  "comment": "Official Her Interactive game patches. Source of truth for both setup-game-patches.sh (download + bundle) and GamePatchCatalog.swift (apply). Scraped from https://www.herinteractive.com/support/game-patches/ — see docs/game-patches.md.",
+  "comment": "Official Her Interactive game patches: what each is and where it comes from. A Wrappfile's DO nancy-drew.patch is what applies one. Scraped from https://www.herinteractive.com/support/game-patches/ — see docs/game-patches.md.",
   "patches": [
     {
       "id": "secrets-can-kill-flower-puzzle",
@@ -10,8 +10,6 @@
       "sha256": "6a64b2400d5cc9c357af19afd63ecf5fde712f3cb9eabb5e29fc2398a2eb748c",
       "payload": "ndsck1.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": false,
       "fixes": "Corrects the flower puzzle in Aunt Eloise's safe. Not applied automatically: the patcher is a 16-bit DOS self-extractor that only replaces GAME.EXE, and the wrapp runs the game under ScummVM, which never runs GAME.EXE.",
       "sourceUrl": "https://www.herinteractive.com/support/game-patches/"
     },
@@ -24,8 +22,6 @@
       "sha256": "56ef69eb0289dfbd0a448c2ddf5a12d9f20f29637dfefe6c68cae8a633b3f504",
       "payload": "stfd-cabinet.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Clicking Mattie's cabinet wrongly sends the player to Dwayne's office.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-stay-tuned-for-danger-matties-cabinet-and-senior-detective-timer/",
       "automation": "her-update-wizard"
@@ -39,8 +35,6 @@
       "sha256": "4d675f452141db19a746119deb1998b3427238a4a2828d4cf2a5b8975c77e915",
       "payload": "timepatch.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": false,
       "fixes": "Grants more time for puzzles on the Senior Detective difficulty. A difficulty preference rather than a bug fix, so it is not applied automatically.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-stay-tuned-for-danger-matties-cabinet-and-senior-detective-timer/"
     },
@@ -53,8 +47,6 @@
       "sha256": "d97efef789524850d9914448658697bd1d26a7c62be5a261dde56661b3c203e0",
       "payload": "mhm_full.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Resolves multiple freezes and assorted CSound errors.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-message-in-a-haunted-mansion-bird-inlay-puzzle-and-csound-error/",
       "automation": "her-update-wizard"
@@ -68,8 +60,6 @@
       "sha256": "226c4443f19fa94b3f1de30e4dce15990ef88dfd5b9c3e34057a99cf0ef4d846",
       "payload": "inlay.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": false,
       "fixes": "Marks the bird inlay puzzle as already solved. Her Interactive says not to install it unless you cannot solve the puzzle yourself, so it is never applied automatically.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-message-in-a-haunted-mansion-bird-inlay-puzzle-and-csound-error/"
     },
@@ -82,8 +72,6 @@
       "sha256": "afdcb3c7f856d4396d6979a7ecfa6d5bb3e17708315798ba111184096edf858e",
       "payload": "hi-installpatch.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": false,
       "fixes": "Closing Simone's purse with closed captioning off, a Modify/Repair/Remove prompt when Treasure in the Royal Tower is already installed, and being confined to the projector room on day 3. Not applied automatically: hi-installpatch.exe only rewrites the uninstall registry entries and shortcuts, which a wrapp has no use for, and contains no game files.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-final-scene-simones-purse-stuck-in-projector-room-and-installer/"
     },
@@ -96,8 +84,6 @@
       "sha256": "cb2590ac704b060fd41c8993c5d0f4597730580bb7726cd687312fcb53ce72fc",
       "payload": "sshphone.exe",
       "action": "extract-into-game-dir",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Freezes while on the phone or at the monolith.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-secret-of-the-scarlet-hand-phonecall-and-monolith-freeze/",
       "destinationSubdirectory": "DataFiles"
@@ -111,8 +97,6 @@
       "sha256": "55fb1b814fdfa022c38ad149f17f4d38acaf76ac6dde84e375c73f3a1597ea26",
       "payload": "dog_full01.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Dead navigation arrows, exits while photographing birds, being unable to leave the journal, repeated bird-photo requests, and the bucket not leaving inventory.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-ghost-dogs-of-moon-lake-cola-puzzle-and-gameplay-errors/",
       "automation": "her-update-wizard"
@@ -126,8 +110,6 @@
       "sha256": "feba3c08daec26cb1d5f24b0f4e480a1aa998a07814c796e7dc78b90586ab6f7",
       "payload": "dog_combo_solver.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": false,
       "fixes": "Marks the cola puzzle as already solved. Her Interactive says not to install it unless you cannot solve the puzzle yourself, so it is never applied automatically.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-ghost-dogs-of-moon-lake-cola-puzzle-and-gameplay-errors/"
     },
@@ -140,8 +122,6 @@
       "sha256": "65ad634eda0575bc458e1dc10299f6152445a0dd6ffdae33bb0ed72d33b151ed",
       "payload": "ddi-wood.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Crash with a CSound/DirectSound error when talking to Casey about the wood samples.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-danger-on-deception-island-clams-missing-and-csound-error/",
       "automation": "her-update-wizard"
@@ -155,8 +135,6 @@
       "sha256": "8bbf248d2dbe73db0029acd1310cfcdde6d116cc1d18b641e3166bd714e4a14f",
       "payload": "DDI_Clamming.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": false,
       "fixes": "Lets the clam bucket be handed in when not all clams can be found. Her Interactive frames this as a last resort after re-checking both clam locations, so it is not applied automatically.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-danger-on-deception-island-clams-missing-and-csound-error/"
     },
@@ -169,8 +147,6 @@
       "sha256": "c8e27c4c6941ad924e84e630748049014d242a26468519c34a3fadd7c56720c5",
       "payload": "sha-full.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Zrender error during the campfire scene, a scene-stack error at the painting, and the fifth key vanishing before it reaches inventory.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-secret-of-shadow-ranch-zrender-error-fifth-key-and-gameplay-error/",
       "automation": "her-update-wizard"
@@ -184,8 +160,6 @@
       "sha256": "57b7c9e442ea42b39368008c35f560c358c5b4b4046d6cc4bcdfadc438972dee",
       "payload": "cur-full.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "The cricket ball never being added to inventory, and the column key vanishing before it reaches inventory.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-curse-of-blackmoor-manor-cricket-ball-and-column-key-missing/",
       "automation": "her-update-wizard"
@@ -199,8 +173,6 @@
       "sha256": "597a3d31f24028b268c02e0d001c99d56963b0cbd4810f5f156133932f184190",
       "payload": "TRN_Patch.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Cursor freeze during the taffy sort puzzle.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-last-train-to-blue-moon-canyon-taffy-sort-puzzle-2/",
       "automation": "her-update-wizard"
@@ -214,8 +186,6 @@
       "sha256": "ef61b2e858a7e8b8e1e98929f8a003fa9b724a515c99deb1564fa0349edc9e0c",
       "payload": "IceUpdater1.1.2.exe",
       "action": "run-installer",
-      "edition": "cd",
-      "automatic": true,
       "fixes": "Ned phone freeze, Guadalupe availability, S3/VIA Unichrome picture-in-picture, and slow end-game chase performance. The site lists this same file again on its S3/VIA Unichrome page.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-white-wolf-of-icicle-creek-cd-version/",
       "automation": "update-installation-wizard"
@@ -229,8 +199,6 @@
       "sha256": "f27674cb8b48ab5695666090dc39042abd802961a9134178b203031568e4ca2f",
       "payload": "nd_wwoic_dd_patch_v1.1.exe",
       "action": "run-installer",
-      "edition": "digital-download",
-      "automatic": true,
       "fixes": "The digital-download build of the same four fixes as ICE Updater 1.1.2.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-white-wolf-of-icicle-creek-digital-download-version/"
     },
@@ -243,8 +211,6 @@
       "sha256": "abbd52d3a3ed5d4089c2eb672dafc7618e5b16e93bd51bbd5aefc3063c89be8d",
       "payload": "IceUpdater1.0.1.exe",
       "action": "run-installer",
-      "edition": "cd",
-      "automatic": false,
       "fixes": "The Isis command menu staying on screen after saving with it open. This is an older updater than 1.1.2 and applying it afterwards would roll the game back, so it is not applied automatically.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-white-wolf-of-icicle-creek-isis-command-box/"
     },
@@ -257,8 +223,6 @@
       "sha256": "47cb44b50cdf1a533b2f3f85c5941b440f8a0354dd16afce30f38baee07e0961",
       "payload": "CRYUpdater1.0.1.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Inventory showing only four mushrooms after five have been collected. Her Interactive states this updater covers both the CD and digital-download editions.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-legend-of-the-crystal-skull-mushroom-missing-from-inventory/",
       "automation": "update-installation-wizard"
@@ -272,8 +236,6 @@
       "sha256": "ba19b5ac8d6a6b33a6e3e27aa5a69b5278839e97e2b89bd7338eca853a9f2c54",
       "payload": "HAU 1.1 patch.exe",
       "action": "run-installer",
-      "edition": "cd",
-      "automatic": true,
       "fixes": "Nancy walking in place on the map early on, and the conversation with Kyler freezing later.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-haunting-of-castle-malloy-nancy-walks-in-place-and-kyler-conversation-freeze-cd-version/",
       "automation": "update-installation-wizard"
@@ -287,8 +249,6 @@
       "sha256": "26766308a08e6a981d738f1ce71d0b51015100ea74c0f0fb88cd5e37f2390115",
       "payload": "HAU1-1-01patch.exe",
       "action": "run-installer",
-      "edition": "digital-download",
-      "automatic": true,
       "fixes": "The digital-download build of the same two fixes as HAU 1.1.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-the-haunting-of-castle-malloy-nancy-walks-in-place-and-kyler-conversation-freeze-digital-download/",
       "automation": "update-installation-wizard"
@@ -302,8 +262,6 @@
       "sha256": "ebae5bcdd27c9dd9430cef816ef9f0ea22031263902671a5cf98f8719b8a5da4",
       "payload": "TOT_Updater1.0.1.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Flickering or black screen on the Doppler cable puzzle with GeForce 2/4 MX cards.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-trail-of-the-twister-doppler-radar-screen/",
       "automation": "update-installation-wizard"
@@ -317,8 +275,6 @@
       "sha256": "7091f888ee8452e24beb58fa508f3ded4eb97f1437e25c4680aa0e9f3df7d1e3",
       "payload": "SAW_Updater1.0.2.exe",
       "action": "run-installer",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Being unable to delete recorder channels when all are full, and missing item labels during the tea ceremony. Her Interactive labels this PC-only because the Mac build self-updates; a wrapp runs the Windows build, so the PC patch is the right one.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-shadow-at-the-waters-edge-delete-channels-on-recorder-tea-ceremony-labels/",
       "automation": "update-installation-wizard"
@@ -333,8 +289,6 @@
       "payload": "DecodePuzzle_SC.cif",
       "action": "copy-into-game-dir",
       "destinationSubdirectory": "Ciftree",
-      "edition": "any",
-      "automatic": true,
       "fixes": "Letters A, F and N locked in the wrong position or duplicated in the Amateur Sleuth decode puzzle. This patch is a data file copied into the game's Ciftree folder, not an installer.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-tomb-of-the-lost-queen-locked-letters-in-decode-puzzle/"
     }

@@ -12,7 +12,7 @@ struct BuildPlanTests {
         return try BuildPlanner(bundle: bundle, wrappfile: wrappfile, modules: modules).plan(edition: edition, conditions: conditions)
     }
 
-    @Test("A disc edition: its stages in order, functions expanded, substitutions made, assemble last")
+    @Test("A disc edition: its stages in order, functions expanded, substitutions made")
     func blueMoonsDisc() throws {
         let plan = try #require(try plan("blue-moon", edition: "cd"))
         #expect(plan.stages.map(\.name) == ["prefix", "disc"])
@@ -39,7 +39,7 @@ struct BuildPlanTests {
         #expect(mounts.contains { $0.contains("source=module:nancy-drew/assets/her-update-wizard.au3") })
         #expect(mounts.contains { $0.contains("source=module:installer/autoit") })
         #expect(patch.origin.hasPrefix("nancy-drew/functions/patch:"))
-        // The module's assemble step, with the bundle's install-dir.
+        // The game's .ini settings, which the stage writes after its patches.
         #expect(steps[3].arguments == ["wine:\(installDir)/*.ini"])
         #expect(plan.stages[1].steps[0].description
                 == "WINE.KEEP-DISCS --combined=wine:C:/nancy-drew-installer/disk-combined --into=wine:C:/nancy-drew-installer input:disc-1 input:disc-2")
@@ -79,7 +79,7 @@ struct BuildPlanTests {
         let context = BuildPlanner.Context(planner: planner, edition: bundle.manifest.editions[edition], conditions: conditions,
                                            recorder: BuildPlanner.Recorder())
         let stage = try #require(file.stage(named: stage))
-        return try context.plan(stage, globals: try context.globalScope(), inheriting: [:], isTarget: false).stage.steps
+        return try context.plan(stage, globals: try context.globalScope(), inheriting: [:]).stage.steps
     }
 
     @Test func conditionsAreDecidedForTheBuild() throws {

@@ -126,7 +126,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .disk,
                 gameExePath: installed.gameExePath, installerDir: installed.installerDir,
-                configureINI: !installed.configuredINI, input: input
+                configureINI: false, input: input
             )
 
             // Builder-owned resources: unmount now the build is complete.
@@ -170,8 +170,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             if let installed { return installed }
             await announceInstall()
             let result = try await installerRunner.installGameWithScummVM(
-                wrappPath: wrappPath, gameInfo: gameInfo, source: .disk,
-                confirmPatchFailure: input.confirmPatchFailure, applyPatches: false
+                wrappPath: wrappPath, gameInfo: gameInfo, source: .disk
             )
             installed = result
             return result
@@ -201,10 +200,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     source: .disk,
                     installerName: installerName,
                     unattended: input.isUnattended,
-                    confirmPatchFailure: input.confirmPatchFailure,
                     chooseGameProgram: input.chooseGameProgram(among:),
-                    applyPatches: false,
-                    stubborn: step.has("stubborn")
+                    automation: step.option("automation").flatMap(plan.file)
                 )
             case _ where step.name.map(isPatch(of: gameInfo)) == true:
                 let gameDir: URL

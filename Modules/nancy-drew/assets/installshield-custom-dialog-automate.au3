@@ -1,13 +1,19 @@
+; The installer's command, as the installer module builds it, which this starts: the program, then its own
+; arguments (its silent switches and the answer file's path). The script knows nothing of either.
 $gameInstallerPath = $CmdLine[1]
+Local $command = '"' & $gameInstallerPath & '"'
+For $i = 2 To $CmdLine[0]
+    $command &= " " & $CmdLine[$i]
+Next
 
 Func LogInfo($msg)
     ConsoleWrite(@YEAR & "-" & @MON & "-" & @MDAY & " " & @HOUR & ":" & @MIN & ":" & @SEC & " " & $msg & @CRLF)
 EndFunc
 
-LogInfo("Starting automation: installer=" & $gameInstallerPath)
+LogInfo("Starting automation: " & $command)
 
 LogInfo("Launching installer")
-Local $iPID = Run('"' & $gameInstallerPath & '" /s /sms /f1C:\nancy-drew-installer\setup.iss')
+Local $iPID = Run($command)
 LogInfo("Installer PID=" & $iPID)
 
 ; Wait for as long as the installer is running rather than a fixed time: on a busy Mac the window has taken longer

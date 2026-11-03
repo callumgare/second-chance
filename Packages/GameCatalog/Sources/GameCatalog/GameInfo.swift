@@ -29,7 +29,6 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     /// edition it's sold in.
     public let bigFishProduct: Int?
     public let internalGameExePath: String?
-    public let doesNotExitInNonInteractiveMode: Bool
     public let installInstructions: String?
     public let failedInstallInfo: String?
     /// Other names a disc or download calls the game by, besides its title,
@@ -138,7 +137,6 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         steamDRM: SteamDRM? = nil,
         steam: SteamApp? = nil,
         bigFish: Int? = nil,
-        doesNotExitInNonInteractiveMode: Bool = false,
         installInstructions: String? = nil,
         failedInstallInfo: String? = nil,
         detectionAliases: [String] = [],
@@ -157,7 +155,6 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         self.steamExePath = steam?.exe
         self.bigFishProduct = bigFish
         self.internalGameExePath = internalGameExePath
-        self.doesNotExitInNonInteractiveMode = doesNotExitInNonInteractiveMode
         self.installInstructions = installInstructions
         self.failedInstallInfo = failedInstallInfo
         self.detectionAliases = detectionAliases

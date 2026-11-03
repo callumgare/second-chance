@@ -19,9 +19,10 @@ different consumers read it, which is the whole point of the format:
 | Consumer | When | What it does with it |
 | --- | --- | --- |
 | [setup-game-patches.sh](../WrappTemplate/setup-game-patches.sh) | Building Second Chance | Downloads each archive, caches it, stages it in the app bundle |
-| [GamePatchCatalog.swift](../SecondChance/Services/GamePatchCatalog.swift) | Building a wrapp | Decides which patches apply to this game and edition |
+| [GamePatchCatalog.swift](../SecondChance/Services/GamePatchCatalog.swift) | Building a wrapp | Reads the patch a Wrappfile's `DO nancy-drew.patch` step names |
 
-**Adding a patch means editing the manifest, not the script or the Swift.**
+**Adding a patch means editing the manifest, and naming it in the Wrappfiles
+of the editions it applies to; not the script or the Swift.**
 
 The build script parses it with `plutil`, which reads JSON natively and ships
 with macOS — so the build needs no `jq`, no Python, no extra tooling.
@@ -38,8 +39,6 @@ with macOS — so the build needs no `jq`, no Python, no extra tooling.
   "sha256": "…",                    // the archive's SHA-256, checked on download
   "payload": "HAU 1.1 patch.exe",   // the single file inside the archive
   "action": "run-installer",        // or "copy-into-game-dir"
-  "edition": "cd",                  // "any" | "cd" | "digital-download"
-  "automatic": true,                // false = listed but never auto-applied
   "fixes": "…",
   "sourceUrl": "https://…",         // the page documenting this patch
   "automation": "her-update-wizard" // optional: the AutoIt script that drives it
@@ -67,41 +66,36 @@ folder without ever running them.
   of the Scarlet Hand's phone/monolith fix is a WinZip self-extractor holding
   one `.CIF`, whose dialog offers `<game>\DataFiles`.
 
-### `edition`
+### Which patches apply
 
-Her Interactive shipped **separate CD and digital-download builds** of some
-patches, and the wrong one does nothing useful. The catalogue maps the wrapp's
-`WrappSource` onto the edition:
+**A Wrappfile's `DO nancy-drew.patch --id=<patch>` is what applies one**,
+in each edition's stage: the manifest only describes the patches. So an
+edition has a patch because its stage names it, and none otherwise.
+`TestFixtures/edition-patches.json` records which each disc and Her download
+edition applies, and the tests check the Wrappfiles against it, so a patch
+dropped or added is a change made there on purpose too.
 
-| `edition` | Applies to |
-| --- | --- |
-| `any` | `.disk`, `.herDownload` |
-| `cd` | `.disk` |
-| `digital-download` | `.herDownload` |
+- **CD and download builds.** Her Interactive shipped separate CD and
+  digital-download builds of some patches, and the wrong one does nothing
+  useful: Castle Malloy and White Wolf of Icicle Creek each have both, and
+  each edition's stage names its own.
+- **No patch applies to a Steam or Big Fish build.** Steam ships its own
+  current build of each game, and Her's patchers refuse it: Shadow Ranch's
+  says "This program cannot update the installed version of …". Big Fish's
+  build is its own, wrapped in its DRM.
 
-**No patch applies to a Steam build.** Steam ships its own current build of
-each game, and Her's patchers refuse it: Shadow Ranch's says "This program
-cannot update the installed version of …" and waits on that box until the
-automation times out.
-
-Castle Malloy and White Wolf of Icicle Creek each have both, so exactly one is
-picked per build. There is a unit test asserting precisely that.
-
-### `automatic`
-
-`false` means the patch is downloaded and bundled but never applied on its own.
-Four reasons a patch is marked opt-in:
+Some patches are listed but no Wrappfile names them:
 
 - **Puzzle solvers.** `haunted-mansion-bird-inlay-solver` and `ghost-dogs-cola-solver` mark a
   puzzle as already solved. Her Interactive's own pages say in capitals not to
   install them unless you cannot solve the puzzle yourself — applying them
-  automatically would quietly remove a puzzle from the game.
+  would quietly remove a puzzle from the game.
 - **Difficulty tweaks.** `stay-tuned-senior-detective-timer` grants more time on
   Senior Detective, and `deception-island-clamming` lets the clam bucket be handed in early.
   These are preferences, not defects.
 - **Superseded updaters.** `white-wolf-isis-command-box` is ICE Updater 1.0.1, older
-  than the 1.1.2 that ships as the automatic CD patch. Applying it afterwards
-  would roll the game back.
+  than the 1.1.2 the CD edition applies. Applying it afterwards would roll the
+  game back.
 - **Nothing for a wrapp to gain.** `secrets-can-kill-flower-puzzle` is a 16-bit
   DOS self-extractor whose only file is a new `GAME.EXE`; the wrapp runs Secrets
   Can Kill under ScummVM, which never runs `GAME.EXE` (and the bundled Wine
@@ -109,8 +103,8 @@ Four reasons a patch is marked opt-in:
   the uninstall registry entries and Start-menu shortcuts that clash when
   Treasure in the Royal Tower is installed too; it holds no game files.
 
-Manifest order is applied order, so where a game has several updaters the newer
-one is listed first and an older one can never overwrite it.
+Where a game has several updaters, its Wrappfile names the newer one first,
+so an older one can never overwrite it.
 
 ## Build time: downloading and staging
 
@@ -226,36 +220,36 @@ isn't counted as the patch failing.
 
 Each patch publishes `.patchApplied` or `.patchFailed` on the bus (and a
 `patch-failed` record in the headless progress file). The integration test
-fails a game whose automatic patches didn't all apply, since the build itself
+fails a game whose edition's patches didn't all apply, since the build itself
 succeeds without them.
 
 ## The catalogue
 
-| Game | Patch | Edition | Applied | What it fixes |
+| Game | Patch | Editions applying it | Applied | What it fixes |
 | --- | --- | --- | --- | --- |
-| Secrets Can Kill | `secrets-can-kill-flower-puzzle` | any | automatic | Corrects the flower puzzle in Aunt Eloise's safe. |
-| Stay Tuned for Danger | `stay-tuned-cabinet` | any | automatic | Clicking Mattie's cabinet wrongly sends the player to Dwayne's office. |
-| Stay Tuned for Danger | `stay-tuned-senior-detective-timer` | any | **opt-in** | Grants more time for puzzles on the Senior Detective difficulty. |
-| Message in a Haunted Mansion | `haunted-mansion-full` | any | automatic | Resolves multiple freezes and assorted CSound errors. |
-| Message in a Haunted Mansion | `haunted-mansion-bird-inlay-solver` | any | **opt-in** | Marks the bird inlay puzzle as already solved. |
-| The Final Scene | `final-scene-install-patch` | any | automatic | Closing Simone's purse with closed captioning off, a Modify/Repair/Remove prompt when Treasure in the Royal Tower is already installed, and being confined to the projector room on day 3. |
-| Secret of the Scarlet Hand | `scarlet-hand-phone-monolith` | any | automatic | Freezes while on the phone or at the monolith. |
-| Ghost Dogs of Moon Lake | `ghost-dogs-full` | any | automatic | Dead navigation arrows, exits while photographing birds, being unable to leave the journal, repeated bird-photo requests, and the bucket not leaving inventory. |
-| Ghost Dogs of Moon Lake | `ghost-dogs-cola-solver` | any | **opt-in** | Marks the cola puzzle as already solved. |
-| Danger on Deception Island | `deception-island-wood-csound` | any | automatic | Crash with a CSound/DirectSound error when talking to Casey about the wood samples. |
-| Danger on Deception Island | `deception-island-clamming` | any | **opt-in** | Lets the clam bucket be handed in when not all clams can be found. |
-| The Secret of Shadow Ranch | `shadow-ranch-full` | any | automatic | Zrender error during the campfire scene, a scene-stack error at the painting, and the fifth key vanishing before it reaches inventory. |
-| Curse of Blackmoor Manor | `blackmoor-manor-full` | any | automatic | The cricket ball never being added to inventory, and the column key vanishing before it reaches inventory. |
-| Last Train to Blue Moon Canyon | `blue-moon-taffy-sort` | any | automatic | Cursor freeze during the taffy sort puzzle. |
-| The White Wolf of Icicle Creek | `white-wolf-updater-cd` | CD | automatic | Ned phone freeze, Guadalupe availability, S3/VIA Unichrome picture-in-picture, and slow end-game chase performance. |
-| The White Wolf of Icicle Creek | `white-wolf-updater-download` | download | automatic | The digital-download build of the same four fixes as ICE Updater 1.1.2. |
-| The White Wolf of Icicle Creek | `white-wolf-isis-command-box` | CD | **opt-in** | The Isis command menu staying on screen after saving with it open. |
-| Legend of the Crystal Skull | `crystal-skull-mushroom` | any | automatic | Inventory showing only four mushrooms after five have been collected. |
-| The Haunting of Castle Malloy | `castle-malloy-walk-in-place-cd` | CD | automatic | Nancy walking in place on the map early on, and the conversation with Kyler freezing later. |
-| The Haunting of Castle Malloy | `castle-malloy-walk-in-place-download` | download | automatic | The digital-download build of the same two fixes as HAU 1.1. |
-| Trail of the Twister | `trail-of-the-twister-doppler-radar` | any | automatic | Flickering or black screen on the Doppler cable puzzle with GeForce 2/4 MX cards. |
-| Shadow at the Water's Edge | `waters-edge-recorder-tea-ceremony` | any | automatic | Being unable to delete recorder channels when all are full, and missing item labels during the tea ceremony. |
-| Tomb of the Lost Queen | `lost-queen-decode-puzzle` | any | automatic | Letters A, F and N locked in the wrong position or duplicated in the Amateur Sleuth decode puzzle. |
+| Secrets Can Kill | `secrets-can-kill-flower-puzzle` | — | **no** | Corrects the flower puzzle in Aunt Eloise's safe. |
+| Stay Tuned for Danger | `stay-tuned-cabinet` | disc and download | yes | Clicking Mattie's cabinet wrongly sends the player to Dwayne's office. |
+| Stay Tuned for Danger | `stay-tuned-senior-detective-timer` | — | **no** | Grants more time for puzzles on the Senior Detective difficulty. |
+| Message in a Haunted Mansion | `haunted-mansion-full` | disc and download | yes | Resolves multiple freezes and assorted CSound errors. |
+| Message in a Haunted Mansion | `haunted-mansion-bird-inlay-solver` | — | **no** | Marks the bird inlay puzzle as already solved. |
+| The Final Scene | `final-scene-install-patch` | — | **no** | Closing Simone's purse with closed captioning off, a Modify/Repair/Remove prompt when Treasure in the Royal Tower is already installed, and being confined to the projector room on day 3. |
+| Secret of the Scarlet Hand | `scarlet-hand-phone-monolith` | disc and download | yes | Freezes while on the phone or at the monolith. |
+| Ghost Dogs of Moon Lake | `ghost-dogs-full` | disc and download | yes | Dead navigation arrows, exits while photographing birds, being unable to leave the journal, repeated bird-photo requests, and the bucket not leaving inventory. |
+| Ghost Dogs of Moon Lake | `ghost-dogs-cola-solver` | — | **no** | Marks the cola puzzle as already solved. |
+| Danger on Deception Island | `deception-island-wood-csound` | disc and download | yes | Crash with a CSound/DirectSound error when talking to Casey about the wood samples. |
+| Danger on Deception Island | `deception-island-clamming` | — | **no** | Lets the clam bucket be handed in when not all clams can be found. |
+| The Secret of Shadow Ranch | `shadow-ranch-full` | disc and download | yes | Zrender error during the campfire scene, a scene-stack error at the painting, and the fifth key vanishing before it reaches inventory. |
+| Curse of Blackmoor Manor | `blackmoor-manor-full` | disc and download | yes | The cricket ball never being added to inventory, and the column key vanishing before it reaches inventory. |
+| Last Train to Blue Moon Canyon | `blue-moon-taffy-sort` | disc and download | yes | Cursor freeze during the taffy sort puzzle. |
+| The White Wolf of Icicle Creek | `white-wolf-updater-cd` | disc | yes | Ned phone freeze, Guadalupe availability, S3/VIA Unichrome picture-in-picture, and slow end-game chase performance. |
+| The White Wolf of Icicle Creek | `white-wolf-updater-download` | download | yes | The digital-download build of the same four fixes as ICE Updater 1.1.2. |
+| The White Wolf of Icicle Creek | `white-wolf-isis-command-box` | — | **no** | The Isis command menu staying on screen after saving with it open. |
+| Legend of the Crystal Skull | `crystal-skull-mushroom` | disc and download | yes | Inventory showing only four mushrooms after five have been collected. |
+| The Haunting of Castle Malloy | `castle-malloy-walk-in-place-cd` | disc | yes | Nancy walking in place on the map early on, and the conversation with Kyler freezing later. |
+| The Haunting of Castle Malloy | `castle-malloy-walk-in-place-download` | download | yes | The digital-download build of the same two fixes as HAU 1.1. |
+| Trail of the Twister | `trail-of-the-twister-doppler-radar` | disc and download | yes | Flickering or black screen on the Doppler cable puzzle with GeForce 2/4 MX cards. |
+| Shadow at the Water's Edge | `waters-edge-recorder-tea-ceremony` | disc and download | yes | Being unable to delete recorder channels when all are full, and missing item labels during the tea ceremony. |
+| Tomb of the Lost Queen | `lost-queen-decode-puzzle` | disc and download | yes | Letters A, F and N locked in the wrong position or duplicated in the Amateur Sleuth decode puzzle. |
 
 ## Caveats worth knowing
 

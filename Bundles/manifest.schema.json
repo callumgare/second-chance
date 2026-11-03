@@ -370,17 +370,6 @@
         "build": { "$ref": "#/$defs/build" },
         "patches": { "type": "array", "items": { "$ref": "#/$defs/name" }, "uniqueItems": true },
         "detect": { "$ref": "#/$defs/detect" },
-        "installer": {
-          "description": "Options for the installer module (phase 1 keeps them here until Wrappfiles exist).",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "stubborn": {
-              "description": "The installer doesn't exit when run silently, so it is watched and closed.",
-              "type": "boolean"
-            }
-          }
-        },
         "runtime": { "$ref": "#/$defs/runtime" },
         "tests": { "$ref": "#/$defs/tests" }
       },

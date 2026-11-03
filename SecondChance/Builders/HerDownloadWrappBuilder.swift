@@ -141,6 +141,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                     case ("her-download", "INSTALL"):
                         gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
                                                                        answerFile: step.option("answer-file").flatMap(plan.file),
+                                                                       automation: step.option("automation").flatMap(plan.file),
                                                                        input: input)
                     case _ where step.name.map(isPatch(of: gameInfo)) == true:
                         guard let gameExePath else {
@@ -166,7 +167,6 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 return InstallLayer.Installed(gameExePath: gameExePath, installerDir: "", configuredINI: configuredINI)
             }
             let gameExePath = installed.gameExePath
-            let configuredINI = installed.configuredINI
 
             if !DebugSettings.shared.skipInstaller {
                 try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
@@ -176,7 +176,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 gameExePath: gameExePath,
-                configureINI: !configuredINI,
+                configureINI: false,
                 edition: "her-windows",
                 input: input
             )
@@ -193,7 +193,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// is and asks its questions itself. Patches are steps of their own.
     /// The game's program, from the root of drive C.
     private func installWindowsDownload(
-        _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: URL?, input: WrappBuildInput
+        _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: URL?, automation: URL?, input: WrappBuildInput
     ) async throws -> String {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let installerBaseDir = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
@@ -219,9 +219,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             source: .herDownload,
             installerPath: unpacked ? nil : installer,
             unattended: input.isUnattended,
-            confirmPatchFailure: input.confirmPatchFailure,
             chooseGameProgram: input.chooseGameProgram(among:),
-            applyPatches: false
+            automation: automation
         )
 
         // Unlike a disc, nothing reads the installer once the game is in.

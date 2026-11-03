@@ -150,17 +150,18 @@ public nonisolated enum SteamBuild: BuildModule {
 }
 
 /// Runs a Windows installer in the stage's Wine: silently with an answer
-/// file, or watched and closed when it won't exit by itself, or under
-/// AutoIt; the wizard when nobody is there to click is a failure.
+/// file, and with `--automation=<script>`, under AutoIt, which is given the
+/// installer's command and clicks where it stops; the wizard when nobody is
+/// there to click is a failure.
 public nonisolated enum InstallerBuild: BuildModule {
     public static let id: ModuleID = "installer"
     public static let instructions = [
-        // `INSTALLER.RUN --from=disc-1 [program]`: the installer on the input (found
-        // as GameDetector finds it when no program is named), into `--into`.
-        InstructionSpec("RUN", options: ["from": .value, "into": .value, "answer-file": .value, "stubborn": .flag,
+        // `INSTALLER.RUN --from=${input.disc-1} [program]`: the installer on the input
+        // (found as GameDetector finds it when no program is named), into `--into`.
+        InstructionSpec("RUN", options: ["from": .value, "into": .value, "answer-file": .value, "automation": .value,
                                          "driver": .value, "msi-properties": .value, "mount": .repeated],
                         required: ["into"], arguments: 0...Int.max, argumentRoles: [.program, .text],
-                        optionRoles: ["from": .input, "into": .location, "answer-file": .file]),
+                        optionRoles: ["from": .input, "into": .location, "answer-file": .file, "automation": .file]),
     ]
     /// AutoIt, which Second Chance carries: `module:installer/autoit`.
     public static let providedFiles: Set<String> = ["autoit"]
@@ -178,8 +179,8 @@ public nonisolated enum HerDownloadBuild: BuildModule {
     public static let instructions = [
         // `HER-DOWNLOAD.INSTALL installer [--into=…] [--answer-file=…]`: where the
         // download's installer puts the game when `--into` is left out.
-        InstructionSpec("INSTALL", options: ["into": .value, "answer-file": .value], arguments: 1...1,
-                        argumentRoles: [.input], optionRoles: ["into": .location, "answer-file": .file]),
+        InstructionSpec("INSTALL", options: ["into": .value, "answer-file": .value, "automation": .value], arguments: 1...1,
+                        argumentRoles: [.input], optionRoles: ["into": .location, "answer-file": .file, "automation": .file]),
     ]
 }
 

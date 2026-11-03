@@ -91,86 +91,48 @@ struct GamePatchCatalogTests {
         }
     }
 
-    // MARK: - Edition matching
+    // MARK: - Which apply
 
-    @Test("Edition 'any' applies to every source Her's patches can update")
-    func anyEditionMatchesAll() {
-        for source in WrappSource.allCases where source != .steam && source != .bigFish {
-            #expect(GamePatch.Edition.any.matches(source))
-        }
-    }
+    /// Each Nancy Drew game's patches, for its disc and Her download
+    /// editions, as `patches.json`'s automatic and edition fields chose them
+    /// before they went: what the Wrappfiles' patch steps are checked against.
+    nonisolated static let editionPatches: [String: [String: [String]]] = {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("TestFixtures/edition-patches.json")
+        struct Fixture: Decodable { let games: [String: [String: [String]]] }
+        guard let data = try? Data(contentsOf: url) else { return [:] }
+        return (try? JSONDecoder().decode(Fixture.self, from: data).games) ?? [:]
+    }()
 
-    @Test("CD patches apply only to disk builds")
-    func cdEdition() {
-        #expect(GamePatch.Edition.cd.matches(.disk))
-        #expect(!GamePatch.Edition.cd.matches(.herDownload))
-        #expect(!GamePatch.Edition.cd.matches(.steam))
-    }
-
-    @Test("Digital-download patches apply to download builds")
-    func downloadEdition() {
-        #expect(!GamePatch.Edition.digitalDownload.matches(.disk))
-        #expect(GamePatch.Edition.digitalDownload.matches(.herDownload))
-    }
-
-    @Test("No patch applies to a Steam build: Steam has its own current build", arguments: [
-        GamePatch.Edition.any, .cd, .digitalDownload,
-    ])
-    func steamGetsNoPatches(edition: GamePatch.Edition) {
-        #expect(!edition.matches(.steam))
-    }
-
-    /// Castle Malloy is the clearest case of a game whose CD and
-    /// digital-download patches must never both be applied.
-    @Test("A game with CD and download patches picks exactly one per source")
-    func editionSplitPicksOne() {
+    @Test("The fixture names only patches the catalogue has, each for its own game")
+    func fixtureIsTheCatalogues() throws {
+        #expect(!Self.editionPatches.isEmpty)
         let catalog = catalog()
-        let fromDisk = catalog.automaticPatches(forGame: "castle-malloy", source: .disk)
-        let fromDownload = catalog.automaticPatches(forGame: "castle-malloy", source: .herDownload)
-
-        #expect(fromDisk.count == 1)
-        #expect(fromDownload.count == 1)
-        #expect(fromDisk.first?.id != fromDownload.first?.id)
-    }
-
-    // MARK: - Automatic vs optional
-
-    @Test("Puzzle solvers are never applied automatically")
-    func solversAreOptional() {
-        let catalog = catalog()
-        let automaticIDs = Set(
-            catalog.patchedGameSlugs
-                .flatMap { catalog.automaticPatches(forGame: $0, source: .disk) }
-                .map(\.id)
-        )
-        // Her Interactive explicitly tells players not to install these
-        // unless they are stuck.
-        for solver in ["haunted-mansion-bird-inlay-solver", "ghost-dogs-cola-solver", "deception-island-clamming"] {
-            #expect(!automaticIDs.contains(solver), "\(solver) should not apply automatically")
-        }
-    }
-
-    @Test("Automatic and optional partition the patches for a game")
-    func partition() {
-        let catalog = catalog()
-        for slug in catalog.patchedGameSlugs {
-            for source in WrappSource.allCases {
-                let auto = catalog.automaticPatches(forGame: slug, source: source)
-                let optional = catalog.optionalPatches(forGame: slug, source: source)
-                let all = catalog.allPatches(forGame: slug)
-
-                #expect(auto.count + optional.count == all.count)
-                #expect(Set(auto.map(\.id)).isDisjoint(with: Set(optional.map(\.id))))
+        for (game, editions) in Self.editionPatches {
+            let ids = Set(catalog.allPatches(forGame: game).map(\.id))
+            for patch in editions.values.flatMap({ $0 }) {
+                #expect(ids.contains(patch), "\(patch) isn't one of \(game)'s patches")
             }
         }
     }
 
-    @Test("White Wolf never applies the superseded 1.0.1 updater automatically")
-    func supersededUpdaterIsOptional() {
-        let catalog = catalog()
-        for source in WrappSource.allCases {
-            let ids = catalog.automaticPatches(forGame: "white-wolf", source: source).map(\.id)
-            #expect(!ids.contains("white-wolf-isis-command-box"))
+    /// Castle Malloy is the clearest case of a game whose CD and
+    /// digital-download patches must never both be applied.
+    @Test("A game with CD and download patches applies exactly one per edition")
+    func editionSplitPicksOne() {
+        let castle = Self.editionPatches["castle-malloy"] ?? [:]
+        #expect(castle["disc"]?.count == 1)
+        #expect(castle["her-download"]?.count == 1)
+        #expect(castle["disc"] != castle["her-download"])
+    }
+
+    @Test("Puzzle solvers and the superseded updater are never applied")
+    func solversAreLeftOut() {
+        let applied = Set(Self.editionPatches.values.flatMap { $0.values.flatMap { $0 } })
+        // Her Interactive tells players not to install these unless they are stuck.
+        for patch in ["haunted-mansion-bird-inlay-solver", "ghost-dogs-cola-solver", "deception-island-clamming",
+                      "white-wolf-isis-command-box"] {
+            #expect(!applied.contains(patch), "\(patch) shouldn't be applied")
         }
     }
 

@@ -10,8 +10,10 @@ FROM prefix AS disc
 USE installer
 USE nancy-drew
 WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
-INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss --stubborn
+INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss \
+    --automation=module:nancy-drew/assets/installshield-custom-dialog-automate.au3
 DO nancy-drew.patch --id=blackmoor-manor-full --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
 # Windows game is taken out
@@ -20,4 +22,5 @@ USE her-download
 USE nancy-drew
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
 DO nancy-drew.patch --id=blackmoor-manor-full --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
 

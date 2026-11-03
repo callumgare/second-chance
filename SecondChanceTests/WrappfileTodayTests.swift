@@ -7,7 +7,8 @@ import WrappBuilder
 
 /// Each game's Wrappfile says what its builder does today: the same discs,
 /// installer options, answer files and patches the builders work out from
-/// `GameInfo`, the bundle's assets and `GamePatchCatalog`. Until the
+/// `GameInfo`, the bundle's assets and the patches each edition applies
+/// (`TestFixtures/edition-patches.json`). Until the
 /// Wrappfile builder runs them, this is what keeps the two from drifting.
 @MainActor
 struct WrappfileTodayTests {
@@ -42,13 +43,12 @@ struct WrappfileTodayTests {
         } else {
             let install = try #require(installs.first)
             #expect(installs.count == 1)
-            #expect((install.option("stubborn") != nil) == game.doesNotExitInNonInteractiveMode)
             #expect((install.option("answer-file") != nil) == (ShippedBundles.asset("disc.iss", ofGame: game.id) != nil))
             let exeFolder = try #require(game.internalGameExePath.map { "C:" + ($0 as NSString).deletingLastPathComponent })
             let installDir = file.globals.compactMap(Declaration.init).first { $0.kind == .const && $0.name == "install-dir" }
             #expect(installDir?.value?.raw == exeFolder)
         }
-        let patches = GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .disk).map(\.id)
+        let patches = GamePatchCatalogTests.editionPatches[game.id]?["disc"] ?? []
         #expect(patchIDs(steps) == patches)
     }
 
@@ -57,7 +57,7 @@ struct WrappfileTodayTests {
         let steps = try instructions(try wrappfile(game), stage: "her-download")
         let install = try #require(steps.first { $0.keyword == "HER-DOWNLOAD.INSTALL" })
         #expect((install.option("answer-file") != nil) == (ShippedBundles.asset("her-download.iss", ofGame: game.id) != nil))
-        let patches = GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .herDownload).map(\.id)
+        let patches = GamePatchCatalogTests.editionPatches[game.id]?["her-download"] ?? []
         #expect(patchIDs(steps) == patches)
     }
 

@@ -91,9 +91,9 @@ Modules' instructions, as the build modules declare them
 | `WINE.REGISTRY --set <key>:<name> <value>` / `--remove <key>:<name>` | Sets or removes a registry value. |
 | `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive, kept at launch. |
 | `WINE.KEEP-DISCS <disc input>… --into=<folder> [--combined=<folder>]` | Copies the discs it's given into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
-| `INSTALLER.RUN [--from=<input>] --into=<folder> [--answer-file=…] [--stubborn] [program]` | Runs a Windows installer: silently with an answer file, watched and closed when it won't exit (`--stubborn`). Without a program, the installer on the input, found as today. |
+| `INSTALLER.RUN [--from=<input>] --into=<folder> [--answer-file=…] [--automation=<script>] [program]` | Runs a Windows installer: silently with an answer file. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
 | `STEAM.INSTALL <input> --into=<folder>` | Installs the input's Steam app. |
-| `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--answer-file=…]` | Installs Her Interactive's download. |
+| `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
 
 An input is always written `${input.<name>}` where an instruction takes one.
 
@@ -243,8 +243,7 @@ A change to the syntax above means a change to the grammar.
 Before a build runs anything, its edition's target is worked out into a plan
 (`BuildPlanner`): the stages it needs, dependencies first; each step with its
 functions expanded, `${…}` substituted and `IF`s decided for this build (the
-Mac, and the edition's inputs); and each module's `assemble` steps after the
-target's own. Every path comes out in full form, every module option keyed
+Mac, and the edition's inputs). Every path comes out in full form, every module option keyed
 by the module's id, each instruction in upper case, and a whole input as its
 token (`input:disc-1`), so a builder tells an input from text. A key into a
 module's data is an object's property or, in a list (or a table that is one
@@ -256,7 +255,7 @@ was written:
 ```text
 FROM prefix AS disc   [installer, nancy-drew, wine]
   INSTALLER.RUN --answer-file=bundle:assets/disc.iss --from=input:disc-1 --into=wine:C:/…    # Wrappfile:15
-  EDIT --from-data=ini wine:C:/…/*.ini    # nancy-drew/functions/configure-ini:9 from nancy-drew/module.yaml (assemble):2
+  EDIT --from-data=ini wine:C:/…/*.ini    # nancy-drew/functions/configure-ini:9 from Wrappfile:17
 ```
 
 `WrappfileTodayTests` checks each game's Wrappfile against what its builder

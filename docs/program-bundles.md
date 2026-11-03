@@ -45,7 +45,6 @@ editions:                       # what it was sold as, and where each comes from
       target: "disc"            # the Wrappfile's stage that builds it
       inputs:                   # what its INPUTs are given, by name
         disc-1: { type: "disc" }
-    installer: { stubborn: true }   # its installer doesn't exit when run silently
   - id: "her-windows"
     source: "her-download"
     build:
@@ -101,7 +100,6 @@ into `GameInfo`, by field:
 | the `steam` edition's `steam-game` input: `app-id`, `common-folder`, `exe` | `steamAppID`, `steamInstallDir`, `steamExePath` |
 | the `steam` edition's `drm` | `steamDRM`: `no`, `launch-when-steam-running`, `launch-via-steam-only`, or left out when not known |
 | the `big-fish` edition's `big-fish-game` input: `product` | `bigFishProduct` |
-| any edition's `installer.stubborn` | `doesNotExitInNonInteractiveMode` |
 | editions' `detect.aliases` and `detect.codes` | `detectionAliases`, `detectionCodes` |
 | `series`, then `series-order` | the order of `allGames()` |
 

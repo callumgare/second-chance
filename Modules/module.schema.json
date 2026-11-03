@@ -90,7 +90,6 @@
       "items": { "type": "string" },
       "uniqueItems": true
     },
-    "assemble": { "type": "array", "items": { "type": "string" } },
     "runtime": {
       "description": "Defaults for the runtime settings of the stages that use it.",
       "type": "object"

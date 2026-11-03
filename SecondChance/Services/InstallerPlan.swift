@@ -24,27 +24,28 @@ nonisolated struct InstallerPlan: Equatable, Sendable {
     /// The installer as a program inside Wine names it, which is what
     /// AutoIt is given (`windowsPath(ofInstaller:driveC:)`).
     let installerWindowsPath: String
-    /// The game's InstallShield installer doesn't exit by itself when run
-    /// silently, so AutoIt drives it instead (`GameInfo`).
-    let doesNotExitWhenSilent: Bool
+    /// The AutoIt script the step names (`--automation`), as Wine names it
+    /// once it's put in the prefix: for an InstallShield installer that,
+    /// run silently from its answer file, wouldn't exit by itself.
+    let automationScript: String?
     /// Where an MSI or Inno Setup installer writes its own log, as Windows sees it.
     let logPath: String?
 
-    init(installerPath: String, type: InstallerType, attempt: Int, hasAnswerFile: Bool, game: GameInfo,
+    init(installerPath: String, type: InstallerType, attempt: Int, hasAnswerFile: Bool, automationScript: String? = nil,
          driveC: URL? = nil, logPath: String? = nil) {
         self.installerPath = installerPath
         self.type = type
         self.attempt = attempt
         self.hasAnswerFile = hasAnswerFile
         self.installerWindowsPath = driveC.map { Self.windowsPath(ofInstaller: installerPath, driveC: $0) } ?? installerPath
-        self.doesNotExitWhenSilent = game.doesNotExitInNonInteractiveMode
+        self.automationScript = automationScript
         self.logPath = logPath
     }
 
     /// AutoIt clicks through an InstallShield wizard that, run silently from
-    /// its answer file, wouldn't exit by itself.
+    /// its answer file, wouldn't exit by itself, when the step names a script.
     var usesAutoIt: Bool {
-        type == .installShield && attempt == 0 && hasAnswerFile && doesNotExitWhenSilent
+        type == .installShield && attempt == 0 && hasAnswerFile && automationScript != nil
     }
 
     /// The installer shows the person its own wizard rather than installing
@@ -58,7 +59,7 @@ nonisolated struct InstallerPlan: Equatable, Sendable {
         }
     }
 
-    /// The installer's own arguments.
+    /// The installer's own arguments, the same with a script as without.
     var installerArguments: [String] {
         switch type {
         case .msi:
@@ -67,8 +68,7 @@ nonisolated struct InstallerPlan: Equatable, Sendable {
             return attempt == 0 ? ["/qn", "/l*", log, "/i", installerPath] : ["/l*", log, "/i", installerPath]
         case .installShield:
             guard attempt == 0 && hasAnswerFile else { return ["/r"] }  // the wizard, recording
-            // AutoIt runs it its own way.
-            return usesAutoIt ? [] : ["/s", "/sms", "/f1C:\\\(WrappLayout.installersFolder)\\setup.iss"]
+            return ["/s", "/sms", "/f1C:\\\(WrappLayout.installersFolder)\\setup.iss"]
         case .innoSetup:
             let log = logPath.map { ["/LOG=\($0)"] } ?? []
             return attempt == 0 ? ["/verysilent", "/norestart"] + log : log
@@ -83,9 +83,11 @@ nonisolated struct InstallerPlan: Equatable, Sendable {
         return type == .msi ? "msiexec" : installerPath
     }
 
-    /// Its arguments.
+    /// Its arguments: with AutoIt, the script, then the installer's own
+    /// command for the script to start.
     var arguments: [String] {
-        usesAutoIt ? ["C:\\installshield-custom-dialog-automate.au3", installerWindowsPath] : installerArguments
+        guard usesAutoIt, let automationScript else { return installerArguments }
+        return [automationScript, installerWindowsPath] + installerArguments
     }
 
     /// The installer as a program inside Wine names it: its C: path when it

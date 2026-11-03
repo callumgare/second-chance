@@ -119,7 +119,6 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let id: String
         public let source: Source
         public let detect: Detect?
-        public let installer: Installer?
         public let drm: String?
         public let build: Build?
         /// A download edition's: what the person is told about where it
@@ -230,10 +229,6 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let aliases: [String]?
         public let codes: [String]?
         public let matchers: [Matcher]?
-    }
-
-    public struct Installer: Decodable, Hashable, Sendable {
-        public let stubborn: Bool?
     }
 }
 

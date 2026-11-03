@@ -441,11 +441,4 @@ struct BigFishWrappBuilderTests {
         #expect(!BigFishWrappPreparer.isUsableInstaller(file))
         #expect(!BigFishWrappPreparer.isUsableInstaller(file.appendingPathExtension("missing")))
     }
-
-    @Test("No official patch is applied to a Big Fish copy")
-    func noPatches() {
-        for edition in [GamePatch.Edition.any, .cd, .digitalDownload] {
-            #expect(!edition.matches(.bigFish))
-        }
-    }
 }

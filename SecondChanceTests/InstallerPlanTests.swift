@@ -7,29 +7,29 @@ import GameCatalog
 /// its wizard: decided by `InstallerPlan` before anything starts.
 @Suite("Installer plan")
 struct InstallerPlanTests {
-    private static let game = GameInfo(id: "test-game", title: "Test Game")
-    private static let stubbornGame = GameInfo(id: "stubborn-game", title: "Stubborn Game", doesNotExitInNonInteractiveMode: true)
+    private static let script = "C:\\automation.au3"
 
     private static func plan(_ type: InstallerType, attempt: Int = 0, answerFile: Bool = true,
-                             game: GameInfo = game) -> InstallerPlan {
+                             script: String? = nil) -> InstallerPlan {
         InstallerPlan(installerPath: "C:\\nancy-drew-installer\\SETUP.EXE", type: type, attempt: attempt,
-                      hasAnswerFile: answerFile, game: game)
+                      hasAnswerFile: answerFile, automationScript: script)
     }
 
-    @Test("AutoIt drives only a first InstallShield attempt, with an answer file, for a game that won't exit")
+    @Test("AutoIt drives only a first InstallShield attempt, with an answer file, when the step names a script")
     func autoItDecision() {
-        #expect(Self.plan(.installShield, game: Self.stubbornGame).usesAutoIt)
+        #expect(Self.plan(.installShield, script: Self.script).usesAutoIt)
         #expect(!Self.plan(.installShield).usesAutoIt)
-        #expect(!Self.plan(.installShield, attempt: 1, game: Self.stubbornGame).usesAutoIt)
-        #expect(!Self.plan(.installShield, answerFile: false, game: Self.stubbornGame).usesAutoIt)
-        #expect(!Self.plan(.innoSetup, game: Self.stubbornGame).usesAutoIt)
+        #expect(!Self.plan(.installShield, attempt: 1, script: Self.script).usesAutoIt)
+        #expect(!Self.plan(.installShield, answerFile: false, script: Self.script).usesAutoIt)
+        #expect(!Self.plan(.innoSetup, script: Self.script).usesAutoIt)
     }
 
-    @Test("An AutoIt run is AutoIt's program, the script and the installer")
+    @Test("An AutoIt run is AutoIt's program and the script, given the installer's command as it would be without one")
     func autoItCommand() {
-        let plan = Self.plan(.installShield, game: Self.stubbornGame)
+        let plan = Self.plan(.installShield, script: Self.script)
         #expect(plan.program == "C:\\autoit\\AutoIt3.exe")
-        #expect(plan.arguments == ["C:\\installshield-custom-dialog-automate.au3", plan.installerPath])
+        #expect(plan.installerArguments == Self.plan(.installShield).installerArguments)
+        #expect(plan.arguments == [Self.script, plan.installerPath] + Self.plan(.installShield).installerArguments)
         #expect(!plan.usesStart)
         #expect(!plan.runsInteractively)
         #expect(plan.automatedDescription != nil)

@@ -2,8 +2,8 @@
 //  GamePatchCatalog.swift
 //  SecondChance
 //
-//  Reads the bundled game-patch manifest and answers which official Her
-//  Interactive patches apply to a given game and edition.
+//  Reads the bundled game-patch manifest: what each official Her
+//  Interactive patch is. Which apply is a Wrappfile's DO nancy-drew.patch.
 //
 
 import Foundation
@@ -31,33 +31,6 @@ nonisolated struct GamePatch: Codable, Identifiable, Hashable, Sendable {
         case extractIntoGameDir = "extract-into-game-dir"
     }
 
-    /// Which edition of the game a patch is built for. Her Interactive shipped
-    /// separate CD and digital-download builds of some patches, and installing
-    /// the wrong one does nothing useful.
-    enum Edition: String, Codable {
-        case any
-        case cd
-        case digitalDownload = "digital-download"
-
-        /// Whether this edition covers a wrapp built from `source`.
-        ///
-        /// None of Her Interactive's patches cover a Steam copy: Steam ships
-        /// its own current build of each game, which the patchers refuse
-        /// ("This program cannot update the installed version of …"). Nor a
-        /// Big Fish copy, Big Fish's own build, its program wrapped in its DRM.
-        func matches(_ source: WrappSource) -> Bool {
-            if source == .steam || source == .bigFish { return false }
-            switch self {
-            case .any:
-                return true
-            case .cd:
-                return source == .disk
-            case .digitalDownload:
-                return source == .herDownload
-            }
-        }
-    }
-
     let id: String
     /// Game slug, matching `GameInfo.id`.
     let game: String
@@ -74,12 +47,6 @@ nonisolated struct GamePatch: Codable, Identifiable, Hashable, Sendable {
     /// For `copyIntoGameDir` and `extractIntoGameDir`, a folder beneath the
     /// game directory to put the files in.
     let destinationSubdirectory: String?
-    let edition: Edition
-    /// Whether to apply this during a build without being asked.
-    ///
-    /// `false` marks patches Her Interactive tells players not to install
-    /// casually — puzzle solvers, difficulty tweaks, and superseded updaters.
-    let automatic: Bool
     let fixes: String
     let sourceUrl: String
     /// For `runInstaller`, the AutoIt script in the module's `assets/` (without
@@ -131,18 +98,6 @@ final class GamePatchCatalog {
     /// them newest-first so an older one can never overwrite a newer one.
     func allPatches(forGame gameSlug: String) -> [GamePatch] {
         patches.filter { $0.game == gameSlug }
-    }
-
-    /// The patches to apply automatically when building a wrapp for `gameSlug`
-    /// from `source`, in manifest order.
-    func automaticPatches(forGame gameSlug: String, source: WrappSource) -> [GamePatch] {
-        allPatches(forGame: gameSlug).filter { $0.automatic && $0.edition.matches(source) }
-    }
-
-    /// Patches listed for a game but deliberately not applied automatically —
-    /// puzzle solvers, difficulty tweaks, and edition mismatches.
-    func optionalPatches(forGame gameSlug: String, source: WrappSource) -> [GamePatch] {
-        allPatches(forGame: gameSlug).filter { !($0.automatic && $0.edition.matches(source)) }
     }
 
     /// Slugs of every game the manifest knows a patch for.

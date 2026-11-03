@@ -95,7 +95,7 @@ struct DiskInstallIntegrationTests {
                 outcome.expect(plistExe == expectedExe, "Wrapp plist GameExePath \(plistExe ?? "nil") ≠ \(expectedExe)")
             }
 
-            let expectedPatches = await GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .disk).map(\.id)
+            let expectedPatches = GamePatchCatalogTests.editionPatches[game.id]?["disc"] ?? []
             outcome.expect(recorder.appliedPatches == expectedPatches,
                     "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")
             outcome.expect(recorder.configuredWrapp != nil, "wrappConfigured event not emitted")

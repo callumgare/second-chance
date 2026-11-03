@@ -63,9 +63,7 @@ struct HerDownloadInstallIntegrationTests {
                 outcome.expect(recorder.detectedExePath == expectedExe, "Exe \(recorder.detectedExePath ?? "nil"), expected \(expectedExe)")
             }
 
-            let expectedPatches = await download.isMacDownload
-                ? []
-                : GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .herDownload).map(\.id)
+            let expectedPatches = download.isMacDownload ? [] : GamePatchCatalogTests.editionPatches[game.id]?["her-download"] ?? []
             outcome.expect(recorder.appliedPatches == expectedPatches,
                            "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")
 

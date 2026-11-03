@@ -24,14 +24,12 @@ editions:
       target: "disc"
       inputs:
         disc-1: { type: "disc" }
-    installer: { stubborn: true }
   - id: "her-windows"
     source: "her-download"
     build:
       target: "her-download"
       inputs:
         installer: { type: "her-download", format: "windows" }
-    installer: { stubborn: true }
   - id: "steam"
     source: "steam"
     build:

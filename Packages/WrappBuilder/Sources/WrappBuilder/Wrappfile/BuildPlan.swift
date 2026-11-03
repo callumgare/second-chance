@@ -8,9 +8,8 @@ import Foundation
 import WrappModules
 
 /// What a build of one edition runs, in order: the stages its target needs,
-/// each with its steps, functions expanded, `${…}` substituted, `IF`s
-/// decided for this build, and its modules' `assemble` steps after the
-/// target's own. Worked out before anything runs (`BuildPlanner`), so a
+/// each with its steps, functions expanded, `${…}` substituted and `IF`s
+/// decided for this build. Worked out before anything runs (`BuildPlanner`), so a
 /// mistake shows before a disc is copied, and the plan can be logged,
 /// compared and keyed.
 public nonisolated struct BuildPlan: Sendable, Equatable {
@@ -198,7 +197,7 @@ public nonisolated struct BuildPlanner {
             guard let stage = wrappfile.stage(named: name) else {
                 throw PlanError(description: "the Wrappfile has no stage called \(name)")
             }
-            let planned = try context.plan(stage, globals: globals, inheriting: modulesByStage, isTarget: name == target.lowercased())
+            let planned = try context.plan(stage, globals: globals, inheriting: modulesByStage)
             modulesByStage[name] = planned.modules
             stages.append(planned.stage)
         }
@@ -319,8 +318,7 @@ public nonisolated struct BuildPlanner {
             order.append(name)
         }
 
-        func plan(_ stage: Stage, globals: Scope, inheriting: [String: StageModules],
-                  isTarget: Bool) throws(PlanError) -> (stage: PlannedStage, modules: StageModules) {
+        func plan(_ stage: Stage, globals: Scope, inheriting: [String: StageModules]) throws(PlanError) -> (stage: PlannedStage, modules: StageModules) {
             var scope = globals
             scope.frames.append([:])
             scope.otherStages = inheriting
@@ -331,22 +329,6 @@ public nonisolated struct BuildPlanner {
             }
             var steps: [PlannedStep] = []
             try expand(stage.body, scope: &scope, origin: "Wrappfile", into: &steps)
-            if isTarget {
-                // Each module's `assemble` steps, after the stage's own, with
-                // the bundle's global values.
-                var assembleScope = globals
-                assembleScope.modules = scope.modules
-                assembleScope.otherStages = inheriting
-                for id in Set(scope.modules.aliases.values).sorted() {
-                    guard let module = planner.modules[id] else { continue }
-                    for line in module.manifest.assemble ?? [] {
-                        guard let parsed = try? WrappfileParser.parse("FROM scratch\n" + line) else {
-                            throw PlanError(description: "the \(id) module's assemble step \(line) doesn't parse")
-                        }
-                        try expand(parsed.stages[0].body, scope: &assembleScope, origin: "\(id)/module.yaml (assemble)", into: &steps)
-                    }
-                }
-            }
             let planned = PlannedStage(name: stage.name ?? "", from: stage.from,
                                        modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps)
             return (planned, scope.modules)

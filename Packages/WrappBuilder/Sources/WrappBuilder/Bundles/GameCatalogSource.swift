@@ -48,7 +48,6 @@ public nonisolated enum GameCatalogSource {
             steamDRM: steamEdition?.drm.flatMap(steamDRM),
             steam: steam,
             bigFish: editions.first { $0.source == .bigFish }?.inputs?.first?.product,
-            doesNotExitInNonInteractiveMode: editions.contains { $0.installer?.stubborn == true },
             detectionAliases: unique(editions.flatMap { $0.detect?.aliases ?? [] }),
             detectionCodes: unique(editions.flatMap { $0.detect?.codes ?? [] }),
             program: manifest.namespace == "nancy-drew" ? nil : manifest.id,
@@ -103,7 +102,6 @@ public nonisolated enum GameCatalogSource {
                 arguments.append("steam: .init(appID: \(appID), installDir: \(literal(folder)), exe: \(literal(exe)))")
             }
             if let product = game.bigFishProduct { arguments.append("bigFish: \(product)") }
-            if game.doesNotExitInNonInteractiveMode { arguments.append("doesNotExitInNonInteractiveMode: true") }
             if !game.detectionAliases.isEmpty { arguments.append("detectionAliases: [\(game.detectionAliases.map(literal).joined(separator: ", "))]") }
             if !game.detectionCodes.isEmpty { arguments.append("detectionCodes: [\(game.detectionCodes.map(literal).joined(separator: ", "))]") }
             if let program = game.program { arguments.append("program: \(literal(program))") }

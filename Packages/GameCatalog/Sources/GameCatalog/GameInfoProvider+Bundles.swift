@@ -106,8 +106,7 @@ nonisolated extension GameInfoProvider {
             graphics: .directDraw,
             internalGameExePath: "/Nancy Drew/The Haunted Carousel/Game.exe",
             steam: .init(appID: 31820, installDir: "Nancy Drew The Haunted Carousel", exe: "Game.exe"),
-            bigFish: 2387,
-            doesNotExitInNonInteractiveMode: true
+            bigFish: 2387
         ),
         GameInfo(
             id: "deception-island",
@@ -116,8 +115,7 @@ nonisolated extension GameInfoProvider {
             graphics: .directDraw,
             internalGameExePath: "/Nancy Drew/Danger on Deception Island/Game.exe",
             steam: .init(appID: 31840, installDir: "Nancy Drew Danger on Deception Island", exe: "Game.exe"),
-            bigFish: 1545,
-            doesNotExitInNonInteractiveMode: true
+            bigFish: 1545
         ),
         GameInfo(
             id: "shadow-ranch",
@@ -127,8 +125,7 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Nancy Drew/Secret of Shadow Ranch/Game.exe",
             steamDRM: .no,
             steam: .init(appID: 572740, installDir: "Nancy Drew The Secret of Shadow Ranch", exe: "Game.exe"),
-            bigFish: 7041,
-            doesNotExitInNonInteractiveMode: true
+            bigFish: 7041
         ),
         GameInfo(
             id: "blackmoor-manor",
@@ -138,8 +135,7 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Nancy Drew/The Curse of Blackmoor Manor/Game.exe",
             steamDRM: .yesLaunchWhenSteamRunning,
             steam: .init(appID: 31830, installDir: "Nancy Drew Curse of Blackmoor Manor", exe: "Game.exe"),
-            bigFish: 1439,
-            doesNotExitInNonInteractiveMode: true
+            bigFish: 1439
         ),
         GameInfo(
             id: "old-clock",
@@ -149,8 +145,7 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Nancy Drew/Secret of the Old Clock/Game.exe",
             steamDRM: .no,
             steam: .init(appID: 31880, installDir: "Nancy Drew Secret of the Old Clock", exe: "Game.exe"),
-            bigFish: 1297,
-            doesNotExitInNonInteractiveMode: true
+            bigFish: 1297
         ),
         GameInfo(
             id: "blue-moon",
