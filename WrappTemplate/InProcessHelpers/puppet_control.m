@@ -187,6 +187,65 @@ static const double kSecondCaptureAfterSeconds = 2.0;
 @implementation CaptureRequest
 @end
 
+/// Where a window's OpenGL surface lies in a capture of it, in pixels, when
+/// it doesn't fill the window, or CGRectNull. On macOS 15 the move into a
+/// fullscreen Space left a Direct3D game's surface at a size from partway
+/// through it, 2485x1399 of a 2560x1440 window. The screen shows it
+/// scaled up to fill the window, but a capture takes it as it is, in the bottom-left
+/// corner with the rest transparent, so every click aimed by one landed left
+/// of and above its target.
+static CGRect undersizedSurface(CGImageRef image) {
+    size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
+    if (width < 2 || height < 2) return CGRectNull;
+    // Its alpha, read by drawing it into a buffer of its own: a capture's
+    // pixel format isn't fixed.
+    uint8_t *alpha = calloc(width * height, 1);
+    if (!alpha) return CGRectNull;
+    CGContextRef context = CGBitmapContextCreate(alpha, width, height, 8, width, NULL, (CGBitmapInfo)kCGImageAlphaOnly);
+    if (!context) {
+        free(alpha);
+        return CGRectNull;
+    }
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+    CGContextRelease(context);
+    // Rows run top to bottom. Opaque at the bottom-left, see-through at the
+    // top-right: then how far the opaque part reaches along the bottom row
+    // and up the left column.
+    const uint8_t *bottom = alpha + (height - 1) * width;
+    CGRect surface = CGRectNull;
+    if (bottom[0] == 255 && alpha[width - 1] == 0) {
+        size_t right = width, top = 0;
+        while (right > 0 && bottom[right - 1] == 0) right--;
+        while (top < height && alpha[top * width] == 0) top++;
+        if (right > 0 && top < height && (right < width || top > 0)) {
+            surface = CGRectMake(0, top, right, height - top);
+        }
+    }
+    free(alpha);
+    return surface;
+}
+
+/// `image` with its part `surface` scaled up to fill it, as the screen shows
+/// it. Owned by the caller.
+static CGImageRef scaledUp(CGImageRef image, CGRect surface) {
+    size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
+    CGImageRef part = CGImageCreateWithImageInRect(image, surface);
+    if (!part) return NULL;
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8, 0, space,
+                                                 (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+    CGColorSpaceRelease(space);
+    CGImageRef result = NULL;
+    if (context) {
+        CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
+        CGContextDrawImage(context, CGRectMake(0, 0, width, height), part);
+        result = CGBitmapContextCreateImage(context);
+        CGContextRelease(context);
+    }
+    CGImageRelease(part);
+    return result;
+}
+
 /// Take a screenshot of `window` for `request`.
 static void startCapture(SCWindow *window, NSSize size, CGFloat scale, CaptureRequest *request) API_AVAILABLE(macos(14.4)) {
     SCContentFilter *filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:window];
@@ -206,6 +265,14 @@ static void startCapture(SCWindow *window, NSSize size, CGFloat scale, CaptureRe
                 if (request->outstanding > 0) return;
                 request->reply = request->lastError;
             } else {
+                CGImageRef cut = NULL;
+                CGRect surface = undersizedSurface(image);
+                if (!CGRectIsNull(surface)) {
+                    debugLog("the window's surface is %.0fx%.0f of %zux%zu; scaling it up as the screen does",
+                             surface.size.width, surface.size.height, CGImageGetWidth(image), CGImageGetHeight(image));
+                    cut = scaledUp(image, surface);
+                    if (cut) image = cut;
+                }
                 CGImageDestinationRef destination = CGImageDestinationCreateWithURL(
                     (__bridge CFURLRef)[NSURL fileURLWithPath:request->path], CFSTR("public.png"), 1, NULL);
                 BOOL written = NO;
@@ -216,6 +283,7 @@ static void startCapture(SCWindow *window, NSSize size, CGFloat scale, CaptureRe
                 }
                 request->reply = written ? [NSString stringWithFormat:@"ok %zux%zu", CGImageGetWidth(image), CGImageGetHeight(image)]
                                          : [NSString stringWithFormat:@"error could not write %@", request->path];
+                if (cut) CGImageRelease(cut);
             }
             request->finished = YES;
             dispatch_semaphore_signal(request->done);

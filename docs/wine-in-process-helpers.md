@@ -632,6 +632,19 @@ One request per connection, one line each way, replies starting `ok` or
 `error`. Coordinates are points in the game window with a top-left origin — a
 capture's pixels divided by `scale` — so no screen geometry is involved.
 
+A capture has to show what the screen shows, or clicks aimed by it miss. On
+macOS 15 they didn't always. The move into a fullscreen Space left a Direct3D
+game's OpenGL surface at a size from partway through it: 2485×1399 in a
+2560×1440 window. On screen macOS scales the surface up to fill the window,
+by the same 3% both ways, so the picture is where it should be, but a capture
+of the window takes the surface as it is,
+in the bottom-left corner with the rest transparent. The game's Exit button
+was then 63 points left of where the capture put it, and the test's clicks
+missed it until something resized the surface, such as the player moving the
+mouse. So a capture whose opaque part is smaller than the window and anchored
+bottom-left is scaled up to fill it, as the screen does (`undersizedSurface`).
+macOS 26 doesn't leave the surface undersized.
+
 | Request | Reply |
 | --- | --- |
 | `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
