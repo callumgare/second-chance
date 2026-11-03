@@ -89,9 +89,9 @@ nonisolated struct InstallerPlan: Equatable, Sendable {
     }
 
     /// The installer as a program inside Wine names it: its C: path when it
-    /// is in the prefix, as a copied disc's is. A Mac path reaches it only
-    /// through Z:, the whole Mac, so it is kept only for an installer outside
-    /// the prefix.
+    /// is in the prefix, as a copied disc's is. An installer outside the
+    /// prefix keeps its Mac path, which Wine reaches through the drive the
+    /// build lends its folder (`GameInstallerRunner.lendFolder`).
     static func windowsPath(ofInstaller installerPath: String, driveC: URL) -> String {
         let driveCPath = driveC.standardizedFileURL.path
         let installer = URL(fileURLWithPath: installerPath).standardizedFileURL.path

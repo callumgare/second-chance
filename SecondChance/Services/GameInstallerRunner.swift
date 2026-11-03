@@ -61,6 +61,8 @@ class GameInstallerRunner {
 
         // Find installer executable
         let installerExe: String
+        let lent = try installerPath.map { try lendFolder(of: $0, at: wrappPath) } ?? false
+        defer { if lent { Wine(wrapp: wrappPath).drives.takeBack() } }
         if let installerPath = installerPath {
             // Direct installer path provided
             installerExe = installerPath.path
@@ -273,6 +275,8 @@ class GameInstallerRunner {
         try fileManager.createDirectory(at: unpacked, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: unpacked) }
 
+        let lent = try lendFolder(of: launcher, at: wrappPath)
+        defer { if lent { Wine(wrapp: wrappPath).drives.takeBack() } }
         logger.notice("Unpacking \(launcher.lastPathComponent) into C:\\nancy-drew-installer\\unpacked")
         let exitCode = try await retryingIfNoDisplay(at: wrappPath, "The installer launcher") {
             let desktop = await self.startDesktop(at: wrappPath)
@@ -682,6 +686,19 @@ class GameInstallerRunner {
             await Wine(wrapp: wrappPath).server.stop()
             return try await step()
         }
+    }
+
+    /// Lend `file`'s folder to Wine as a drive (`WineDrives.lend`) when the
+    /// file is outside the prefix's C: drive, as a downloaded installer is,
+    /// and say whether it did: the prefix has no drive showing the whole Mac,
+    /// so Wine couldn't otherwise run it.
+    func lendFolder(of file: URL, at wrappPath: URL) throws -> Bool {
+        let driveC = WrappLayout(app: wrappPath).driveC.standardizedFileURL.path
+        guard !file.standardizedFileURL.path.hasPrefix(driveC + "/") else { return false }
+        let folder = file.deletingLastPathComponent()
+        try Wine(wrapp: wrappPath).drives.lend(folder)
+        logger.notice("\(WineDrives.lentLetter.uppercased()): shows \(folder.path) while \(file.lastPathComponent) runs")
+        return true
     }
 
     /// Start Wine's desktop before an installer or patcher runs, so it isn't

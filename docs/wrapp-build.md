@@ -555,9 +555,18 @@ new Second Chance or WrappPuppeteer still reads a wrapp built before it; the
 slug and source are optional for that reason.
 
 A prefix's drive letters are links in its `dosdevices` folder, made through
-`wine.drives` (`WineDrives`). A prefix has only A:, C: and Z:, every other
-letter blocked so Wine can't add the Mac's disks; a disc build mounts each
-copied disc from D: on, as a CD-ROM drive. A: is the player's saves: each
+`wine.drives` (`WineDrives`). A prefix has only A: and C:, every other
+letter blocked so Wine can't add the Mac's disks. There is no Z: showing
+the whole Mac, as Wine would have, so a Windows program that searches every
+drive, or goes wrong, sees only the game's own files and the saves; a wrapp
+built when prefixes had one blocks it as it launches. Wine isn't a sandbox,
+though: a program can still name any Mac file through Wine's `\\?\unix\`
+paths, so this guards against accidents, not against a program that sets
+out to. A disc build mounts each copied disc from D: on, as a CD-ROM drive.
+An installer outside the prefix — Steam's, from the downloads cache, or a
+Her Interactive download wherever it was saved — is run by its Mac path
+while its folder is lent to Wine as Y: (`WineDrives.lend`), which Wine then
+names the path through; Y: is blocked again once it has run. A: is the player's saves: each
 launch points it at the wrapp's folder in Application Support, and the
 Windows user's Documents links to the same place, so a game saving to either
 reaches it. A build points both at a folder in `/tmp` that may not exist, so

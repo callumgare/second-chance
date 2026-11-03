@@ -278,6 +278,9 @@ func main() {
     if config.gameEngine.runsInWine {
         do {
             try config.wine.drives.mount(config.appSupportPath, as: "a")
+            // A wrapp built when prefixes had a Z: showing the whole Mac
+            // (WineDrives): the game never needed it.
+            config.wine.drives.block("z")
         } catch {
             mainLogger.critical("ERROR: Failed to mount directory into Wine: \(error)")
             showAlert(message: String(localized: "Couldn't Open Your Saved Games"),

@@ -455,7 +455,12 @@ class WrappBuildHelper {
         // web helper without them), which needs cabextract, which isn't
         // bundled — and Steam signs in fine under the bundled Wine without them.
         let installer = try await steamInstaller()
-        try await wine.run(.program(installer.path, ["/S"]), timeout: 300)
+        do {
+            // It's run from the cache, which Wine sees only while its folder is lent.
+            try wine.drives.lend(installer.deletingLastPathComponent())
+            defer { wine.drives.takeBack() }
+            try await wine.run(.program(installer.path, ["/S"]), timeout: 300)
+        }
 
         // Save to cache
         try cacheManager.saveCache(wrappPath: wrappPath, stage: .steamClientInstalled)
