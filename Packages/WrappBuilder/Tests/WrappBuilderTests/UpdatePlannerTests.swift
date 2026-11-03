@@ -45,7 +45,7 @@ struct UpdatePlannerTests {
                 .init(id: "wine", release: 2, version: "10.0_8", files: ["prefix.yaml": prefixHash]),
                 .init(id: "nancy-drew", release: 2, version: "1"),
             ] + extra,
-            args: ["install-dir": Self.installDir]
+            launch: RecordedLaunch(program: "wine:\(Self.installDir)/Game.exe")
         )
     }
 
@@ -209,13 +209,35 @@ struct UpdatePlannerTests {
         }
     }
 
+    @Test("A lock with its launch builds afresh only when the program moved")
+    func recordedLaunch() throws {
+        var old = lock()
+        old.args = nil
+        old.launch = RecordedLaunch(program: "wine:\(Self.installDir)/Game.exe")
+        if case .freshBuild = try planner().plan(old: old, target: target()) { Issue.record("the same program isn't a move") }
+        old.launch = RecordedLaunch(program: "wine:C:/Elsewhere/Game.exe")
+        guard case .freshBuild = try planner().plan(old: old, target: target()) else {
+            Issue.record("a program that moved should be a fresh build")
+            return
+        }
+    }
+
+    @Test("An old ScummVM app, its data in its prefix, is updated in place, not built afresh")
+    func oldScummVMApp() throws {
+        var old = lock()
+        old.composition = Composition(launcher: .scummvm)
+        var scummvm = target()
+        scummvm.launch = RecordedLaunch(program: "scummvm:/SharedSupport/game/", arguments: ["nancy:nancy7"])
+        if case .freshBuild(let why) = try planner().plan(old: old, target: scummvm) { Issue.record("built afresh: \(why)") }
+    }
+
     @Test("A wrapp from before locks gets one made up from its settings")
     func madeUpLock() throws {
         let settings = WrappSettings(gameExePath: "/Program Files (x86)/Nancy Drew/Game/Game.exe", engine: .wine,
                                      gameSlug: "example", source: nil, installerDir: "/nancy-drew-installer/disk-1")
         let made = WrappLock.madeUp(settings: settings, program: "nancy-drew/example", edition: "cd", wineVersion: "10.0_8")
         #expect(made.bundle.version == 0)
-        #expect(made.args?["install-dir"] == Self.installDir)
+        #expect(made.launch?.program == "wine:\(Self.installDir)/Game.exe")
         #expect(made.source == "disk")
         #expect(made.modules.map(\.id) == ["wine"])
         // Its prefix was set up from a prefix.yaml nothing recorded: Wine's

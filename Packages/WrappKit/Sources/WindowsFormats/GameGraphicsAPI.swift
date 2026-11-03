@@ -45,6 +45,17 @@ nonisolated public enum GameGraphicsAPI: Equatable, Sendable {
         }
     }
 
+    /// What a launch declares (`--wine.graphics`: `direct-draw`, `direct-3d`
+    /// or `unknown`); nil for one that declares nothing.
+    public init?(declared: String?) {
+        switch declared {
+        case "direct-draw": self = .directDraw
+        case "direct-3d": self = .direct3D
+        case "unknown": self = .unknown
+        default: return nil
+        }
+    }
+
     /// From the lower-cased names of the DLLs an .exe imports.
     public init(importedDLLs imports: Set<String>) {
         if imports.contains("ddraw.dll") {

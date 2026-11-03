@@ -253,6 +253,14 @@ public nonisolated struct WrappfileChecker {
         checkOptions(instruction, spec: spec, scope: scope, found: &found)
         checkReferences(instruction.arguments + instruction.options.compactMap(\.value), at: at, scope: scope, found: &found)
         checkPaths(instruction, spec: spec, scope: scope, scopes: scopes, file: file, found: &found)
+        if instruction.keyword == "ICON", let icon = instruction.arguments.first?.raw, !icon.contains("${"),
+           !(icon.hasPrefix("/Resources/") && icon.hasSuffix(".icns")) {
+            found.errors.append("\(at) \(icon): an app's icon is an .icns in its Resources/: /Resources/<name>.icns")
+        }
+        if instruction.keyword == "VOLUME", let name = instruction.arguments.first?.raw, !name.contains("${"),
+           manifest.volumes?[name] == nil {
+            found.errors.append("\(at) \(name), but manifest.yaml has no volume called that")
+        }
         // A patcher isn't an install: it looks for no program afterwards.
         if spec.options["patch"] != nil, instruction.option("patch") != nil, instruction.option("creates") != nil {
             found.errors.append("\(at) --patch takes no --creates: a patcher is run in its folder, and nothing is looked for afterwards")
@@ -403,6 +411,10 @@ public nonisolated struct WrappfileChecker {
             switch role {
             case .location: (modules, pathRole) = (scope.moduleIDs, .location)
             case .program: (modules, pathRole) = (scope.moduleIDs, .program)
+            case .copySource where instruction.option("from") == nil:
+                // A file of the bundle's.
+                check(word, .file)
+                return
             case .copySource:
                 // In the stage it's copied from; a path in an input is the input's.
                 guard let copyFrom else { return }
@@ -464,7 +476,6 @@ public nonisolated struct WrappfileChecker {
         case 1:
             return nil
         case 0:
-            if LegacyPaths.allowsUnclaimedDrivePaths(manifest.id), form == .driveLetter { return nil }
             let uses = modules.map(\.rawValue).sorted().joined(separator: ", ")
             let what = form == .driveLetter ? "\(path.prefix(2)) paths" : "a folder as a \(role.rawValue)"
             return "no module of this stage handles \(what) (it uses \(uses.isEmpty ? "none" : uses))"
@@ -604,7 +615,6 @@ public nonisolated struct WrappfileChecker {
     func manifestProblems(_ file: Wrappfile) -> [String] {
         var problems: [String] = []
         let builds = manifest.editions.compactMap { edition in edition.build.map { ("edition \(edition.id)", $0) } }
-            + (manifest.variants ?? []).compactMap { variant in variant.build.map { ("variant \(variant.id)", $0) } }
         for (owner, build) in builds {
             for stage in [build.target, build.base].compactMap({ $0 }) where file.stage(named: stage) == nil {
                 problems.append("manifest.yaml's \(owner) builds \(stage), which the Wrappfile has no stage called")
@@ -695,16 +705,6 @@ public nonisolated struct WrappfileChecker {
         if range.upperBound == Int.max { return "at least \(range.lowerBound) argument\(range.lowerBound == 1 ? "" : "s")" }
         return "\(range.lowerBound) to \(range.upperBound) arguments"
     }
-}
-
-/// Paths written before their bundle's module could handle them, allowed
-/// until the bundle moves them (phase 2d of the program bundle plan).
-nonisolated enum LegacyPaths {
-    /// Lure of the Temptress copies to `C:/…` in a stage with only ScummVM,
-    /// which takes no drive paths: its data moves to the app's own folder.
-    static let unclaimedDrivePaths: Set<String> = ["freeware/lure-of-the-temptress"]
-
-    static func allowsUnclaimedDrivePaths(_ bundle: String) -> Bool { unclaimedDrivePaths.contains(bundle) }
 }
 
 /// A path into a data table, against the table's JSON Schema: each name a

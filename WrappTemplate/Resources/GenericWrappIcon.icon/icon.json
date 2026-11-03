@@ -1,0 +1,104 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "automatic-gradient" : "srgb:0.90000,0.91500,0.93500,1.00000"
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "automatic-gradient" : "srgb:0.20000,0.21000,0.23000,1.00000"
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "blur-material" : 0.5,
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name" : "cone.svg",
+          "name" : "cone",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -6.5078125,
+              7
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Cone",
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    },
+    {
+      "blur-material" : 0.5,
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name" : "sphere.svg",
+          "name" : "sphere",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              45.2578125,
+              92.453125
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Sphere",
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    },
+    {
+      "blur-material" : 0.5,
+      "layers" : [
+        {
+          "glass" : true,
+          "image-name" : "square.svg",
+          "name" : "square",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              7,
+              7.0546875
+            ]
+          }
+        }
+      ],
+      "lighting" : "individual",
+      "name" : "Square",
+      "shadow" : {
+        "kind" : "layer-color",
+        "opacity" : 0.5
+      },
+      "specular" : false,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}

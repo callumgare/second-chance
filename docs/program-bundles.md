@@ -2,7 +2,9 @@
 
 Every game Second Chance knows is described by a **program bundle**: a folder
 in `Bundles/` with a `manifest.yaml` saying what the program is, the editions it
-was sold as and where each comes from, and the variants it runs as. This is the
+was sold as and where each comes from, and the volumes the person's files are
+kept in; its `Wrappfile` says how each edition is built and how the program
+runs ([wrappfile.md](wrappfile.md)). This is the
 first step of making Second Chance work for programs other than Nancy Drew's
 games. For now the bundles only replace the hand-written table of games: the
 build still works as before, reading the same facts from a table generated
@@ -34,9 +36,9 @@ series: "Nancy Drew"
 series-order: 13                # where it comes in lists of the series
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.old-clock"]
 
-variants:                       # how it runs: in Wine, starting this program
-  - id: "wine"
-    launch: { wine: { exe: "C:/Nancy Drew/Secret of the Old Clock/Game.exe", graphics: "direct-draw" } }
+volumes:                        # kept outside the app, in its Application Support folder
+  wine-documents:
+    display-name: "saved games"   # text people see, in the string catalog
 
 editions:                       # what it was sold as, and where each comes from
   - id: "cd"
@@ -94,9 +96,9 @@ into `GameInfo`, by field:
 | `id` (the part after the `/`) | `id`, the game's slug |
 | `title` | `title` |
 | the `disc` edition's `build.inputs`, one per disc | `diskCount` |
-| a variant called `scummvm` | `gameEngine: .scummvm`; otherwise `.wine` |
-| the `wine` variant's `launch.wine.exe` | `internalGameExePath`, without `C:` |
-| the `wine` variant's `launch.wine.graphics` | `graphics`: what the game draws with, for an `.exe` that can't say (`GameGraphicsAPI`) |
+| the module of the first planned edition's `LAUNCH` | `gameEngine`: `.scummvm`, `.dosbox`, otherwise `.wine` |
+| that launch's program, on Wine's or DOSBox's C: | `internalGameExePath`, without `C:` |
+| that launch's `--wine.graphics` | `graphics`: what the game draws with, for an `.exe` that can't say (`GameGraphicsAPI`) |
 | the `steam` edition's `steam-game` input: `app-id`, `common-folder`, `exe` | `steamAppID`, `steamInstallDir`, `steamExePath` |
 | the `steam` edition's `drm` | `steamDRM`: `no`, `launch-when-steam-running`, `launch-via-steam-only`, or left out when not known |
 | the `big-fish` edition's `big-fish-game` input: `product` | `bigFishProduct` |
@@ -139,6 +141,18 @@ nancy-drew/old-clock: manifest.yaml at /editions/2: dmr isn't something this can
 Checks the schema can't make, across fields or against the folder (the id
 matches its folder, no two editions share an id), are in
 `ProgramBundleLoader`.
+
+### Volumes
+
+`volumes` names what's kept outside the app, the person's: its
+`display-name`, which files in it are theirs (`in-use-when`), and how it's
+brought forward. The Wrappfile's `VOLUME` says where the program sees each
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-icon)); a volume no stage
+mounts is fine, as the ScummVM games' `wine-documents` keeps saves from before
+they ran in ScummVM. There are no variants: how a program runs is its
+edition's target's `LAUNCH`, and `sc generate` reads the catalogue's engine,
+program and graphics from the first planned edition's, planned for both
+kinds of Mac, failing if they differ.
 
 ## Download editions
 
@@ -183,8 +197,8 @@ editions:
 The shipped ones are SkiFree (`freeware/skifree`, a bare exe under Wine),
 Lure of the Temptress (`freeware/lure-of-the-temptress`, a zip ScummVM hosts,
 under ScummVM) and Tyrian 2000 (`freeware/tyrian-2000`, a zip of DOS files,
-under DOSBox, whose variant names the DOS program as `launch: { dosbox: {
-exe } }`, at its path on DOSBox's own C:, `C:/TYRIAN/TYRIAN2K.EXE`). A ScummVM game needs its engine's data file in ScummVM's
+under DOSBox, whose `LAUNCH` names the DOS program at its path on DOSBox's
+own C:, `C:/TYRIAN/TYRIAN2K.EXE`). A ScummVM game needs its engine's data file in ScummVM's
 engine: the scummvm module's package names the ones the shipped bundles'
 engines use (`engine-data`, [modules.md](modules.md#engine-packages)), and a
 game whose file is missing stops at ScummVM's "Unable

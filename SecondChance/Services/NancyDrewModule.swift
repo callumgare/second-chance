@@ -115,8 +115,8 @@ nonisolated enum ShippedBundles {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
             let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
-            let planned = try plan(forGame: slug, edition: edition, in: bundle)?.target?.modules
-            let used = planned ?? composition.modules.map(\.rawValue)
+            let plan = try plan(forGame: slug, edition: edition, in: bundle)
+            let used = plan?.target?.modules ?? composition.modules.map(\.rawValue)
             // Each module's data files by hash, which its default updates
             // compare (`when-changed`).
             let refs = try used.compactMap { id -> WrappLock.ModuleRef? in
@@ -128,10 +128,12 @@ nonisolated enum ShippedBundles {
                                            files: files.isEmpty ? nil : files, package: module.manifest.package()?.package.prepared)
             }
             let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
-            // The volumes of the variant the wrapp runs: its launcher's.
+            // The volumes the plan's launch mounts; for an edition with no
+            // plan, those its first planned edition's does, as every edition
+            // of a program runs it the same way.
             let manifest = loaded.manifest
-            let variant = manifest.variants?.first { $0.id == composition.launcher.rawValue }
-                ?? manifest.variants?.first { $0.id == "wine" && composition.has(.wine) }
+            let launch = try plan?.launch ?? manifest.editions.lazy.filter { $0.build?.target != nil }
+                .compactMap { try? Self.plan(forGame: slug, edition: $0.id, in: bundle)?.launch }.first
             let rules = (manifest.volumes ?? [:]).sorted { $0.key < $1.key }.map { name, volume -> VolumeRule in
                 switch volume.inUseWhen {
                 case .patterns(let patterns): VolumeRule(name: name, patterns: patterns)
@@ -139,15 +141,11 @@ nonisolated enum ShippedBundles {
                 case .anyFile, nil: VolumeRule(name: name, patterns: nil)
                 }
             }
-            let mounted = variant?.volumes?.map(\.source) ?? []
             var lock = WrappLock(bundle: .init(id: manifest.id, version: manifest.version), edition: edition,
                                  source: source.rawValue, composition: composition, modules: refs, builtBy: version,
                                  formerBundleIDs: manifest.formerBundleIds, volumes: rules.isEmpty ? nil : rules,
-                                 savesVolume: mounted.first,
-                                 scummvmSettingsVolume: mounted.contains("scummvm-settings") ? "scummvm-settings" : nil)
-            let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
-            let args = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).globalConstants(edition: edition)
-            lock.args = args.isEmpty ? nil : args
+                                 savesVolume: launch?.savesVolume, scummvmSettingsVolume: launch?.scummvmSettingsVolume)
+            lock.launch = plan?.launch
             lock.launcher = launcherRevision(in: bundle)
             return lock
         } catch let error as WrappBuildError {
@@ -177,7 +175,7 @@ nonisolated enum ShippedBundles {
                 try planner.plan(edition: edition, target: stage, conditions: .thisMac).target?.modules ?? []
             }
             let decision = try updates.plan(old: old, target: .init(
-                bundleVersion: target.bundle.version, edition: target.edition, modules: target.modules, args: target.args ?? [:],
+                bundleVersion: target.bundle.version, edition: target.edition, modules: target.modules, launch: target.launch,
                 launcher: target.launcher
             ))
             return (decision, target)

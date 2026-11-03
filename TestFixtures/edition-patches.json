@@ -1,5 +1,5 @@
 {
-  "_about": "Each Nancy Drew game's patches, for its disc and Her download editions, as patches.json's automatic and edition fields chose them before they went (2026-11-04). The Wrappfiles' DO nancy-drew.patch steps are checked against this: a change to which patches an edition applies is made here on purpose too.",
+  "_about": "Each Nancy Drew game's patches, for its disc and Her download editions, as patches.json's automatic and edition fields chose them before they went (2026-11-04). The Wrappfiles' DO nancy-drew.patch steps are checked against this: a change to which patches an edition applies is made here on purpose too. Scarlet Hand's patch was dropped on purpose (2026-11-04): ScummVM's nancy.dat ships the same S1671.cif and applies it.",
   "games": {
     "blackmoor-manor": {
       "disc": [
@@ -70,12 +70,8 @@
       ]
     },
     "scarlet-hand": {
-      "disc": [
-        "scarlet-hand-phone-monolith"
-      ],
-      "her-download": [
-        "scarlet-hand-phone-monolith"
-      ]
+      "disc": [],
+      "her-download": []
     },
     "secrets-can-kill": {
       "disc": [],

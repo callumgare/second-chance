@@ -370,8 +370,9 @@ struct WrappBuilder {
 
     /// Copy the app build's WrappTemplate executable, its debug dylib, the
     /// in-process helpers (which both engines load from the wrapp's
-    /// Frameworks) and its asset catalog (the accent colour and icon, nothing
-    /// per game) into an existing wrapp and re-sign it — the fast loop for
+    /// Frameworks) and its asset catalog (the accent colour and the generic
+    /// icon; a game's own icon is an .icns its ICON names) into an existing
+    /// wrapp and re-sign it — the fast loop for
     /// WrappTemplate changes, without reinstalling the game.
     func updateTemplate(of wrapp: URL) async throws {
         let files = ["Contents/MacOS/WrappTemplate", "Contents/MacOS/WrappTemplate.debug.dylib",

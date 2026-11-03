@@ -6,3 +6,6 @@ INPUT game
 FROM scratch AS download
 USE dosbox
 COPY --from=${input.game} tyrian2000 C:/TYRIAN/ # the zip's tyrian2000/ folder: the whole game
+# What the game writes, laid over its C:
+VOLUME --dosbox.overlay dosbox-saves C:/
+LAUNCH C:/TYRIAN/TYRIAN2K.EXE

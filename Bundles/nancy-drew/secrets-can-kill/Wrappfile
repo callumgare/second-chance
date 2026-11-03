@@ -1,4 +1,5 @@
-# Where Her's download installs the game, whose data ScummVM reads.
+# ScummVM reads the game's data from the app's own folder; Wine is only
+# what some editions need to get the data out, and isn't kept.
 CONST install-dir = "C:/Program Files (x86)/Her Interactive/Secrets Can Kill"
 INPUT disc-1
 INPUT disc-2
@@ -7,19 +8,27 @@ INPUT installer
 FROM scratch AS prefix
 USE wine@10
 
-# The CD edition: ScummVM reads the disc's data, kept in the wrapp and
-# patched through Wine, which the wrapp then leaves out.
-FROM prefix AS disc
-USE nancy-drew
+# How the game runs, whichever edition it came from
+FROM scratch AS scummvm
 USE scummvm
-WINE.KEEP-DISCS ${input.disc-1} ${input.disc-2} --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
-EXPORT C:/nancy-drew-installer/disk-combined
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME scummvm-saves scummvm:saves/
+VOLUME scummvm-settings scummvm:settings/
+LAUNCH /SharedSupport/game/ nancy:nancy1
 
-# Her Interactive's download: a Windows installer, or a Mac app whose
-# Windows game is taken out
-FROM prefix AS her-download
+# The CD edition: the discs' data, copied as they are. Disc 1's files win
+# a name both discs have.
+FROM scummvm AS disc
+COPY --from=${input.disc-2} . /SharedSupport/game/
+COPY --from=${input.disc-1} . /SharedSupport/game/
+
+# Her Interactive's download: a Windows installer, run under Wine for the
+# data it installs
+FROM prefix AS her-download-files
 USE her-download
 USE nancy-drew
-USE scummvm
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
 
+FROM scummvm AS her-download
+COPY --from=her-download-files ${const.install-dir} /SharedSupport/game/

@@ -92,7 +92,14 @@ public nonisolated struct InstructionSpec: Sendable {
             // unpacks that file too (a self-extracting zip).
             InstructionSpec("ADD", options: ["checksum": .value, "unpack": .value, "member": .value, "extract": .flag],
                             required: ["checksum"], arguments: 2...2, argumentRoles: [.text, .location]),
-            InstructionSpec("EXPORT", arguments: 1...1, argumentRoles: [.location]),
+            // How the wrapp starts its program: recorded with the plan, not a step.
+            InstructionSpec("LAUNCH", options: ["fallback": .value, "env": .repeated], arguments: 1...Int.max,
+                            argumentRoles: [.program, .text], optionRoles: ["fallback": .program]),
+            // A volume of the manifest's, where the program sees it; or with
+            // --remove, one taken off. Recorded with the launch.
+            InstructionSpec("VOLUME", options: ["remove": .flag], arguments: 1...2, argumentRoles: [.text, .location]),
+            // The app's icon: an .icns in its Resources/. Recorded with the plan.
+            InstructionSpec("ICON", arguments: 1...1, argumentRoles: [.location]),
             InstructionSpec("MOVE", arguments: 2...2, argumentRoles: [.location]),
             InstructionSpec("REMOVE", arguments: 1...1, argumentRoles: [.location]),
             // `--ini=<section>.<key>=<value>`, or `--from-data=<table>`: the calling
@@ -111,6 +118,10 @@ public nonisolated struct InstructionSpec: Sendable {
     /// The keywords that declare or assign a value, which have rules of
     /// their own.
     public static let declarations: Set<String> = ["INPUT", "CONST", "VAR", "SET"]
+
+    /// What's recorded with the plan rather than run as a step: the launch,
+    /// its volumes, and the app's icon.
+    public static let recorded: Set<String> = ["LAUNCH", "VOLUME", "ICON"]
 
     /// The words that start or end a block, or a stage: compared in upper
     /// case, as every keyword is.

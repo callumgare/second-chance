@@ -233,7 +233,7 @@ succeeds without them.
 | Message in a Haunted Mansion | `haunted-mansion-full` | disc and download | yes | Resolves multiple freezes and assorted CSound errors. |
 | Message in a Haunted Mansion | `haunted-mansion-bird-inlay-solver` | — | **no** | Marks the bird inlay puzzle as already solved. |
 | The Final Scene | `final-scene-install-patch` | — | **no** | Closing Simone's purse with closed captioning off, a Modify/Repair/Remove prompt when Treasure in the Royal Tower is already installed, and being confined to the projector room on day 3. |
-| Secret of the Scarlet Hand | `scarlet-hand-phone-monolith` | disc and download | yes | Freezes while on the phone or at the monolith. |
+| Secret of the Scarlet Hand | `scarlet-hand-phone-monolith` | — | **no** | Freezes while on the phone or at the monolith. ScummVM applies the same file itself. |
 | Ghost Dogs of Moon Lake | `ghost-dogs-full` | disc and download | yes | Dead navigation arrows, exits while photographing birds, being unable to leave the journal, repeated bird-photo requests, and the bucket not leaving inventory. |
 | Ghost Dogs of Moon Lake | `ghost-dogs-cola-solver` | — | **no** | Marks the cola puzzle as already solved. |
 | Danger on Deception Island | `deception-island-wood-csound` | disc and download | yes | Crash with a CSound/DirectSound error when talking to Casey about the wood samples. |

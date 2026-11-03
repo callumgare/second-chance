@@ -128,15 +128,30 @@ final class UpdateWrappBuilder {
                 try await run(step, chain: chain, edition: lock.edition, wrappPath: wrappPath, gameInfo: gameInfo,
                               settings: settings, source: source, input: input)
             }
+            // What this bundle's edition records: its launch and its icon. A
+            // ScummVM game's data, which old apps kept in their prefix, moves
+            // into the app where the launch reads it.
+            let editionID = target.edition
+            let editionPlan = try await Blocking.run { try ShippedBundles.plan(forGame: gameInfo.id, edition: editionID) }
+            var gameExePath = settings.gameExePath, installerDir = settings.installerDir
+            if let launch = editionPlan?.launch, launch.launcher() == .scummvm, settings.recordedLaunch == nil {
+                try await moveScummVMData(of: settings, to: launch, in: wrappPath)
+                gameExePath = ""
+                installerDir = ""
+            }
+            if let editionPlan {
+                try await runFileCopies(editionPlan, wrappPath: wrappPath)
+            }
             try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
 
             let record = WrappLock.UpdateRecord(fromBundle: lock.bundle.version, fromModules: lock.modules,
                                                 applied: chain.applied, fromBuiltBy: lock.builtBy)
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: source,
-                gameExePath: settings.gameExePath, installerDir: settings.installerDir,
+                gameExePath: gameExePath, installerDir: installerDir,
                 steamID: settings.steamAppID, composition: composition, steamLaunchMode: settings.steamLaunchMode,
-                edition: target.edition, updated: record, input: input
+                edition: target.edition, updated: record, launch: editionPlan?.launch ?? settings.recordedLaunch,
+                icon: editionPlan?.icon, input: input
             )
             await helper.launchIfAsked(finalPath, input: input)
             return .updated(finalPath)
@@ -148,6 +163,38 @@ final class UpdateWrappBuilder {
     }
 
     // MARK: - Steps
+
+    /// An old ScummVM app's data, which it kept in its prefix (its
+    /// settings' `GameInstallerDir`), moved to where the launch reads it
+    /// (`/SharedSupport/game/`). The prefix then goes with the rest of
+    /// Wine, as the app's launch has none.
+    private func moveScummVMData(of settings: WrappSettings, to launch: RecordedLaunch, in wrappPath: URL) async throws {
+        let layout = WrappLayout(app: wrappPath)
+        let data = layout.onDriveC(settings.installerDir)
+        guard let destination = layout.location(launch.path) else {
+            throw WrappBuildError.buildRecipeProblem("the launch's \(launch.path) has no place in the app")
+        }
+        guard FileManager.default.fileExists(atPath: data.path) else {
+            throw WrappBuildError.buildRecipeProblem("the old app's game data isn't at \(settings.installerDir)")
+        }
+        try await Blocking.run {
+            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
+            // A disc's data folder may be a link to the discs' combined view.
+            try FileManager.default.copyItem(at: data.resolvingSymlinksInPath(), to: destination)
+        }
+        logger.notice("[Update] Moved the game's data from \(settings.installerDir) to \(launch.path)")
+    }
+
+    /// The plan's copies of a bundle's or module's files into the app (its
+    /// icon), which an update brings as a build does.
+    private func runFileCopies(_ plan: BuildPlan, wrappPath: URL) async throws {
+        let layout = WrappLayout(app: wrappPath)
+        for step in plan.stages.flatMap(\.steps) where WrappBuildHelper.isAppStep(step) && step.option("from") == nil {
+            guard let file = plan.file(step.arguments[0]), let destination = layout.location(step.arguments[1]) else { continue }
+            try helper.copyFile(file, to: destination)
+        }
+    }
 
     /// The old wrapp's prefix, game and all, in place of the new one's, with
     /// the person's files left behind: its Documents and A: drive lead to

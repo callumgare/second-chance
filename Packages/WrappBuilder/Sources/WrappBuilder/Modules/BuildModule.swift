@@ -70,6 +70,14 @@ public nonisolated enum WineBuild: BuildModule {
     /// A `source` mount's drive: `--mount=type=source,from=disc-1,wine.drive=D:`.
     public static let mountFields = ["source": Set(["drive"])]
 
+    /// A launch's: what the program draws with (`direct-draw`, `direct-3d` or
+    /// `unknown`), and the log and line that say a non-zero exit was a clean
+    /// quit. A volume's: the drive it's given.
+    public static let coreOptions: [String: [String: InstructionSpec.OptionKind]] = [
+        "LAUNCH": ["graphics": .value, "clean-exit-log": .value, "clean-exit-line": .value],
+        "VOLUME": ["drive": .value],
+    ]
+
     /// How the wine module sets a new prefix up, after wineboot
     /// (`Modules/wine/prefix.yaml`), in order.
     public struct PrefixSetup: Decodable, Sendable {
@@ -134,6 +142,9 @@ public nonisolated enum ScummVMBuild: BuildModule {
 /// DOSBox Staging, which runs a DOS game from its folder, with no Wine.
 public nonisolated enum DOSBoxBuild: BuildModule {
     public static let id = ModuleID.dosbox
+    /// A volume laid over a drive the game sees (`mount c … -t overlay`),
+    /// holding what the game writes.
+    public static let coreOptions: [String: [String: InstructionSpec.OptionKind]] = ["VOLUME": ["overlay": .flag]]
 }
 
 /// Steam is installed into a wrapp's Wine by its build, so the template

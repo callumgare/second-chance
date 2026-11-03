@@ -11,12 +11,6 @@ volumes:
   wine-documents:
     display-name: "saved games"
 
-variants:
-  - id: "wine"
-    volumes:
-      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
-    launch: { wine: { exe: "C:/Program Files (x86)/Her Interactive/Nancy Drew Alibi in Ashes/Alibi.exe", graphics: "direct-3d" } }
-
 editions:
   - id: "cd"
     source: "disc"

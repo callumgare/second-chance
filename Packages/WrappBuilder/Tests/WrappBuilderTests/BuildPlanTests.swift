@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import WrappBuilder
+import WrappFormat
 
 struct BuildPlanTests {
     private func plan(_ slug: String, edition: String,
@@ -51,10 +52,24 @@ struct BuildPlanTests {
         let lostQueen = try #require(try plan("lost-queen", edition: "cd")).target?.steps ?? []
         let copy = try #require(lostQueen.first { $0.name == "lost-queen-decode-puzzle" })
         #expect(copy.instruction == "ADD" && copy.option("unpack") == "zip" && copy.option("checksum")?.hasPrefix("sha256:") == true)
-        let scarlet = try #require(try plan("scarlet-hand", edition: "cd")).target?.steps ?? []
-        let extract = try #require(scarlet.first { $0.name == "scarlet-hand-phone-monolith" })
+        // Scarlet Hand's is the one self-extracting zip; no edition applies it now, as ScummVM does.
+        let extract = try #require(try steps("""
+        FROM scratch AS only
+        USE nancy-drew
+        DO nancy-drew.patch --id=scarlet-hand-phone-monolith --into=C:/game
+        """).first)
         #expect(extract.instruction == "ADD" && extract.has("extract"))
-        #expect(try #require(try plan("scarlet-hand", edition: "cd")).target?.modules.contains("scummvm") == true)
+        #expect(extract.arguments.last == "wine:C:/game/DataFiles")
+
+        // A ScummVM disc edition that needs no Wine: its discs copied into the app.
+        let scarlet = try #require(try plan("scarlet-hand", edition: "cd"))
+        #expect(scarlet.stages.map(\.name) == ["scummvm", "disc"])
+        #expect(scarlet.target?.modules == ["scummvm"])
+        #expect(scarlet.target?.steps.map(\.description) == ["COPY --from=input:disc-1 . /SharedSupport/game/"])
+        #expect(scarlet.launch == RecordedLaunch(program: "scummvm:/SharedSupport/game/", arguments: ["nancy:nancy6"], volumes: [
+            .init(name: "scummvm-saves", location: "scummvm:saves/"), .init(name: "scummvm-settings", location: "scummvm:settings/"),
+        ]))
+        #expect(scarlet.icon == "/Resources/nancy-drew.icns")
     }
 
     @Test("A Steam edition names no stage: a module's default stages build it")

@@ -4,6 +4,10 @@ INPUT installer
 
 FROM scratch AS prefix
 USE wine@10
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+LAUNCH --wine.graphics=direct-3d "${const.install-dir}/Captive.exe"
 
 # The CD edition: the disc kept in the wrapp, as the game checks for it
 FROM prefix AS disc
@@ -27,6 +31,6 @@ DO nancy-drew.configure-ini --into=${const.install-dir}
 FROM prefix AS her-mac
 USE her-download
 USE nancy-drew
-HER-DOWNLOAD.INSTALL ${input.installer}
+HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 

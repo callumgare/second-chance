@@ -50,6 +50,14 @@ with no `explorer.exe` left to finish the job.
 
 ## Modules
 
+A wrapp starts its program as its build recorded it (`WrappSettings.launch`,
+from the Wrappfile's `LAUNCH` and `VOLUME`s: [wrappfile.md](wrappfile.md#the-launch-volumes-and-icon)):
+a Wine program at its C: path, ScummVM on the game's data folder in the app
+with the game's id (`nancy:nancy7`), DOSBox on its own C:. A wrapp built
+before launches were recorded has one made from its older settings, in one
+place (`WrappSettings.launch`): a ScummVM game's data in its prefix, started
+by ScummVM's `--auto-detect`.
+
 A wrapp runs a composition of modules (`Composition`, from its settings):
 the one that starts the game, and the services started before it. Wine
 alone, ScummVM alone, DOSBox alone, Wine with Steam running beside it,

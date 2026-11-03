@@ -6,6 +6,8 @@
 
 import Foundation
 import GameCatalog
+import WrappFormat
+import WrappModules
 
 /// GameCatalog's table, made from the bundles: `sc generate` writes
 /// it to `GameInfoProvider+Bundles.swift`, and a test fails when the file
@@ -17,15 +19,34 @@ public nonisolated enum GameCatalogSource {
     public static let path = "Packages/GameCatalog/Sources/GameCatalog/GameInfoProvider+Bundles.swift"
 
     /// The game each bundle describes, in the order lists show them: by
-    /// series, then `series-order`, then id.
-    public static func games(from bundles: [ProgramBundle]) -> [GameInfo] {
-        bundles.map(\.manifest)
-            .sorted { ($0.series ?? "", $0.seriesOrder ?? .max, $0.id) < ($1.series ?? "", $1.seriesOrder ?? .max, $1.id) }
-            .map(gameInfo)
+    /// series, then `series-order`, then id. Its engine, program and
+    /// graphics are its default edition's planned launch's.
+    public static func games(from bundles: [ProgramBundle], modules: [ModuleFolder]) throws -> [GameInfo] {
+        try bundles
+            .sorted { ($0.manifest.series ?? "", $0.manifest.seriesOrder ?? .max, $0.manifest.id)
+                < ($1.manifest.series ?? "", $1.manifest.seriesOrder ?? .max, $1.manifest.id) }
+            .map { bundle in gameInfo(bundle.manifest, launch: try defaultLaunch(of: bundle, modules: modules)) }
     }
 
-    /// The game a manifest describes, as today's code knows games.
-    public static func gameInfo(_ manifest: Manifest) -> GameInfo {
+    /// The launch of the bundle's first edition with a stage, planned for
+    /// both kinds of Mac: the catalogue is checked in, so it mustn't depend
+    /// on which Mac made it, and a launch that differs between them fails.
+    public static func defaultLaunch(of bundle: ProgramBundle, modules: [ModuleFolder]) throws -> RecordedLaunch? {
+        guard let edition = bundle.manifest.editions.first(where: { $0.build?.target != nil }) else { return nil }
+        let text = try String(contentsOf: bundle.folder.appendingPathComponent("Wrappfile"), encoding: .utf8)
+        let planner = BuildPlanner(bundle: bundle, wrappfile: try WrappfileParser.parse(text), modules: modules)
+        let launches = try ["arm64", "x86_64"].map { arch in
+            try planner.plan(edition: edition.id, conditions: BuildConditions(arch: arch, macos: 15))?.launch
+        }
+        guard launches[0] == launches[1] else {
+            throw BuildPlanner.PlanError(description: "\(bundle.manifest.id)'s \(edition.id) launches one way on arm64 and another on x86_64")
+        }
+        return launches[0]
+    }
+
+    /// The game a manifest describes, as today's code knows games, with its
+    /// default edition's launch.
+    public static func gameInfo(_ manifest: Manifest, launch: RecordedLaunch?) -> GameInfo {
         let editions = manifest.editions
         let disc = editions.first { $0.source == .disc }
         let steamEdition = editions.first { $0.source == .steam }
@@ -34,17 +55,16 @@ public nonisolated enum GameCatalogSource {
             guard let appID = input.appId, let folder = input.commonFolder, let exe = input.exe else { return nil }
             return GameInfo.SteamApp(appID: appID, installDir: folder, exe: exe)
         }
-        let exe = manifest.variants?.lazy.compactMap { $0.launch?.wine?.exe ?? $0.launch?.dosbox?.exe }.first
-        let graphics = manifest.variants?.lazy.compactMap { $0.launch?.wine?.graphics }.first
-        let variants = Set(manifest.variants?.map(\.id) ?? [])
+        let launcher = launch?.launcher()
+        // Today's paths are from the root of the drive the program's on.
+        let exe = launcher == .wine || launcher == .dosbox ? launch.map { String($0.path.dropFirst(2)) } : nil
         return GameInfo(
             id: manifest.name,
             title: manifest.title,
             diskCount: disc?.inputs?.count ?? 1,
-            gameEngine: variants.contains("scummvm") ? .scummvm : variants.contains("dosbox") ? .dosbox : .wine,
-            graphics: graphics.flatMap(GameInfo.Graphics.init(rawValue:)),
-            // Today's paths are from the root of drive C.
-            internalGameExePath: exe.map { $0.hasPrefix("C:") ? String($0.dropFirst(2)) : $0 },
+            gameEngine: launcher == .scummvm ? .scummvm : launcher == .dosbox ? .dosbox : .wine,
+            graphics: launch?.graphics,
+            internalGameExePath: exe,
             steamDRM: steamEdition?.drm.flatMap(steamDRM),
             steam: steam,
             bigFish: editions.first { $0.source == .bigFish }?.inputs?.first?.product,

@@ -29,14 +29,14 @@ struct ProgramBundleTests {
     @Test func theCatalogueIsWhatTheBundlesMake() throws {
         let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
         let bundles = try loader.loadAll().get()
-        let generated = GameCatalogSource.source(for: GameCatalogSource.games(from: bundles))
+        let generated = GameCatalogSource.source(for: try GameCatalogSource.games(from: bundles, modules: try shippedModules()))
         let checkedIn = try String(contentsOf: repoRoot.appendingPathComponent(GameCatalogSource.path), encoding: .utf8)
         #expect(generated == checkedIn, "\(GameCatalogSource.path) is stale: run `sc generate`")
     }
 
     @Test func theCatalogueRoundTripsThroughTheSourceItIsMadeOf() throws {
         let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
-        let games = GameCatalogSource.games(from: try loader.loadAll().get())
+        let games = try GameCatalogSource.games(from: try loader.loadAll().get(), modules: try shippedModules())
         #expect(games == GameInfoProvider.shared.allGames())
     }
 

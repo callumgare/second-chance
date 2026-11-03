@@ -21,6 +21,12 @@ struct GameConfig {
     let gameInstallerDir: String
     /// The modules the wrapp runs (`RuntimeModules`).
     let composition: Composition
+    /// How the game starts, as its build recorded it (or its legacy settings
+    /// mean, for a wrapp built before).
+    var launch: RecordedLaunch
+    /// Whether the build recorded the launch, rather than the wrapp making
+    /// one from its legacy settings.
+    var launchRecorded = false
     let steamGameId: String?
     /// The user's choice, at build time, of how a DRM-free Steam game starts;
     /// nil for a game that offered no choice.
@@ -67,7 +73,8 @@ struct GameConfig {
     func withoutSteam() -> GameConfig {
         GameConfig(
             appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
-            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: .wine), steamGameId: nil,
+            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: .wine), launch: launch,
+            launchRecorded: launchRecorded, steamGameId: nil,
             steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
             gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, settingsPath: settingsPath,
             scummvmConfigPath: scummvmConfigPath
@@ -274,9 +281,11 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
     return GameConfig(
         appPath: appPath,
         winePrefix: winePrefix,
-        gameExePath: settings.gameExePath,
+        gameExePath: settings.recordedLaunch.flatMap(drivePath(of:)) ?? settings.gameExePath,
         gameInstallerDir: settings.installerDir,
         composition: settings.composition,
+        launch: settings.launch,
+        launchRecorded: settings.recordedLaunch != nil,
         steamGameId: settings.steamAppID,
         steamLaunchMode: settings.steamLaunchMode,
         gameTitle: gameTitle,
@@ -290,6 +299,15 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         bigFishSKU: settings.bigFishSKU,
         bigFishTrial: settings.bigFishTrial ?? false
     )
+}
+
+/// A Wine or DOSBox launch's program as a path from the root of its C:
+/// drive (`/Nancy Drew/Game.exe`), as the runtimes find it; nil for another.
+func drivePath(of launch: RecordedLaunch) -> String? {
+    for prefix in ["wine:C:", "dosbox:C:"] where launch.program.hasPrefix(prefix) {
+        return String(launch.program.dropFirst(prefix.count))
+    }
+    return nil
 }
 
 /// Where the wrapp keeps what's the person's, moving it in first from the

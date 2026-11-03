@@ -41,6 +41,9 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     /// build: launching it opens the Game Manager, whose Play Now the wrapp
     /// presses itself (docs/big-fish.md).
     public var bigFishTrial: Bool?
+    /// How the wrapp starts its program, as its Wrappfile said; nil in a
+    /// wrapp built before launches were recorded (`launch` makes one).
+    public var recordedLaunch: RecordedLaunch?
 
     enum CodingKeys: String, CodingKey {
         case gameExePath = "GameExePath"
@@ -53,12 +56,14 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         case bigFishLaunchFile = "BigFishLaunchFile"
         case bigFishSKU = "BigFishSKU"
         case bigFishTrial = "BigFishTrial"
+        case recordedLaunch = "Launch"
     }
 
     public init(
         gameExePath: String, engine: GameInfo.GameEngine, gameSlug: String?, source: WrappSource?,
         installerDir: String, steamAppID: String? = nil, steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
-        bigFishLaunchFile: String? = nil, bigFishSKU: String? = nil, bigFishTrial: Bool? = nil
+        bigFishLaunchFile: String? = nil, bigFishSKU: String? = nil, bigFishTrial: Bool? = nil,
+        recordedLaunch: RecordedLaunch? = nil
     ) {
         self.gameExePath = gameExePath
         self.engine = engine
@@ -70,12 +75,35 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         self.bigFishLaunchFile = bigFishLaunchFile
         self.bigFishSKU = bigFishSKU
         self.bigFishTrial = bigFishTrial
+        self.recordedLaunch = recordedLaunch
     }
 
     /// The modules the wrapp runs, from its engine: a Wine game with a
     /// `.bfg` to start it is started by Big Fish's DRM.
     public var composition: Composition {
         engine == .wine && bigFishLaunchFile != nil ? Composition(launcher: .bigFish) : Composition(legacy: engine)
+    }
+
+    /// How the wrapp starts its program: as recorded, or for a wrapp built
+    /// before launches were, the launch its legacy settings mean. A ScummVM
+    /// game's data was on the C: drive then, and it was started by ScummVM's
+    /// detection rather than its id.
+    public var launch: RecordedLaunch {
+        if let recordedLaunch { return recordedLaunch }
+        switch engine {
+        case .scummvm:
+            let folder = "/SharedSupport/prefix/drive_c/" + installerDir.drop { $0 == "/" }
+            return RecordedLaunch(program: "scummvm:" + (folder.hasSuffix("/") ? folder : folder + "/"))
+        case .dosbox:
+            return RecordedLaunch(program: "dosbox:C:" + gameExePath)
+        case .wineSteam where steamLaunchMode != .direct:
+            let exe = "wine:C:" + gameExePath
+            return RecordedLaunch(program: "steam://rungameid/\(steamAppID ?? "")", options: ["steam.exe": exe],
+                                  fallback: steamLaunchMode == .steam ? exe : nil)
+        default:
+            if let bigFishLaunchFile { return RecordedLaunch(program: "big-fish:C:" + bigFishLaunchFile) }
+            return RecordedLaunch(program: "wine:C:" + gameExePath)
+        }
     }
 
     /// The settings of the wrapp at `layout`.

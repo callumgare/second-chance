@@ -61,7 +61,7 @@ struct UpdateWrappTests {
         #expect(chain.applied == ["wine-prefix"])
         #expect(chain.moves.isEmpty)
         #expect(target.modules.first { $0.id == "wine" }?.files?["prefix.yaml"] != nil)
-        #expect(target.args?["install-dir"] != nil)
+        #expect(target.launch?.program.hasPrefix("wine:C:/") == true)
     }
 
     @Test func anOldWrappOnAnotherMajorWineNeedsItsDisc() throws {
@@ -84,12 +84,12 @@ struct UpdateWrappTests {
         #expect(steam.contains("Steam") && !steam.contains("disc"))
     }
 
-    /// The game's folder as its lock records it, `C:` dropped: where the
-    /// wrapp's settings put its exe.
+    /// The game's folder as its lock's launch has it, `wine:C:` dropped:
+    /// where the wrapp's settings put its exe.
     private func installDir(of slug: String) throws -> String {
         let lock = try ShippedBundles.lock(forGame: slug, edition: "cd", source: .disk,
                                            composition: GameInfoProvider.shared.gameInfo(for: slug).composition)
-        let dir = try #require(lock.args?["install-dir"])
-        return String(dir.dropFirst(2))
+        let program = try #require(lock.launch?.program)
+        return (String(program.dropFirst("wine:C:".count)) as NSString).deletingLastPathComponent
     }
 }

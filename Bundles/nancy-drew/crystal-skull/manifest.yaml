@@ -11,12 +11,6 @@ volumes:
   wine-documents:
     display-name: "saved games"
 
-variants:
-  - id: "wine"
-    volumes:
-      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
-    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/Legend of the Crystal Skull/Game.exe", graphics: "direct-3d" } }
-
 editions:
   - id: "cd"
     source: "disc"

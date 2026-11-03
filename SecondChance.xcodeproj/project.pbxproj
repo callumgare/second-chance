@@ -114,7 +114,7 @@
 				Resources/Assets.xcassets,
 				Resources/Localizable.xcstrings,
 				Resources/scummvm.ini,
-				Resources/WrappTemplateIcon.icon,
+				Resources/GenericWrappIcon.icon,
 				StartupDiagnostics.swift,
 				Subcommands.swift,
 				UIStateCatalog.swift,
@@ -924,7 +924,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
-				ASSETCATALOG_COMPILER_APPICON_NAME = WrappTemplateIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = GenericWrappIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
@@ -964,7 +964,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ARCHS = x86_64;
-				ASSETCATALOG_COMPILER_APPICON_NAME = WrappTemplateIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = GenericWrappIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";

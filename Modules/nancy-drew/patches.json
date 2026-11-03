@@ -84,7 +84,7 @@
       "sha256": "cb2590ac704b060fd41c8993c5d0f4597730580bb7726cd687312fcb53ce72fc",
       "payload": "sshphone.exe",
       "action": "extract-into-game-dir",
-      "fixes": "Freezes while on the phone or at the monolith.",
+      "fixes": "Freezes while on the phone or at the monolith. Not applied: ScummVM, which runs the game, ships the same file (S1671.cif, in nancy.dat since 2024) and applies it while its Fix softlocks option is on, as it is by default.",
       "sourceUrl": "https://www.herinteractive.com/2014/04/patch-secret-of-the-scarlet-hand-phonecall-and-monolith-freeze/",
       "destinationSubdirectory": "DataFiles"
     },

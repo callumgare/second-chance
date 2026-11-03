@@ -88,18 +88,18 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.buildRecipeProblem("\(game.programID)'s \(chosen.edition) edition names no stage")
             }
             try await run(plan, inputs: [chosen.input.id: unpacked], wrappPath: wrappPath)
-            // What the wrapp starts: a Wine program's exe, or for ScummVM the
-            // folder of the game's data, which it reads.
-            let installDir = chosen.installDir.map { $0.hasPrefix("C:") ? String($0.dropFirst(2)) : $0 }
-            let launcher = game.composition.launcher
-            // DOSBox's program is on its own C:, the others' on Wine's.
+            // What the wrapp starts, as the plan's launch says: it must be
+            // there. The settings' older keys name a program on a C: drive,
+            // which a ScummVM game's data in the app isn't.
             let layout = WrappLayout(app: wrappPath)
-            let drive = launcher == .dosbox ? layout.dosboxC : layout.driveC
-            guard let exe = launcher == .scummvm ? installDir : game.internalGameExePath,
-                  FileManager.default.fileExists(atPath: WrappLayout.onDriveC(exe, in: drive).path) else {
+            guard let launch = plan.launch else { throw WrappBuildError.gameExecutableNotFound }
+            let launcher = launch.launcher()
+            let place = launcher == .scummvm ? launch.path : launch.program
+            guard let program = layout.location(place), FileManager.default.fileExists(atPath: program.path) else {
                 throw WrappBuildError.gameExecutableNotFound
             }
-            await bus.publishWrappBuild(.gameExeDetected(path: exe, gameInfo: game))
+            let exe = launcher == .scummvm ? "" : String(launch.path.dropFirst(2))
+            await bus.publishWrappBuild(.gameExeDetected(path: launcher == .scummvm ? "/SharedSupport/game" : exe, gameInfo: game))
 
             // Why it was free to have, for anyone who wants to know later,
             // with the licence's own words when it has some.
@@ -115,9 +115,8 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             try await helper.cleanupUnusedEngine(at: wrappPath, composition: game.composition)
 
             let finalPath = try await helper.completeBuild(
-                wrapp: wrappPath, gameInfo: game, source: .download, gameExePath: exe,
-                installerDir: launcher == .scummvm ? exe : "",
-                configureINI: false, edition: chosen.edition, input: input
+                wrapp: wrappPath, gameInfo: game, source: .download, gameExePath: exe, installerDir: "",
+                configureINI: false, edition: chosen.edition, launch: launch, icon: plan.icon, input: input
             )
             try? FileManager.default.removeItem(at: unpacked)
             await helper.launchIfAsked(finalPath, input: input)
@@ -192,11 +191,9 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the download flow can't run \(step)")
             }
             // In full form, through its type's place in the app (`wine:C:/…`
-            // in the prefix, a bare `/…` in Contents/); Lure's bare `C:/…`
-            // is allowed until it moves (LegacyPaths).
+            // in the prefix, a bare `/…` in Contents/).
             let destination = step.arguments[1]
-            let written = destination.hasPrefix("C:/") ? "wine:" + destination : destination
-            guard let target = layout.location(written) else {
+            guard let target = layout.location(destination) else {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): \(destination) has no place in the app")
             }
             let subpath = step.arguments[0] == "." ? "" : step.arguments[0]

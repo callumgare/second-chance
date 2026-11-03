@@ -50,14 +50,22 @@ final class ScummVMRuntime: GameStarting {
     nonisolated static func launchInfo(_ config: GameConfig) -> GameLaunchInfo {
         let layout = WrappLayout(app: config.appPath)
         let scummvmIni = layout.resources.appendingPathComponent("scummvm.ini").path
-        let dataDir = WrappLayout.onDriveC(config.gameInstallerDir, in: config.wine.driveC).path
+        // The game's data: where its launch says, in the app; for a wrapp
+        // built before launches were recorded, in its prefix, whose copy the
+        // wrapp may be running from.
+        let dataDir = config.launchRecorded
+            ? (layout.location(config.launch.path)?.path ?? config.launch.path)
+            : WrappLayout.onDriveC(config.gameInstallerDir, in: config.wine.driveC).path
+        // The game its launch names (`nancy:nancy7`), or for an older wrapp,
+        // whichever ScummVM detects in the folder.
+        let game = config.launch.arguments.first ?? "--auto-detect"
         let arguments = [
             "-f",                                            // Fullscreen
             "--config=\(config.scummvmConfigPath.path)",     // User config file location
             "--initial-cfg=\(scummvmIni)",                   // Configuration template to copy into configPath if there's no existing config
             "--path=\(dataDir)",                             // Game files location
             "--savepath=\(config.appSupportPath.path)",      // Save files location
-            "--auto-detect",                                 // Automatically detect and start game
+            game,                                            // The game to start
         ]
         return GameLaunchInfo(
             executable: layout.scummvm.path,

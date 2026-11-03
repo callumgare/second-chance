@@ -228,7 +228,9 @@ class WrappBuildHelper {
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,
         configureINI: Bool = true,
-        bundleID: String? = nil
+        bundleID: String? = nil,
+        launch: RecordedLaunch? = nil,
+        icon: String? = nil
     ) async throws {
         await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
@@ -257,6 +259,17 @@ class WrappBuildHelper {
         plist["CFBundleDisplayName"] = gameInfo.appName
         plist["GameExePath"] = gameExePath
         plist["Program Name and Path"] = gameExePath
+        // The icon the Wrappfile names (`ICON`), in place of the template's
+        // generic one, which `CFBundleIconName` names in its asset catalog
+        // and would win over the file.
+        if let icon {
+            guard let file = WrappLayout(app: wrappPath).location(icon), fileManager.fileExists(atPath: file.path),
+                  file.deletingLastPathComponent().lastPathComponent == "Resources" else {
+                throw WrappBuildError.buildRecipeProblem("ICON \(icon) isn't a file in the app's Resources/")
+            }
+            plist["CFBundleIconFile"] = file.lastPathComponent
+            plist.removeValue(forKey: "CFBundleIconName")
+        }
         // Where a failed launch looks for a newer Second Chance (NewerRelease).
         if let feed = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String {
             plist[NewerRelease.feedURLKey] = feed
@@ -275,7 +288,8 @@ class WrappBuildHelper {
         let settings = WrappSettings(
             gameExePath: gameExePath, engine: engine, gameSlug: gameInfo.id,
             source: source, installerDir: installerDir, steamAppID: steamID, steamLaunchMode: steamLaunchMode,
-            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial
+            bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial,
+            recordedLaunch: launch
         )
         try settings.write(to: WrappLayout(app: wrappPath))
         logger.notice("Created AppSettings.plist with engine: \(settings.engine.rawValue)")
@@ -302,6 +316,112 @@ class WrappBuildHelper {
     /// Configure game INI files
     /// Give every .ini in `gameDir` the nancy-drew module's settings
     /// (`DO nancy-drew.configure-ini`).
+    /// Whether a step copies into the app itself, outside the prefix: a
+    /// `COPY` to a bare `/…` path. Builders run these after the cached
+    /// install layer, which holds the prefix alone.
+    nonisolated static func isAppStep(_ step: PlannedStep) -> Bool {
+        step.module == nil && step.instruction == "COPY" && step.arguments.last?.hasPrefix("/") == true
+    }
+
+    /// The plan's steps that copy into the app: a bundle's or module's file
+    /// (the icon), an input's files as they are (a disc's data), or a folder
+    /// of another stage's (a game's data, out of the prefix it was installed
+    /// in). `input` gives each input's folder by name. Publishes the game's
+    /// data as installed once one is copied.
+    func runAppSteps(_ plan: BuildPlan, wrappPath: URL, gameInfo: GameInfo,
+                     input: (String) async throws -> URL?) async throws {
+        let layout = WrappLayout(app: wrappPath)
+        var copiedData = false
+        for step in plan.stages.flatMap(\.steps) where Self.isAppStep(step) {
+            logger.debug("Plan step: \(step) (\(step.origin))")
+            guard step.arguments.count == 2, let destination = layout.location(step.arguments[1]) else {
+                throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
+            }
+            let source: URL
+            if step.option("from") == nil {
+                guard let file = plan.file(step.arguments[0]) else {
+                    throw WrappBuildError.buildRecipeProblem("\(step.origin): the plan has no file \(step.arguments[0])")
+                }
+                try copyFile(file, to: destination)
+                continue
+            } else if let name = PlannedStep.input(in: step.option("from")) {
+                guard let folder = try await input(name) else {
+                    throw WrappBuildError.buildRecipeProblem("\(step.origin): this build has no \(name)")
+                }
+                source = step.arguments[0] == "." ? folder : folder.appendingPathComponent(step.arguments[0])
+            } else {
+                guard let folder = layout.location(step.arguments[0]) else {
+                    throw WrappBuildError.buildRecipeProblem("\(step.origin): \(step.arguments[0]) has no place in the app")
+                }
+                source = folder
+            }
+            if !copiedData {
+                await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
+                await bus.publishWrappBuild(.engineRouted(composition: gameInfo.composition, gameInfo: gameInfo))
+                copiedData = true
+            }
+            try await copyContents(of: source, into: destination)
+            logger.notice("Copied \(step.arguments[0]) from \(step.option("from") ?? "") into \(step.arguments[1])")
+        }
+        if copiedData {
+            await bus.publishWrappBuild(.gameExeDetected(path: "/SharedSupport/game", gameInfo: gameInfo))
+        }
+    }
+
+    /// A bundle's or module's file copied into the app (`COPY <file> <dest>`):
+    /// into `destination` when it names a folder (`…/`), as it otherwise.
+    func copyFile(_ file: URL, to destination: URL) throws {
+        let target = destination.hasDirectoryPath ? destination.appendingPathComponent(file.lastPathComponent) : destination
+        try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: target.path) { try fileManager.removeItem(at: target) }
+        try fileManager.copyItem(at: file, to: target)
+    }
+
+    /// What's in `folder` copied into `destination`, merged with what's there:
+    /// a file of the same name is replaced, as a later disc's files are by
+    /// an earlier's. Off the main thread, as a disc is hundreds of MB.
+    func copyContents(of folder: URL, into destination: URL) async throws {
+        try await Blocking.run {
+            let files = FileManager.default
+            func merge(_ from: URL, _ into: URL) throws {
+                try files.createDirectory(at: into, withIntermediateDirectories: true)
+                for name in try files.contentsOfDirectory(atPath: from.path) {
+                    let source = from.appendingPathComponent(name), target = into.appendingPathComponent(name)
+                    var isFolder: ObjCBool = false
+                    files.fileExists(atPath: source.path, isDirectory: &isFolder)
+                    var targetIsFolder: ObjCBool = false
+                    let exists = files.fileExists(atPath: target.path, isDirectory: &targetIsFolder)
+                    if isFolder.boolValue, exists, targetIsFolder.boolValue {
+                        try merge(source, target)
+                        continue
+                    }
+                    if exists { try files.removeItem(at: target) }
+                    try files.copyItem(at: source, to: target)
+                    // A disc's files are read-only; the app's copy needn't be,
+                    // or a later disc couldn't replace one, nor the app be removed.
+                    if let enumerator = files.enumerator(atPath: target.path) {
+                        for case let inner as String in enumerator {
+                            _ = chmod(target.appendingPathComponent(inner).path, isFolder.boolValue ? 0o755 : 0o644)
+                        }
+                    }
+                    _ = chmod(target.path, isFolder.boolValue ? 0o755 : 0o644)
+                }
+            }
+            try merge(folder.resolvingSymlinksInPath(), destination)
+        }
+    }
+
+    /// Remove something the build made that the app needn't keep; a failure
+    /// is only logged. Hundreds of MB, so off the main thread.
+    func removeQuietly(_ url: URL, what: String) async {
+        do {
+            try await Blocking.run { try FileManager.default.removeItem(at: url) }
+        } catch CocoaError.fileNoSuchFile {
+        } catch {
+            logger.warning("Couldn't remove \(what) at \(url.path): \(error)")
+        }
+    }
+
     func configureGameINI(in gameDir: URL) throws {
         logger.notice("Configuring game INI files in: \(gameDir.path)")
 
@@ -503,6 +623,8 @@ class WrappBuildHelper {
         configureINI: Bool = true,
         edition: String? = nil,
         updated: WrappLock.UpdateRecord? = nil,
+        launch: RecordedLaunch? = nil,
+        icon: String? = nil,
         input: WrappBuildInput
     ) async throws -> URL {
         // What it was built from, for updating it and for reports; its
@@ -518,8 +640,13 @@ class WrappBuildHelper {
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,
             bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial,
-            configureINI: configureINI, bundleID: lock.wrappBundleID
+            configureINI: configureINI, bundleID: lock.wrappBundleID, launch: launch, icon: icon
         )
+        // A program whose launch has no Wine (a ScummVM game whose data is in
+        // the app) keeps no prefix: what was built in one isn't the app's.
+        if let launch, !(composition ?? gameInfo.composition).has(.wine), launch.launcher() != .wine {
+            await removeQuietly(WrappLayout(app: wrappPath).prefix, what: "the Wine prefix, which the game doesn't use")
+        }
         try lock.write(to: WrappLayout(app: wrappPath))
         logger.notice("Built from \(lock.summary)")
         moveUserFiles(for: lock)

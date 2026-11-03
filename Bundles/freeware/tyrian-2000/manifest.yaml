@@ -9,12 +9,6 @@ volumes:
   dosbox-saves:
     display-name: "saved games"
 
-variants:
-  - id: "dosbox"
-    launch: { dosbox: { exe: "C:/TYRIAN/TYRIAN2K.EXE" } }
-    volumes:
-      - { source: "dosbox-saves" } # what the game writes, laid over its folder
-
 editions:
   - id: "download"
     source: "download"

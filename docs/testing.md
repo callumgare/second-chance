@@ -295,7 +295,9 @@ copies — and asserts on the events the flow publishes:
 - Disks resolved, and the game detected from the disk fingerprint
 - Engine routed correctly (Wine vs ScummVM)
 - Game exe path detected, matching `GameInfoProvider.internalGameExePath`
-- The wrapp's `Info.plist`/`AppSettings.plist` carry the right `GameExePath`,
+- The wrapp's `Info.plist`/`AppSettings.plist` carry the right `GameExePath`
+  (and the recorded launch, which WrappPuppeteer reads the game's exe and
+  graphics from),
   `GameEngine`, `GameSlug`
 - Every automatic patch for the game applied (`patchApplied`), and none failed:
   a failed patch doesn't fail the build, so it has to fail the test

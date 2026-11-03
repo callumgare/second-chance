@@ -263,7 +263,10 @@ class GameLauncher {
         let window = diagnostics.map { $0.hasSeenWindow ? ", after its window appeared" : ", before any window appeared" } ?? ""
         // The later Her Interactive games exit with whatever code MFC has
         // lying around, so for them a non-zero exit is judged by their own log.
-        let cleanExitLog = gameStarted && signal == nil && (exitCode ?? 0) != 0
+        // Only for a game whose launch says so (`--wine.clean-exit-log`), or
+        // any Wine game in a wrapp built before launches were recorded.
+        let judgedByLog = !config.launchRecorded || config.launch.options["wine.clean-exit-log"] != nil
+        let cleanExitLog = judgedByLog && gameStarted && signal == nil && (exitCode ?? 0) != 0
             ? HerEngineLog.cleanExitLog(inDocuments: documentsDirectory, since: launchedAt)
             : nil
         if !gameStarted {

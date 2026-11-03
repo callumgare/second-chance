@@ -31,7 +31,7 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
     /// The bundle ids this program's wrapps had before, whose folders are
     /// moved into this one's (`UserFilesMove`).
     public var formerBundleIDs: [String]?
-    /// The variant's volumes, with the patterns a file of the person's in
+    /// The bundle's volumes, with the patterns a file of the person's in
     /// each matches.
     public var volumes: [VolumeRule]?
     /// The volume the game keeps its saves in, which the old folders become
@@ -40,9 +40,13 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
     public var savesVolume: String?
     /// The volume ScummVM's settings file is kept in, for a ScummVM game.
     public var scummvmSettingsVolume: String?
-    /// The Wrappfile's global `ARG`s as the build had them (`install-dir`),
-    /// which an update must find unchanged or move the program for.
+    /// The Wrappfile's global `ARG`s, as a wrapp built before launches were
+    /// recorded has them (`install-dir`): read as the launch they mean.
     public var args: [String: String]?
+    /// How the wrapp starts its program, as its plan said: what an update
+    /// compares, building afresh when the program moved. Nil in a lock
+    /// from before it was recorded, or for an edition with no plan.
+    public var launch: RecordedLaunch?
     /// How this wrapp was updated from an older one; nil for a fresh build.
     public var updated: UpdateRecord?
     /// A lock made up for a wrapp built before locks, from its settings.
@@ -126,15 +130,11 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
         let modules = composition.modules.map { module in
             ModuleRef(id: module.rawValue, release: 0, version: module == .wine ? wineVersion : nil)
         }
-        // The game's folder, as the global ARG writes it: C:/… with the
-        // exe's name dropped. ScummVM's exe path is the folder already.
-        var installDir = settings.gameExePath
-        if composition.has(.wine), let slash = installDir.lastIndex(of: "/") { installDir = String(installDir[..<slash]) }
-        let args = composition.has(.wine) && !installDir.isEmpty ? ["install-dir": "C:" + installDir] : nil
+        // Its launch, as its settings say it.
         var lock = WrappLock(bundle: .init(id: program, version: 0), edition: edition,
                              source: (settings.source ?? .disk).rawValue, composition: composition,
                              modules: modules, builtBy: "unknown", builtAt: builtAt)
-        lock.args = args
+        lock.launch = settings.launch
         lock.madeUp = true
         return lock
     }

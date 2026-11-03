@@ -46,17 +46,11 @@
       "description": "A Wrappfile function the default stages run first.",
       "$ref": "#/$defs/name"
     },
-    "runtime": { "$ref": "#/$defs/runtime" },
     "volumes": {
       "description": "What is kept outside the app, by name.",
       "type": "object",
       "propertyNames": { "$ref": "#/$defs/name" },
       "additionalProperties": { "$ref": "#/$defs/volume" }
-    },
-    "variants": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/variant" },
-      "minItems": 1
     },
     "editions": {
       "type": "array",
@@ -75,54 +69,10 @@
   "$defs": {
     "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
     "program-id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$" },
-    "windows-path": {
-      "description": "A path in the wrapp's Windows, with forward slashes: C:/Program Files/Game/Game.exe.",
-      "type": "string",
-      "pattern": "^[A-Z]:/[^\\\\]*$"
-    },
     "relative-path": {
       "description": "A path relative to a folder, with forward slashes.",
       "type": "string",
       "pattern": "^[^/\\\\][^\\\\]*$"
-    },
-    "module-options": {
-      "description": "A module's options, checked against that module's schema.",
-      "type": "object"
-    },
-    "runtime": {
-      "description": "How the program runs: settings, not build steps. An edition's or variant's runtime is laid over the bundle's.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "aspect": { "type": "string", "pattern": "^[0-9]+:[0-9]+$" },
-        "save-warning": { "type": "boolean" },
-        "environment": {
-          "type": "object",
-          "additionalProperties": { "type": "string" }
-        },
-        "wine": { "$ref": "#/$defs/module-options" },
-        "scummvm": { "$ref": "#/$defs/module-options" },
-        "steam": { "$ref": "#/$defs/module-options" },
-        "dosbox": { "$ref": "#/$defs/module-options" },
-        "when": {
-          "description": "Settings decided at launch, by the Mac the program runs on.",
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["mac"],
-            "properties": {
-              "mac": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "arch": { "enum": ["arm64", "x86_64"] },
-                  "macos": { "type": "string" }
-                }
-              }
-            }
-          }
-        }
-      }
     },
     "volume": {
       "type": "object",
@@ -151,52 +101,6 @@
         }
       }
     },
-    "mount": {
-      "description": "A volume, mounted where the program wants it.",
-      "type": "object",
-      "required": ["source"],
-      "properties": {
-        "source": { "$ref": "#/$defs/name" },
-        "target": { "$ref": "#/$defs/windows-path" },
-        "wine": { "$ref": "#/$defs/module-options" },
-        "scummvm": { "$ref": "#/$defs/module-options" },
-        "dosbox": { "$ref": "#/$defs/module-options" }
-      },
-      "additionalProperties": false
-    },
-    "launch": {
-      "description": "What the wrapp starts: each engine module's own options.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "wine": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "exe": { "$ref": "#/$defs/windows-path" },
-            "args": { "type": "array", "items": { "type": "string" } },
-            "graphics": {
-              "description": "What the game draws with, as its .exe's imports said in the editions that could be read: the wrapp goes by this when an .exe can't say, as an Armadillo-wrapped Big Fish edition's can't.",
-              "enum": ["direct-draw", "direct-3d"]
-            }
-          }
-        },
-        "scummvm": { "$ref": "#/$defs/module-options" },
-        "steam": { "$ref": "#/$defs/module-options" },
-        "dosbox": {
-          "description": "The DOS program DOSBox runs, on the game's C: drive.",
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "exe": { "$ref": "#/$defs/windows-path" }
-          }
-        },
-        "when": {
-          "type": "array",
-          "items": { "type": "object" }
-        }
-      }
-    },
     "build": {
       "description": "The Wrappfile stage to build (target), the stage it starts from on a fresh build (base), and what the Wrappfile's INPUTs are given, by name. An edition with no stage yet (Steam's, Big Fish's) has inputs and no target.",
       "type": "object",
@@ -209,36 +113,6 @@
           "propertyNames": { "$ref": "#/$defs/name" },
           "additionalProperties": { "$ref": "#/$defs/input" }
         }
-      }
-    },
-    "variant": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id"],
-      "properties": {
-        "id": { "$ref": "#/$defs/name" },
-        "editions": {
-          "description": "The editions this variant can be built from; every one when left out.",
-          "type": "array",
-          "items": { "$ref": "#/$defs/name" },
-          "uniqueItems": true
-        },
-        "build": { "$ref": "#/$defs/build" },
-        "available": {
-          "description": "yes, existing-files-only (only for someone with files in its volumes), or no.",
-          "enum": ["yes", "existing-files-only", "no"]
-        },
-        "reason": {
-          "description": "Why it isn't available, for people.",
-          "type": "string"
-        },
-        "preference": {
-          "description": "The lowest is preferred for a first build.",
-          "type": "integer"
-        },
-        "volumes": { "type": "array", "items": { "$ref": "#/$defs/mount" } },
-        "launch": { "$ref": "#/$defs/launch" },
-        "runtime": { "$ref": "#/$defs/runtime" }
       }
     },
     "detect": {
@@ -370,7 +244,6 @@
         "build": { "$ref": "#/$defs/build" },
         "patches": { "type": "array", "items": { "$ref": "#/$defs/name" }, "uniqueItems": true },
         "detect": { "$ref": "#/$defs/detect" },
-        "runtime": { "$ref": "#/$defs/runtime" },
         "tests": { "$ref": "#/$defs/tests" }
       },
       "allOf": [

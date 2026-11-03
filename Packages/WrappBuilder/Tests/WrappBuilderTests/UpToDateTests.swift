@@ -26,7 +26,7 @@ struct UpToDateTests {
     }
 
     private func target(launcher: String? = "launcher-1", package: String = "engine-1") -> UpdatePlanner.Target {
-        .init(bundleVersion: 3, edition: "cd", modules: [wine(package: package)], args: [:], launcher: launcher)
+        .init(bundleVersion: 3, edition: "cd", modules: [wine(package: package)], launch: nil, launcher: launcher)
     }
 
     private func lock(launcher: String? = "launcher-1", package: String? = "engine-1") -> WrappLock {

@@ -75,9 +75,12 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 | `CONST <name> = <value>`, `VAR <name> [= <value>]`, `SET <name> = <value>` | A fixed value; a value worked out in the Wrappfile; and a new value for a `VAR`. |
 | `USE <module>[@<constraint>] [AS <name>]` | Adds a module, and what it depends on: its instructions are then `<NAME>.INSTRUCTION`, its functions `DO <name>.<function>`, and its path types, options and mount fields are the stage's ([below](#what-modules-add)). |
 | `RUN [--mount=…] [--creates=…] [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `source`, `cache`, `secret`, `bind`, `fetch`. `--env` is the only way a value reaches a program's environment. |
-| `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files. |
+| `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files: from another stage or an input, or without `--from`, a bundle's or module's file. |
 | `ADD --checksum=sha256:<hash> [--unpack=zip --member=<file> [--extract]] <url> <dest>` | A download, found in the download cache first. |
-| `EXPORT`, `MOVE`, `REMOVE`, `EDIT <file> --ini=…` / `--from-data=<table>` | File changes Second Chance makes itself. |
+| `MOVE`, `REMOVE`, `EDIT <file> --ini=…` / `--from-data=<table>` | File changes Second Chance makes itself. |
+| `LAUNCH [--fallback=<program>] [--env NAME=<value>]… <program> [<argument>…]` | How the app starts its program ([below](#the-launch-volumes-and-icon)). |
+| `VOLUME [--<module>.<option>]… <volume> <location>`, `VOLUME --remove <volume>` | Where the program sees one of the manifest's volumes. |
+| `ICON /Resources/<name>.icns` | The app's icon. |
 | `FUNCTION <name>` … `END`, `DO <name>` / `DO <alias>.<name>` | Named steps, with `INPUT`s as parameters (`--id=…`): a bundle's own, or a module's (in its `functions/`). |
 
 Every step takes `--name=<id>`, naming it for reports, and
@@ -149,6 +152,46 @@ comes from:
 <name>=<value>` (`--input launch-mode=steam`); the app takes them headless
 as JSON in `SECOND_CHANCE_INPUTS`.
 
+## The launch, volumes and icon
+
+How the app starts its program is decided by the build, as Docker keeps `CMD`
+in the Dockerfile: it depends on where the build put the program and which
+modules are left in the app.
+
+```dockerfile
+FROM wine@10/prefix AS prefix
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+LAUNCH --wine.graphics=direct-draw "${const.install-dir}/Game.exe"
+```
+
+- **`LAUNCH`'s program's path type is what starts it**: `C:/…/Game.exe` in a
+  Wine stage is Wine's, `/SharedSupport/game/` ScummVM's (with the game's id
+  after it: `nancy:nancy7`), `C:/TYRIAN/TYRIAN2K.EXE` in a DOSBox stage
+  DOSBox's. Like `RUN`, it takes options only before the program.
+- **A Wine launch says what the program draws with**, `--wine.graphics=direct-draw`,
+  `direct-3d` or `unknown` (neither: GDI), which arms the app's helpers
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md)). A game whose
+  non-zero exit is judged by a log says so with `--wine.clean-exit-log` and
+  `--wine.clean-exit-line` (Her's later engine's `Debug.LOG`).
+- **The last `LAUNCH` a stage reaches wins**, counting what it inherits
+  through `FROM`, after `IF`s are decided; a stage with none has its
+  parent's. Every edition's target must reach one, which planning checks.
+- **`VOLUME`s build up**, inherited through `FROM`; `--remove` takes one
+  off. The location is a path type's: `wine:C:/users/crossover/Documents`
+  with `--wine.drive=A:`, `scummvm:saves/` and `scummvm:settings/`, or
+  `--dosbox.overlay` laid over a DOSBox drive.
+- **`ICON` names an `.icns` in the app's `/Resources/`**, which a `COPY`
+  put there; the build sets it as the app's icon. An app with no `ICON` has
+  the template's own, a generic one. An `.icns`, not an Icon Composer
+  `.icon`, as only Xcode compiles those: a module's `assets/<name>.icon` is
+  compiled to `<name>.icns` beside it by `sc generate`.
+- **None of them is a step**: the plan records them (`BuildPlan.launch`,
+  `.icon`), so they change no layer key, and the build writes the launch
+  into the app's settings (`WrappSettings.recordedLaunch`, the `Launch` key),
+  which the app reads ([wrapp-launch.md](wrapp-launch.md)).
+
 ## What modules add
 
 A module with Swift can add to the core's instructions, in any stage that has
@@ -214,10 +257,12 @@ and the modules (`WrappfileChecker`), naming each problem's line:
   is taken; `INPUT`s are only global or at a function's top;
 - every stage, function, module (at a version its constraint allows) and
   input named exists, and every function is given its parameters;
-- every edition's and variant's `build` names a stage, and the manifest's
-  `setup` a function;
+- every edition's `build` names a stage, and the manifest's `setup` a
+  function; a `VOLUME` names one of the manifest's volumes, and an `ICON` an
+  `.icns` in the app's `/Resources/`;
 - every edition's target plans, for either kind of Mac and every value of
-  every choice, so a problem only a plan shows fails the check, not a build.
+  every choice, and reaches a `LAUNCH`, so a problem only a plan shows fails
+  the check, not a build.
 
 `sc bundle check` shows warnings as well (a name in upper case, a module named
 like a core instruction); they don't stop a bundle loading.

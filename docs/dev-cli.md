@@ -95,6 +95,11 @@ the program they replace `sc` with, as its own responsible process, so macOS
 privacy prompts (which Steam waits on) aren't addressed to `sc`; see
 [steam.md](steam.md).
 
+`sc generate` writes the Swift made from `Bundles/` and `Modules/`, and
+compiles each module's Icon Composer icons (`assets/<name>.icon`) to the
+`.icns` a Wrappfile's `ICON` names (`xcrun actool`, which only Xcode has, so
+the `.icns` is checked in).
+
 `--from steam` builds any game on Steam that the signed-in account owns;
 `--steam-launch steam|direct` answers the launch question for a DRM-free one,
 as `--input launch-mode=steam` does. `--input <name>=<value>` gives any of the

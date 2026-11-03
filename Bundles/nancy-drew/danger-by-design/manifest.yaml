@@ -11,12 +11,6 @@ volumes:
   wine-documents:
     display-name: "saved games"
 
-variants:
-  - id: "wine"
-    volumes:
-      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
-    launch: { wine: { exe: "C:/Program Files (x86)/Nancy Drew/Danger by Design/Game.exe", graphics: "direct-draw" } }
-
 editions:
   - id: "cd"
     source: "disc"

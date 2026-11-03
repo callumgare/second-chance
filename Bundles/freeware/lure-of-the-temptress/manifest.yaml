@@ -12,12 +12,6 @@ volumes:
     in-use-when: "never" # only ScummVM's settings
     display-name: "settings"
 
-variants:
-  - id: "scummvm"
-    volumes:
-      - { source: "scummvm-saves" } # ScummVM's save path
-      - { source: "scummvm-settings" } # its settings file, scummvm.ini
-
 editions:
   - id: "download"
     source: "download"

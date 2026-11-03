@@ -22,7 +22,6 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public let formerBundleIds: [String]?
     /// A Wrappfile function the default stages run first.
     public let setup: String?
-    public let variants: [Variant]?
     public let editions: [Edition]
     /// What is kept outside the app, by name.
     public let volumes: [String: Volume]?
@@ -74,22 +73,9 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         }
     }
 
-    /// A volume, mounted where a variant wants it.
-    public struct Mount: Decodable, Hashable, Sendable {
-        public let source: String
-        public let target: String?
-    }
-
     /// The part of the id after the namespace: today's game slug.
     public var name: String { String(id.split(separator: "/").last ?? "") }
     public var namespace: String { String(id.split(separator: "/").first ?? "") }
-
-    public struct Variant: Decodable, Hashable, Sendable {
-        public let id: String
-        public let volumes: [Mount]?
-        public let build: Build?
-        public let launch: Launch?
-    }
 
     /// The Wrappfile stage built (`target`), the stage it starts from on a
     /// fresh build (`base`), and what the Wrappfile's `INPUT`s are given, by
@@ -101,18 +87,6 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         /// here, sorted, as a key's case and hyphens wouldn't survive
         /// decoding (`Manifest.decode`).
         public let inputs: [Input]?
-    }
-
-    public struct Launch: Decodable, Hashable, Sendable {
-        public let wine: WineLaunch?
-        /// DOSBox's: the DOS program on the game's C: drive (`C:/Tyrian/TYRIAN.EXE`).
-        public let dosbox: WineLaunch?
-    }
-
-    public struct WineLaunch: Decodable, Hashable, Sendable {
-        public let exe: String?
-        /// What it draws with, `direct-draw` or `direct-3d`.
-        public let graphics: String?
     }
 
     public struct Edition: Decodable, Hashable, Sendable {

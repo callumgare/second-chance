@@ -79,11 +79,16 @@ struct Wrapp {
         composition = settings?.composition
         modules = TestModules(composition: composition, layout: layout, prefix: layout.prefix)
         gameSlug = settings?.gameSlug ?? "unknown"
-        let exePath = settings?.gameExePath ?? "/Game.exe"
+        // The program its launch names, as the wrapp reads it.
+        let launch = settings?.recordedLaunch
+        let exePath = launch.flatMap { $0.program.hasPrefix("wine:C:") ? String($0.program.dropFirst("wine:C:".count)) : nil }
+            ?? settings?.gameExePath ?? "/Game.exe"
         gameExeName = (exePath as NSString).lastPathComponent
         winePrefix = layout.prefix
         graphics = composition?.has(.wine) == true
-            ? GameGraphicsAPI(exeAt: layout.onDriveC(exePath), game: GameInfoProvider.shared.gameInfo(for: gameSlug)) : .unknown
+            ? GameGraphicsAPI(declared: launch?.options["wine.graphics"])
+                ?? GameGraphicsAPI(exeAt: layout.onDriveC(exePath), game: GameInfoProvider.shared.gameInfo(for: gameSlug))
+            : .unknown
     }
 }
 

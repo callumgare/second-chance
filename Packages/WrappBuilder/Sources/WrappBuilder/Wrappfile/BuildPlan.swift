@@ -6,6 +6,7 @@
 
 import Foundation
 import WrappModules
+import WrappFormat
 
 /// What a build of one edition runs, in order: the stages its target needs,
 /// each with its steps, functions expanded, `${…}` substituted and `IF`s
@@ -20,6 +21,12 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
     /// (`bundle:assets/disc.iss`, `module:nancy-drew/assets/x.au3`), with
     /// where each is: what install layers hash and builders read.
     public var files: [String: URL] = [:]
+    /// How the wrapp starts its program: the target's `LAUNCH`, with the
+    /// `VOLUME`s it has. Nil only for an update's plan built `FROM previous`,
+    /// which keeps the old wrapp's.
+    public var launch: RecordedLaunch?
+    /// The app's icon, `/Resources/<name>.icns`; nil for the template's own.
+    public var icon: String?
 
     public var target: PlannedStage? { stages.last }
 
@@ -212,6 +219,14 @@ public nonisolated struct BuildPlanner {
         }
         var plan = BuildPlan(edition: edition.id, stages: stages)
         plan.files = recorder.files
+        let recorded = modulesByStage[target.lowercased()] ?? StageModules()
+        if var launch = recorded.launch {
+            launch.volumes = recorded.volumes
+            plan.launch = launch
+        } else if !recorded.fromPrevious {
+            throw PlanError(description: "manifest.yaml's edition \(edition.id) builds \(target), which reaches no LAUNCH")
+        }
+        plan.icon = recorded.icon
         return plan
     }
 
@@ -235,11 +250,17 @@ public nonisolated struct BuildPlanner {
         var files: [String: URL] = [:]
     }
 
-    /// A stage's modules: by the name it knows each by, and the version of
-    /// each it has.
+    /// A stage's modules, by the name it knows each by, and the version of
+    /// each it has; and what's recorded rather than run, inherited through
+    /// `FROM` as the modules are: its launch, volumes and icon.
     struct StageModules {
         var aliases: [String: String] = [:]
         var versions: [String: String] = [:]
+        var launch: RecordedLaunch?
+        var volumes: [RecordedLaunch.Volume] = []
+        var icon: String?
+        /// Built from the old wrapp (`FROM previous`), whose launch it keeps.
+        var fromPrevious = false
     }
 
     // MARK: - Working it out
@@ -332,6 +353,7 @@ public nonisolated struct BuildPlanner {
             scope.frames.append([:])
             scope.otherStages = inheriting
             switch stage.from {
+            case .stage("previous"): scope.modules.fromPrevious = true
             case .stage(let parent): scope.modules = inheriting[parent] ?? StageModules()
             case .module(let id, let constraint, _): try addModule(id, constraint: constraint, as: nil, to: &scope, origin: "Wrappfile:\(stage.line)")
             case .scratch: break
@@ -398,7 +420,9 @@ public nonisolated struct BuildPlanner {
                 let (id, constraint) = WrappfileChecker.splitConstraint(words.first ?? "")
                 try addModule(id, constraint: constraint, as: words.count == 3 ? words[2] : nil, to: &scope, origin: at)
             case "DO":
-                try expandFunction(instruction, scope: scope, origin: at, into: &steps)
+                try expandFunction(instruction, scope: &scope, origin: at, into: &steps)
+            case _ where InstructionSpec.recorded.contains(instruction.keyword):
+                try record(instruction, scope: &scope, origin: at)
             default:
                 let module = instruction.moduleAlias.map { scope.modules.aliases[$0] ?? $0 }
                 let spec = spec(of: instruction, module: module)
@@ -421,6 +445,11 @@ public nonisolated struct BuildPlanner {
                 for (index, word) in instruction.arguments.enumerated() {
                     let role = spec?.role(ofArgument: index) ?? .text
                     let value = try substitute(word, in: scope, origin: at, as: role)
+                    if role == .copySource, instruction.option("from") == nil {
+                        // Without --from, a file of the bundle's or a module's.
+                        arguments.append(try fileFullForm(value, scope: scope, origin: at))
+                        continue
+                    }
                     if role == .copySource {
                         // A path in the stage copied from is that stage's; one in an input is the input's.
                         guard let from = instruction.option("from")?.value?.raw.lowercased(),
@@ -484,7 +513,7 @@ public nonisolated struct BuildPlanner {
             }
         }
 
-        func expandFunction(_ instruction: Instruction, scope: Scope, origin: String,
+        func expandFunction(_ instruction: Instruction, scope: inout Scope, origin: String,
                             into steps: inout [PlannedStep]) throws(PlanError) {
             guard let name = instruction.arguments.first?.raw.lowercased() else { return }
             var inner = Scope(modules: scope.modules, frames: [[:]], module: nil, inFunction: true, otherStages: scope.otherStages)
@@ -546,6 +575,79 @@ public nonisolated struct BuildPlanner {
                 throw PlanError(description: "\(origin): DO \(name) takes no --\(option.name)")
             }
             try expand(function.body, scope: &inner, origin: "\(source) from \(origin)", into: &steps)
+            // What a function records (its LAUNCH, VOLUMEs, ICON) is the
+            // calling stage's.
+            scope.modules.launch = inner.modules.launch
+            scope.modules.volumes = inner.modules.volumes
+            scope.modules.icon = inner.modules.icon
+        }
+
+        /// `LAUNCH`, `VOLUME` or `ICON`: recorded with the stage, in full
+        /// form, rather than run. The last `LAUNCH` a stage reaches wins,
+        /// fallback and all; volumes build up, and `--remove` takes one off.
+        func record(_ instruction: Instruction, scope: inout Scope, origin: String) throws(PlanError) {
+            guard let spec = InstructionSpec.core[instruction.keyword] else { return }
+            let modules = scope.moduleIDs
+            var options: [String: String] = [:]
+            var environment: [String: String] = [:]
+            for option in instruction.options {
+                let role = spec.role(ofOption: option.name)
+                let text = try option.value.map { word throws(PlanError) in try substitute(word, in: scope, origin: origin, as: role) } ?? ""
+                if text.contains("${input.") {
+                    throw PlanError(description: "\(origin): a secret can't be recorded in the app: \(option.name)")
+                }
+                if option.name == "env" {
+                    let pair = text.split(separator: "=", maxSplits: 1)
+                    environment[String(pair[0])] = pair.count > 1 ? String(pair[1]) : ""
+                } else {
+                    options[moduleOptionName(option.name, scope: scope)] = try fullForm(text, role: role, scope: scope, modules: modules, origin: origin)
+                }
+            }
+            var arguments: [String] = []
+            for (index, word) in instruction.arguments.enumerated() {
+                let role = spec.role(ofArgument: index)
+                let text = try substitute(word, in: scope, origin: origin, as: role)
+                arguments.append(try fullForm(text, role: role, scope: scope, modules: modules, origin: origin))
+            }
+            switch instruction.keyword {
+            case "LAUNCH":
+                guard let program = arguments.first else { return }
+                let fallback = options.removeValue(forKey: "fallback")
+                let launch = RecordedLaunch(program: program, arguments: Array(arguments.dropFirst()), environment: environment,
+                                            options: options, fallback: fallback)
+                try checkLaunch(launch, origin: origin)
+                scope.modules.launch = launch
+            case "VOLUME":
+                guard let name = arguments.first else { return }
+                if options.removeValue(forKey: "remove") != nil {
+                    guard scope.modules.volumes.contains(where: { $0.name == name }) else {
+                        throw PlanError(description: "\(origin): VOLUME --remove \(name), but the stage has no volume called that")
+                    }
+                    scope.modules.volumes.removeAll { $0.name == name }
+                } else if arguments.count == 2 {
+                    scope.modules.volumes.removeAll { $0.name == name }
+                    scope.modules.volumes.append(RecordedLaunch.Volume(name: name, location: arguments[1], options: options))
+                }
+            default:
+                scope.modules.icon = arguments.first
+            }
+        }
+
+        /// What a launch must say for the module that starts it.
+        func checkLaunch(_ launch: RecordedLaunch, origin: String) throws(PlanError) {
+            switch launch.launcher(planner.pathTypes) {
+            case .wine?:
+                let graphics = launch.options["wine.graphics"]
+                guard let graphics, ["direct-draw", "direct-3d", "unknown"].contains(graphics) else {
+                    throw PlanError(description: "\(origin): a Wine launch says what it draws with: --wine.graphics=direct-draw, direct-3d or unknown")
+                }
+            case .scummvm?:
+                guard !launch.arguments.isEmpty else {
+                    throw PlanError(description: "\(origin): a ScummVM launch names its game: LAUNCH <folder> <game id>")
+                }
+            default:
+                break
+            }
         }
 
         /// `origin` with `line` after its file: `nancy-drew/functions/patch:30
@@ -627,7 +729,6 @@ public nonisolated struct BuildPlanner {
             case 1:
                 return claiming[0].fullForm(path)
             case 0:
-                if form == .driveLetter, LegacyPaths.allowsUnclaimedDrivePaths(planner.bundle.manifest.id) { return path }
                 let uses = modules.map(\.rawValue).sorted().joined(separator: ", ")
                 let what = form == .driveLetter ? "\(path.prefix(2)) paths" : "a folder as a \(pathRole.rawValue)"
                 throw PlanError(description: "\(origin): \(path): no module of this stage handles \(what) (it uses \(uses))")

@@ -214,7 +214,11 @@ the helper's middle clicks did harm: one arriving while the player has a menu
 open from the menu bar closes it, and with nothing ever locking the cursor the
 helper kept clicking for its full 15 tries — again on every return to the app.
 
-So the wrapp arms it only where cnc-ddraw may be drawing. `GameGraphicsAPI`
+So the wrapp arms it only where cnc-ddraw may be drawing, as the game's
+launch declares (`LAUNCH --wine.graphics=direct-draw`, `direct-3d` or
+`unknown`, recorded in its settings: [wrappfile.md](wrappfile.md#the-launch-volumes-and-icon)).
+A wrapp built before launches were recorded is judged as before:
+`GameGraphicsAPI`
 (`Packages/WrappKit/Sources/WindowsFormats/`) reads the DLLs the game's `.exe` imports, from its PE import
 directory: `ddraw.dll` means DirectDraw; `d3d8.dll` or `d3d9.dll` without it
 means Direct3D, and cursor lock stays unarmed. Every game checked fell cleanly

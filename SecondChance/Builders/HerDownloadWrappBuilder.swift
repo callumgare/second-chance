@@ -135,7 +135,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             ) { () async throws -> InstallLayer.Installed in
                 var gameExePath: String?
                 var configuredINI = false
-                for step in plan.stages.flatMap(\.steps) {
+                for step in plan.stages.flatMap(\.steps) where !WrappBuildHelper.isAppStep(step) {
                     logger.debug("Plan step: \(step) (\(step.origin))")
                     switch (step.module, step.instruction) {
                     case ("her-download", "INSTALL"):
@@ -162,6 +162,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 return InstallLayer.Installed(gameExePath: gameExePath, installerDir: "", configuredINI: configuredINI)
             }
             let gameExePath = installed.gameExePath
+            try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
 
             if !DebugSettings.shared.skipInstaller {
                 try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
@@ -173,6 +174,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 gameExePath: gameExePath,
                 configureINI: false,
                 edition: "her-windows",
+                plan: plan,
                 input: input
             )
         } catch {
@@ -281,7 +283,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             }
             let steps = plan.stages.flatMap(\.steps)
             for step in steps where !(step.module == "her-download" && step.instruction == "INSTALL")
-                && !(step.module == nil && step.instruction == "EDIT" && step.option("from-data") == "ini") {
+                && !(step.module == nil && step.instruction == "EDIT" && step.option("from-data") == "ini")
+                && !WrappBuildHelper.isAppStep(step) {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the Mac download flow can't run \(step)")
             }
             let configuresINI = steps.contains { $0.instruction == "EDIT" }
@@ -302,8 +305,13 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await removeQuietly(staging, what: "the rest of the Cider app")
             await isoMounter.unmountAll()
 
-            let gameExePath = "/" + gameExe.path(relativeTo: driveCPath)
+            // The game goes where the step's --into says, which the Cider app
+            // may have put it elsewhere than.
+            let into = steps.first { $0.module == "her-download" && $0.instruction == "INSTALL" }?.option("into")
+            let movedExe = try moveExtractedGame(gameExe, to: into, driveC: driveCPath)
+            let gameExePath = "/" + movedExe.path(relativeTo: driveCPath)
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
+            try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
 
             // Her Interactive's patches are Windows updaters that look for
             // the game their own installer registered; a Cider build never
@@ -319,6 +327,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 gameExePath: gameExePath,
                 configureINI: configuresINI,
                 edition: "her-mac",
+                plan: plan,
                 input: input
             )
         } catch {
@@ -350,12 +359,17 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         gameExePath: String,
         configureINI: Bool,
         edition: String,
+        plan: BuildPlan,
         input: WrappBuildInput
     ) async throws -> URL {
+        // A game whose data is copied into the app (ScummVM's) has no
+        // program on C: for the settings' older keys to name.
+        let inPrefix = plan.launch?.program.hasPrefix("wine:") ?? true
         let gameDir = (gameExePath as NSString).deletingLastPathComponent
         let finalPath = try await helper.completeBuild(
             wrapp: wrappPath, gameInfo: gameInfo, source: .herDownload,
-            gameExePath: gameExePath, installerDir: gameDir, configureINI: configureINI, edition: edition, input: input
+            gameExePath: inPrefix ? gameExePath : "", installerDir: inPrefix ? gameDir : "", configureINI: configureINI,
+            edition: edition, launch: plan.launch, icon: plan.icon, input: input
         )
         await helper.launchIfAsked(finalPath, input: input)
         return finalPath
@@ -366,6 +380,24 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         guard !(error is ChooseAnotherDownload) else { return }
         let buildError = WrappBuildError(error)
         await bus.publishWrappBuild(.failed(buildError))
+    }
+
+    /// The game a Cider app gave up, moved to the folder `into` names
+    /// (`wine:C:/…`), the step's: the program's new place. The folder the
+    /// app put it in must be there, or the move fails, naming it.
+    private func moveExtractedGame(_ exe: URL, to into: String?, driveC: URL) throws -> URL {
+        guard let into, into.hasPrefix("wine:C:/") else { return exe }
+        let found = exe.deletingLastPathComponent()
+        let target = WrappLayout.onDriveC(String(into.dropFirst("wine:C:".count)), in: driveC)
+        guard found.standardizedFileURL != target.standardizedFileURL else { return exe }
+        guard FileManager.default.fileExists(atPath: found.path) else {
+            throw WrappBuildError.buildRecipeProblem("the Mac download's game isn't in \(found.path(relativeTo: driveC)), where its app says")
+        }
+        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
+        try FileManager.default.moveItem(at: found, to: target)
+        logger.notice("Moved the game from \(found.path(relativeTo: driveC)) to \(into), as the Wrappfile says")
+        return target.appendingPathComponent(exe.lastPathComponent)
     }
 
     /// Hundreds of MB, so off the main thread.

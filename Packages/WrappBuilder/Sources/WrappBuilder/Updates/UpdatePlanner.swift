@@ -7,6 +7,7 @@
 
 import Foundation
 import WrappFormat
+import WrappModules
 
 /// Works out how an old wrapp is brought up to what this build makes:
 /// the updates that apply, in order, each from where the last left the
@@ -26,16 +27,18 @@ public nonisolated struct UpdatePlanner {
         public var bundleVersion: Int
         public var edition: String
         public var modules: [WrappLock.ModuleRef]
-        public var args: [String: String]
+        /// How this build's wrapps start their program; nil for an edition
+        /// with no plan.
+        public var launch: RecordedLaunch?
         /// The launcher's revision this build's wrapps carry.
         public var launcher: String?
 
-        public init(bundleVersion: Int, edition: String, modules: [WrappLock.ModuleRef], args: [String: String],
+        public init(bundleVersion: Int, edition: String, modules: [WrappLock.ModuleRef], launch: RecordedLaunch?,
                     launcher: String? = nil) {
             self.bundleVersion = bundleVersion
             self.edition = edition
             self.modules = modules
-            self.args = args
+            self.launch = launch
             self.launcher = launcher
         }
     }
@@ -80,6 +83,21 @@ public nonisolated struct UpdatePlanner {
         case upToDate
     }
 
+    /// Why the old wrapp's program isn't where this build's launch has it,
+    /// so it's built afresh; nil when it is. An old lock with no launch says
+    /// its game's folder (`args["install-dir"]`). A ScummVM game's data,
+    /// which old wrapps kept in their prefix, the update moves into the app
+    /// (`UpdateWrappBuilder`), so that isn't a move to build afresh for.
+    static func programMoved(old: WrappLock, target: Target) -> String? {
+        guard let new = target.launch?.program else { return nil }
+        if old.composition.launcher == .scummvm, target.launch?.launcher() == .scummvm { return nil }
+        if let program = old.launch?.program {
+            return program == new ? nil : "its program is \(program), and this bundle's is \(new)"
+        }
+        guard let folder = old.args?["install-dir"] else { return nil }
+        return new.hasPrefix("wine:" + folder + "/") ? nil : "its game is in \(folder), and this bundle's program is \(new)"
+    }
+
     public init(manifest: Manifest, modules: [ModuleFolder], stageModules: @escaping (String) throws -> [String]) {
         self.manifest = manifest
         self.modules = Dictionary(modules.map { ($0.manifest.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -100,8 +118,8 @@ public nonisolated struct UpdatePlanner {
         guard old.edition == target.edition, manifest.editions.contains(where: { $0.id == old.edition }) else {
             return .freshBuild("it was built from the \(old.edition) edition, not \(target.edition)")
         }
-        if let oldDir = old.args?["install-dir"], let newDir = target.args["install-dir"], oldDir != newDir {
-            return .freshBuild("its game is in \(oldDir), and this bundle installs it to \(newDir)")
+        if let moved = Self.programMoved(old: old, target: target) {
+            return .freshBuild(moved)
         }
 
         var state = State(bundle: old.bundle.version, modules: Dictionary(old.modules.map { ($0.id, $0) }, uniquingKeysWith: { $1 }))

@@ -71,12 +71,16 @@ final class WineRuntime: GameStarting {
 
     func armWatchers(_ watchers: LaunchWatchers, gameExe: URL?) {
         guard let gameExe else { return }
-        // The catalog says for an .exe whose imports Armadillo hides (Big Fish's).
+        // What the launch declares (`--wine.graphics`); for a wrapp built
+        // before, the .exe's imports, and the catalog for one whose imports
+        // Armadillo hides (Big Fish's).
         let game = GameInfoProvider.shared.gameInfo(for: config.gameSlug)
-        let graphics = GameGraphicsAPI(exeAt: gameExe, game: game)
-        logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
+        let declared = GameGraphicsAPI(declared: config.launch.options["wine.graphics"])
+        let graphics = declared ?? GameGraphicsAPI(exeAt: gameExe, game: game)
+        let said = declared == nil ? "" : ", as its launch says"
+        logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(said)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
         watchers.helperReport = InProcessHelperReport(
-            armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe, game: game), logger: logger)
+            armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe, declared: graphics), logger: logger)
         // Steam's launches are judged differently: Steam stays running.
         watchers.quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.composition.has(.steam))
         watchers.copyProtection = CopyProtection(exeAt: gameExe)

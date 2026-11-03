@@ -11,12 +11,6 @@ volumes:
   wine-documents:
     display-name: "saved games"
 
-variants:
-  - id: "wine"
-    volumes:
-      - { source: "wine-documents", target: "C:/users/crossover/Documents", wine: { drive: "A:" } }
-    launch: { wine: { exe: "C:/Nancy Drew/Danger on Deception Island/Game.exe", graphics: "direct-draw" } }
-
 editions:
   - id: "cd"
     source: "disc"

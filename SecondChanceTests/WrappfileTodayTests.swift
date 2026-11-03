@@ -20,8 +20,11 @@ struct WrappfileTodayTests {
         return try WrappfileParser.parse(String(contentsOf: file, encoding: .utf8))
     }
 
+    /// A target's instructions, and those of the `<target>-files` stage its
+    /// data is copied from, for a ScummVM game whose data needs Wine.
     private func instructions(_ file: Wrappfile, stage: String) throws -> [Instruction] {
-        try #require(file.stage(named: stage), "no \(stage) stage").body.flatMap(\.instructions)
+        let files = file.stage(named: stage + "-files")?.body.flatMap(\.instructions) ?? []
+        return try files + #require(file.stage(named: stage), "no \(stage) stage").body.flatMap(\.instructions)
     }
 
     private func patchIDs(_ instructions: [Instruction]) -> [String] {
@@ -33,14 +36,17 @@ struct WrappfileTodayTests {
     func discEditionIsTodays(_ game: GameInfo) throws {
         let file = try wrappfile(game)
         let steps = try instructions(file, stage: "disc")
-        let keep = try #require(steps.first { $0.keyword == "WINE.KEEP-DISCS" })
-        #expect((keep.option("combined") != nil) == (game.diskCount > 1))
-
         let installs = steps.filter { $0.keyword == "INSTALLER.RUN" }
         if game.gameEngine == .scummvm {
+            // ScummVM reads the disc's data, copied into the app: through Wine
+            // only to patch it, otherwise as it is.
             #expect(installs.isEmpty, "ScummVM reads the disc's data; nothing is installed")
-            #expect(steps.contains { $0.keyword == "USE" && $0.arguments.first?.raw == "scummvm" })
+            #expect(file.stage(named: "disc")?.from == .stage("scummvm"))
+            let keeps = steps.contains { $0.keyword == "WINE.KEEP-DISCS" }
+            #expect(keeps == (file.stage(named: "disc-files") != nil))
         } else {
+            let keep = try #require(steps.first { $0.keyword == "WINE.KEEP-DISCS" })
+            #expect((keep.option("combined") != nil) == (game.diskCount > 1))
             let install = try #require(installs.first)
             #expect(installs.count == 1)
             #expect((install.option("answer-file") != nil) == (ShippedBundles.asset("disc.iss", ofGame: game.id) != nil))

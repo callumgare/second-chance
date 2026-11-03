@@ -133,7 +133,7 @@ public nonisolated final class ProgramBundleLoader {
     func wrappfileProblems(_ manifest: Manifest, in folder: URL, modules: [ModuleFolder]) -> [String] {
         let file = folder.appendingPathComponent("Wrappfile")
         guard let text = try? String(contentsOf: file, encoding: .utf8) else {
-            let needed = manifest.editions.contains { $0.build != nil } || manifest.variants?.contains { $0.build != nil } == true
+            let needed = manifest.editions.contains { $0.build?.target != nil }
             return needed ? ["has editions to build but no Wrappfile"] : []
         }
         do {
@@ -165,7 +165,7 @@ public nonisolated final class ProgramBundleLoader {
         if manifest.id != expected {
             messages.append("its id is \(manifest.id), but its folder says \(expected)")
         }
-        for (kind, ids) in [("edition", manifest.editions.map(\.id)), ("variant", manifest.variants?.map(\.id) ?? [])] {
+        for (kind, ids) in [("edition", manifest.editions.map(\.id))] {
             for id in Set(ids) where ids.count(where: { $0 == id }) > 1 {
                 messages.append("has two \(kind)s called \(id)")
             }

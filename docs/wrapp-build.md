@@ -426,8 +426,13 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
 - **What it was built from is its lock** (`WrappLock.json`, `WrappLock`):
   the bundle's version, each module's version and release and a hash of each
   of its data files, an engine's prepared hash (`package`), the launcher's
-  revision, the Wrappfile's global `CONST`s (`install-dir`), and how it was
-  updated, if it was. A wrapp from before locks gets one made up from its
+  revision, the plan's launch (`launch`: its program and volumes, which an
+  update compares, building afresh when the program moved), the saves
+  volume the launch's module keeps saves in, and how it was updated, if it
+  was. An older lock's `args["install-dir"]` is read as the folder its
+  program is in. An old ScummVM app, which kept its game's data in its
+  prefix, is updated in place: the data moves to where the launch reads it
+  (`/SharedSupport/game/`) and the prefix goes. A wrapp from before locks gets one made up from its
   settings and its Wine's version file (`WrappLock.madeUp`), at bundle version
   0, with the disc edition for a wrapp that never recorded its source.
 - **What to do is worked out before anything runs** (`UpdatePlanner`, in
@@ -670,16 +675,29 @@ the engines the build needs from the engine store
 ([modules.md](modules.md#the-engine-store)), which fetches and prepares each
 the first time a build on that Mac needs it:
 
-- **Wine**, whenever the build runs a Windows program (an installer, a
-  patch) or the game runs in it. A download whose game isn't Wine's (Lure of
-  the Temptress, under ScummVM) needs none, and gets a bare C: drive.
+- **Wine**, whenever one of the plan's stages has it: the build runs a
+  Windows program (an installer, a patch) or the game runs in it. A plan none
+  of whose stages has Wine (a ScummVM game's disc copied as it is, Lure of
+  the Temptress) is built without it.
 - **The engine the game runs**, from its composition (ScummVM).
 
 An engine is cloned in beside the launcher's files (`EngineInstall`), with its
 list of files and a record of which engine it is in `Resources/engines/`, and
 a file that is already the launcher's stops the build rather than being
 replaced. `cleanupUnusedEngine` takes out, by that list, each engine the game
-doesn't run. An engine nobody can fetch fails the build as
+doesn't run, a folder left holding only a signature included (an engine is
+signed after its list is made). A game whose launch has no Wine keeps no
+prefix either: a ScummVM game's data is copied out of the prefix it was
+patched or installed in, into the app (`/SharedSupport/game/`), by its
+target's `COPY`, and the prefix goes.
+
+**The template's icon is a generic one** (`WrappTemplate/Resources/GenericWrappIcon.icon`,
+its asset catalog's app icon), which an app whose Wrappfile names no `ICON`
+keeps, SkiFree and Tyrian among them. A Wrappfile's `ICON` names an `.icns` a
+`COPY` put in the app's `Resources/`; `completeBuild` checks it's there, sets
+`CFBundleIconFile` to it and removes `CFBundleIconName`, which names the
+generic icon in the asset catalog and would win over the file. The Nancy Drew
+games' icon is the nancy-drew module's `assets/nancy-drew.icns`. An engine nobody can fetch fails the build as
 `engineUnavailable`, which asks the person to check they are online.
 
 The template copy is `cp -ac`: each file is an APFS clone, so it is near

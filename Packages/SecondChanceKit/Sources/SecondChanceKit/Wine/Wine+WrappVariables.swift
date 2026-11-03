@@ -56,6 +56,14 @@ nonisolated extension Wine {
             gameExe: exeURL.lastPathComponent, graphicsAPI: GameGraphicsAPI(exeAt: exeURL, game: game), environment: environment)
     }
 
+    /// The same, for a game whose launch declares what it draws with.
+    public static func inProcessHelperVariables(
+        gameExe exeURL: URL, declared graphicsAPI: GameGraphicsAPI,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String: String] {
+        inProcessHelperVariables(gameExe: exeURL.lastPathComponent, graphicsAPI: graphicsAPI, environment: environment)
+    }
+
     /// The same, for the .exe called `gameExe` that draws with `graphicsAPI`.
     static func inProcessHelperVariables(
         gameExe: String, graphicsAPI: GameGraphicsAPI, environment: [String: String]

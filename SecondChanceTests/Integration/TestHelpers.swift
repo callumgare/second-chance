@@ -824,10 +824,13 @@ extension WrappInfo {
         settings(at: wrappPath)?.gameSlug
     }
 
-    /// The game's .exe inside the wrapp's own prefix, from the `GameExePath`
-    /// in its AppSettings.plist; nil for a wrapp without one (ScummVM).
+    /// The program the wrapp's launch starts, in the wrapp: a Wine or DOSBox
+    /// program on its C:, or a ScummVM game's data folder; nil for a wrapp
+    /// with no settings, or a launch whose program isn't in it (Steam's).
     static func gameExe(at wrappPath: URL) -> URL? {
-        settings(at: wrappPath).map { WrappLayout(app: wrappPath).onDriveC($0.gameExePath) }
+        guard let launch = settings(at: wrappPath)?.launch else { return nil }
+        let layout = WrappLayout(app: wrappPath)
+        return layout.location(launch.program.hasPrefix("scummvm:") ? launch.path : launch.program)
     }
 
     /// The game's engine from the wrapp's AppSettings.plist.

@@ -5,10 +5,6 @@ version: 1
 title: "SkiFree"
 display-name: "SkiFree"
 
-variants:
-  - id: "wine"
-    launch: { wine: { exe: "C:/SkiFree/ski32.exe" } }
-
 editions:
   - id: "download"
     source: "download"
