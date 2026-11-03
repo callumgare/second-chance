@@ -224,9 +224,13 @@ class WrappBuildViewModel {
                 // the error screen about to replace it.
                 _ = await screenshotsBeforeError()
                 if !isCancelling { handleBuildFailure(error) }
-            case .completed:
+            case .completed(let wrappPath):
                 instructions = nil
                 steamSignInNotice = nil
+                // With the screen, not once the builder returns: it may still
+                // be tidying up (unmounting discs), and without the app's
+                // place the screen has no Show in Finder or Play Now.
+                builtWrappURL = wrappPath
                 currentState = .completed
                 stopStepTimer()
             default:
