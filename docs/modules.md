@@ -36,7 +36,8 @@ id: "wine"                     # a shipped module's is one name; one someone add
 release: 1                     # our fixes beneath its versions; counts up
 native: "wine"                 # the Swift compiled into Second Chance it is
 versions:                      # what this release provides, as a bundle names it with @
-  - { version: "10.0_8" }
+  - version: "10.0_8"
+    package: { … }             # an engine's: what it is made from (below)
 data: ["prefix.yaml", "routine-errors.yaml"]
 updates:                       # its default updates, after a bundle's
   - { id: "wine-prefix", when-changed: ["prefix.yaml"] }
@@ -50,6 +51,74 @@ bundle's for a wrapp whose copy of the module is behind, as
 [wrapp-build.md](wrapp-build.md#updating-a-wrapp) describes; one with no
 `build` is done by the module's own Swift. The rest of the format (functions,
 stages, volumes) is the plan's, and comes with what reads it.
+
+## Engine packages
+
+An engine module's version says what the engine is made from: its makers'
+downloads, each checked by its SHA-256 as a download edition's input is
+([program-bundles.md](program-bundles.md#download-editions)), and the hash of
+the tree preparing them gives.
+
+```yaml
+versions:
+  - version: "10.0_8"
+    package:
+      prepared: "9fab…"                  # EngineTree's hash of the prepared tree
+      sources:
+        - id: "wine"                     # what the module's Swift knows it as
+          sha256: "2a6b…"
+          size: 166321980
+          urls: ["https://github.com/Sikarugir-App/Engines/…/WS12WineSikarugir10.0_8.tar.xz"]
+        - id: "wineskin"
+          …
+```
+
+**Preparing** (`EnginePreparer`, with the module's `BuildModule.prepare`)
+lays the sources out as a wrapp's `Contents/` and lists the files it made
+in `Resources/engines/<module>.files`. It uses only what every macOS has
+(`tar`, `ditto`, `hdiutil`, `codesign`), so it can run on the Mac that
+builds. Wine's:
+
+- Sikarugir's Wine goes in `SharedSupport/wine`, and its wrapper
+  template's frameworks in `Frameworks`.
+- The Mac driver (`winemac.so`) gets a weak dependency on the in-process
+  helpers, and `wineserver`, which asks for `@rpath/libinotify`, a run path
+  to `Frameworks`. Both are load commands written into the file's header
+  padding (`MachOPatch`), as `install_name_tool` would, which only comes
+  with Xcode's tools. Every other Wine program finds the frameworks through
+  `DYLD_FALLBACK_LIBRARY_PATH` (`Wine`).
+- The wrapper's Swift modules are dropped, and the framework they were in
+  is sealed again.
+- Every unsigned program and DLL is signed, deepest first: signing a
+  framework's binary seals the hashes of every file in it, so they must be
+  signed before it.
+
+ScummVM's copies the program, its frameworks, the data its GUI needs and the
+engine data files `engine-data` names, out of its disk image.
+
+**The prepared hash** (`EngineTree.hash`) covers each path, a file's
+contents, whether it is executable, a link's target, and the code signature
+a file that isn't Mach-O keeps in its `com.apple.cs.*` extended attributes;
+not times, owners or other attributes, which a download or a copy changes.
+Preparing must give the package's hash, so every Mac runs the engine that
+was tested. It is taken **before signing**: `codesign` writes a different
+ad hoc signature for the same file on another macOS (15.6 and 26.2 do), so
+a module's Swift returns what to sign, and the preparer hashes the tree,
+then signs it.
+
+```bash
+./sc engine prepare wine                   # prepare it here; check, or print, its hash
+./sc engine prepare scummvm --into /tmp/s  # and keep the tree
+```
+
+A new version is added without `prepared`, prepared, and given the hash
+`sc engine prepare` prints. Changing a package changes the module's folder,
+so it needs a new release, as any change does.
+
+For now the template still carries both engines, built by `setup-wine.sh`
+and `setup-scummvm.sh`, and builds copy them from it. Builds taking engines
+from their packages instead, fetched when a build first needs one, is what
+comes next.
 
 ## What lives where
 

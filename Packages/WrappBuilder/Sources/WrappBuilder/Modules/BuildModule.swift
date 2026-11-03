@@ -25,12 +25,21 @@ public nonisolated protocol BuildModule: Sendable {
 
     /// The stages it provides, by name (`client` for `FROM steam/client`).
     static var stages: [String] { get }
+
+    /// Lay an engine version's downloaded sources out as a wrapp's
+    /// `Contents/` (`EnginePreparer`), returning the files to sign once the
+    /// tree is hashed; only an engine's module has one.
+    static func prepare(_ job: EngineJob) async throws -> [URL]
 }
 
 nonisolated extension BuildModule {
     public static var templateFiles: String? { nil }
     public static var instructions: [InstructionSpec] { [] }
     public static var stages: [String] { [] }
+
+    public static func prepare(_ job: EngineJob) async throws -> [URL] {
+        throw EngineError("the \(id.rawValue) module has no engine to prepare")
+    }
 }
 
 public nonisolated enum WineBuild: BuildModule {

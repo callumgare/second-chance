@@ -1,10 +1,24 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 3
+release: 4
 native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
 versions:
-  - { version: "10.0_8" }                    # Sikarugir's Wine 10.0, packaging 8 (setup-wine.sh)
+  # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
+  # template, prepared on the Mac that builds (WineBuild.prepare).
+  - version: "10.0_8"
+    package:
+      # EngineTree's hash of the prepared tree (`sc engine prepare`).
+      prepared: "bbf9fa215e2d5fb07465c985aa0716a2dfcba6f212b8a7b76ba739d5cc97f32e"
+      sources:
+        - id: "wine"
+          sha256: "2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68"
+          size: 166321980
+          urls: ["https://github.com/Sikarugir-App/Engines/releases/download/v1.0/WS12WineSikarugir10.0_8.tar.xz"]
+        - id: "wineskin"
+          sha256: "9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a"
+          size: 84533420
+          urls: ["https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"]
 runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
 data: ["prefix.yaml", "routine-errors.yaml"]
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program with no menu, started and quit

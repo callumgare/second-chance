@@ -112,7 +112,10 @@ manifest field, and `sc generate` writes the Swift made from bundles and
 modules' data: GameCatalog's table of games, and the wrapp's routine Wine
 errors ([program-bundles.md](program-bundles.md), [modules.md](modules.md)).
 `sc module check [<id>…]` checks modules and their recorded releases, and `sc
-module release <id>` records one ([modules.md](modules.md#releases)).
+module release <id>` records one ([modules.md](modules.md#releases)). `sc engine prepare <id>
+[--version <v>] [--into <folder>]` prepares an engine from its package's
+downloads as a build would, and checks or prints its hash
+([modules.md](modules.md#engine-packages)).
 
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`

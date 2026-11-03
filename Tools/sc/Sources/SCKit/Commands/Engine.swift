@@ -1,0 +1,73 @@
+import ArgumentParser
+import Foundation
+import WrappBuilder
+
+struct EngineCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "engine",
+        abstract: "Prepare the engines modules' packages describe.",
+        discussion: "docs/modules.md#engine-packages describes an engine's package and its prepared hash.",
+        subcommands: [EnginePrepareCommand.self]
+    )
+}
+
+struct EnginePrepareCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "prepare",
+        abstract: "Prepare an engine version from its downloads, and print the hash of its tree.",
+        discussion: """
+        Downloads the package's sources (once per Mac) and prepares them as a \
+        build would. A package that names its `prepared` hash must give it; \
+        one that doesn't yet is prepared, and its hash printed to add.
+        """
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    @Argument(help: "The module's id (wine, scummvm).")
+    var id: String
+
+    @Option(help: "The version to prepare (default: the newest with a package).")
+    var version: String?
+
+    @Option(help: "Where to leave the prepared tree (default: a temporary folder, removed after).")
+    var into: String?
+
+    func run() async throws {
+        let session = try Session.start(global)
+        let loader = try ModuleLoader(root: session.repo.modules)
+        let module: ModuleFolder
+        switch loader.load(session.repo.modules.appendingPathComponent(id)) {
+        case .success(let loaded): module = loaded
+        case .failure(let problems):
+            for problem in problems.all { session.ui.line(problem.description) }
+            throw SCError("\(id) has problems; fix them first.")
+        }
+        let kept = into.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let kept, FileManager.default.fileExists(atPath: kept.path) {
+            throw SCError("\(kept.path) already exists.")
+        }
+        let tree = kept ?? FileManager.default.temporaryDirectory.appendingPathComponent("sc-engine-\(UUID().uuidString)")
+        defer { if kept == nil { try? FileManager.default.removeItem(at: tree) } }
+
+        let preparer = EnginePreparer(downloader: Downloader(cache: Downloader.standardCache(),
+                                                            userAgent: "SecondChance-sc (+https://github.com/callumgare/second-chance)"))
+        let ui = session.ui
+        let prepared = try await preparer.prepare(module, version: version, into: tree, checked: false) { step in
+            ui.line(step)
+        }
+        let expected = module.manifest.package(version: prepared.version)?.package.prepared
+        let files = try EngineTree.files(in: tree).count
+        ui.line("\(id) \(prepared.version): \(files) files")
+        ui.line("prepared: \"\(prepared.hash)\"")
+        if let kept { ui.line("Left in \(kept.path)") }
+        switch expected {
+        case prepared.hash?:
+            ui.success("It matches its package.")
+        case let other?:
+            throw SCError("Its package says \(other); this Mac prepared it differently.")
+        case nil:
+            ui.info("Its package names no prepared hash yet: add the line above to its version's package.")
+        }
+    }
+}

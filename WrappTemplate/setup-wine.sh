@@ -101,6 +101,9 @@ clang -dynamiclib \
 codesign --force --sign - "${TEMP_DIR}/Frameworks/in_process_helpers.dylib"
 echo "✓ Built and signed in_process_helpers.dylib"
 
+# The Swift that prepares Wine from its package does the same as this and
+# the rpath step below (WineBuild.prepare, docs/modules.md#engine-packages):
+# change them together until the template stops carrying engines.
 echo "🔧 Patching winemac.so to load the in-process helpers..."
 "${HELPERS_DIR}/patch-winemac.swift" \
     "${TEMP_DIR}/SharedSupport/wine/lib/wine/x86_64-unix/winemac.so"

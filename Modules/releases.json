@@ -357,6 +357,22 @@
         "versions" : [
           "2026.3.0"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "c71f17d3f83e4df5ded8ded2a8213eb7742ea9602d647f39130a69febf56380d",
+          "scenarios/starts-and-quits.yaml" : "3ff1ea7da37332fec5cb23ce436b172ed4c0fd739d27e33d9e3385308b8f65df"
+        },
+        "functions" : [
+
+        ],
+        "release" : 3,
+        "versions" : [
+          "2026.3.0"
+        ]
       }
     ],
     "steam" : [
@@ -453,6 +469,27 @@
 
         ],
         "release" : 3,
+        "versions" : [
+          "10.0_8"
+        ]
+      },
+      {
+        "data" : [
+          "prefix.yaml",
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "module.yaml" : "a0c05f9998633930d1e63e12a7b1e60300e8a0e1b3f24fa82998971063411e38",
+          "prefix.schema.json" : "ee33a1a23374169e96cd949eb997359b9ecea37ce3f8ef937c684521b979736f",
+          "prefix.yaml" : "cd1547520f3cc523179663dea0a53629eea696af288dbc4594c1a21f1a3a0e9e",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "00c90907ce7e9e1298be2dfcef8ae80a68e668ae5c56c57d1c85ca3a5ce8623b",
+          "scenarios/starts-and-quits.yaml" : "e9315d8978315476450a102bdf4041163f8c93e4d6818c01924bd4e1c29f8030"
+        },
+        "functions" : [
+
+        ],
+        "release" : 4,
         "versions" : [
           "10.0_8"
         ]

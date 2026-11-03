@@ -35,7 +35,32 @@
           "version": { "type": "string", "pattern": "^[0-9A-Za-z._-]+$" },
           "preview": { "description": "Used only where a constraint names it.", "type": "boolean" },
           "withdrawn": { "type": "boolean" },
-          "replaced-by": { "type": "string" }
+          "replaced-by": { "type": "string" },
+          "package": {
+            "description": "An engine's: the downloads it is made from, and the hash of the tree preparing them gives (docs/modules.md#engine-packages).",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sources"],
+            "properties": {
+              "prepared": { "description": "EngineTree's hash of the prepared tree, which preparing must give.", "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "sources": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "sha256", "urls"],
+                  "properties": {
+                    "id": { "description": "What the module's Swift knows it as (wine, wineskin).", "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+                    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                    "size": { "type": "integer", "minimum": 1 },
+                    "urls": { "description": "Where to look, in order; the sha256 decides.", "type": "array", "minItems": 1, "items": { "type": "string", "pattern": "^https://" } }
+                  }
+                }
+              },
+              "engine-data": { "description": "ScummVM's: the engine data files kept from its app's Resources.", "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+            }
+          }
         }
       }
     },

@@ -31,6 +31,8 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
         public let preview: Bool?
         public let withdrawn: Bool?
         public let replacedBy: String?
+        /// An engine's: what it is made from (`EnginePackage`).
+        public let package: EnginePackage?
     }
 }
 

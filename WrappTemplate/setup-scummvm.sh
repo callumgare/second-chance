@@ -54,7 +54,9 @@ ditto --rsrc "${SCUMMVM_APP}/Contents/MacOS/scummvm" "${TEMP_DIR}/MacOS/scummvm"
 # The engine data files of the engines the shipped bundles' ScummVM games
 # use: nancy for Nancy Drew, lure for Lure of the Temptress. A game whose
 # engine's file is missing stops at "Unable to locate the '<engine>.dat'
-# engine data file".
+# engine data file". The same list as the scummvm module's package's
+# engine-data (Modules/scummvm/module.yaml): keep the two alike until the
+# template stops carrying engines.
 ENGINE_DATA=(nancy.dat lure.dat)
 for data in "${ENGINE_DATA[@]}"; do
     ditto --rsrc "${SCUMMVM_APP}/Contents/Resources/${data}" "${TEMP_DIR}/Resources/${data}"

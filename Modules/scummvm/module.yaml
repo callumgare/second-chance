@@ -1,9 +1,24 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "scummvm"
-release: 2
+release: 3
 native: "scummvm"                            # its Swift: ScummVMRuntime, ScummVMBuild
 versions:
-  - { version: "2026.3.0" }                  # setup-scummvm.sh
+  # ScummVM's own Mac build, prepared on the Mac that builds
+  # (ScummVMBuild.prepare).
+  - version: "2026.3.0"
+    package:
+      # EngineTree's hash of the prepared tree (`sc engine prepare`).
+      prepared: "279d224c94209ee6896bd54560fcbb131dffc7d626afc94960f305ba757252dd"
+      sources:
+        - id: "scummvm"
+          sha256: "d483f41a67d389a3bf50832b9a1a054fbeded56fc148216e4f84a06d330d2172"
+          size: 163659840
+          urls:
+            - "https://downloads.scummvm.org/frs/scummvm/2026.3.0/scummvm-2026.3.0-macosx.dmg"
+            - "https://web.archive.org/web/20260710213756id_/https://downloads.scummvm.org/frs/scummvm/2026.3.0/scummvm-2026.3.0-macosx.dmg"
+      # The engines the shipped bundles' games use: nancy for Nancy Drew,
+      # lure for Lure of the Temptress.
+      engine-data: ["nancy.dat", "lure.dat"]
 runtime: { save-warning: false }
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a game with no menu to quit from, started and quit

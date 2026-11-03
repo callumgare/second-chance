@@ -1,20 +1,25 @@
 //
-//  ProcessUtilities.swift
-//  SecondChance
+//  ProcessOutput.swift
+//  ProcessKit
 //
 //  Running a program without freezing the window: `Process.output(of:_:)`
-//  waits for it through `Blocking.run` (SecondChanceKit).
+//  waits for it through `Blocking.run`.
 
 import Foundation
-import SecondChanceKit
 
 /// What a finished subprocess said and how it ended.
-nonisolated struct ProcessOutput: Sendable {
-    let status: Int32
-    let output: String
-    let errorOutput: String
+nonisolated public struct ProcessOutput: Sendable {
+    public let status: Int32
+    public let output: String
+    public let errorOutput: String
 
-    var succeeded: Bool { status == 0 }
+    public init(status: Int32, output: String, errorOutput: String) {
+        self.status = status
+        self.output = output
+        self.errorOutput = errorOutput
+    }
+
+    public var succeeded: Bool { status == 0 }
 }
 
 extension Process {
@@ -26,7 +31,7 @@ extension Process {
     /// Cancelling the task stops the program (SIGTERM) and throws
     /// `CancellationError`, so a cancelled build doesn't wait for a copy or
     /// an `hdiutil` to finish first.
-    nonisolated static func output(
+    nonisolated public static func output(
         of executable: String,
         _ arguments: [String],
         environment: [String: String]? = nil
