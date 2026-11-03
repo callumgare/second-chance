@@ -52,7 +52,7 @@ SERVICE --ready=helper-ready "C:/Helper/helper.exe"
   | `--log=<path>` with `--contains="…"` or `--matches="…"` | a line written after the program started has the text, or matches the regex |
   | `--file=<path>` | the file exists |
   | `--process=<name>` | a process of that name is running |
-  | `--process-has-window[=<pid>]` | the process has a window on screen |
+  | `--process-has-window[=<name>]` | the program's process (or one of that name) has a window on screen |
   | `--output` with `--contains` or `--matches` | the program writes such a line to its output |
   | `--exits[=<code>]` | the program exits (with that code) |
   | `--<module>.<watch>` | a module's own, such as `--steam.signed-in` |
@@ -62,17 +62,15 @@ SERVICE --ready=helper-ready "C:/Helper/helper.exe"
 - **`--all` or `--any` is required with more than one `WATCH`**, so how the
   watches combine is always written. With one, neither is needed.
 - **A signal reads the program it's used with through `${program.…}`**:
-  `path`, `dir` and `name`, known when planning, and `pid`, known only at
-  launch. The step using the signal provides `program`; nothing else does.
-  An option that's about a program defaults to it: `--process-has-window`
-  alone means `--process-has-window=${program.pid}`.
-- **Launch-time values are filled in by the wrapp.** The planner substitutes
-  everything known when planning, and records the rest as data the wrapp's
-  watcher fills in when the program starts. A function can't be given one
-  (functions run only when planning), and a build step can't use one.
+  `path`, `dir` and `name`, all known when planning. The step using the
+  signal provides `program`; nothing else does. A watch that's about a
+  process means the program's own unless told otherwise: the wrapp's
+  watcher knows which process it started, so no pid is needed in the
+  Wrappfile.
 - **Signals are defined in a Wrappfile, globally, or in a module**, and
   named like functions: `steam.signed-in`, `self.ready` in the module's own
-  files. A local signal can't share a name with a module the stage uses.
+  files. A local signal wins over a module of the same name, with a
+  warning, as a local function does.
   One defined and never used is a warning.
 - **A signal's block is a scope** for `INPUT`, `CONST` and `VAR`, as a
   function's is.
@@ -111,7 +109,7 @@ enum Watch: Codable {
     case log(path: String, pattern: LinePattern)        // full-form path; literal or regex
     case file(path: String)
     case process(name: String)
-    case processHasWindow(pid: LaunchValue)             // filled in when the program starts
+    case processHasWindow(name: String?)                // nil: the program's own process
     case output(pattern: LinePattern)
     case exits(code: Int32?)
     case module(ModuleID, watch: String, arguments: [String: String])
@@ -129,9 +127,8 @@ the loading window's signs of progress, `ProcessList`, and the window checks.
 ## Rough phases
 
 1. **`SIGNAL`, `WATCH` and `SERVICE --ready`.**
-   - Parsed and checked: watch options, `--all`/`--any`, `program` only
-     where provided, and no launch-time value given to a function or used in
-     a build step.
+   - Parsed and checked: watch options, `--all`/`--any`, and `program` only
+     where provided.
    - Planned into recorded signals, and the wrapp waiting on a service's
      signal.
    - Steam's readiness re-expressed as `steam.signed-in`, and Steam's
@@ -153,6 +150,8 @@ game with a service only signals can start.
    are given as options where it's used (`--ready=helper-ready,port=8080`
    reads badly; `READY helper-ready --port=8080` on its own line after the
    step reads better). Leave it out until one needs it.
-3. **Signals in steps before launch**, if those are built
+3. **Values known only at launch**, such as the pid of a process the
+   program starts. Nothing needs one yet.
+4. **Signals in steps before launch**, if those are built
    ([before-launch-steps.md](before-launch-steps.md)): a migration could wait
    on a converter's signal. Nothing needs it.
