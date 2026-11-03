@@ -10,6 +10,8 @@ import Testing
 @testable import ProcessKit
 @testable import SecondChance
 @testable import SecondChanceKit
+import WrappBuilder
+import WrappFormat
 @testable import WineKit
 import GameCatalog
 
@@ -147,7 +149,7 @@ final class FakeNetworkCounter: WineNetworkCounting, @unchecked Sendable {
 
 struct FakePreparer: SteamWrappPreparing {
     func prepare(wrappAt path: URL) async throws { try SteamWrappBuilderTests.fakeWrapp(at: path) }
-    func setUpGraphics(for gameInfo: GameInfo, in path: URL) async throws {}
+    func run(_ step: PlannedStep, in path: URL) async throws {}
 }
 
 @MainActor
@@ -259,8 +261,16 @@ struct SteamWrappBuilderTests {
         let plist = try settings(wrapp)
         #expect(plist["GameEngine"] as? String == "wine-steam")
         #expect(plist["SteamGameId"] as? String == "226820")
-        #expect(plist["GameExePath"] as? String == "/Program Files (x86)/Steam/steamapps/common/Nancy Drew The Ghost of Thornton Hall/Thornton.exe")
+        // Where the bundle installs it, a link to Steam's library.
+        #expect(plist["GameExePath"] as? String == "/Program Files (x86)/Her Interactive/Ghost of Thornton Hall/Thornton.exe")
+        let link = prefix.appendingPathComponent("drive_c/Program Files (x86)/Her Interactive/Ghost of Thornton Hall")
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path)
+                == "../Steam/steamapps/common/Nancy Drew The Ghost of Thornton Hall")
         #expect(plist["SteamLaunchMode"] == nil)
+        let launch = try #require(try WrappSettings(of: WrappLayout(app: wrapp)).recordedLaunch)
+        #expect(launch.program == "steam://rungameid/226820")
+        #expect(launch.options["steam.exe"] == "wine:C:/Program Files (x86)/Her Interactive/Ghost of Thornton Hall/Thornton.exe")
+        #expect(launch.fallback == nil)
         for file in SteamSessionStore.files {
             #expect(!FileManager.default.fileExists(atPath: prefix.appendingPathComponent(file).path), "\(file) shipped in the wrapp")
         }
@@ -274,27 +284,44 @@ struct SteamWrappBuilderTests {
         }
     }
 
-    @Test("A ScummVM game is moved out of Steam, Steam is removed, and ScummVM runs it")
-    func direct() async throws {
+    @Test("A ScummVM game's data is copied out of Steam into the app, which keeps no Wine, and ScummVM runs it")
+    func scummvm() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
         let wrapp = try await build(game: "haunted-mansion").result.get()
-        let prefix = wrapp.appendingPathComponent("Contents/SharedSupport/prefix")
         let plist = try settings(wrapp)
         #expect(plist["GameEngine"] as? String == "scummvm")
-        #expect(plist["GameExePath"] as? String == "/Program Files (x86)/Nancy Drew/Nancy Drew Message in a Haunted Mansion")
         #expect(plist["SteamGameId"] == nil)
         #expect(plist["SteamLaunchMode"] == nil)  // no choice offered
-        let gameExe = prefix.appendingPathComponent("drive_c/Program Files (x86)/Nancy Drew/Nancy Drew Message in a Haunted Mansion/Game.exe")
-        #expect(FileManager.default.fileExists(atPath: gameExe.path))
+        #expect(FileManager.default.fileExists(atPath: wrapp.appendingPathComponent("Contents/SharedSupport/game/Game.exe").path))
+        #expect(!FileManager.default.fileExists(atPath: wrapp.appendingPathComponent("Contents/SharedSupport/prefix").path))
+        let launch = try #require(try WrappSettings(of: WrappLayout(app: wrapp)).recordedLaunch)
+        #expect(launch.program == "scummvm:/SharedSupport/game/")
+    }
+
+    @Test("A DRM-free game chosen to start directly is moved out of Steam, and Steam taken away")
+    func direct() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let wrapp = try await build(game: "shadow-ranch", mode: "direct").result.get()
+        let prefix = wrapp.appendingPathComponent("Contents/SharedSupport/prefix")
+        let plist = try settings(wrapp)
+        #expect(plist["GameEngine"] as? String == "wine")
+        #expect(plist["SteamGameId"] == nil)
+        let game = prefix.appendingPathComponent("drive_c/Nancy Drew/Secret of Shadow Ranch")
+        #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: game.path)) == nil)
+        #expect(FileManager.default.fileExists(atPath: game.appendingPathComponent("Game.exe").path))
         #expect(!FileManager.default.fileExists(atPath: prefix.appendingPathComponent(SteamClient.steamDirInPrefix).path))
+        #expect(try WrappSettings(of: WrappLayout(app: wrapp)).recordedLaunch?.program == "wine:C:/Nancy Drew/Secret of Shadow Ranch/Game.exe")
     }
 
     @Test("Launching a DRM-free game via Steam keeps Steam running it")
     func directChoiceViaSteam() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
-        let plist = try settings(try await build(game: "shadow-ranch", mode: "steam").result.get())
+        let wrapp = try await build(game: "shadow-ranch", mode: "steam").result.get()
+        let plist = try settings(wrapp)
         #expect(plist["GameEngine"] as? String == "wine-steam")
         #expect(plist["SteamLaunchMode"] as? String == "steam")
+        let launch = try #require(try WrappSettings(of: WrappLayout(app: wrapp)).recordedLaunch)
+        #expect(launch.fallback == "wine:C:/Nancy Drew/Secret of Shadow Ranch/Game.exe")
     }
 
     @Test("A game the account doesn't own fails, and Steam is shut down")

@@ -17,13 +17,16 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     /// only when the .exe can't say: Armadillo hides the imports of every
     /// Big Fish edition (`GameGraphicsAPI`).
     public let graphics: Graphics?
-    public let steamDRM: SteamDRM?
     /// The game's Steam app ID, when it is sold (or was) on Steam.
     public let steamAppID: Int?
     /// The folder Steam installs it into, under `steamapps/common/`.
     public let steamInstallDir: String?
-    /// The Windows executable Steam launches, relative to `steamInstallDir`.
+    /// The Windows program Steam starts, relative to `steamInstallDir`, as
+    /// its Steam edition's launch says; nil for a game ScummVM runs.
     public let steamExePath: String?
+    /// Whether a Steam build asks how the game should start: its Steam
+    /// edition has a `launch-mode` input, as a DRM-free game's does.
+    public let offersSteamLaunchChoice: Bool
     /// The game's product number on Big Fish Games, the number in each of its
     /// SKUs (`F2435T1L1`: product 2435, English). One for every language
     /// edition it's sold in.
@@ -76,59 +79,22 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         case direct3D = "direct-3d"
     }
 
-    public enum SteamDRM: String, Codable, Sendable {
-        case no
-        case yesLaunchWhenSteamRunning = "yes-launch-when-steam-running"
-        case yesLaunchViaSteamOnly = "yes-launch-via-steam-only"
-    }
-
     /// Where a game lives on Steam, from its app info.
     public struct SteamApp: Hashable, Sendable {
         public let appID: Int
         public let installDir: String
-        public let exe: String
+        public let exe: String?
 
-        public init(appID: Int, installDir: String, exe: String) {
+        public init(appID: Int, installDir: String, exe: String?) {
             self.appID = appID
             self.installDir = installDir
             self.exe = exe
         }
     }
 
-    /// How a Steam-sourced wrapp starts its game, when the game lets the
-    /// user choose (`offersSteamLaunchChoice`).
-    public enum SteamLaunchMode: String, Codable, CaseIterable, Sendable {
-        /// Through Steam: slower, but Steam Cloud keeps the saves.
-        case steam
-        /// Without Steam, which is removed from the wrapp: quicker and more
-        /// reliable, saves stay on this Mac.
-        case direct
-    }
-
     public var isOnSteam: Bool { steamAppID != nil }
 
     public var isOnBigFish: Bool { bigFishProduct != nil }
-
-    /// Only a game known to have no DRM can run without Steam — and the games
-    /// ScummVM runs always do (see `steamEngine`), so they offer no choice.
-    public var offersSteamLaunchChoice: Bool { isOnSteam && steamDRM == .no && gameEngine != .scummvm }
-
-    /// The engine a Steam-sourced wrapp of this game uses.
-    ///
-    /// A game ScummVM runs from disc runs in ScummVM on Steam's files too,
-    /// whatever its DRM: ScummVM reads the data, never the exe, and Steam's
-    /// exe under Wine ignores the mouse (its cursor stays put while clicks
-    /// land elsewhere). Any other game that needs Steam is launched by Steam
-    /// (`-applaunch`), which works whatever its DRM: starting the exe
-    /// ourselves with Steam running (`.wineSteamSilent`) left Blue Moon's
-    /// Steam release running with no window, though its DRM is meant to need
-    /// only Steam running. Only a DRM-free game the user chose to launch
-    /// directly runs without Steam.
-    public func steamEngine(launchMode: SteamLaunchMode?) -> GameEngine {
-        if gameEngine == .scummvm { return .scummvm }
-        if steamDRM == .no && launchMode == .direct { return gameEngine }
-        return .wineSteam
-    }
 
     public init(
         id: String,
@@ -137,8 +103,8 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         gameEngine: GameEngine = .wine,
         graphics: Graphics? = nil,
         internalGameExePath: String? = nil,
-        steamDRM: SteamDRM? = nil,
         steam: SteamApp? = nil,
+        offersSteamLaunchChoice: Bool = false,
         bigFish: Int? = nil,
         installInstructions: String? = nil,
         failedInstallInfo: String? = nil,
@@ -153,10 +119,10 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         self.diskCount = diskCount
         self.gameEngine = gameEngine
         self.graphics = graphics
-        self.steamDRM = steamDRM
         self.steamAppID = steam?.appID
         self.steamInstallDir = steam?.installDir
         self.steamExePath = steam?.exe
+        self.offersSteamLaunchChoice = offersSteamLaunchChoice
         self.bigFishProduct = bigFish
         self.internalGameExePath = internalGameExePath
         self.installInstructions = installInstructions

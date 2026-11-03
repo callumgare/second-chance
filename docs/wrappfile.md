@@ -93,11 +93,14 @@ Modules' instructions, as the build modules declare them
 | Instruction | Does |
 | --- | --- |
 | `WINE.WINETRICKS <verb>` | Installs a winetricks verb. |
-| `WINE.REGISTRY --set <key>:<name> <value>` / `--remove <key>:<name>` | Sets or removes a registry value. |
+| `WINE.REGISTRY --set <key>:<name> <value>` / `--remove <key>:<name>` | Sets or removes a registry value. The key is a name the module knows (`x11-driver`, `mac-driver`, `direct3d`) or written in full (`HKEY_CURRENT_USER\Software\Wine\…`). |
 | `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive, kept at launch. |
 | `WINE.KEEP-DISCS <disc input>… --into=<folder> [--combined=<folder>]` | Copies the discs it's given into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
 | `INSTALLER.RUN [--from=<input>] --into=<folder> [--creates=<program>] [--answer-file=…] [--automation=<script>] [--patch] [program]` | Runs a Windows installer: silently with an answer file. `--creates` is the program it should leave, linked to what it made if that's elsewhere, and must be the target's `LAUNCH` program when that is under `--into`; `--patch` runs a patcher in `--into`, looking for nothing afterwards. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
-| `STEAM.INSTALL <input> --into=<folder>` | Installs the input's Steam app. |
+| `STEAM.CLIENT` | Installs Steam's client in the prefix (the steam module's `client` stage). |
+| `STEAM.INSTALL <input> --into=<folder> [--mount=…]` | Has Steam install the input's app, signed in with the shared sign-in (`--mount=type=secret,id=steam-sign-in`) and with the kept client (`--mount=type=cache,id=steam-client`), and makes `--into` a link to the folder Steam put it in. |
+| `STEAM.SIGN-OUT` | Takes the sign-in out of the prefix, saved for the next build first, so the app carries none. |
+| `STEAM.REMOVE` | Takes Steam away: the game moved to where `STEAM.INSTALL --into` linked it, then Steam's folders and the client stage's registry settings removed. |
 | `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--creates=<program>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
 
 An input is always written `${input.<name>}` where an instruction takes one.
@@ -175,6 +178,15 @@ LAUNCH --wine.graphics=direct-draw "${const.install-dir}/Game.exe"
   ([wine-in-process-helpers.md](wine-in-process-helpers.md)). A game whose
   non-zero exit is judged by a log says so with `--wine.clean-exit-log` and
   `--wine.clean-exit-line` (Her's later engine's `Debug.LOG`).
+- **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
+  names the program Steam starts, `--steam.exe=<its path in Wine>`, which the
+  app finds the game's process by; as Steam starts a Windows game in the
+  app's Wine, it says what it draws with too.
+- **`--fallback=<program>`** is what the person is offered when the launch
+  fails or seems stuck, for that one launch: run without the launch's
+  launcher, with its options. Steam words it "Start Without Steam". A bundle
+  writes one only for a game that can start without its launcher (a DRM-free
+  game on Steam).
 - **The last `LAUNCH` a stage reaches wins**, counting what it inherits
   through `FROM`, after `IF`s are decided; a stage with none has its
   parent's. Every edition's target must reach one, which planning checks,

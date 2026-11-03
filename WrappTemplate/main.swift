@@ -88,8 +88,10 @@ func main() {
         exit(1)
     }
     let options = WrappLaunchOptions(arguments: CommandLine.arguments)
-    let launchingWithoutSteam = options.withoutSteam && loadedConfig.canLaunchWithoutSteam
-    let config = launchingWithoutSteam ? loadedConfig.withoutSteam() : loadedConfig
+    // The launch's fallback, this once, after the launch failed and the
+    // player asked for it (Steam's words for it: "Start Without Steam").
+    let launchingWithoutSteam = options.withoutSteam && loadedConfig.hasFallback
+    let config = launchingWithoutSteam ? loadedConfig.withFallback() : loadedConfig
 
     // The game's files: the exe's folder for Wine, the data folder itself for
     // ScummVM. An install that was cut short shows up here as too small.
@@ -252,7 +254,7 @@ func main() {
     }
     infoWindow.onPossibleFailure = { gameLauncher.captureDiagnostics(.stalled) }
     gameLauncher.onQuitStep = { step in infoWindow.quitting(step) }
-    if config.canLaunchWithoutSteam {
+    if config.hasFallback {
         infoWindow.onLaunchWithoutSteam = {
             mainLogger.notice("Player chose to launch without Steam: stopping this launch, then opening the wrapp again")
             appDelegate.relaunchWithoutSteam = true

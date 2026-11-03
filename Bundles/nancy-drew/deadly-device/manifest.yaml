@@ -33,8 +33,9 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 220420, common-folder: "Nancy Drew - TheDeadlyDevice", exe: "DeadlyDevice.exe" }
+        game: { type: "steam-game", app-id: 220420, common-folder: "Nancy Drew - TheDeadlyDevice" }
     # drm left out: not known, so the game is started through Steam
   - id: "big-fish"
     source: "big-fish"

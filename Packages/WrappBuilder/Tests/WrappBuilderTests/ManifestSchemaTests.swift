@@ -20,10 +20,12 @@ struct ManifestSchemaTests {
       - id: "steam"
         source: "steam"
         build:
+          target: "steam"
           inputs:
-            game: { type: "steam-game", app-id: 31880, common-folder: "Old Clock", exe: "Game.exe" }
+            game: { type: "steam-game", app-id: 31880, common-folder: "Old Clock" }
             launch-mode: { type: "choice", options: ["direct", "steam"], default: "direct", prompt: "How should the game start?" }
-        drm: "no"
+        notes:
+          drm: "no"
     notes:
       anything: [goes, here, yes, 10.10]
 
@@ -43,6 +45,10 @@ struct ManifestSchemaTests {
     @Test(arguments: [
         // A bare no is the text "no" in YAML 1.2, as the editor reads it
         ("drm: \"no\"", "drm: no", nil),
+        // an edition's notes are anything, but drm is a note now, not a field
+        ("    notes:\n      drm: \"no\"", "    drm: \"no\"", "/editions/1: drm isn't something this can have"),
+        // the program Steam starts is the launch's, not the input's
+        ("common-folder: \"Old Clock\" }", "common-folder: \"Old Clock\", exe: \"Game.exe\" }", "/editions/1/build/inputs/game: exe isn't something this can have"),
         // and yes, on and off are words too
         ("title: \"Secret of the Old Clock\"", "title: off", nil),
         // but true is a boolean, which a title can't be
@@ -52,7 +58,7 @@ struct ManifestSchemaTests {
         // a quoted number isn't a number
         ("app-id: 31880", "app-id: \"31880\"", "/editions/1/build/inputs/game/app-id: must be a whole number"),
         // a mistyped key is caught, not dropped
-        ("drm: \"no\"", "dmr: \"no\"", "/editions/1: dmr isn't something this can have; is it mistyped?"),
+        ("    notes:", "    ntoes:", "/editions/1: ntoes isn't something this can have; is it mistyped?"),
         // a value from the wrong list
         ("source: \"disc\"", "source: \"cdrom\"", "/editions/0/source: must be one of: disc, her-download, steam, big-fish, download"),
         // a Steam field on a disc
@@ -60,7 +66,7 @@ struct ManifestSchemaTests {
         // an input of no type there is
         ("disc-1: { type: \"disc\" }", "disc-1: { type: \"cd\" }", "/editions/0/build/inputs/disc-1"),
         // choices are inputs now
-        ("    drm: \"no\"", "    drm: \"no\"\n    choices: {}", "/editions/1: choices isn't something this can have"),
+        ("    notes:", "    choices: {}\n    notes:", "/editions/1: choices isn't something this can have"),
         // the id needs a namespace
         ("id: \"nancy-drew/old-clock\"", "id: \"old-clock\"", "/id: isn't written as it should be"),
     ] as [(String, String, String?)])

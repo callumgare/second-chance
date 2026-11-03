@@ -82,14 +82,17 @@ nonisolated enum ShippedBundles {
     /// shipped bundle, Wrappfile and the shipped modules; nil for an edition
     /// with no stage of its own. Throws `buildRecipeProblem` when the bundle
     /// can't be loaded or planned.
-    static func plan(forGame slug: String, edition: String, in bundle: Bundle = .main) throws -> BuildPlan? {
+    static func plan(forGame slug: String, edition: String, choices: [String: String] = [:],
+                     in bundle: Bundle = .main) throws -> BuildPlan? {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
             let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
-            return try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).plan(edition: edition, conditions: .thisMac)
+            var conditions = BuildConditions.thisMac
+            conditions.choices = choices
+            return try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).plan(edition: edition, conditions: conditions)
         } catch let error as WrappBuildError {
             throw error
         } catch {

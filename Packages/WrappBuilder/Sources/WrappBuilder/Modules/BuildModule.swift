@@ -24,6 +24,10 @@ public nonisolated protocol BuildModule: Sendable {
     /// `--<alias>.<option>` in a stage that has the module.
     static var coreOptions: [String: [String: InstructionSpec.OptionKind]] { get }
 
+    /// What each of those options' values is, where it isn't text: by
+    /// instruction, then option (`LAUNCH`'s `exe`, a location).
+    static var coreOptionRoles: [String: [String: InstructionSpec.Role]] { get }
+
     /// Fields it adds to core mount types, by type, each written
     /// `<alias>.<field>=…` in a `--mount=`.
     static var mountFields: [String: Set<String>] { get }
@@ -42,6 +46,7 @@ nonisolated extension BuildModule {
     public static var instructions: [InstructionSpec] { [] }
     public static var stages: [String] { [] }
     public static var coreOptions: [String: [String: InstructionSpec.OptionKind]] { [:] }
+    public static var coreOptionRoles: [String: [String: InstructionSpec.Role]] { [:] }
     public static var mountFields: [String: Set<String>] { [:] }
     public static var providedFiles: Set<String> { [] }
 
@@ -127,12 +132,24 @@ public nonisolated enum DOSBoxBuild: BuildModule {
 public nonisolated enum SteamBuild: BuildModule {
     public static let id = ModuleID.steam
     public static let instructions = [
-        // Installs the input's app (`STEAM.INSTALL game --into=…`), the sign-in mounted as a secret.
-        InstructionSpec("INSTALL", options: ["into": .value], required: ["into"], arguments: 1...1,
+        // Installs Steam's client in the prefix.
+        InstructionSpec("CLIENT"),
+        // Has Steam install the input's app (`STEAM.INSTALL game --into=…`), with
+        // the shared sign-in (a `secret` mount) and the cached client (a `cache`
+        // one), and makes `--into` a link to the folder Steam put it in.
+        InstructionSpec("INSTALL", options: ["into": .value, "mount": .repeated], required: ["into"], arguments: 1...1,
                         argumentRoles: [.input], optionRoles: ["into": .location]),
+        // Takes the sign-in out of the prefix, saved to the shared store first.
+        InstructionSpec("SIGN-OUT"),
+        // Takes Steam away: the game moved to where `STEAM.INSTALL --into` linked
+        // it, then Steam's folders and its registry settings removed.
+        InstructionSpec("REMOVE"),
     ]
-    /// `client`: Steam installed in a prefix and signed in.
-    public static let stages = ["client"]
+
+    /// A launch's: the program Steam starts (`--steam.exe=C:/…/Game.exe`),
+    /// which the app finds the game's process by.
+    public static let coreOptions: [String: [String: InstructionSpec.OptionKind]] = ["LAUNCH": ["exe": .value]]
+    public static let coreOptionRoles: [String: [String: InstructionSpec.Role]] = ["LAUNCH": ["exe": .location]]
 }
 
 /// Runs a Windows installer in the stage's Wine: silently with an answer

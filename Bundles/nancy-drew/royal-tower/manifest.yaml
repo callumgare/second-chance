@@ -33,9 +33,11 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 615780, common-folder: "Nancy Drew Treasure in the Royal Tower", exe: "game.exe" }
-    drm: "no"
+        game: { type: "steam-game", app-id: 615780, common-folder: "Nancy Drew Treasure in the Royal Tower" }
+    notes:
+      drm: "no"
   - id: "big-fish"
     source: "big-fish"
     build:

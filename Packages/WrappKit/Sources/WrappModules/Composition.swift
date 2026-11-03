@@ -114,6 +114,6 @@ nonisolated public struct Composition: Codable, Sendable, Hashable, CustomString
 
 nonisolated extension GameInfo {
     /// The modules a wrapp of this game runs, built from a disc or a
-    /// download (a Steam build works its own out: `steamEngine`).
+    /// download (a Steam build plans its own).
     public var composition: Composition { Composition(legacy: gameEngine) }
 }

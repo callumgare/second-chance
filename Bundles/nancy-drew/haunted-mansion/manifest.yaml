@@ -33,9 +33,11 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 615770, common-folder: "Nancy Drew Message in a Haunted Mansion", exe: "Game.exe" }
-    drm: "no"
+        game: { type: "steam-game", app-id: 615770, common-folder: "Nancy Drew Message in a Haunted Mansion" }
+    notes:
+      drm: "no"
   - id: "big-fish"
     source: "big-fish"
     build:

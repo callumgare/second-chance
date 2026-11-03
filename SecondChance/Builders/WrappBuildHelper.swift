@@ -223,7 +223,7 @@ class WrappBuildHelper {
         installerDir: String,
         steamID: String? = nil,
         composition: Composition? = nil,
-        steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        steamLaunchMode: String? = nil,
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,
@@ -347,15 +347,19 @@ class WrappBuildHelper {
     /// it: a Wine or DOSBox program's file, a ScummVM game's folder. A
     /// launch that isn't a path in the app (`steam://`) isn't checked.
     nonisolated static func checkLaunchProgram(_ launch: RecordedLaunch, in wrappPath: URL) throws {
-        guard launch.program.hasPrefix("wine:") || launch.program.hasPrefix("dosbox:") || launch.program.hasPrefix("scummvm:") else { return }
-        guard let location = WrappLayout(app: wrappPath).location(launch.program) else {
-            throw WrappBuildError.buildRecipeProblem("LAUNCH \(launch.program) isn't in the app")
+        // Steam's launch names the program Steam starts (`--steam.exe`).
+        let program = launch.options["steam.exe"] ?? launch.program
+        guard program.hasPrefix("wine:") || program.hasPrefix("dosbox:") || program.hasPrefix("scummvm:") else { return }
+        // ScummVM's is a folder in the app (`scummvm:/SharedSupport/game/`).
+        let place = program.hasPrefix("scummvm:") ? String(program.dropFirst("scummvm:".count)) : program
+        guard let location = WrappLayout(app: wrappPath).location(place) else {
+            throw WrappBuildError.buildRecipeProblem("LAUNCH \(program) isn't in the app")
         }
         guard FileManager.default.fileExists(atPath: location.path) else {
-            logger.critical("❌ The build didn't make what LAUNCH runs, \(launch.program) (\(location.path))")
+            logger.critical("❌ The build didn't make what LAUNCH runs, \(program) (\(location.path))")
             throw WrappBuildError.gameExecutableNotFound
         }
-        logger.notice("✓ LAUNCH's program is there: \(launch.program)")
+        logger.notice("✓ LAUNCH's program is there: \(program)")
     }
 
     /// Whether a step copies into the app itself, outside the prefix: a
@@ -658,7 +662,7 @@ class WrappBuildHelper {
         installerDir: String,
         steamID: String? = nil,
         composition: Composition? = nil,
-        steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        steamLaunchMode: String? = nil,
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,

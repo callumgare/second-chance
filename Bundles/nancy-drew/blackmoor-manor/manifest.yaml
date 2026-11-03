@@ -27,9 +27,11 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31830, common-folder: "Nancy Drew Curse of Blackmoor Manor", exe: "Game.exe" }
-    drm: "launch-when-steam-running"
+        game: { type: "steam-game", app-id: 31830, common-folder: "Nancy Drew Curse of Blackmoor Manor" }
+    notes:
+      drm: "launch-when-steam-running"
   - id: "big-fish"
     source: "big-fish"
     build:

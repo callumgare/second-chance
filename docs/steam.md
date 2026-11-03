@@ -42,13 +42,43 @@ the test host under xcodebuild — can still meet the prompts; answer them
 
 ## Building
 
-`SteamWrappBuilder`, in order:
+A game's Steam edition has a stage like any other, `steam`, built `FROM
+steam@1/client`, the steam module's own stage (`Modules/steam/stages/client`,
+itself built from the wine module's prefix):
+
+```dockerfile
+FROM steam@1/client AS steam
+USE nancy-drew
+DO wine.cnc-ddraw
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO steam.install --game=${input.game} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
+LAUNCH --wine.graphics=direct-draw \
+    --steam.exe="${const.install-dir}/Game.exe" steam://rungameid/${input.game.app-id}
+```
+
+The client stage installs Steam (`STEAM.CLIENT`) and has ⌘ act as Ctrl in its
+windows (`WINE.REGISTRY`). The `install` function (`Modules/steam/functions/install`)
+has Steam install the game with the shared sign-in, a `secret` mount, and the
+kept client, a `cache` one (`STEAM.INSTALL`), making `--into` a link to the
+folder Steam put the game in, then takes the sign-in out of the prefix
+(`STEAM.SIGN-OUT`). `STEAM.REMOVE` takes Steam away again: the game moved to
+where the link was, Steam's folders deleted and the client stage's
+registry settings removed. A ScummVM game's Steam stage installs it the same
+way in a stage of its own and copies its data out (`COPY --from=steam-files
+${const.install-dir} /SharedSupport/game/`), so the app keeps no Wine.
+
+`SteamWrappBuilder` follows the plan: the client stage's steps before the
+game is known, since Steam must be signed in to say which games the account
+owns, then the edition's, recognising each by its shape. In order:
 
 1. **Take the Steam lock.** While a game has it, ask what to do about it
    (`WrappBuildInput.askAboutSteamInUse`, below); a headless build fails
    with `steamInUse`, naming the game.
-2. **Make the wrapp and install the Steam client into it** — the template,
-   the cached prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
+2. **Make the wrapp and install the Steam client into it**, as the client
+   stage says — the template, the cached prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
    `~/Library/Caches/SecondChance/`). Not `winetricks steam`: it installs
    Microsoft's core fonts first, which needs `cabextract`, which isn't
    bundled, and Steam doesn't need them under the bundled Wine. Then lay the
@@ -61,9 +91,9 @@ the test host under xcodebuild — can still meet the prompts; answer them
    session, or one Steam rejects, the GUI brings Steam's window to the front
    once Steam has asked for a sign-in and the window is up (as a wrapp does;
    see [Running](#running)), only then says to sign in there (QR or
-   password), and waits up to 30 minutes. ⌘C and ⌘V work in it: the build
-   has ⌘ act as Ctrl for `steam.exe` and `steamwebhelper.exe` alone
-   (`WineRegistry.letCommandActAsControl`), as Wine otherwise keeps ⌘ for
+   password), and waits up to 30 minutes. ⌘C and ⌘V work in it: the client
+   stage has ⌘ act as Ctrl for `steam.exe` and `steamwebhelper.exe` alone
+   (its `WINE.REGISTRY` steps), as Wine otherwise keeps ⌘ for
    its own Mac menu and a Windows program knows only Ctrl. A headless build fails
    with `steamSignInRequired` instead. A Steam that exits first — missing
    from eight checks two seconds apart, since it restarts itself after an
@@ -117,9 +147,11 @@ the test host under xcodebuild — can still meet the prompts; answer them
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
    when there are none), asking in Second Chance's main window, in place of
    the progress, which comes to the front as the person has just been in
-   Steam's window (`WrappBuildViewModel.ask`); for a DRM-free one it then asks how it launches
-   (`getSteamLaunchMode`, `STEAM_LAUNCH_MODE`), and the engine follows
-   (`engineRouted`). Steam only installs a queued game when it starts, so the
+   Steam's window (`WrappBuildViewModel.ask`); for one whose Steam edition has a
+   `launch-mode` input it then asks how it launches (`getSteamLaunchMode`,
+   `STEAM_LAUNCH_MODE`), the answer is the input's value, and the edition is
+   planned with it: the engine follows its launch (`engineRouted`). At
+   `STEAM.INSTALL`, Steam only installs a queued game when it starts, so the
    build then stops Steam — saving the session but leaving it in the prefix —
    queues the install and starts Steam again, which signs straight back in.
    A game named up front (`STEAM_GAME_SLUG`: headless builds and the
@@ -137,19 +169,22 @@ the test host under xcodebuild — can still meet the prompts; answer them
    checks in a row as during the sign-in, fails the build with
    `steamExitedWhileInstalling` rather than leaving it to wait out the
    four-hour limit.
-6. **Stop Steam, save the session, and take the sign-in out of the wrapp.**
+6. **Stop Steam, save the session, and take the sign-in out of the wrapp**
+   (`STEAM.SIGN-OUT`).
    The build runs Steam inside the wrapp's own prefix, so without this the
    finished `.app` would carry the account's token, and anyone given a copy
    could use the account. A wrapp gets the sign-in from the shared store when
    it runs, and on a Mac without one asks for it once. Then release the
    Steam lock: nothing after this uses Steam, and a wrapp opened while the
    build saves itself would otherwise find Steam taken by the build.
-7. **Configure.** A game that runs without Steam is moved out of
-   `steamapps/common/` into `Program Files (x86)/Nancy Drew/`, and the Steam
-   client is deleted; otherwise its exe stays in Steam's library and
-   `AppSettings.plist` gets `SteamGameId`. `SteamLaunchMode` records the
-   user's choice. Her Interactive's patches are not applied: Steam's build is
-   current, and the patchers refuse it ([game-patches.md](game-patches.md)).
+7. **Configure.** The rest of the edition's steps: a game that runs without
+   Steam is moved out of `steamapps/common/` to where `--into` linked it, and
+   Steam taken away (`STEAM.REMOVE`); otherwise it stays in Steam's library,
+   reached through the link, and `AppSettings.plist` gets `SteamGameId`. The
+   launch is recorded as the plan's, and `SteamLaunchMode` records the
+   person's choice for an older Second Chance. Her Interactive's patches are
+   not applied: Steam's build is current, and the patchers refuse it
+   ([game-patches.md](game-patches.md)).
 
 Steam is stopped on the failure path too, and the session saved if it signed
 in, so a failed build neither leaves Steam running nor loses a refreshed
@@ -162,27 +197,29 @@ steam` runs the whole thing headless.
 
 ## Which games, and how they launch
 
-`GameInfo` carries each game's Steam app ID, install folder (under
-`steamapps/common/`) and Windows executable, taken from Steam's app info.
+`GameInfo` carries each game's Steam app ID and install folder (under
+`steamapps/common/`), from its Steam edition's `steam-game` input, and the
+Windows program Steam starts, from that edition's launch (`--steam.exe`).
 30 of the 33 games are on Steam; the original Secrets Can Kill and Stay Tuned
 for Danger aren't (Steam's Secrets Can Kill is the Remastered edition), and
 Ransom of the Seven Ships (31980) is no longer sold but still installs for
 those who own it.
 
-The engine a Steam wrapp uses (`GameInfo.steamEngine(launchMode:)`):
+How a Steam wrapp starts its game is its Steam stage's `LAUNCH`, as each
+bundle writes it:
 
-| Game | Choice offered | Engine | Starts by |
+| Game | Choice offered | Launch | Starts by |
 | --- | --- | --- | --- |
-| one ScummVM runs from disc, any `steamDRM` | none | `.scummvm` | ScummVM on Steam's files; Steam is removed from the wrapp |
-| `.yesLaunchViaSteamOnly`, `.yesLaunchWhenSteamRunning`, or not worked out (`nil`) | none | `.wineSteam` | `steam.exe -applaunch <id>` |
-| `.no` | "via Steam" | `.wineSteam` | as above |
-| `.no` | "directly" | `.wine` | the exe; Steam is removed from the wrapp |
+| one ScummVM runs from disc | none | `/SharedSupport/game/ nancy:…` | ScummVM on Steam's files, copied into the app; no Wine is kept |
+| any other | none | `steam://rungameid/<id>` | `steam.exe -applaunch <id>` |
+| DRM-free, with a `launch-mode` input | "via Steam" | `steam://rungameid/<id>`, `--fallback` the exe | as above |
+| DRM-free, with a `launch-mode` input | "directly" | the exe, after `STEAM.REMOVE` | Wine |
 
 **Everything that needs Steam is launched by Steam** (`-applaunch`), which
 works whatever the DRM. The other way — Steam `-silent`, then the wrapp
 starting the exe itself (`.wineSteamSilent`, still understood by the wrapp) —
 left Blue Moon's Steam release running with no window for minutes, though
-its `steamDRM` says it only needs Steam running; through `-applaunch` its
+its DRM is said to need only Steam running; through `-applaunch` its
 window was up in a second.
 
 **The ScummVM games always run in ScummVM**, so they get no launch choice
@@ -191,10 +228,13 @@ under Wine it ignores the mouse — its cursor stays put while clicks land
 elsewhere — while ScummVM reads only the data and so doesn't care about the
 exe's DRM.
 
-The choice (`offersSteamLaunchChoice`) is put to the user without naming
-engines: launching directly is quicker and more reliable, launching via Steam
-keeps Steam Cloud saves. A game whose DRM is worked out and set in
-its bundle's `drm` ([program-bundles.md](program-bundles.md)) gets the faster path from then on.
+The choice (`offersSteamLaunchChoice`, from the edition's `launch-mode`
+input) is put to the user without naming engines: launching directly is
+quicker and more reliable, launching via Steam keeps Steam Cloud saves. What
+is known of a game's DRM is a note on its Steam edition (`notes: { drm: … }`),
+for people: a game found to be DRM-free gets the choice by its bundle gaining
+the input and the `IF` around its `LAUNCH`
+([program-bundles.md](program-bundles.md)).
 
 ## Running
 
@@ -278,15 +318,17 @@ without a sign before it counts as stalled.
 
 **A DRM-free game the user chose to launch via Steam can fall back to
 launching directly.** Both the possible-launch-failure warning and the error
-offer **Start Without Steam** (starting the game without Steam) when `AppSettings.plist` has
-`SteamLaunchMode` = `steam` (`GameConfig.canLaunchWithoutSteam`). On a
-heavily loaded Mac the busy-Mac note replaces the warning, but the offer
+offer **Start Without Steam** (starting the game without Steam) when the
+recorded launch has a fallback (`LAUNCH --fallback`, `GameConfig.hasFallback`;
+for a wrapp built before launches were recorded, `SteamLaunchMode` =
+`steam`). On a heavily loaded Mac the busy-Mac note replaces the warning, but the offer
 still appears under it once the warning would have; a game with
-DRM never had the choice, has no `SteamLaunchMode`, and isn't offered it.
+DRM has no fallback, and isn't offered it.
 Picking it quits the wrapp the usual way — Steam stopped, the sign-in saved,
 the Wine session ended — and then opens a new instance with
-`--launch-without-steam`, which runs as engine `wine` on the exe still in
-Steam's library (`GameConfig.withoutSteam()`), without the save warning the
+`--launch-without-steam`, which runs the fallback, the exe still in Steam's
+library, with the launch's options and without its launcher, Steam
+(`GameConfig.withFallback()`), and without the save warning the
 player has just seen. It is for that launch only: the next one goes through
 Steam again. Saves are the same folder either way; only the Steam Cloud sync
 is skipped.

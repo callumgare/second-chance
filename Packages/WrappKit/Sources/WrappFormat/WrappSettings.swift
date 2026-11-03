@@ -29,7 +29,7 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     public var steamAppID: String?
     /// How a DRM-free Steam game starts, as the person chose when building
     /// it; nil for a game that offered no choice.
-    public var steamLaunchMode: GameInfo.SteamLaunchMode?
+    public var steamLaunchMode: String?
     /// For a game installed through Big Fish's Game Manager: the message file
     /// its own Play shortcut opens (`LaunchGame.bfg`), a path from the root of
     /// the C: drive as `gameExePath` is. The wrapp hands it to Big Fish's
@@ -61,7 +61,7 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
 
     public init(
         gameExePath: String, engine: GameInfo.GameEngine, gameSlug: String?, source: WrappSource?,
-        installerDir: String, steamAppID: String? = nil, steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        installerDir: String, steamAppID: String? = nil, steamLaunchMode: String? = nil,
         bigFishLaunchFile: String? = nil, bigFishSKU: String? = nil, bigFishTrial: Bool? = nil,
         recordedLaunch: RecordedLaunch? = nil
     ) {
@@ -96,10 +96,10 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
             return RecordedLaunch(program: "scummvm:" + (folder.hasSuffix("/") ? folder : folder + "/"))
         case .dosbox:
             return RecordedLaunch(program: "dosbox:C:" + gameExePath)
-        case .wineSteam where steamLaunchMode != .direct:
+        case .wineSteam where steamLaunchMode != "direct":
             let exe = "wine:C:" + gameExePath
             return RecordedLaunch(program: "steam://rungameid/\(steamAppID ?? "")", options: ["steam.exe": exe],
-                                  fallback: steamLaunchMode == .steam ? exe : nil)
+                                  fallback: steamLaunchMode == "steam" ? exe : nil)
         default:
             if let bigFishLaunchFile { return RecordedLaunch(program: "big-fish:C:" + bigFishLaunchFile) }
             return RecordedLaunch(program: "wine:C:" + gameExePath)

@@ -34,9 +34,11 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 226820, common-folder: "Nancy Drew The Ghost of Thornton Hall", exe: "Thornton.exe" }
-    drm: "launch-via-steam-only"
+        game: { type: "steam-game", app-id: 226820, common-folder: "Nancy Drew The Ghost of Thornton Hall" }
+    notes:
+      drm: "launch-via-steam-only"
   - id: "big-fish"
     source: "big-fish"
     build:

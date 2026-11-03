@@ -244,20 +244,12 @@
         "build": { "$ref": "#/$defs/build" },
         "patches": { "type": "array", "items": { "$ref": "#/$defs/name" }, "uniqueItems": true },
         "detect": { "$ref": "#/$defs/detect" },
-        "tests": { "$ref": "#/$defs/tests" }
+        "tests": { "$ref": "#/$defs/tests" },
+        "notes": {
+          "description": "For people only, about this edition (a Steam edition's drm): never read by a build, the app or a wrapp, and not checked."
+        }
       },
       "allOf": [
-        {
-          "if": { "properties": { "source": { "const": "steam" } } },
-          "then": {
-            "properties": {
-              "drm": {
-                "description": "What the game's DRM needs; left out when not known.",
-                "enum": ["no", "launch-when-steam-running", "launch-via-steam-only"]
-              }
-            }
-          }
-        },
         {
           "if": { "properties": { "source": { "const": "download" } } },
           "then": {
@@ -313,10 +305,6 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^[^/\\\\]+$"
-        },
-        "exe": {
-          "description": "The program Steam starts, relative to common-folder.",
-          "$ref": "#/$defs/relative-path"
         }
       }
     },

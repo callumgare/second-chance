@@ -71,7 +71,7 @@ extension WrappBuildInput {
     /// ask anyone to sign in: the build needs a saved sign-in.
     convenience init(
         steamGame slug: String,
-        launchMode: GameInfo.SteamLaunchMode? = nil,
+        launchMode: String? = nil,
         outputDir: URL,
         viewModel: WrappBuildViewModel? = nil
     ) {
@@ -80,7 +80,7 @@ extension WrappBuildInput {
             "OUTPUT_PATH": outputDir.path,
         ]
         if let launchMode {
-            environment["STEAM_LAUNCH_MODE"] = launchMode.rawValue
+            environment["STEAM_LAUNCH_MODE"] = launchMode
         }
         self.init(environment: environment, viewModel: viewModel)
     }

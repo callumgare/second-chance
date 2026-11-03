@@ -2,23 +2,19 @@
 //  GameInfoSteamTests.swift
 //  SecondChanceTests
 //
-//  Each game's Steam data, and which engine a Steam-sourced wrapp uses.
+//  Each game's Steam data, and how its Steam edition starts it.
 
 import Foundation
 import Testing
 @testable import SecondChance
 import GameCatalog
+import WrappBuilder
+import WrappFormat
+import WrappModules
 
 @Suite("Game info: Steam")
 struct GameInfoSteamTests {
     let games = GameInfoProvider.shared.allGames()
-
-    @Test("Every game with known Steam DRM has its Steam app data")
-    func drmGamesAreOnSteam() {
-        for game in games where game.steamDRM != nil {
-            #expect(game.isOnSteam, "\(game.id) has steamDRM but no Steam app")
-        }
-    }
 
     @Test("Steam data is complete and the app IDs are unique")
     func steamDataIsWhole() {
@@ -26,42 +22,42 @@ struct GameInfoSteamTests {
         #expect(onSteam.count >= 30)
         for game in onSteam {
             #expect(game.steamInstallDir?.isEmpty == false, "\(game.id) has no install dir")
-            #expect(game.steamExePath?.lowercased().hasSuffix(".exe") == true, "\(game.id)'s exe is \(game.steamExePath ?? "nil")")
+            // The program Steam starts, from the edition's launch; ScummVM reads data, and has none.
+            if game.gameEngine == .scummvm {
+                #expect(game.steamExePath == nil, "\(game.id)'s exe is \(game.steamExePath ?? "nil")")
+            } else {
+                #expect(game.steamExePath?.lowercased().hasSuffix(".exe") == true, "\(game.id)'s exe is \(game.steamExePath ?? "nil")")
+            }
         }
         let ids = onSteam.compactMap(\.steamAppID)
         #expect(Set(ids).count == ids.count)
     }
 
-    @Test("Only a game known to be DRM-free offers the launch choice")
+    @Test("Only a game whose Steam edition has a launch-mode input offers the launch choice")
     func launchChoice() throws {
         let byID = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
-        #expect(try !#require(byID["haunted-mansion"]).offersSteamLaunchChoice)  // .no, but always ScummVM
-        #expect(try #require(byID["shadow-ranch"]).offersSteamLaunchChoice)  // .no
+        #expect(try !#require(byID["haunted-mansion"]).offersSteamLaunchChoice)  // DRM-free, but always ScummVM
+        #expect(try #require(byID["shadow-ranch"]).offersSteamLaunchChoice)  // DRM-free
         #expect(try !#require(byID["blue-moon"]).offersSteamLaunchChoice)  // DRM
         #expect(try !#require(byID["sea-of-darkness"]).offersSteamLaunchChoice)  // not worked out
         #expect(try !#require(byID["stay-tuned"]).offersSteamLaunchChoice)  // not on Steam
     }
 
-    @Test("The engine follows the DRM and, for DRM-free games, the user's choice", arguments: [
-        // (DRM, disc engine, choice, expected)
-        (GameInfo.SteamDRM?.some(.yesLaunchViaSteamOnly), GameInfo.GameEngine.wine, GameInfo.SteamLaunchMode?.none, GameInfo.GameEngine.wineSteam),
-        // Everything that needs Steam is launched by Steam.
-        (.yesLaunchWhenSteamRunning, .wine, nil, .wineSteam),
-        (.no, .wine, .steam, .wineSteam),
-        (.no, .wine, .direct, .wine),
-        // ScummVM games run in ScummVM from Steam too, whatever the DRM or choice.
-        (.no, .scummvm, .direct, .scummvm),
-        (.no, .scummvm, .steam, .scummvm),
-        (.yesLaunchViaSteamOnly, .scummvm, nil, .scummvm),
-        (.no, .wine, nil, .wineSteam),
-        // DRM not worked out: through Steam, which works whatever it is.
-        (nil, .wine, nil, .wineSteam),
-        (nil, .scummvm, nil, .scummvm),
-    ])
-    func engine(drm: GameInfo.SteamDRM?, disc: GameInfo.GameEngine, choice: GameInfo.SteamLaunchMode?, expected: GameInfo.GameEngine) {
-        let game = GameInfo(id: "x", title: "X", gameEngine: disc, steamDRM: drm,
-                            steam: .init(appID: 1, installDir: "X", exe: "Game.exe"))
-        #expect(game.steamEngine(launchMode: choice) == expected)
+    @Test("A Steam edition's plan says how it starts: through Steam, by Wine when chosen, or ScummVM", arguments: [
+        // (game, choice, expected)
+        ("thornton-hall", nil, GameInfo.GameEngine.wineSteam),
+        ("blue-moon", nil, .wineSteam),
+        ("shadow-ranch", "steam", .wineSteam),
+        ("shadow-ranch", "direct", .wine),
+        ("royal-tower", nil, .scummvm),
+        ("sea-of-darkness", nil, .wineSteam),
+    ] as [(String, String?, GameInfo.GameEngine)])
+    func engine(game: String, choice: String?, expected: GameInfo.GameEngine) throws {
+        let plan = try ShippedBundles.plan(forGame: game, edition: "steam", choices: choice.map { ["launch-mode": $0] } ?? [:])
+        let launch = try #require(plan?.launch)
+        #expect(SteamWrappBuilder.composition(of: launch).legacyEngine == expected)
+        // Only a game started by Steam with a choice can fall back to Wine.
+        #expect((launch.fallback != nil) == (choice == "steam"))
     }
 
     @Test("What each engine needs to start a game", arguments: [

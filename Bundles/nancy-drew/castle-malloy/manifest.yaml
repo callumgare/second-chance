@@ -28,8 +28,9 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31910, common-folder: "Nancy Drew The Haunting of Castle Malloy", exe: "CastleMalloy.exe" }
+        game: { type: "steam-game", app-id: 31910, common-folder: "Nancy Drew The Haunting of Castle Malloy" }
     # drm left out: not known, so the game is started through Steam
   - id: "big-fish"
     source: "big-fish"

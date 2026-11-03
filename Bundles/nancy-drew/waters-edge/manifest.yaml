@@ -35,9 +35,11 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 200080, common-folder: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe" }
-    drm: "launch-when-steam-running"
+        game: { type: "steam-game", app-id: 200080, common-folder: "Nancy Drew - Shadow Waters Edge" }
+    notes:
+      drm: "launch-when-steam-running"
   - id: "big-fish"
     source: "big-fish"
     build:

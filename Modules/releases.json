@@ -705,6 +705,25 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/install" : "a929cc342973a34067a728031db6383a4e677f70413d1347cef885cf1accd276",
+          "module.yaml" : "4ad85d3037bc4016a44a2181bcff0fb50e549ac513630b7c3243065b2dc3f32d",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "39570faa9291b3d0d0d8e9ba0eb4650fc8520ac8736624093401bca780e5f01c",
+          "stages/client" : "3e5dbf7dd1a2ef2af7fad5f3907fe76e55b77fb46f07a4bca1c7e2ee90a5f4f1"
+        },
+        "functions" : [
+          "functions/install"
+        ],
+        "release" : 3,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "wine" : [

@@ -234,16 +234,9 @@ public nonisolated struct BuildPlanner {
                 throw PlanError(description: "the Wrappfile has no stage called \(name)")
             }
             // A module's stage that is a Wrappfile (`FROM wine@10/prefix`) is
-            // planned first, once, as a stage of its own (`wine/prefix`).
-            if case .module(let id, let constraint, let moduleStage) = stage.from,
-               let module = modules[id.lowercased()], let found = try moduleStageFile(moduleStage, of: module) {
-                let key = "\(module.manifest.id)/\(moduleStage)"
-                if modulesByStage[key] == nil {
-                    let planned = try context.planModuleStage(found, named: key, module: module, constraint: constraint)
-                    modulesByStage[key] = planned.modules
-                    stages.append(planned.stage)
-                }
-            }
+            // planned first, once, as a stage of its own (`wine/prefix`),
+            // after the module stage it's built from, if any.
+            try context.planModuleStages(stage.from, into: &stages, known: &modulesByStage)
             let planned = try context.plan(stage, globals: globals, inheriting: modulesByStage)
             modulesByStage[name] = planned.modules
             stages.append(planned.stage)
@@ -293,13 +286,21 @@ public nonisolated struct BuildPlanner {
     /// prefix is made), at the version `constraint` picks: what the build
     /// makes the prefix with, and its layer is keyed on.
     public static func moduleStage(_ id: String, _ name: String, constraint: String?, modules: [ModuleFolder]) throws -> PlannedStage? {
-        guard let module = modules.first(where: { $0.manifest.id == id }) else { return nil }
+        try moduleStages(id, name, constraint: constraint, modules: modules).last
+    }
+
+    /// A module's stage, after each module stage it's built from, in the
+    /// order they're made (`wine/prefix`, then `steam/client`).
+    public static func moduleStages(_ id: String, _ name: String, constraint: String?, modules: [ModuleFolder]) throws -> [PlannedStage] {
+        guard let module = modules.first(where: { $0.manifest.id == id }) else { return [] }
         let manifest = try Manifest.decode(["format": 1, "id": "module/\(id)", "version": 1, "title": id,
                                             "editions": [["id": "module", "source": "download"]]])
         let planner = BuildPlanner(bundle: ProgramBundle(folder: module.folder, manifest: manifest), wrappfile: Wrappfile(), modules: modules)
-        guard let stage = try planner.moduleStageFile(name, of: module) else { return nil }
         let context = Context(planner: planner, edition: manifest.editions[0], conditions: .thisMac, recorder: Recorder())
-        return try context.planModuleStage(stage, named: "\(id)/\(name)", module: module, constraint: constraint).stage
+        var stages: [PlannedStage] = []
+        var known: [String: StageModules] = [:]
+        try context.planModuleStages(StageSource.module(id: id, constraint: constraint, stage: name), into: &stages, known: &known)
+        return stages
     }
 
     /// A module's function's steps, planned in a stage with nothing but
@@ -460,9 +461,27 @@ public nonisolated struct BuildPlanner {
         /// A module's stage, planned with the module as `self` and at the
         /// version the bundle's `FROM` picked, which its own `USE` of the
         /// module takes.
+        /// The module stage `from` names, if it's one that is a Wrappfile, and
+        /// each it's built from before it, each planned once: added to
+        /// `stages` and `known`, by `<module>/<stage>`.
+        func planModuleStages(_ from: StageSource, into stages: inout [PlannedStage],
+                              known: inout [String: StageModules]) throws(PlanError) {
+            guard case .module(let id, let constraint, let name) = from, let module = planner.modules[id.lowercased()],
+                  let found = try planner.moduleStageFile(name, of: module) else { return }
+            let key = "\(module.manifest.id)/\(name)"
+            guard known[key] == nil else { return }
+            try planModuleStages(found.from, into: &stages, known: &known)
+            let planned = try planModuleStage(found, named: key, module: module, constraint: constraint, inheriting: known)
+            known[key] = planned.modules
+            stages.append(planned.stage)
+        }
+
         func planModuleStage(_ stage: Stage, named name: String, module: ModuleFolder,
-                             constraint: String?) throws(PlanError) -> (stage: PlannedStage, modules: StageModules) {
+                             constraint: String?, inheriting: [String: StageModules] = [:]) throws(PlanError) -> (stage: PlannedStage, modules: StageModules) {
             var scope = Scope()
+            if case .module(let parent, _, let parentStage) = stage.from, let inherited = inheriting["\(parent.lowercased())/\(parentStage)"] {
+                scope.modules = inherited
+            }
             scope.module = module
             try addModule(module.manifest.id, constraint: constraint, as: nil, to: &scope, origin: name)
             var steps: [PlannedStep] = []
@@ -504,12 +523,15 @@ public nonisolated struct BuildPlanner {
                             guard try holds(condition, scope: scope, origin: Self.locate(origin, line: branch.line)) else { continue }
                         }
                         // A branch is a scope: its declarations are its own, and
-                        // a SET of an outer VAR changes it.
+                        // a SET of an outer VAR changes it. What it records (a
+                        // LAUNCH, a VOLUME) and the modules it uses are the
+                        // stage's, as the branch taken decides them.
                         var inner = scope
                         inner.frames.append([:])
                         try expand(branch.steps, scope: &inner, origin: origin, into: &steps)
                         inner.frames.removeLast()
                         scope.frames = inner.frames
+                        scope.modules = inner.modules
                         break
                     }
                 }
@@ -698,7 +720,8 @@ public nonisolated struct BuildPlanner {
             var options: [String: String] = [:]
             var environment: [String: String] = [:]
             for option in instruction.options {
-                let role = spec.role(ofOption: option.name)
+                let key = moduleOptionName(option.name, scope: scope)
+                let role = moduleOptionRole(key, of: instruction.keyword) ?? spec.role(ofOption: option.name)
                 let text = try option.value.map { word throws(PlanError) in try substitute(word, in: scope, origin: origin, as: role) } ?? ""
                 if text.contains("${input.") {
                     throw PlanError(description: "\(origin): a secret can't be recorded in the app: \(option.name)")
@@ -707,7 +730,7 @@ public nonisolated struct BuildPlanner {
                     let pair = text.split(separator: "=", maxSplits: 1)
                     environment[String(pair[0])] = pair.count > 1 ? String(pair[1]) : ""
                 } else {
-                    options[moduleOptionName(option.name, scope: scope)] = try fullForm(text, role: role, scope: scope, modules: modules, origin: origin)
+                    options[key] = try fullForm(text, role: role, scope: scope, modules: modules, origin: origin)
                 }
             }
             var arguments: [String] = []
@@ -742,11 +765,24 @@ public nonisolated struct BuildPlanner {
 
         /// What a launch must say for the module that starts it.
         func checkLaunch(_ launch: RecordedLaunch, origin: String) throws(PlanError) {
-            switch launch.launcher(planner.pathTypes) {
-            case .wine?:
+            func checkGraphics(_ what: String) throws(PlanError) {
                 let graphics = launch.options["wine.graphics"]
                 guard let graphics, ["direct-draw", "direct-3d", "unknown"].contains(graphics) else {
-                    throw PlanError(description: "\(origin): a Wine launch says what it draws with: --wine.graphics=direct-draw, direct-3d or unknown")
+                    throw PlanError(description: "\(origin): \(what) says what it draws with: --wine.graphics=direct-draw, direct-3d or unknown")
+                }
+            }
+            switch launch.launcher(planner.pathTypes) {
+            case .wine?:
+                try checkGraphics("a Wine launch")
+            case .steam?:
+                // Steam starts a Windows game in the app's Wine, so it says
+                // what it draws with too, and the program Steam starts.
+                try checkGraphics("a Steam launch")
+                guard launch.options["steam.exe"]?.hasPrefix("wine:") == true else {
+                    throw PlanError(description: "\(origin): a Steam launch names the program Steam starts: --steam.exe=<its path in Wine>")
+                }
+                guard launch.arguments.isEmpty else {
+                    throw PlanError(description: "\(origin): a Steam launch takes no arguments")
                 }
             case .scummvm?:
                 guard !launch.arguments.isEmpty else {
@@ -770,6 +806,14 @@ public nonisolated struct BuildPlanner {
         func spec(of instruction: Instruction, module: String?) -> InstructionSpec? {
             guard let module else { return InstructionSpec.core[instruction.keyword] }
             return planner.native(planner.modules[module]?.manifest.native ?? "")?.instructions.first { $0.name == instruction.name }
+        }
+
+        /// What a module's option on a core instruction is (`steam.exe`, a
+        /// location); nil for a core option, or a module's that is text.
+        func moduleOptionRole(_ key: String, of keyword: String) -> InstructionSpec.Role? {
+            guard let dot = key.firstIndex(of: ".") else { return nil }
+            let module = planner.modules[String(key[..<dot])]
+            return planner.native(module?.manifest.native ?? "")?.coreOptionRoles[keyword]?[String(key[key.index(after: dot)...])]
         }
 
         /// `--<alias>.<option>` keyed by the module's id: `--w.drive` after

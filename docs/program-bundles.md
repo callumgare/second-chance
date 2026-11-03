@@ -55,15 +55,17 @@ editions:                       # what it was sold as, and where each comes from
         installer: { type: "her-download", format: "windows" }
   - id: "steam"
     source: "steam"
-    build:                      # no target: its builder builds it, as before Wrappfiles
+    build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock", exe: "Game.exe" }
+        game: { type: "steam-game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock" }
         launch-mode:            # a question, whose answer is the input's value
           type: "choice"
           options: ["direct", "steam"]
           default: "direct"     # what a headless build takes
           prompt: "How should the game start?"
-    drm: "no"                   # left out when not known
+    notes:                      # for people only, about this edition
+      drm: "no"
   - id: "big-fish"
     source: "big-fish"
     build:
@@ -82,7 +84,7 @@ question whose prompt is looked up in the string catalog. An edition's
 inputs are of its source's type, or choices. Every input the target reads
 with no default must be given, and every one given must be read: one nothing
 reads is a typo, or something asked for no reason. An edition with no
-target yet (Steam's, Big Fish's) isn't checked: its builder reads its inputs
+target yet (Big Fish's) isn't checked: its builder reads its inputs
 itself.
 
 The schema describes every field. `updates` is read when an old wrapp is updated
@@ -99,8 +101,9 @@ into `GameInfo`, by field:
 | the module of the first planned edition's `LAUNCH` | `gameEngine`: `.scummvm`, `.dosbox`, otherwise `.wine` |
 | that launch's program, on Wine's or DOSBox's C: | `internalGameExePath`, without `C:` |
 | that launch's `--wine.graphics` | `graphics`: what the game draws with, for an `.exe` that can't say (`GameGraphicsAPI`) |
-| the `steam` edition's `steam-game` input: `app-id`, `common-folder`, `exe` | `steamAppID`, `steamInstallDir`, `steamExePath` |
-| the `steam` edition's `drm` | `steamDRM`: `no`, `launch-when-steam-running`, `launch-via-steam-only`, or left out when not known |
+| the `steam` edition's `steam-game` input: `app-id`, `common-folder` | `steamAppID`, `steamInstallDir` |
+| the `steam` edition's launch: its `--steam.exe`, or its Wine program | `steamExePath`, its name |
+| whether the `steam` edition has a `launch-mode` input | `offersSteamLaunchChoice` |
 | the `big-fish` edition's `big-fish-game` input: `product` | `bigFishProduct` |
 | editions' `detect.aliases` and `detect.codes` | `detectionAliases`, `detectionCodes` |
 | `series`, then `series-order` | the order of `allGames()` |
@@ -115,7 +118,12 @@ say so for the others.
 `notes` is for what is worth recording but changes nothing: which installer a
 game uses, its quirks. It is one key the schema doesn't check, rather than
 unchecked keys anywhere, since rejecting a mistyped key is what catches real
-mistakes. Nothing reads it but `sc bundle list --where`.
+mistakes. Nothing reads it but `sc bundle list --where`. An edition has
+`notes` too, about itself: a Steam edition's `drm` (`no`,
+`launch-when-steam-running`, `launch-via-steam-only`, left out when not
+known), found as `editions.notes.drm=no`. They aren't merged with the top
+level's, and no build reads them: what a game's DRM allows is what its Steam
+stage's `LAUNCH` says.
 
 ### How a manifest is read
 

@@ -28,8 +28,9 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31980, common-folder: "Nancy Drew Ransom of the Seven Ships", exe: "Ransom.exe" }
+        game: { type: "steam-game", app-id: 31980, common-folder: "Nancy Drew Ransom of the Seven Ships" }
     # drm left out: not known, so the game is started through Steam
 
 tests:

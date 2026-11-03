@@ -27,14 +27,16 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 572740, common-folder: "Nancy Drew The Secret of Shadow Ranch", exe: "Game.exe" }
+        game: { type: "steam-game", app-id: 572740, common-folder: "Nancy Drew The Secret of Shadow Ranch" }
         launch-mode: # DRM-free, so it can start without Steam
           type: "choice"
           options: ["direct", "steam"]
           default: "direct" # pre-selected; what a headless build takes
           prompt: "How should the game start?"
-    drm: "no"
+    notes:
+      drm: "no"
   - id: "big-fish"
     source: "big-fish"
     build:

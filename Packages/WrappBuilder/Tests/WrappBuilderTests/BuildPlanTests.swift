@@ -75,9 +75,26 @@ struct BuildPlanTests {
         #expect(scarlet.icon == "/Resources/nancy-drew.icns")
     }
 
-    @Test("A Steam edition names no stage: a module's default stages build it")
-    func steamHasNoPlan() throws {
-        #expect(try plan("old-clock", edition: "steam") == nil)
+    @Test("A Steam edition is built from the steam module's client stage, and the choice decides its launch")
+    func steamPlans() throws {
+        func plan(_ mode: String) throws -> BuildPlan {
+            try #require(try self.plan("old-clock", edition: "steam", conditions: BuildConditions(arch: "arm64", macos: 15, choices: ["launch-mode": mode])))
+        }
+        let steam = try plan("steam")
+        // The client stage is built from the wine module's prefix, each planned once.
+        #expect(steam.stages.map(\.name) == ["wine/prefix", "steam/client", "steam"])
+        #expect(steam.stages[1].steps.map { "\($0.module ?? "").\($0.instruction)" }
+                == ["steam.CLIENT", "wine.REGISTRY", "wine.REGISTRY", "wine.REGISTRY", "wine.REGISTRY"])
+        #expect(steam.bundleSteps.map { "\($0.module ?? "").\($0.instruction)" }
+                == ["wine.WINETRICKS", ".EDIT", ".COPY", "steam.INSTALL", "steam.SIGN-OUT", ".EDIT"])
+        let exe = "wine:C:/Nancy Drew/Secret of the Old Clock/Game.exe"
+        #expect(steam.launch?.program == "steam://rungameid/31880")
+        #expect(steam.launch?.options == ["wine.graphics": "direct-draw", "steam.exe": exe])
+        #expect(steam.launch?.fallback == exe)
+        let direct = try plan("direct")
+        #expect(direct.bundleSteps.last?.instruction == "REMOVE")
+        #expect(direct.launch?.program == exe)
+        #expect(direct.launch?.fallback == nil)
     }
 
     @Test("An install's --creates is the launch's program when the launch is in its folder")

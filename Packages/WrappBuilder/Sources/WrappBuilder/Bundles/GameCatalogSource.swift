@@ -25,14 +25,24 @@ public nonisolated enum GameCatalogSource {
         try bundles
             .sorted { ($0.manifest.series ?? "", $0.manifest.seriesOrder ?? .max, $0.manifest.id)
                 < ($1.manifest.series ?? "", $1.manifest.seriesOrder ?? .max, $1.manifest.id) }
-            .map { bundle in gameInfo(bundle.manifest, launch: try defaultLaunch(of: bundle, modules: modules)) }
+            .map { bundle in
+                gameInfo(bundle.manifest, launch: try defaultLaunch(of: bundle, modules: modules),
+                         steamLaunch: try launch(of: bundle, edition: { $0.source == .steam }, modules: modules))
+            }
     }
 
     /// The launch of the bundle's first edition with a stage, planned for
     /// both kinds of Mac: the catalogue is checked in, so it mustn't depend
     /// on which Mac made it, and a launch that differs between them fails.
     public static func defaultLaunch(of bundle: ProgramBundle, modules: [ModuleFolder]) throws -> RecordedLaunch? {
-        guard let edition = bundle.manifest.editions.first(where: { $0.build?.target != nil }) else { return nil }
+        try launch(of: bundle, edition: { _ in true }, modules: modules)
+    }
+
+    /// The launch of the bundle's first edition with a stage that `matches`,
+    /// with its choices' defaults, planned for both kinds of Mac.
+    static func launch(of bundle: ProgramBundle, edition matches: (Manifest.Edition) -> Bool,
+                       modules: [ModuleFolder]) throws -> RecordedLaunch? {
+        guard let edition = bundle.manifest.editions.first(where: { $0.build?.target != nil && matches($0) }) else { return nil }
         let text = try String(contentsOf: bundle.folder.appendingPathComponent("Wrappfile"), encoding: .utf8)
         let planner = BuildPlanner(bundle: bundle, wrappfile: try WrappfileParser.parse(text), modules: modules)
         let launches = try ["arm64", "x86_64"].map { arch in
@@ -46,14 +56,18 @@ public nonisolated enum GameCatalogSource {
 
     /// The game a manifest describes, as today's code knows games, with its
     /// default edition's launch.
-    public static func gameInfo(_ manifest: Manifest, launch: RecordedLaunch?) -> GameInfo {
+    public static func gameInfo(_ manifest: Manifest, launch: RecordedLaunch?, steamLaunch: RecordedLaunch? = nil) -> GameInfo {
         let editions = manifest.editions
         let disc = editions.first { $0.source == .disc }
         let steamEdition = editions.first { $0.source == .steam }
         let steamInput = steamEdition?.inputs?.first
+        // The program Steam starts, or the one Wine does when the default
+        // choice takes Steam away: in the folder Steam installs the game in.
+        let steamExe = (steamLaunch?.options["steam.exe"] ?? (steamLaunch?.launcher() == .wine ? steamLaunch?.program : nil))
+            .map { String($0.split(separator: "/").last ?? "") }
         let steam = steamInput.flatMap { input -> GameInfo.SteamApp? in
-            guard let appID = input.appId, let folder = input.commonFolder, let exe = input.exe else { return nil }
-            return GameInfo.SteamApp(appID: appID, installDir: folder, exe: exe)
+            guard let appID = input.appId, let folder = input.commonFolder else { return nil }
+            return GameInfo.SteamApp(appID: appID, installDir: folder, exe: steamExe)
         }
         let launcher = launch?.launcher()
         // Today's paths are from the root of the drive the program's on.
@@ -65,8 +79,8 @@ public nonisolated enum GameCatalogSource {
             gameEngine: launcher == .scummvm ? .scummvm : launcher == .dosbox ? .dosbox : .wine,
             graphics: launch?.graphics,
             internalGameExePath: exe,
-            steamDRM: steamEdition?.drm.flatMap(steamDRM),
             steam: steam,
+            offersSteamLaunchChoice: steamInput != nil && steamEdition?.choice("launch-mode") != nil,
             bigFish: editions.first { $0.source == .bigFish }?.inputs?.first?.product,
             detectionAliases: unique(editions.flatMap { $0.detect?.aliases ?? [] }),
             detectionCodes: unique(editions.flatMap { $0.detect?.codes ?? [] }),
@@ -83,16 +97,6 @@ public nonisolated enum GameCatalogSource {
         let name = manifest.displayName ?? (manifest.series == nil ? "{title}" : "{series} - {title}")
         return name.replacingOccurrences(of: "{title}", with: manifest.title)
             .replacingOccurrences(of: "{series}", with: manifest.series ?? "")
-    }
-
-    /// The manifest's `drm`, as today's code calls it.
-    static func steamDRM(_ drm: String) -> GameInfo.SteamDRM? {
-        switch drm {
-        case "no": .no
-        case "launch-when-steam-running": .yesLaunchWhenSteamRunning
-        case "launch-via-steam-only": .yesLaunchViaSteamOnly
-        default: nil
-        }
     }
 
     private static func unique(_ values: [String]) -> [String] {
@@ -127,10 +131,11 @@ public nonisolated enum GameCatalogSource {
             if game.gameEngine != .wine { arguments.append("gameEngine: .\(engineCase(game.gameEngine))") }
             if let graphics = game.graphics { arguments.append("graphics: .\(graphicsCase(graphics))") }
             if let exe = game.internalGameExePath { arguments.append("internalGameExePath: \(literal(exe))") }
-            if let drm = game.steamDRM { arguments.append("steamDRM: .\(drmCase(drm))") }
-            if let appID = game.steamAppID, let folder = game.steamInstallDir, let exe = game.steamExePath {
-                arguments.append("steam: .init(appID: \(appID), installDir: \(literal(folder)), exe: \(literal(exe)))")
+            if let appID = game.steamAppID, let folder = game.steamInstallDir {
+                let exe = game.steamExePath.map(literal) ?? "nil"
+                arguments.append("steam: .init(appID: \(appID), installDir: \(literal(folder)), exe: \(exe))")
             }
+            if game.offersSteamLaunchChoice { arguments.append("offersSteamLaunchChoice: true") }
             if let product = game.bigFishProduct { arguments.append("bigFish: \(product)") }
             if !game.detectionAliases.isEmpty { arguments.append("detectionAliases: [\(game.detectionAliases.map(literal).joined(separator: ", "))]") }
             if !game.detectionCodes.isEmpty { arguments.append("detectionCodes: [\(game.detectionCodes.map(literal).joined(separator: ", "))]") }
@@ -162,14 +167,6 @@ public nonisolated enum GameCatalogSource {
         switch graphics {
         case .directDraw: "directDraw"
         case .direct3D: "direct3D"
-        }
-    }
-
-    private static func drmCase(_ drm: GameInfo.SteamDRM) -> String {
-        switch drm {
-        case .no: "no"
-        case .yesLaunchWhenSteamRunning: "yesLaunchWhenSteamRunning"
-        case .yesLaunchViaSteamOnly: "yesLaunchViaSteamOnly"
         }
     }
 }

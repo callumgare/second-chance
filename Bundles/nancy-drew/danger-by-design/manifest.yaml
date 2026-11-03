@@ -28,8 +28,9 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31800, common-folder: "Nancy Drew Danger by Design", exe: "Game.exe" }
+        game: { type: "steam-game", app-id: 31800, common-folder: "Nancy Drew Danger by Design" }
     # drm left out: not known, so the game is started through Steam
   - id: "big-fish"
     source: "big-fish"

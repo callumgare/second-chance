@@ -15,6 +15,9 @@ import os
 import Testing
 @testable import ProcessKit
 @testable import SecondChance
+import WrappBuilder
+import WrappFormat
+import WrappModules
 @testable import SecondChanceKit
 @testable import WineKit
 import GameCatalog
@@ -38,26 +41,26 @@ struct SteamInstallIntegrationTests {
         // games from other sources build alongside. A DRM-free game is built
         // to launch directly, the default answer.
         try await IntegrationStages.steam.withLock {
-            try await buildAndLaunch(game, launchMode: game.offersSteamLaunchChoice ? .direct : nil)
+            try await buildAndLaunch(game, launchMode: game.offersSteamLaunchChoice ? "direct" : nil)
         }
     }
 
     // MARK: - One game
 
-    /// Where the build should put the game's exe, from the game's Steam data
-    /// and the engine its launch mode gives.
-    static func expectedExePath(_ game: GameInfo, engine: GameInfo.GameEngine) -> String? {
-        guard let installDir = game.steamInstallDir, let exe = game.steamExePath else { return nil }
-        switch engine {
-        case .scummvm: return "/Program Files (x86)/Nancy Drew/\(installDir)"
-        case .wine: return "/Program Files (x86)/Nancy Drew/\(installDir)/\(exe)"
-        case .wineSteam, .wineSteamSilent: return "/Program Files (x86)/Steam/steamapps/common/\(installDir)/\(exe)"
-        case .dosbox: return nil  // no Steam game runs in DOSBox
-        }
+    /// The engine and exe the game's Steam edition should give, as its plan
+    /// says for `launchMode`: the program Steam starts or Wine does, where
+    /// the bundle installs it, or ScummVM's data in the app.
+    static func expected(_ game: GameInfo, launchMode: String?) throws -> (engine: GameInfo.GameEngine, exe: String) {
+        let plan = try ShippedBundles.plan(forGame: game.id, edition: "steam", choices: launchMode.map { ["launch-mode": $0] } ?? [:])
+        let launch = try #require(plan?.launch)
+        let composition = SteamWrappBuilder.composition(of: launch)
+        let program = launch.options["steam.exe"] ?? launch.program
+        let exe = composition.launcher == .scummvm ? "/SharedSupport/game" : String(program.dropFirst("wine:C:".count))
+        return (composition.legacyEngine ?? .wine, exe)
     }
 
-    private func buildAndLaunch(_ game: GameInfo, launchMode: GameInfo.SteamLaunchMode?, label: String? = nil) async throws {
-        let engine = game.steamEngine(launchMode: launchMode)
+    private func buildAndLaunch(_ game: GameInfo, launchMode: String?, label: String? = nil) async throws {
+        let (engine, expectedExe) = try Self.expected(game, launchMode: launchMode)
         let run = IntegrationGameRun(game: game, label: label ?? game.id, source: "steam", progress: Self.progress)
         try await run.run { outcome in
             if let owned = Self.ownedSlugs.withLock({ $0 }), !owned.contains(game.id) {
@@ -87,8 +90,7 @@ struct SteamInstallIntegrationTests {
                 outcome.expect(outcome.buildLog.contains { $0.contains(marker) }, "The build's log has no \"\(marker)\" line")
             }
 
-            let expectedExe = Self.expectedExePath(game, engine: engine)
-            outcome.expect(recorder.detectedExePath == expectedExe, "Exe \(recorder.detectedExePath ?? "nil"), expected \(expectedExe ?? "nil")")
+            outcome.expect(recorder.detectedExePath == expectedExe, "Exe \(recorder.detectedExePath ?? "nil"), expected \(expectedExe)")
 
             // The build ran Steam signed in inside this wrapp; none of that may ship.
             let prefix = wrapp.appendingPathComponent("Contents/SharedSupport/prefix")

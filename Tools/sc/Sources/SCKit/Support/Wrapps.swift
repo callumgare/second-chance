@@ -108,7 +108,7 @@ struct SteamSourceOptions: ParsableArguments, WrappSourceInput {
         var env = ["INSTALLATION_SOURCE": "steam", "STEAM_GAME_SLUG": game.slug]
         if let steamLaunch {
             guard game.offersSteamLaunchChoice else {
-                throw SCError("\(game.title) has no launch choice: its DRM decides how it starts.")
+                throw SCError("\(game.title) has no launch choice: its Steam edition has no launch-mode input.")
             }
             env["STEAM_LAUNCH_MODE"] = steamLaunch.rawValue
         }

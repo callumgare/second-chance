@@ -3,6 +3,7 @@
 CONST install-dir = "C:/Program Files (x86)/Her Interactive/Ghost Dogs of Moon Lake"
 INPUT disc-1
 INPUT installer
+INPUT game
 
 FROM wine@10/prefix AS prefix
 
@@ -34,3 +35,10 @@ DO nancy-drew.patch --id=ghost-dogs-full --into=${const.install-dir}
 
 FROM scummvm AS her-download
 COPY --from=her-download-files ${const.install-dir} /SharedSupport/game/
+
+# Steam's: the game installed by Steam, for its data
+FROM steam@1/client AS steam-files
+DO steam.install --game=${input.game} --into=${const.install-dir}
+
+FROM scummvm AS steam
+COPY --from=steam-files ${const.install-dir} /SharedSupport/game/

@@ -136,7 +136,9 @@ class WineManager {
 
     /// A registry key the set-up names.
     static func registryKey(_ name: String) -> WineRegistry.Key {
-        switch name {
+        // A key written in full (`HKEY_CURRENT_USER\Software\Wine\…`).
+        if name.hasPrefix("HKEY_") { return WineRegistry.Key(rawValue: name) }
+        return switch name {
         case "mac-driver": #"HKEY_CURRENT_USER\Software\Wine\Mac Driver"#
         case "direct3d": #"HKEY_CURRENT_USER\Software\Wine\Direct3D"#
         default: .x11Driver

@@ -27,8 +27,9 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31820, common-folder: "Nancy Drew The Haunted Carousel", exe: "Game.exe" }
+        game: { type: "steam-game", app-id: 31820, common-folder: "Nancy Drew The Haunted Carousel" }
     # drm left out: not known, so the game is started through Steam
   - id: "big-fish"
     source: "big-fish"

@@ -434,16 +434,16 @@ class WrappBuildInput {
     /// offers the choice; the engine behind each answer is not the user's
     /// concern, so the question is about what they'll notice.
     @MainActor
-    func getSteamLaunchMode(for game: GameInfo) async throws -> GameInfo.SteamLaunchMode {
+    func getSteamLaunchMode(for game: GameInfo) async throws -> String {
+        let modes = ["direct", "steam"]
         if let value = try inputs()["launch-mode"] ?? environment["STEAM_LAUNCH_MODE"] {
-            guard let mode = GameInfo.SteamLaunchMode(rawValue: value.lowercased()) else {
+            guard modes.contains(value.lowercased()) else {
                 throw WrappBuildError.invalidPath("STEAM_LAUNCH_MODE must be steam or direct, not \(value)")
             }
-            return mode
+            return value.lowercased()
         }
-        if isHeadlessRun { return .direct }
+        if isHeadlessRun { return "direct" }
 
-        let modes: [GameInfo.SteamLaunchMode] = [.direct, .steam]
         let question = Self.launchModeQuestion(for: game)
         guard let answer = await ask(question), answer.action == 1, let chosen = answer.choice else {
             // Nothing is installed yet: back to the welcome screen.

@@ -33,8 +33,9 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31850, common-folder: "Nancy Drew Ghost Dogs of Moon Lake", exe: "Game.exe" }
+        game: { type: "steam-game", app-id: 31850, common-folder: "Nancy Drew Ghost Dogs of Moon Lake" }
     # drm left out: not known, so the game is started through Steam
   - id: "big-fish"
     source: "big-fish"

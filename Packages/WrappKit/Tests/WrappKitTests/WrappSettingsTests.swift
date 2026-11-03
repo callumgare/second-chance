@@ -25,7 +25,7 @@ struct WrappSettingsTests {
         let layout = WrappLayout(app: wrapp)
         let settings = WrappSettings(
             gameExePath: "/Program Files (x86)/Nancy Drew/Game.exe", engine: .wineSteam, gameSlug: "royal-tower",
-            source: .steam, installerDir: "/nancy-drew-installer/disk-1", steamAppID: "42210", steamLaunchMode: .steam
+            source: .steam, installerDir: "/nancy-drew-installer/disk-1", steamAppID: "42210", steamLaunchMode: "steam"
         )
         try settings.write(to: layout)
         #expect(try WrappSettings(of: layout) == settings)

@@ -28,9 +28,6 @@ struct GameConfig {
     /// one from its legacy settings.
     var launchRecorded = false
     let steamGameId: String?
-    /// The user's choice, at build time, of how a DRM-free Steam game starts;
-    /// nil for a game that offered no choice.
-    let steamLaunchMode: GameInfo.SteamLaunchMode?
     let gameTitle: String
     let gameSlug: String
     /// Where the game came from: `disk`, `her-download` or `steam`, or
@@ -61,21 +58,25 @@ struct GameConfig {
     /// The wrapp's Wine, running in the prefix the game runs in.
     nonisolated var wine: Wine { Wine(wrapp: appPath, prefix: winePrefix) }
 
-    /// Whether this launch could start the game without Steam instead: only a
-    /// DRM-free game the user chose to launch through Steam. Its files are
-    /// still in Steam's library, where Wine runs them just as well.
-    var canLaunchWithoutSteam: Bool {
-        composition.launcher == .steam && steamLaunchMode == .steam
-    }
+    /// Whether this launch has a program to fall back to when it fails
+    /// (`LAUNCH --fallback`): a DRM-free game the person chose to launch
+    /// through Steam, whose files Wine runs just as well.
+    var hasFallback: Bool { launch.fallback != nil }
 
-    /// This configuration, launching the game's exe directly rather than
-    /// through Steam (`--launch-without-steam`).
-    func withoutSteam() -> GameConfig {
-        GameConfig(
-            appPath: appPath, winePrefix: winePrefix, gameExePath: gameExePath,
-            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: .wine), launch: launch,
+    /// This configuration, launching the fallback rather than the program
+    /// (`--launch-fallback`): run without the main launch's launcher, as
+    /// its module's, with the main launch's options.
+    func withFallback() -> GameConfig {
+        guard let fallback = launch.fallback else { return self }
+        var launch = launch
+        launch.program = fallback
+        launch.fallback = nil
+        launch.options["steam.exe"] = nil
+        return GameConfig(
+            appPath: appPath, winePrefix: winePrefix, gameExePath: drivePath(of: launch) ?? gameExePath,
+            gameInstallerDir: gameInstallerDir, composition: Composition(launcher: launch.launcher() ?? .wine), launch: launch,
             launchRecorded: launchRecorded, steamGameId: nil,
-            steamLaunchMode: steamLaunchMode, gameTitle: gameTitle, gameSlug: gameSlug,
+            gameTitle: gameTitle, gameSlug: gameSlug,
             gameSource: gameSource, bundleId: bundleId, appSupportPath: appSupportPath, settingsPath: settingsPath,
             scummvmConfigPath: scummvmConfigPath
         )
@@ -286,8 +287,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         composition: settings.composition,
         launch: settings.launch,
         launchRecorded: settings.recordedLaunch != nil,
-        steamGameId: settings.steamAppID,
-        steamLaunchMode: settings.steamLaunchMode,
+        steamGameId: settings.recordedLaunch.flatMap(steamAppID(of:)) ?? settings.steamAppID,
         gameTitle: gameTitle,
         gameSlug: settings.gameSlug ?? "unknown",
         gameSource: settings.source?.rawValue ?? "unknown",
@@ -302,12 +302,20 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
 }
 
 /// A Wine or DOSBox launch's program as a path from the root of its C:
-/// drive (`/Nancy Drew/Game.exe`), as the runtimes find it; nil for another.
+/// drive (`/Nancy Drew/Game.exe`), as the runtimes find it, or for Steam's
+/// launch the program Steam starts (`--steam.exe`); nil for another.
 func drivePath(of launch: RecordedLaunch) -> String? {
-    for prefix in ["wine:C:", "dosbox:C:"] where launch.program.hasPrefix(prefix) {
-        return String(launch.program.dropFirst(prefix.count))
+    let program = launch.options["steam.exe"] ?? launch.program
+    for prefix in ["wine:C:", "dosbox:C:"] where program.hasPrefix(prefix) {
+        return String(program.dropFirst(prefix.count))
     }
     return nil
+}
+
+/// The Steam app a Steam launch starts (`steam://rungameid/<id>`).
+func steamAppID(of launch: RecordedLaunch) -> String? {
+    let prefix = "steam://rungameid/"
+    return launch.program.hasPrefix(prefix) ? String(launch.program.dropFirst(prefix.count)) : nil
 }
 
 /// Where the wrapp keeps what's the person's, moving it in first from the

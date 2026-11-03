@@ -93,7 +93,6 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let id: String
         public let source: Source
         public let detect: Detect?
-        public let drm: String?
         public let build: Build?
         /// A download edition's: what the person is told about where it
         /// comes from (`free-release`, …), and who gives the permission.
@@ -158,7 +157,6 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let format: String?
         public let appId: Int?
         public let commonFolder: String?
-        public let exe: String?
         /// A Big Fish edition's product number.
         public let product: Int?
         /// A download's: its URLs in order, its file's SHA-256 and size,
@@ -179,7 +177,6 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
             fields["format"] = format
             fields["app-id"] = appId.map(String.init)
             fields["common-folder"] = commonFolder
-            fields["exe"] = exe
             fields["product"] = product.map(String.init)
             fields["sha256"] = sha256
             return fields

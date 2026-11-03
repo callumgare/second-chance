@@ -27,14 +27,16 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock", exe: "Game.exe" }
+        game: { type: "steam-game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock" }
         launch-mode: # DRM-free, so it can start without Steam
           type: "choice"
           options: ["direct", "steam"]
           default: "direct" # pre-selected; what a headless build takes
           prompt: "How should the game start?"
-    drm: "no"
+    notes:
+      drm: "no"
   - id: "big-fish"
     source: "big-fish"
     build:

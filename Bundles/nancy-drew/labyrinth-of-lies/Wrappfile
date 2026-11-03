@@ -1,6 +1,7 @@
 CONST install-dir = "C:/Program Files (x86)/Her Interactive/Labyrinth of Lies"
 INPUT disc-1
 INPUT installer
+INPUT game
 
 FROM wine@10/prefix AS prefix
 USE nancy-drew # its clean-exit log
@@ -38,3 +39,16 @@ USE nancy-drew
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
+# Steam's: the game installed by Steam, which starts it
+FROM steam@1/client AS steam
+USE nancy-drew # its clean-exit log
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO steam.install --game=${input.game} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
+# Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
+LAUNCH --wine.graphics=direct-3d \
+    --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
+    --wine.clean-exit-line="${nancy-drew.data.clean-exit-log.marker}" \
+    --steam.exe="${const.install-dir}/Labyrinth.exe" steam://rungameid/${input.game.app-id}

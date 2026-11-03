@@ -2,6 +2,7 @@ CONST install-dir = "C:/Program Files (x86)/Nancy Drew/Last Train to Blue Moon C
 INPUT disc-1
 INPUT disc-2
 INPUT installer
+INPUT game
 
 FROM wine@10/prefix AS prefix
 DO wine.cnc-ddraw
@@ -28,3 +29,14 @@ HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates="$
 DO nancy-drew.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
+# Steam's: the game installed by Steam, which starts it
+FROM steam@1/client AS steam
+USE nancy-drew
+DO wine.cnc-ddraw
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO steam.install --game=${input.game} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
+LAUNCH --wine.graphics=direct-draw \
+    --steam.exe="${const.install-dir}/Game.exe" steam://rungameid/${input.game.app-id}

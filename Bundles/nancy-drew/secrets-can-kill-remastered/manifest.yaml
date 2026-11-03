@@ -34,8 +34,9 @@ editions:
   - id: "steam"
     source: "steam"
     build:
+      target: "steam"
       inputs:
-        game: { type: "steam-game", app-id: 42210, common-folder: "Nancy Drew Secrets Can Kill", exe: "Secrets.exe" }
+        game: { type: "steam-game", app-id: 42210, common-folder: "Nancy Drew Secrets Can Kill" }
     # drm left out: not known, so the game is started through Steam
   - id: "big-fish"
     source: "big-fish"

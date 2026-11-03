@@ -89,7 +89,7 @@ class InfoWindowViewModel: ObservableObject {
     /// WrappPuppeteer can click it through the wrapp (PuppetServer).
     var confirmButtonFrame: CGRect = .zero
     /// Set when the game could be started without Steam instead (see
-    /// `GameConfig.canLaunchWithoutSteam`): offered when the launch fails, or
+    /// `GameConfig.hasFallback`, the launch's `--fallback`): offered when the launch fails, or
     /// may have.
     var onLaunchWithoutSteam: (() -> Void)?
     /// What to do about the last session's Wine, still running: offered once
