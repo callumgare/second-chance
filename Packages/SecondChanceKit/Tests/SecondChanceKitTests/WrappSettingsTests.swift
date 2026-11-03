@@ -81,4 +81,30 @@ struct WrappSettingsTests {
         drives.removeAll()
         #expect(try FileManager.default.contentsOfDirectory(atPath: drives.folder.path).isEmpty)
     }
+
+    @Test("Blocking a mounted letter removes the link, not what it shows")
+    func blockingAMountedLetter() throws {
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let shown = FileManager.default.temporaryDirectory.appendingPathComponent("drives-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: shown, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: shown) }
+        let drives = Wine(wrapp: wrapp).drives
+        try drives.mount(shown, as: "z")
+        drives.block("z")
+        #expect(throws: (any Error).self) { try drives.target(of: "z") }
+        #expect(FileManager.default.fileExists(atPath: drives.link("z").path))
+        #expect(FileManager.default.fileExists(atPath: shown.path))
+    }
+
+    @Test("A lent folder is Y: until it is taken back")
+    func lending() throws {
+        defer { try? FileManager.default.removeItem(at: wrapp) }
+        let drives = Wine(wrapp: wrapp).drives
+        drives.block("y")
+        try drives.lend(URL(fileURLWithPath: "/tmp/Downloads"))
+        #expect(try drives.target(of: "Y") == "/tmp/Downloads")
+        drives.takeBack()
+        #expect(throws: (any Error).self) { try drives.target(of: "y") }
+        #expect(FileManager.default.fileExists(atPath: drives.link("y").path))
+    }
 }

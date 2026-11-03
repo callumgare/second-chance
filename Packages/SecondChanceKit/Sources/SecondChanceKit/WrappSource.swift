@@ -11,6 +11,7 @@ public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable
     case disk = "disk"
     case herDownload = "her-download"
     case steam = "steam"
+    case bigFish = "big-fish"
 
     public var id: String { rawValue }
 
@@ -22,6 +23,8 @@ public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable
             return "Her Interactive Download"
         case .steam:
             return "Steam"
+        case .bigFish:
+            return "Big Fish Games"
         }
     }
 
@@ -33,6 +36,8 @@ public nonisolated enum WrappSource: String, CaseIterable, Identifiable, Codable
             return "A Windows or Mac download bought from Her Interactive"
         case .steam:
             return "A game in your Steam library"
+        case .bigFish:
+            return "A game in your Big Fish library"
         }
     }
 }

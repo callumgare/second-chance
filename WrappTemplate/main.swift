@@ -205,8 +205,12 @@ func main() {
     if config.gameEngine.runsInWine {
         isOurs = { pid in !server.isElsewhere(pid) }
     }
+    // What the loading window says first: Steam starting, or the game,
+    // which Big Fish's copy protection makes slow to start.
+    let firstStage: LoadingStage = config.gameEngine.needsSteam ? .startingSteam
+        : config.launchedByBigFish ? .bigFishStartingGame(title: config.gameTitle) : .startingGame(title: config.gameTitle)
     let infoWindow = InfoWindowController(
-        stage: config.gameEngine.needsSteam ? .startingSteam : .startingGame(title: config.gameTitle),
+        stage: firstStage,
         appSupportPath: config.appSupportPath, gameSlug: config.gameSlug, gameTitle: config.gameTitle,
         saveWarningEnabled: saveWarningEnabled,
         loadMonitor: loadMonitor,
@@ -278,6 +282,9 @@ func main() {
     if config.gameEngine.runsInWine {
         do {
             try config.wine.drives.mount(config.appSupportPath, as: "a")
+            // A wrapp built when prefixes had a Z: showing the whole Mac
+            // (WineDrives): the game never needed it.
+            config.wine.drives.block("z")
         } catch {
             mainLogger.critical("ERROR: Failed to mount directory into Wine: \(error)")
             showAlert(message: String(localized: "Couldn't Open Your Saved Games"),
@@ -319,8 +326,7 @@ func main() {
     // is: the launch awaits whatever it waits for, so the window keeps going.
     func launchGameAsync() {
         Task {
-            await waitForLastSession(wine, infoWindow: infoWindow, then: config.gameEngine.needsSteam
-                ? .startingSteam : .startingGame(title: config.gameTitle))
+            await waitForLastSession(wine, infoWindow: infoWindow, then: firstStage)
             let outcome = await gameLauncher.launchGame(infoWindow: infoWindow, debugMode: debugMode) {
                 if !warningConfirmed.isSignalled {
                     mainLogger.notice("Ready to start the game; waiting for the player to confirm the save warning")

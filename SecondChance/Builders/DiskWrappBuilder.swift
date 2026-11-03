@@ -17,6 +17,7 @@ import Foundation
 import Logging
 import GameCatalog
 import SecondChanceKit
+import Synchronization
 
 /// Builds a wrapp from game disks.
 ///
@@ -187,7 +188,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 let gameInfo = gameInfoProvider.gameInfo(for: gameSlug)
                 logger.notice("Detected game: \(gameInfo.title)")
                 if gameInfo.id == GameInfo.unknownGame.id,
-                   try input.askAboutUnrecognisedGame(.disk) == .chooseAnother {
+                   try await input.askAboutUnrecognisedGame(.disk) == .chooseAnother {
                     await isoMounter.unmountAll()
                     disk1 = try await input.getDisk1Path()
                     continue
@@ -202,7 +203,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     case .none:
                         throw WrappBuildError.installerNotFound
                     case .unrecognised(let programs):
-                        switch try input.askAboutUnidentifiedInstaller(programs: programs) {
+                        switch try await input.askAboutUnidentifiedInstaller(programs: programs) {
                         case .tryProgram(let program):
                             installerName = program
                         case .chooseAnother:
@@ -269,7 +270,38 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         try fileManager.createDirectory(at: installerPath, withIntermediateDirectories: true)
 
+        // Wine is told the discs' drives are CD drives while they copy: each
+        // run of Wine starts its session afresh, which on its own took 8 to
+        // 18 s per drive once the copying was done.
+        let letters = (0..<max(1, gameInfoProvider.gameInfo(for: gameSlug).diskCount)).map(Self.driveLetter(forDisc:))
+        let marking = DriveMarking(wine: Wine(wrapp: wrappPath), letters: letters)
+
         let disk1Dest = installerPath.appendingPathComponent("disk-1")
+        do {
+            try await copyDiscs(disk1: disk1, disk1Dest: disk1Dest, into: installerPath, disk2: resolveDisk2)
+        } catch {
+            // Not left running in the prefix the builder is about to remove.
+            await marking.cancel()
+            throw error
+        }
+        if !marking.isFinished {
+            await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Getting the discs ready"))))
+        }
+        try await marking.wait()
+
+        helper.installAnswerFile(forGame: gameSlug, source: .disk, into: installerPath)
+
+        // Mount the disk directories as CD-ROM drives
+        // (Don't report progress again - would cause duplicate print)
+        try mountGameDisksIntoWine(wrappPath: wrappPath)
+
+        // Save to cache
+        try cacheManager.saveCache(wrappPath: wrappPath, stage: .diskGameInstallerCopied, gameSlug: gameSlug)
+    }
+
+    /// Copy disc 1, and disc 2 if the game has one, the second into a
+    /// folder of its own with `disk-combined` linking to both.
+    private func copyDiscs(disk1: URL, disk1Dest: URL, into installerPath: URL, disk2 resolveDisk2: () async throws -> URL?) async throws {
         try await copyDisc(disk1, to: disk1Dest)
 
         // Copy disk 2 if present
@@ -304,15 +336,41 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 }
             }
         }
+    }
 
-        helper.installAnswerFile(forGame: gameSlug, source: .disk, into: installerPath)
+    /// The drive letter disc `index` (from 0) is at: D: on.
+    static func driveLetter(forDisc index: Int) -> Character {
+        Character(UnicodeScalar(UInt8(100 + index)))  // "d" is 100
+    }
 
-        // Mount the disk directories as CD-ROM drives
-        // (Don't report progress again - would cause duplicate print)
-        try await mountGameDisksIntoWine(wrappPath: wrappPath)
+    /// Marking the discs' drive letters as CD drives (`WineDrives.setKind`),
+    /// run alongside copying the discs.
+    private struct DriveMarking {
+        /// Set once the marking is done, so the copy can tell whether
+        /// there's still a wait to name.
+        private final class Done: Sendable {
+            private let value = Mutex(false)
+            var isSet: Bool { value.withLock { $0 } }
+            func set() { value.withLock { $0 = true } }
+        }
 
-        // Save to cache
-        try cacheManager.saveCache(wrappPath: wrappPath, stage: .diskGameInstallerCopied, gameSlug: gameSlug)
+        private let task: Task<Void, Error>
+        private let done = Done()
+
+        init(wine: Wine, letters: [Character]) {
+            let done = done
+            task = Task {
+                try await wine.drives.setKind(.cdrom, of: letters)
+                done.set()
+            }
+        }
+
+        var isFinished: Bool { done.isSet }
+        func wait() async throws { try await task.value }
+        func cancel() async {
+            task.cancel()
+            _ = try? await task.value
+        }
     }
 
     /// Mount game disk directories as CD-ROM drives.
@@ -321,8 +379,9 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     /// game as well as its installer: some games check their disc is in the
     /// drive before they will play. We don't know which files each one looks
     /// at, so the whole disc is kept rather than just what the check reads.
-    /// A ScummVM game needs them anyway, as its game data.
-    private func mountGameDisksIntoWine(wrappPath: URL) async throws {
+    /// A ScummVM game needs them anyway, as its game data. That the letters
+    /// are CD drives was set while the discs copied (`DriveMarking`).
+    private func mountGameDisksIntoWine(wrappPath: URL) throws {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let installerPath = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
 
@@ -353,23 +412,19 @@ final class DiskWrappBuilder: WrappBuildStrategy {
 
         logger.notice("Found \(diskDirs.count) disk director\(diskDirs.count == 1 ? "y" : "ies") to mount as CD-ROM drives")
 
-        // Mount each disk starting at drive letter "d:" (4th letter, index 3)
+        // Mount each disk starting at drive letter "d:"
         for (index, disk) in diskDirs.enumerated() {
-            let letterIndex = index + 3 // Start at "d:" which is the 4th letter (index 3)
-            guard letterIndex < 26 else {
+            guard index < 23 else {
                 logger.warning("Warning: Too many disks to mount (maximum 23)")
                 break
             }
-
-            let letter = Character(UnicodeScalar(UInt8(97 + letterIndex))) // 'a' = 97
+            let letter = Self.driveLetter(forDisc: index)
 
             // Use relative path from prefix directory
             let relativePath = "../drive_c/nancy-drew-installer/disk-\(disk.number)"
 
             logger.notice("Mounting disk-\(disk.number) as \(letter): (cdrom)")
-            let drives = Wine(wrapp: wrappPath).drives
-            try drives.mount(relativePath, as: letter)
-            try await drives.setKind(.cdrom, of: letter)
+            try Wine(wrapp: wrappPath).drives.mount(relativePath, as: letter)
         }
     }
 
@@ -391,6 +446,12 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                 text: progress.total.map { "\(copied) of \(FreeSpace.describe($0))" } ?? "\(copied) copied"
             )
             Task { await bus.publishWrappBuild(.stepProgress(measured)) }
+        }
+        // The total is how full the disc is, which counts its file system as
+        // well as its files: done, the bar is full rather than just short.
+        if let total {
+            let all = FreeSpace.describe(total)
+            await bus.publishWrappBuild(.stepProgress(StepProgress(fraction: 1, text: "\(all) of \(all)")))
         }
     }
 }

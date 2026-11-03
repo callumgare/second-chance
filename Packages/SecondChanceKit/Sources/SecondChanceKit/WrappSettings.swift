@@ -29,6 +29,17 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
     /// How a DRM-free Steam game starts, as the person chose when building
     /// it; nil for a game that offered no choice.
     public var steamLaunchMode: GameInfo.SteamLaunchMode?
+    /// For a game installed through Big Fish's Game Manager: the message file
+    /// its own Play shortcut opens (`LaunchGame.bfg`), a path from the root of
+    /// the C: drive as `gameExePath` is. The wrapp hands it to Big Fish's
+    /// `bfgprocess.exe`, whose DRM service starts the game (docs/big-fish.md).
+    public var bigFishLaunchFile: String?
+    /// The Big Fish SKU of the edition installed (`F2435T1L1`).
+    public var bigFishSKU: String?
+    /// The game is Big Fish's free trial, which only the integration tests
+    /// build: launching it opens the Game Manager, whose Play Now the wrapp
+    /// presses itself (docs/big-fish.md).
+    public var bigFishTrial: Bool?
 
     enum CodingKeys: String, CodingKey {
         case gameExePath = "GameExePath"
@@ -38,11 +49,15 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         case installerDir = "GameInstallerDir"
         case steamAppID = "SteamGameId"
         case steamLaunchMode = "SteamLaunchMode"
+        case bigFishLaunchFile = "BigFishLaunchFile"
+        case bigFishSKU = "BigFishSKU"
+        case bigFishTrial = "BigFishTrial"
     }
 
     public init(
         gameExePath: String, engine: GameInfo.GameEngine, gameSlug: String?, source: WrappSource?,
-        installerDir: String, steamAppID: String? = nil, steamLaunchMode: GameInfo.SteamLaunchMode? = nil
+        installerDir: String, steamAppID: String? = nil, steamLaunchMode: GameInfo.SteamLaunchMode? = nil,
+        bigFishLaunchFile: String? = nil, bigFishSKU: String? = nil, bigFishTrial: Bool? = nil
     ) {
         self.gameExePath = gameExePath
         self.engine = engine
@@ -51,6 +66,9 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         self.installerDir = installerDir
         self.steamAppID = steamAppID
         self.steamLaunchMode = steamLaunchMode
+        self.bigFishLaunchFile = bigFishLaunchFile
+        self.bigFishSKU = bigFishSKU
+        self.bigFishTrial = bigFishTrial
     }
 
     /// The settings of the wrapp at `layout`.

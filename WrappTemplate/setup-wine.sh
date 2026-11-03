@@ -67,12 +67,13 @@ rm -rf "${FRAMEWORKS_TEMP}"
 # asked to quit, so an exit before then reads as a failure),
 # cocoa_start_wait.m (lets every Wine process's driver wait for Cocoa to
 # start beyond Wine's 5 s, which a busy Mac runs out) and
-# puppet_control.m (lets the integration tests' WrappPuppeteer see and click
-# the game). ScummVM wrapps load the same dylib into scummvm, for
+# hidden_windows.m (keeps Big Fish's Game Manager off the screen but to sign
+# in) and puppet_control.m (lets the integration tests' WrappPuppeteer see and
+# click the game). ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.
 # See docs/wine-in-process-helpers.md.
-echo "🖥️  Building in-process helpers (native fullscreen, cursor lock, mode scaling, quit watch, Cocoa start wait, puppet control)..."
+echo "🖥️  Building in-process helpers (native fullscreen, cursor lock, mode scaling, quit watch, Cocoa start wait, hidden windows, puppet control)..."
 HELPERS_DIR="${SCRIPT_DIR}/InProcessHelpers"
 clang -dynamiclib \
     -o "${TEMP_DIR}/Frameworks/in_process_helpers.dylib" \
@@ -83,6 +84,7 @@ clang -dynamiclib \
     "${HELPERS_DIR}/puppet_control.m" \
     "${HELPERS_DIR}/quit_watch.m" \
     "${HELPERS_DIR}/cocoa_start_wait.m" \
+    "${HELPERS_DIR}/hidden_windows.m" \
     -framework Cocoa \
     -framework OpenGL \
     -framework ImageIO \
@@ -102,6 +104,19 @@ echo "✓ Built and signed in_process_helpers.dylib"
 echo "🔧 Patching winemac.so to load the in-process helpers..."
 "${HELPERS_DIR}/patch-winemac.swift" \
     "${TEMP_DIR}/SharedSupport/wine/lib/wine/x86_64-unix/winemac.so"
+
+# Rosetta 2 raises faults Windows wouldn't for two things the DRM on Big Fish's
+# games (Armadillo) does: an fs: access with the 0x67 address-size prefix, which
+# it can't run, and the Windows 9x SoftICE probes, which code takes because Wine
+# on macOS runs 32-bit code in an LDT segment. The patch makes Wine's 32-bit
+# ntdll deal with them before any exception handler sees them.
+# See docs/big-fish.md#armadillo-under-rosetta.
+echo "🔧 Adding the Rosetta fault fix to Wine's 32-bit ntdll..."
+PATCH_NTDLL="${DERIVED_FILE_DIR}/patch-ntdll"
+xcrun swiftc -O -o "${PATCH_NTDLL}" \
+    "${SCRIPT_DIR}/RosettaFaultFix/main.swift" \
+    "${SCRIPT_DIR}/../Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/RosettaFaultFix.swift"
+"${PATCH_NTDLL}" "${TEMP_DIR}/SharedSupport/wine/lib/wine/i386-windows/ntdll.dll"
 
 # Fix rpaths
 echo "🔧 Fixing rpaths..."

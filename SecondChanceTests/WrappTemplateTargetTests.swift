@@ -28,12 +28,13 @@ struct WrappTemplateTargetTests {
     }
 
     /// The Swift files the target compiles: all in the folder, bar the
-    /// in-process helpers' patcher, a script setup-wine.sh runs.
+    /// engine patchers setup-wine.sh builds and runs (the in-process helpers'
+    /// and the Rosetta fault fix's).
     private static func swiftFiles() throws -> [String] {
         let folder = TestPaths.repoRoot.appendingPathComponent("WrappTemplate")
         let walker = try #require(FileManager.default.enumerator(atPath: folder.path))
         return walker.compactMap { $0 as? String }
-            .filter { $0.hasSuffix(".swift") && !$0.hasPrefix("InProcessHelpers/") }
+            .filter { $0.hasSuffix(".swift") && !$0.hasPrefix("InProcessHelpers/") && !$0.hasPrefix("RosettaFaultFix/") }
     }
 
     @Test("Every Swift file in WrappTemplate/ is in the target, and everything listed exists")

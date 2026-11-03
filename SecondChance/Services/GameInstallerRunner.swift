@@ -55,12 +55,14 @@ class GameInstallerRunner {
         installerName: String? = nil,
         unattended: Bool,
         confirmPatchFailure: PatchFailureConfirmation,
-        chooseGameProgram: ([String]) throws -> String
+        chooseGameProgram: ([String]) async throws -> String
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
         // Find installer executable
         let installerExe: String
+        let lent = try installerPath.map { try lendFolder(of: $0, at: wrappPath) } ?? false
+        defer { if lent { Wine(wrapp: wrappPath).drives.takeBack() } }
         if let installerPath = installerPath {
             // Direct installer path provided
             installerExe = installerPath.path
@@ -141,7 +143,7 @@ class GameInstallerRunner {
 
                 // Try to find the game executable
                 do {
-                    gameExe = try findGameExecutable(
+                    gameExe = try await findGameExecutable(
                         before: exesBefore,
                         after: exesAfter,
                         expectedPath: gameInfo.internalGameExePath,
@@ -273,6 +275,8 @@ class GameInstallerRunner {
         try fileManager.createDirectory(at: unpacked, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: unpacked) }
 
+        let lent = try lendFolder(of: launcher, at: wrappPath)
+        defer { if lent { Wine(wrapp: wrappPath).drives.takeBack() } }
         logger.notice("Unpacking \(launcher.lastPathComponent) into C:\\nancy-drew-installer\\unpacked")
         let exitCode = try await retryingIfNoDisplay(at: wrappPath, "The installer launcher") {
             let desktop = await self.startDesktop(at: wrappPath)
@@ -684,6 +688,19 @@ class GameInstallerRunner {
         }
     }
 
+    /// Lend `file`'s folder to Wine as a drive (`WineDrives.lend`) when the
+    /// file is outside the prefix's C: drive, as a downloaded installer is,
+    /// and say whether it did: the prefix has no drive showing the whole Mac,
+    /// so Wine couldn't otherwise run it.
+    func lendFolder(of file: URL, at wrappPath: URL) throws -> Bool {
+        let driveC = WrappLayout(app: wrappPath).driveC.standardizedFileURL.path
+        guard !file.standardizedFileURL.path.hasPrefix(driveC + "/") else { return false }
+        let folder = file.deletingLastPathComponent()
+        try Wine(wrapp: wrappPath).drives.lend(folder)
+        logger.notice("\(WineDrives.lentLetter.uppercased()): shows \(folder.path) while \(file.lastPathComponent) runs")
+        return true
+    }
+
     /// Start Wine's desktop before an installer or patcher runs, so it isn't
     /// left to Wine's 10-second on-demand start ("The explorer process failed
     /// to start", which once failed Stay Tuned's patch). See `WineDesktop`.
@@ -851,8 +868,8 @@ class GameInstallerRunner {
         after: Set<String>,
         expectedPath: String?,
         driveCPath: URL,
-        choose: ([String]) throws -> String
-    ) throws -> URL {
+        choose: ([String]) async throws -> String
+    ) async throws -> URL {
         logger.notice("=== Searching for game executable ===")
 
         // Find new executables
@@ -914,7 +931,7 @@ class GameInstallerRunner {
         }
         if !ranked.isEmpty {
             let names = ranked.map { Self.windowsPath(of: $0, driveC: driveCPath) }
-            let chosen = try choose(names)
+            let chosen = try await choose(names)
             guard let index = names.firstIndex(of: chosen) else { throw WrappBuildError.gameExecutableNotFound }
             logger.notice("Using the chosen executable: \(ranked[index].path)")
             return ranked[index]

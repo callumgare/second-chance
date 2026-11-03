@@ -34,6 +34,19 @@ struct GameConfig {
     let appSupportPath: URL
     /// ScummVM's settings for this game.
     let scummvmConfigPath: URL
+    /// For a game installed through Big Fish's Game Manager, its
+    /// `LaunchGame.bfg` (from the root of C:, as `gameExePath`), which Big
+    /// Fish's `bfgprocess.exe` is given to start it (docs/big-fish.md).
+    var bigFishLaunchFile: String?
+    /// The edition's Big Fish SKU (`F2435T1L1`).
+    var bigFishSKU: String?
+    /// A Big Fish free trial (only the integration tests build them): the
+    /// wrapp starts it with the Game Manager's Play Now, the only way a trial
+    /// starts.
+    var bigFishTrial = false
+
+    /// Big Fish's programs start the game, not the wrapp.
+    nonisolated var launchedByBigFish: Bool { bigFishLaunchFile != nil && gameEngine == .wine }
 
     /// The wrapp's Wine, running in the prefix the game runs in.
     nonisolated var wine: Wine { Wine(wrapp: appPath, prefix: winePrefix) }
@@ -284,6 +297,9 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         gameSource: settings.source?.rawValue ?? "unknown",
         bundleId: bundleId,
         appSupportPath: appSupportPath,
-        scummvmConfigPath: scummvmConfigPath
+        scummvmConfigPath: scummvmConfigPath,
+        bigFishLaunchFile: settings.bigFishLaunchFile,
+        bigFishSKU: settings.bigFishSKU,
+        bigFishTrial: settings.bigFishTrial ?? false
     )
 }

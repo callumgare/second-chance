@@ -69,6 +69,11 @@ build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 # Build from each Her Interactive download in installers/<slug>/
 ./sc test integration scarlet-hand --source her-download
 
+# Build from Big Fish Games: the games the test account in .env owns, or
+# every game's free trial, signed out
+./sc test integration white-wolf --source big-fish
+./sc test integration --source big-fish-trial
+
 # Build here, launch in a tart VM (another macOS version, say)
 ./sc test integration ghost-dogs --vm sc-sequoia
 ```
@@ -118,8 +123,9 @@ the mock disk in `TestFixtures/`, not real ISOs) and `ProgressFileWriterTests`
 
 **`sc test unit` runs every suite except a denylist**, `TestRunner.unitExclusions`
 in `Tools/sc/Sources/SCKit/Support/TestRunner.swift`: `DiskInstallIntegrationTests`,
-`SteamInstallIntegrationTests` and `HerDownloadInstallIntegrationTests` (real
-installs). A new suite therefore runs by default;
+`SteamInstallIntegrationTests`, `HerDownloadInstallIntegrationTests`,
+`BigFishOwnedInstallIntegrationTests` and `BigFishTrialInstallIntegrationTests`
+(real installs). A new suite therefore runs by default;
 one that is slow or needs the environment set up has to be added to that list.
 
 The exception is a suite that switches itself off unless told where its
@@ -142,9 +148,11 @@ there would report a pass having tested nothing.
 
 **Each build source has its own suite**, picked with `--source`:
 `DiskInstallIntegrationTests` (`disk`, the default),
-`SteamInstallIntegrationTests` (`steam`) and
-`HerDownloadInstallIntegrationTests` (`her-download`). A game tested more than
-one way is a row per source in the table, with a Source column. All three go
+`SteamInstallIntegrationTests` (`steam`),
+`HerDownloadInstallIntegrationTests` (`her-download`),
+`BigFishOwnedInstallIntegrationTests` (`big-fish`) and
+`BigFishTrialInstallIntegrationTests` (`big-fish-trial`). A game tested more than
+one way is a row per source in the table, with a Source column. All of them go
 through one per-game flow, `IntegrationGameRun`, which waits for its turn to
 build and then to launch ([below](#building-games-side-by-side)).
 
@@ -160,7 +168,8 @@ go on:
   and only as many as the disk has room for. Each build reserves
   a quarter more than its game's build took last time
   (`test-results/integration-sizes.json`), or before it has been measured,
-  the engine and four times its installers' size (8 GB for a Steam game). It
+  the engine and four times its installers' size (8 GB for a Steam or Big
+  Fish game). It
   keeps the reservation until its output is deleted after its launch, so built
   wrapps waiting for their turn on screen hold back new builds. Builds
   reserve no more between them than was free when the first asked, less
@@ -174,6 +183,9 @@ go on:
   (`IntegrationStages.steam`): a wrapp holds Steam's one-wrapp-at-a-time lock
   while it runs, and a build signing in to Steam meanwhile would fail with
   `steamInUse`. Other sources' games build alongside.
+- **Owned Big Fish** games go one at a time too, build and launch together
+  (`IntegrationStages.bigFish`): each build signs the one test account in and
+  out. Big Fish trials sign in to nothing and build alongside the rest.
 
 Each build reports on a bus of its own and tags its log entries with its own
 id ([logging.md](logging.md#which-build-an-entry-is-from)), so its events
@@ -246,6 +258,21 @@ The Steam suite:
 - always builds: `--refresh-wrapp` applies to the disk suite's wrapps only;
 - downloads every game it tests, so it's slow, and run often could trip
   Steam's rate limits. It is in `TestRunner.unitExclusions`.
+
+The Big Fish suites, both in `TestRunner.unitExclusions`:
+
+- `--source big-fish` builds each game Big Fish sells that the test account
+  owns, signed in with `BIG_FISH_EMAIL` and `BIG_FISH_PASSWORD` from `.env`
+  (which `sc` passes to the test host only for this suite). Without them the
+  suite disables itself and says why. Like the Steam suite, the first build
+  tells it (a `bigFishGamesOwned` event) which games the account owns and
+  the rest are skipped without building; it checks the wrapp carries no
+  trace of the sign-in.
+- `--source big-fish-trial` builds every game's free trial, signed out, so
+  any game Big Fish sells can be tested without owning it.
+
+Both always build and download every game they test.
+[big-fish.md](big-fish.md#testing) has what each checks.
 
 The tests find the repo, and so `installers/`, through `TestPaths.repoRoot`.
 That defaults to `#filePath`, which is fixed at compile time and wrong on any

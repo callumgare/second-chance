@@ -439,14 +439,24 @@ struct NancyDrewQuitScenario {
         let windowDeadline = Date().addingTimeInterval(options.windowDetectTimeout)
         while true {
             let watched = pid
+            // A window of another process of the same exe counts too: a game
+            // wrapped in Armadillo (Big Fish's) runs as two, and the window is
+            // the second's, the first running it under its own debugger.
+            let sameExe: (Int32) -> Bool = { owner in
+                ProcessName.executable(ofPID: owner)?.caseInsensitiveCompare(processName) == .orderedSame
+            }
             if let windows = WindowFinder.waitForWindows(timeout: windowDeadline.timeIntervalSinceNow,
-                                                         where: { $0.ownerPid == watched },
+                                                         where: { $0.ownerPid == watched || sameExe($0.ownerPid) },
                                                          giveUp: { !ProcessControl.isAlive(watched) }) {
                 logger.notice("✅ Game window detected after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
                 for (index, window) in windows.enumerated() {
                     logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
                 }
-                return .found(pid: pid, windows: windows)
+                let owner = windows.first?.ownerPid ?? watched
+                if owner != watched {
+                    logger.notice("   The window is \(processName)'s second process's (PID: \(owner)), not the first's (PID: \(watched))")
+                }
+                return .found(pid: owner, windows: windows.filter { $0.ownerPid == owner })
             }
             if ProcessControl.isAlive(watched) {
                 logger.critical("❌ Timeout: \(processName) process found but no windows appeared")

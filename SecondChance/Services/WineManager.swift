@@ -182,6 +182,8 @@ class WineManager {
             try? FileManager.default.removeItem(at: prefixPath)
             try FileManager.default.copyItem(at: cachedPrefix, to: prefixPath)
         }
+        // A prefix cached when prefixes had a Z: showing the whole Mac.
+        Wine(wrapp: wrappPath).drives.block("z")
     }
 
     /// Make the prefix from scratch, and cache it.
@@ -238,15 +240,14 @@ class WineManager {
         await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Setting up where the game finds its disc"))))
         try await winetricks.install(.isolateHome)
 
-        // Only the drives a game needs (WineDrives has what each is for).
-        // The A: drive's place in /tmp stands in for the saves until the
-        // wrapp points it at them, and C: is relative so the prefix still
-        // works copied into a wrapp.
+        // Only the drives a game needs (WineDrives has what each is for),
+        // and no Z: showing the whole Mac. The A: drive's place in /tmp
+        // stands in for the saves until the wrapp points it at them, and C:
+        // is relative so the prefix still works copied into a wrapp.
         wine.drives.removeAll()
         try wine.drives.mount("/tmp/second-chance-nancy-drew-\(UUID().uuidString)", as: "a")
         try wine.drives.mount("../drive_c", as: "c")
-        try wine.drives.mount("/", as: "z")
-        wine.drives.block("bdefghijklmnopqrstuvwxy")
+        wine.drives.block("bdefghijklmnopqrstuvwxyz")
 
         // Ensure Wine server is fully shut down before caching
         // This ensures all registry changes and file writes are flushed to disk

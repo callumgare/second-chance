@@ -34,6 +34,9 @@ struct SteamWrappPreparer: SteamWrappPreparing {
     func prepare(wrappAt path: URL) async throws {
         try await helper.createBaseWrapp(at: path)
         try await helper.installSteamClient(in: path)
+        // ⌘C and ⌘V in Steam's sign-in window, for a build and the wrapp
+        // alike. Each build, as the installed client may come from the cache.
+        try await Wine(wrapp: path).registry.letCommandActAsControl(in: Array(SteamSignInWindow.processNames).sorted())
         // Hundreds of MB of Steam, so off the main thread.
         let clientCache = self.clientCache
         let prefix = WrappLayout(app: path).prefix
@@ -181,10 +184,6 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if !restored && !input.canSignInToSteam { throw WrappBuildError.steamSignInRequired }
             if let preselected, let steam = Self.steamData(preselected) {
                 try client.queueInstall(appID: steam.appID, installDir: steam.installDir)
-            }
-            // Without a saved sign-in, Steam's window is about to ask for one.
-            if !sessionStore.hasSession && input.canSignInToSteam {
-                await bus.publishWrappBuild(.instructions(Self.signInInstructions))
             }
             try await client.start(silent: true)
             run.started()
@@ -351,7 +350,6 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                     logger.error("Couldn't sign out of Steam: \(error)")
                 }
                 SteamSessionStore.strip(from: prefix)
-                await bus.publishWrappBuild(.instructions(Self.signInInstructions))
                 try await startAgain(SteamStartupStage.starting.message)
             }
             for event in watch.check() {
@@ -362,8 +360,10 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 case .needsSignIn:
                     guard input.canSignInToSteam else { throw WrappBuildError.steamSignInRequired }
                     await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Waiting for you to sign in to Steam"))))
-                    await bus.publishWrappBuild(.instructions(Self.signInInstructions))
+                    // Told to sign in in Steam's window once it's there: this
+                    // waits for it to appear (up to a minute) and brings it forward.
                     await client.bringSignInWindowForward()
+                    await bus.publishWrappBuild(.instructions(Self.signInInstructions))
                     deadline = Date().addingTimeInterval(Self.signInTimeout)
                 case .startup(let stage):
                     await bus.publishWrappBuild(.progress(.installingGame(substep: stage.message)))

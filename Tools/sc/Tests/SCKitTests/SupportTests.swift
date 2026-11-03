@@ -386,6 +386,64 @@ struct GameTests {
         #expect(Set(source.availableGames(repo: repo).map(\.slug)) == [windows.slug, both.slug])
     }
 
+    @Test("The Big Fish source names the game, and signs in with .env's test account unless it's a trial")
+    func bigFishSource() throws {
+        let repo = Repo(root: FileManager.default.temporaryDirectory.appendingPathComponent("sc-big-fish-\(UUID().uuidString)"))
+        let onBigFish = try #require(Catalog.game(slug: "white-wolf"))
+        let notOnBigFish = try #require(Catalog.game(slug: "stay-tuned"))
+        let account = ["BIG_FISH_EMAIL": "player@example.com", "BIG_FISH_PASSWORD": "secret", "SENTRY_DSN": "x"]
+
+        let owned = try BigFishSourceOptions.parse([])
+        #expect(try owned.environment(for: onBigFish, dotEnv: account) == [
+            "INSTALLATION_SOURCE": "big-fish", "BIG_FISH_GAME_SLUG": "white-wolf",
+            "BIG_FISH_TEST_SIGN_IN": "1", "BIG_FISH_EMAIL": "player@example.com", "BIG_FISH_PASSWORD": "secret",
+        ])
+        // No account in .env: a headless build couldn't sign in.
+        #expect(throws: SCError.self) { try owned.environment(for: onBigFish, dotEnv: ["BIG_FISH_EMAIL": "player@example.com"]) }
+        #expect(throws: SCError.self) { try owned.environment(for: onBigFish, repo: repo) }
+        #expect(throws: SCError.self) { try owned.environment(for: notOnBigFish, dotEnv: account) }
+        #expect(owned.availableGames(repo: repo).contains(onBigFish))
+        #expect(!owned.availableGames(repo: repo).contains(notOnBigFish))
+
+        let trial = try BigFishSourceOptions.parse(["--big-fish-trial"])
+        #expect(try trial.environment(for: onBigFish, repo: repo) == [
+            "INSTALLATION_SOURCE": "big-fish", "BIG_FISH_GAME_SLUG": "white-wolf", "BIG_FISH_TRIAL": "1",
+        ])
+        #expect(try trial.environment(for: onBigFish, dotEnv: account)["BIG_FISH_PASSWORD"] == nil)
+
+        let options = try WrappSourceOptions.parse(["--from", "big-fish", "--big-fish-trial"])
+        #expect(options.input is BigFishSourceOptions)
+        #expect(try options.input.environment(for: onBigFish, repo: repo)["BIG_FISH_TRIAL"] == "1")
+    }
+
+    @Test("The Big Fish suites test the games Big Fish sells, and only the owned one gets the account")
+    func bigFishIntegration() throws {
+        let onBigFish = try #require(Catalog.game(slug: "white-wolf"))
+        let notOnBigFish = try #require(Catalog.game(slug: "stay-tuned"))
+        for source in [IntegrationSource.bigFish, .bigFishTrial] {
+            #expect(source.tests(onBigFish, herDownloads: []))
+            #expect(!source.tests(notOnBigFish, herDownloads: []))
+        }
+        #expect(Catalog.games.filter { IntegrationSource.bigFishTrial.tests($0, herDownloads: []) }.count == 30)
+
+        #expect(try IntegrationOptions.parseSources("big-fish-trial") == [.bigFishTrial])
+        #expect(try IntegrationOptions.parseSources("big-fish,disk,big-fish-trial") == [.disk, .bigFish, .bigFishTrial])
+        #expect(TestRunner.integrationSelection([.bigFish, .bigFishTrial]).filter { $0.hasPrefix("-only-testing:") } == [
+            "-only-testing:SecondChanceTests/BigFishOwnedInstallIntegrationTests",
+            "-only-testing:SecondChanceTests/BigFishTrialInstallIntegrationTests",
+        ])
+        for source in [IntegrationSource.bigFish, .bigFishTrial] {
+            #expect(TestRunner.unitExclusions.contains(TestRunner.integrationSuite(source)))
+        }
+
+        let dotEnv = ["BIG_FISH_EMAIL": "player@example.com", "BIG_FISH_PASSWORD": "secret", "SENTRY_DSN": "x"]
+        #expect(TestRunner.bigFishEnvironment(dotEnv: dotEnv, sources: [.bigFish]) == [
+            "TEST_RUNNER_BIG_FISH_EMAIL": "player@example.com", "TEST_RUNNER_BIG_FISH_PASSWORD": "secret",
+        ])
+        #expect(TestRunner.bigFishEnvironment(dotEnv: dotEnv, sources: [.disk, .bigFishTrial]).isEmpty)
+        #expect(TestRunner.bigFishEnvironment(dotEnv: [:], sources: [.bigFish]).isEmpty)
+    }
+
     @Test("--build-concurrency defaults to one build per four performance cores, never none")
     func defaultBuildConcurrency() throws {
         #expect(IntegrationOptions.defaultBuildConcurrency(fastCores: 8) == 2)
@@ -400,7 +458,7 @@ struct GameTests {
         #expect(try IntegrationOptions.parseSources("her-download,disk") == [.disk, .herDownload])
         #expect(try IntegrationOptions.parseSources("disk") == [.disk])
         #expect(try IntegrationOptions.parseSources("steam,disk") == [.disk, .steam])
-        #expect(try IntegrationOptions.parseSources("all") == WrappSourceKind.allCases)
+        #expect(try IntegrationOptions.parseSources("all") == IntegrationSource.allCases)
         #expect(throws: ValidationError.self) { try IntegrationOptions.parseSources("") }
         do {
             _ = try IntegrationOptions.parseSources("stam")

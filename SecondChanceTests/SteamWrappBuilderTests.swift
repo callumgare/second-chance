@@ -333,7 +333,7 @@ struct SteamWrappBuilderTests {
         #expect(run.client?.calls == ["restoreLogin", "queueInstall 226820", "start", "shutdown", "saveLogin"])
     }
 
-    @Test("From the app, Steam's sign-in window is brought to the front when Steam asks for a sign-in")
+    @Test("From the app, Steam's sign-in window is brought to the front when Steam asks for a sign-in, and the person told")
     func signInWindowComesForward() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
         let picking = PickingInput(pick: "thornton-hall", environment: Self.appEnvironment(base: base))
@@ -343,6 +343,22 @@ struct SteamWrappBuilderTests {
         }
         _ = try run.result.get()
         #expect(run.client?.calls.filter { $0 == "bringSignInWindowForward" }.count == 1)
+        #expect(run.events.contains(where: Self.isSignInInstructions))
+    }
+
+    static func isSignInInstructions(_ event: WrappBuildEvent) -> Bool {
+        if case .instructions(SteamWrappBuilder.signInInstructions) = event { return true }
+        return false
+    }
+
+    @Test("From the app, nobody is told to sign in in Steam's window when Steam signs in by itself")
+    func noSignInWindowNoInstructions() async throws {
+        defer { try? FileManager.default.removeItem(at: base) }
+        let picking = PickingInput(pick: "thornton-hall", environment: Self.appEnvironment(base: base))
+        let run = await build(game: "thornton-hall", picking: picking) { $0.owned = [226820] }
+        _ = try run.result.get()
+        #expect(!run.events.contains(where: Self.isSignInInstructions))
+        #expect(run.client?.calls.contains("bringSignInWindowForward") == false)
     }
 
     @Test("An account that owns none of the games fails without asking which to build")

@@ -17,28 +17,30 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sha
 nonisolated public enum SteamSignInWindow {
     /// The programs whose windows are Steam's: the client, and the web
     /// helper that draws its UI.
-    static let processNames: Set<String> = ["steam.exe", "steamwebhelper.exe"]
+    public static let processNames: Set<String> = ["steam.exe", "steamwebhelper.exe"]
 
     /// Wait up to `timeout` for a window of Steam's to be on screen, then
     /// bring it to the front. Only one wrapp or build runs Steam at a time
     /// (`SteamActiveLock`), so any Steam window on screen is this one's.
     /// Returns whether it found one to bring forward. `window` names it in
-    /// the log.
+    /// the log. Big Fish's Game Manager uses it too, with its own `programs`
+    /// and `store` name.
     @discardableResult
-    public static func bringForward(timeout: TimeInterval = 60, window: String = "sign-in window") async -> Bool {
+    public static func bringForward(timeout: TimeInterval = 60, window: String = "sign-in window",
+                                    programs: Set<String> = processNames, store: String = "Steam") async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while true {
-            if let pid = steamWindowOwner() {
+            if let pid = steamWindowOwner(programs: programs) {
                 let activated = await activate(pid: pid)
                 if activated {
-                    logger.notice("Brought Steam's \(window) to the front")
+                    logger.notice("Brought \(store)'s \(window) to the front")
                 } else {
-                    logger.warning("Couldn't bring Steam's \(window) to the front (pid \(pid)); macOS refused the activation")
+                    logger.warning("Couldn't bring \(store)'s \(window) to the front (pid \(pid)); macOS refused the activation")
                 }
                 return activated
             }
             guard Date() < deadline else {
-                logger.warning("None of Steam's windows appeared within \(Int(timeout))s to bring its \(window) forward")
+                logger.warning("None of \(store)'s windows appeared within \(Int(timeout))s to bring its \(window) forward")
                 return false
             }
             try? await Task.sleep(for: .seconds(1))
@@ -46,7 +48,7 @@ nonisolated public enum SteamSignInWindow {
     }
 
     /// The process owning Steam's largest on-screen window, if any.
-    static func steamWindowOwner() -> pid_t? {
+    static func steamWindowOwner(programs: Set<String> = processNames) -> pid_t? {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         var best: (pid: pid_t, area: CGFloat)?
         for window in windows {
@@ -57,7 +59,7 @@ nonisolated public enum SteamSignInWindow {
             // Skips the tiny helper windows Wine and CEF keep about.
             guard area > 200 * 200, area > (best?.area ?? 0),
                   let name = ProcessName.executable(ofPID: pid),
-                  processNames.contains(name.lowercased()) else { continue }
+                  programs.contains(name.lowercased()) else { continue }
             best = (pid, area)
         }
         return best?.pid

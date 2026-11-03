@@ -10,6 +10,7 @@ enum WrappSourceKind: String, CaseIterable, ExpressibleByArgument, Sendable {
     case disk
     case steam
     case herDownload = "her-download"
+    case bigFish = "big-fish"
 }
 
 /// What a source contributes to a headless build: the app's
@@ -156,6 +157,64 @@ struct HerDownloadSourceOptions: ParsableArguments, WrappSourceInput {
     }
 }
 
+/// `--from big-fish`: a game through Big Fish's Game Manager
+/// (docs/big-fish.md). A headless build can't ask anyone to sign in, so the
+/// full game signs in with the test account in `.env` (`BIG_FISH_EMAIL`,
+/// `BIG_FISH_PASSWORD`); `--big-fish-trial` builds the game's free trial,
+/// signed out, instead.
+struct BigFishSourceOptions: ParsableArguments, WrappSourceInput {
+    @Flag(help: ArgumentHelp(
+        "Build the game's free trial from Big Fish, signed out, rather than the full game the test account owns.",
+        discussion: "A trial wrapp is for testing: it starts through the Game Manager's Play Now and runs for 60 minutes."
+    ))
+    var bigFishTrial = false
+
+    /// The `.env` keys holding the test account's sign-in. Passed on to the
+    /// app (or the test host) and never shown.
+    static let accountKeys = ["BIG_FISH_EMAIL", "BIG_FISH_PASSWORD"]
+
+    func availableGames(repo: Repo) -> [CatalogGame] {
+        Catalog.games.filter(\.isOnBigFish)
+    }
+
+    var availabilityDescription: String { "Big Fish Games" }
+
+    func environment(for game: CatalogGame, repo: Repo) throws -> [String: String] {
+        try environment(for: game, dotEnv: bigFishTrial ? [:] : DotEnv.load(repo))
+    }
+
+    func environment(for game: CatalogGame, dotEnv: [String: String]) throws -> [String: String] {
+        guard game.isOnBigFish else {
+            throw SCError("\(game.title) isn't sold by Big Fish Games.",
+                          hints: ["Games on Big Fish: \(Catalog.games.filter(\.isOnBigFish).map(\.slug).joined(separator: ", "))"])
+        }
+        var env = ["INSTALLATION_SOURCE": "big-fish", "BIG_FISH_GAME_SLUG": game.slug]
+        if bigFishTrial {
+            env["BIG_FISH_TRIAL"] = "1"
+            return env
+        }
+        guard let account = Self.testAccount(dotEnv: dotEnv) else {
+            throw SCError("A headless Big Fish build can't ask anyone to sign in, and .env has no test account.",
+                          hints: ["Set \(Self.accountKeys.joined(separator: " and ")) in .env (see .env.example).",
+                                  "Or build the free trial with --big-fish-trial."])
+        }
+        env["BIG_FISH_TEST_SIGN_IN"] = "1"
+        env.merge(account) { _, new in new }
+        return env
+    }
+
+    /// The test account's sign-in from `.env`, or nil when either half is
+    /// missing or empty.
+    static func testAccount(dotEnv: [String: String]) -> [String: String]? {
+        var account: [String: String] = [:]
+        for key in accountKeys {
+            guard let value = dotEnv[key], !value.isEmpty else { return nil }
+            account[key] = value
+        }
+        return account
+    }
+}
+
 enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
     case `continue`
     case cancel
@@ -163,7 +222,7 @@ enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
 
 /// Everything about what a wrapp is built from.
 struct WrappSourceOptions: ParsableArguments {
-    @Option(help: "What to build the wrapp from: disk, steam or her-download.")
+    @Option(help: "What to build the wrapp from: disk, steam, her-download or big-fish.")
     var from: WrappSourceKind = .disk
 
     @OptionGroup(title: "Disk source")
@@ -175,6 +234,9 @@ struct WrappSourceOptions: ParsableArguments {
     @OptionGroup(title: "Her Interactive download source")
     var herDownload: HerDownloadSourceOptions
 
+    @OptionGroup(title: "Big Fish Games source")
+    var bigFish: BigFishSourceOptions
+
     @Option(help: "What to do when an official game patch fails to apply: continue or cancel. Default: continue.")
     var patchFailure: PatchFailurePolicy?
 
@@ -183,6 +245,7 @@ struct WrappSourceOptions: ParsableArguments {
         case .disk: disk
         case .steam: steam
         case .herDownload: herDownload
+        case .bigFish: bigFish
         }
     }
 }

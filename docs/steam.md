@@ -58,9 +58,13 @@ the test host under xcodebuild — can still meet the prompts; answer them
    build. The cache leaves out the account's sign-in, licences, settings and
    games.
 3. **Sign in**: restore the shared session and start Steam silently. With no
-   session, or one Steam rejects, the GUI says to sign in in Steam's window
-   (QR or password), brings that window to the front (as a wrapp does; see
-   [Running](#running)) and waits up to 30 minutes; a headless build fails
+   session, or one Steam rejects, the GUI brings Steam's window to the front
+   once Steam has asked for a sign-in and the window is up (as a wrapp does;
+   see [Running](#running)), only then says to sign in there (QR or
+   password), and waits up to 30 minutes. ⌘C and ⌘V work in it: the build
+   has ⌘ act as Ctrl for `steam.exe` and `steamwebhelper.exe` alone
+   (`WineRegistry.letCommandActAsControl`), as Wine otherwise keeps ⌘ for
+   its own Mac menu and a Windows program knows only Ctrl. A headless build fails
    with `steamSignInRequired` instead. A Steam that exits first — missing
    from eight checks two seconds apart, since it restarts itself after an
    update — is started once more, and exiting again fails the build with
@@ -111,7 +115,9 @@ the test host under xcodebuild — can still meet the prompts; answer them
 4. **Pick the game from the ones the account owns** (`ownedAppIDs`), so
    nobody is offered a game Steam won't install. From the app,
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
-   when there are none); for a DRM-free one it then asks how it launches
+   when there are none), asking in Second Chance's main window, in place of
+   the progress, which comes to the front as the person has just been in
+   Steam's window (`WrappBuildViewModel.ask`); for a DRM-free one it then asks how it launches
    (`getSteamLaunchMode`, `STEAM_LAUNCH_MODE`), and the engine follows
    (`engineRouted`). Steam only installs a queued game when it starts, so the
    build then stops Steam — saving the session but leaving it in the prefix —
@@ -330,7 +336,9 @@ Rules the store follows, each from something seen to go wrong:
 
 Signing out — Second Chance's *Sign Out of Steam*, or `sc clean
 steam-session` — deletes the store; every Steam wrapp then asks for a
-sign-in once. `sc clean steam-client` drops the cached Steam client.
+sign-in once. The menu item is there only while the store holds a sign-in
+(`StoreSignIns`, which looks again each time a menu opens or Second Chance
+comes to the front, since builds and wrapps save and drop it). `sc clean steam-client` drops the cached Steam client.
 
 ## One wrapp on Steam at a time
 
@@ -349,7 +357,9 @@ means: a cancel or a failure for a build, a quiet end to a wrapp's launch.
 `SteamLockHolder.name` is
 the holding wrapp's name as the person knows it (its game's title, from the
 running app), found only while the pid in the record is still an app with
-that bundle ID. `ask` shows the choice a build and a wrapp both offer:
+that bundle ID. `ask` shows the choice a build and a wrapp both offer, as an
+alert in a wrapp; a build asks the same `prompt` as a page of Second Chance's
+window (`BuildQuestion`):
 
 - **Try Again**, the default. The alert asks them to save their game and
   quit it themselves, then click this.
@@ -357,7 +367,7 @@ that bundle ID. `ask` shows the choice a build and a wrapp both offer:
   quit; the alert says that anything not saved in it will be lost, and the
   button is marked as losing work: `hasDestructiveAction` on the alert (the
   only warning style macOS 26 lets an alert button take; it ignores a red
-  title), and a red title on the error screen, where SwiftUI's
+  title), and a red title on the error screen and the build's page, where SwiftUI's
   `role: .destructive` alone draws no colour on a push button. `quit` asks the
   wrapp to quit as Cmd-Q would, which stops its Steam and saves the sign-in
   back. A wrapp still running 40 s later gets SIGTERM, which it treats as a

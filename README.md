@@ -14,8 +14,9 @@ Second Chance works with the Nancy Drew adventure games from _Secrets Can Kill_ 
 game made before Her Interactive moved to a new game engine with _Midnight in Salem_. You tell it where your copy of a
 game is, and it makes a new app that runs that game.
 
-It works with copies of the games from the original CDs, games from Steam, and both Mac and PC copies of the games downloaded from the online Her
-Interactive store (although this is the least tested of the 3, let me know if you find any issues with it).
+It works with copies of the games from the original CDs, games from Steam, games bought from Big Fish Games, and both Mac
+and PC copies of the games downloaded from the online Her Interactive store (although Big Fish Games and the Her
+Interactive store are the least tested, so let me know if you find any issues with them).
 
 <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/app-welcome-dark.png">
@@ -95,44 +96,45 @@ Second Chance knows about all 33 of these games but not all games have been been
 
 Key:\
 **✓** tested and working\
+**✓ (trial)** its free trial tested and working, though not yet the full game\
 **–** not tested yet\
 **n/a** not sold on this platform
 
-| #   | Game                           | CD  | Steam | Her Download |
-| --- | ------------------------------ | :-: | :---: | :----------: |
-| 1   | Secrets Can Kill               | ✓   | n/a   | n/a          |
-|     | Secrets Can Kill Remastered    | ✓   | ✓     | –            |
-| 2   | Stay Tuned for Danger          | ✓   | n/a   | –            |
-| 3   | Message in a Haunted Mansion   | ✓   | ✓     | –            |
-| 4   | Treasure in the Royal Tower    | ✓   | ✓     | –            |
-| 5   | The Final Scene                | ✓   | –     | –            |
-| 6   | Secret of the Scarlet Hand     | ✓   | –     | ✓ (Windows)  |
-| 7   | Ghost Dogs of Moon Lake        | ✓   | ✓     | –            |
-| 8   | The Haunted Carousel           | ✓   | –     | –            |
-| 9   | Danger on Deception Island     | ✓   | –     | –            |
-| 10  | The Secret of Shadow Ranch     | ✓   | ✓     | –            |
-| 11  | Curse of Blackmoor Manor       | ✓   | ✓     | –            |
-| 12  | Secret of the Old Clock        | ✓   | ✓     | –            |
-| 13  | Last Train to Blue Moon Canyon | ✓   | ✓     | –            |
-| 14  | Danger by Design               | ✓   | –     | –            |
-| 15  | The Creature of Kapu Cave      | ✓   | –     | –            |
-| 16  | The White Wolf of Icicle Creek | ✓   | –     | –            |
-| 17  | Legend of the Crystal Skull    | ✓   | –     | –            |
-| 18  | The Phantom of Venice          | ✓   | –     | –            |
-| 19  | The Haunting of Castle Malloy  | ✓   | –     | –            |
-| 20  | Ransom of the Seven Ships¹     | ✓   | n/a   | n/a          |
-| 21  | Warnings at Waverly Academy    | ✓   | ✓     | –            |
-| 22  | Trail of the Twister           | ✓   | –     | ✓ (Mac)      |
-| 23  | Shadow at the Water's Edge     | ✓   | ✓     | –            |
-| 24  | The Captive Curse              | ✓   | –     | –            |
-| 25  | Alibi in Ashes                 | ✓   | –     | –            |
-| 26  | Tomb of the Lost Queen         | ✓   | –     | –            |
-| 27  | The Deadly Device              | ✓   | –     | –            |
-| 28  | Ghost of Thornton Hall         | ✓   | ✓     | –            |
-| 29  | The Silent Spy                 | ✓   | –     | –            |
-| 30  | The Shattered Medallion        | ✓   | –     | –            |
-| 31  | Labyrinth of Lies              | ✓   | –     | –            |
-| 32  | Sea of Darkness                | ✓   | –     | –            |
+| #   | Game                           | CD  | Steam | Her Download | Big Fish    |
+| --- | ------------------------------ | :-: | :---: | :----------: | :---------: |
+| 1   | Secrets Can Kill               | ✓   | n/a   | n/a          | n/a         |
+|     | Secrets Can Kill Remastered    | ✓   | ✓     | –            | –           |
+| 2   | Stay Tuned for Danger          | ✓   | n/a   | –            | n/a         |
+| 3   | Message in a Haunted Mansion   | ✓   | ✓     | –            | ✓ (trial)   |
+| 4   | Treasure in the Royal Tower    | ✓   | ✓     | –            | ✓ (trial)   |
+| 5   | The Final Scene                | ✓   | –     | –            | ✓ (trial)   |
+| 6   | Secret of the Scarlet Hand     | ✓   | –     | ✓ (Windows)  | ✓ (trial)   |
+| 7   | Ghost Dogs of Moon Lake        | ✓   | ✓     | –            | –           |
+| 8   | The Haunted Carousel           | ✓   | –     | –            | –           |
+| 9   | Danger on Deception Island     | ✓   | –     | –            | –           |
+| 10  | The Secret of Shadow Ranch     | ✓   | ✓     | –            | ✓ (trial)   |
+| 11  | Curse of Blackmoor Manor       | ✓   | ✓     | –            | –           |
+| 12  | Secret of the Old Clock        | ✓   | ✓     | –            | –           |
+| 13  | Last Train to Blue Moon Canyon | ✓   | ✓     | –            | –           |
+| 14  | Danger by Design               | ✓   | –     | –            | –           |
+| 15  | The Creature of Kapu Cave      | ✓   | –     | –            | –           |
+| 16  | The White Wolf of Icicle Creek | ✓   | –     | –            | ✓           |
+| 17  | Legend of the Crystal Skull    | ✓   | –     | –            | –           |
+| 18  | The Phantom of Venice          | ✓   | –     | –            | –           |
+| 19  | The Haunting of Castle Malloy  | ✓   | –     | –            | –           |
+| 20  | Ransom of the Seven Ships¹     | ✓   | n/a   | n/a          | n/a         |
+| 21  | Warnings at Waverly Academy    | ✓   | ✓     | –            | –           |
+| 22  | Trail of the Twister           | ✓   | –     | ✓ (Mac)      | –           |
+| 23  | Shadow at the Water's Edge     | ✓   | ✓     | –            | –           |
+| 24  | The Captive Curse              | ✓   | –     | –            | –           |
+| 25  | Alibi in Ashes                 | ✓   | –     | –            | –           |
+| 26  | Tomb of the Lost Queen         | ✓   | –     | –            | –           |
+| 27  | The Deadly Device              | ✓   | –     | –            | –           |
+| 28  | Ghost of Thornton Hall         | ✓   | ✓     | –            | –           |
+| 29  | The Silent Spy                 | ✓   | –     | –            | –           |
+| 30  | The Shattered Medallion        | ✓   | –     | –            | –           |
+| 31  | Labyrinth of Lies              | ✓   | –     | –            | –           |
+| 32  | Sea of Darkness                | ✓   | –     | –            | –           |
 
 ¹ Her Interactive stopped selling Ransom of the Seven Ships in 2020. If you have a copy bought before then it may still work.
 
@@ -234,6 +236,6 @@ Second Chance is built on:
 - [Sparkle](https://sparkle-project.org/), which keeps Second Chance up to date.
 
 The Nancy Drew games are made by Her Interactive. Second Chance isn't affiliated with Her Interactive (yet, if you're
-reading this Her Interactive sponsor me!).
+reading this Her Interactive sponsor me!), nor with Valve or Big Fish Games.
 
 Second Chance is open source, under the [GNU General Public License v3](license.txt).

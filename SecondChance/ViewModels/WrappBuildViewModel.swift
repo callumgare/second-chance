@@ -83,12 +83,66 @@ class WrappBuildViewModel {
     private(set) var successReportsQuestion: SuccessReportsQuestion?
     @ObservationIgnored private var successReportsAnswered: CheckedContinuation<Void, Never>?
 
+    /// A question the build asks part way through, which the main window
+    /// shows as a page of its own, in place of the build's progress: which
+    /// game to get from a store, what to do about a disc it doesn't
+    /// recognise, putting in disc 2, and the rest (`WrappBuildInput`).
+    struct BuildQuestion {
+        /// One of a list to pick from.
+        struct Choice {
+            let title: String
+            /// What picking it means, beneath it, if it needs saying.
+            var detail: String?
+        }
+        /// A button along the bottom.
+        struct Action {
+            enum Role {
+                /// The way on: takes Return, and a double-clicked choice.
+                case primary
+                /// Takes Escape.
+                case cancel
+                /// Loses something (a game that was just installed).
+                case destructive
+                case other
+            }
+            let title: String
+            var role: Role = .other
+        }
+        let title: String
+        let detail: String
+        /// What the list of choices is, for VoiceOver: "Games".
+        var choicesLabel = ""
+        /// A list to pick from, the first picked to start with; none for a
+        /// question its buttons answer alone.
+        var choices: [Choice] = []
+        let actions: [Action]
+        /// What the build is waiting for meanwhile, shown with a spinner: a
+        /// question something else can answer (disc 2 going in).
+        var waiting: String?
+        /// The sidebar's step while it's asked, when not the build's own.
+        var step: InstallerStep?
+        /// Bring Second Chance to the front, as the person has just been in
+        /// another app's window (a store's sign-in); otherwise the Dock
+        /// icon bounces if it's in the background.
+        var comesToFront = false
+    }
+    /// The button a question was answered with (its index in `actions`),
+    /// and the choice picked then, if it has any.
+    struct BuildAnswer {
+        let action: Int
+        let choice: Int?
+    }
+    /// Set only by `ask`, and by `UIStateCatalog` to picture it.
+    var question: BuildQuestion?
+    @ObservationIgnored private var questionAnswered: CheckedContinuation<BuildAnswer?, Never>?
+
     /// The failed build's report, for the error screen.
     let failureReport = FailureReportModel()
 
     private let diskBuilder: DiskWrappBuilder
     private let herDownloadBuilder: HerDownloadWrappBuilder
     private let steamBuilder: SteamWrappBuilder
+    private let bigFishBuilder: BigFishWrappBuilder
     /// Where this view model's builds report, and where it follows them.
     let bus: EventBus<AppEvent>
     private let cacheManager = CacheManager.shared
@@ -122,6 +176,7 @@ class WrappBuildViewModel {
         diskBuilder = DiskWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
         herDownloadBuilder = HerDownloadWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
         steamBuilder = SteamWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
+        bigFishBuilder = BigFishWrappBuilder(helper: helper, installerRunner: installerRunner, bus: bus)
 
         // Subscribe to the build's bus so wrapp-build events drive the observed properties.
         // (A headless run is this view model too: CLIBuilder starts its build.)
@@ -169,9 +224,13 @@ class WrappBuildViewModel {
                 // the error screen about to replace it.
                 _ = await screenshotsBeforeError()
                 if !isCancelling { handleBuildFailure(error) }
-            case .completed:
+            case .completed(let wrappPath):
                 instructions = nil
                 steamSignInNotice = nil
+                // With the screen, not once the builder returns: it may still
+                // be tidying up (unmounting discs), and without the app's
+                // place the screen has no Show in Finder or Play Now.
+                builtWrappURL = wrappPath
                 currentState = .completed
                 stopStepTimer()
             default:
@@ -195,6 +254,7 @@ class WrappBuildViewModel {
         } ?? true
 
         guard isNewStep else { return }
+        let previous = lastProgressState
 
         // The substep too: the screen hides it for the first 5 s, but it's
         // what says how far a step got (Steam's "Connecting to Steam").
@@ -202,10 +262,20 @@ class WrappBuildViewModel {
         logger.notice("━━━ \(state.displayText)\(state.elapsedSeconds == nil ? substep : "") ━━━")
         LogContext.enterStage(state.displayText)
 
-        stepStartTime = Date()
-        shouldShowElapsed = false
         lastProgressState = state
         stepProgress = nil
+
+        // A new substep of the step under way shows at once once the step
+        // has shown its own: the 5 s are the step's, not each substep's, or
+        // the screen would fall back to the step's name between them.
+        if let previous, previous.baseText == state.baseText, let startTime = stepStartTime {
+            let elapsed = Date().timeIntervalSince(startTime)
+            currentState = withElapsedSeconds(state, elapsed: shouldShowElapsed ? Int(elapsed) : nil)
+            return
+        }
+
+        stepStartTime = Date()
+        shouldShowElapsed = false
         stopStepTimer()
 
         // Initially show state without elapsed time (substep hidden until 5 s)
@@ -264,6 +334,7 @@ class WrappBuildViewModel {
         case .disk: await runBuild(diskBuilder, from: source)
         case .herDownload: await runBuild(herDownloadBuilder, from: source)
         case .steam: await runBuild(steamBuilder, from: source)
+        case .bigFish: await runBuild(bigFishBuilder, from: source)
         }
     }
 
@@ -276,6 +347,17 @@ class WrappBuildViewModel {
         isCancelling = true
         buildTask.cancel()
         finishSuccessReportsQuestion()
+        answerQuestion(nil)
+    }
+
+    /// The person cancelled a question that ends the build, which winds down
+    /// as a cancelled build does: "Stopping…" while it stops Steam or Big
+    /// Fish and removes the half-made app, rather than the step it was on,
+    /// and then the welcome screen.
+    func windDownAfterCancelledQuestion() {
+        guard buildTask != nil, !isCancelling else { return }
+        logger.notice("The person cancelled a question, so the build is stopping")
+        isCancelling = true
     }
 
     // MARK: - Success reports question
@@ -309,6 +391,39 @@ class WrappBuildViewModel {
         successReportsQuestion = nil
         successReportsAnswered?.resume()
         successReportsAnswered = nil
+    }
+
+    // MARK: - Build questions
+
+    /// Show `question`, and wait for its answer: nil when it was withdrawn
+    /// (`withdrawQuestion`) or the build cancelled.
+    func ask(_ question: BuildQuestion) async -> BuildAnswer? {
+        await withCheckedContinuation { continuation in
+            questionAnswered?.resume(returning: nil)
+            questionAnswered = continuation
+            self.question = question
+            if question.comesToFront {
+                // The store's window, active as they signed in, would stay in
+                // front of the question otherwise. The plain activate() is
+                // only a request since macOS 14, which that window can keep.
+                NSApp.installerWindow?.orderFront(nil)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            } else {
+                NSApp.askForAttention()
+            }
+        }
+    }
+
+    func answerQuestion(_ answer: BuildAnswer?) {
+        question = nil
+        questionAnswered?.resume(returning: answer)
+        questionAnswered = nil
+    }
+
+    /// Take the question away unanswered, as something else has answered
+    /// it (disc 2 went in).
+    func withdrawQuestion() {
+        answerQuestion(nil)
     }
 
     /// Drive any builder: build → completed, or route the failure. The bus

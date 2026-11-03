@@ -40,6 +40,26 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// Another wrapp, or another build, is running Steam. The error screen
     /// offers to quit it, as a fallback.
     case steamInUse(SteamLockHolder)
+    /// Big Fish's Game Manager couldn't be downloaded or installed.
+    case bigFishGameManagerInstallFailed
+    /// The Game Manager needs someone to sign in, and nobody can: a headless
+    /// build without the test harness's sign-in.
+    case bigFishSignInRequired
+    /// Nobody signed in to the Game Manager's window in time.
+    case bigFishSignInTimedOut
+    /// The Game Manager quit partway through the build.
+    case bigFishGameManagerQuit
+    /// The signed-in Big Fish account owns none of the games.
+    case bigFishNoGamesOwned
+    /// The signed-in Big Fish account doesn't own the game.
+    case bigFishGameNotOwned(title: String)
+    /// The Game Manager couldn't download the game.
+    case bigFishDownloadFailed
+    /// The Game Manager couldn't install the game it downloaded.
+    case bigFishInstallFailed
+    /// The Game Manager installed the game, but couldn't activate it (Big
+    /// Fish's DRM unlocking it for this computer).
+    case bigFishActivationFailed
     case installerNotFound
     /// The folder chosen holds a game that's already installed, with no
     /// installer beside it (`GameDetector.isInstalledGame`).
@@ -128,6 +148,8 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: "The game didn't install completely. Try again.")
         case .steamInstallFailed:
             return String(localized: "Steam couldn't install the game. Try again.")
+        case .bigFishSignInRequired:
+            return Self.tryAgain
         case .unsupportedMacDownload:
             return String(localized: """
                 Second Chance can't use this Mac download. It may not have finished downloading: download it again, \
@@ -183,6 +205,38 @@ enum WrappBuildError: LocalizedError, Equatable {
                 return String(localized: "Another game is using Steam, and only one game can use it at a time. Quit it and try again.")
             }
             return String(localized: "\(name) is using Steam, and only one game can use it at a time. Save your game in \(name) and quit it, then click Try Again.")
+        case .bigFishGameManagerInstallFailed:
+            return String(localized: """
+                Big Fish's Game Manager, which downloads the game, couldn't be set up. \
+                Check that this Mac is connected to the internet, then try again.
+                """)
+        case .bigFishSignInRequired:
+            // Only a headless build (sc) says this, so it needn't be plain.
+            return "Big Fish's Game Manager needs you to sign in, which a headless build can't do. "
+                + "Build from the app, or set BIG_FISH_TEST_SIGN_IN=1 with BIG_FISH_EMAIL and BIG_FISH_PASSWORD."
+        case .bigFishSignInTimedOut:
+            return String(localized: """
+                Big Fish's Game Manager waited for you to sign in, but nobody did. \
+                Try again when you're ready, and sign in when its window appears.
+                """)
+        case .bigFishGameManagerQuit:
+            return String(localized: "Big Fish's Game Manager closed unexpectedly. Try again.")
+        case .bigFishNoGamesOwned:
+            return String(localized: "Your Big Fish Games account doesn't have any of the Nancy Drew games that Second Chance can install.")
+        case .bigFishGameNotOwned(let title):
+            return String(localized: "Your Big Fish Games account doesn't have \(title).")
+        case .bigFishDownloadFailed:
+            return String(localized: """
+                Big Fish's Game Manager couldn't download the game. \
+                Check that this Mac is connected to the internet, then try again.
+                """)
+        case .bigFishInstallFailed:
+            return String(localized: "Big Fish's Game Manager couldn't install the game. Try again.")
+        case .bigFishActivationFailed:
+            return String(localized: """
+                Big Fish's Game Manager installed the game, but couldn't unlock it to play on this Mac. \
+                Check that this Mac is connected to the internet, then try again.
+                """)
         case .installerNotFound:
             return String(localized: "Couldn't find the game's installer. Check that it's the first disc of a Nancy Drew game, or the file you downloaded from Her Interactive.")
         case .installedGameNotInstaller:

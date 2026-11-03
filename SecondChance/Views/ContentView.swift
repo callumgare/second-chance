@@ -21,13 +21,10 @@ struct ContentView: View {
             Divider()
 
             Group {
-                switch viewModel.currentState {
-                case .idle, .selectingWrappSource, .selectingSource:
-                    WelcomeView()
-                case .error(let message):
-                    ErrorView(message: message)
-                default:
-                    WrappBuildProgressView()
+                if let question = viewModel.question {
+                    BuildQuestionView(question: question)
+                } else {
+                    page
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -55,8 +52,22 @@ struct ContentView: View {
         }
     }
 
+    /// The page for where the build is, when it isn't asking anything.
+    @ViewBuilder
+    private var page: some View {
+        switch viewModel.currentState {
+        case .idle, .selectingWrappSource, .selectingSource:
+            WelcomeView()
+        case .error(let message):
+            ErrorView(message: message)
+        default:
+            WrappBuildProgressView()
+        }
+    }
+
     private var currentStep: InstallerStep {
-        InstallerStep(viewModel.currentState) ?? .summary
+        if let step = viewModel.question?.step { return step }
+        return InstallerStep(viewModel.currentState) ?? .summary
     }
 
     private var failedStep: InstallerStep? {

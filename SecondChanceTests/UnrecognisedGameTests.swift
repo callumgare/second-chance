@@ -14,10 +14,10 @@ struct UnrecognisedGameTests {
         ["HER_INSTALLER_PATH": "/nonexistent.exe"],
     ])
     @MainActor
-    func headlessInstallsAnyway(environment: [String: String]) throws {
+    func headlessInstallsAnyway(environment: [String: String]) async throws {
         let input = WrappBuildInput(environment: environment, viewModel: nil)
-        #expect(try input.askAboutUnrecognisedGame(.disk) == .installAnyway)
-        #expect(try input.askAboutUnrecognisedGame(.herDownload) == .installAnyway)
+        #expect(try await input.askAboutUnrecognisedGame(.disk) == .installAnyway)
+        #expect(try await input.askAboutUnrecognisedGame(.herDownload) == .installAnyway)
     }
 
     @Test("Detection that matches nothing gives the game the builders ask about")

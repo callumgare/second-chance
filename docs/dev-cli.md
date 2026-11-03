@@ -30,7 +30,7 @@ nearest command's help.
 ./sc lint                              # SwiftLint and markdownlint, as CI runs them
 ./sc setup                             # Once per clone: tools, commit hook, completions
 ./sc clean wine-prefixes               # Start the next build from a fresh Wine prefix
-./sc clean downloads                   # Fetch (and check) Wine, AutoIt, ScummVM and the patches afresh
+./sc clean downloads                   # Fetch (and check) Wine, AutoIt, ScummVM, the patches and Big Fish's installer afresh
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
 ./sc --on <host> attach                # Pick up a remote run after the connection dropped
 ```
@@ -69,8 +69,8 @@ app at all — launching a wrapp as it is doesn't need it.
 is the only place xcodebuild is run from; see AGENTS.md for why the flag is
 load-bearing.
 
-**Sources.** `wrapp build --from disk` (the default), `--from steam` or
-`--from her-download`. Each source is a case of `WrappSourceKind` with its own
+**Sources.** `wrapp build --from disk` (the default), `--from steam`,
+`--from her-download` or `--from big-fish`. Each source is a case of `WrappSourceKind` with its own
 options type conforming to `WrappSourceInput` (`Support/Wrapps.swift`), which
 turns the options into the app's `INSTALLATION_SOURCE` and inputs. Adding a
 source is a new case and a new type — the same shape as the app's
@@ -81,9 +81,11 @@ source is a new case and a new type — the same shape as the app's
 than one download needs `--her-download` to pick which
 ([her-download.md](her-download.md)).
 
-`sc test integration --source disk|steam|her-download|all` (comma-separated)
-picks which build sources' suites run; [testing.md](testing.md) has what each
-needs.
+`sc test integration --source disk|steam|her-download|big-fish|big-fish-trial|all`
+(comma-separated) picks which build sources' suites run; [testing.md](testing.md)
+has what each needs. These are `IntegrationSource`'s cases rather than
+`WrappSourceKind`'s, as Big Fish has two suites, the owned games and the free
+trials, where `wrapp build` has one source and a flag.
 
 `wrapp build` starts the app, and `wrapp run`, `wrapp wine` and `app run`
 the program they replace `sc` with, as its own responsible process, so macOS
@@ -95,6 +97,13 @@ privacy prompts (which Steam waits on) aren't addressed to `sc`; see
 It needs the shared Steam sign-in to exist already — a headless build can't
 show Steam's sign-in window — so sign in once by building a Steam game from
 the app. [steam.md](steam.md) has the details.
+
+`--from big-fish` builds any game Big Fish Games sells that the test account
+in `.env` (`BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD`) owns: a headless build has
+nobody to sign in, so `sc` passes the account to the app with
+`BIG_FISH_TEST_SIGN_IN=1`, and refuses to start without it. `--big-fish-trial`
+builds the game's free trial instead, signed out, with no account needed
+([big-fish.md](big-fish.md#testing)).
 
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`
@@ -239,8 +248,8 @@ which forces that copy on (`0` forces it off).
 ## Tests
 
 `sc test unit` runs every suite except a short denylist —
-`TestRunner.unitExclusions`: the integration suites for discs, Steam and Her
-downloads — so **a new suite runs by default**. It then runs `Tools/sc`'s
+`TestRunner.unitExclusions`: the integration suites for discs, Steam, Her
+downloads and Big Fish — so **a new suite runs by default**. It then runs `Tools/sc`'s
 own Swift tests. `sc test integration [<slug>…]` runs the per-game integration
 suite with one worker; `sc test all` runs both, as two separate xcodebuild
 runs. A bare `sc test` is `sc test unit`, so the hours-long run is never had by

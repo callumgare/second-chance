@@ -76,7 +76,8 @@ struct Repo: Sendable {
     }
 
     /// What the build downloads into `~/Library/Caches/SecondChance` (Wine,
-    /// Wineskin, AutoIt, ScummVM, the game patches, Steam's installer): every
+    /// Wineskin, AutoIt, ScummVM, the game patches, Steam's installer, Big
+    /// Fish's Game Manager installer `bfginstaller35.exe`): every
     /// entry there but the caches `sc clean` has targets of its own for, and
     /// the app's wrapp cache.
     static var downloads: [URL] {

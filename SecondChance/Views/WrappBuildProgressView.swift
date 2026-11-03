@@ -6,7 +6,10 @@
 
 import SwiftUI
 import GameCatalog
+import Logging
 import SecondChanceKit
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildProgressView")
 
 struct WrappBuildProgressView: View {
     @Environment(WrappBuildViewModel.self) var viewModel
@@ -155,14 +158,23 @@ struct WrappBuildProgressView: View {
         }
     }
 
-    /// How long to expect: a Steam build downloads the game, which takes as
-    /// long as the connection makes it.
+    /// How long to expect: a Steam or Big Fish build downloads the game,
+    /// which takes as long as the connection makes it.
     static func howLong(from source: WrappSource?) -> String {
-        let leave = "You can leave it running and do something else."
-        if source == .steam {
-            return "Steam downloads the game, so how long this takes depends on your internet connection. \(leave)"
+        switch source {
+        case .steam:
+            return String(localized: """
+                Steam downloads the game, so how long this takes depends on your internet connection. \
+                You can leave it running and do something else.
+                """)
+        case .bigFish:
+            return String(localized: """
+                Big Fish's Game Manager downloads the game, so how long this takes depends on your internet connection. \
+                You can leave it running and do something else.
+                """)
+        default:
+            return String(localized: "This usually takes a few minutes. You can leave it running and do something else.")
         }
-        return "This usually takes a few minutes. \(leave)"
     }
 
     /// What the build is doing, for the person watching: the step's
@@ -212,13 +224,36 @@ struct WrappBuildProgressView: View {
                     viewModel.reset()
                 }
                 if let url = viewModel.builtWrappURL {
+                    // Until the game's app has launched, when its Dock icon
+                    // and loading window take over saying it's starting.
+                    if startingGame {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Starting the game")
+                    }
                     Button("Play Now") {
-                        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-                        viewModel.reset()
+                        play(url)
                     }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(startingGame)
                 }
             }
+        }
+    }
+
+    @State private var startingGame = false
+
+    /// Open the game's app, the screen staying as it is: Done goes back to
+    /// the start.
+    private func play(_ url: URL) {
+        startingGame = true
+        Task {
+            do {
+                _ = try await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            } catch {
+                logger.error("Couldn't open the game's app \(url.path): \(error.localizedDescription)")
+            }
+            startingGame = false
         }
     }
 

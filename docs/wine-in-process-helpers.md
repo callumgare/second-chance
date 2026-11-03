@@ -13,6 +13,7 @@ wrapp does not have:
 | Mode scaling | `WrappTemplate/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `WrappTemplate/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
 | Cocoa start wait | `WrappTemplate/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
+| Hidden windows | `WrappTemplate/InProcessHelpers/hidden_windows.m` | Keeps Big Fish's Game Manager's windows and Dock icon off the screen, but while the person signs in | `HIDDEN_WINDOWS_EXE`, set on the Game Manager; `*` for everything it runs during a build ([below](#hidden-windows)) | — |
 | Puppet control | `WrappTemplate/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
 
 ## How they get into the game process
@@ -550,6 +551,38 @@ Either means the game can never show a window, so the wrapp reports it,
 stops the launch and opens the game again by itself, passing
 `--after-no-display`; a copy started that way shows an error instead
 (`noDisplayExplanation`) if it happens again.
+
+## Hidden windows
+
+Big Fish's Game Manager is driven through its page
+([big-fish.md](big-fish.md)), and the person should only see it to sign in,
+as Steam's `-silent` keeps Steam out of sight. The Game Manager has no such
+option, so `BigFishGameManager` starts it with `HIDDEN_WINDOWS_EXE` set
+(`Wine.hiddenWindowsVariables`). During a build it is `*`: a Wine program
+passes its environment on to the programs it starts, so every program the
+Game Manager runs is hidden too — the game's installer, and Microsoft's
+DirectX setup, which a script cancels unseen. The Game Manager's own
+installer, which an AutoIt script clicks through, runs with it set to `*`
+too, and a file to show it that is never made. When a wrapp starts a trial
+through it, it is `bfgclient.exe`, as the game is one of those programs. In
+each process it arms in, the helper:
+
+- keeps windows off the screen: AppKit puts a window there through
+  `-[NSWindow orderWindow:relativeTo:]`, which every `orderFront:` comes down
+  to and which Wine's Mac driver calls for each window the program shows.
+  While hidden, a window ordered in is remembered instead, so none flashes up;
+- keeps the Dock icon away: Wine gives a program its Dock icon, and makes it
+  active, in `-[WineApplicationController transformProcessToForeground:]`,
+  which does nothing while hidden.
+
+It shows them, as Wine would have, while the file `HIDDEN_WINDOWS_SHOW_FILE`
+names exists, looking four times a second, and hides them again (an
+accessory app: no Dock icon) once it's gone. `showSignIn` creates it and
+`hideWindow`, which the build calls once the person has signed in, removes
+it. It lives in the temporary folder, so it never ships in a wrapp. The
+helper logs `second-chance-helper[HiddenWindows] notice: armed in
+bfgclient.exe (pid …)`, then `windows shown` and `windows hidden` as the sign-in
+comes and goes.
 
 ## Puppet control
 

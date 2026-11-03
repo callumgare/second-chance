@@ -76,8 +76,8 @@ struct CleanCommand: AsyncParsableCommand {
         build: DerivedData. wrapps: the wrapps dir. test-results: reports and result bundles. \
         steam-session: the saved Steam sign-in (signs every Steam wrapp out, like Sign Out of Steam). \
         steam-client: the cached Steam client (the next Steam build downloads Steam's update again). \
-        downloads: what building Second Chance downloaded (Wine, AutoIt, ScummVM, game patches), \
-        fetched and checked again by the next build. \
+        downloads: what building Second Chance or a wrapp downloaded (Wine, AutoIt, ScummVM, game patches, \
+        Big Fish's Game Manager installer), fetched and checked again when next needed. \
         With no target in a terminal, asks which. Without a terminal, deletes only with -y.
         """
     )

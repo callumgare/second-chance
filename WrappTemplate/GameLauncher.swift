@@ -33,6 +33,9 @@ struct GameLaunchInfo {
     }
 }
 
+/// What Big Fish's Game Manager opens a game's `.bfg` files with.
+nonisolated let bigFishProcessExe = #"C:\Program Files (x86)\bfgclient\bfgprocess.exe"#
+
 nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
     let driveC = config.wine.driveC
     let gameExeUnixPath = WrappLayout.onDriveC(config.gameExePath, in: driveC).path
@@ -43,7 +46,12 @@ nonisolated func getGameLaunchInfo(_ config: GameConfig) -> GameLaunchInfo {
     switch config.gameEngine {
     case .wine, .wineSteam, .wineSteamSilent:
         // By name, from its own folder: games look for their files beside them.
-        let command = WineCommand.start(gameExeName, unixPath: false, in: URL(fileURLWithPath: gameExeDir))
+        var command = WineCommand.start(gameExeName, unixPath: false, in: URL(fileURLWithPath: gameExeDir))
+        if config.launchedByBigFish, let launchFile = config.bigFishLaunchFile {
+            // As Big Fish's own Play shortcut does: bfgprocess hands the file to
+            // Big Fish's DRM service, which runs its launcher, which runs the game.
+            command = .program(bigFishProcessExe, ["C:" + launchFile.replacingOccurrences(of: "/", with: "\\")])
+        }
         let wine = config.wine
         return GameLaunchInfo(
             executable: command.executable(in: wine).path,
@@ -283,10 +291,13 @@ class GameLauncher {
     func waitForWineToEnd() async {
         guard config.gameEngine.runsInWine else { return }
         // Generous: it ends by itself in seconds, more on a loaded Mac, and
-        // only a session that is stuck reaches the kill.
+        // only a session that is stuck reaches the kill. Not for a Big Fish
+        // game: its launcher outlives it, running the game's Big Fish
+        // launcher again and then opening the Game Manager, which kept the
+        // session going for the whole wait. None of that is needed now.
         let server = config.wine.server
         let onQuitStep = onQuitStep
-        let periods = Self.quitPeriods(grace: 30)
+        let periods = Self.quitPeriods(grace: config.launchedByBigFish ? 0 : 30)
         await server.shutDown(gracePeriod: periods.grace, stopPeriod: periods.stop) { onQuitStep?(.init($0)) }
     }
 
@@ -600,20 +611,27 @@ class GameLauncher {
         launchedAt = Date()
         // Launch the game process (engine-specific)
         let launchResult: (process: Process?, gamePid: Int32, gameExeName: String?)
-        // Steam starts the game itself, so there's no launcher process of
-        // ours to watch: the game is found, and watched, by its exe.
+        // Steam starts the game itself, and so does Big Fish's DRM service, so
+        // there's no launcher process of ours to watch: the game is found, and
+        // watched, by its exe.
         let launchedBySteam = config.gameEngine.launchedBySteam
+        let launchedByBigFish = config.launchedByBigFish
+        let launchedByStore = launchedBySteam || launchedByBigFish
 
         switch config.gameEngine {
+        case .wine where launchedByBigFish && config.bigFishTrial:
+            launchResult = await launchBigFishTrial(activity: infoWindow?.activity)
         case .wine, .wineSteamSilent:
-            launchResult = launchWineProcess(activity: infoWindow?.activity)
+            let started = launchWineProcess(activity: infoWindow?.activity)
+            // bfgprocess hands the launch on and exits within seconds.
+            launchResult = launchedByBigFish && started.gamePid > 0 ? (nil, 0, started.gameExeName) : started
         case .wineSteam:
             launchResult = await launchViaSteam()
         case .scummvm:
             launchResult = launchScummVMProcess(activity: infoWindow?.activity)
         }
 
-        guard launchResult.gamePid > 0 || (launchedBySteam && launchResult.gameExeName != nil) else {
+        guard launchResult.gamePid > 0 || (launchedByStore && launchResult.gameExeName != nil) else {
             logger.critical("Failed to launch the game")
             handleGameTermination(exitCode: nil, signal: nil, infoWindow: nil)
             return .ended(exitCode: -1, failed: true, windowAppeared: false)
@@ -625,27 +643,32 @@ class GameLauncher {
         if let gameExeName = launchResult.gameExeName {
             logger.notice("[Game Launch] Waiting for game executable to start...")
             let whileWaiting = launchedBySteam ? steamLaunchWatcher(infoWindow) : nil
-            let abandonIf = launchedBySteam ? Self.steamGone() : nil
+            let abandonIf = launchedBySteam ? Self.steamGone() : launchedByBigFish ? Self.bigFishGone() : nil
             if let detectedPid = await gameMonitor.waitForGameToStart(gameExeName: gameExeName, gamePid: gamePid, launcher: launchResult.process,
                                                                        abandonIf: abandonIf, whileWaiting: whileWaiting) {
                 logger.notice("[Game Launch] Game executable detected with PID \(detectedPid)")
                 gameStarted = true
-                if launchedBySteam { gamePid = detectedPid }
+                if launchedByStore { gamePid = detectedPid }
                 diagnostics?.gameStarted(pid: detectedPid)
 
                 // Activate game window (Wine games only)
                 if config.gameEngine.runsInWine {
                     logger.notice("[Game Launch] Activating game window...")
-                    if await gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) {
+                    // Big Fish's games run under Armadillo as two processes of
+                    // the same exe; the window is the second's.
+                    let shownBy = launchedByBigFish
+                        ? await gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow, anyRunning: gameExeName)
+                        : await gameMonitor.activateGameWindow(gamePid: detectedPid, infoWindow: infoWindow) ? detectedPid : nil
+                    if let shownBy {
                         windowAppeared = true
-                        gameWindowPid.withLock { $0 = detectedPid }
+                        gameWindowPid.withLock { $0 = shownBy }
                         diagnostics?.gameWindowAppeared()
                         quitCheck?.windowDidAppear()
                         helperReport?.gameWindowAppeared()
                     }
                 }
-            } else if launchedBySteam {
-                logger.error("[Game Launch] Steam never started \(gameExeName)")
+            } else if launchedByStore {
+                logger.error("[Game Launch] \(launchedBySteam ? "Steam" : "Big Fish's launcher") never started \(gameExeName)")
                 diagnostics?.gameExited(exitCode: -1)
                 handleGameTermination(exitCode: nil, signal: nil, infoWindow: nil)
                 return .ended(exitCode: -1, failed: true, windowAppeared: false)
@@ -777,8 +800,15 @@ class GameLauncher {
         }
         let game: WineProcess
         do {
+            var environment = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath))
+            if config.launchedByBigFish {
+                // Big Fish's launcher opens the Game Manager as the game ends:
+                // never seen, as its file to show it is never made.
+                let neverShown = FileManager.default.temporaryDirectory.appendingPathComponent("second-chance-never-shown")
+                environment.merge(Wine.hiddenWindowsVariables(exe: "bfgclient.exe", showFile: neverShown)) { game, _ in game }
+            }
             game = try wine.start(command,
-                                  environment: Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath)),
+                                  environment: environment,
                                   output: .log(wineOutputLogger, onLine: observe))
         } catch {
             logger.critical("ERROR: Failed to launch game: \(error)")
@@ -826,6 +856,56 @@ class GameLauncher {
             let running = processes.contains { $0.name.lowercased() == "steam.exe" }
             missing = running ? 0 : missing + 1
             return missing >= 3 ? "Steam has exited without starting the game" : nil
+        }
+    }
+
+    // MARK: - Big Fish
+
+    /// Start a Big Fish free trial: through the Game Manager's Play Now, as
+    /// launching its `.bfg` file only opens the Game Manager for a trial. Only
+    /// the integration tests build trials (docs/big-fish.md).
+    private func launchBigFishTrial(activity: LaunchActivityMonitor?) async -> (process: Process?, gamePid: Int32, gameExeName: String?) {
+        let launchInfo = getGameLaunchInfo(config)
+        guard let sku = config.bigFishSKU.flatMap(BigFishSKU.init) else {
+            logger.critical("ERROR: no Big Fish SKU for a Big Fish trial")
+            return (nil, -1, nil)
+        }
+        // The game is the Game Manager's child, so it has the Game Manager's
+        // environment and output: the helpers are armed through them.
+        let helperReport = helperReport
+        let quitCheck = quitCheck
+        let startup = startupDiagnostics
+        let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
+        let manager = BigFishGameManager(wrappPath: config.appPath, prefixDir: config.winePrefix,
+                                         gameExe: launchInfo.gameExePath.map(URL.init(fileURLWithPath:)),
+                                         onOutputLine: { line in
+                                             startup?.observe(line: line)
+                                             helperReport?.observe(line: line)
+                                             quitCheck?.observe(line: line)
+                                             noDisplay.check(line)
+                                             activity?.noteOutput()
+                                         })
+        do {
+            try await manager.start(timeout: 600)
+            try await manager.play(sku)
+        } catch {
+            logger.critical("ERROR: Couldn't have the Game Manager start the trial: \(error)")
+            return (nil, -1, nil)
+        }
+        startupDiagnostics?.wineLaunched()
+        diagnostics = startupDiagnostics
+        return (nil, 0, launchInfo.gameExeName)
+    }
+
+    /// While Big Fish's DRM service starts the game there's nothing of ours to
+    /// watch either: the wait ends when bfgprocess and the service have both
+    /// gone, three checks in a row, without the game appearing.
+    private static func bigFishGone() -> (Set<ProcessList.Entry>) -> String? {
+        var missing = 0
+        return { processes in
+            let running = processes.contains { ["bfgprocess.exe", "bfggameservices.exe"].contains($0.name.lowercased()) }
+            missing = running ? 0 : missing + 1
+            return missing >= 3 ? "Big Fish's launcher has exited without starting the game" : nil
         }
     }
 

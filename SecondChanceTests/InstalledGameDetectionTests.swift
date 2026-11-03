@@ -81,9 +81,9 @@ struct InstalledGameDetectionTests {
 
     @Test("A headless run tries the disc's first program without asking")
     @MainActor
-    func headlessTriesFirstProgram() throws {
+    func headlessTriesFirstProgram() async throws {
         let input = WrappBuildInput(environment: ["DISK_1_PATH": "/nonexistent"], viewModel: nil)
-        #expect(try input.askAboutUnidentifiedInstaller(programs: ["a.exe", "b.exe"]) == .tryProgram("a.exe"))
+        #expect(try await input.askAboutUnidentifiedInstaller(programs: ["a.exe", "b.exe"]) == .tryProgram("a.exe"))
     }
 
     /// A temporary folder holding empty files, and folders for names ending in `/`.

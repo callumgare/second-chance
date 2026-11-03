@@ -47,8 +47,8 @@ struct GameProgramChoiceTests {
 
     @Test("A headless run takes the likeliest program without asking")
     @MainActor
-    func headlessTakesFirst() throws {
+    func headlessTakesFirst() async throws {
         let input = WrappBuildInput(environment: ["NON_INTERACTIVE": "true"], viewModel: nil)
-        #expect(try input.chooseGameProgram(among: ["C:\\Game\\Play.exe", "C:\\Game\\uninst.exe"]) == "C:\\Game\\Play.exe")
+        #expect(try await input.chooseGameProgram(among: ["C:\\Game\\Play.exe", "C:\\Game\\uninst.exe"]) == "C:\\Game\\Play.exe")
     }
 }

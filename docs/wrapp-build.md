@@ -16,9 +16,9 @@ WrappBuildViewModel (GUI)  ←  CLIBuilder (headless)
           └───────────────┐
                   WrappBuildStrategy
                           │
-    ┌─────────────────────┼──────────────────────┐
-DiskWrappBuilder   HerDownloadWrappBuilder   SteamWrappBuilder
-    └─────────────────────┼──────────────────────┘
+    ┌──────────────────┬──┴─────────────────┬─────────────────────┐
+DiskWrappBuilder  HerDownloadWrappBuilder  SteamWrappBuilder  BigFishWrappBuilder
+    └──────────────────┴──┬─────────────────┴─────────────────────┘
                           ↓
       WrappBuildHelper · GameInstallerRunner · ISOMounter
 ```
@@ -63,7 +63,7 @@ other builders are the same shape with less in the middle.
 | 2 | `input.getDisk1Path()`; mount it if it's a file rather than a folder | `.isoMounted` |
 | 3 | Turn down an installed game (`GameDetector.isInstalledGame`), then `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo`, then, for a Wine game, find its installer (`GameDetector.installerLookup`) | `.progress(.detectingGame)`, `.gameDetected` |
 | 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
-| 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). Cancelling stops it, and the bytes copied show on the progress bar. The copies stay in the finished wrapp, mounted as CD drives, because some games check for their disc before they will play | `.progress(.copyingInstaller)`, `.stepProgress` |
+| 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). Cancelling stops it, and the bytes copied show on the progress bar, full once it's done (the total is how full the disc is, which counts its file system too). Meanwhile, one Wine run marks D: on as CD drives (`DriveMarking`, `WineDrives.setKind(_:of:)` with several letters): each run starts Wine's session afresh, and marking each drive after the copy left the screen still for 8 to 18 s a drive; a wait that's left once the copy is done says "Getting the discs ready". The copies stay in the finished wrapp, mounted as CD drives, because some games check for their disc before they will play | `.progress(.copyingInstaller)`, `.stepProgress` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
 | 7 | Route on `gameInfo.gameEngine` into `installGameWithWine` or `installGameWithScummVM` | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 8 | `cleanupUnusedEngine` strips the engine this game doesn't use | — |
@@ -195,14 +195,30 @@ user is prompted.
 | Method | Env var | Fallback |
 | --- | --- | --- |
 | `getDisk1Path()` | `DISK_1_PATH` | NSOpenPanel (disk/ISO) |
-| `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: it is ejected, and an alert asks for disc 2, answered by disc 2 being put in (`DiscMountWatcher`, as Disk Arbitration reports the mount even while the alert is up), or by Continue; else NSOpenPanel |
+| `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: it is ejected, and the main window asks for disc 2, answered by disc 2 being put in (`DiscMountWatcher`, which withdraws the question), or by Choose Disc 2…, which opens an NSOpenPanel; else NSOpenPanel |
 | `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe, .dmg, or the installer .app in an opened .dmg) |
+| `bigFishGameFromEnvironment(among:)` | `BIG_FISH_GAME_SLUG` | nil: the game is picked once the Game Manager has signed in |
+| `chooseBigFishGame(from:)` | — (headless always names the game) | main window, a list of the editions the account owns |
+| `isBigFishTrial` | `BIG_FISH_TRIAL=1` (tests only) | false: the full game |
+| `bigFishTestSignIn` | `BIG_FISH_TEST_SIGN_IN=1` with `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD` (tests only) | nil: the person signs in in the Game Manager's window |
 | `getSaveLocation(for:)` | `OUTPUT_PATH` (an app already there is replaced) | NSOpenPanel save dialog, opening in `/Applications`, or `~/Applications` for someone who can't write there; it turns down a folder that can't be written to while it is still open. Cancelling it doesn't throw the install away: the person is asked whether to choose a place again or start over. A folder that already has the game's app asks before replacing it, and while that copy is open, asks them to quit it first |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
-| `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | NSAlert |
+| `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | main window |
 
 There are **no separate interactive/non-interactive classes**. Headless is just
 "every env var set, so nothing prompts."
+
+A question the build asks part way through — which game to get from a store,
+how a DRM-free Steam game starts, disc 2, a disc or game it doesn't
+recognise, which program is the game, a patch that failed, Steam in use,
+whether to start over rather than save — is a `BuildQuestion`, which the main
+window shows as a page of its own (`BuildQuestionView`) in place of the
+build's progress, its sidebar left as it is. `WrappBuildViewModel.ask` shows
+one and waits for the button it was answered with, and the choice picked
+from its list if it has one; `withdrawQuestion` takes it away unanswered, as
+disc 2 going in does. Cancelling the build answers it with nothing. Only the
+open panels, the Rosetta question before a build starts, and replacing an app
+that's already there stay as panels and alerts.
 
 The `environment` dictionary is a constructor parameter defaulting to
 `ProcessInfo.processInfo.environment` — which is what makes the table above a
@@ -274,7 +290,12 @@ already; see the historical plan.
 
 `.progress(WrappBuildState)` carries the same state enum the UI renders, so
 step display and the event stream can't drift apart. The ViewModel hides
-substeps and elapsed time for the first 5 s so fast steps don't flash.
+substeps and elapsed time for a step's first 5 s so fast steps don't flash;
+the 5 s are the step's, so once they are up a new substep shows at once
+rather than the step's name for another 5 s. Name a step for what the person
+would call it: Steam's and Big Fish's client installs are
+`.settingUpWrapp`, as the screen says "Installing the game…" for
+`.installingGame` until its substep shows.
 
 `.instructions(String?)` is for what the person has to *do* for the build to
 go on — sign in to Steam's window, click through an installer that runs
@@ -421,12 +442,16 @@ The window stays hidden (the app's activation policy is `.prohibited`) unless
 going through the screens a person building the game would see. Either way
 nothing asks: every answer still comes from the environment.
 
-Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam`) and
+Required: `INSTALLATION_SOURCE` (`disk` | `her-download` | `steam` | `big-fish`) and
 `OUTPUT_PATH`; `disk` also needs `DISK_1_PATH`, `her-download` needs
 `HER_INSTALLER_PATH` (the `.exe` or `.dmg`), and `steam` needs
 `STEAM_GAME_SLUG` (plus `STEAM_LAUNCH_MODE=steam|direct` for a DRM-free game,
 default `direct`) and a saved Steam sign-in, since a headless build can't sign
-in — it fails with `steamSignInRequired` rather than wait.
+in — it fails with `steamSignInRequired` rather than wait. `big-fish` needs
+`BIG_FISH_GAME_SLUG`, and either `BIG_FISH_TRIAL=1` (the game's free trial,
+with no sign-in) or the test harness's account (`BIG_FISH_TEST_SIGN_IN=1` with
+`BIG_FISH_EMAIL` and `BIG_FISH_PASSWORD`), or it fails with
+`bigFishSignInRequired` ([big-fish.md](big-fish.md#the-build)).
 
 An installer or patcher that prints Wine's `nodrv_CreateWindow` error found
 no desktop to open its windows on, so `Wine.run` throws `WineError.noDisplay`
@@ -547,9 +572,18 @@ new Second Chance or WrappPuppeteer still reads a wrapp built before it; the
 slug and source are optional for that reason.
 
 A prefix's drive letters are links in its `dosdevices` folder, made through
-`wine.drives` (`WineDrives`). A prefix has only A:, C: and Z:, every other
-letter blocked so Wine can't add the Mac's disks; a disc build mounts each
-copied disc from D: on, as a CD-ROM drive. A: is the player's saves: each
+`wine.drives` (`WineDrives`). A prefix has only A: and C:, every other
+letter blocked so Wine can't add the Mac's disks. There is no Z: showing
+the whole Mac, as Wine would have, so a Windows program that searches every
+drive, or goes wrong, sees only the game's own files and the saves; a wrapp
+built when prefixes had one blocks it as it launches. Wine isn't a sandbox,
+though: a program can still name any Mac file through Wine's `\\?\unix\`
+paths, so this guards against accidents, not against a program that sets
+out to. A disc build mounts each copied disc from D: on, as a CD-ROM drive.
+An installer outside the prefix — Steam's, from the downloads cache, or a
+Her Interactive download wherever it was saved — is run by its Mac path
+while its folder is lent to Wine as Y: (`WineDrives.lend`), which Wine then
+names the path through; Y: is blocked again once it has run. A: is the player's saves: each
 launch points it at the wrapp's folder in Application Support, and the
 Windows user's Documents links to the same place, so a game saving to either
 reaches it. A build points both at a folder in `/tmp` that may not exist, so
@@ -565,7 +599,9 @@ game's own process name — so the target can be renamed without touching it.
 1. Add a case to `WrappSource`.
 2. Add a builder conforming to `WrappBuildStrategy`, owning its own resources on
    both paths.
-3. Add a `buildFrom…` method on the ViewModel that calls `runBuild(_:)`.
+3. Add the builder to the ViewModel and a case to its `build(from:)` that
+   calls `runBuild(_:)`; the welcome screen's list (`WelcomeView`) and the
+   File menu (`InstallCommands`) offer the source.
 4. Publish the same events the disk flow does — that is what the UI and tests
    read.
 5. Add any new prompt to `WrappBuildInput` with an env-var override, or headless
@@ -575,4 +611,5 @@ Do **not** ship a partial source. A builder that creates a temp wrapp and then
 gives up has to remove it: an early Steam builder installed the Steam client
 and then threw, leaking the wrapp every time. `SteamWrappBuilder` also stops
 Steam on its failure path, as anything left running would hold the Wine
-session (and the Steam lock) open.
+session (and the Steam lock) open; `BigFishWrappBuilder` likewise shuts down
+Big Fish's Game Manager.

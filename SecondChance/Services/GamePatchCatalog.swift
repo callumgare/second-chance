@@ -42,9 +42,10 @@ nonisolated struct GamePatch: Codable, Identifiable, Hashable, Sendable {
         ///
         /// None of Her Interactive's patches cover a Steam copy: Steam ships
         /// its own current build of each game, which the patchers refuse
-        /// ("This program cannot update the installed version of …").
+        /// ("This program cannot update the installed version of …"). Nor a
+        /// Big Fish copy, Big Fish's own build, its program wrapped in its DRM.
         func matches(_ source: WrappSource) -> Bool {
-            if source == .steam { return false }
+            if source == .steam || source == .bigFish { return false }
             switch self {
             case .any:
                 return true

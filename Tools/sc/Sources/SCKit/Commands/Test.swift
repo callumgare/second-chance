@@ -44,10 +44,12 @@ struct IntegrationOptions: ParsableArguments {
     var diskMargin: Double = 10
 
     @Option(help: ArgumentHelp(
-        "Which builds to test: disk, steam, her-download, or all — comma-separated. Default: disk.",
+        "Which builds to test: disk, steam, her-download, big-fish, big-fish-trial, or all — comma-separated. Default: disk.",
         discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own. "
             + "her-download builds each game from every installers/<slug>/her-download*.exe or .dmg (docs/her-download.md). "
-            + "Both always build, whatever --refresh-wrapp says.",
+            + "big-fish builds each game Big Fish sells, signed in with the test account in .env (BIG_FISH_EMAIL, BIG_FISH_PASSWORD), "
+            + "and skips games the account doesn't own; big-fish-trial builds each one's free trial, signed out (docs/big-fish.md). "
+            + "All of them always build, whatever --refresh-wrapp says.",
         valueName: "sources"
     ))
     var source = "disk"
@@ -64,7 +66,7 @@ struct IntegrationOptions: ParsableArguments {
     @OptionGroup var wrapps: WrappsDirOptions
 
     /// The sources `--source` names, in their canonical order.
-    var sources: [WrappSourceKind] { (try? Self.parseSources(source)) ?? [.disk] }
+    var sources: [IntegrationSource] { (try? Self.parseSources(source)) ?? [.disk] }
 
     /// What this Mac's GUI session must allow. Builds open windows here
     /// either way; only a game launched here needs to see and click the
@@ -118,20 +120,20 @@ struct IntegrationOptions: ParsableArguments {
         return ProcessInfo.processInfo.activeProcessorCount
     }
 
-    static func parseSources(_ value: String) throws -> [WrappSourceKind] {
+    static func parseSources(_ value: String) throws -> [IntegrationSource] {
         let names = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-        if names.contains("all") { return WrappSourceKind.allCases }
-        var sources = Set<WrappSourceKind>()
+        if names.contains("all") { return IntegrationSource.allCases }
+        var sources = Set<IntegrationSource>()
         for name in names {
-            guard let source = WrappSourceKind(rawValue: name) else {
-                let known = WrappSourceKind.allCases.map(\.rawValue) + ["all"]
+            guard let source = IntegrationSource(rawValue: name) else {
+                let known = IntegrationSource.allCases.map(\.rawValue) + ["all"]
                 let guess = known.min { Games.distance(name, $0) < Games.distance(name, $1) }
                 throw ValidationError("Unknown source '\(name)'.\(guess.map { " Did you mean '\($0)'?" } ?? "") Sources: \(known.joined(separator: ", ")).")
             }
             sources.insert(source)
         }
-        guard !sources.isEmpty else { throw ValidationError("Give at least one source: disk, steam, her-download or all.") }
-        return WrappSourceKind.allCases.filter(sources.contains)
+        guard !sources.isEmpty else { throw ValidationError("Give at least one source: disk, steam, her-download, big-fish, big-fish-trial or all.") }
+        return IntegrationSource.allCases.filter(sources.contains)
     }
 }
 
