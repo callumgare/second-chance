@@ -49,3 +49,15 @@ ELSE
       --steam.exe="${const.install-dir}/Game.exe" \
       --fallback="${const.install-dir}/Game.exe" steam://rungameid/${input.game.app-id}
 END
+
+# Big Fish's: the game installed by its Game Manager, whose DRM starts it
+FROM big-fish@1/manager AS big-fish
+USE nancy-drew
+DO wine.cnc-ddraw
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO big-fish.install --game=${input.game} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
+LAUNCH --wine.graphics=direct-draw \
+    --big-fish.exe="${const.install-dir}/Game.exe" "big-fish:${const.install-dir}/LaunchGame.bfg"

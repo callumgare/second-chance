@@ -1,3 +1,4 @@
+import CryptoKit
 //
 //  BigFishWrappBuilderTests.swift
 //  SecondChanceTests
@@ -8,6 +9,7 @@
 import Foundation
 import Testing
 @testable import SecondChance
+import WrappBuilder
 @testable import SecondChanceKit
 import GameCatalog
 
@@ -108,6 +110,7 @@ final class FakeBigFishPreparer: BigFishWrappPreparing, @unchecked Sendable {
         try FileManager.default.createDirectory(at: client, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: client.appendingPathComponent("bfgclient.exe").path, contents: Data("MZ".utf8))
     }
+    func run(_ step: PlannedStep, in path: URL) async throws {}
     func startCancellingDirectXSetup(in path: URL) async { directX.append("start") }
     func stopCancellingDirectXSetup(in path: URL) async { directX.append("stop") }
     private(set) var forgotAccount = 0
@@ -214,8 +217,15 @@ struct BigFishWrappBuilderTests {
         let settings = try settings(wrapp)
         #expect(settings.source == .bigFish)
         #expect(settings.engine == .wine)
-        #expect(settings.gameExePath == "/Program Files (x86)/Nancy Drew - \(title)/Game.exe")
-        #expect(settings.bigFishLaunchFile == "/Program Files (x86)/Nancy Drew - \(title)/LaunchGame.bfg")
+        // Where the bundle installs it, a link to the folder Big Fish installed it in.
+        let folder = "/Program Files (x86)/Nancy Drew/The White Wolf of Icicle Creek"
+        #expect(settings.gameExePath == "\(folder)/Game.exe")
+        #expect(settings.bigFishLaunchFile == "\(folder)/LaunchGame.bfg")
+        let link = wrapp.appendingPathComponent("Contents/SharedSupport/prefix/drive_c").appendingPathComponent(folder)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == "../Nancy Drew - \(title)")
+        let launch = try #require(settings.recordedLaunch)
+        #expect(launch.program == "big-fish:C:\(folder)/LaunchGame.bfg")
+        #expect(launch.options["big-fish.exe"] == "wine:C:\(folder)/Game.exe")
         #expect(settings.bigFishSKU == Self.whiteWolf)
         #expect(settings.bigFishTrial == nil)
         // Started with the sign-in kept from before, kept again rather than
@@ -405,13 +415,13 @@ struct BigFishWrappBuilderTests {
         defer { try? FileManager.default.removeItem(at: base) }
         let run = try await build(game: Self.hauntedMansion)
         let wrapp = try run.result.get()
-        let title = try Self.game(Self.hauntedMansion).title
         let settings = try settings(wrapp)
         #expect(settings.engine == .scummvm)
-        #expect(settings.gameExePath == "/Program Files (x86)/Nancy Drew - \(title)")
+        #expect(settings.gameExePath == "/SharedSupport/game")
         #expect(settings.bigFishLaunchFile == nil)
-        let client = wrapp.appendingPathComponent("Contents/SharedSupport/prefix").appendingPathComponent(BigFishGameManager.clientDirInPrefix)
-        #expect(!FileManager.default.fileExists(atPath: client.path))
+        // Its data copied into the app, which keeps no Wine, and so no Game Manager.
+        #expect(!FileManager.default.fileExists(atPath: wrapp.appendingPathComponent("Contents/SharedSupport/prefix").path))
+        #expect(settings.recordedLaunch?.program == "scummvm:/SharedSupport/game/")
         #expect(run.preparer.keptSignIn == 1)
     }
 
@@ -433,12 +443,19 @@ struct BigFishWrappBuilderTests {
         #expect(try name("F2435T1L7") == "\(wolf.title) (in another language)")
     }
 
-    @Test("Big Fish's installer is told from an error page by its size and its first bytes")
-    func installerCheck() throws {
+    @Test("Big Fish's installer is used only at the size and hash the manager stage pins")
+    func installerCheck() async throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("bfg-\(UUID().uuidString).exe")
         defer { try? FileManager.default.removeItem(at: file) }
-        try Data("MZ small".utf8).write(to: file)
-        #expect(!BigFishWrappPreparer.isUsableInstaller(file))
-        #expect(!BigFishWrappPreparer.isUsableInstaller(file.appendingPathExtension("missing")))
+        let small = Data("MZ small".utf8)
+        try small.write(to: file)
+        let hash = SHA256.hash(data: small).map { String(format: "%02x", $0) }.joined()
+        #expect(!BigFishWrappPreparer.isUsableInstaller(file, sha256: hash))  // an error page's size
+        #expect(!BigFishWrappPreparer.isUsableInstaller(file.appendingPathExtension("missing"), sha256: hash))
+        // The stage pins the installer it was tried with.
+        let step = try #require(try await BigFishWrappBuilder.managerStage().steps.first { $0.instruction == "MANAGER" })
+        let (url, sha256) = try BigFishWrappPreparer.installerFetch(of: step)
+        #expect(url.lastPathComponent == "bfginstaller35.exe")
+        #expect(sha256.count == 64)
     }
 }

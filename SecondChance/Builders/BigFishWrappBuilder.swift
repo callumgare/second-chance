@@ -5,18 +5,21 @@
 //  The per-source orchestrator for building a wrapp from a Big Fish Games
 //  purchase.
 //
-//  Big Fish's own Game Manager is installed in the wrapp's Wine prefix and
-//  started; the person signs in in its window and picks one of their games,
-//  and the Game Manager downloads, installs and activates it. The person is
-//  then signed out, the Game Manager stopped, and the game configured like
-//  any other. The Game Manager stays in the wrapp: its services start the
-//  game. docs/big-fish.md has why each step is as it is.
+//  The big-fish module's manager stage installs Big Fish's own Game Manager
+//  in the wrapp's Wine prefix, and it's started; the person signs in in its
+//  window and picks one of their games, and the game's Big Fish edition's
+//  steps have the Game Manager download, install and activate it
+//  (`BIG-FISH.INSTALL`), then sign the person out (`BIG-FISH.SIGN-OUT`). The
+//  Game Manager stays in the wrapp: its services start the game.
+//  docs/big-fish.md has why each step is as it is.
 //
 
 import Foundation
 import Logging
 import SecondChanceKit
 import GameCatalog
+import WrappBuilder
+import WrappFormat
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.BigFishWrappBuilder")
 
@@ -61,8 +64,12 @@ struct BigFishGameChoice: Equatable {
 /// Game Manager installed in it, and cancelling the DirectX setup a game's
 /// installer starts. Tests stand in a fake.
 protocol BigFishWrappPreparing {
-    /// The template, a Wine prefix and the Game Manager, installed and not running.
+    /// The template, a Wine prefix and the Game Manager, installed and not
+    /// running: the big-fish module's `manager` stage.
     func prepare(wrappAt path: URL) async throws
+    /// One of the Wine steps a game's Big Fish stage has of its own
+    /// (cnc-ddraw's), carried out in the wrapp's prefix.
+    func run(_ step: PlannedStep, in path: URL) async throws
     /// Start dismissing Microsoft's DirectX web setup, which a game's
     /// installer runs and the games don't need, until `stopCancellingDirectXSetup`.
     func startCancellingDirectXSetup(in path: URL) async
@@ -84,9 +91,6 @@ protocol BigFishWrappPreparing {
 /// The real `BigFishWrappPreparing`: Big Fish's installer, clicked through
 /// with AutoIt.
 final class BigFishWrappPreparer: BigFishWrappPreparing {
-    /// The Game Manager's installer: the same file for everyone, and always
-    /// the current version, so it can't be pinned by a hash.
-    static let installerURL = "https://cdn-games.bigfishsites.com/gm_35/gm_installers/currentInstallers/Windows/bfginstaller35.exe"
     /// It's about 144 MB: anything much smaller is an error page.
     nonisolated static let installerMinimumSize = 50_000_000
     static let setupScript = "big-fish-game-manager-setup"
@@ -108,18 +112,35 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
         self.sessionStore = sessionStore
     }
 
+    func run(_ step: PlannedStep, in path: URL) async throws {
+        try await WineSteps(bus: bus).run(step, wrappPath: path)
+    }
+
+    /// The template and the wine module's prefix, then the big-fish
+    /// module's `manager` stage's steps (`FROM big-fish@1/manager`): the
+    /// Game Manager installed, and ⌘ acting as Ctrl in its window.
     func prepare(wrappAt path: URL) async throws {
         try await helper.createBaseWrapp(at: path)
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Big Fish's Game Manager"))))
-        do {
-            try await installGameManager(in: path)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            logger.error("Couldn't install the Game Manager: \(ErrorChain.describe(error))")
-            let buildError = WrappBuildError(error)
-            if case .internalError = buildError { throw WrappBuildError.bigFishGameManagerInstallFailed }
-            throw buildError
+        for step in try await BigFishWrappBuilder.managerStage().steps {
+            switch (step.module, step.instruction) {
+            case ("big-fish", "MANAGER"):
+                let (url, sha256) = try Self.installerFetch(of: step)
+                await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Big Fish's Game Manager"))))
+                do {
+                    try await installGameManager(from: url, sha256: sha256, in: path)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    logger.error("Couldn't install the Game Manager: \(ErrorChain.describe(error))")
+                    let buildError = WrappBuildError(error)
+                    if case .internalError = buildError { throw WrappBuildError.bigFishGameManagerInstallFailed }
+                    throw buildError
+                }
+            case _ where WineSteps.handles(step):
+                try await run(step, in: path)
+            default:
+                throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
+            }
         }
     }
 
@@ -129,8 +150,8 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
     /// the script clicks through it. The installer starts the Game Manager
     /// as it finishes, and only one runs in a prefix, so the session is
     /// ended afterwards for the build to start its own.
-    private func installGameManager(in path: URL) async throws {
-        let installer = try await Self.gameManagerInstaller()
+    private func installGameManager(from url: URL, sha256: String, in path: URL) async throws {
+        let installer = try await Self.gameManagerInstaller(from: url, sha256: sha256)
         let layout = WrappLayout(app: path)
         let wine = Wine(wrapp: path)
         let staging = try await stage(script: Self.setupScript, in: layout.driveC)
@@ -167,9 +188,6 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
             throw WrappBuildError.internalError("Big Fish's installer finished, but there's no \(client.path)")
         }
         logger.notice("Installed the Game Manager")
-
-        // ⌘C and ⌘V in its sign-in form.
-        try await wine.registry.letCommandActAsControl(in: ["bfgclient.exe"])
     }
 
     /// The Game Manager's sign-in, as it keeps it in the registry.
@@ -226,22 +244,41 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
         }
     }
 
-    /// Big Fish's installer, downloaded once into the caches directory.
+    /// `BIG-FISH.MANAGER`'s installer: its `fetch` mount's address and hash.
+    nonisolated static func installerFetch(of step: PlannedStep) throws -> (url: URL, sha256: String) {
+        guard let fetch = (step.options["mount"] ?? []).map(GameInstallerRunner.fields(of:)).first(where: { $0["type"] == "fetch" }),
+              let url = fetch["url"].flatMap(URL.init(string:)), let sha256 = fetch["sha256"] else {
+            throw WrappBuildError.buildRecipeProblem("\(step.origin): BIG-FISH.MANAGER needs its installer as a fetch mount with its sha256")
+        }
+        return (url, sha256)
+    }
+
+    /// The installer the manager stage pins, downloaded once into the caches
+    /// directory: what the integration tests fetch before their builds.
     static func gameManagerInstaller() async throws -> URL {
+        guard let step = try await BigFishWrappBuilder.managerStage().steps.first(where: { $0.module == "big-fish" && $0.instruction == "MANAGER" }) else {
+            throw WrappBuildError.buildRecipeProblem("the big-fish module's manager stage installs no Game Manager")
+        }
+        let (url, sha256) = try installerFetch(of: step)
+        return try await gameManagerInstaller(from: url, sha256: sha256)
+    }
+
+    /// Big Fish's installer, downloaded once into the caches directory, and
+    /// only used when its hash is the one the manager stage pins.
+    static func gameManagerInstaller(from url: URL, sha256: String) async throws -> URL {
         let cached = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SecondChance/bfginstaller35.exe")
-        if await Blocking.run({ isUsableInstaller(cached) }) { return cached }
-        guard let url = URL(string: installerURL) else {
-            throw WrappBuildError.internalError("Bad Game Manager installer URL: \(installerURL)")
-        }
+        if await Blocking.run({ isUsableInstaller(cached, sha256: sha256) }) { return cached }
         logger.notice("Downloading the Game Manager's installer from \(url.absoluteString)")
         let (download, response) = try await URLSession.shared.download(from: url)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else {
             throw WrappBuildError.internalError("Couldn't download the Game Manager's installer (HTTP \(status))")
         }
-        guard await Blocking.run({ isUsableInstaller(download) }) else {
-            throw WrappBuildError.internalError("The Game Manager's installer that downloaded isn't a Windows program of the expected size")
+        guard await Blocking.run({ isUsableInstaller(download, sha256: sha256) }) else {
+            throw WrappBuildError.internalError(
+                "The Game Manager's installer that downloaded isn't the one the big-fish module's manager stage names (sha256 \(sha256)): "
+                + "Big Fish may have updated it, which needs the stage updating")
         }
         try await Blocking.run {
             try FileManager.default.createDirectory(at: cached.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -251,13 +288,12 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
         return cached
     }
 
-    /// A Windows program (it starts `MZ`) of about the installer's size.
-    nonisolated static func isUsableInstaller(_ url: URL) -> Bool {
+    /// The installer the stage pins: a file of about the installer's size
+    /// (anything much smaller is an error page) with its sha256.
+    nonisolated static func isUsableInstaller(_ url: URL, sha256: String) -> Bool {
         guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int,
-              size >= installerMinimumSize,
-              let handle = try? FileHandle(forReadingFrom: url) else { return false }
-        defer { try? handle.close() }
-        return (try? handle.read(upToCount: 2)) == Data("MZ".utf8)
+              size >= installerMinimumSize else { return false }
+        return (try? LayerKey.hash(file: url)) == sha256.lowercased()
     }
 
     func startCancellingDirectXSetup(in path: URL) async {
@@ -421,59 +457,72 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             let gameInfo = choice.game
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
-            // Big Fish's DRM starts a Wine game; ScummVM runs nothing of Big Fish's.
-            let runsInScummVM = gameInfo.composition.launcher == .scummvm
-            let composition = runsInScummVM ? gameInfo.composition : Composition(launcher: .bigFish)
+            // The game's Big Fish edition: Big Fish's DRM starts a Wine game;
+            // ScummVM runs nothing of Big Fish's.
+            let slug = gameInfo.id
+            let plan = try await Blocking.run { try ShippedBundles.plan(forGame: slug, edition: "big-fish") }
+            guard let plan, let launch = plan.launch else {
+                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s Big Fish edition has no stage")
+            }
+            let composition = Composition(launch: launch)
             await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
             logger.notice("Building \(gameInfo.title) from Big Fish (\(choice.sku)\(trial ? ", free trial" : "")), engine \(composition.engineTag)")
 
-            // ── Download, install and activate ─────────────────────────
-            await preparer.startCancellingDirectXSetup(in: wrappPath)
-            try await manager.download(choice.sku, fullVersion: !trial)
-            let installed = try await waitForInstall(manager, sku: choice.sku)
-            await preparer.stopCancellingDirectXSetup(in: wrappPath)
-
-            // The sign-in mustn't ship in the app: anyone given a copy could
-            // use the account. An activated game plays signed out. A person's
-            // is kept for the next build instead (signing out may end it with
-            // Big Fish too); the test harness's is signed out.
-            if !trial && !keepsSignIn { try await signOut(manager) }
-            await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Closing Big Fish's Game Manager"))))
-            await manager.shutdown(timeout: Self.shutdownTimeout)
-            managerStarted = false
-            if keepsSignIn { await preparer.keepSignIn(from: wrappPath) }
-            // Signing out leaves the account's tokens in the registry and the
-            // store's session in the Game Manager's browser profile.
-            try await preparer.forgetAccount(in: wrappPath)
-
-            // ── Locate and configure ───────────────────────────────────
-            let files = try FileManager.default.contentsOfDirectory(atPath: installed.folder.path)
-            let knownNames = [gameInfo.steamExePath, gameInfo.internalGameExePath.flatMap(Self.lastComponent)].compactMap { $0 }
-            guard let exe = installed.gameExecutable(among: files, knownNames: knownNames) else {
-                logger.critical("Can't tell which program in \(installed.folder.path) is the game: \(files.joined(separator: ", "))")
-                throw WrappBuildError.gameExecutableNotFound
+            for step in plan.bundleSteps {
+                logger.debug("Plan step: \(step) (\(step.origin))")
+                switch (step.module, step.instruction) {
+                case ("big-fish", "INSTALL"):
+                    // ── Download, install and activate ─────────────────
+                    if step.has("decline-directx") { await preparer.startCancellingDirectXSetup(in: wrappPath) }
+                    try await manager.download(choice.sku, fullVersion: !trial)
+                    let installed = try await waitForInstall(manager, sku: choice.sku)
+                    await preparer.stopCancellingDirectXSetup(in: wrappPath)
+                    try linkInstalledGame(step, folder: installed.folder, wrappPath: wrappPath)
+                case ("big-fish", "SIGN-OUT"):
+                    // The sign-in mustn't ship in the app: anyone given a copy could
+                    // use the account. An activated game plays signed out. A person's
+                    // is kept for the next build instead (signing out may end it with
+                    // Big Fish too); the test harness's is signed out.
+                    if !trial && !keepsSignIn { try await signOut(manager) }
+                    await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Closing Big Fish's Game Manager"))))
+                    await manager.shutdown(timeout: Self.shutdownTimeout)
+                    managerStarted = false
+                    if keepsSignIn { await preparer.keepSignIn(from: wrappPath) }
+                    // Signing out leaves the account's tokens in the registry and the
+                    // store's session in the Game Manager's browser profile.
+                    try await preparer.forgetAccount(in: wrappPath)
+                case (nil, "EDIT") where step.option("from-data") == "ini":
+                    guard let files = step.arguments.first, let folder = WrappLayout(app: wrappPath).location(files)?.deletingLastPathComponent() else {
+                        throw WrappBuildError.buildRecipeProblem("\(step.origin): EDIT's files aren't in the app")
+                    }
+                    try helper.configureGameINI(in: folder)
+                case _ where WineSteps.handles(step):
+                    try await preparer.run(step, in: wrappPath)
+                case _ where WrappBuildHelper.isAppStep(step):
+                    continue  // after the steps that put things in the prefix
+                default:
+                    throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
+                }
             }
-            let layout = WrappLayout(app: wrappPath)
-            let gameDirPath = "/" + installed.folder.path(relativeTo: layout.driveC)
-            let gameExePath = runsInScummVM ? gameDirPath : gameDirPath + "/" + exe
-            await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
-            try await helper.setUpCncDdraw(for: gameInfo, in: wrappPath)
+            try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
 
-            // ScummVM reads the game's files and runs nothing of Big Fish's.
-            let launchFile: String?
-            if runsInScummVM {
-                Self.removeGameManager(from: layout.prefix)
-                launchFile = nil
-            } else {
-                launchFile = "/" + installed.launchFile.path(relativeTo: layout.driveC)
+            // What the game is, as the build's events and the legacy settings say it.
+            let runsInScummVM = composition.launcher == .scummvm
+            func drivePath(_ program: String?) -> String? {
+                program.flatMap { $0.split(separator: ":", maxSplits: 1).last.map { String($0.dropFirst(2)) } }
+            }
+            let gameExePath = runsInScummVM ? "/SharedSupport/game" : drivePath(launch.options["big-fish.exe"]) ?? ""
+            if !runsInScummVM {
+                await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
             }
             try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
 
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .bigFish,
-                gameExePath: gameExePath, installerDir: gameDirPath, composition: composition,
-                bigFishLaunchFile: launchFile, bigFishSKU: choice.sku.description, bigFishTrial: trial ? true : nil,
-                input: input
+                gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent, composition: composition,
+                bigFishLaunchFile: runsInScummVM ? nil : drivePath(launch.program), bigFishSKU: choice.sku.description,
+                bigFishTrial: trial ? true : nil, configureINI: false, edition: "big-fish",
+                launch: launch, icon: plan.icon, input: input
             )
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath
@@ -670,23 +719,32 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
         }
     }
 
-    /// The file name at the end of a Windows or Unix path.
-    private static func lastComponent(_ path: String) -> String? {
-        path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init)
+    /// The big-fish module's `manager` stage, as the app's modules plan it.
+    nonisolated static func managerStage(in bundle: Bundle = .main) async throws -> PlannedStage {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
+        return try await Blocking.run {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            guard let stage = try BuildPlanner.moduleStage("big-fish", "manager", constraint: nil, modules: modules) else {
+                throw WrappBuildError.buildRecipeProblem("the big-fish module has no manager stage")
+            }
+            return stage
+        }
     }
 
-    /// Take the Game Manager and its download cache out of a wrapp that
-    /// doesn't run it: hundreds of MB nothing would use.
-    static func removeGameManager(from prefix: URL) {
-        for path in [BigFishGameManager.clientDirInPrefix, "drive_c/ProgramData/Big Fish", "drive_c/BigFishCache"] {
-            let url = prefix.appendingPathComponent(path)
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
-            do {
-                try FileManager.default.removeItem(at: url)
-            } catch {
-                logger.warning("Couldn't remove \(path) from the wrapp: \(error.localizedDescription)")
-            }
+    /// `BIG-FISH.INSTALL --into`: a link to the folder the Game Manager
+    /// installed the game in, so every later step, and the launch, name the
+    /// game where the bundle says.
+    private func linkInstalledGame(_ step: PlannedStep, folder: URL, wrappPath: URL) throws {
+        guard let into = step.option("into"), let link = WrappLayout(app: wrappPath).location(into) else {
+            throw WrappBuildError.buildRecipeProblem("\(step.origin): BIG-FISH.INSTALL's --into isn't in the app")
         }
-        logger.notice("Removed Big Fish's Game Manager from the wrapp")
+        guard folder.standardizedFileURL != link.standardizedFileURL else { return }
+        guard !FileManager.default.fileExists(atPath: link.path) else {
+            throw WrappBuildError.buildRecipeProblem("\(step.origin): \(into) is there already")
+        }
+        try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            atPath: link.path, withDestinationPath: GameInstallerRunner.relativePath(from: link.deletingLastPathComponent(), to: folder))
+        logger.notice("Big Fish installed the game in \(folder.path); \(into) links to it")
     }
 }

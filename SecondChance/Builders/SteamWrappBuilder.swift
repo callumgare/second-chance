@@ -241,7 +241,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             guard let plan, let launch = plan.launch else {
                 throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s Steam edition has no stage")
             }
-            let composition = Self.composition(of: launch)
+            let composition = Composition(launch: launch)
             await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
             logger.notice("Building \(gameInfo.title) from Steam (app \(steam.appID)), engine \(composition.engineTag)\(launchMode.map { ", launching \($0)" } ?? "")")
 
@@ -339,16 +339,6 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.buildRecipeProblem("the steam module has no client stage")
             }
             return stage
-        }
-    }
-
-    /// The modules a wrapp runs for its launch: Steam's starts the game
-    /// with Steam running, Wine's runs it without, and ScummVM's reads its data.
-    nonisolated static func composition(of launch: RecordedLaunch) -> Composition {
-        switch launch.launcher() {
-        case .steam?: Composition(legacy: .wineSteam)
-        case .scummvm?: Composition(launcher: .scummvm)
-        default: Composition(launcher: .wine)
         }
     }
 

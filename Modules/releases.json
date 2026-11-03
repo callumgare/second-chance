@@ -15,6 +15,23 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "functions/install" : "303ac1285da4764a4a626be2219358abd15dfeac1963de541cf6f6e3cd9b1c51",
+          "module.yaml" : "18240bac75fe4c3bfa6334120c20800798d28541ad3a4bb7e37782c4c4931054",
+          "stages/manager" : "168a8bdcff746d800535ff56bb4991256d38b622b972af395801244a2bab01e5"
+        },
+        "functions" : [
+          "functions/install"
+        ],
+        "release" : 2,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "disc" : [

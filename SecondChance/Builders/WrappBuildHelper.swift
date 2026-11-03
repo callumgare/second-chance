@@ -326,29 +326,12 @@ class WrappBuildHelper {
     /// Configure game INI files
     /// Give every .ini in `gameDir` the nancy-drew module's settings
     /// (`DO nancy-drew.configure-ini`).
-    /// cnc-ddraw, for a Wine game the catalogue says draws with DirectDraw,
-    /// built by a source whose edition has no stage yet (Steam's, Big
-    /// Fish's): the wine module's `cnc-ddraw` function's steps, which a
-    /// bundle's stage runs itself (`DO wine.cnc-ddraw`), as the shared
-    /// prefix no longer has it.
-    func setUpCncDdraw(for gameInfo: GameInfo, in wrappPath: URL) async throws {
-        guard gameInfo.graphics == .directDraw, gameInfo.gameEngine != .scummvm,
-              let resources = Bundle.main.resourceURL else { return }
-        let steps = try await Blocking.run {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
-            return try BuildPlanner.functionSteps("wine", "cnc-ddraw", modules: modules)
-        }
-        for step in steps {
-            try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
-        }
-    }
-
     /// The recorded launch's program is in the app, once the build has made
     /// it: a Wine or DOSBox program's file, a ScummVM game's folder. A
     /// launch that isn't a path in the app (`steam://`) isn't checked.
     nonisolated static func checkLaunchProgram(_ launch: RecordedLaunch, in wrappPath: URL) throws {
-        // Steam's launch names the program Steam starts (`--steam.exe`).
-        let program = launch.options["steam.exe"] ?? launch.program
+        // Steam's and Big Fish's launches name the program they start.
+        let program = launch.options["steam.exe"] ?? launch.options["big-fish.exe"] ?? launch.program
         guard program.hasPrefix("wine:") || program.hasPrefix("dosbox:") || program.hasPrefix("scummvm:") else { return }
         // ScummVM's is a folder in the app (`scummvm:/SharedSupport/game/`).
         let place = program.hasPrefix("scummvm:") ? String(program.dropFirst("scummvm:".count)) : program

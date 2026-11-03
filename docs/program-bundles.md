@@ -69,6 +69,7 @@ editions:                       # what it was sold as, and where each comes from
   - id: "big-fish"
     source: "big-fish"
     build:
+      target: "big-fish"
       inputs:
         game: { type: "big-fish-game", product: 1297 }   # its number in Big Fish's SKUs
 
@@ -83,9 +84,7 @@ declares and `${input.<name>}` reads ([wrappfile.md](wrappfile.md#values)).
 question whose prompt is looked up in the string catalog. An edition's
 inputs are of its source's type, or choices. Every input the target reads
 with no default must be given, and every one given must be read: one nothing
-reads is a typo, or something asked for no reason. An edition with no
-target yet (Big Fish's) isn't checked: its builder reads its inputs
-itself.
+reads is a typo, or something asked for no reason.
 
 The schema describes every field. `updates` is read when an old wrapp is updated
 ([wrapp-build.md](wrapp-build.md#updating-a-wrapp)), and `tests` (the

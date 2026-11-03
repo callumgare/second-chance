@@ -53,7 +53,7 @@ struct SteamInstallIntegrationTests {
     static func expected(_ game: GameInfo, launchMode: String?) throws -> (engine: GameInfo.GameEngine, exe: String) {
         let plan = try ShippedBundles.plan(forGame: game.id, edition: "steam", choices: launchMode.map { ["launch-mode": $0] } ?? [:])
         let launch = try #require(plan?.launch)
-        let composition = SteamWrappBuilder.composition(of: launch)
+        let composition = Composition(launch: launch)
         let program = launch.options["steam.exe"] ?? launch.program
         let exe = composition.launcher == .scummvm ? "/SharedSupport/game" : String(program.dropFirst("wine:C:".count))
         return (composition.legacyEngine ?? .wine, exe)

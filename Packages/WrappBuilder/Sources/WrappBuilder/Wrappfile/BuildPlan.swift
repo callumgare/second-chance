@@ -194,7 +194,7 @@ public nonisolated struct BuildPlanner {
         let plan = try plan(edition: edition, target: target, conditions: conditions, recorder: recorder)
         // cnc-ddraw is for a game that draws with DirectDraw, and such a game
         // needs it: the two are written together.
-        if let launch = plan.launch, launch.launcher(pathTypes) == .wine {
+        if let launch = plan.launch, launch.options["wine.graphics"] != nil {
             let cncDdraw = plan.stages.flatMap(\.steps).contains {
                 $0.module == ModuleID.wine.rawValue && $0.instruction == "WINETRICKS" && $0.arguments == ["cnc_ddraw"]
             }
@@ -774,15 +774,18 @@ public nonisolated struct BuildPlanner {
             switch launch.launcher(planner.pathTypes) {
             case .wine?:
                 try checkGraphics("a Wine launch")
-            case .steam?:
-                // Steam starts a Windows game in the app's Wine, so it says
-                // what it draws with too, and the program Steam starts.
-                try checkGraphics("a Steam launch")
-                guard launch.options["steam.exe"]?.hasPrefix("wine:") == true else {
-                    throw PlanError(description: "\(origin): a Steam launch names the program Steam starts: --steam.exe=<its path in Wine>")
+            case .steam?, .bigFish?:
+                // Steam, or Big Fish's DRM, starts a Windows game in the app's
+                // Wine, so the launch says what it draws with too, and the
+                // program that's started.
+                let module = launch.launcher(planner.pathTypes)?.rawValue ?? ""
+                let what = module == "steam" ? "a Steam launch" : "a Big Fish launch"
+                try checkGraphics(what)
+                guard launch.options["\(module).exe"]?.hasPrefix("wine:") == true else {
+                    throw PlanError(description: "\(origin): \(what) names the program it starts: --\(module).exe=<its path in Wine>")
                 }
                 guard launch.arguments.isEmpty else {
-                    throw PlanError(description: "\(origin): a Steam launch takes no arguments")
+                    throw PlanError(description: "\(origin): \(what) takes no arguments")
                 }
             case .scummvm?:
                 guard !launch.arguments.isEmpty else {

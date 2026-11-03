@@ -55,7 +55,7 @@ struct GameInfoSteamTests {
     func engine(game: String, choice: String?, expected: GameInfo.GameEngine) throws {
         let plan = try ShippedBundles.plan(forGame: game, edition: "steam", choices: choice.map { ["launch-mode": $0] } ?? [:])
         let launch = try #require(plan?.launch)
-        #expect(SteamWrappBuilder.composition(of: launch).legacyEngine == expected)
+        #expect(Composition(launch: launch).legacyEngine == expected)
         // Only a game started by Steam with a choice can fall back to Wine.
         #expect((launch.fallback != nil) == (choice == "steam"))
     }

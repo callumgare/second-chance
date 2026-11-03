@@ -295,7 +295,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         appSupportPath: files.saves,
         settingsPath: files.settings,
         scummvmConfigPath: files.scummvmConfig,
-        bigFishLaunchFile: settings.bigFishLaunchFile,
+        bigFishLaunchFile: settings.recordedLaunch.flatMap(bigFishLaunchFile(of:)) ?? settings.bigFishLaunchFile,
         bigFishSKU: settings.bigFishSKU,
         bigFishTrial: settings.bigFishTrial ?? false
     )
@@ -303,13 +303,21 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
 
 /// A Wine or DOSBox launch's program as a path from the root of its C:
 /// drive (`/Nancy Drew/Game.exe`), as the runtimes find it, or for Steam's
-/// launch the program Steam starts (`--steam.exe`); nil for another.
+/// or Big Fish's launch the program it starts (`--steam.exe`,
+/// `--big-fish.exe`); nil for another.
 func drivePath(of launch: RecordedLaunch) -> String? {
-    let program = launch.options["steam.exe"] ?? launch.program
+    let program = launch.options["steam.exe"] ?? launch.options["big-fish.exe"] ?? launch.program
     for prefix in ["wine:C:", "dosbox:C:"] where program.hasPrefix(prefix) {
         return String(program.dropFirst(prefix.count))
     }
     return nil
+}
+
+/// The `.bfg` a Big Fish launch has Big Fish's DRM start, as a path from the
+/// root of C: (`/Program Files (x86)/…/LaunchGame.bfg`).
+func bigFishLaunchFile(of launch: RecordedLaunch) -> String? {
+    let prefix = "big-fish:C:"
+    return launch.program.hasPrefix(prefix) ? String(launch.program.dropFirst(prefix.count)) : nil
 }
 
 /// The Steam app a Steam launch starts (`steam://rungameid/<id>`).

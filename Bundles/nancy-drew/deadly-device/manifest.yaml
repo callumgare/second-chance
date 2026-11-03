@@ -40,6 +40,7 @@ editions:
   - id: "big-fish"
     source: "big-fish"
     build:
+      target: "big-fish"
       inputs:
         game: { type: "big-fish-game", product: 5587 }
 

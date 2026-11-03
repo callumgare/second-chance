@@ -42,7 +42,39 @@ Chance's own window shows what it is doing.
 
 ## The build
 
-`BigFishWrappBuilder` (`SecondChance/Builders/`), step by step:
+A game's Big Fish edition has a stage, `big-fish`, built `FROM
+big-fish@1/manager`, the big-fish module's own stage
+(`Modules/big-fish/stages/manager`, itself built from the wine module's
+prefix), the same shape as Steam's ([steam.md](steam.md#building)):
+
+```dockerfile
+FROM big-fish@1/manager AS big-fish
+USE nancy-drew
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO big-fish.install --game=${input.game} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
+LAUNCH --wine.graphics=direct-3d \
+    --big-fish.exe="${const.install-dir}/Game.exe" "big-fish:${const.install-dir}/LaunchGame.bfg"
+```
+
+The manager stage installs the Game Manager (`BIG-FISH.MANAGER`, its
+installer a `fetch` mount pinned by its sha256) and has ⌘ act as Ctrl in its
+window (`WINE.REGISTRY`). The `install` function
+(`Modules/big-fish/functions/install`) has the Game Manager download, install
+and activate the game, declining DirectX's setup (`BIG-FISH.INSTALL
+--decline-directx`), and makes `--into` a link to the folder it installed
+the game in, then signs out and takes the account out of the prefix
+(`BIG-FISH.SIGN-OUT`). The launch is the folder's `LaunchGame.bfg`, which
+Big Fish's DRM starts, naming the program it starts (`--big-fish.exe`) for
+the wrapp to find the game's process by. A ScummVM game's stage installs it
+in a stage of its own and copies its data into the app, which keeps no Wine
+and so no Game Manager.
+
+`BigFishWrappBuilder` (`SecondChance/Builders/`) follows the plan: the
+manager stage's steps first, then, once the game is picked, the edition's,
+recognising each by its shape. Step by step:
 
 1. **The game named up front**, if any: `BIG_FISH_GAME_SLUG`, which a headless
    run must set. `BIG_FISH_TRIAL=1` builds that game's free trial instead (its
@@ -50,10 +82,12 @@ Chance's own window shows what it is doing.
    integration tests, which can then try every game Big Fish sells. A trial
    wrapp records `BigFishTrial` in its settings.
 2. **The Game Manager is installed** in a fresh wrapp's prefix
-   (`BigFishWrappPreparer`). `bfginstaller35.exe` is downloaded once into
-   `~/Library/Caches/SecondChance/` over https; as it's always the current
-   version it can't be checked against a hash, so it is only checked for
-   being a Windows program of about the right size. Its `/S` isn't silent: it
+   (`BigFishWrappPreparer`, the manager stage). `bfginstaller35.exe` is
+   downloaded once into `~/Library/Caches/SecondChance/` over https, and used
+   only when its sha256 is the one the stage pins. Big Fish replaces the file
+   at that address whenever it updates the Game Manager, so a build then
+   fails at the hash, rather than installing something nobody has tried,
+   until the stage is updated with the new one. Its `/S` isn't silent: it
    relaunches itself for administrator rights, and the relaunch stops on its
    licence page. `big-fish-game-manager-setup.au3` (in the app's Resources)
    clicks whichever of its buttons is live (`I Agree`, then `Next`, `Install`,
@@ -63,7 +97,7 @@ Chance's own window shows what it is doing.
    exits, so its DevTools port never answers), so the session is ended there.
    AutoIt and the installer are staged under `C:\second-chance-big-fish` and
    removed after. ⌘ is made to work as Ctrl for the Game Manager alone
-   (`WineRegistry.letCommandActAsControl`: `LeftCommandIsCtrl` and
+   (the stage's `WINE.REGISTRY` steps: `LeftCommandIsCtrl` and
    `RightCommandIsCtrl` under Wine's `AppDefaults\bfgclient.exe\Mac Driver`),
    so ⌘C and ⌘V work in its sign-in form: Wine otherwise keeps ⌘ for its own
    Mac menu, and a Windows program knows only Ctrl. The installer runs Big Fish's `epoch.exe`, which searches
@@ -99,7 +133,7 @@ Chance's own window shows what it is doing.
    are (`WrappBuildViewModel.ask`). The build publishes
    `.bigFishGamesOwned`. A game named up front takes its English edition if
    the account has it, else any edition it has.
-6. **Download, install, activate.** `downloadNewGame` with
+6. **Download, install, activate** (`BIG-FISH.INSTALL`). `downloadNewGame` with
    `downloadFullVersion` false for a trial; then the game's state is read every
    2 s for up to 4 hours. Downloading and installing show their progress.
    Activation ("Activating the game", with no percentage) has no state of
@@ -110,10 +144,11 @@ Chance's own window shows what it is doing.
    wait after installing, and a ready state before the game's folder has its
    `bfgstate.xml`. A failed state fails
    the build as a download, install or activation failure, and so does the
-   Game Manager quitting. Meanwhile `big-fish-directx-cancel.au3` cancels
-   Microsoft's DirectX web setup, which each game's installer starts and would
-   otherwise sit on its licence page.
-7. **Keep the sign-in, or sign out.** The wrapp mustn't carry the sign-in,
+   Game Manager quitting. Meanwhile, as `--decline-directx` says,
+   `big-fish-directx-cancel.au3` cancels Microsoft's DirectX web setup, which
+   each game's installer starts and would otherwise sit on its licence page.
+   Then `--into` is made a link to the folder the game went in.
+7. **Keep the sign-in, or sign out** (`BIG-FISH.SIGN-OUT`). The wrapp mustn't carry the sign-in,
    and an owned, activated game plays signed out. A person's sign-in is kept
    for the next build ([below](#the-kept-sign-in)): the Game Manager is shut
    down signed in, and its values saved. The test harness's account is
@@ -125,16 +160,16 @@ Chance's own window shows what it is doing.
    (`C:\ProgramData\Big Fish\cef`) keeps the store's session cookies, so
    `BigFishWrappPreparer.forgetAccount` deletes those values and the profile
    (which the launch doesn't need; the Game Manager makes a new one if it runs).
-8. **Configure.** The game's program is the one in its folder the catalog
-   knows by name (its Steam release's `.exe`, or the disc's), or else the only
-   one that isn't Big Fish's. The wrapp records `BigFishLaunchFile` (the
-   folder's `LaunchGame.bfg`, from the root of C:) and `BigFishSKU`, and keeps
-   the Game Manager: its `bfgprocess.exe` and `bfggameservices.exe` start the
-   game, as the wrapp's `big-fish` module has them (`BigFishRuntime`,
-   [wrapp-launch.md](wrapp-launch.md#modules)). A game ScummVM runs (Haunted Mansion, Royal Tower) is a ScummVM wrapp
-   of the installed folder, as from Steam: no launch file, and the Game
-   Manager and its download cache are taken out. No official Her Interactive
-   patch applies to a Big Fish copy (`GamePatch.Edition.matches`).
+8. **Configure.** The rest of the edition's steps (cnc-ddraw for a DirectDraw
+   game, its `.ini` settings, the icon). The wrapp records the plan's launch,
+   whose program a build checks is there, and for an older Second Chance
+   `BigFishLaunchFile` (the launch's `LaunchGame.bfg`, from the root of C:)
+   and `BigFishSKU`, and keeps the Game Manager: its `bfgprocess.exe` and
+   `bfggameservices.exe` start the game, as the wrapp's `big-fish` module has
+   them (`BigFishRuntime`, [wrapp-launch.md](wrapp-launch.md#modules)). A game
+   ScummVM runs (Haunted Mansion, Royal Tower) is a ScummVM wrapp of its data,
+   copied into the app, as from Steam. No official Her Interactive patch is
+   applied to a Big Fish copy: its stage has none.
 
 A failure anywhere shuts the Game Manager down and removes the half-made
 wrapp. `BigFishWrappBuilderTests` drives all of this with a fake Game Manager

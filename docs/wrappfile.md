@@ -100,6 +100,9 @@ Modules' instructions, as the build modules declare them
 | `STEAM.CLIENT` | Installs Steam's client in the prefix (the steam module's `client` stage). |
 | `STEAM.INSTALL <input> --into=<folder> [--mount=…]` | Has Steam install the input's app, signed in with the shared sign-in (`--mount=type=secret,id=steam-sign-in`) and with the kept client (`--mount=type=cache,id=steam-client`), and makes `--into` a link to the folder Steam put it in. |
 | `STEAM.SIGN-OUT` | Takes the sign-in out of the prefix, saved for the next build first, so the app carries none. |
+| `BIG-FISH.MANAGER --mount=type=fetch,url=…,sha256=…,target=…` | Installs Big Fish's Game Manager from its installer, pinned by its hash (the big-fish module's `manager` stage). |
+| `BIG-FISH.INSTALL <input> --into=<folder> [--decline-directx]` | Has the Game Manager download, install and activate the input's game, declining DirectX's setup, and makes `--into` a link to the folder it installed it in. |
+| `BIG-FISH.SIGN-OUT` | Signs the Game Manager out, or keeps a person's sign-in for the next build, then takes the account out of the prefix. |
 | `STEAM.REMOVE` | Takes Steam away: the game moved to where `STEAM.INSTALL --into` linked it, then Steam's folders and the client stage's registry settings removed. |
 | `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--creates=<program>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
 
@@ -181,7 +184,9 @@ LAUNCH --wine.graphics=direct-draw "${const.install-dir}/Game.exe"
 - **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
   names the program Steam starts, `--steam.exe=<its path in Wine>`, which the
   app finds the game's process by; as Steam starts a Windows game in the
-  app's Wine, it says what it draws with too.
+  app's Wine, it says what it draws with too. **A Big Fish launch** is the
+  same, its program the game's `big-fish:C:/…/LaunchGame.bfg`, which Big
+  Fish's DRM starts, and `--big-fish.exe` the program it starts.
 - **`--fallback=<program>`** is what the person is offered when the launch
   fails or seems stuck, for that one launch: run without the launch's
   launcher, with its options. Steam words it "Start Without Steam". A bundle

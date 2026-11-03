@@ -36,3 +36,10 @@ DO steam.install --game=${input.game} --into=${const.install-dir}
 
 FROM scummvm AS steam
 COPY --from=steam-files ${const.install-dir} /SharedSupport/game/
+
+# Big Fish's: the game installed by its Game Manager, for its data
+FROM big-fish@1/manager AS big-fish-files
+DO big-fish.install --game=${input.game} --into=${const.install-dir}
+
+FROM scummvm AS big-fish
+COPY --from=big-fish-files ${const.install-dir} /SharedSupport/game/

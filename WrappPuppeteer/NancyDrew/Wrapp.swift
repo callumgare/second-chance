@@ -81,9 +81,10 @@ struct Wrapp {
         gameSlug = settings?.gameSlug ?? "unknown"
         // The program its launch names, as the wrapp reads it.
         let launch = settings?.recordedLaunch
-        // Steam's launch names the program Steam starts (`--steam.exe`).
+        // Steam's and Big Fish's launches name the program they start
+        // (`--steam.exe`, `--big-fish.exe`).
         let exePath = launch.flatMap { launch in
-            let program = launch.options["steam.exe"] ?? launch.program
+            let program = launch.options["steam.exe"] ?? launch.options["big-fish.exe"] ?? launch.program
             return program.hasPrefix("wine:C:") ? String(program.dropFirst("wine:C:".count)) : nil
         }
             ?? settings?.gameExePath ?? "/Game.exe"

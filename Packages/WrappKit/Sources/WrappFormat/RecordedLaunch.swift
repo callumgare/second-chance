@@ -88,3 +88,15 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         volumes.first { $0.location == "scummvm:settings/" }?.name
     }
 }
+
+nonisolated extension Composition {
+    /// The modules a wrapp runs for `launch`: its program's module, and
+    /// Steam's running beside a game Steam starts.
+    public init(launch: RecordedLaunch) {
+        switch launch.launcher() {
+        case .steam?: self.init(launcher: .steam, services: [.steam])
+        case let launcher?: self.init(launcher: launcher)
+        case nil: self.init(launcher: .wine)
+        }
+    }
+}

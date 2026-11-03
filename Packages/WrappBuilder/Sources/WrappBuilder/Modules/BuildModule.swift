@@ -194,6 +194,24 @@ public nonisolated enum HerDownloadBuild: BuildModule {
 /// stage: `BigFishWrappBuilder` builds them, as Steam's builder does its.
 public nonisolated enum BigFishBuild: BuildModule {
     public static let id = ModuleID.bigFish
+    public static let instructions = [
+        // Installs Big Fish's Game Manager, from its installer as a `fetch`
+        // mount pinned by its hash, clicked through by AutoIt.
+        InstructionSpec("MANAGER", options: ["mount": .repeated]),
+        // Has the Game Manager download, install and activate the input's game
+        // (`BIG-FISH.INSTALL game --into=…`), declining the DirectX setup its
+        // installer starts with `--decline-directx`, and makes `--into` a link
+        // to the folder it installed the game in.
+        InstructionSpec("INSTALL", options: ["into": .value, "decline-directx": .flag], required: ["into"], arguments: 1...1,
+                        argumentRoles: [.input], optionRoles: ["into": .location]),
+        // Signs the Game Manager out and takes the account out of the prefix.
+        InstructionSpec("SIGN-OUT"),
+    ]
+
+    /// A launch's: the program Big Fish's DRM starts (`--big-fish.exe=C:/…/Game.exe`),
+    /// which the app finds the game's process by.
+    public static let coreOptions: [String: [String: InstructionSpec.OptionKind]] = ["LAUNCH": ["exe": .value]]
+    public static let coreOptionRoles: [String: [String: InstructionSpec.Role]] = ["LAUNCH": ["exe": .location]]
 }
 
 public nonisolated enum BuildModules {

@@ -52,3 +52,17 @@ LAUNCH --wine.graphics=direct-3d \
     --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
     --wine.clean-exit-line="${nancy-drew.data.clean-exit-log.marker}" \
     --steam.exe="${const.install-dir}/Thornton.exe" steam://rungameid/${input.game.app-id}
+
+# Big Fish's: the game installed by its Game Manager, whose DRM starts it
+FROM big-fish@1/manager AS big-fish
+USE nancy-drew # its clean-exit log
+COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
+ICON /Resources/nancy-drew.icns
+VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO big-fish.install --game=${input.game} --into=${const.install-dir}
+DO nancy-drew.configure-ini --into=${const.install-dir}
+# Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
+LAUNCH --wine.graphics=direct-3d \
+    --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
+    --wine.clean-exit-line="${nancy-drew.data.clean-exit-log.marker}" \
+    --big-fish.exe="${const.install-dir}/Thornton.exe" "big-fish:${const.install-dir}/LaunchGame.bfg"

@@ -32,6 +32,8 @@ struct WrappfileCheckerTests {
     HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
     FROM steam@1/client AS steam
     DO steam.install --game=${input.game} --into=${const.install-dir}
+    FROM big-fish@1/manager AS big-fish
+    DO big-fish.install --game=${input.game} --into=${const.install-dir}
     """
 
     @Test func aValidWrappfileHasNoProblems() throws {

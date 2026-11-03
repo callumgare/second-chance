@@ -78,10 +78,13 @@ nonisolated public struct WrappSettings: Codable, Sendable, Equatable {
         self.recordedLaunch = recordedLaunch
     }
 
-    /// The modules the wrapp runs, from its engine: a Wine game with a
-    /// `.bfg` to start it is started by Big Fish's DRM.
+    /// The modules the wrapp runs, from its launch (`Composition(launch:)`):
+    /// as recorded, or as its legacy settings translate.
     public var composition: Composition {
-        engine == .wine && bigFishLaunchFile != nil ? Composition(launcher: .bigFish) : Composition(legacy: engine)
+        // Steam running beside a game the wrapp starts itself, which only
+        // a wrapp built before launches were recorded does.
+        if recordedLaunch == nil, engine == .wineSteamSilent { return Composition(legacy: engine) }
+        return Composition(launch: launch)
     }
 
     /// How the wrapp starts its program: as recorded, or for a wrapp built

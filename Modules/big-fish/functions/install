@@ -1,0 +1,14 @@
+# DO big-fish.install --game=<the edition's big-fish-game input> --into=<the game's folder>
+#
+# The Game Manager downloads, installs and activates the game, signed in
+# (or, for a free trial, not), with the DirectX setup the game's installer
+# starts declined: the games don't need it. --into becomes a link to the
+# folder Big Fish installed the game in. Then the Game Manager is signed out
+# and the account taken out of the prefix, so the app carries none: an
+# activated game plays signed out.
+FUNCTION install
+  INPUT game
+  INPUT into
+  BIG-FISH.INSTALL ${input.game} --into=${input.into} --decline-directx
+  BIG-FISH.SIGN-OUT
+END
