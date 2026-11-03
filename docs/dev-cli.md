@@ -19,6 +19,7 @@ nearest command's help.
 ./sc wrapp update stay-tuned           # Put the latest WrappTemplate into it
 ./sc wrapp wine stay-tuned -- regedit  # Run Wine inside its prefix
 ./sc test unit                         # Unit tests (seconds) + sc's own tests
+./sc test unit DocsTableTests          # Just that suite, wherever it's declared
 ./sc test integration stay-tuned       # Install, launch and quit one game for real
 ./sc test integration ghost-dogs --vm sc-sequoia  # …launching it in a tart VM
 ./sc test                              # The unit tests, as sc test unit
@@ -266,7 +267,11 @@ which forces that copy on (`0` forces it off).
 `sc test unit` runs every suite except a short denylist —
 `TestRunner.unitExclusions`: the integration suites for discs, Steam, Her
 downloads and Big Fish — so **a new suite runs by default**. It then runs `Tools/sc`'s
-own Swift tests. `sc test integration [<slug>…]` runs the per-game integration
+own Swift tests. Name suites to run only those: `sc test unit DocsTableTests
+CompositionTests` runs each where it's declared (`UnitTestSelection`): the
+app's through xcodebuild's `-only-testing`, a package's or sc's own through
+`swift test --filter`, and the app is built for testing only when one of them
+is the app's. `Suite/test()` runs one test. `sc test integration [<slug>…]` runs the per-game integration
 suite with one worker; `sc test all` runs both, as two separate xcodebuild
 runs. A bare `sc test` is `sc test unit`, so the hours-long run is never had by
 accident.

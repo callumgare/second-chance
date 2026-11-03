@@ -10,8 +10,13 @@ struct ParsingTests {
     @Test("Bare `sc test` is the unit tests; `sc test all` runs everything, and takes integration games")
     func bareTestIsUnit() throws {
         #expect(try SC.parseAsRoot(["test"]) is TestUnitCommand)
-        // Games belong to an integration run, never quietly to the unit one.
-        #expect(throws: (any Error).self) { try SC.parseAsRoot(["test", "stay-tuned"]) }
+        // Games belong to an integration run, never quietly to the unit one:
+        // there a game is a suite's name, which no suite has.
+        let unit = try #require(try SC.parseAsRoot(["test", "stay-tuned"]) as? TestUnitCommand)
+        #expect(unit.suites == ["stay-tuned"])
+        #expect(throws: SCError.self) {
+            try UnitTestSelection.locate(unit.suites, root: FileManager.default.temporaryDirectory, packages: [], integrationSuites: [])
+        }
 
         let withGames = try #require(try SC.parseAsRoot(["test", "all", "stay-tuned", "blue-moon"]) as? TestAllCommand)
         #expect(withGames.games == ["stay-tuned", "blue-moon"])

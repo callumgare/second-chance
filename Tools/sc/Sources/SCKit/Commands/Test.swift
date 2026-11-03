@@ -180,23 +180,40 @@ struct TestUnitCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unit",
         abstract: "Run the unit tests (seconds): the app's, the shared package's and sc's own.",
-        discussion: "Every suite except the integration ones — a new suite runs by default."
+        discussion: """
+            Every suite except the integration ones — a new suite runs by default. Name suites to run only \
+            those: each is found where it's declared, and the app is built for testing only when one of them \
+            is the app's.
+            """
     )
 
     @OptionGroup var global: GlobalOptions
     @OptionGroup var appBuild: AppBuildOptions
     @OptionGroup var report: ReportOptions
 
+    @Argument(help: ArgumentHelp(
+        "Suites to run instead of all of them: a suite's type, or one of its tests.",
+        discussion: "DocsTableTests runs that suite; DocsTableTests/aTest() one test in it. Each runs wherever it's declared: "
+            + "the app's tests, a local package's or sc's own.",
+        valueName: "suite"
+    ))
+    var suites: [String] = []
+
     func run() async throws {
         let session = try Session.start(global)
         try TestCommandSupport.requireTools()
         let stamp = UI.timestamp()
         let runner = TestRunner(session: session)
-        try await runner.xcode.ensureTestBuild(appBuild)
-        let unit = try await runner.unit(stamp: stamp)
-        let packageStatus = try await TestCommandSupport.runPackageTests(session)
-        let toolStatus = try await TestCommandSupport.runToolTests(session)
-        try await TestCommandSupport.finish([unit], stamp: stamp, policy: report.openReport, session: session,
+        let selection = try suites.isEmpty ? nil : UnitTestSelection.locate(
+            suites, root: session.repo.root, packages: TestCommandSupport.testedPackages, integrationSuites: TestRunner.unitExclusions)
+        var runs: [TestRun] = []
+        if selection.map({ !$0.app.isEmpty }) ?? true {
+            try await runner.xcode.ensureTestBuild(appBuild)
+            runs.append(try await runner.unit(stamp: stamp, only: selection?.app))
+        }
+        let packageStatus = try await TestCommandSupport.runPackageTests(session, only: selection?.packages)
+        let toolStatus = try await TestCommandSupport.runToolTests(session, only: selection?.tool)
+        try await TestCommandSupport.finish(runs, stamp: stamp, policy: report.openReport, session: session,
                                             extraFailure: packageStatus != 0 ? packageStatus : toolStatus)
     }
 }
@@ -257,14 +274,19 @@ enum TestCommandSupport {
     /// app, run by SwiftPM with no Xcode build.
     static let testedPackages = ["WrappKit", "SecondChanceKit", "PuppeteerCore", "WrappBuilder"]
 
-    /// Each of `testedPackages`' tests; the first failure's status, or 0.
-    static func runPackageTests(_ session: Session) async throws -> Int32 {
+    /// Each of `testedPackages`' tests, or only the suites `only` names in
+    /// each package it has any for; the first failure's status, or 0.
+    static func runPackageTests(_ session: Session, only: [String: [String]]? = nil) async throws -> Int32 {
         var status: Int32 = 0
         for name in testedPackages {
+            let filters = only?[name]
+            if only != nil && filters == nil { continue }
             let package = session.repo.root.appendingPathComponent("Packages/\(name)")
             do {
                 try await session.ui.logStep("\(name)'s tests", log: "test-\(name.lowercased())", success: "\(name)'s tests passed") { sink in
-                    try await Proc.stream("swift", ["test", "--package-path", package.path], cwd: session.repo.root) { await sink.line($0) }
+                    try await Proc.stream("swift", ["test", "--package-path", package.path] + filterArguments(filters), cwd: session.repo.root) {
+                        await sink.line($0)
+                    }
                 }
             } catch let error as SCError where error.alreadyReported {
                 if status == 0 { status = error.exitCode }
@@ -273,16 +295,25 @@ enum TestCommandSupport {
         return status
     }
 
-    static func runToolTests(_ session: Session) async throws -> Int32 {
+    /// sc's own tests, or only the suites `only` names (none: not run).
+    static func runToolTests(_ session: Session, only: [String]? = nil) async throws -> Int32 {
+        if let only, only.isEmpty { return 0 }
         let package = session.repo.root.appendingPathComponent("Tools/sc")
         do {
             try await session.ui.logStep("sc's own tests", log: "test-sc", success: "sc's own tests passed") { sink in
-                try await Proc.stream("swift", ["test", "--package-path", package.path], cwd: session.repo.root) { await sink.line($0) }
+                try await Proc.stream("swift", ["test", "--package-path", package.path] + filterArguments(only), cwd: session.repo.root) {
+                    await sink.line($0)
+                }
             }
             return 0
         } catch let error as SCError where error.alreadyReported {
             return error.exitCode
         }
+    }
+
+    /// `swift test`'s `--filter` for each of `suites`; nothing for all of them.
+    static func filterArguments(_ suites: [String]?) -> [String] {
+        (suites ?? []).flatMap { ["--filter", $0] }
     }
 
     /// Totals, the HTML report, and the verdict (a non-zero exit when anything failed).
@@ -310,6 +341,8 @@ enum TestCommandSupport {
         let reportLine = report.map { "Report: \(session.repo.display($0))" }
 
         guard failed else {
+            // Only package suites were run: their steps have said so.
+            if totals.isEmpty { totals.append("The suites asked for passed") }
             ui.success(TerminalTextBuilder.text(totals.joined(separator: "\n")), takeaways: reportLine.map { [TerminalTextBuilder.text($0)] } ?? [])
             return
         }

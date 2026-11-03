@@ -102,10 +102,13 @@ struct TestRunner {
 
     // MARK: - Unit
 
-    func unit(stamp: String) async throws -> TestRun {
+    /// The app's unit suites: every one but the integration suites, or only
+    /// `only` (each `Suite` or `Suite/test()`).
+    func unit(stamp: String, only: [String]? = nil) async throws -> TestRun {
         let bundle = repo.testResults.appendingPathComponent("\(stamp)-unit.xcresult")
+        let selection = only.map { $0.map { "-only-testing:SecondChanceTests/\($0)" } } ?? Self.unitSelection
         let total = try? await ui.progressStep("Counting unit tests", success: "Counted unit tests") { _ in
-            try await xcode.countTests(selection: Self.unitSelection)
+            try await xcode.countTests(selection: selection)
         }
         let board = TestBoard(total: total ?? nil)
         let live = ui.isLive
@@ -122,7 +125,7 @@ struct TestRunner {
             statusLine: { board.statusLine },
             table: { suiteTable(board) },
             run: { sink in
-                try await xcode.runTests(selection: Self.unitSelection, environment: env, resultBundle: bundle, sink: sink)
+                try await xcode.runTests(selection: selection, environment: env, resultBundle: bundle, sink: sink)
             }
         )
         await ui.table(headers: suiteTable(board).headers, rows: suiteTable(board).rows)

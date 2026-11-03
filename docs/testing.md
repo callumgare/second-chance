@@ -133,6 +133,8 @@ in `Tools/sc/Sources/SCKit/Support/TestRunner.swift`: `DiskInstallIntegrationTes
 `BigFishOwnedInstallIntegrationTests` and `BigFishTrialInstallIntegrationTests`
 (real installs). A new suite therefore runs by default;
 one that is slow or needs the environment set up has to be added to that list.
+To check one thing, name the suites: `sc test unit DocsTableTests` runs that
+suite alone, wherever it is declared ([dev-cli.md](dev-cli.md#tests)).
 
 The exception is a suite that switches itself off unless told where its
 setup is. `SteamClientSmokeTests` drives a real Steam and is `.enabled(if:)`
