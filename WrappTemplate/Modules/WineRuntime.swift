@@ -35,9 +35,6 @@ final class WineRuntime: GameStarting {
 
     var stopsOnQuit: Bool { true }
 
-    // A Wine game is less stable than a ScummVM one: warn the player to save.
-    var showsSaveWarning: Bool { true }
-
     // Only this game's Wine counts as its launch's progress: another game's,
     // running alongside, would keep a stuck launch looking busy.
     var ownsProcess: (@Sendable (pid_t) -> Bool)? {

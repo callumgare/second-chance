@@ -251,6 +251,11 @@ generated from the bundles by `sc generate` and checked in, and a test
 added or changed in its bundle**, followed by `sc generate`; the generated
 file is never edited by hand.
 
+A program's names come from its bundle too: its program id is the bundle's
+`id`, and its app is called the manifest's `display-name` (with `{title}` and
+`{series}` filled in), or "{series} - {title}" when it has a series, or its
+title alone — "Nancy Drew - Secret of the Old Clock", "SkiFree".
+
 Loading and checking bundles lives in `Packages/WrappBuilder/`, the package that
 will hold everything that turns a bundle into a wrapp, kept apart from the app.
 

@@ -38,7 +38,10 @@ nonisolated extension GameInfoProvider {
             id: "secrets-can-kill",
             title: "Secrets Can Kill",
             diskCount: 2,
-            gameEngine: .scummvm
+            gameEngine: .scummvm,
+            program: "nancy-drew/secrets-can-kill",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Secrets Can Kill"
         ),
         GameInfo(
             id: "secrets-can-kill-remastered",
@@ -48,14 +51,20 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Nancy Drew SCK/Secrets.exe",
             steam: .init(appID: 42210, installDir: "Nancy Drew Secrets Can Kill", exe: "Secrets.exe"),
             bigFish: 6180,
-            detectionAliases: ["nancy drew sck"]
+            detectionAliases: ["nancy drew sck"],
+            program: "nancy-drew/secrets-can-kill-remastered",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Secrets Can Kill Remastered"
         ),
         GameInfo(
             id: "stay-tuned",
             title: "Stay Tuned for Danger",
             diskCount: 1,
             gameEngine: .scummvm,
-            detectionCodes: ["STFD"]
+            detectionCodes: ["STFD"],
+            program: "nancy-drew/stay-tuned",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Stay Tuned for Danger"
         ),
         GameInfo(
             id: "haunted-mansion",
@@ -64,7 +73,10 @@ nonisolated extension GameInfoProvider {
             gameEngine: .scummvm,
             steamDRM: .no,
             steam: .init(appID: 615770, installDir: "Nancy Drew Message in a Haunted Mansion", exe: "Game.exe"),
-            bigFish: 5517
+            bigFish: 5517,
+            program: "nancy-drew/haunted-mansion",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Message in a Haunted Mansion"
         ),
         GameInfo(
             id: "royal-tower",
@@ -73,7 +85,10 @@ nonisolated extension GameInfoProvider {
             gameEngine: .scummvm,
             steamDRM: .no,
             steam: .init(appID: 615780, installDir: "Nancy Drew Treasure in the Royal Tower", exe: "game.exe"),
-            bigFish: 5229
+            bigFish: 5229,
+            program: "nancy-drew/royal-tower",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Treasure in the Royal Tower"
         ),
         GameInfo(
             id: "final-scene",
@@ -81,7 +96,10 @@ nonisolated extension GameInfoProvider {
             diskCount: 1,
             gameEngine: .scummvm,
             steam: .init(appID: 615730, installDir: "Nancy Drew The Final Scene", exe: "Game.exe"),
-            bigFish: 5230
+            bigFish: 5230,
+            program: "nancy-drew/final-scene",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Final Scene"
         ),
         GameInfo(
             id: "scarlet-hand",
@@ -89,7 +107,10 @@ nonisolated extension GameInfoProvider {
             diskCount: 1,
             gameEngine: .scummvm,
             steam: .init(appID: 31890, installDir: "Nancy Drew Secret of the Scarlet Hand", exe: "Game.exe"),
-            bigFish: 5087
+            bigFish: 5087,
+            program: "nancy-drew/scarlet-hand",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Secret of the Scarlet Hand"
         ),
         GameInfo(
             id: "ghost-dogs",
@@ -97,7 +118,10 @@ nonisolated extension GameInfoProvider {
             diskCount: 1,
             gameEngine: .scummvm,
             steam: .init(appID: 31850, installDir: "Nancy Drew Ghost Dogs of Moon Lake", exe: "Game.exe"),
-            bigFish: 2493
+            bigFish: 2493,
+            program: "nancy-drew/ghost-dogs",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Ghost Dogs of Moon Lake"
         ),
         GameInfo(
             id: "haunted-carousel",
@@ -106,7 +130,10 @@ nonisolated extension GameInfoProvider {
             graphics: .directDraw,
             internalGameExePath: "/Nancy Drew/The Haunted Carousel/Game.exe",
             steam: .init(appID: 31820, installDir: "Nancy Drew The Haunted Carousel", exe: "Game.exe"),
-            bigFish: 2387
+            bigFish: 2387,
+            program: "nancy-drew/haunted-carousel",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Haunted Carousel"
         ),
         GameInfo(
             id: "deception-island",
@@ -115,7 +142,10 @@ nonisolated extension GameInfoProvider {
             graphics: .directDraw,
             internalGameExePath: "/Nancy Drew/Danger on Deception Island/Game.exe",
             steam: .init(appID: 31840, installDir: "Nancy Drew Danger on Deception Island", exe: "Game.exe"),
-            bigFish: 1545
+            bigFish: 1545,
+            program: "nancy-drew/deception-island",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Danger on Deception Island"
         ),
         GameInfo(
             id: "shadow-ranch",
@@ -125,7 +155,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Nancy Drew/Secret of Shadow Ranch/Game.exe",
             steamDRM: .no,
             steam: .init(appID: 572740, installDir: "Nancy Drew The Secret of Shadow Ranch", exe: "Game.exe"),
-            bigFish: 7041
+            bigFish: 7041,
+            program: "nancy-drew/shadow-ranch",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Secret of Shadow Ranch"
         ),
         GameInfo(
             id: "blackmoor-manor",
@@ -135,7 +168,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Nancy Drew/The Curse of Blackmoor Manor/Game.exe",
             steamDRM: .yesLaunchWhenSteamRunning,
             steam: .init(appID: 31830, installDir: "Nancy Drew Curse of Blackmoor Manor", exe: "Game.exe"),
-            bigFish: 1439
+            bigFish: 1439,
+            program: "nancy-drew/blackmoor-manor",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Curse of Blackmoor Manor"
         ),
         GameInfo(
             id: "old-clock",
@@ -145,7 +181,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Nancy Drew/Secret of the Old Clock/Game.exe",
             steamDRM: .no,
             steam: .init(appID: 31880, installDir: "Nancy Drew Secret of the Old Clock", exe: "Game.exe"),
-            bigFish: 1297
+            bigFish: 1297,
+            program: "nancy-drew/old-clock",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Secret of the Old Clock"
         ),
         GameInfo(
             id: "blue-moon",
@@ -155,7 +194,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon/Game.exe",
             steamDRM: .yesLaunchWhenSteamRunning,
             steam: .init(appID: 31810, installDir: "Nancy Drew Last Train to Blue Moon Canyon", exe: "Game.exe"),
-            bigFish: 1111
+            bigFish: 1111,
+            program: "nancy-drew/blue-moon",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Last Train to Blue Moon Canyon"
         ),
         GameInfo(
             id: "danger-by-design",
@@ -164,7 +206,10 @@ nonisolated extension GameInfoProvider {
             graphics: .directDraw,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/Danger by Design/Game.exe",
             steam: .init(appID: 31800, installDir: "Nancy Drew Danger by Design", exe: "Game.exe"),
-            bigFish: 1207
+            bigFish: 1207,
+            program: "nancy-drew/danger-by-design",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Danger by Design"
         ),
         GameInfo(
             id: "kapu-cave",
@@ -173,7 +218,10 @@ nonisolated extension GameInfoProvider {
             graphics: .directDraw,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/The Creature of Kapu Cave/Game.exe",
             steam: .init(appID: 31900, installDir: "Nancy Drew The Creature of Kapu Cave", exe: "Game.exe"),
-            bigFish: 2491
+            bigFish: 2491,
+            program: "nancy-drew/kapu-cave",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Creature of Kapu Cave"
         ),
         GameInfo(
             id: "white-wolf",
@@ -182,7 +230,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/The White Wolf of Icicle Creek/Game.exe",
             steam: .init(appID: 31930, installDir: "Nancy Drew - The White Wolf of Icicle Creek", exe: "Game.exe"),
-            bigFish: 2435
+            bigFish: 2435,
+            program: "nancy-drew/white-wolf",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The White Wolf of Icicle Creek"
         ),
         GameInfo(
             id: "crystal-skull",
@@ -191,7 +242,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/Legend of the Crystal Skull/Game.exe",
             steam: .init(appID: 31860, installDir: "Nancy Drew Legend of The Crystal Skull", exe: "Game.exe"),
-            bigFish: 2234
+            bigFish: 2234,
+            program: "nancy-drew/crystal-skull",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Legend of the Crystal Skull"
         ),
         GameInfo(
             id: "phantom-of-venice",
@@ -200,7 +254,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/The Phantom of Venice/PhantomOfVenice.exe",
             steam: .init(appID: 31920, installDir: "Nancy Drew The Phantom of Venice", exe: "PhantomOfVenice.exe"),
-            bigFish: 2556
+            bigFish: 2556,
+            program: "nancy-drew/phantom-of-venice",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Phantom of Venice"
         ),
         GameInfo(
             id: "castle-malloy",
@@ -209,7 +266,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/The Haunting of Castle Malloy/CastleMalloy.exe",
             steam: .init(appID: 31910, installDir: "Nancy Drew The Haunting of Castle Malloy", exe: "CastleMalloy.exe"),
-            bigFish: 2699
+            bigFish: 2699,
+            program: "nancy-drew/castle-malloy",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Haunting of Castle Malloy"
         ),
         GameInfo(
             id: "seven-ships",
@@ -217,7 +277,10 @@ nonisolated extension GameInfoProvider {
             diskCount: 2,
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/Ransom of the Seven Ships/Ransom.exe",
-            steam: .init(appID: 31980, installDir: "Nancy Drew Ransom of the Seven Ships", exe: "Ransom.exe")
+            steam: .init(appID: 31980, installDir: "Nancy Drew Ransom of the Seven Ships", exe: "Ransom.exe"),
+            program: "nancy-drew/seven-ships",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Ransom of the Seven Ships"
         ),
         GameInfo(
             id: "waverly-academy",
@@ -227,7 +290,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Nancy Drew/Warnings at Waverly Academy/Waverly.exe",
             steamDRM: .yesLaunchWhenSteamRunning,
             steam: .init(appID: 43600, installDir: "Nancy Drew Warnings at Waverly Academy", exe: "Waverly.exe"),
-            bigFish: 5386
+            bigFish: 5386,
+            program: "nancy-drew/waverly-academy",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Warnings at Waverly Academy"
         ),
         GameInfo(
             id: "trail-of-the-twister",
@@ -236,7 +302,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Nancy Drew/Trail of the Twister/Twister.exe",
             steam: .init(appID: 42230, installDir: "Nancy Drew Trail of the Twister", exe: "Twister.exe"),
-            bigFish: 6262
+            bigFish: 6262,
+            program: "nancy-drew/trail-of-the-twister",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Trail of the Twister"
         ),
         GameInfo(
             id: "waters-edge",
@@ -247,7 +316,10 @@ nonisolated extension GameInfoProvider {
             steamDRM: .yesLaunchWhenSteamRunning,
             steam: .init(appID: 200080, installDir: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe"),
             bigFish: 6327,
-            detectionAliases: ["shadow waters edge"]
+            detectionAliases: ["shadow waters edge"],
+            program: "nancy-drew/waters-edge",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Shadow at the Water's Edge"
         ),
         GameInfo(
             id: "captive-curse",
@@ -257,7 +329,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Nancy Drew/The Captive Curse/Captive.exe",
             steam: .init(appID: 42220, installDir: "Nancy Drew The Captive Curse", exe: "Captive.exe"),
             bigFish: 7178,
-            detectionCodes: ["CAP"]
+            detectionCodes: ["CAP"],
+            program: "nancy-drew/captive-curse",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Captive Curse"
         ),
         GameInfo(
             id: "alibi-in-ashes",
@@ -266,7 +341,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Her Interactive/Nancy Drew Alibi in Ashes/Alibi.exe",
             steam: .init(appID: 202670, installDir: "Nancy Drew Alibi in Ashes", exe: "Alibi.exe"),
-            bigFish: 7313
+            bigFish: 7313,
+            program: "nancy-drew/alibi-in-ashes",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Alibi in Ashes"
         ),
         GameInfo(
             id: "lost-queen",
@@ -275,7 +353,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Her Interactive/Tomb of the Lost Queen/Tomb.exe",
             steam: .init(appID: 210230, installDir: "Nancy Drew - Tomb of the Lost Queen", exe: "Tomb.exe"),
-            bigFish: 8059
+            bigFish: 8059,
+            program: "nancy-drew/lost-queen",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Tomb of the Lost Queen"
         ),
         GameInfo(
             id: "deadly-device",
@@ -284,7 +365,10 @@ nonisolated extension GameInfoProvider {
             graphics: .direct3D,
             internalGameExePath: "/Program Files (x86)/Her Interactive/The Deadly Device/DeadlyDevice.exe",
             steam: .init(appID: 220420, installDir: "Nancy Drew - TheDeadlyDevice", exe: "DeadlyDevice.exe"),
-            bigFish: 5587
+            bigFish: 5587,
+            program: "nancy-drew/deadly-device",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Deadly Device"
         ),
         GameInfo(
             id: "thornton-hall",
@@ -295,7 +379,10 @@ nonisolated extension GameInfoProvider {
             steamDRM: .yesLaunchViaSteamOnly,
             steam: .init(appID: 226820, installDir: "Nancy Drew The Ghost of Thornton Hall", exe: "Thornton.exe"),
             bigFish: 8778,
-            detectionCodes: ["GTH"]
+            detectionCodes: ["GTH"],
+            program: "nancy-drew/thornton-hall",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Ghost of Thornton Hall"
         ),
         GameInfo(
             id: "silent-spy",
@@ -305,7 +392,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Her Interactive/The Silent Spy/Spy.exe",
             steam: .init(appID: 572730, installDir: "Nancy Drew The Silent Spy", exe: "Spy.exe"),
             bigFish: 8862,
-            detectionCodes: ["SPY"]
+            detectionCodes: ["SPY"],
+            program: "nancy-drew/silent-spy",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Silent Spy"
         ),
         GameInfo(
             id: "shattered-medallion",
@@ -315,7 +405,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Her Interactive/The Shattered Medallion/Medallion.exe",
             steam: .init(appID: 572720, installDir: "Nancy Drew The Shattered Medallion", exe: "Medallion.exe"),
             bigFish: 11150,
-            detectionCodes: ["MED"]
+            detectionCodes: ["MED"],
+            program: "nancy-drew/shattered-medallion",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - The Shattered Medallion"
         ),
         GameInfo(
             id: "labyrinth-of-lies",
@@ -325,7 +418,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Her Interactive/Labyrinth of Lies/Labyrinth.exe",
             steam: .init(appID: 572710, installDir: "Nancy Drew Labyrinth of Lies", exe: "Labyrinth.exe"),
             bigFish: 14014,
-            detectionCodes: ["LIE"]
+            detectionCodes: ["LIE"],
+            program: "nancy-drew/labyrinth-of-lies",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Labyrinth of Lies"
         ),
         GameInfo(
             id: "sea-of-darkness",
@@ -335,7 +431,10 @@ nonisolated extension GameInfoProvider {
             internalGameExePath: "/Program Files (x86)/Her Interactive/Sea of Darkness/SeaOfDarkness.exe",
             steam: .init(appID: 572700, installDir: "Nancy Drew The Sea of Darkness", exe: "SeaOfDarkness.exe"),
             bigFish: 18045,
-            detectionCodes: ["SEA"]
+            detectionCodes: ["SEA"],
+            program: "nancy-drew/sea-of-darkness",
+            series: "Nancy Drew",
+            displayName: "Nancy Drew - Sea of Darkness"
         ),
     ]
 }

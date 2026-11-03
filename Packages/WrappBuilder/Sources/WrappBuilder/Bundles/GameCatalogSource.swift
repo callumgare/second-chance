@@ -70,9 +70,19 @@ public nonisolated enum GameCatalogSource {
             bigFish: editions.first { $0.source == .bigFish }?.inputs?.first?.product,
             detectionAliases: unique(editions.flatMap { $0.detect?.aliases ?? [] }),
             detectionCodes: unique(editions.flatMap { $0.detect?.codes ?? [] }),
-            program: manifest.namespace == "nancy-drew" ? nil : manifest.id,
-            displayName: manifest.displayName ?? (manifest.series == "Nancy Drew" ? nil : manifest.title)
+            program: manifest.id,
+            series: manifest.series,
+            displayName: appName(of: manifest)
         )
+    }
+
+    /// What the program's app is called: the manifest's `display-name`, with
+    /// `{title}` and `{series}` filled in, or "<series> - <title>" with a
+    /// series, or the title alone.
+    static func appName(of manifest: Manifest) -> String {
+        let name = manifest.displayName ?? (manifest.series == nil ? "{title}" : "{series} - {title}")
+        return name.replacingOccurrences(of: "{title}", with: manifest.title)
+            .replacingOccurrences(of: "{series}", with: manifest.series ?? "")
     }
 
     /// The manifest's `drm`, as today's code calls it.
@@ -125,6 +135,7 @@ public nonisolated enum GameCatalogSource {
             if !game.detectionAliases.isEmpty { arguments.append("detectionAliases: [\(game.detectionAliases.map(literal).joined(separator: ", "))]") }
             if !game.detectionCodes.isEmpty { arguments.append("detectionCodes: [\(game.detectionCodes.map(literal).joined(separator: ", "))]") }
             if let program = game.program { arguments.append("program: \(literal(program))") }
+            if let series = game.series { arguments.append("series: \(literal(series))") }
             if let name = game.displayName { arguments.append("displayName: \(literal(name))") }
             lines += arguments.enumerated().map { "            \($1)\($0 == arguments.count - 1 ? "" : ",")" }
             lines.append("        ),")

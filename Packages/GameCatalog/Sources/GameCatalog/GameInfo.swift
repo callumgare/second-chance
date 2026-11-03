@@ -37,17 +37,20 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     /// Short codes a disc calls it by ("STFD"), matched in capitals, as a
     /// whole word: in lower case they could be anything.
     public let detectionCodes: [String]
-    /// Its bundle's id when that isn't `nancy-drew/<id>`: a program beyond
-    /// Nancy Drew (`freeware/skifree`).
+    /// Its bundle's id: `nancy-drew/blue-moon`, `freeware/skifree`.
     public let program: String?
-    /// What its app is called, when that isn't "Nancy Drew - <title>".
+    /// The series it belongs to, as people call it: "Nancy Drew".
+    public let series: String?
+    /// What its app is called, from its bundle: the manifest's
+    /// `display-name`, or "<series> - <title>", or the title alone.
     public let displayName: String?
 
-    /// Its program bundle's id: `nancy-drew/blue-moon`.
-    public var programID: String { program ?? "nancy-drew/\(id)" }
+    /// Its program bundle's id: `nancy-drew/blue-moon`. One made by hand,
+    /// not from a bundle, has its id.
+    public var programID: String { program ?? id }
 
     /// The name of the game's app, as Finder and the Dock show it.
-    public var appName: String { displayName ?? "Nancy Drew - \(title)" }
+    public var appName: String { displayName ?? title }
     /// The game's app's file name.
     public var appBundleName: String { appName + ".app" }
 
@@ -142,6 +145,7 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         detectionAliases: [String] = [],
         detectionCodes: [String] = [],
         program: String? = nil,
+        series: String? = nil,
         displayName: String? = nil
     ) {
         self.id = id
@@ -160,6 +164,7 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         self.detectionAliases = detectionAliases
         self.detectionCodes = detectionCodes
         self.program = program
+        self.series = series
         self.displayName = displayName
     }
 }

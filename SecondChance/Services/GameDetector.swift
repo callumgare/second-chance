@@ -55,7 +55,7 @@ class GameDetector {
                 + game.detectionCodes.map { DetectionIndex.Rule(bundleID: id, matcher: .word($0)) }
         }
         return DetectionIndex(rules: rules, programs: games.map {
-            .init(bundleID: $0.programID, title: $0.title, series: $0.program == nil ? "Nancy Drew" : nil)
+            .init(bundleID: $0.programID, title: $0.title, series: $0.series)
         })
     }
 

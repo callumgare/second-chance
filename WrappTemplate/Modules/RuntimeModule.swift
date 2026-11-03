@@ -34,8 +34,9 @@ protocol RuntimeModule: AnyObject, Sendable {
     /// thing a launch waits for (Steam's start); nil leaves the game's.
     func firstStage(gameTitle: String) -> LoadingStage?
 
-    /// Whether the save warning is shown before the game starts, by this
-    /// module's reckoning: Wine games show it (ScummVM is more stable).
+    /// Whether the save warning is shown before the game starts, as the
+    /// module's `runtime: { save-warning }` says: Wine games show it
+    /// (ScummVM is more stable).
     var showsSaveWarning: Bool { get }
 
     /// Whether a process counts as this launch's progress for the loading
@@ -70,7 +71,7 @@ protocol RuntimeModule: AnyObject, Sendable {
 extension RuntimeModule {
     var stopsOnQuit: Bool { false }
     func firstStage(gameTitle: String) -> LoadingStage? { nil }
-    var showsSaveWarning: Bool { false }
+    var showsSaveWarning: Bool { Self.id.showsSaveWarning }
     var ownsProcess: (@Sendable (pid_t) -> Bool)? { nil }
     func connectSaves(_ saves: URL) throws(ModuleFailure) {}
     func armWatchers(_ watchers: LaunchWatchers, gameExe: URL?) {}

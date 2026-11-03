@@ -94,7 +94,36 @@ public nonisolated enum ModuleDataSource {
         [
             (routineErrorsPath, try routineErrorsSource(modules: loader)),
             (cleanExitLogPath, try cleanExitLogSource(modules: loader)),
+            (saveWarningPath, try saveWarningSource(modules: loader)),
         ]
+    }
+
+    /// Where the save warning's Swift lives, from the repo's root.
+    public static let saveWarningPath = "Packages/WrappKit/Sources/WrappModules/ModuleID+SaveWarning.swift"
+
+    /// The modules whose programs get the save warning: each module's
+    /// `runtime: { save-warning }`.
+    public static func saveWarningSource(modules loader: ModuleLoader) throws -> String {
+        let warned = try loader.loadAll().get().filter { $0.manifest.runtime?.saveWarning == true }.map(\.manifest.id).sorted()
+        return ([
+            "//",
+            "//  ModuleID+SaveWarning.swift",
+            "//  WrappModules",
+            "//",
+            "//  Generated from each module's `runtime: { save-warning }` by",
+            "//  `sc generate`. Don't edit it: change the modules' module.yaml and run",
+            "//  that again. A test fails when this file isn't what the data makes.",
+            "",
+            "nonisolated extension ModuleID {",
+            "    /// The modules whose programs get the save warning before they start.",
+            "    static let showingSaveWarning: Set<ModuleID> = [\(warned.map(literal).joined(separator: ", "))]",
+            "",
+            "    /// Whether a program this module runs gets the save warning before it",
+            "    /// starts, as its module.yaml says.",
+            "    public var showsSaveWarning: Bool { Self.showingSaveWarning.contains(self) }",
+            "}",
+            "",
+        ]).joined(separator: "\n")
     }
 
     /// `text`'s words in lines of at most `width` characters.

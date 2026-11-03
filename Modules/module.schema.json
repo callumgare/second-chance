@@ -97,8 +97,12 @@
       "uniqueItems": true
     },
     "runtime": {
-      "description": "Defaults for the runtime settings of the stages that use it.",
-      "type": "object"
+      "description": "What the wrapp does for a program this module runs, compiled into it by sc generate.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "save-warning": { "description": "Whether the save warning is shown before the program starts.", "type": "boolean" }
+      }
     },
     "volumes": { "type": "object" },
     "updates": {

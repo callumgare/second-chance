@@ -68,7 +68,7 @@ launch asks them rather than asking which engine it has:
 
 | Step | What each module does |
 | --- | --- |
-| Before the window | `firstStage` (Steam: "Starting Steam"; Big Fish: the game, given longer), `showsSaveWarning` (Wine), `ownsProcess` (Wine: only this prefix's processes are the launch's progress), `connectSaves` (Wine: the A: drive and Documents) |
+| Before the window | `firstStage` (Steam: "Starting Steam"; Big Fish: the game, given longer), `showsSaveWarning` (the module's `runtime: { save-warning }`, compiled in by `sc generate`: Wine), `ownsProcess` (Wine: only this prefix's processes are the launch's progress), `connectSaves` (Wine: the A: drive and Documents) |
 | Getting going | `armWatchers` (Wine: the helpers' report, the quit check, copy protection; ScummVM: puppet control), then `prepare` in start order (Steam: start and sign in; Wine: the desktop, unless Steam started the session) |
 | The game | the launcher's `startGame`, and `findsGame`: a Wine program by its `.exe`, one Steam or Big Fish's DRM started (given up on when they go), or the launcher's own process (ScummVM, DOSBox); `windowMayBeAnotherProcess` for a game whose window is another process's of its `.exe` (Big Fish's, under Armadillo) |
 | After the game | `finishAfterGame`, last started first (Steam saves its sign-in, Wine lets its desktop go); then Wine's session is waited for |

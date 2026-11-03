@@ -29,6 +29,13 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     /// Its default updates, run after a bundle's for a wrapp whose copy of
     /// the module is behind this one (`UpdatePlanner`).
     public let updates: [Update]?
+    /// What the wrapp does for a program it runs, which `sc generate`
+    /// compiles in (`ModuleDataSource`).
+    public let runtime: Runtime?
+
+    public struct Runtime: Decodable, Hashable, Sendable {
+        public let saveWarning: Bool?
+    }
 
     public struct Version: Decodable, Hashable, Sendable {
         public let version: String

@@ -180,6 +180,7 @@ none.
 | --- | --- | --- |
 | `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and `WineSteps`, which carries the steps out; Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
+| `wine`, `scummvm`, `dosbox` | `module.yaml`'s `runtime: { save-warning }`: whether their programs get the save warning before they start (Wine's do) | the wrapp (`ModuleID.showsSaveWarning`), compiled in by `sc generate` |
 | `steam` | `routine-errors.yaml`: what Steam logs as it starts | the same, for a game launched through Steam |
 | `nancy-drew` | `patches.json`: Her Interactive's patches ([game-patches.md](game-patches.md)) | `GamePatchCatalog`, and `setup-game-patches.sh`, which stages their archives in the app's download cache |
 | `nancy-drew` | `ini.yaml`: what every `.ini` in a game's folder has changed once it's installed (LCD mode, saves in Documents) | `WrappBuildHelper`, configuring the wrapp |
