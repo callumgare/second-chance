@@ -52,9 +52,15 @@ struct DiskInstallIntegrationTests {
 
     // MARK: - Per-game parameterized test
 
+    /// The selected games that were sold on disc: those whose bundle has a
+    /// `cd` edition (the free programs have none).
+    static let discGames: [GameInfo] = TestGameFilter.selectedGames.filter { game in
+        (try? ShippedBundles.plan(forGame: game.id, edition: "cd")) != nil
+    }
+
     @Test(
         "Wrapp creation produces correct intermediate results for each game",
-        arguments: TestGameFilter.selectedGames
+        arguments: discGames
     )
     func wrappCreationForGame(game: GameInfo) async throws {
         try await testGame(game)

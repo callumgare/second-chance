@@ -35,3 +35,11 @@ public enum Catalog {
         games.first { $0.slug == slug }
     }
 }
+
+extension CatalogGame {
+    /// Whether its bundle has an edition from `source` (`disc`, `download`).
+    func hasEdition(source: String, repo: Repo) -> Bool {
+        let manifest = repo.bundles.appendingPathComponent(programID).appendingPathComponent("manifest.yaml")
+        return (try? String(contentsOf: manifest, encoding: .utf8))?.contains("source: \"\(source)\"") == true
+    }
+}

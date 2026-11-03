@@ -220,10 +220,7 @@ struct BigFishSourceOptions: ParsableArguments, WrappSourceInput {
 /// its bundle says (docs/wrapp-build.md#the-download-source).
 struct DownloadSourceOptions: ParsableArguments, WrappSourceInput {
     func availableGames(repo: Repo) -> [CatalogGame] {
-        Catalog.games.filter { game in
-            let manifest = repo.bundles.appendingPathComponent(game.programID).appendingPathComponent("manifest.yaml")
-            return (try? String(contentsOf: manifest, encoding: .utf8))?.contains("source: \"download\"") == true
-        }
+        Catalog.games.filter { $0.hasEdition(source: "download", repo: repo) }
     }
 
     var availabilityDescription: String { "download editions" }
