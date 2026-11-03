@@ -8,10 +8,17 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$root/Tools/sc"
 binary="$package/.build/release/sc"
-# The game catalog sc shares with the app, a local package of its own.
-catalog="$root/Packages/GameCatalog"
+# What the binary was built from, as a hash of the sources' contents (with
+# Packages/GameCatalog, the game catalog sc shares with the app). Not
+# their modification times: `sc --on` syncs with rsync, which keeps the
+# sending Mac's times, so a checkout synced over another's (another branch, or
+# an older commit) kept the binary built from that one (~50 ms).
+stamp="$binary.sources"
+sources_hash="$(cd "$root" && find -L Tools/sc/Sources Packages/GameCatalog Tools/sc/Package.swift Tools/sc/Package.resolved \
+    -type f -not -path '*/.build/*' -not -path '*/.swiftpm/*' -not -name .DS_Store -print0 2>/dev/null \
+    | sort -z | xargs -0 shasum | shasum)"
 
-if [[ ! -x "$binary" ]] || [[ -n "$(find -L "$package/Sources" "$catalog" "$package/Package.swift" "$package/Package.resolved" -newer "$binary" -print -quit 2>/dev/null)" ]]; then
+if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]]; then
     # Rebuilding takes ~10 s (longer the first time), so say so. In a
     # terminal: a spinner with the elapsed time, cleared once it's done.
     message="Building sc (Tools/sc has changed)"
@@ -42,7 +49,7 @@ if [[ ! -x "$binary" ]] || [[ -n "$(find -L "$package/Sources" "$catalog" "$pack
         echo "sc: building Tools/sc failed (output above)" >&2
         exit 1
     fi
-    touch "$binary"
+    printf '%s\n' "$sources_hash" > "$stamp"
 fi
 
 SC_REPO_ROOT="$root" exec "$binary" "$@"
