@@ -114,8 +114,9 @@ errors ([program-bundles.md](program-bundles.md), [modules.md](modules.md)).
 `sc module check [<id>…]` checks modules and their recorded releases, and `sc
 module release <id>` records one ([modules.md](modules.md#releases)). `sc engine prepare <id>
 [--version <v>] [--into <folder>]` prepares an engine from its package's
-downloads as a build would, and checks or prints its hash, and `sc engine
-fetch [<id>…]` puts engines in this Mac's engine store
+downloads as a build would, and checks or prints its hash, `sc engine
+fetch [<id>…]` puts engines in this Mac's engine store, and `sc engine check`
+asks each engine's downloads are still where their modules say
 ([modules.md](modules.md#engine-packages)).
 
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`

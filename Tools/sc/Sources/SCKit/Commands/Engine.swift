@@ -7,7 +7,7 @@ struct EngineCommand: AsyncParsableCommand {
         commandName: "engine",
         abstract: "Prepare the engines modules' packages describe.",
         discussion: "docs/modules.md#engine-packages describes an engine's package and its prepared hash.",
-        subcommands: [EnginePrepareCommand.self, EngineFetchCommand.self]
+        subcommands: [EnginePrepareCommand.self, EngineFetchCommand.self, EngineCheckCommand.self]
     )
 }
 
@@ -104,6 +104,24 @@ struct EngineFetchCommand: AsyncParsableCommand {
             ui.line("\(engine.module) \(engine.version): \(engine.prepared ? "prepared" : "already here"), \(engine.tree.path)")
         }
         ui.success("\(modules.count) engine\(modules.count == 1 ? "" : "s") in the store.")
+    }
+}
+
+struct EngineCheckCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "check",
+        abstract: "Check every engine's downloads are still where their modules say.",
+        discussion: "Asks each source's first URL for its headers, as sc release does before releasing."
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    func run() async throws {
+        let session = try Session.start(global)
+        let problems = try await EngineSources.check(modules: session.repo.modules)
+        for problem in problems { session.ui.line(problem.description) }
+        guard problems.isEmpty else { throw SCError("\(problems.count) engine download\(problems.count == 1 ? "" : "s") aren't where their modules say.") }
+        session.ui.success("Every engine's downloads are where their modules say.")
     }
 }
 

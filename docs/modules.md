@@ -115,7 +115,10 @@ then signs it.
 ```
 
 A new version is added without `prepared`, prepared, and given the hash
-`sc engine prepare` prints. Changing a package changes the module's folder,
+`sc engine prepare` prints. Give each source a second URL where one exists
+(the Wayback Machine's copy, its `id_` form, checked against the hash), and
+`sc release` refuses to release while a source's first URL doesn't answer
+with its size (`sc engine check`). Changing a package changes the module's folder,
 so it needs a new release, as any change does.
 
 ### The engine store

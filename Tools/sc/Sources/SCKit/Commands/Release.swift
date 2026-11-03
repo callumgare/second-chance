@@ -134,6 +134,19 @@ private struct Release {
         }
     }
 
+    /// Refuse to release while an engine's download has gone from where its
+    /// module says: Second Chance carries no engine, so nobody who hasn't
+    /// prepared it already could build a game that needs it.
+    private func checkEngineSources() async throws {
+        let problems = try await ui.progressStep("Engine downloads", success: "Engine downloads are where their modules say") { _ in
+            try await EngineSources.check(modules: repo.modules)
+        }
+        guard problems.isEmpty else {
+            throw SCError("Release stopped: an engine's download isn't where its module says.",
+                          hints: problems.map(\.description) + ["Point the module at where it is now (docs/modules.md#engine-packages)."])
+        }
+    }
+
     /// Run the linters. On a failure, ask whether to release anyway, defaulting
     /// to no; a dry run only reports it, and a run that can't ask stops.
     private func checkLint() async throws {
@@ -188,6 +201,7 @@ private struct Release {
         // Lint, before anything is generated: a release can go out with lint
         // failures, but only when someone says so.
         try await checkLint()
+        try await checkEngineSources()
 
         // Asked now, while someone is here to answer: the tests, build and
         // symbols upload take long enough that they may have walked away,

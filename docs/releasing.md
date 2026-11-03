@@ -14,6 +14,12 @@ does ([dev-cli.md](dev-cli.md#lint)). If they find anything it shows what, and
 asks whether to release anyway, defaulting to no; a run that can't ask stops.
 A dry run only reports what they found.
 
+Then it checks that every engine's downloads are still where their modules
+say (`sc engine check`, [modules.md](modules.md#engine-packages)): Second
+Chance carries no engine, so a release whose engine can't be fetched builds
+nothing for anyone who hasn't prepared it already. One that has gone stops
+the release, naming it.
+
 Then, before the long part of the run, it asks whether to publish the release
 as soon as it's built rather than stop for you to check the build first,
 defaulting to no ([Publishing](#publishing)). The tests, build and symbol
