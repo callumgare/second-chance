@@ -55,7 +55,7 @@ class GameInstallerRunner {
         installerName: String? = nil,
         unattended: Bool,
         confirmPatchFailure: PatchFailureConfirmation,
-        chooseGameProgram: ([String]) throws -> String
+        chooseGameProgram: ([String]) async throws -> String
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
@@ -143,7 +143,7 @@ class GameInstallerRunner {
 
                 // Try to find the game executable
                 do {
-                    gameExe = try findGameExecutable(
+                    gameExe = try await findGameExecutable(
                         before: exesBefore,
                         after: exesAfter,
                         expectedPath: gameInfo.internalGameExePath,
@@ -868,8 +868,8 @@ class GameInstallerRunner {
         after: Set<String>,
         expectedPath: String?,
         driveCPath: URL,
-        choose: ([String]) throws -> String
-    ) throws -> URL {
+        choose: ([String]) async throws -> String
+    ) async throws -> URL {
         logger.notice("=== Searching for game executable ===")
 
         // Find new executables
@@ -931,7 +931,7 @@ class GameInstallerRunner {
         }
         if !ranked.isEmpty {
             let names = ranked.map { Self.windowsPath(of: $0, driveC: driveCPath) }
-            let chosen = try choose(names)
+            let chosen = try await choose(names)
             guard let index = names.firstIndex(of: chosen) else { throw WrappBuildError.gameExecutableNotFound }
             logger.notice("Using the chosen executable: \(ranked[index].path)")
             return ranked[index]

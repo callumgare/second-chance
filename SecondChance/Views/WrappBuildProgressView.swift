@@ -16,8 +16,6 @@ struct WrappBuildProgressView: View {
             completed
         } else if let question = viewModel.successReportsQuestion {
             successReports(question)
-        } else if let question = viewModel.question {
-            buildQuestion(question)
         } else {
             inProgress
         }
@@ -63,47 +61,6 @@ struct WrappBuildProgressView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-    }
-
-    @State private var chosenAnswer: Int?
-
-    /// A question the build asks (`BuildQuestion`): its choices in a list,
-    /// the first picked to start with. Double-clicking one picks it.
-    private func buildQuestion(_ question: WrappBuildViewModel.BuildQuestion) -> some View {
-        InstallerPage(title: question.title) {
-            Text(question.detail)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            List(question.choices.indices, id: \.self, selection: $chosenAnswer) { index in
-                let choice = question.choices[index]
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(choice.title)
-                    if let detail = choice.detail {
-                        Text(detail)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(.vertical, choice.detail == nil ? 0 : 4)
-            }
-            .listStyle(.bordered)
-            .contextMenu(forSelectionType: Int.self) { _ in
-            } primaryAction: { selection in
-                if let index = selection.first { viewModel.answerQuestion(index) }
-            }
-            .accessibilityLabel(question.choicesLabel)
-        } leading: {
-            EmptyView()
-        } trailing: {
-            Button("Cancel") { viewModel.answerQuestion(nil) }
-                .keyboardShortcut(.cancelAction)
-            Button("Continue") { viewModel.answerQuestion(chosenAnswer) }
-                .keyboardShortcut(.defaultAction)
-                .disabled(chosenAnswer == nil)
-        }
-        .onAppear { chosenAnswer = question.choices.isEmpty ? nil : 0 }
-        .accessibilityIdentifier("build-question")
     }
 
     private var gameName: String? {

@@ -143,47 +143,67 @@ nonisolated public struct SteamLockHolder: Sendable, Equatable {
         return choices.indices.contains(index) ? choices[index] : .cancel
     }
 
-    /// The alert `ask` shows, and what each of its buttons chooses.
-    @MainActor
+    /// What `ask` asks: a title, the explanation, and a button for each
+    /// choice. A build shows it as a page of Second Chance's window, and
+    /// a game's app as an alert.
+    public struct Prompt {
+        public struct Button {
+            public let title: String
+            public let choice: Choice
+            /// It loses something: a game quit without saving.
+            public let destructive: Bool
+        }
+        public let title: String
+        public let detail: String
+        /// In order: Try Again first, as the way on.
+        public let buttons: [Button]
+    }
+
+    /// What to ask about the holder.
     ///
     /// `blocked` is a whole sentence saying what is waiting: "Old Clock
-    /// can't start until it quits." The alert's text is whole sentences
-    /// either side of it, so each can be translated as one.
-    func alert(blocked: String) -> (NSAlert, [Choice]) {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
+    /// can't start until it quits." The text is whole sentences either side
+    /// of it, so each can be translated as one.
+    public func prompt(blocked: String) -> Prompt {
         let oneAtATime = String(localized: "Only one game can use Steam at a time.")
-        let tryAgain = String(localized: "Try Again"), cancel = String(localized: "Cancel")
+        let tryAgain = Prompt.Button(title: String(localized: "Try Again"), choice: .tryAgain, destructive: false)
+        let cancel = Prompt.Button(title: String(localized: "Cancel"), choice: .cancel, destructive: false)
         if isBuild {
-            alert.messageText = String(localized: "Second Chance is adding a game from Steam")
-            alert.informativeText = [oneAtATime, blocked, String(localized: "Wait for Second Chance to finish, then try again.")]
-                .joined(separator: " ")
-            alert.addButton(withTitle: tryAgain)
-            alert.addButton(withTitle: cancel)
-            return (alert, [.tryAgain, .cancel])
+            return Prompt(title: String(localized: "Second Chance is adding a game from Steam"),
+                          detail: [oneAtATime, blocked, String(localized: "Wait for Second Chance to finish, then try again.")]
+                              .joined(separator: " "),
+                          buttons: [tryAgain, cancel])
         }
-        if let name = name.map(Self.quoted) {
-            alert.messageText = String(localized: "\(name) is using Steam")
-        } else {
-            alert.messageText = String(localized: "Another game is using Steam")
-        }
+        let title = name.map(Self.quoted).map { String(localized: "\($0) is using Steam") }
+            ?? String(localized: "Another game is using Steam")
         if canQuit, let name = name.map(Self.quoted) {
             // Quitting it themselves comes first: they can save before it
             // goes. Having it quit for them is the fallback, offered last.
-            alert.informativeText = [oneAtATime, blocked, String(localized: "Save your game in \(name) and quit it, then click Try Again.")]
+            let detail = [oneAtATime, blocked, String(localized: "Save your game in \(name) and quit it, then click Try Again.")]
                 .joined(separator: " ") + "\n\n"
                 + String(localized: "If \(name) won't quit, Second Chance can quit it for you, but anything you haven't saved in it will be lost.")
-            alert.addButton(withTitle: tryAgain)
-            alert.addButton(withTitle: cancel)
+            let quit = Prompt.Button(title: String(localized: "Quit It Without Saving"), choice: .quitHolder, destructive: true)
+            return Prompt(title: title, detail: detail, buttons: [tryAgain, cancel, quit])
+        }
+        return Prompt(title: title,
+                      detail: [oneAtATime, blocked, String(localized: "Quit it, then click Try Again.")].joined(separator: " "),
+                      buttons: [tryAgain, cancel])
+    }
+
+    /// The alert `ask` shows, and what each of its buttons chooses.
+    @MainActor
+    func alert(blocked: String) -> (NSAlert, [Choice]) {
+        let prompt = prompt(blocked: blocked)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.detail
+        for button in prompt.buttons {
             // Destructive, as macOS marks a button that loses work. It's the
             // only warning style an alert button takes: macOS 26 ignores a
             // red title (`contentTintColor`, `attributedTitle`).
-            alert.addButton(withTitle: String(localized: "Quit It Without Saving")).hasDestructiveAction = true
-            return (alert, [.tryAgain, .cancel, .quitHolder])
+            alert.addButton(withTitle: button.title).hasDestructiveAction = button.destructive
         }
-        alert.informativeText = [oneAtATime, blocked, String(localized: "Quit it, then click Try Again.")].joined(separator: " ")
-        alert.addButton(withTitle: tryAgain)
-        alert.addButton(withTitle: cancel)
-        return (alert, [.tryAgain, .cancel])
+        return (alert, prompt.buttons.map(\.choice))
     }
 }

@@ -82,7 +82,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// recognises and the person would rather choose another download.
     private func checkRecognised(_ gameInfo: GameInfo, input: WrappBuildInput) async throws {
         guard gameInfo.id == GameInfo.unknownGame.id else { return }
-        if try input.askAboutUnrecognisedGame(.herDownload) == .chooseAnother {
+        if try await input.askAboutUnrecognisedGame(.herDownload) == .chooseAnother {
             throw ChooseAnotherDownload()
         }
     }

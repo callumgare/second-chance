@@ -23,6 +23,9 @@
     "%@ (in another language)" : {
 
     },
+    "%@ comes on two discs, and disc 1 has been copied. Take it out and put in disc 2: installing carries on by itself once it's in. If disc 2 is already on this Mac, choose it instead." : {
+
+    },
     "%@ didn't quit." : {
 
     },
@@ -252,7 +255,10 @@
     "Choose Another Place" : {
 
     },
-    "Choose Where to Save" : {
+    "Choose Disc 2…" : {
+
+    },
+    "Choose Where to Save…" : {
 
     },
     "Choose where to save the app for %@. Your Applications folder is a good place: you'll find it there with your other apps." : {
@@ -334,6 +340,9 @@
 
     },
     "Details" : {
+
+    },
+    "Disc 1 couldn't be ejected. Eject it from the Finder and put in disc 2: installing carries on by itself once it's in. If disc 2 is already on this Mac, choose it instead." : {
 
     },
     "Don't Send" : {
@@ -590,6 +599,9 @@
 
     },
     "Play Now" : {
+
+    },
+    "Programs" : {
 
     },
     "Putting the report together…" : {
@@ -914,6 +926,9 @@
     "The game didn't install completely. Try again." : {
 
     },
+    "The game installed several programs, and Second Chance can't tell which one is the game. The likeliest is chosen for you." : {
+
+    },
     "The game quit before it showed anything." : {
 
     },
@@ -1024,6 +1039,9 @@
     "Waiting for a previous copy of the game to finish closing…" : {
 
     },
+    "Waiting for disc 2…" : {
+
+    },
     "Waiting for the download to start" : {
 
     },
@@ -1073,6 +1091,9 @@
 
     },
     "Which program should it try?" : {
+
+    },
+    "Which program starts the game?" : {
 
     },
     "Yes" : {

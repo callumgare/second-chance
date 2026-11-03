@@ -7,7 +7,8 @@
 //  decision), confirmations, and callbacks.
 //
 //  Every path/choice method checks a corresponding env var FIRST; if set, it
-//  is used with no UI. If unset, the user is prompted (NSOpenPanel/NSAlert).
+//  is used with no UI. If unset, the user is asked: in the main window
+//  (`BuildQuestion`), or with an open panel or an alert.
 //  This eliminates the old Interactive / NonInteractive context split — the
 //  same code path handles both modes. Headless mode is just "all env vars
 //  set, no prompts."
@@ -32,12 +33,12 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | Method                        | Env var override                        | Fallback (no env var)          |
 /// |-------------------------------|-----------------------------------------|--------------------------------|
 /// | `getDisk1Path()`              | `DISK_1_PATH`                           | NSOpenPanel (disk/ISO)         |
-/// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | Ejects disc 1; NSAlert answered by disc 2 going in, else NSOpenPanel |
+/// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | Ejects disc 1; main window, answered by disc 2 going in, or NSOpenPanel |
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | main window, the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | main window, two choices       |
-/// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
+/// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | main window: try again, quit, cancel |
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `bigFishGameFromEnvironment`  | `BIG_FISH_GAME_SLUG`                    | nil: asked after sign-in       |
 /// | `chooseBigFishGame(from:)`    | — (only asked when the above is nil)    | main window, the owned games   |
@@ -46,9 +47,9 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
 /// | `getSaveLocation(for:)`       | `OUTPUT_PATH` (replaces an older app)    | NSOpenPanel; cancelling asks to choose again or start over; asks before replacing |
 /// | `shouldLaunchGame()`          | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS`       | `(false, [])`                  |
-/// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | NSAlert                        |
-/// | `askAboutUnrecognisedGame(_:)` | — (headless: installs it anyway)       | NSAlert: choose another, install anyway, cancel |
-/// | `chooseGameProgram(among:)`   | — (headless: the first, as ranked)      | NSAlert with the programs      |
+/// | `confirmPatchFailure()`       | `PATCH_FAILURE_POLICY`                  | main window                    |
+/// | `askAboutUnrecognisedGame(_:)` | — (headless: installs it anyway)       | main window: choose another, install anyway, cancel |
+/// | `chooseGameProgram(among:)`   | — (headless: the first, as ranked)      | main window, the programs      |
 /// | `ensureRosetta(bus:)`         | — (headless: fails if it's missing)     | NSAlert offering to install it |
 /// | `onGameDetected()`            | `EXPECTED_GAME_SLUG` (fails on mismatch)| accepts whatever was detected  |
 ///
@@ -72,6 +73,25 @@ class WrappBuildInput {
     private func cancelledBeforeStart() -> WrappBuildError {
         viewModel?.windDownAfterCancelledQuestion()
         return .userCancelledBeforeStart
+    }
+
+    typealias Question = WrappBuildViewModel.BuildQuestion
+
+    /// Cancel and Continue, for a question with a list to pick from.
+    static var cancelOrContinue: [Question.Action] {
+        [.init(title: String(localized: "Cancel"), role: .cancel),
+         .init(title: String(localized: "Continue"), role: .primary)]
+    }
+
+    /// Ask `question` in the main window, and wait for the answer: nil when
+    /// it was withdrawn, the build cancelled, or there's no window to ask in.
+    @MainActor
+    private func ask(_ question: Question) async -> WrappBuildViewModel.BuildAnswer? {
+        guard let viewModel else {
+            logger.warning("No window to ask \"\(question.title)\" in: taken as cancelled")
+            return nil
+        }
+        return await viewModel.ask(question)
     }
 
     // MARK: - Input Paths
@@ -114,47 +134,92 @@ class WrappBuildInput {
         // Disc 1 is done with: out it comes, rather than asking for a click.
         var ejectFailed = !(await Self.eject(disc1Volume))
         while true {
-            let alert = NSAlert()
-            alert.messageText = String(localized: "Now put in disc 2")
-            alert.informativeText = ejectFailed
-                ? "Disc 1 couldn't be ejected. Eject it from the Finder and put in disc 2: installing carries on by itself once it's in."
-                : "\(gameInfo.title) comes on two discs, and disc 1 has been copied. Take it out and put in disc 2: installing carries on by itself once it's in."
-            alert.addButton(withTitle: String(localized: "Continue"))
-            if ejectFailed {
-                alert.addButton(withTitle: String(localized: "Eject Disc 1"))
-            }
-            alert.addButton(withTitle: String(localized: "Cancel"))
-            // A new disc going in answers the alert: Disk Arbitration says
-            // when it has mounted, which is what Continue was waiting for.
+            let (question, eject, choose) = Self.disc2Question(for: gameInfo, ejectFailed: ejectFailed)
+            // A new disc going in answers the question: Disk Arbitration says
+            // when it has mounted.
             var inserted: URL?
-            let watcher = DiscMountWatcher { volume in
+            let watcher = DiscMountWatcher { [weak viewModel] volume in
                 guard volume != disc1Volume, !volumesBefore.contains(volume),
                       Self.ejectableVolumes().contains(volume) else { return }
                 inserted = volume
-                NSApp.abortModal()
+                viewModel?.withdrawQuestion()
             }
-            let response = alert.runModalAskingForAttention()
+            let answer = await ask(question)
             watcher.stop()
             if let inserted {
                 logger.notice("Disc 2 went in: \(inserted.path)")
                 return inserted
             }
-            switch response {
-            case .alertFirstButtonReturn:
+            switch answer?.action {
+            case choose:
                 // A disc that wasn't there before, other than disc 1, is disc 2.
                 let new = Self.ejectableVolumes().filter { $0 != disc1Volume && !volumesBefore.contains($0) }
                 if new.count == 1 {
                     logger.notice("Disc 2 found in the drive: \(new[0].path)")
                     return new[0]
                 }
-                guard let url = await selectDisc(message: pickerMessage) else { throw WrappBuildError.userCancelled }
-                return url
-            case .alertSecondButtonReturn where ejectFailed:
+                if let url = await selectDisc(message: pickerMessage) { return url }
+                // Cancelling the panel goes back to waiting for the disc.
+            case eject where eject != nil:
                 ejectFailed = !(await Self.eject(disc1Volume))
             default:
                 throw WrappBuildError.userCancelled
             }
         }
+    }
+
+    // MARK: - Questions
+
+    /// Which game to get from Steam, of the `games` the account owns.
+    static func steamGameQuestion(_ games: [GameInfo]) -> Question {
+        Question(
+            title: String(localized: "Which game do you want from Steam?"),
+            detail: String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."),
+            choicesLabel: String(localized: "Games"),
+            choices: games.map { .init(title: $0.title) },
+            actions: cancelOrContinue,
+            step: .source,
+            comesToFront: true)
+    }
+
+    /// How a DRM-free Steam game should start: `.direct`, then `.steam`.
+    static func launchModeQuestion(for game: GameInfo) -> Question {
+        Question(
+            title: String(localized: "How should \(game.title) start?"),
+            detail: String(localized: "Either way it's the same game. They differ in how quickly it starts and where your saves are kept."),
+            choicesLabel: String(localized: "Ways to start the game"),
+            choices: [
+                .init(title: String(localized: "Launch Directly"),
+                      detail: String(localized: "Starts faster and is more reliable, but saves stay on this Mac.")),
+                .init(title: String(localized: "Launch via Steam"),
+                      detail: String(localized: "Keeps your saves in Steam Cloud, but starts slower.")),
+            ],
+            actions: cancelOrContinue,
+            step: .source)
+    }
+
+    /// Put in disc 2, with which of its buttons ejects disc 1 (offered once
+    /// that has failed) and which chooses disc 2 in an open panel.
+    static func disc2Question(for gameInfo: GameInfo, ejectFailed: Bool) -> (Question, eject: Int?, choose: Int) {
+        var actions: [Question.Action] = [.init(title: String(localized: "Cancel"), role: .cancel)]
+        let eject = ejectFailed ? actions.count : nil
+        if ejectFailed { actions.append(.init(title: String(localized: "Eject Disc 1"))) }
+        let choose = actions.count
+        actions.append(.init(title: String(localized: "Choose Disc 2…"), role: .primary))
+        let question = Question(
+            title: String(localized: "Now put in disc 2"),
+            detail: ejectFailed
+                ? String(localized: """
+                    Disc 1 couldn't be ejected. Eject it from the Finder and put in disc 2: installing carries on by \
+                    itself once it's in. If disc 2 is already on this Mac, choose it instead.
+                    """)
+                : String(localized: """
+                    \(gameInfo.title) comes on two discs, and disc 1 has been copied. Take it out and put in disc 2: \
+                    installing carries on by itself once it's in. If disc 2 is already on this Mac, choose it instead.
+                    """),
+            actions: actions,
+            waiting: String(localized: "Waiting for disc 2…"))
+        return (question, eject, choose)
     }
 
     /// Eject the disc at `volume`, off the main thread (it can take a few
@@ -270,12 +335,8 @@ class WrappBuildInput {
         // (and so `owned` arrives): how the series is known.
         let games = owned
 
-        let question = WrappBuildViewModel.BuildQuestion(
-            title: String(localized: "Which game do you want from Steam?"),
-            detail: String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."),
-            choicesLabel: String(localized: "Games"),
-            choices: games.map { .init(title: $0.title) })
-        guard let viewModel, let chosen = await viewModel.ask(question) else {
+        let question = Self.steamGameQuestion(games)
+        guard let answer = await ask(question), answer.action == 1, let chosen = answer.choice else {
             // The first question the user is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }
@@ -296,17 +357,8 @@ class WrappBuildInput {
         if isHeadlessRun { return .direct }
 
         let modes: [GameInfo.SteamLaunchMode] = [.direct, .steam]
-        let question = WrappBuildViewModel.BuildQuestion(
-            title: String(localized: "How should \(game.title) start?"),
-            detail: String(localized: "Either way it's the same game. They differ in how quickly it starts and where your saves are kept."),
-            choicesLabel: String(localized: "Ways to start the game"),
-            choices: [
-                .init(title: String(localized: "Launch Directly"),
-                      detail: String(localized: "Starts faster and is more reliable, but saves stay on this Mac.")),
-                .init(title: String(localized: "Launch via Steam"),
-                      detail: String(localized: "Keeps your saves in Steam Cloud, but starts slower.")),
-            ])
-        guard let viewModel, let chosen = await viewModel.ask(question) else {
+        let question = Self.launchModeQuestion(for: game)
+        guard let answer = await ask(question), answer.action == 1, let chosen = answer.choice else {
             // Nothing is installed yet: back to the welcome screen.
             throw cancelledBeforeStart()
         }
@@ -321,7 +373,14 @@ class WrappBuildInput {
     @MainActor
     func askAboutSteamInUse(_ holder: SteamLockHolder) async -> SteamLockHolder.Choice? {
         if isHeadlessRun { return nil }
-        return holder.ask(blocked: String(localized: "The game you're adding can't be installed until it quits."))
+        let prompt = holder.prompt(blocked: String(localized: "The game you're adding can't be installed until it quits."))
+        let question = Question(
+            title: prompt.title, detail: prompt.detail,
+            actions: prompt.buttons.map {
+                .init(title: $0.title, role: $0.destructive ? .destructive : $0.choice == .tryAgain ? .primary : $0.choice == .cancel ? .cancel : .other)
+            })
+        guard let answer = await ask(question) else { return .cancel }
+        return prompt.buttons[answer.action].choice
     }
 
     /// Whether the person has asked, from the progress screen's notice that
@@ -370,15 +429,18 @@ class WrappBuildInput {
     @MainActor
     func chooseBigFishGame(from owned: [BigFishGameChoice]) async throws -> BigFishGameChoice {
         if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("BIG_FISH_GAME_SLUG") }
-        let question = WrappBuildViewModel.BuildQuestion(
+        let question = Question(
             title: String(localized: "Which game do you want from Big Fish Games?"),
             detail: String(localized: """
                 These are the Nancy Drew games your Big Fish Games account has. \
                 Second Chance installs the one you pick through Big Fish's Game Manager.
                 """),
             choicesLabel: String(localized: "Games"),
-            choices: owned.map { .init(title: $0.displayName) })
-        guard let viewModel, let chosen = await viewModel.ask(question) else {
+            choices: owned.map { .init(title: $0.displayName) },
+            actions: Self.cancelOrContinue,
+            step: .source,
+            comesToFront: true)
+        guard let answer = await ask(question), answer.action == 1, let chosen = answer.choice else {
             // The first question the person is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }
@@ -408,7 +470,7 @@ class WrappBuildInput {
 
         while true {
             guard let folder = await chooseOutputFolder(for: gameInfo) else {
-                if askChooseAgainOrStartOver(gameInfo) { continue }
+                if await askChooseAgainOrStartOver(gameInfo) { continue }
                 throw WrappBuildError.userCancelled
             }
             let destination = folder.appendingPathComponent(gameInfo.appBundleName)
@@ -443,13 +505,13 @@ class WrappBuildInput {
     /// The save panel was cancelled with the game installed: true to choose
     /// a place again, false to start over and throw the install away.
     @MainActor
-    private func askChooseAgainOrStartOver(_ gameInfo: GameInfo) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = String(localized: "\(gameInfo.title) is installed, but not saved yet")
-        alert.informativeText = String(localized: "Choose where to save the game's app to keep it. Starting over throws away the game that was just installed.")
-        alert.addButton(withTitle: String(localized: "Choose Where to Save"))
-        alert.addButton(withTitle: String(localized: "Start Over"))
-        return alert.runModalAskingForAttention() == .alertFirstButtonReturn
+    private func askChooseAgainOrStartOver(_ gameInfo: GameInfo) async -> Bool {
+        let question = Question(
+            title: String(localized: "\(gameInfo.title) is installed, but not saved yet"),
+            detail: String(localized: "Choose where to save the game's app to keep it. Starting over throws away the game that was just installed."),
+            actions: [.init(title: String(localized: "Start Over"), role: .destructive),
+                      .init(title: String(localized: "Choose Where to Save…"), role: .primary)])
+        return await ask(question)?.action == 1
     }
 
     /// The game's app is already at `destination`: true to replace it,
@@ -523,18 +585,17 @@ class WrappBuildInput {
 
         if isHeadlessRun { return true }
 
-        let alert = NSAlert()
-        alert.messageText = String(localized: "A fix for the game couldn't be added")
-        alert.informativeText = String(localized: """
-            Her Interactive made a fix for this game, "\(patch.title)", and Second Chance couldn't add it. \
-            The game will still work without it. What it fixes:
+        let question = Question(
+            title: String(localized: "A fix for the game couldn't be added"),
+            detail: String(localized: """
+                Her Interactive made a fix for this game, "\(patch.title)", and Second Chance couldn't add it. \
+                The game will still work without it. What it fixes:
 
-            \(patch.fixes)
-            """)
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: String(localized: "Continue Without It"))
-        alert.addButton(withTitle: String(localized: "Stop Installing"))
-        return alert.runModalAskingForAttention() == .alertFirstButtonReturn
+                \(patch.fixes)
+                """),
+            actions: [.init(title: String(localized: "Stop Installing"), role: .cancel),
+                      .init(title: String(localized: "Continue Without It"), role: .primary)])
+        return await ask(question)?.action == 1
     }
 
     /// What to do with a disc or download whose game wasn't recognised.
@@ -550,34 +611,31 @@ class WrappBuildInput {
     /// welcome screen, as nothing has been built yet. A headless run
     /// installs it anyway, as one always has.
     @MainActor
-    func askAboutUnrecognisedGame(_ source: WrappSource) throws -> UnrecognisedGameChoice {
+    func askAboutUnrecognisedGame(_ source: WrappSource) async throws -> UnrecognisedGameChoice {
         if isHeadlessRun { return .installAnyway }
 
         let what = source == .disk ? "disc" : "download"
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Second Chance doesn't recognise this game")
         // Whole sentences for each, so each translates whole.
-        if source == .disk {
-            alert.informativeText = String(localized: """
-                It may be the wrong disc, or a game Second Chance doesn't know. \
-                You can choose another disc, or install it anyway, though it may not work.
-                """)
-        } else {
-            alert.informativeText = String(localized: """
-                It may be the wrong download, or a game Second Chance doesn't know. \
-                You can choose another download, or install it anyway, though it may not work.
-                """)
-        }
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: source == .disk
-                        ? String(localized: "Choose Another Disc…") : String(localized: "Choose Another Download…"))
-        alert.addButton(withTitle: String(localized: "Install Anyway"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        switch alert.runModalAskingForAttention() {
-        case .alertFirstButtonReturn:
+        let question = Question(
+            title: String(localized: "Second Chance doesn't recognise this game"),
+            detail: source == .disk
+                ? String(localized: """
+                    It may be the wrong disc, or a game Second Chance doesn't know. \
+                    You can choose another disc, or install it anyway, though it may not work.
+                    """)
+                : String(localized: """
+                    It may be the wrong download, or a game Second Chance doesn't know. \
+                    You can choose another download, or install it anyway, though it may not work.
+                    """),
+            actions: [.init(title: String(localized: "Install Anyway")),
+                      .init(title: String(localized: "Cancel"), role: .cancel),
+                      .init(title: source == .disk ? String(localized: "Choose Another Disc…") : String(localized: "Choose Another Download…"),
+                            role: .primary)])
+        switch await ask(question)?.action {
+        case 2:
             logger.notice("Unrecognised game: choosing another \(what)")
             return .chooseAnother
-        case .alertSecondButtonReturn:
+        case 0:
             logger.notice("Unrecognised game: installing it anyway")
             return .installAnyway
         default:
@@ -599,43 +657,32 @@ class WrappBuildInput {
     /// when there are several, or another disc; cancelling goes back to the
     /// welcome screen. A headless run tries the first, as one always has.
     @MainActor
-    func askAboutUnidentifiedInstaller(programs: [String]) throws -> UnidentifiedInstallerChoice {
+    func askAboutUnidentifiedInstaller(programs: [String]) async throws -> UnidentifiedInstallerChoice {
         guard let first = programs.first else { throw WrappBuildError.installerNotFound }
         if isHeadlessRun {
             logger.warning("No installer recognised on the disc: trying \(first)")
             return .tryProgram(first)
         }
 
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Second Chance couldn't find this disc's installer")
-        alert.informativeText = String(localized: """
-            It may be a disc Second Chance doesn't know, such as a special edition or one in another language. \
-            You can choose another disc, or try a program on it to install the game, though it may not work.
-            """)
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: String(localized: "Try It"))
-        alert.addButton(withTitle: String(localized: "Choose Another Disc…"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-
-        var picker: NSPopUpButton?
-        if programs.count > 1 {
-            let label = NSTextField(labelWithString: String(localized: "Which program should it try?"))
-            let popUp = NSPopUpButton(frame: .zero, pullsDown: false)
-            popUp.addItems(withTitles: programs)
-            let stack = NSStackView(views: [label, popUp])
-            stack.orientation = .vertical
-            stack.alignment = .leading
-            stack.frame = NSRect(x: 0, y: 0, width: 300, height: 52)
-            alert.accessoryView = stack
-            picker = popUp
-        }
-
-        switch alert.runModalAskingForAttention() {
-        case .alertFirstButtonReturn:
-            let program = picker?.titleOfSelectedItem ?? first
+        // With several, which to try is picked from a list.
+        let question = Question(
+            title: String(localized: "Second Chance couldn't find this disc's installer"),
+            detail: String(localized: """
+                It may be a disc Second Chance doesn't know, such as a special edition or one in another language. \
+                You can choose another disc, or try a program on it to install the game, though it may not work.
+                """),
+            choicesLabel: String(localized: "Which program should it try?"),
+            choices: programs.count > 1 ? programs.map { .init(title: $0) } : [],
+            actions: [.init(title: String(localized: "Choose Another Disc…")),
+                      .init(title: String(localized: "Cancel"), role: .cancel),
+                      .init(title: String(localized: "Try It"), role: .primary)])
+        let answer = await ask(question)
+        switch answer?.action {
+        case 2:
+            let program = answer?.choice.map { programs[$0] } ?? first
             logger.notice("No installer recognised: trying \(program)")
             return .tryProgram(program)
-        case .alertSecondButtonReturn:
+        case 0:
             logger.notice("No installer recognised: choosing another disc")
             return .chooseAnother
         default:
@@ -649,26 +696,24 @@ class WrappBuildInput {
     /// comes ranked, likeliest first (`GameInstallerRunner.rankedGamePrograms`),
     /// and the list starts on the first. A headless run takes that one.
     @MainActor
-    func chooseGameProgram(among programs: [String]) throws -> String {
+    func chooseGameProgram(among programs: [String]) async throws -> String {
         guard let first = programs.first else { throw WrappBuildError.gameExecutableNotFound }
         if isHeadlessRun {
             logger.warning("More than one program could be the game: using \(first)")
             return first
         }
 
-        let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 420, height: 26), pullsDown: false)
-        menu.addItems(withTitles: programs)
-        let alert = NSAlert()
-        alert.messageText = "Which program starts the game?"
-        alert.informativeText = "The game installed several programs, and Second Chance can't tell "
-            + "which one is the game. The likeliest is chosen for you."
-        alert.accessoryView = menu
-        alert.addButton(withTitle: "Continue")
-        alert.addButton(withTitle: "Cancel")
-        guard alert.runModal() == .alertFirstButtonReturn, let chosen = menu.titleOfSelectedItem else {
+        let question = Question(
+            title: String(localized: "Which program starts the game?"),
+            detail: String(localized: "The game installed several programs, and Second Chance can't tell which one is the game. The likeliest is chosen for you."),
+            choicesLabel: String(localized: "Programs"),
+            choices: programs.map { .init(title: $0) },
+            actions: Self.cancelOrContinue)
+        guard let answer = await ask(question), answer.action == 1, let index = answer.choice else {
             logger.notice("Choosing the game's program: cancelled")
             throw WrappBuildError.userCancelled
         }
+        let chosen = programs[index]
         logger.notice("Chosen as the game's program: \(chosen)")
         return chosen
     }

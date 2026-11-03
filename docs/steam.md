@@ -357,7 +357,9 @@ means: a cancel or a failure for a build, a quiet end to a wrapp's launch.
 `SteamLockHolder.name` is
 the holding wrapp's name as the person knows it (its game's title, from the
 running app), found only while the pid in the record is still an app with
-that bundle ID. `ask` shows the choice a build and a wrapp both offer:
+that bundle ID. `ask` shows the choice a build and a wrapp both offer, as an
+alert in a wrapp; a build asks the same `prompt` as a page of Second Chance's
+window (`BuildQuestion`):
 
 - **Try Again**, the default. The alert asks them to save their game and
   quit it themselves, then click this.
@@ -365,7 +367,7 @@ that bundle ID. `ask` shows the choice a build and a wrapp both offer:
   quit; the alert says that anything not saved in it will be lost, and the
   button is marked as losing work: `hasDestructiveAction` on the alert (the
   only warning style macOS 26 lets an alert button take; it ignores a red
-  title), and a red title on the error screen, where SwiftUI's
+  title), and a red title on the error screen and the build's page, where SwiftUI's
   `role: .destructive` alone draws no colour on a push button. `quit` asks the
   wrapp to quit as Cmd-Q would, which stops its Steam and saves the sign-in
   back. A wrapp still running 40 s later gets SIGTERM, which it treats as a

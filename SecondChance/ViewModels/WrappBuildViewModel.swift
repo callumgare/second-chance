@@ -84,24 +84,57 @@ class WrappBuildViewModel {
     @ObservationIgnored private var successReportsAnswered: CheckedContinuation<Void, Never>?
 
     /// A question the build asks part way through, which the main window
-    /// shows in place of the build's progress (whose last step is over):
-    /// which game to get from a store, once it has said which the account
-    /// owns, and how a DRM-free Steam game should start.
+    /// shows as a page of its own, in place of the build's progress: which
+    /// game to get from a store, what to do about a disc it doesn't
+    /// recognise, putting in disc 2, and the rest (`WrappBuildInput`).
     struct BuildQuestion {
+        /// One of a list to pick from.
         struct Choice {
             let title: String
             /// What picking it means, beneath it, if it needs saying.
             var detail: String?
         }
+        /// A button along the bottom.
+        struct Action {
+            enum Role {
+                /// The way on: takes Return, and a double-clicked choice.
+                case primary
+                /// Takes Escape.
+                case cancel
+                /// Loses something (a game that was just installed).
+                case destructive
+                case other
+            }
+            let title: String
+            var role: Role = .other
+        }
         let title: String
         let detail: String
         /// What the list of choices is, for VoiceOver: "Games".
-        let choicesLabel: String
-        let choices: [Choice]
+        var choicesLabel = ""
+        /// A list to pick from, the first picked to start with; none for a
+        /// question its buttons answer alone.
+        var choices: [Choice] = []
+        let actions: [Action]
+        /// What the build is waiting for meanwhile, shown with a spinner: a
+        /// question something else can answer (disc 2 going in).
+        var waiting: String?
+        /// The sidebar's step while it's asked, when not the build's own.
+        var step: InstallerStep?
+        /// Bring Second Chance to the front, as the person has just been in
+        /// another app's window (a store's sign-in); otherwise the Dock
+        /// icon bounces if it's in the background.
+        var comesToFront = false
+    }
+    /// The button a question was answered with (its index in `actions`),
+    /// and the choice picked then, if it has any.
+    struct BuildAnswer {
+        let action: Int
+        let choice: Int?
     }
     /// Set only by `ask`, and by `UIStateCatalog` to picture it.
     var question: BuildQuestion?
-    @ObservationIgnored private var questionAnswered: CheckedContinuation<Int?, Never>?
+    @ObservationIgnored private var questionAnswered: CheckedContinuation<BuildAnswer?, Never>?
 
     /// The failed build's report, for the error screen.
     let failureReport = FailureReportModel()
@@ -358,26 +391,35 @@ class WrappBuildViewModel {
 
     // MARK: - Build questions
 
-    /// Show `question`, and wait for the index of the choice picked, or nil
-    /// if the person cancelled it (or the build).
-    func ask(_ question: BuildQuestion) async -> Int? {
+    /// Show `question`, and wait for its answer: nil when it was withdrawn
+    /// (`withdrawQuestion`) or the build cancelled.
+    func ask(_ question: BuildQuestion) async -> BuildAnswer? {
         await withCheckedContinuation { continuation in
             questionAnswered?.resume(returning: nil)
             questionAnswered = continuation
             self.question = question
-            // The person may have just signed in in a store's window, which
-            // would otherwise stay in front of the question. The plain
-            // activate() is only a request since macOS 14, which that
-            // window, active as they signed in, can keep.
-            NSApp.installerWindow?.orderFront(nil)
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            if question.comesToFront {
+                // The store's window, active as they signed in, would stay in
+                // front of the question otherwise. The plain activate() is
+                // only a request since macOS 14, which that window can keep.
+                NSApp.installerWindow?.orderFront(nil)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            } else {
+                NSApp.askForAttention()
+            }
         }
     }
 
-    func answerQuestion(_ choice: Int?) {
+    func answerQuestion(_ answer: BuildAnswer?) {
         question = nil
-        questionAnswered?.resume(returning: choice)
+        questionAnswered?.resume(returning: answer)
         questionAnswered = nil
+    }
+
+    /// Take the question away unanswered, as something else has answered
+    /// it (disc 2 went in).
+    func withdrawQuestion() {
+        answerQuestion(nil)
     }
 
     /// Drive any builder: build → completed, or route the failure. The bus

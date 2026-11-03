@@ -195,18 +195,30 @@ user is prompted.
 | Method | Env var | Fallback |
 | --- | --- | --- |
 | `getDisk1Path()` | `DISK_1_PATH` | NSOpenPanel (disk/ISO) |
-| `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: it is ejected, and an alert asks for disc 2, answered by disc 2 being put in (`DiscMountWatcher`, as Disk Arbitration reports the mount even while the alert is up), or by Continue; else NSOpenPanel |
+| `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH` | Disc 1 in the drive: it is ejected, and the main window asks for disc 2, answered by disc 2 being put in (`DiscMountWatcher`, which withdraws the question), or by Choose Disc 2…, which opens an NSOpenPanel; else NSOpenPanel |
 | `getHerInstallerPath()` | `HER_INSTALLER_PATH` | NSOpenPanel (.exe, .dmg, or the installer .app in an opened .dmg) |
 | `bigFishGameFromEnvironment(among:)` | `BIG_FISH_GAME_SLUG` | nil: the game is picked once the Game Manager has signed in |
-| `chooseBigFishGame(from:)` | — (headless always names the game) | NSAlert with a popup of the editions the account owns |
+| `chooseBigFishGame(from:)` | — (headless always names the game) | main window, a list of the editions the account owns |
 | `isBigFishTrial` | `BIG_FISH_TRIAL=1` (tests only) | false: the full game |
 | `bigFishTestSignIn` | `BIG_FISH_TEST_SIGN_IN=1` with `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD` (tests only) | nil: the person signs in in the Game Manager's window |
 | `getSaveLocation(for:)` | `OUTPUT_PATH` (an app already there is replaced) | NSOpenPanel save dialog, opening in `/Applications`, or `~/Applications` for someone who can't write there; it turns down a folder that can't be written to while it is still open. Cancelling it doesn't throw the install away: the person is asked whether to choose a place again or start over. A folder that already has the game's app asks before replacing it, and while that copy is open, asks them to quit it first |
 | `shouldLaunchGame()` | `LAUNCH_GAME`, `LAUNCH_GAME_ARGS` | `(false, [])` |
-| `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | NSAlert |
+| `confirmPatchFailure()` | `PATCH_FAILURE_POLICY` | main window |
 
 There are **no separate interactive/non-interactive classes**. Headless is just
 "every env var set, so nothing prompts."
+
+A question the build asks part way through — which game to get from a store,
+how a DRM-free Steam game starts, disc 2, a disc or game it doesn't
+recognise, which program is the game, a patch that failed, Steam in use,
+whether to start over rather than save — is a `BuildQuestion`, which the main
+window shows as a page of its own (`BuildQuestionView`) in place of the
+build's progress, its sidebar left as it is. `WrappBuildViewModel.ask` shows
+one and waits for the button it was answered with, and the choice picked
+from its list if it has one; `withdrawQuestion` takes it away unanswered, as
+disc 2 going in does. Cancelling the build answers it with nothing. Only the
+open panels, the Rosetta question before a build starts, and replacing an app
+that's already there stay as panels and alerts.
 
 The `environment` dictionary is a constructor parameter defaulting to
 `ProcessInfo.processInfo.environment` — which is what makes the table above a
