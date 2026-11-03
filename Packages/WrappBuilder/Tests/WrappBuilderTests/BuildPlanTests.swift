@@ -24,21 +24,22 @@ struct BuildPlanTests {
             "wine.KEEP-DISCS", "installer.RUN", ".RUN", ".EDIT",
         ])
         let install = steps[1]
-        #expect(install.option("into") == installDir)
+        #expect(install.option("into") == "wine:" + installDir)
         #expect(install.option("from") == "disc-1")
         #expect(install.option("answer-file")?.hasSuffix("Bundles/nancy-drew/blue-moon/assets/disc.iss") == true)
         #expect(install.option("answer-file")?.hasPrefix("asset:/") == true)
         // blue-moon-taffy-sort is a wizard: run under AutoIt, from the module's assets.
         let patch = steps[2]
         #expect(patch.name == "blue-moon-taffy-sort")
-        #expect(patch.arguments == ["C:/autoit/AutoIt3.exe", "C:/patch.au3", "\(installDir)/BlueMoon_TaffySort_Patch.exe"]
-                || patch.arguments.first == "C:/autoit/AutoIt3.exe")
+        #expect(patch.arguments == ["wine:C:/autoit/AutoIt3.exe", "C:/patch.au3", "\(installDir)/TRN_Patch.exe"])
+        #expect(patch.description.hasPrefix("RUN --mount=type=fetch,url=https://"))
         let mounts = try #require(patch.options["mount"])
         #expect(mounts.first?.hasPrefix("type=fetch,url=https://") == true)
         #expect(mounts.contains { $0.contains("source=assets/her-update-wizard.au3") })
         #expect(patch.origin.hasPrefix("nancy-drew/functions/patch:"))
         // The module's assemble step, with the bundle's install-dir.
-        #expect(steps[3].arguments == ["\(installDir)/*.ini"])
+        #expect(steps[3].arguments == ["wine:\(installDir)/*.ini"])
+        #expect(plan.stages[1].steps[0].description == "WINE.KEEP-DISCS --combined=wine:C:/nancy-drew-installer/disk-combined --into=wine:C:/nancy-drew-installer")
         #expect(steps[3].option("from-data") == "ini")
     }
 
@@ -63,14 +64,14 @@ struct BuildPlanTests {
         FROM scratch AS only
         USE wine
         IF arch=arm64
-          wine.WINETRICKS arm
+          WINE.WINETRICKS arm
         ELSE IF macos>=26
-          wine.WINETRICKS new
+          WINE.WINETRICKS new
         ELSE
-          wine.WINETRICKS old
+          WINE.WINETRICKS old
         END
         IF updates has fix
-          wine.WINETRICKS fix
+          WINE.WINETRICKS fix
         END
         """)
         let modules = try shippedModules()
@@ -86,6 +87,39 @@ struct BuildPlanTests {
         #expect(try verbs(BuildConditions(arch: "arm64", macos: 15)) == ["arm"])
         #expect(try verbs(BuildConditions(arch: "x86_64", macos: 26)) == ["new"])
         #expect(try verbs(BuildConditions(arch: "x86_64", macos: 15, updates: ["fix"])) == ["old", "fix"])
+    }
+
+    @Test("Short forms come out in full, aliases as ids, and a function's paths are checked in the stage that calls it")
+    func fullForms() throws {
+        let modules = try shippedModules()
+        let loader = try ProgramBundleLoader(root: bundlesRoot, modules: modules)
+        let bundle = try loader.load(bundlesRoot.appendingPathComponent("nancy-drew/old-clock")).get()
+        let file = try WrappfileParser.parse("""
+        FUNCTION drop
+          ARG into
+          REMOVE ${into}/x
+        END
+        FROM scratch AS only
+        USE wine AS w
+        USE dosbox
+        RUN --mount=type=source,from=disc-1,w.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path
+        COPY --from=disc-1 . dosbox:C:/GAME/
+        REMOVE /SharedSupport/x
+        FROM scratch AS lonely
+        USE scummvm
+        DO drop --into=C:/y
+        """)
+        let planner = BuildPlanner(bundle: bundle, wrappfile: file, modules: modules)
+        let context = BuildPlanner.Context(planner: planner, edition: bundle.manifest.editions[0], conditions: .thisMac)
+        let steps = try context.plan(try #require(file.stage(named: "only")), inheriting: [:], isTarget: false).stage.steps
+        #expect(steps.map(\.description) == [
+            "RUN --mount=type=source,from=disc-1,wine.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path",
+            "COPY --from=disc-1 . dosbox:C:/GAME/",
+            "REMOVE /SharedSupport/x",
+        ])
+        #expect(throws: BuildPlanner.PlanError.self) {
+            try context.plan(try #require(file.stage(named: "lonely")), inheriting: [:], isTarget: false)
+        }
     }
 
     @Test("Every edition of every bundle plans")

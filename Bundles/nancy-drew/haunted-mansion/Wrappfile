@@ -12,7 +12,7 @@ USE wine@10                                # set up as the wine module's prefix.
 FROM prefix AS disc
 USE nancy-drew
 USE scummvm
-wine.KEEP-DISCS --into=C:/nancy-drew-installer
+WINE.KEEP-DISCS --into=C:/nancy-drew-installer
 DO nancy-drew.patch --id=haunted-mansion-full --into=C:/nancy-drew-installer/disk-1
 EXPORT C:/nancy-drew-installer/disk-1
 
@@ -23,7 +23,7 @@ ARG install-dir
 USE her-download
 USE nancy-drew
 USE scummvm
-her-download.INSTALL installer --into=${install-dir}
+HER-DOWNLOAD.INSTALL installer --into=${install-dir}
 DO nancy-drew.patch --id=haunted-mansion-full --into=${install-dir}
 
 # Steam's edition names no stage: the steam module's default stages build it.

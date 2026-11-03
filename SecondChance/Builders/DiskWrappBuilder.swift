@@ -180,7 +180,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         for step in plan.stages.flatMap(\.steps) {
             logger.debug("Plan step: \(step) (\(step.origin))")
             switch (step.module, step.instruction) {
-            case ("wine", "KEEP-DISCS") where step.option("into") == "C:/" + WrappLayout.installersFolder:
+            case ("wine", "KEEP-DISCS") where step.option("into") == "wine:C:/" + WrappLayout.installersFolder:
                 try await copyGameDisks(
                     disk1: disk1Root,
                     to: wrappPath,

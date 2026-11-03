@@ -45,7 +45,7 @@ differs between the two. So downloads have answer files of their own: each
 game's bundle has the disc's as `assets/disc.iss` and the download's as
 `assets/her-download.iss` (`Bundles/nancy-drew/<slug>/`,
 [program-bundles.md](program-bundles.md)), and its Wrappfile names it
-(`her-download.INSTALL installer --answer-file=${assets/her-download.iss}`);
+(`HER-DOWNLOAD.INSTALL installer --answer-file=${assets/her-download.iss}`);
 the Her download builder copies it to `nancy-drew-installer/setup.iss` once
 the launcher has unpacked. A Mac download builds its bundle's `her-mac` stage,
 which has no patches.
@@ -57,7 +57,7 @@ Only Scarlet Hand has one so far. To record one for another game:
 2. Run the wizard in record mode, `wine C:\out\Disk1\setup.exe /r /f1C:\out\rec.iss`,
    and click through it accepting the defaults.
 3. Save `rec.iss` as `Bundles/nancy-drew/<slug>/assets/her-download.iss`, and
-   name it in the bundle's Wrappfile (`her-download.INSTALL installer
+   name it in the bundle's Wrappfile (`HER-DOWNLOAD.INSTALL installer
    --answer-file=${assets/her-download.iss}`).
 
 The downloads install to `C:\Program Files (x86)\Her Interactive\<game>`, not to the

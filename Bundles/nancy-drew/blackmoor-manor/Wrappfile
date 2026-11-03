@@ -11,8 +11,8 @@ FROM prefix AS disc
 ARG install-dir
 USE installer
 USE nancy-drew
-wine.KEEP-DISCS --into=C:/nancy-drew-installer
-installer.RUN --from=disc-1 --into=${install-dir} --answer-file=${assets/disc.iss} --stubborn
+WINE.KEEP-DISCS --into=C:/nancy-drew-installer
+INSTALLER.RUN --from=disc-1 --into=${install-dir} --answer-file=${assets/disc.iss} --stubborn
 DO nancy-drew.patch --id=blackmoor-manor-full --into=${install-dir}
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
@@ -21,7 +21,7 @@ FROM prefix AS her-download
 ARG install-dir
 USE her-download
 USE nancy-drew
-her-download.INSTALL installer --into=${install-dir}
+HER-DOWNLOAD.INSTALL installer --into=${install-dir}
 DO nancy-drew.patch --id=blackmoor-manor-full --into=${install-dir}
 
 # Steam's edition names no stage: the steam module's default stages build it.

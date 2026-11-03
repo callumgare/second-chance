@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "nancy-drew"
-release: 5
+release: 6
 versions:
   - { version: "1" }
 depends-on: ["wine@10"]                      # its installers and patches run in Wine

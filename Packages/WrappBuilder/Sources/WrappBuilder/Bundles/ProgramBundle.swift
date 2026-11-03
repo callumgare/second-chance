@@ -138,11 +138,24 @@ public nonisolated final class ProgramBundleLoader {
         }
         do {
             let parsed = try WrappfileParser.parse(text)
-            return WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: modules).problems(parsed)
-                .map { "Wrappfile \($0)" }
+            let problems = WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: modules).problems(parsed)
+            if !problems.isEmpty { return problems.map { "Wrappfile \($0)" } }
+            // What only a plan shows: every edition's target planned.
+            return BuildPlanner(bundle: ProgramBundle(folder: folder, manifest: manifest), wrappfile: parsed, modules: modules)
+                .problemsPlanningEveryTarget().map { "Wrappfile \($0)" }
         } catch {
             return ["Wrappfile \(error)"]
         }
+    }
+
+    /// What the checker warns about in the bundle's Wrappfile: nothing that
+    /// stops it loading, but worth saying (`sc bundle check`).
+    public func warnings(_ folder: URL) -> [String] {
+        guard let modules, case .success(let bundle) = load(folder),
+              let text = try? String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8),
+              let parsed = try? WrappfileParser.parse(text) else { return [] }
+        return WrappfileChecker(manifest: bundle.manifest, bundleFolder: folder, modules: modules).warnings(parsed)
+            .map { "Wrappfile \($0)" }
     }
 
     /// What the schema can't check: rules across fields and the folder.

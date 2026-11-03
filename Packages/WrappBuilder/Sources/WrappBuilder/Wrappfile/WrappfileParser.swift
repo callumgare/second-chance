@@ -17,6 +17,10 @@ import Foundation
 /// - Options (`--name[=value]`) may be anywhere, except that for `RUN` (or
 ///   a module's `.RUN`) the first word that isn't one is the program, and
 ///   everything after it is the program's arguments.
+/// - Keywords are case-insensitive, a module's name in an instruction
+///   included (`WINE.MOUNT`, `wine.mount`), and kept in upper case. Stage
+///   and function names are too, as Docker's stage names are, and kept in
+///   lower case.
 /// - `${…}` substitutes, and may nest (`${data.patches.${id}.url}`); `$$`
 ///   is a `$`.
 public nonisolated enum WrappfileParser {
@@ -185,7 +189,7 @@ public nonisolated enum WrappfileParser {
             var file = Wrappfile()
             while index < lines.count {
                 let line = lines[index]
-                switch line.words[0].text {
+                switch line.words[0].text.uppercased() {
                 case "ARG" where file.stages.isEmpty:
                     index += 1
                     guard line.words.count == 2 else { throw WrappfileError(line: line.number, message: "ARG takes one name, with its value: ARG name=value") }
@@ -195,12 +199,13 @@ public nonisolated enum WrappfileParser {
                     guard line.words.count == 2 else { throw WrappfileError(line: line.number, message: "FUNCTION takes one name") }
                     let body = try steps(until: ["END"], in: "FUNCTION", openedAt: line.number).steps
                     index += 1  // END
-                    file.functions.append(WrappfileFunction(name: line.words[1].text, body: body, line: line.number))
+                    file.functions.append(WrappfileFunction(name: line.words[1].text.lowercased(), body: body, line: line.number,
+                                                            nameAsWritten: line.words[1].text))
                 case "FROM":
                     index += 1
                     let (source, name) = try fromLine(line)
                     let body = try steps(until: ["FROM", "FUNCTION"], in: nil, topLevel: true).steps
-                    file.stages.append(Stage(name: name, from: source, body: body, line: line.number))
+                    file.stages.append(Stage(name: name?.lowercased(), from: source, body: body, line: line.number, nameAsWritten: name))
                 default:
                     throw WrappfileError(line: line.number,
                                          message: "\(line.words[0].text) comes before the first FROM; only ARG and FUNCTION can")
@@ -211,11 +216,12 @@ public nonisolated enum WrappfileParser {
 
         func fromLine(_ line: Line) throws(WrappfileError) -> (StageSource, String?) {
             let words = line.words.map(\.text)
-            guard words.count == 2 || (words.count == 4 && words[2] == "AS") else {
+            guard words.count == 2 || (words.count == 4 && words[2].uppercased() == "AS") else {
                 throw WrappfileError(line: line.number, message: "FROM is FROM <stage> [AS <name>]")
             }
             let name = words.count == 4 ? words[3] : nil
-            let from = words[1]
+            // Stage and module names, as Docker's stage names, whatever their case.
+            let from = words[1].lowercased()
             if from == "scratch" { return (.scratch, name) }
             if let slash = from.lastIndex(of: "/") {
                 let module = String(from[..<slash])
@@ -235,8 +241,8 @@ public nonisolated enum WrappfileParser {
             var collected: [Step] = []
             while index < lines.count {
                 let line = lines[index]
-                let keyword = line.words[0].text
-                let elseIf = keyword == "ELSE" && line.words.count > 1 && line.words[1].text == "IF"
+                let keyword = line.words[0].text.uppercased()
+                let elseIf = keyword == "ELSE" && line.words.count > 1 && line.words[1].text.uppercased() == "IF"
                 if terminators.contains(keyword) || (elseIf && terminators.contains("ELSE IF")) {
                     return (collected, line)
                 }
@@ -271,10 +277,10 @@ public nonisolated enum WrappfileParser {
                 branches.append(Step.Branch(condition: condition, steps: body, line: branchLine))
                 guard let end else { throw WrappfileError(line: first.number, message: "IF has no END") }
                 index += 1
-                if end.words[0].text == "END" { break }
+                if end.words[0].text.uppercased() == "END" { break }
                 if condition == nil { throw WrappfileError(line: end.number, message: "nothing can follow ELSE but END") }
                 branchLine = end.number
-                if end.words.count > 1, end.words[1].text == "IF" {
+                if end.words.count > 1, end.words[1].text.uppercased() == "IF" {
                     condition = try parseCondition(Array(end.words.dropFirst(2)), line: end.number)
                 } else if end.words.count == 1 {
                     condition = nil
@@ -310,8 +316,8 @@ public nonisolated enum WrappfileParser {
             var arguments: [Word] = []
             // A program's arguments are its own, `--` or not: only before the
             // program are words options. Elsewhere options go anywhere
-            // (`steam.INSTALL game --into=…`).
-            let keyword = line.words[0].text
+            // (`STEAM.INSTALL game --into=…`).
+            let keyword = line.words[0].text.uppercased()
             let runsAProgram = keyword == "RUN" || keyword.hasSuffix(".RUN")
             for raw in line.words.dropFirst() {
                 if !runsAProgram || arguments.isEmpty, !raw.quoted, raw.text.hasPrefix("--"), raw.text.count > 2 {
@@ -326,7 +332,7 @@ public nonisolated enum WrappfileParser {
                     arguments.append(try word(raw, line: line.number))
                 }
             }
-            return Instruction(keyword: line.words[0].text, options: options, arguments: arguments, line: line.number)
+            return Instruction(keyword: keyword, options: options, arguments: arguments, line: line.number)
         }
     }
 }

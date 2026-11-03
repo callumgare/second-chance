@@ -21,7 +21,7 @@ FUNCTION patch
   ELSE IF ${data.patches.${id}.automation:-none}=none
     # A patcher with a silent mode, staged beside the game, where these old
     # patchers look for it.
-    installer.RUN --name=${id} --into=${into} \
+    INSTALLER.RUN --name=${id} --into=${into} \
         --mount=type=fetch,url=${data.patches.${id}.url},sha256=${data.patches.${id}.sha256},unpack=zip,member=${data.patches.${id}.payload},target=${into}/${data.patches.${id}.payload} \
         ${into}/${data.patches.${id}.payload}
   ELSE

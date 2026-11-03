@@ -63,7 +63,7 @@ struct BundlePlanCommand: AsyncParsableCommand {
 struct BundleCheckCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "check",
-        abstract: "Check bundles against the manifest schema, without building them.",
+        abstract: "Check bundles against the manifest schema and plan every edition, without building them.",
         discussion: "With no paths, checks every bundle in Bundles/. A path is a bundle's folder."
     )
 
@@ -81,6 +81,9 @@ struct BundleCheckCommand: AsyncParsableCommand {
         var problems: [ProgramBundle.Problem] = []
         for folder in folders {
             if case .failure(let found) = loader.load(folder) { problems += found.all }
+            for warning in loader.warnings(folder) {
+                session.ui.line("\(session.repo.display(folder)): warning: \(warning)")
+            }
         }
         guard problems.isEmpty else {
             for problem in problems { session.ui.line(problem.description) }

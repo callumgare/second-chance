@@ -11,8 +11,8 @@ FROM prefix AS disc
 ARG install-dir
 USE installer
 USE nancy-drew
-wine.KEEP-DISCS --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
-installer.RUN --from=disc-1 --into=${install-dir}
+WINE.KEEP-DISCS --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
+INSTALLER.RUN --from=disc-1 --into=${install-dir}
 DO nancy-drew.patch --id=trail-of-the-twister-doppler-radar --into=${install-dir}
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
@@ -21,7 +21,7 @@ FROM prefix AS her-download
 ARG install-dir
 USE her-download
 USE nancy-drew
-her-download.INSTALL installer --into=${install-dir}
+HER-DOWNLOAD.INSTALL installer --into=${install-dir}
 DO nancy-drew.patch --id=trail-of-the-twister-doppler-radar --into=${install-dir}
 
 # Her Interactive's Mac download: a Cider app, whose Windows game is taken
@@ -30,6 +30,6 @@ DO nancy-drew.patch --id=trail-of-the-twister-doppler-radar --into=${install-dir
 FROM prefix AS her-mac
 USE her-download
 USE nancy-drew
-her-download.INSTALL installer
+HER-DOWNLOAD.INSTALL installer
 
 # Steam's edition names no stage: the steam module's default stages build it.

@@ -15,8 +15,9 @@ public nonisolated struct Wrappfile: Sendable, Equatable {
     public var functions: [WrappfileFunction] = []
     public var stages: [Stage] = []
 
-    public func stage(named name: String) -> Stage? { stages.first { $0.name == name } }
-    public func function(named name: String) -> WrappfileFunction? { functions.first { $0.name == name } }
+    /// Stage and function names are case-insensitive, as Docker's stage names are.
+    public func stage(named name: String) -> Stage? { stages.first { $0.name == name.lowercased() } }
+    public func function(named name: String) -> WrappfileFunction? { functions.first { $0.name == name.lowercased() } }
 }
 
 public nonisolated struct ArgDeclaration: Sendable, Equatable {
@@ -26,9 +27,12 @@ public nonisolated struct ArgDeclaration: Sendable, Equatable {
 }
 
 public nonisolated struct WrappfileFunction: Sendable, Equatable {
+    /// In lower case.
     public let name: String
     public let body: [Step]
     public let line: Int
+    /// As written, for the warning about upper case.
+    public var nameAsWritten: String?
 
     /// Its parameters: the `ARG`s its body declares, with their defaults.
     public var parameters: [ArgDeclaration] {
@@ -41,11 +45,13 @@ public nonisolated struct WrappfileFunction: Sendable, Equatable {
 }
 
 public nonisolated struct Stage: Sendable, Equatable {
-    /// From `AS <name>`; nil for a stage nothing names.
+    /// From `AS <name>`, in lower case; nil for a stage nothing names.
     public let name: String?
     public let from: StageSource
     public let body: [Step]
     public let line: Int
+    /// As written, for the warning about upper case.
+    public var nameAsWritten: String?
 }
 
 /// What a stage starts from.
@@ -92,24 +98,29 @@ public nonisolated indirect enum Step: Sendable, Equatable {
     }
 }
 
-/// One instruction: its keyword (`RUN`, `COPY`, `wine.MOUNT`, `DO`), its
+/// One instruction: its keyword (`RUN`, `COPY`, `WINE.MOUNT`, `DO`), its
 /// `--options`, and its arguments.
 public nonisolated struct Instruction: Sendable, Equatable {
+    /// In upper case, however it was written.
     public let keyword: String
     public let options: [InstructionOption]
     public let arguments: [Word]
     public let line: Int
 
-    /// The module alias of a module's instruction (`wine` for
-    /// `wine.MOUNT`); nil for a core one.
+    /// The module alias of a module's instruction, in lower case as a
+    /// module's name is (`wine` for `WINE.MOUNT`); nil for a core one.
+    /// `MODULE.<NAME>.<INSTRUCTION>` names the module in full, for one
+    /// whose name is the core's.
     public var moduleAlias: String? {
-        guard let dot = keyword.firstIndex(of: ".") else { return nil }
-        return String(keyword[..<dot])
+        let parts = keyword.split(separator: ".", omittingEmptySubsequences: false)
+        if parts.count == 3, parts[0] == "MODULE" { return parts[1].lowercased() }
+        guard parts.count == 2 else { return nil }
+        return parts[0].lowercased()
     }
 
     /// Its name without the alias (`MOUNT`).
     public var name: String {
-        guard let dot = keyword.firstIndex(of: ".") else { return keyword }
+        guard let dot = keyword.lastIndex(of: ".") else { return keyword }
         return String(keyword[keyword.index(after: dot)...])
     }
 

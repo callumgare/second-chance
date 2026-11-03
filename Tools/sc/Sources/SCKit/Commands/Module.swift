@@ -45,7 +45,12 @@ struct ModuleCheckCommand: AsyncParsableCommand {
                 for problem in problems { session.ui.line("\(module.manifest.id): \(problem)") }
             }
         }
-        guard failed == 0 else { throw SCError("\(failed) of \(folders.count) modules have problems.") }
+        let loaded = folders.compactMap { try? loader.load($0).get() }
+        let across = BuildModules.problems(across: loaded)
+        for problem in across { session.ui.line(problem) }
+        guard failed == 0, across.isEmpty else {
+            throw SCError("\(failed) of \(folders.count) modules have problems\(across.isEmpty ? "" : ", and \(across.count) across them").")
+        }
         session.ui.success("\(folders.count) modules are valid, each at its recorded release.")
     }
 }

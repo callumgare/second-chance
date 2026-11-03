@@ -6,17 +6,22 @@
 
 import Foundation
 
-/// What an instruction may be given: its options and how many arguments.
+/// What an instruction may be given: its options and how many arguments,
+/// and what each is (a place in the app, a program, an input…), which the
+/// checker and planner read to know which words are paths.
 public nonisolated struct InstructionSpec: Sendable {
+    /// In upper case: `RUN`, or `KEEP-DISCS` for `WINE.KEEP-DISCS`.
     public let name: String
     /// Every option it takes, by name, and whether it needs a value.
     public let options: [String: OptionKind]
     /// Options it can't do without.
     public let required: Set<String>
     public let arguments: ClosedRange<Int>
-    /// For an instruction that names one of an edition's inputs as its first
-    /// argument (`steam.INSTALL game`).
-    public let firstArgumentIsInput: Bool
+    /// What each argument is, in order; the last goes for every argument
+    /// after it. Plain text when there are none.
+    public let argumentRoles: [Role]
+    /// What each option's value is; plain text for one not named.
+    public let optionRoles: [String: Role]
 
     public enum OptionKind: Sendable {
         /// `--name`
@@ -27,14 +32,43 @@ public nonisolated struct InstructionSpec: Sendable {
         case repeated
     }
 
+    /// What a word is, which says how it's checked and planned.
+    public enum Role: Sendable, Equatable {
+        /// A place in the app: a path in a location type, a short form one
+        /// claims, or a bare `/…` path in the app's `Contents/`.
+        case location
+        /// A program, in a program type or a short form one claims.
+        case program
+        /// One of the edition's inputs (`STEAM.INSTALL game`).
+        case input
+        /// A path in what `COPY --from` copies from: a stage, or an input.
+        case copySource
+        /// Text, used as it is: a program's own arguments, a URL.
+        case text
+    }
+
     public init(_ name: String, options: [String: OptionKind] = [:], required: Set<String> = [],
-                arguments: ClosedRange<Int> = 0...0, firstArgumentIsInput: Bool = false) {
+                arguments: ClosedRange<Int> = 0...0, argumentRoles: [Role] = [], optionRoles: [String: Role] = [:]) {
         self.name = name
         self.options = options
         self.required = required
         self.arguments = arguments
-        self.firstArgumentIsInput = firstArgumentIsInput
+        self.argumentRoles = argumentRoles
+        self.optionRoles = optionRoles
     }
+
+    /// What argument `index` is.
+    public func role(ofArgument index: Int) -> Role {
+        guard !argumentRoles.isEmpty else { return .text }
+        return argumentRoles[min(index, argumentRoles.count - 1)]
+    }
+
+    /// What `--<name>`'s value is.
+    public func role(ofOption name: String) -> Role { optionRoles[name] ?? .text }
+
+    /// For an instruction that names one of an edition's inputs as its first
+    /// argument (`STEAM.INSTALL game`).
+    public var firstArgumentIsInput: Bool { argumentRoles.first == .input }
 
     /// Options every step takes: its name, for conditions and reports.
     static let everyStep: [String: OptionKind] = ["name": .value]
@@ -44,24 +78,31 @@ public nonisolated struct InstructionSpec: Sendable {
         let specs = [
             InstructionSpec("ARG", arguments: 1...1),
             InstructionSpec("USE", arguments: 1...3),
-            InstructionSpec("RUN", options: ["mount": .repeated, "creates": .value, "with": .value, "on-failure": .value,
+            InstructionSpec("RUN", options: ["mount": .repeated, "creates": .value, "on-failure": .value,
                                              "describe": .value, "if-skipped": .value, "ask": .value],
-                            arguments: 1...Int.max),
-            InstructionSpec("COPY", options: ["from": .value], arguments: 2...2),
+                            arguments: 1...Int.max, argumentRoles: [.program, .text], optionRoles: ["creates": .location]),
+            InstructionSpec("COPY", options: ["from": .value], arguments: 2...2, argumentRoles: [.copySource, .location]),
             // `--unpack=zip --member=<file>` takes one file out of a zip; `--extract`
             // unpacks that file too (a self-extracting zip).
             InstructionSpec("ADD", options: ["checksum": .value, "unpack": .value, "member": .value, "extract": .flag],
-                            required: ["checksum"], arguments: 2...2),
-            InstructionSpec("EXPORT", arguments: 1...1),
-            InstructionSpec("MOVE", arguments: 2...2),
-            InstructionSpec("REMOVE", arguments: 1...1),
+                            required: ["checksum"], arguments: 2...2, argumentRoles: [.text, .location]),
+            InstructionSpec("EXPORT", arguments: 1...1, argumentRoles: [.location]),
+            InstructionSpec("MOVE", arguments: 2...2, argumentRoles: [.location]),
+            InstructionSpec("REMOVE", arguments: 1...1, argumentRoles: [.location]),
             // `--ini=<section>.<key>=<value>`, or `--from-data=<table>`: the calling
             // module's table of replacements and settings (nancy-drew's `ini`).
-            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value], arguments: 1...1),
+            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value], arguments: 1...1, argumentRoles: [.location]),
         ]
         return Dictionary(uniqueKeysWithValues: specs.map { ($0.name, $0) })
     }()
 
     /// The mount types `RUN --mount=type=…` takes.
-    public static let mountTypes: Set<String> = ["source", "cache", "secret", "bind", "fetch", "volume"]
+    public static let mountTypes: Set<String> = ["source", "cache", "secret", "bind", "fetch"]
+
+    /// What each core mount field is; plain text for the rest.
+    public static let mountFieldRoles: [String: Role] = ["target": .location]
+
+    /// The words that start or end a block, or a stage: compared in upper
+    /// case, as every keyword is.
+    static let blockWords: Set<String> = ["IF", "ELSE", "END", "FROM", "AS", "FUNCTION", "LAYER"]
 }

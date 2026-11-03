@@ -187,9 +187,15 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
                   step.arguments.count == 2 else {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the download flow can't run \(step)")
             }
-            let destination = step.arguments[1]
+            // In full form (`wine:C:/…`, `dosbox:C:/…`), each on the C: drive
+            // until DOSBox's has a folder of its own; Lure's bare `C:/…` is
+            // allowed until it moves (LegacyPaths).
+            var destination = step.arguments[1]
+            for prefix in ["wine:", "dosbox:"] where destination.hasPrefix(prefix) {
+                destination = String(destination.dropFirst(prefix.count))
+            }
             guard destination.hasPrefix("C:/") else {
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): \(destination) isn't on the C: drive")
+                throw WrappBuildError.buildRecipeProblem("\(step.origin): \(step.arguments[1]) isn't on the C: drive")
             }
             let target = layout.onDriveC(String(destination.dropFirst(2)))
             let subpath = step.arguments[0] == "." ? "" : step.arguments[0]

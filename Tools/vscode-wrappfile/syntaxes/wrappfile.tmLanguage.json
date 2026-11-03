@@ -22,7 +22,7 @@
             "name": "comment.line.number-sign.wrappfile"
         },
         "from": {
-            "match": "^\\s*(FROM)\\s+([^\\s@/]+)(?:(@)([^\\s/]+))?(?:(/)(\\S+))?(?:\\s+(AS)\\s+(\\S+))?",
+            "match": "(?i)^\\s*(FROM)\\s+([^\\s@/]+)(?:(@)([^\\s/]+))?(?:(/)(\\S+))?(?:\\s+(AS)\\s+(\\S+))?",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" },
                 "2": { "name": "entity.name.type.stage.wrappfile" },
@@ -35,7 +35,7 @@
             }
         },
         "use": {
-            "match": "^\\s*(USE)\\s+([^\\s@]+)(?:(@)(\\S+))?(?:\\s+(AS)\\s+(\\S+))?",
+            "match": "(?i)^\\s*(USE)\\s+([^\\s@]+)(?:(@)(\\S+))?(?:\\s+(AS)\\s+(\\S+))?",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" },
                 "2": { "name": "entity.name.namespace.module.wrappfile" },
@@ -46,7 +46,7 @@
             }
         },
         "arg": {
-            "match": "^\\s*(ARG)\\s+([^\\s=]+)(=)?",
+            "match": "(?i)^\\s*(ARG)\\s+([^\\s=]+)(=)?",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" },
                 "2": { "name": "variable.other.readwrite.wrappfile" },
@@ -54,14 +54,14 @@
             }
         },
         "function": {
-            "match": "^\\s*(FUNCTION)\\s+(\\S+)",
+            "match": "(?i)^\\s*(FUNCTION)\\s+(\\S+)",
             "captures": {
                 "1": { "name": "storage.type.function.wrappfile" },
                 "2": { "name": "entity.name.function.wrappfile" }
             }
         },
         "do": {
-            "match": "^\\s*(DO)\\s+(?:([^\\s.]+)(\\.))?([^\\s.]+)",
+            "match": "(?i)^\\s*(DO)\\s+(?:([^\\s.]+)(\\.))?([^\\s.]+)",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" },
                 "2": { "name": "entity.name.namespace.module.wrappfile" },
@@ -70,7 +70,7 @@
             }
         },
         "condition": {
-            "begin": "^\\s*(IF|ELSE\\s+IF)(?=\\s|$)",
+            "begin": "(?i)^\\s*(IF|ELSE\\s+IF)(?=\\s|$)",
             "beginCaptures": {
                 "1": { "name": "keyword.control.conditional.wrappfile" }
             },
@@ -89,23 +89,26 @@
             ]
         },
         "block": {
-            "match": "^\\s*(ELSE|END|LAYER)(?=\\s|$)",
+            "match": "(?i)^\\s*(ELSE|END|LAYER)(?=\\s|$)",
             "captures": {
                 "1": { "name": "keyword.control.wrappfile" }
             }
         },
         "instruction": {
-            "match": "^\\s*(RUN|COPY|ADD|EXPORT|MOVE|REMOVE|EDIT)(?=\\s|$)",
+            "match": "(?i)^\\s*(RUN|COPY|ADD|EXPORT|MOVE|REMOVE|EDIT)(?=\\s|$)",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" }
             }
         },
         "module-instruction": {
-            "match": "^\\s*([a-z][a-z0-9-]*)(\\.)([A-Z][A-Z0-9-]*)(?=\\s|$)",
+            "comment": "A module's instruction, WINE.MOUNT in any case, or MODULE.<NAME>.<INSTRUCTION> naming the module in full.",
+            "match": "(?i)^\\s*(?:(MODULE)(\\.))?([a-z][a-z0-9-]*)(\\.)([a-z][a-z0-9-]*)(?=\\s|$)",
             "captures": {
-                "1": { "name": "entity.name.namespace.module.wrappfile" },
+                "1": { "name": "keyword.other.module.wrappfile" },
                 "2": { "name": "punctuation.accessor.wrappfile" },
-                "3": { "name": "keyword.other.instruction.wrappfile" }
+                "3": { "name": "entity.name.namespace.module.wrappfile" },
+                "4": { "name": "punctuation.accessor.wrappfile" },
+                "5": { "name": "keyword.other.instruction.wrappfile" }
             }
         },
         "words": {
@@ -114,6 +117,8 @@
                 { "include": "#string" },
                 { "include": "#substitution" },
                 { "include": "#option" },
+                { "include": "#path-type" },
+                { "include": "#mount-field" },
                 {
                     "match": "\\$\\$",
                     "name": "constant.character.escape.dollar.wrappfile"
@@ -125,10 +130,14 @@
             ]
         },
         "option": {
-            "match": "(?<!\\S)(--[a-z][a-z0-9-]*)(=)?",
+            "comment": "--name, or a module's --<module>.<name>.",
+            "match": "(?<!\\S)(--)(?:([a-z][a-z0-9-]*)(\\.))?([a-z][a-z0-9-]*)(=)?",
             "captures": {
                 "1": { "name": "variable.parameter.option.wrappfile" },
-                "2": { "name": "keyword.operator.assignment.wrappfile" }
+                "2": { "name": "entity.name.namespace.module.wrappfile" },
+                "3": { "name": "punctuation.accessor.wrappfile" },
+                "4": { "name": "variable.parameter.option.wrappfile" },
+                "5": { "name": "keyword.operator.assignment.wrappfile" }
             }
         },
         "string": {
@@ -150,7 +159,8 @@
                     "match": "\\$\\$",
                     "name": "constant.character.escape.dollar.wrappfile"
                 },
-                { "include": "#substitution" }
+                { "include": "#substitution" },
+                { "include": "#path-type" }
             ]
         },
         "substitution": {
@@ -170,6 +180,24 @@
                     "name": "keyword.operator.default.wrappfile"
                 }
             ]
+        },
+        "path-type": {
+            "comment": "A path in a module's type, in full form: wine:C:/…, steam://….",
+            "match": "(?<=^|[\\s=,\"])(wine|dosbox|scummvm|steam|big-fish)(:)",
+            "captures": {
+                "1": { "name": "storage.type.path-type.wrappfile" },
+                "2": { "name": "punctuation.separator.path-type.wrappfile" }
+            }
+        },
+        "mount-field": {
+            "comment": "A module's field in a --mount: wine.drive=.",
+            "match": "(?<=,)([a-z][a-z0-9-]*)(\\.)([a-z][a-z0-9-]*)(=)",
+            "captures": {
+                "1": { "name": "entity.name.namespace.module.wrappfile" },
+                "2": { "name": "punctuation.accessor.wrappfile" },
+                "3": { "name": "variable.parameter.field.wrappfile" },
+                "4": { "name": "keyword.operator.assignment.wrappfile" }
+            }
         }
     }
 }

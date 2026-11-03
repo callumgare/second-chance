@@ -8,7 +8,7 @@ struct WrappfileParserTests {
 
     # Shared set-up, as steps
     FUNCTION prefix-setup
-      wine.WINETRICKS cnc_ddraw
+      WINE.WINETRICKS cnc_ddraw
     END
 
     FROM scratch AS prefix
@@ -18,15 +18,15 @@ struct WrappfileParserTests {
     FROM prefix AS disc
     ARG install-dir
     USE nancy-drew AS nd                     # its functions are then DO nd.<name>
-    wine.MOUNT C:/discs/disc-1/ D: --cdrom
+    WINE.MOUNT C:/discs/disc-1/ D: --cdrom
     RUN --creates="${install-dir}/Game.exe" \
         D:/setup.exe /s /sms /f1${assets/disc.iss}
     DO nd.patch --id=blue-moon-taffy-sort --into=${install-dir}
-    wine.REGISTRY --set HKCU\Software\Wine\Direct3D:renderer gl
+    WINE.REGISTRY --set HKCU\Software\Wine\Direct3D:renderer gl
     IF arch=arm64
-      wine.REGISTRY --set "HKCU\Software\Wine\Mac Driver:RetinaMode" "n"
+      WINE.REGISTRY --set "HKCU\Software\Wine\Mac Driver:RetinaMode" "n"
     ELSE IF macos>=26
-      wine.REGISTRY --remove "HKCU\Software\Wine\Mac Driver:RetinaMode"
+      WINE.REGISTRY --remove "HKCU\Software\Wine\Mac Driver:RetinaMode"
     ELSE
       # nothing
     END
@@ -50,8 +50,8 @@ struct WrappfileParserTests {
         #expect(file.stages[2].from == .module(id: "steam", constraint: "2", stage: "client"))
 
         let disc = file.stages[1].body.flatMap(\.instructions)
-        #expect(disc.map(\.keyword) == ["ARG", "USE", "wine.MOUNT", "RUN", "DO", "wine.REGISTRY",
-                                         "wine.REGISTRY", "wine.REGISTRY"])
+        #expect(disc.map(\.keyword) == ["ARG", "USE", "WINE.MOUNT", "RUN", "DO", "WINE.REGISTRY",
+                                         "WINE.REGISTRY", "WINE.REGISTRY"])
         let run = disc[3]
         #expect(run.option("creates")?.value?.substitutions == ["install-dir"])
         #expect(run.arguments.map(\.raw) == ["D:/setup.exe", "/s", "/sms", "/f1${assets/disc.iss}"])
@@ -98,6 +98,37 @@ struct WrappfileParserTests {
         let mount = try #require(function.body.flatMap(\.instructions).last?.option("mount"))
         #expect(mount.value?.substitutions == ["data.patches.${id}.url", "id"])
         #expect(mount.fields["type"] == "fetch")
+    }
+
+    @Test("Keywords, module names and stage names are case-insensitive")
+    func caseInsensitive() throws {
+        let lower = try WrappfileParser.parse("""
+        function Setup
+          wine.winetricks x
+        end
+        from scratch as Prefix
+        use wine
+        if arch=arm64
+          wine.mount C:/x D:
+        else if macos>=26
+          run x
+        else
+          layer
+            Module.Wine.Registry --set k v
+          end
+        end
+        from PREFIX AS disc
+        """)
+        #expect(lower.functions.map(\.name) == ["setup"])
+        #expect(lower.functions.first?.body.flatMap(\.instructions).first?.keyword == "WINE.WINETRICKS")
+        #expect(lower.stages.map(\.name) == ["prefix", "disc"])
+        #expect(lower.stages[0].nameAsWritten == "Prefix")
+        #expect(lower.stages[1].from == .stage("prefix"))
+        #expect(lower.stage(named: "PREFIX") != nil)
+        let instructions = lower.stages[0].body.flatMap(\.instructions)
+        #expect(instructions.map(\.keyword) == ["USE", "WINE.MOUNT", "RUN", "MODULE.WINE.REGISTRY"])
+        #expect(instructions[1].moduleAlias == "wine" && instructions[1].name == "MOUNT")
+        #expect(instructions[3].moduleAlias == "wine" && instructions[3].name == "REGISTRY")
     }
 
     @Test("Quotes make one word, and \"\" inside them is a quote")

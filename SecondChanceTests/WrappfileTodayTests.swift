@@ -32,10 +32,10 @@ struct WrappfileTodayTests {
     func discEditionIsTodays(_ game: GameInfo) throws {
         let file = try wrappfile(game)
         let steps = try instructions(file, stage: "disc")
-        let keep = try #require(steps.first { $0.keyword == "wine.KEEP-DISCS" })
+        let keep = try #require(steps.first { $0.keyword == "WINE.KEEP-DISCS" })
         #expect((keep.option("combined") != nil) == (game.diskCount > 1))
 
-        let installs = steps.filter { $0.keyword == "installer.RUN" }
+        let installs = steps.filter { $0.keyword == "INSTALLER.RUN" }
         if game.gameEngine == .scummvm {
             #expect(installs.isEmpty, "ScummVM reads the disc's data; nothing is installed")
             #expect(steps.contains { $0.keyword == "USE" && $0.arguments.first?.raw == "scummvm" })
@@ -54,7 +54,7 @@ struct WrappfileTodayTests {
     @Test("Her download's edition installs and patches as the Her download builder does", arguments: games)
     func herDownloadEditionIsTodays(_ game: GameInfo) throws {
         let steps = try instructions(try wrappfile(game), stage: "her-download")
-        let install = try #require(steps.first { $0.keyword == "her-download.INSTALL" })
+        let install = try #require(steps.first { $0.keyword == "HER-DOWNLOAD.INSTALL" })
         #expect((install.option("answer-file") != nil) == (ShippedBundles.asset("her-download.iss", ofGame: game.id) != nil))
         let patches = GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .herDownload).map(\.id)
         #expect(patchIDs(steps) == patches)
@@ -79,7 +79,7 @@ struct WrappfileTodayTests {
     @Test("Her's Mac download takes the game out of the Cider app and patches nothing", arguments: herMacGames)
     func herMacEditionIsTodays(_ game: GameInfo) throws {
         let steps = try instructions(try wrappfile(game), stage: "her-mac")
-        #expect(steps.contains { $0.keyword == "her-download.INSTALL" })
+        #expect(steps.contains { $0.keyword == "HER-DOWNLOAD.INSTALL" })
         #expect(patchIDs(steps).isEmpty)
     }
 

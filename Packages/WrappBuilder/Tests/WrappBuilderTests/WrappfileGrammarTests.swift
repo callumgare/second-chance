@@ -9,8 +9,11 @@ struct WrappfileGrammarTests {
         let url = repoRoot.appendingPathComponent("Tools/vscode-wrappfile/syntaxes/wrappfile.tmLanguage.json")
         let grammar = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let repository = try #require(grammar["repository"] as? [String: [String: Any]])
-        let match = try #require(repository["instruction"]?["match"] as? String)
-        // `^\s*(RUN|COPY|…)(?=\s|$)`: the first group's alternatives
+        // `(?i)^\s*(RUN|COPY|…)(?=\s|$)`: the first group's alternatives,
+        // matched whatever their case
+        let written = try #require(repository["instruction"]?["match"] as? String)
+        #expect(written.hasPrefix("(?i)"))
+        let match = String(written.dropFirst("(?i)".count))
         let open = try #require(match.range(of: "("))
         let close = try #require(match.range(of: ")", range: open.upperBound..<match.endIndex))
         let named = Set(match[open.upperBound..<close.lowerBound].split(separator: "|").map(String.init))

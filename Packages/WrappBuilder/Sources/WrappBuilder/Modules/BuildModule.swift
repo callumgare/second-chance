@@ -14,11 +14,19 @@ import WrappModules
 public nonisolated protocol BuildModule: Sendable {
     static var id: ModuleID { get }
 
-    /// Its instructions, by name (`MOUNT` for `wine.MOUNT`).
+    /// Its instructions, by name (`MOUNT` for `WINE.MOUNT`).
     static var instructions: [InstructionSpec] { get }
 
     /// The stages it provides, by name (`client` for `FROM steam/client`).
     static var stages: [String] { get }
+
+    /// Options it adds to core instructions, by instruction, each written
+    /// `--<alias>.<option>` in a stage that has the module.
+    static var coreOptions: [String: [String: InstructionSpec.OptionKind]] { get }
+
+    /// Fields it adds to core mount types, by type, each written
+    /// `<alias>.<field>=…` in a `--mount=`.
+    static var mountFields: [String: Set<String>] { get }
 
     /// Lay an engine version's downloaded sources out as a wrapp's
     /// `Contents/` (`EnginePreparer`), returning the files to sign once the
@@ -29,6 +37,8 @@ public nonisolated protocol BuildModule: Sendable {
 nonisolated extension BuildModule {
     public static var instructions: [InstructionSpec] { [] }
     public static var stages: [String] { [] }
+    public static var coreOptions: [String: [String: InstructionSpec.OptionKind]] { [:] }
+    public static var mountFields: [String: Set<String>] { [:] }
 
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         throw EngineError("the \(id.rawValue) module has no engine to prepare")
@@ -43,12 +53,16 @@ public nonisolated enum WineBuild: BuildModule {
         // Sets (`--set <key>:<name> <value>`) or removes (`--remove <key>:<name>`) a registry value.
         InstructionSpec("REGISTRY", options: ["set": .flag, "remove": .flag], arguments: 1...2),
         // Gives a folder in the prefix a drive, kept for later steps and at launch.
-        InstructionSpec("MOUNT", options: ["cdrom": .flag], arguments: 2...2),
+        InstructionSpec("MOUNT", options: ["cdrom": .flag], arguments: 2...2, argumentRoles: [.location, .text]),
         // Copies every disc the edition declares into `--into` (`<into>/disk-<n>`),
         // and for more than one disc merges them into `--combined` as well, giving
         // each a drive from D: in order: for a game that checks for its disc.
-        InstructionSpec("KEEP-DISCS", options: ["into": .value, "combined": .value], required: ["into"]),
+        InstructionSpec("KEEP-DISCS", options: ["into": .value, "combined": .value], required: ["into"],
+                        optionRoles: ["into": .location, "combined": .location]),
     ]
+
+    /// A `source` mount's drive: `--mount=type=source,from=disc-1,wine.drive=D:`.
+    public static let mountFields = ["source": Set(["drive"])]
 
     /// How the wine module sets a new prefix up, after wineboot
     /// (`Modules/wine/prefix.yaml`), in order.
@@ -121,8 +135,9 @@ public nonisolated enum DOSBoxBuild: BuildModule {
 public nonisolated enum SteamBuild: BuildModule {
     public static let id = ModuleID.steam
     public static let instructions = [
-        // Installs the input's app (`steam.INSTALL game --into=…`), the sign-in mounted as a secret.
-        InstructionSpec("INSTALL", options: ["into": .value], required: ["into"], arguments: 1...1, firstArgumentIsInput: true),
+        // Installs the input's app (`STEAM.INSTALL game --into=…`), the sign-in mounted as a secret.
+        InstructionSpec("INSTALL", options: ["into": .value], required: ["into"], arguments: 1...1,
+                        argumentRoles: [.input], optionRoles: ["into": .location]),
     ]
     /// `client`: Steam installed in a prefix and signed in.
     public static let stages = ["client"]
@@ -134,11 +149,12 @@ public nonisolated enum SteamBuild: BuildModule {
 public nonisolated enum InstallerBuild: BuildModule {
     public static let id: ModuleID = "installer"
     public static let instructions = [
-        // `installer.RUN --from=disc-1 [program]`: the installer on the input (found
+        // `INSTALLER.RUN --from=disc-1 [program]`: the installer on the input (found
         // as GameDetector finds it when no program is named), into `--into`.
         InstructionSpec("RUN", options: ["from": .value, "into": .value, "answer-file": .value, "stubborn": .flag,
                                          "driver": .value, "msi-properties": .value, "mount": .repeated],
-                        required: ["into"], arguments: 0...Int.max),
+                        required: ["into"], arguments: 0...Int.max, argumentRoles: [.program, .text],
+                        optionRoles: ["from": .input, "into": .location]),
     ]
 }
 
@@ -152,9 +168,10 @@ public nonisolated enum DiscBuild: BuildModule {
 public nonisolated enum HerDownloadBuild: BuildModule {
     public static let id: ModuleID = "her-download"
     public static let instructions = [
-        // `her-download.INSTALL installer [--into=…] [--answer-file=…]`: where the
+        // `HER-DOWNLOAD.INSTALL installer [--into=…] [--answer-file=…]`: where the
         // download's installer puts the game when `--into` is left out.
-        InstructionSpec("INSTALL", options: ["into": .value, "answer-file": .value], arguments: 1...1, firstArgumentIsInput: true),
+        InstructionSpec("INSTALL", options: ["into": .value, "answer-file": .value], arguments: 1...1,
+                        argumentRoles: [.input], optionRoles: ["into": .location]),
     ]
 }
 
@@ -176,5 +193,17 @@ public nonisolated enum BuildModules {
     /// The Swift of the module whose `native:` is `id`.
     public static func native(_ id: String) -> (any BuildModule.Type)? {
         known.first { $0.id.rawValue == id }
+    }
+
+    /// What's wrong across modules rather than in one: two whose ids differ
+    /// only in case (a module's name is case-insensitive), and the path
+    /// types they register.
+    public static func problems(across modules: [ModuleFolder], pathTypes: PathTypeRegistry = .shipped) -> [String] {
+        var problems = pathTypes.problems
+        let ids = modules.map(\.manifest.id)
+        for (lowered, same) in Dictionary(grouping: ids, by: { $0.lowercased() }) where same.count > 1 {
+            problems.append("modules \(same.sorted().joined(separator: " and ")) differ only in case (\(lowered))")
+        }
+        return problems.sorted()
     }
 }

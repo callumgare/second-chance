@@ -24,6 +24,17 @@ Modules/
 Swift: the instructions a Wrappfile gives them ([wrappfile.md](wrappfile.md))
 and today's builders.
 
+A module's Swift (`BuildModule`) declares its instructions, the stages it
+provides, and what it adds to the core's instructions in any stage that has
+it: options (`coreOptions`, written `--wine.<option>`) and mount fields
+(`mountFields`, `wine.drive=`). Its path types (`wine:`, `scummvm:`) are in
+`PathTypeRegistry`, in WrappKit, since the app reads them too
+([wrappfile.md](wrappfile.md#what-modules-add)). Only a module with Swift can
+add any of these: a module of data alone has functions, and nothing to carry
+an addition out. `sc module check` and the unit tests refuse two modules
+registering one path type, a type named with one letter, and two module ids
+that differ only in case.
+
 Second Chance ships the folder in its resources (`Contents/Resources/Modules`),
 where a build reads it, and so does WrappPuppeteer, for its needles.
 
