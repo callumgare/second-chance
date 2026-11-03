@@ -2,6 +2,10 @@
     "cSpell.words": [
         "wrapp"
     ],
+    // No npm here, and its package.json scan follows symlinks without
+    // honouring .gitignore, so it crawls the whole disk through Wine
+    // prefixes' dosdevices/z: -> /
+    "npm.autoDetect": "off",
     // Build and test output; the file watcher ignores .gitignore
     "files.watcherExclude": {
         "**/build/**": true,
