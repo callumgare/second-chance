@@ -7,7 +7,7 @@ struct EngineCommand: AsyncParsableCommand {
         commandName: "engine",
         abstract: "Prepare the engines modules' packages describe.",
         discussion: "docs/modules.md#engine-packages describes an engine's package and its prepared hash.",
-        subcommands: [EnginePrepareCommand.self]
+        subcommands: [EnginePrepareCommand.self, EngineFetchCommand.self]
     )
 }
 
@@ -50,8 +50,7 @@ struct EnginePrepareCommand: AsyncParsableCommand {
         let tree = kept ?? FileManager.default.temporaryDirectory.appendingPathComponent("sc-engine-\(UUID().uuidString)")
         defer { if kept == nil { try? FileManager.default.removeItem(at: tree) } }
 
-        let preparer = EnginePreparer(downloader: Downloader(cache: Downloader.standardCache(),
-                                                            userAgent: "SecondChance-sc (+https://github.com/callumgare/second-chance)"))
+        let preparer = EnginePreparer(downloader: Downloader.forSC())
         let ui = session.ui
         let prepared = try await preparer.prepare(module, version: version, into: tree, checked: false) { step in
             ui.line(step)
@@ -69,5 +68,48 @@ struct EnginePrepareCommand: AsyncParsableCommand {
         case nil:
             ui.info("Its package names no prepared hash yet: add the line above to its version's package.")
         }
+    }
+}
+
+struct EngineFetchCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "fetch",
+        abstract: "Put engines in this Mac's engine store, as a build would.",
+        discussion: """
+        Prepares each engine module's newest version (or --version's) into \
+        ~/Library/Caches/SecondChance/engines unless it is there already, so a \
+        build or test that follows needn't wait for it. With no ids, every \
+        engine module.
+        """
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    @Argument(help: "Module ids (default: every module with an engine package).")
+    var ids: [String] = []
+
+    @Option(help: "The version to fetch (default: the newest with a package).")
+    var version: String?
+
+    func run() async throws {
+        let session = try Session.start(global)
+        let loader = try ModuleLoader(root: session.repo.modules)
+        let modules = try loader.loadAll().get().filter { ids.isEmpty ? $0.manifest.package() != nil : ids.contains($0.manifest.id) }
+        let missing = Set(ids).subtracting(modules.map(\.manifest.id))
+        guard missing.isEmpty else { throw SCError("No module \(missing.sorted().joined(separator: ", ")).") }
+        let store = EngineStore(root: EngineStore.standardRoot(), preparer: EnginePreparer(downloader: Downloader.forSC()))
+        let ui = session.ui
+        for module in modules {
+            let engine = try await store.engine(module, version: version) { step in ui.line(step) }
+            ui.line("\(engine.module) \(engine.version): \(engine.prepared ? "prepared" : "already here"), \(engine.tree.path)")
+        }
+        ui.success("\(modules.count) engine\(modules.count == 1 ? "" : "s") in the store.")
+    }
+}
+
+extension Downloader {
+    /// The downloader sc's commands share: the app's cache, under sc's name.
+    static func forSC() -> Downloader {
+        Downloader(cache: Downloader.standardCache(), userAgent: "SecondChance-sc (+https://github.com/callumgare/second-chance)")
     }
 }

@@ -115,10 +115,31 @@ A new version is added without `prepared`, prepared, and given the hash
 `sc engine prepare` prints. Changing a package changes the module's folder,
 so it needs a new release, as any change does.
 
+### The engine store
+
+Prepared engines are kept in `~/Library/Caches/SecondChance/engines/<prepared
+hash>/` (`EngineStore`), so each is fetched and prepared the first time a
+build needs it and found after that; nothing is fetched ahead of a build.
+Only a version whose package names its `prepared` hash can be stored.
+
+- An engine is prepared under `.incoming-<hash>-<uuid>` and renamed into
+  place whole, so nothing finds half of one.
+- Two builds wanting the same engine, in one process or two, take a lock on
+  its hash (`.locks/<hash>.lock`): one prepares it, and the other then finds
+  it.
+- A tree missing a file its list names, as macOS emptying the cache can
+  leave one, is prepared again.
+- `prune(keeping:)` removes engines no listed version names, and what a
+  preparation that stopped partway left; one whose lock is taken is being
+  prepared, and is left.
+
+It is a cache: a wrapp holds its own copy of its engine, so clearing it costs
+only the next build's download. `sc engine fetch [<id>…]` fills it here, as
+a build would.
+
 For now the template still carries both engines, built by `setup-wine.sh`
 and `setup-scummvm.sh`, and builds copy them from it. Builds taking engines
-from their packages instead, fetched when a build first needs one, is what
-comes next.
+from the store instead is what comes next.
 
 ## What lives where
 
