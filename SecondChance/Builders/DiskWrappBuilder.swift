@@ -179,7 +179,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         for step in plan.stages.flatMap(\.steps) {
             logger.debug("Plan step: \(step) (\(step.origin))")
             switch (step.module, step.instruction) {
-            case ("wine", "KEEP-DISCS") where step.option("into") == "wine:C:/" + WrappLayout.installersFolder:
+            case ("wine", "KEEP-DISCS"):
+                try checkKeptDiscs(step, gameInfo: gameInfo)
                 try await copyGameDisks(
                     disk1: disk1Root,
                     to: wrappPath,
@@ -201,21 +202,15 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     installerName: installerName,
                     unattended: input.isUnattended,
                     chooseGameProgram: input.chooseGameProgram(among:),
-                    automation: step.option("automation").flatMap(plan.file)
+                    automation: step.option("automation").flatMap(plan.file),
+                    creates: try GameInstallerRunner.expectedProgram(of: step)
                 )
-            case _ where step.name.map(isPatch(of: gameInfo)) == true:
-                let gameDir: URL
-                if composition.launcher == .scummvm {
-                    gameDir = layout.onDriveC(try await dataInstalled().installerDir)
-                } else if let installed {
-                    gameDir = layout.onDriveC(installed.gameExePath).deletingLastPathComponent()
-                } else {
-                    throw WrappBuildError.buildRecipeProblem("\(step.origin): a patch before the game is installed")
-                }
-                _ = try await installerRunner.applyGamePatch(
-                    id: step.name ?? "", wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameDir,
-                    source: .disk, confirmFailure: input.confirmPatchFailure
-                )
+            case _ where GameInstallerRunner.isPatchStep(step):
+                // A ScummVM game's data is "installed" once the discs are
+                // copied, before its patches rewrite it.
+                if composition.launcher == .scummvm { _ = try await dataInstalled() }
+                try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
+                                                       source: .disk, confirmFailure: input.confirmPatchFailure)
             case (nil, "EXPORT"):
                 _ = try await dataInstalled()
             case (nil, "EDIT") where step.option("from-data") == "ini":
@@ -235,13 +230,6 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         return InstallLayer.Installed(gameExePath: result.gameExePath, installerDir: result.installerDir, configuredINI: configuredINI)
     }
 
-    /// Whether `name` is one of the game's patches: a step `DO
-    /// nancy-drew.patch` made.
-    private func isPatch(of gameInfo: GameInfo) -> (String) -> Bool {
-        let ids = Set(GamePatchCatalog.shared.allPatches(forGame: gameInfo.id).map(\.id))
-        return { ids.contains($0) }
-    }
-
     /// Put the plan's answer file (`bundle:assets/disc.iss`) where the
     /// installer runner looks for one: `setup.iss` among the installer's discs.
     private func installAnswerFile(_ source: URL, into installers: URL) throws {
@@ -252,6 +240,25 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         }
         try fileManager.copyItem(at: source, to: destination)
         logger.notice("✅ Copied \(source.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent)'s \(source.lastPathComponent) to setup.iss")
+    }
+
+    /// What `WINE.KEEP-DISCS` says, checked against what this build does
+    /// with the discs: each in `C:/nancy-drew-installer/disk-<n>`, and for
+    /// more than one, combined in `disk-combined` beside them.
+    private func checkKeptDiscs(_ step: PlannedStep, gameInfo: GameInfo) throws {
+        let into = "wine:C:/" + WrappLayout.installersFolder
+        let discs = step.arguments.map(PlannedStep.input(in:))
+        let expected = (1...max(gameInfo.diskCount, 1)).map { "disc-\($0)" }
+        var problems: [String] = []
+        if step.option("into") != into { problems.append("--into=\(step.option("into") ?? "") (it keeps them in \(into))") }
+        if discs != expected { problems.append("\(step.arguments.joined(separator: " ")) (it keeps \(expected.joined(separator: ", ")))") }
+        let combined = gameInfo.diskCount > 1 ? into + "/disk-combined" : nil
+        if step.option("combined") != combined {
+            problems.append("--combined=\(step.option("combined") ?? "") (it combines \(combined.map { "them in \($0)" } ?? "nothing"))")
+        }
+        guard problems.isEmpty else {
+            throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't do what WINE.KEEP-DISCS says: \(problems.joined(separator: "; "))")
+        }
     }
 
     /// Disc 2 of a two-disc game, mounted if it's an ISO, or nil for a

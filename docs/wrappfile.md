@@ -80,7 +80,9 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 | `EXPORT`, `MOVE`, `REMOVE`, `EDIT <file> --ini=…` / `--from-data=<table>` | File changes Second Chance makes itself. |
 | `FUNCTION <name>` … `END`, `DO <name>` / `DO <alias>.<name>` | Named steps, with `INPUT`s as parameters (`--id=…`): a bundle's own, or a module's (in its `functions/`). |
 
-Every step takes `--name=<id>`, naming it for conditions and reports.
+Every step takes `--name=<id>`, naming it for reports, and
+`--on-failure=ask`, which asks whether to carry on without a step that
+failed; without it, a failed step fails the build.
 
 Modules' instructions, as the build modules declare them
 (`Packages/WrappBuilder/Sources/WrappBuilder/Modules/BuildModule.swift`):
@@ -91,9 +93,9 @@ Modules' instructions, as the build modules declare them
 | `WINE.REGISTRY --set <key>:<name> <value>` / `--remove <key>:<name>` | Sets or removes a registry value. |
 | `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive, kept at launch. |
 | `WINE.KEEP-DISCS <disc input>… --into=<folder> [--combined=<folder>]` | Copies the discs it's given into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
-| `INSTALLER.RUN [--from=<input>] --into=<folder> [--answer-file=…] [--automation=<script>] [program]` | Runs a Windows installer: silently with an answer file. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
+| `INSTALLER.RUN [--from=<input>] --into=<folder> [--creates=<program>] [--answer-file=…] [--automation=<script>] [--patch] [program]` | Runs a Windows installer: silently with an answer file. `--creates` is the program it should leave, linked to what it made if that's elsewhere; `--patch` runs a patcher in `--into`, looking for nothing afterwards. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
 | `STEAM.INSTALL <input> --into=<folder>` | Installs the input's Steam app. |
-| `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
+| `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--creates=<program>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
 
 An input is always written `${input.<name>}` where an instruction takes one.
 

@@ -10,7 +10,7 @@ FROM prefix AS disc
 USE installer
 USE nancy-drew
 WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
-INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss
+INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --creates="${const.install-dir}/DeadlyDevice.exe" --answer-file=assets/disc.iss
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
@@ -18,7 +18,7 @@ DO nancy-drew.configure-ini --into=${const.install-dir}
 FROM prefix AS her-download
 USE her-download
 USE nancy-drew
-HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
+HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates="${const.install-dir}/DeadlyDevice.exe"
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Her Interactive's Mac download: a Cider app, whose Windows game is taken

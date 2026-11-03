@@ -11,7 +11,7 @@ FROM prefix AS disc
 USE installer
 USE nancy-drew
 WINE.KEEP-DISCS ${input.disc-1} ${input.disc-2} --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
-INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir}
+INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --creates="${const.install-dir}/CastleMalloy.exe"
 DO nancy-drew.patch --id=castle-malloy-walk-in-place-cd --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
@@ -20,7 +20,7 @@ DO nancy-drew.configure-ini --into=${const.install-dir}
 FROM prefix AS her-download
 USE her-download
 USE nancy-drew
-HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
+HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates="${const.install-dir}/CastleMalloy.exe"
 DO nancy-drew.patch --id=castle-malloy-walk-in-place-download --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 

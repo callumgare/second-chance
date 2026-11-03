@@ -142,16 +142,11 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                         gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
                                                                        answerFile: step.option("answer-file").flatMap(plan.file),
                                                                        automation: step.option("automation").flatMap(plan.file),
+                                                                       creates: try GameInstallerRunner.expectedProgram(of: step),
                                                                        input: input)
-                    case _ where step.name.map(isPatch(of: gameInfo)) == true:
-                        guard let gameExePath else {
-                            throw WrappBuildError.buildRecipeProblem("\(step.origin): a patch before the game is installed")
-                        }
-                        _ = try await installerRunner.applyGamePatch(
-                            id: step.name ?? "", wrappPath: wrappPath, gameInfo: gameInfo,
-                            gameInstallDir: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent(),
-                            source: .herDownload, confirmFailure: input.confirmPatchFailure
-                        )
+                    case _ where GameInstallerRunner.isPatchStep(step):
+                        try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
+                                                               source: .herDownload, confirmFailure: input.confirmPatchFailure)
                     case (nil, "EDIT") where step.option("from-data") == "ini":
                         if let gameExePath {
                             try helper.configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
@@ -193,7 +188,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// is and asks its questions itself. Patches are steps of their own.
     /// The game's program, from the root of drive C.
     private func installWindowsDownload(
-        _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: URL?, automation: URL?, input: WrappBuildInput
+        _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: URL?, automation: URL?, creates: String?,
+        input: WrappBuildInput
     ) async throws -> String {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let installerBaseDir = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
@@ -220,7 +216,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             installerPath: unpacked ? nil : installer,
             unattended: input.isUnattended,
             chooseGameProgram: input.chooseGameProgram(among:),
-            automation: automation
+            automation: automation,
+            creates: creates
         )
 
         // Unlike a disc, nothing reads the installer once the game is in.
@@ -228,13 +225,6 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await removeQuietly(installerBaseDir, what: "the unpacked installer")
         }
         return gameExePath
-    }
-
-    /// Whether `name` is one of the game's patches: a step `DO
-    /// nancy-drew.patch` made.
-    private func isPatch(of gameInfo: GameInfo) -> (String) -> Bool {
-        let ids = Set(GamePatchCatalog.shared.allPatches(forGame: gameInfo.id).map(\.id))
-        return { ids.contains($0) }
     }
 
     // MARK: - Mac download

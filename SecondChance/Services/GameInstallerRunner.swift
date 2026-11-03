@@ -9,6 +9,7 @@
 //
 
 import Foundation
+import WrappBuilder
 import Logging
 import SecondChanceKit
 import SecondChanceReporting
@@ -55,7 +56,8 @@ class GameInstallerRunner {
         installerName: String? = nil,
         unattended: Bool,
         chooseGameProgram: ([String]) async throws -> String,
-        automation: URL? = nil
+        automation: URL? = nil,
+        creates: String? = nil
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
@@ -147,7 +149,7 @@ class GameInstallerRunner {
                     gameExe = try await findGameExecutable(
                         before: exesBefore,
                         after: exesAfter,
-                        expectedPath: gameInfo.internalGameExePath,
+                        expectedPath: creates ?? gameInfo.internalGameExePath,
                         driveCPath: driveCPath,
                         choose: chooseGameProgram
                     )
@@ -226,7 +228,10 @@ class GameInstallerRunner {
 
         // Get relative path from drive_c
         // Use proper path manipulation to avoid issues with /private symlinks
-        let relativePath = gameExe.path(relativeTo: driveCPath)
+        var relativePath = gameExe.path(relativeTo: driveCPath)
+        if let creates {
+            relativePath = String(try linkExpected(creates, toFound: gameExe, driveC: driveCPath).dropFirst())
+        }
 
         // Determine the installer directory (disk-combined or disk-1)
         let installerDir = installerDirectoryPath(in: driveCPath)
@@ -933,5 +938,64 @@ extension GameInstallerRunner {
     nonisolated static func isNotTheGame(_ program: URL) -> Bool {
         let name = program.lastPathComponent.lowercased()
         return notTheGame.contains { name.hasPrefix($0) }
+    }
+}
+
+extension GameInstallerRunner {
+    /// The step's `--creates` (`/Nancy Drew/Game/Game.exe`, from the root of
+    /// C:), made to name what the installer actually made: people have
+    /// other versions of a disc than ours, which may install elsewhere or
+    /// name the program differently. Where the folder differs, the expected
+    /// one becomes a link to the folder the game went to; where the
+    /// program's name differs too, the expected program a link to the one
+    /// found. Nothing after the install needs to know. The links are
+    /// relative, so they hold wherever the app is.
+    func linkExpected(_ creates: String, toFound found: URL, driveC: URL) throws -> String {
+        let expected = driveC.appendingPathComponent(creates.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
+        guard expected.standardizedFileURL.resolvingSymlinksInPath() != found.standardizedFileURL.resolvingSymlinksInPath() else {
+            return creates
+        }
+        let expectedFolder = expected.deletingLastPathComponent()
+        let foundFolder = found.deletingLastPathComponent()
+        if expectedFolder.standardizedFileURL != foundFolder.standardizedFileURL {
+            guard !fileManager.fileExists(atPath: expectedFolder.path) else {
+                throw WrappBuildError.buildRecipeProblem(
+                    "the installer put the game in \(foundFolder.path(relativeTo: driveC)), but \(creates) expects it in a folder that is there already")
+            }
+            try fileManager.createDirectory(at: expectedFolder.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let relative = Self.relativePath(from: expectedFolder.deletingLastPathComponent(), to: foundFolder)
+            try fileManager.createSymbolicLink(atPath: expectedFolder.path, withDestinationPath: relative)
+            logger.notice("Linked \(expectedFolder.path(relativeTo: driveC)) to \(relative), where the installer put the game")
+        }
+        if expected.lastPathComponent != found.lastPathComponent, !fileManager.fileExists(atPath: expected.path) {
+            try fileManager.createSymbolicLink(atPath: expected.path, withDestinationPath: found.lastPathComponent)
+            logger.notice("Linked \(expected.lastPathComponent) to \(found.lastPathComponent), the program the installer made")
+        }
+        return creates
+    }
+
+    /// `target` relative to the folder `base`: `../Other/Game`.
+    nonisolated static func relativePath(from base: URL, to target: URL) -> String {
+        let from = base.standardizedFileURL.pathComponents
+        let to = target.standardizedFileURL.pathComponents
+        var common = 0
+        while common < min(from.count, to.count), from[common] == to[common] { common += 1 }
+        return (Array(repeating: "..", count: from.count - common) + to[common...]).joined(separator: "/")
+    }
+}
+
+extension GameInstallerRunner {
+    /// An install step's `--creates`, from the root of C:
+    /// (`/Nancy Drew/Game/Game.exe`), checked to be in its `--into`, where
+    /// the step says the game goes; nil for a step that names none.
+    nonisolated static func expectedProgram(of step: PlannedStep) throws -> String? {
+        guard let creates = step.option("creates") else { return nil }
+        guard creates.hasPrefix("wine:C:/") else {
+            throw WrappBuildError.buildRecipeProblem("\(step.origin): --creates=\(creates) isn't on the C: drive")
+        }
+        if let into = step.option("into"), !creates.hasPrefix(into + "/") {
+            throw WrappBuildError.buildRecipeProblem("\(step.origin): --creates=\(creates) isn't in --into=\(into)")
+        }
+        return String(creates.dropFirst("wine:C:".count))
     }
 }

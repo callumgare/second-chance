@@ -204,15 +204,12 @@ final class UpdateWrappBuilder {
         let gameDir = gameInfo.composition.launcher == .scummvm
             ? layout.onDriveC(settings.installerDir)
             : layout.onDriveC(settings.gameExePath).deletingLastPathComponent()
-        let patches = Set(GamePatchCatalog.shared.allPatches(forGame: gameInfo.id).map(\.id))
         for step in plan.stages.flatMap(\.steps) {
             logger.debug("Update step: \(step) (\(step.origin))")
             switch (step.module, step.instruction) {
-            case _ where step.name.map(patches.contains) == true:
-                _ = try await installerRunner.applyGamePatch(
-                    id: step.name ?? "", wrappPath: wrappPath, gameInfo: gameInfo, gameInstallDir: gameDir,
-                    source: source, confirmFailure: input.confirmPatchFailure
-                )
+            case _ where GameInstallerRunner.isPatchStep(step):
+                try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
+                                                       source: source, confirmFailure: input.confirmPatchFailure)
             case (nil, "EDIT") where step.option("from-data") == "ini":
                 if gameInfo.composition.launcher != .scummvm { try helper.configureGameINI(in: gameDir) }
             case ("wine", "KEEP-DISCS"), ("installer", "RUN"), ("her-download", "INSTALL"):

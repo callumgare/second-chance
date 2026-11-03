@@ -54,8 +54,9 @@ folder without ever running them.
 
 ### `action`
 
-- **`run-installer`** — the payload is a Windows installer. It is staged next to
-  the game and run under Wine. Twenty-one of the twenty-three patches are this.
+- **`run-installer`** — the payload is a Windows installer. It is put in the
+  game's folder and run under Wine there. Twenty-one of the twenty-three
+  patches are this.
 - **`copy-into-game-dir`** — the payload is a data file to drop into the game
   directory, optionally under `destinationSubdirectory`. Only Tomb of the Lost
   Queen's decode-puzzle fix works this way; it is a `.cif` that belongs in
@@ -135,24 +136,30 @@ which `sc release` builds) must ship every patch, so there the script exits 1.
 
 ## Wrapp build time: applying
 
-`GameInstallerRunner.applyGamePatches` runs after the game's own installer has
-finished and the game exe has been located, from **both** engine paths.
+A patch is applied by the steps `DO nancy-drew.patch` expands to
+(`Modules/nancy-drew/functions/patch`), which the builders carry out as they
+say (`GameInstallerRunner.runPatchStep`), in the order the Wrappfile names the
+patches. The step its `action` takes:
 
-For each applicable patch, in manifest order:
+| Patch | Step | Carried out |
+| --- | --- | --- |
+| `copy-into-game-dir` | `ADD --checksum=… --unpack=zip --member=<payload> <url> <folder>` | The archive, found in the download cache by its hash, unzipped, and its member copied into the folder |
+| `extract-into-game-dir` | the same, with `--extract` | The member, a self-extracting zip, unzipped into the folder |
+| `run-installer`, no `automation` | `INSTALLER.RUN --patch --into=<folder> --mount=type=fetch,…,target=<folder>/<payload> <folder>/<payload>` | The payload put where its mount says, run silently as its installer type allows, in `--into`, and taken away. It isn't an install: nothing is looked for afterwards |
+| `run-installer` with `automation` | `RUN --mount=type=fetch,… --mount=type=bind,source=assets/<script>.au3,… --mount=type=bind,source=module:installer/autoit,… C:/autoit/AutoIt3.exe /ErrorStdOut C:/patch.au3 <payload>` | Each mount put at its target, AutoIt run with the script, and the mounts taken away |
 
-1. Unzip the bundled archive to a temp directory.
-2. Find the payload by its exact manifest name.
-3. Either copy it into the game directory, or stage it there and run it under
-   Wine. The installer is run by its Windows path (`C:\…`): Wine reads a path
-   starting with `/` as a Unix path, which names nothing inside the prefix.
-   The run waits for the prefix's Wine processes to end, since a patcher can
-   hand over to a program it unpacks and exit first (Her Interactive's
-   patch stubs run `_upd1.exe`); that wait shares the patch timeout.
-   A non-zero exit from the installer counts as a failed patch, and so does an
-   Inno Setup patcher whose `/LOG` lacks `Installation process succeeded.`
-   (most patchers are self-extracting updaters with no log to check).
-4. Remove a staged installer afterwards, so the game directory is left as it was
-   found — patched, but without a stray Windows exe in it.
+- **A patch goes where its `--into` says**: the game's folder the Wrappfile
+  names, not one worked out from where the exe was found.
+- **What counts as success** is the program's exit code. The AutoIt scripts
+  exit 0 only once the patcher says it updated the game. An Inno Setup
+  patcher's `/LOG` must also say `Installation process succeeded.` (most
+  patchers are self-extracting updaters with no log). A program is run by
+  its Windows path (`C:\…`), and the run waits for the prefix's Wine
+  processes to end, since a patcher can hand over to a program it unpacks
+  and exit first (Her Interactive's patch stubs run `_upd1.exe`).
+- **What a failure does** is the step's `--on-failure=ask`: it asks whether
+  to carry on without the patch ([below](#failure-is-not-fatal)). A step
+  without it fails the build.
 
 Copies overwrite rather than fail, so rebuilding a wrapp is idempotent.
 
@@ -161,7 +168,7 @@ Copies overwrite rather than fail, so rebuilding a wrapp is idempotent.
 Most of Her Interactive's patchers have no silent mode: they are wizards that
 wait for clicks. A patch whose manifest entry names an `automation` script is
 run through AutoIt with that script from the nancy-drew module's `assets/`
-(`runAutomatedPatchInstaller`), which clicks through the wizard and exits 0 only
+(the patch function's `RUN` step), which clicks through the wizard and exits 0 only
 once the patcher says the game was updated; anything else fails the patch, and
 the script's log lines, which name each page it saw, are in the build log.
 When a page stops changing for 60 seconds a script logs every visible window
@@ -177,13 +184,6 @@ AutoIt is copied into the prefix for the run and removed afterwards.
 | `update-installation-wizard` | Crystal Skull, Water's Edge, Trail of the Twister, Castle Malloy (both editions), White Wolf (CD) | An "Update Installation Wizard" that finds the game and patches on its own, then stops on a Finished page with a Close button; its Details pane lists each file backed up, updated or added. Castle Malloy's CD updater first asks for the game folder, which it can't find in the registry ("Folder \"(null)\" doesn't exist"), so the script fills in the folder the patcher runs from |
 | `her-update-wizard` | Stay Tuned (cabinet), Haunted Mansion, Ghost Dogs, Deception Island (wood/C-sound), Shadow Ranch, Blackmoor Manor, Blue Moon (taffy sort) | A small stub that unpacks and runs an "Update Program" wizard (window class `UpdShClass`): Welcome, Information, Directory, Confirmation (Start), End, which says "has been successfully updated". Pages are told apart by their text, since only some builds name the page in the window title. The Directory box is filled from the game's registry entry, so for a ScummVM game (no installed copy) it is empty and the patcher would write to the root of `C:`; the script sets it to the folder the patcher runs from, which the build makes the game folder. A patcher still running 15 s after its End page (Blue Moon's shows a Clickteam Patch Maker advert after Exit) has its open windows logged and is closed, since it would otherwise hold the Wine session open until the patch timeout |
 
-Every applied patch logs which files under the game directory it added (`+`),
-changed (`~`) or removed (`-`), and warns when it changed none, which is how a
-patcher that "succeeds" without finding the game shows up. For a patcher driven
-by AutoIt, changing nothing fails the patch: the exit code there is AutoIt's,
-not the patcher's, and AutoIt has once exited 0 without the patcher ever
-starting.
-
 To probe a new patcher's dialogs without a screen, run it under AutoIt with a
 script that logs `WinList()`, each window's `WinGetText` and its controls
 after every step; that is how these pages were found. Pass AutoIt
@@ -198,8 +198,8 @@ uses the generic silent flags for whichever installer family
 `/verysilent /norestart` for Inno Setup, `/qn` for MSI.
 
 If an installer ignores those and puts up a wizard, nothing would ever answer
-it, so `runPatchInstaller` gives the Wine run a 15-minute timeout, long enough
-for a patcher on a fully loaded machine (most finish in seconds). On timeout
+it, so a patcher gets the same time limit as any unattended install
+(`SECOND_CHANCE_INSTALL_TIMEOUT`, 30 minutes by default). On timeout
 `Wine.run` stops the prefix's wineserver — the only thing that
 ends a Windows process — and the patch is reported as failed.
 
@@ -209,7 +209,7 @@ A patch that fails is reported (`FailureReporter.sendWithoutAsking`, tagged
 with the patch's id, when the reporting setting sends without asking) and then
 routes through the build's `WrappBuildInput.confirmPatchFailure`, the seam
 described in [wrapp-build.md](wrapp-build.md), which each builder passes to
-`applyGamePatches` (it isn't state on the shared runner, since builds run side
+`runPatchStep` (it isn't state on the shared runner, since builds run side
 by side). `PATCH_FAILURE_POLICY=continue|cancel` answers it; otherwise the GUI
 asks whether to carry on without the fix, naming what it fixes rather than why
 it failed (a page of the main window, `BuildQuestion`), and headless runs

@@ -253,6 +253,10 @@ public nonisolated struct WrappfileChecker {
         checkOptions(instruction, spec: spec, scope: scope, found: &found)
         checkReferences(instruction.arguments + instruction.options.compactMap(\.value), at: at, scope: scope, found: &found)
         checkPaths(instruction, spec: spec, scope: scope, scopes: scopes, file: file, found: &found)
+        // A patcher isn't an install: it looks for no program afterwards.
+        if spec.options["patch"] != nil, instruction.option("patch") != nil, instruction.option("creates") != nil {
+            found.errors.append("\(at) --patch takes no --creates: a patcher is run in its folder, and nothing is looked for afterwards")
+        }
         // An input is written as one, ${input.<name>}, wherever one is taken.
         var inputWords = instruction.arguments.enumerated().filter { spec.role(ofArgument: $0.offset) == .input }.map(\.element)
         inputWords += instruction.options.filter { spec.role(ofOption: $0.name) == .input }.compactMap(\.value)

@@ -65,7 +65,7 @@ other builders are the same shape with less in the middle.
 | 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` and installs Wine, which runs the installer, and the engine the game runs, from the engine store ([the template](#the-template)) | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). Cancelling stops it, and the bytes copied show on the progress bar, full once it's done (the total is how full the disc is, which counts its file system too). Meanwhile, one Wine run marks D: on as CD drives (`DriveMarking`, `WineDrives.setKind(_:of:)` with several letters): each run starts Wine's session afresh, and marking each drive after the copy left the screen still for 8 to 18 s a drive; a wait that's left once the copy is done says "Getting the discs ready". The copies stay in the finished wrapp, mounted as CD drives, because some games check for their disc before they will play | `.progress(.copyingInstaller)`, `.stepProgress` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
-| 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `WINE.KEEP-DISCS` is steps 5–6; `INSTALLER.RUN --from=${input.disc-1}` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (AutoIt with the script `--automation` names); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each `DO nancy-drew.patch` step applies that one patch (`applyGamePatch`); the stage's `DO nancy-drew.configure-ini` (`EDIT --from-data=ini`) sets the game's .ini files, and only then. A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
+| 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `WINE.KEEP-DISCS` is steps 5–6; `INSTALLER.RUN --from=${input.disc-1}` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (AutoIt with the script `--automation` names), and where the installer put the game somewhere other than its `--creates` says, links the expected folder and program to what it made ([below](#what-a-step-says-is-what-happens)); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each patch's steps are carried out as they say (`runPatchStep`, [game-patches.md](game-patches.md#wrapp-build-time-applying)); the stage's `DO nancy-drew.configure-ini` (`EDIT --from-data=ini`) sets the game's .ini files, and only then. A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 8 | `cleanupUnusedEngine` takes out each engine the composition doesn't run (`EngineInstall.remove`): Wine, for a ScummVM game | — |
 | 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` (and the game INI, when the plan didn't) | `.progress(.configuringWrapp)`, `.wrappConfigured` |
 | 10 | `helper.finalize` — take the quarantine off, sign, ask where to save (`getSaveLocation`), move it there (`saveWrapp`) | `.signed`, `.progress(.savingApp)`, `.completed` |
@@ -493,6 +493,28 @@ resulting `.failed` and goes back to the welcome screen once the build has
 returned; a build that had already saved its app finishes normally.
 
 ## How an installer is run
+
+## What a step says is what happens
+
+A builder recognises a plan's steps by their shape and carries each out. Every
+value it takes from a step is either what it does, or checked against what it
+does, and a builder that would do otherwise fails the build, naming both
+(`buildRecipeProblem`): `WINE.KEEP-DISCS` must say the discs this build keeps,
+in `C:/nancy-drew-installer/disk-<n>`, combined in `disk-combined` for more
+than one; an install's `--creates` must be in its `--into`; a patch runs in
+the folder its `--into` names. So every line of a Wrappfile is true, even
+before a builder runs every step itself.
+
+**An installer may put the game elsewhere.** People have other versions of a
+disc than ours (another language, a reissue), so `INSTALLER.RUN` and
+`HER-DOWNLOAD.INSTALL` stay flexible about the installer, and find what it
+made with the same search as before: the step's `--creates`; any new
+`game.exe`; the only new program that isn't a helper (`unins…`, `setup…`);
+otherwise the person picks. If what it found isn't what `--creates` says, the
+expected folder becomes a link to the one the game went to, and, if the
+program's name differs too, the expected program a link to the one found
+(`linkExpected`). The links are relative and inside the app, and nothing
+after the install needs to know.
 
 Each attempt at a game's installer is decided before it starts, by
 `InstallerPlan`, from the installer's type, which attempt it is, whether the

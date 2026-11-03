@@ -32,7 +32,7 @@ struct BuildPlanTests {
         // blue-moon-taffy-sort is a wizard: run under AutoIt, from the module's assets.
         let patch = steps[2]
         #expect(patch.name == "blue-moon-taffy-sort")
-        #expect(patch.arguments == ["wine:C:/autoit/AutoIt3.exe", "C:/patch.au3", "\(installDir)/TRN_Patch.exe"])
+        #expect(patch.arguments == ["wine:C:/autoit/AutoIt3.exe", "/ErrorStdOut", "C:/patch.au3", "\(installDir)/TRN_Patch.exe"])
         #expect(patch.description.hasPrefix("RUN --mount=type=fetch,url=https://"))
         let mounts = try #require(patch.options["mount"])
         #expect(mounts.first?.hasPrefix("type=fetch,url=https://") == true)

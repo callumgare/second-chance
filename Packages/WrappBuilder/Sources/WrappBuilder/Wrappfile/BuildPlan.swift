@@ -51,6 +51,15 @@ public nonisolated struct PlannedStep: Sendable, Equatable, CustomStringConverti
     /// from `Wrappfile:16`.
     public let origin: String
 
+    public init(instruction: String, module: String?, options: [String: [String]], arguments: [String], name: String?, origin: String) {
+        self.instruction = instruction
+        self.module = module
+        self.options = options
+        self.arguments = arguments
+        self.name = name
+        self.origin = origin
+    }
+
     public func option(_ name: String) -> String? { options[name]?.first }
     public func has(_ name: String) -> Bool { options[name] != nil }
 

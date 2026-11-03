@@ -159,9 +159,10 @@ public nonisolated enum InstallerBuild: BuildModule {
         // `INSTALLER.RUN --from=${input.disc-1} [program]`: the installer on the input
         // (found as GameDetector finds it when no program is named), into `--into`.
         InstructionSpec("RUN", options: ["from": .value, "into": .value, "answer-file": .value, "automation": .value,
-                                         "driver": .value, "msi-properties": .value, "mount": .repeated],
+                                         "creates": .value, "patch": .flag, "driver": .value, "msi-properties": .value, "mount": .repeated],
                         required: ["into"], arguments: 0...Int.max, argumentRoles: [.program, .text],
-                        optionRoles: ["from": .input, "into": .location, "answer-file": .file, "automation": .file]),
+                        optionRoles: ["from": .input, "into": .location, "answer-file": .file, "automation": .file,
+                                      "creates": .location]),
     ]
     /// AutoIt, which Second Chance carries: `module:installer/autoit`.
     public static let providedFiles: Set<String> = ["autoit"]
@@ -179,8 +180,9 @@ public nonisolated enum HerDownloadBuild: BuildModule {
     public static let instructions = [
         // `HER-DOWNLOAD.INSTALL installer [--into=…] [--answer-file=…]`: where the
         // download's installer puts the game when `--into` is left out.
-        InstructionSpec("INSTALL", options: ["into": .value, "answer-file": .value, "automation": .value], arguments: 1...1,
-                        argumentRoles: [.input], optionRoles: ["into": .location, "answer-file": .file, "automation": .file]),
+        InstructionSpec("INSTALL", options: ["into": .value, "answer-file": .value, "automation": .value, "creates": .value],
+                        arguments: 1...1, argumentRoles: [.input],
+                        optionRoles: ["into": .location, "answer-file": .file, "automation": .file, "creates": .location]),
     ]
 }
 

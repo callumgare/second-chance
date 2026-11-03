@@ -73,8 +73,10 @@ public nonisolated struct InstructionSpec: Sendable {
     /// argument (`STEAM.INSTALL game`).
     public var firstArgumentIsInput: Bool { argumentRoles.first == .input }
 
-    /// Options every step takes: its name, for conditions and reports.
-    static let everyStep: [String: OptionKind] = ["name": .value]
+    /// Options every step takes: its name, for reports; and what a failure
+    /// does, `--on-failure=ask` asking whether to carry on without it, where
+    /// otherwise a failed step fails the build.
+    static let everyStep: [String: OptionKind] = ["name": .value, "on-failure": .value]
 
     /// The core's instructions, which every stage has.
     public static let core: [String: InstructionSpec] = {
@@ -82,7 +84,7 @@ public nonisolated struct InstructionSpec: Sendable {
             InstructionSpec("USE", arguments: 1...3),
             // `--env NAME=<value>`, as many as needed: the only way a value
             // reaches a program's environment.
-            InstructionSpec("RUN", options: ["mount": .repeated, "env": .repeated, "creates": .value, "on-failure": .value,
+            InstructionSpec("RUN", options: ["mount": .repeated, "env": .repeated, "creates": .value,
                                              "describe": .value, "if-skipped": .value, "ask": .value],
                             arguments: 1...Int.max, argumentRoles: [.program, .text], optionRoles: ["creates": .location]),
             InstructionSpec("COPY", options: ["from": .value], arguments: 2...2, argumentRoles: [.copySource, .location]),
