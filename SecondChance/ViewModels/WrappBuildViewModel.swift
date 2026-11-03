@@ -83,6 +83,18 @@ class WrappBuildViewModel {
     private(set) var successReportsQuestion: SuccessReportsQuestion?
     @ObservationIgnored private var successReportsAnswered: CheckedContinuation<Void, Never>?
 
+    /// Which game to get from a store, asked once it has said which the
+    /// account owns: the main window shows it in place of the build's
+    /// progress, whose last step (finding out what's owned) is over.
+    struct GameQuestion {
+        let title: String
+        let detail: String
+        let choices: [String]
+    }
+    /// Set only by `askWhichGame`, and by `UIStateCatalog` to picture it.
+    var gameQuestion: GameQuestion?
+    @ObservationIgnored private var gameQuestionAnswered: CheckedContinuation<Int?, Never>?
+
     /// The failed build's report, for the error screen.
     let failureReport = FailureReportModel()
 
@@ -290,6 +302,7 @@ class WrappBuildViewModel {
         isCancelling = true
         buildTask.cancel()
         finishSuccessReportsQuestion()
+        answerGameQuestion(nil)
     }
 
     /// The person cancelled a question that ends the build, which winds down
@@ -333,6 +346,30 @@ class WrappBuildViewModel {
         successReportsQuestion = nil
         successReportsAnswered?.resume()
         successReportsAnswered = nil
+    }
+
+    // MARK: - Which game question
+
+    /// Show `question`, and wait for the index of the choice picked, or nil
+    /// if the person cancelled it (or the build).
+    func askWhichGame(_ question: GameQuestion) async -> Int? {
+        await withCheckedContinuation { continuation in
+            gameQuestionAnswered?.resume(returning: nil)
+            gameQuestionAnswered = continuation
+            gameQuestion = question
+            // The person has just signed in in the store's window, which
+            // would otherwise stay in front of the question. The plain
+            // activate() is only a request since macOS 14, which that
+            // window, active as they signed in, can keep.
+            NSApp.installerWindow?.orderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
+    }
+
+    func answerGameQuestion(_ choice: Int?) {
+        gameQuestion = nil
+        gameQuestionAnswered?.resume(returning: choice)
+        gameQuestionAnswered = nil
     }
 
     /// Drive any builder: build → completed, or route the failure. The bus

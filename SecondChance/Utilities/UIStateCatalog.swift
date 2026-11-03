@@ -64,6 +64,14 @@ enum UIStateCatalog {
             window("big-fish-sign-in", bigFish(String(localized: "Waiting for you to sign in to Big Fish Games")) {
                 $0.instructions = BigFishWrappBuilder.signInInstructions
             }),
+            window("steam-which-game", steam(String(localized: "Checking which games your Steam account owns")) {
+                $0.detectedGame = nil
+                $0.gameQuestion = WrappBuildViewModel.GameQuestion(
+                    title: String(localized: "Which game do you want from Steam?"),
+                    detail: String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."),
+                    choices: ["ghost-dogs", "haunted-carousel", "deception-island", "shadow-ranch", "blackmoor-manor"]
+                        .map { GameInfoProvider.shared.gameInfo(for: $0).title })
+            }),
             window("big-fish-downloading", bigFish(String(localized: "Downloading the game")) {
                 $0.stepProgress = StepProgress(fraction: 0.42, text: "42% done")
             }),

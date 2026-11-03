@@ -16,6 +16,8 @@ struct WrappBuildProgressView: View {
             completed
         } else if let question = viewModel.successReportsQuestion {
             successReports(question)
+        } else if let question = viewModel.gameQuestion {
+            whichGame(question)
         } else {
             inProgress
         }
@@ -61,6 +63,37 @@ struct WrappBuildProgressView: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
+    }
+
+    @State private var chosenGame: Int?
+
+    /// Which game to get from a store: the games the account owns, the
+    /// first picked to start with. Double-clicking one picks it.
+    private func whichGame(_ question: WrappBuildViewModel.GameQuestion) -> some View {
+        InstallerPage(title: question.title) {
+            Text(question.detail)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            List(question.choices.indices, id: \.self, selection: $chosenGame) { index in
+                Text(question.choices[index])
+            }
+            .listStyle(.bordered)
+            .contextMenu(forSelectionType: Int.self) { _ in
+            } primaryAction: { selection in
+                if let index = selection.first { viewModel.answerGameQuestion(index) }
+            }
+            .accessibilityLabel("Games")
+        } leading: {
+            EmptyView()
+        } trailing: {
+            Button("Cancel") { viewModel.answerGameQuestion(nil) }
+                .keyboardShortcut(.cancelAction)
+            Button("Continue") { viewModel.answerGameQuestion(chosenGame) }
+                .keyboardShortcut(.defaultAction)
+                .disabled(chosenGame == nil)
+        }
+        .onAppear { chosenGame = question.choices.isEmpty ? nil : 0 }
+        .accessibilityIdentifier("which-game-question")
     }
 
     private var gameName: String? {

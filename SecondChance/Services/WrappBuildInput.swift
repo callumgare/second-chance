@@ -35,12 +35,12 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getDisk2Path(gameInfo:disk1:)` | `DISK_2_PATH`                         | Ejects disc 1; NSAlert answered by disc 2 going in, else NSOpenPanel |
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
-/// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | NSAlert with the owned games   |
+/// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | main window, the owned games   |
 /// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `bigFishGameFromEnvironment`  | `BIG_FISH_GAME_SLUG`                    | nil: asked after sign-in       |
-/// | `chooseBigFishGame(from:)`    | — (only asked when the above is nil)    | NSAlert with the owned games   |
+/// | `chooseBigFishGame(from:)`    | — (only asked when the above is nil)    | main window, the owned games   |
 /// | `isBigFishTrial`              | `BIG_FISH_TRIAL=1` (tests only)         | false: the full game           |
 /// | `bigFishTestSignIn`           | `BIG_FISH_TEST_SIGN_IN=1`, `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD` (tests only) | nil: the person signs in |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
@@ -270,19 +270,15 @@ class WrappBuildInput {
         // (and so `owned` arrives): how the series is known.
         let games = owned
 
-        let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
-        menu.addItems(withTitles: games.map(\.title))
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Which game do you want from Steam?")
-        alert.informativeText = String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam.")
-        alert.accessoryView = menu
-        alert.addButton(withTitle: String(localized: "Continue"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        guard alert.runModalInFront() == .alertFirstButtonReturn else {
+        let question = WrappBuildViewModel.GameQuestion(
+            title: String(localized: "Which game do you want from Steam?"),
+            detail: String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."),
+            choices: games.map(\.title))
+        guard let viewModel, let chosen = await viewModel.askWhichGame(question) else {
             // The first question the user is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }
-        return games[menu.indexOfSelectedItem]
+        return games[chosen]
     }
 
     /// How a DRM-free Steam game should start. Only asked when the game
@@ -372,22 +368,18 @@ class WrappBuildInput {
     @MainActor
     func chooseBigFishGame(from owned: [BigFishGameChoice]) async throws -> BigFishGameChoice {
         if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("BIG_FISH_GAME_SLUG") }
-        let menu = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
-        menu.addItems(withTitles: owned.map(\.displayName))
-        let alert = NSAlert()
-        alert.messageText = String(localized: "Which game do you want from Big Fish Games?")
-        alert.informativeText = String(localized: """
-            These are the Nancy Drew games your Big Fish Games account has. \
-            Second Chance installs the one you pick through Big Fish's Game Manager.
-            """)
-        alert.accessoryView = menu
-        alert.addButton(withTitle: String(localized: "Continue"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        guard alert.runModalInFront() == .alertFirstButtonReturn else {
+        let question = WrappBuildViewModel.GameQuestion(
+            title: String(localized: "Which game do you want from Big Fish Games?"),
+            detail: String(localized: """
+                These are the Nancy Drew games your Big Fish Games account has. \
+                Second Chance installs the one you pick through Big Fish's Game Manager.
+                """),
+            choices: owned.map(\.displayName))
+        guard let viewModel, let chosen = await viewModel.askWhichGame(question) else {
             // The first question the person is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }
-        return owned[menu.indexOfSelectedItem]
+        return owned[chosen]
     }
 
     // MARK: - Output Choices
