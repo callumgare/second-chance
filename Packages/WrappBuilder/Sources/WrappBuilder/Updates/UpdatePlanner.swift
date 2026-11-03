@@ -84,18 +84,14 @@ public nonisolated struct UpdatePlanner {
     }
 
     /// Why the old wrapp's program isn't where this build's launch has it,
-    /// so it's built afresh; nil when it is. An old lock with no launch says
-    /// its game's folder (`args["install-dir"]`). A ScummVM game's data,
+    /// so it's built afresh; nil when it is. A ScummVM game's data,
     /// which old wrapps kept in their prefix, the update moves into the app
     /// (`UpdateWrappBuilder`), so that isn't a move to build afresh for.
     static func programMoved(old: WrappLock, target: Target) -> String? {
         guard let new = target.launch?.program else { return nil }
         if old.composition.launcher == .scummvm, target.launch?.launcher() == .scummvm { return nil }
-        if let program = old.launch?.program {
-            return program == new ? nil : "its program is \(program), and this bundle's is \(new)"
-        }
-        guard let folder = old.args?["install-dir"] else { return nil }
-        return new.hasPrefix("wine:" + folder + "/") ? nil : "its game is in \(folder), and this bundle's program is \(new)"
+        guard let program = old.launch?.program else { return nil }
+        return program == new ? nil : "its program is \(program), and this bundle's is \(new)"
     }
 
     public init(manifest: Manifest, modules: [ModuleFolder], stageModules: @escaping (String) throws -> [String]) {

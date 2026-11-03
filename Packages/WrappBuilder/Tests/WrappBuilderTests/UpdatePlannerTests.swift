@@ -61,7 +61,7 @@ struct UpdatePlannerTests {
             ] + extra,
             builtBy: "0.9.0"
         )
-        lock.args = ["install-dir": installDir]
+        lock.launch = RecordedLaunch(program: "wine:\(installDir)/Game.exe")
         return lock
     }
 
@@ -212,7 +212,6 @@ struct UpdatePlannerTests {
     @Test("A lock with its launch builds afresh only when the program moved")
     func recordedLaunch() throws {
         var old = lock()
-        old.args = nil
         old.launch = RecordedLaunch(program: "wine:\(Self.installDir)/Game.exe")
         if case .freshBuild = try planner().plan(old: old, target: target()) { Issue.record("the same program isn't a move") }
         old.launch = RecordedLaunch(program: "wine:C:/Elsewhere/Game.exe")

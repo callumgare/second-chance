@@ -430,8 +430,7 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   revision, the plan's launch (`launch`: its program and volumes, which an
   update compares, building afresh when the program moved), the saves
   volume the launch's module keeps saves in, and how it was updated, if it
-  was. An older lock's `args["install-dir"]` is read as the folder its
-  program is in. An old ScummVM app, which kept its game's data in its
+  was. An old ScummVM app, which kept its game's data in its
   prefix, is updated in place: the data moves to where the launch reads it
   (`/SharedSupport/game/`) and the prefix goes. A wrapp from before locks gets one made up from its
   settings and its Wine's version file (`WrappLock.madeUp`), at bundle version
@@ -743,12 +742,29 @@ it can't write runs in a copy (`getWinePrefix`), so what is inside the prefix
 the game runs in is asked of its `Wine`: `driveC`, `documents` and `drives`.
 
 What the build records about the game is `WrappSettings`, in
-`Resources/AppSettings.plist`: the `.exe`, the engine, the slug, the source,
-where the installer is, and, from Steam, the app ID and the launch mode the
-person chose. `configureWrapp` writes it; the wrapp's `loadConfig` and
-WrappPuppeteer read it. Its keys are the ones wrapps have always had, so a
-new Second Chance or WrappPuppeteer still reads a wrapp built before it; the
-slug and source are optional for that reason.
+`Resources/AppSettings.plist`: above all its launch (`Launch`, the plan's
+`RecordedLaunch`: the program, its arguments, environment and module
+options, the fallback, and the volumes), with the slug and the source.
+`configureWrapp` writes it; the wrapp's `loadConfig`, the update builder and
+WrappPuppeteer read it, and the modules the wrapp runs follow from the
+launch (`Composition(launch:)`).
+
+**The legacy keys are still written**, beside `Launch`, wherever they can say
+what the launch does: `GameExePath` and `GameInstallerDir` (paths from the
+root of C:), `GameEngine`, `SteamGameId`, `SteamLaunchMode`,
+`BigFishLaunchFile`, `BigFishSKU` and `BigFishTrial`. Nothing in this
+Second Chance reads them for a wrapp that has `Launch`; they're there for
+an older Second Chance, which knows only them, updating or reading a newer
+app. **They're read only for a wrapp built before launches were recorded**,
+which is every wrapp a released Second Chance (1.1.0 and earlier) built:
+`WrappSettings.launch` translates them into the launch they mean, and the
+wrapp, the update builder and WrappPuppeteer go by that. So does a made-up
+lock (`WrappLock.madeUp`) for a wrapp from before locks, and the user-files
+move from the folder of a wrapp from before volumes
+([wrapp-launch.md](wrapp-launch.md#user-files)): no released wrapp has a
+lock or volumes, so none of that can go yet. What only unreleased builds
+wrote is no longer read: a lock's `args`, for one, which no released wrapp
+has.
 
 A prefix's drive letters are links in its `dosdevices` folder, made through
 `wine.drives` (`WineDrives`). A prefix has only A: and C:, every other

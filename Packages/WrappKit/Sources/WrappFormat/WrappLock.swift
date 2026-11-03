@@ -40,12 +40,9 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
     public var savesVolume: String?
     /// The volume ScummVM's settings file is kept in, for a ScummVM game.
     public var scummvmSettingsVolume: String?
-    /// The Wrappfile's global `ARG`s, as a wrapp built before launches were
-    /// recorded has them (`install-dir`): read as the launch they mean.
-    public var args: [String: String]?
     /// How the wrapp starts its program, as its plan said: what an update
-    /// compares, building afresh when the program moved. Nil in a lock
-    /// from before it was recorded, or for an edition with no plan.
+    /// compares, building afresh when the program moved. A lock made up
+    /// for a wrapp built before locks has the launch its settings mean.
     public var launch: RecordedLaunch?
     /// How this wrapp was updated from an older one; nil for a fresh build.
     public var updated: UpdateRecord?
