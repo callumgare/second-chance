@@ -306,6 +306,7 @@
 				E2A159062F064DDD00292958 /* Build In-Process Helpers */,
 				E2467E6E2F24D0A800D4773B /* Check static linking */,
 				E2D5E0112F01000000000001 /* Stamp Sentry DSN */,
+				E2D5E0122F01000000000001 /* Stamp Launcher Revision */,
 			);
 			buildRules = (
 			);
@@ -441,6 +442,27 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		E2D5E0122F01000000000001 /* Stamp Launcher Revision */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/WrappTemplate/stamp-launcher-revision.sh",
+				"$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Stamp Launcher Revision";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${SRCROOT}/WrappTemplate/stamp-launcher-revision.sh\"\n";
+		};
 		E2D5E0102F01000000000001 /* Stamp Sentry DSN */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;

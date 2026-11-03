@@ -97,6 +97,13 @@ nonisolated enum ShippedBundles {
         }
     }
 
+    /// The revision of the launcher this Second Chance's template is
+    /// (`stamp-launcher-revision.sh`), which the wrapps it builds carry.
+    static func launcherRevision(in bundle: Bundle = .main) -> String? {
+        guard let template = bundle.url(forResource: "WrappTemplate", withExtension: "app") else { return nil }
+        return Bundle(url: template)?.object(forInfoDictionaryKey: "SecondChanceLauncherRevision") as? String
+    }
+
     /// What a wrapp of `edition` of the game `slug` is built from: its
     /// bundle's version, and the modules its plan's target stage has (or,
     /// for an edition built by a module's own stages, the composition's),
@@ -118,7 +125,7 @@ nonisolated enum ShippedBundles {
                     files[name] = try LayerKey.hash(file: module.file(name))
                 }
                 return WrappLock.ModuleRef(id: id, release: module.manifest.release, version: module.manifest.versions.first?.version,
-                                           files: files.isEmpty ? nil : files)
+                                           files: files.isEmpty ? nil : files, package: module.manifest.package()?.package.prepared)
             }
             let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
             // The volumes of the variant the wrapp runs: its launcher's.
@@ -141,6 +148,7 @@ nonisolated enum ShippedBundles {
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             let args = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).globalArgs(edition: edition)
             lock.args = args.isEmpty ? nil : args
+            lock.launcher = launcherRevision(in: bundle)
             return lock
         } catch let error as WrappBuildError {
             throw error
@@ -169,7 +177,8 @@ nonisolated enum ShippedBundles {
                 try planner.plan(edition: edition, target: stage, conditions: .thisMac).target?.modules ?? []
             }
             let decision = try updates.plan(old: old, target: .init(
-                bundleVersion: target.bundle.version, edition: target.edition, modules: target.modules, args: target.args ?? [:]
+                bundleVersion: target.bundle.version, edition: target.edition, modules: target.modules, args: target.args ?? [:],
+                launcher: target.launcher
             ))
             return (decision, target)
         } catch let error as WrappBuildError {

@@ -69,7 +69,15 @@ final class UpdateWrappBuilder {
         return (WrappLock.madeUp(settings: settings, program: "nancy-drew/" + slug, edition: edition, wineVersion: wineVersion), settings)
     }
 
-    func update(wrapp old: URL, input: WrappBuildInput) async throws -> URL {
+    /// How an update ended: the updated wrapp, or the person choosing to
+    /// install the game again from its disc, as the app had nothing to
+    /// update.
+    enum Outcome {
+        case updated(URL)
+        case reinstallFromDisc
+    }
+
+    func update(wrapp old: URL, input: WrappBuildInput) async throws -> Outcome {
         logger.notice("Updating the game's app: \(old.path)")
         await bus.publishWrappBuild(.progress(.detectingGame(substep: nil)))
         let (lock, settings) = try await Blocking.run { try Self.lock(of: old) }
@@ -84,12 +92,19 @@ final class UpdateWrappBuilder {
         let (decision, target) = try await Blocking.run {
             try ShippedBundles.updateDecision(from: lock, forGame: slug, source: source, composition: composition)
         }
-        guard case .update(let chain) = decision else {
-            if case .freshBuild(let reason) = decision {
-                logger.notice("It can't be updated, only built afresh: \(reason)")
-                throw WrappBuildError.updateNeedsSource(reason: reason, source: source)
-            }
-            throw WrappBuildError.internalError("unknown update decision")
+        let chain: UpdatePlanner.Chain
+        switch decision {
+        case .update(let planned):
+            chain = planned
+        case .freshBuild(let reason):
+            logger.notice("It can't be updated, only built afresh: \(reason)")
+            throw WrappBuildError.updateNeedsSource(reason: reason, source: source)
+        case .upToDate:
+            logger.notice("It is already up to date: no update applies, and it has this Second Chance's launcher and engines")
+            try await input.confirmReinstall(gameInfo, source: source)
+            logger.notice("Installing it again from the start, as asked")
+            guard source == .disk else { throw WrappBuildError.reinstallNeedsSource(source: source) }
+            return .reinstallFromDisc
         }
         let applied = chain.applied.isEmpty ? "nothing but this Second Chance's own app" : chain.applied.joined(separator: ", ")
         let moves = chain.moves.map { ", moving \($0.module) from \($0.from) to \($0.to)" }.joined()
@@ -124,7 +139,7 @@ final class UpdateWrappBuilder {
                 edition: target.edition, updated: record, input: input
             )
             await helper.launchIfAsked(finalPath, input: input)
-            return finalPath
+            return .updated(finalPath)
         } catch {
             await helper.removeTempWrapp(wrappPath)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))

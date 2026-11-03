@@ -27,12 +27,16 @@ public nonisolated struct UpdatePlanner {
         public var edition: String
         public var modules: [WrappLock.ModuleRef]
         public var args: [String: String]
+        /// The launcher's revision this build's wrapps carry.
+        public var launcher: String?
 
-        public init(bundleVersion: Int, edition: String, modules: [WrappLock.ModuleRef], args: [String: String]) {
+        public init(bundleVersion: Int, edition: String, modules: [WrappLock.ModuleRef], args: [String: String],
+                    launcher: String? = nil) {
             self.bundleVersion = bundleVersion
             self.edition = edition
             self.modules = modules
             self.args = args
+            self.launcher = launcher
         }
     }
 
@@ -71,6 +75,9 @@ public nonisolated struct UpdatePlanner {
         /// Build afresh from the source, saying why, for the log and the
         /// person.
         case freshBuild(String)
+        /// Nothing to do: no update applies, and the wrapp already has this
+        /// build's launcher and engines.
+        case upToDate
     }
 
     public init(manifest: Manifest, modules: [ModuleFolder], stageModules: @escaping (String) throws -> [String]) {
@@ -168,6 +175,14 @@ public nonisolated struct UpdatePlanner {
                 return .freshBuild("its \(id) \(have) can't be moved to \(to) without building it afresh")
             }
             chain.moves.append(.init(module: id, from: have, to: to))
+        }
+
+        // Every wrapp has a launcher, which an update always brings: with no
+        // update to apply and this build's launcher and engines already in
+        // it, there is nothing to bring.
+        let sameEngines = target.modules.allSatisfy { want in want.package == nil || oldModules[want.id]?.package == want.package }
+        if chain.applied.isEmpty, chain.moves.isEmpty, sameEngines, let launcher = target.launcher, old.launcher == launcher {
+            return .upToDate
         }
         return .update(chain)
     }

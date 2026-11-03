@@ -267,9 +267,6 @@
     "Choose Disc 2…" : {
 
     },
-    "Choose Where to Save" : {
-
-    },
     "Choose Where to Save…" : {
 
     },
@@ -460,6 +457,9 @@
     "In a detailed report" : {
 
     },
+    "Install Again" : {
+
+    },
     "Install Anyway" : {
 
     },
@@ -545,9 +545,6 @@
 
     },
     "Launch Directly" : {
-
-    },
-    "Launch directly: starts faster and is more reliable, but saves stay on this Mac.\n\nLaunch via Steam: keeps your saves in Steam Cloud, but starts slower." : {
 
     },
     "Launch via Steam" : {
@@ -956,6 +953,12 @@
     "That file isn't a copy of a game disc. Choose the game's disc instead." : {
 
     },
+    "The app for %@ is already up to date" : {
+
+    },
+    "The app for %@ is already up to date." : {
+
+    },
     "The file could not be read as a text log file." : {
 
     },
@@ -1017,6 +1020,21 @@
         }
       }
     },
+    "There's nothing new for it. You can install the game again from the start, by downloading it again." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, from Big Fish Games." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, from Steam." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, which needs its discs." : {
+
+    },
+    "There's nothing new for it. You can install the game again from the start, which needs the file you downloaded from Her Interactive." : {
+
+    },
     "These are the Nancy Drew games your Big Fish Games account has. Second Chance installs the one you pick through Big Fish's Game Manager." : {
 
     },
@@ -1048,6 +1066,9 @@
     "This game needs Steam signed in, which needs the internet." : {
 
     },
+    "This game's app can't be brought up to date by itself. Add the game from Big Fish Games again, and Second Chance will make the app again." : {
+
+    },
     "This game's app can't be brought up to date by itself. Add the game from Steam again, and Second Chance will make the app again." : {
 
     },
@@ -1073,6 +1094,21 @@
 
     },
     "To help identify which games run correctly and which need work Second Chance can notify the developer on a successful run. Only very basic info is sent like the title of the game and macOS version. Nothing about you or your files will ever be sent." : {
+
+    },
+    "To install the game again, add it from Big Fish Games again." : {
+
+    },
+    "To install the game again, add it from Steam again." : {
+
+    },
+    "To install the game again, choose its first disc." : {
+
+    },
+    "To install the game again, choose the file you downloaded from Her Interactive." : {
+
+    },
+    "To install the game again, download it again." : {
 
     },
     "Try Again" : {

@@ -44,6 +44,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `chooseBigFishGame(from:)`    | — (only asked when the above is nil)    | main window, the owned games   |
 /// | `chooseDownload(from:)`       | `DOWNLOAD_PROGRAM`                      | main window, the free games    |
 /// | `confirmDownload(_:)`         | — (headless: goes ahead)                | main window: where it's from   |
+/// | `confirmReinstall(_:source:)` | — (headless: fails, as up to date)      | main window: install again, cancel |
 /// | `isBigFishTrial`              | `BIG_FISH_TRIAL=1` (tests only)         | false: the full game           |
 /// | `bigFishTestSignIn`           | `BIG_FISH_TEST_SIGN_IN=1`, `BIG_FISH_EMAIL`, `BIG_FISH_PASSWORD` (tests only) | nil: the person signs in |
 /// | `askAboutSuccessReports()`    | — (headless: not asked)                 | main window, once ever         |
@@ -371,6 +372,35 @@ class WrappBuildInput {
             throw cancelledBeforeStart()
         }
         return editions[chosen]
+    }
+
+    /// Whether to install the game of an app that is already up to date
+    /// again, from the start: returns when the person says so, and throws
+    /// `userCancelledBeforeStart` when they don't. A headless run has nobody
+    /// to ask, so it stops, saying the app is up to date.
+    @MainActor
+    func confirmReinstall(_ game: GameInfo, source: WrappSource) async throws {
+        if isHeadlessRun { throw WrappBuildError.alreadyUpToDate(title: game.title) }
+        // Whole sentences for each, so each translates whole.
+        let detail = switch source {
+        case .disk: String(localized: "There's nothing new for it. You can install the game again from the start, which needs its discs.")
+        case .herDownload: String(localized: """
+            There's nothing new for it. You can install the game again from the start, which needs the file \
+            you downloaded from Her Interactive.
+            """)
+        case .steam: String(localized: "There's nothing new for it. You can install the game again from the start, from Steam.")
+        case .bigFish: String(localized: "There's nothing new for it. You can install the game again from the start, from Big Fish Games.")
+        case .download: String(localized: "There's nothing new for it. You can install the game again from the start, by downloading it again.")
+        }
+        let question = Question(
+            title: String(localized: "The app for \(game.title) is already up to date"),
+            detail: detail,
+            actions: [.init(title: String(localized: "Cancel"), role: .cancel),
+                      .init(title: String(localized: "Install Again"), role: .primary)])
+        guard await ask(question)?.action == 1 else {
+            // Nothing has changed yet: back to the welcome screen.
+            throw cancelledBeforeStart()
+        }
     }
 
     /// Tell the person why the game is free and where it comes from before

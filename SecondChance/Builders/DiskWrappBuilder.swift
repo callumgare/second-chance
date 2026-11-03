@@ -65,9 +65,17 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         // A game's app chosen where its disc would go is updated from
         // itself (docs/wrapp-build.md#updating-a-wrapp): the disc source is
         // the way to it until updating is a source of its own.
-        let chosen = try await input.getDisk1Path()
+        var chosen = try await input.getDisk1Path()
         if UpdateWrappBuilder.isWrapp(chosen) {
-            return try await updater.update(wrapp: chosen, input: input)
+            switch try await updater.update(wrapp: chosen, input: input) {
+            case .updated(let wrapp):
+                return wrapp
+            case .reinstallFromDisc:
+                // It was up to date, and the person chose to install the
+                // game again: from its disc, as any disc build.
+                chosen = try await input.getDisk1Path()
+                guard !UpdateWrappBuilder.isWrapp(chosen) else { throw WrappBuildError.reinstallNeedsSource(source: .disk) }
+            }
         }
 
         // ── Resolve disk 1 and detect the game ONCE ──────────────────────

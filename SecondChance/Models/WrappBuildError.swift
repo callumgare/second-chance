@@ -70,6 +70,12 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// A game's app was chosen to be updated, and it can only be built
     /// afresh from its `source`, for `reason` (for the log).
     case updateNeedsSource(reason: String, source: WrappSource = .disk)
+    /// The game's app chosen to update has nothing to update, and a
+    /// headless run can't ask whether to install it again.
+    case alreadyUpToDate(title: String)
+    /// The person chose to install an up-to-date app's game again, from a
+    /// source the update can't take them to yet.
+    case reinstallNeedsSource(source: WrappSource)
     /// None of the places a free game's bundle names had its file, or
     /// none answered (each is in the log and reported).
     case downloadUnavailable(title: String)
@@ -283,6 +289,18 @@ enum WrappBuildError: LocalizedError, Equatable {
                 This game's app can't be brought up to date by itself. Add the game from Big Fish Games again, \
                 and Second Chance will make the app again.
                 """)
+        case .alreadyUpToDate(let title):
+            return String(localized: "The app for \(title) is already up to date.")
+        case .reinstallNeedsSource(.disk):
+            return String(localized: "To install the game again, choose its first disc.")
+        case .reinstallNeedsSource(.herDownload):
+            return String(localized: "To install the game again, choose the file you downloaded from Her Interactive.")
+        case .reinstallNeedsSource(.download):
+            return String(localized: "To install the game again, download it again.")
+        case .reinstallNeedsSource(.steam):
+            return String(localized: "To install the game again, add it from Steam again.")
+        case .reinstallNeedsSource(.bigFish):
+            return String(localized: "To install the game again, add it from Big Fish Games again.")
         case .downloadUnavailable(let title):
             return String(localized: """
                 \(title) can't be downloaded right now. The places that had it don't have it any more, \

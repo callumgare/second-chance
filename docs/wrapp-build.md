@@ -425,8 +425,9 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
 
 - **What it was built from is its lock** (`WrappLock.json`, `WrappLock`):
   the bundle's version, each module's version and release and a hash of each
-  of its data files, the Wrappfile's global `ARG`s (`install-dir`), and how it
-  was updated, if it was. A wrapp from before locks gets one made up from its
+  of its data files, an engine's prepared hash (`package`), the launcher's
+  revision, the Wrappfile's global `ARG`s (`install-dir`), and how it was
+  updated, if it was. A wrapp from before locks gets one made up from its
   settings and its Wine's version file (`WrappLock.madeUp`), at bundle version
   0, with the disc edition for a wrapp that never recorded its source.
 - **What to do is worked out before anything runs** (`UpdatePlanner`, in
@@ -450,8 +451,23 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   `prefix.yaml` changed, applies this set-up over the old prefix
   (`WineManager.applyPrefixSetup`) with the game left installed. The steam
   module's `steam` builds afresh, from Steam, which needs no disc.
+- **Every wrapp has a launcher, which an update always brings.** The
+  launcher's revision is a hash of the sources the wrapp's own code is built
+  from (`stamp-launcher-revision.sh` writes it into the template's Info.plist
+  as `SecondChanceLauncherRevision`; a Debug build's starts `debug-`, so it
+  never matches a release's). With no update to apply, a wrapp that has this
+  revision and this build's engines (each `package`) is **up to date**
+  (`UpdatePlanner.Decision.upToDate`). Choosing it says so, and offers to
+  install the game again from the start, a question in the main window
+  (`WrappBuildInput.confirmReinstall`):
+  for a disc game the first disc is then asked for and the game built as
+  any disc build is; for another source the person is told which to choose
+  (`reinstallNeedsSource`). A headless run stops with `alreadyUpToDate`.
 - **The old wrapp's prefix is carried into a new one** made from this
-  template, so the launch code is always this Second Chance's. Its
+  template, so the launch code is always this Second Chance's, with the
+  engines from the store ([the template](#the-template)): another package of
+  the same engine version is simply this build's, and another version within
+  Wine's major version moves the prefix as above. Its
   `Documents` and A: drive lead to the person's saves, so both are pointed at
   an empty stand-in before anything runs (the first launch points them back),
   and Z: is mounted for the update's Wine programs and taken away again as

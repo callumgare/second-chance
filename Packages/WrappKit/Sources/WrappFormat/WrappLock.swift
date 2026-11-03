@@ -23,6 +23,11 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
     public var modules: [ModuleRef]
     /// The version of Second Chance that built it.
     public var builtBy: String
+    /// The revision of the launcher it carries (the template's
+    /// `SecondChanceLauncherRevision`): a hash of the sources the wrapp's
+    /// own code is built from. Nil for a wrapp from before it was recorded,
+    /// whose launcher counts as out of date.
+    public var launcher: String?
     /// The bundle ids this program's wrapps had before, whose folders are
     /// moved into this one's (`UserFilesMove`).
     public var formerBundleIDs: [String]?
@@ -63,12 +68,16 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
         /// The SHA-256 of each of the module's data files the build read
         /// (`prefix.yaml`), which a module's default update compares.
         public var files: [String: String]?
+        /// An engine's: its package's prepared hash, which names the engine
+        /// the wrapp holds.
+        public var package: String?
 
-        public init(id: String, release: Int, version: String?, files: [String: String]? = nil) {
+        public init(id: String, release: Int, version: String?, files: [String: String]? = nil, package: String? = nil) {
             self.id = id
             self.release = release
             self.version = version
             self.files = files
+            self.package = package
         }
     }
 
