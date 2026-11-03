@@ -15,8 +15,8 @@
 //  game's .exe -- or `scummvm`, which the wrapp loads this dylib into with
 //  DYLD_INSERT_LIBRARIES. Nothing a player runs sets either.
 //
-//  One request per connection to $SECOND_CHANCE_PUPPET_DIR/game.sock, one line
-//  each way; replies start `ok` or `error`. Coordinates are points in the game
+//  One request per connection to $SECOND_CHANCE_PUPPET_DIR/game-<pid>.sock, one
+//  line each way; replies start `ok` or `error`. Coordinates are points in the game
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
@@ -415,7 +415,10 @@ static void puppetControlInit(void) {
     if (!directory || !*directory || !processRunsExeNamedBy("PUPPET_CONTROL_EXE")) return;
 
     char path[sizeof(((struct sockaddr_un *)0)->sun_path)];
-    if (snprintf(path, sizeof(path), "%s/game.sock", directory) >= (int)sizeof(path)) {
+    // One socket per process: a game that runs as two, as Armadillo's do, has
+    // the helper in both, and WrappPuppeteer talks to the one with the window.
+    // A shared path went to whichever started last, often the windowless one.
+    if (snprintf(path, sizeof(path), "%s/game-%d.sock", directory, getpid()) >= (int)sizeof(path)) {
         helperReport("PuppetControl", "error", "socket path in %s is too long for a Unix socket", directory);
         return;
     }

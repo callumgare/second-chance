@@ -269,54 +269,32 @@ public enum ProcessControl {
         return opened
     }
 
-    private static var finishedLaunching = false
-
-    /// Take the screen from the app in front, as Cmd-Tab to another app
-    /// does: become a regular app with a window, then have the app in front
-    /// hand this one activation (`handOver`; since macOS 14 an app can't take
-    /// it otherwise) and take it. macOS can't show a regular app's window in
-    /// another app's fullscreen Space, so it slides over to the desktop's.
-    /// Waits until the window is on screen. Returns the window, for
-    /// `giveBackScreen`, or nil if it never showed (and then gives the
-    /// screen back itself).
-    public static func takeOverScreen(title: String, timeout: TimeInterval = 15, handOver: () -> Bool) -> NSWindow? {
-        if !finishedLaunching {
-            NSApp.finishLaunching()
-            finishedLaunching = true
+    /// Switch to another app that is already running, as Cmd-Tab to it
+    /// does: have the app in front hand it activation (`handOver`, given the
+    /// app's PID; since macOS 14 an app can't take it otherwise), then
+    /// activate it. Switching to an app with a window on the desktop, such as
+    /// the Finder, takes the screen off a fullscreen app's Space. Whether the
+    /// app was found, handed activation and agreed to activate; that the
+    /// switch then happened is for the caller to check.
+    ///
+    /// WrappPuppeteer once became a regular app with a window of its own and
+    /// activated itself instead. macOS 26 made it active, or refused, without
+    /// ever taking the screen off the game's Space, and the game stayed
+    /// active and key.
+    public static func switchTo(bundleIdentifier: String, handOver: (pid_t) -> Bool) -> Bool {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first else {
+            logger.warning("⚠️  \(bundleIdentifier) isn't running, so there's nothing to switch to")
+            return false
         }
-        NSApp.setActivationPolicy(.regular)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 160),
-                              styleMask: [.titled], backing: .buffered, defer: false)
-        window.title = title
-        window.isReleasedWhenClosed = false
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        handleEvents(for: 0.2)
-        guard handOver() else {
-            logger.warning("⚠️  The app in front didn't hand over activation")
-            giveBackScreen(window)
-            return nil
+        guard handOver(app.processIdentifier) else {
+            logger.warning("⚠️  The app in front didn't hand activation to \(bundleIdentifier)")
+            return false
         }
-        NSApp.activate()
-        let deadline = Date().addingTimeInterval(timeout)
-        while !window.occlusionState.contains(.visible), Date() < deadline {
-            handleEvents(for: 0.1)
+        guard app.activate(options: [.activateAllWindows]) else {
+            logger.warning("⚠️  \(bundleIdentifier) didn't activate")
+            return false
         }
-        guard window.occlusionState.contains(.visible) else {
-            logger.warning("⚠️  WrappPuppeteer's window never came on screen within \(Int(timeout))s")
-            giveBackScreen(window)
-            return nil
-        }
-        return window
-    }
-
-    /// Close the window `takeOverScreen` showed, and go back to being an
-    /// accessory app, whose windows (the click ring) can show over another
-    /// app's fullscreen Space.
-    public static func giveBackScreen(_ window: NSWindow?) {
-        window?.close()
-        NSApp.setActivationPolicy(.accessory)
-        handleEvents(for: 0.1)
+        return true
     }
 
     /// Take AppKit's events off the queue and handle them for `seconds`.

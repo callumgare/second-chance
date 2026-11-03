@@ -85,8 +85,6 @@ struct NancyDrewQuitScenario {
         }
         defer { try? FileManager.default.removeItem(atPath: directory) }
         let wrappSocket = ControlSocket(path: directory + "/wrapp.sock")
-        let game = WindowControl(socket: ControlSocket(path: directory + "/game.sock"))
-        let context = Context(directory: directory, wrapp: wrappSocket, game: game)
 
         // Saves and settings go in here too, gone with it, not the player's
         // (WrappTemplate/Configuration.swift): one the player set to play
@@ -134,6 +132,11 @@ struct NancyDrewQuitScenario {
 
         logger.notice("ℹ️  Game process PID: \(gamePid)")
         ProcessCleanup.track(appPid: app.processIdentifier, helperPid: gamePid)
+        // Each process the helper is in serves on a socket of its own: a game
+        // that runs as two processes, as Armadillo's do, has it in both, and
+        // the one to talk to is the one with the window.
+        let game = WindowControl(socket: ControlSocket(path: directory + "/game-\(gamePid).sock"))
+        let context = Context(directory: directory, wrapp: wrappSocket, game: game)
 
         // The game refuses captures until its window is in its fullscreen
         // Space, so the frames start there.
@@ -278,44 +281,33 @@ struct NancyDrewQuitScenario {
     }
 
     /// Switch away from the game and back as a player would, and say why
-    /// that went wrong, or nil. The game hands activation to WrappPuppeteer,
-    /// which shows a window of its own, so macOS slides off the game's
-    /// fullscreen Space to the desktop, as Cmd-Tab to another app does; then
-    /// WrappPuppeteer opens the wrapp as a click on its Dock icon does, and
-    /// closes its window once the game is back. The game has to be
-    /// active again within `switchBackSeconds`: a Wine game's process has no
-    /// Dock icon of its own, so the wrapp brings it forward. A Direct3D game
+    /// that went wrong, or nil. The game hands activation to the Finder,
+    /// which is then activated, as Cmd-Tab to it does, so macOS slides off the
+    /// game's fullscreen Space to the desktop; then WrappPuppeteer opens the
+    /// wrapp as a click on its Dock icon does. The game has to be active
+    /// again within `switchBackSeconds`: a Wine game's process has no Dock
+    /// icon of its own, so the wrapp brings it forward. A Direct3D game
     /// whose mode Wine emulates once came back with its picture half a screen
     /// up; the caller checks the frame again once this returns. Not being
     /// able to switch away at all is the test's problem, not the game's, so
     /// it's only warned about.
     private func switchAwayAndBackFailure(_ context: Context, gamePid: Int32) -> String? {
-        logger.notice("🔀 Switching away from the game, then back by opening the game's app as its Dock icon would...")
-        // What counts is the game no longer being active: once it has gone to
-        // the background, it has to come back. WrappPuppeteer's window, shown
-        // until then, takes the screen off the game's fullscreen Space, as
-        // Cmd-Tab to another app's window does.
-        let window = ProcessControl.takeOverScreen(title: "WrappPuppeteer: switched away from the game") {
-            context.game.yieldActivation(to: getpid())
+        logger.notice("🔀 Switching away from the game to the Finder, then back by opening the game's app as its Dock icon would...")
+        let switched = ProcessControl.switchTo(bundleIdentifier: "com.apple.finder") { pid in
+            context.game.yieldActivation(to: pid)
         }
-        defer { ProcessControl.giveBackScreen(window) }
-        if window != nil {
-            logger.notice("   WrappPuppeteer's window is on screen, off the game's Space")
-        }
+        // Away means inactive and off the screen: the slide to the desktop
+        // takes a moment.
+        let isAway = { (state: ControlledWindowState?) in state?.active == false && state?.onActiveSpace != true }
         let away = Date().addingTimeInterval(Self.switchBackSeconds)
-        // Away means inactive and, once WrappPuppeteer's window is up, off
-        // the screen: the slide to the desktop takes a moment.
-        let isAway = { (state: ControlledWindowState?) in
-            state?.active == false && (window == nil || state?.onActiveSpace != true)
-        }
-        while !isAway(context.game.state()), Date() < away {
+        while switched, !isAway(context.game.state()), Date() < away {
             ProcessControl.handleEvents(for: 0.2)
         }
         guard context.game.state()?.active == false else {
             warnForTest("Couldn't switch away from the game, so coming back to it through the Dock wasn't checked")
             return nil
         }
-        if window != nil, context.game.state()?.onActiveSpace == true {
+        if context.game.state()?.onActiveSpace == true {
             warnForTest("The screen stayed on the game's Space after switching away, so coming back to it wasn't really checked")
         }
         logger.notice("   Switched away; opening the game's app...")

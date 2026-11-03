@@ -603,8 +603,17 @@ It arms only when WrappPuppeteer started the wrapp. WrappPuppeteer passes
 `SECOND_CHANCE_PUPPET_DIR`, a private directory; when that is set,
 `Wine.inProcessHelperVariables` sets `PUPPET_CONTROL_EXE` to the
 game's `.exe`, and the helper in that process listens on
-`$SECOND_CHANCE_PUPPET_DIR/game.sock`. A player's launch sets neither, so
-nothing listens.
+`$SECOND_CHANCE_PUPPET_DIR/game-<pid>.sock`, named by its own PID. A player's
+launch sets neither, so nothing listens.
+
+Each process has a socket of its own because a game can run as two processes
+with the same `.exe`: an Armadillo-wrapped game from Big Fish starts a second
+copy under its own debugger, and that copy has the window
+([big-fish.md](big-fish.md)). Both load the helper. When they shared one path,
+whichever started last took it, and the Secrets Can Kill Remastered trial's
+debugger, which has no window, started six seconds after the game: every
+request got `error no game window`. WrappPuppeteer works out which process has
+the game's window before its first request, and talks to that one's socket.
 
 ScummVM games use it too, though nothing else here applies to them.
 `scummvm` is an ordinary binary — ad-hoc signed, without hardened runtime — so
@@ -688,5 +697,5 @@ start the wrapp with the variable and talk to the socket:
 
 ```bash
 mkdir -m 700 /tmp/wp && SECOND_CHANCE_PUPPET_DIR=/tmp/wp "<wrapp>.app/Contents/MacOS/WrappTemplate" &
-echo state | /usr/bin/nc -U /tmp/wp/game.sock
+echo state | /usr/bin/nc -U /tmp/wp/game-<pid>.sock   # the game process's PID
 ```

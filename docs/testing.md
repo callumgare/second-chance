@@ -364,7 +364,7 @@ missing, the launch phase is skipped and the build assertions still run.
 windows itself: it starts the wrapp with `SECOND_CHANCE_PUPPET_DIR` naming a
 private directory, and the wrapp and the game then serve their own windows on
 sockets there — the wrapp its info window on `wrapp.sock`, a helper inside
-the game process the game window on `game.sock` — since a process may
+the game process the game window on `game-<pid>.sock` — since a process may
 capture and click its own windows without Screen Recording or Accessibility.
 [wine-in-process-helpers.md](wine-in-process-helpers.md#puppet-control) has
 how the helper gets into each engine and what the sockets accept. If
@@ -687,26 +687,28 @@ takes the path a capture is saved to as one word.
 
 The first time Exit is found, before clicking it, the scenario switches
 away from the game and back, as a player would. The game's helper hands
-activation to WrappPuppeteer (`yield`, [puppet
-control](wine-in-process-helpers.md#puppet-control)), which becomes a regular
-app for the moment and shows a window (`ProcessControl.takeOverScreen`).
-macOS can't show it in the game's fullscreen Space, so the screen slides over
-to the desktop, as Cmd-Tab to another app's window does; WrappPuppeteer waits
-until its window is on screen, handling AppKit's events meanwhile, since it
-never runs NSApp's event loop and neither the activation nor the window would
-happen otherwise. Without a window of its own nothing would show the switch:
-the game's Space would stay up, and only which app is active would change.
-Once the game says it is no longer active and its window is off the screen
-(`onspace=0`), WrappPuppeteer opens the wrapp as a click on its Dock icon does
-(`ProcessControl.reopen`), and closes its window once the game is back. The
-game has to be active again, with its window back on screen, within 15 s:
-the wrapp brings it forward ([the Dock](wrapp-launch.md#the-dock)). Active
-alone isn't enough, as an app made active needn't take the screen to its
-window's Space. The menu's frame is then checked again, below: a Direct3D
-game whose mode Wine emulates once came back with its picture half a screen
-up. A game that doesn't come back fails the run. A switch away that doesn't
-happen at all is the test's problem rather than the game's, so it's only a
-warning.
+activation to the Finder (`yield`, [puppet
+control](wine-in-process-helpers.md#puppet-control)), and WrappPuppeteer
+then activates the Finder (`ProcessControl.switchTo`), as Cmd-Tab to it
+does. The Finder's windows are on the desktop, so the screen slides off the
+game's fullscreen Space. Once the game says it is no longer active and its
+window is off the screen (`onspace=0`), WrappPuppeteer opens the wrapp as a
+click on its Dock icon does (`ProcessControl.reopen`). The game has to be
+active again, with its window back on screen, within 15 s: the wrapp brings
+it forward ([the Dock](wrapp-launch.md#the-dock)). Active alone isn't
+enough, as an app made active needn't take the screen to its window's Space.
+The menu's frame is then checked again, below: a Direct3D game whose mode
+Wine emulates once came back with its picture half a screen up. A game that
+doesn't come back fails the run. A switch away that doesn't happen at all is
+the test's problem rather than the game's, so it's only a warning.
+
+WrappPuppeteer used to switch to itself instead: it became a regular app for
+the moment and showed a window, which macOS can't show in another app's
+fullscreen Space. On macOS 26 that never left the game's Space. macOS made
+WrappPuppeteer active, or refused to, but the screen stayed on the game,
+which stayed active and key, so every run only warned that it couldn't
+switch away. Activating the Finder after the game's hand-over left the
+game's Space at once.
 
 ### Quitting from the menu
 
