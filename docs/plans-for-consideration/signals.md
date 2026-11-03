@@ -12,7 +12,8 @@ It builds on work proposed with it, which isn't built yet either:
   services, as each knows when it's ready (`steam://client`, ready once
   signed in);
 - `LAUNCH`;
-- values read through namespaces in `${…}`, with functions;
+- values read through namespaces in `${…}` (`${input.…}`, `${const.…}`),
+  all known when planning;
 - path types (`wine:C:/…`).
 
 If that work changes before this is taken up, this plan changes with it.

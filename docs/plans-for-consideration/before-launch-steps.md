@@ -6,8 +6,10 @@ the person's files (a save format, a settings file) rather than the app.
 
 It builds on the work proposed with it, which isn't built yet either: path
 types (`wine:C:/…`, with short forms such as `C:/…`), a launch recorded in
-the wrapp's settings from the Wrappfile's `LAUNCH`, and the `SERVICE`
-instruction. If that work changes before this is taken up, this plan
+the wrapp's settings from the Wrappfile's `LAUNCH` and `VOLUME`s, the
+`SERVICE` instruction, instructions written in upper case
+(`WINE.REGISTRY`), and values read through namespaces in `${…}`, declared
+with `INPUT`, `CONST` and `VAR`. If that work changes before this is taken up, this plan
 changes with it.
 
 ## Why
@@ -77,9 +79,9 @@ That's the same kind of declaration as a path type's roles.
 | `COPY`, `MOVE`, `REMOVE`, `EDIT` | Yes | File changes the app can make itself, in plain Swift. |
 | `RUN` (a program in an engine) | Later, when a game needs it | Possible, since the app runs Wine already, but slower, and it may need a display. It suits an old game's own save converter. |
 | `ADD`, and `fetch` mounts | No | A launch must never need the internet. Anything a step needs is fetched by the build and kept in the app. |
-| `FROM`, `USE`, `ARG`, `LAYER`, `EXPORT`, `COPY --from=<stage>` | No | They describe the build itself. Their effects (values, modules) are decided by the time the app runs. |
-| Instructions that need an input (`installer.RUN`, `steam.INSTALL`, `wine.KEEP-DISCS`, `her-download.INSTALL`) | No | The disc or download isn't there at launch. |
-| Other module instructions | If the module declares it | `wine.REGISTRY` could, but only where the registry is in a volume, under the rule above. |
+| `FROM`, `USE`, `INPUT`, `CONST`, `VAR`, `SET`, `LAYER`, `COPY --from=<stage>` | No | They describe the build itself. Their effects (values, modules) are decided by the time the app runs. |
+| Instructions that take an input (`INSTALLER.RUN`, `STEAM.INSTALL`, `WINE.KEEP-DISCS`, `HER-DOWNLOAD.INSTALL`) | No | The disc or download isn't there at launch. |
+| Other module instructions | If the module declares it | `WINE.REGISTRY` could, but only where the registry is in a volume, under the rule above. |
 
 ## Modules
 
@@ -98,7 +100,7 @@ That's the same kind of declaration as a path type's roles.
 ## Compiled to data, not code
 
 There's no compiler on a player's Mac, so the block can't become Swift. It
-doesn't need to: the planner already compiles it, with functions expanded,
+doesn't need to: the planner already compiles it, with `DO`s expanded,
 `${…}` substituted, `IF`s decided and paths in their full form. The block
 becomes a list of typed operations in the app's settings:
 
@@ -113,7 +115,7 @@ enum PrelaunchOperation: Codable {
 ```
 
 The app knows those operations and nothing of Wrappfile syntax,
-substitution, functions or module data. That is how the app already reads
+substitution, `FUNCTION`s or module data. That is how the app already reads
 everything else (`sc generate`'s Swift, the recorded launch). An app runs
 the operations it was built with, using its own code, so the two can't
 disagree.
@@ -166,8 +168,8 @@ need the change.
 
 ## Open questions
 
-1. **Conditions inside the block.** A condition on a choice can be decided
-   at build time. A condition on the Mac (`arch`, `macos`) is about the Mac
+1. **Conditions inside the block.** A condition on an input can be decided
+   at build time. A condition on the Mac (`${platform.arch}`) is about the Mac
    that built the app, which may not be the one running it. The proposal is
    to forbid those inside the block until a game needs one, rather than add
    evaluation at launch.
