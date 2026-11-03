@@ -97,7 +97,7 @@ each module's `assemble` steps after the target's own. A module function's
 `${data.<table>.<key>.<field>}` reads the module's table, where a key is an
 object's property or, in a list (or a table that is one list under one key,
 as `patches.json` is), the item with that `id`. `${assets/…}` becomes
-`asset:<path>`, for the step to mount. `sc bundle plan <game> <edition>` prints
+`asset:<path>`, for the step to mount. `sc bundle plan <bundle id> <edition>` prints
 one, each step with where it was written:
 
 ```text

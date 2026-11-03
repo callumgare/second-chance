@@ -24,7 +24,7 @@ struct BundlePlanCommand: AsyncParsableCommand {
 
     @OptionGroup var global: GlobalOptions
 
-    @Argument(help: "The bundle's id (nancy-drew/blue-moon) or a game's slug.")
+    @Argument(help: "The bundle's id, e.g. nancy-drew/blue-moon or freeware/skifree.")
     var bundle: String
 
     @Argument(help: "The edition's id (cd, her-windows, steam).")
@@ -33,7 +33,10 @@ struct BundlePlanCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         let modules = try loadModules(session)
-        let id = bundle.contains("/") ? bundle : "nancy-drew/\(bundle)"
+        guard bundle.contains("/") else {
+            throw SCError("\(bundle) isn't a bundle's id: name it in full, as <namespace>/<name> (nancy-drew/blue-moon).")
+        }
+        let id = bundle
         let folder = session.repo.bundles.appendingPathComponent(id)
         let loaded: ProgramBundle
         switch try ProgramBundleLoader(root: session.repo.bundles, modules: modules).load(folder) {
