@@ -278,7 +278,7 @@ class WrappBuildInput {
         alert.accessoryView = menu
         alert.addButton(withTitle: String(localized: "Continue"))
         alert.addButton(withTitle: String(localized: "Cancel"))
-        guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
+        guard alert.runModalInFront() == .alertFirstButtonReturn else {
             // The first question the user is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }
@@ -383,7 +383,7 @@ class WrappBuildInput {
         alert.accessoryView = menu
         alert.addButton(withTitle: String(localized: "Continue"))
         alert.addButton(withTitle: String(localized: "Cancel"))
-        guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
+        guard alert.runModalInFront() == .alertFirstButtonReturn else {
             // The first question the person is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }

@@ -94,7 +94,9 @@ Chance's own window shows what it is doing.
 5. **The game.** The account's library (`ownedGames`) is matched to the
    catalog by product number, so every language edition is a choice of its
    own, labelled with its language when it isn't English; they're offered in
-   the order the games came out, and the build publishes
+   the order the games came out, with Second Chance and the question brought
+   to the front (`runModalInFront`) from the Game Manager's sign-in. The
+   build publishes
    `.bigFishGamesOwned`. A game named up front takes its English edition if
    the account has it, else any edition it has.
 6. **Download, install, activate.** `downloadNewGame` with

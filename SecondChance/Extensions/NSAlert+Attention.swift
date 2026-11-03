@@ -34,4 +34,20 @@ extension NSAlert {
         NSApp.askForAttention()
         return runModal()
     }
+
+    /// `runModal()` with Second Chance, and so the question, brought to the
+    /// front: for a question that follows on at once from something the
+    /// person did in another app's window, as which game to get does from
+    /// signing in in Steam's or Big Fish's, where they're still at the Mac
+    /// and the question would otherwise open behind that window.
+    @MainActor
+    func runModalInFront() -> NSApplication.ModalResponse {
+        if NSApp.activationPolicy() == .regular {
+            NSApp.installerWindow?.orderFront(nil)
+            // The plain activate() is only a request since macOS 14, which
+            // the store's window, active as the person signed in, can keep.
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        return runModal()
+    }
 }
