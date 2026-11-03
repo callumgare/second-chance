@@ -329,7 +329,7 @@ built-in display has no 4:3 modes at all. On a monitor that does have the mode
 the switch works, but really switches the monitor.
 
 So the prefix has Wine's `EmulateModeset` on (the wine module's
-`Modules/wine/prefix.yaml`, which `WineManager` follows as it creates the prefix; Wine 10 reads it from `HKCU\Software\Wine\X11 Driver` whatever
+`Modules/wine/stages/prefix`, whose `WINE.REGISTRY` step sets it as the prefix is made; Wine 10 reads it from `HKCU\Software\Wine\X11 Driver` whatever
 the driver). win32u then says yes to any common mode without touching the
 display, and maps the game's windows up to the display's real size, at the
 same scale on both axes: on a 1512×945 display the game's 800×600 window

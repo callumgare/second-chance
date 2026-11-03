@@ -297,14 +297,24 @@ class WrappBuildHelper {
         // A build that ran Wine has a prefix with drives; one that didn't (a
         // download ScummVM runs) has a bare C: drive, and nothing to point.
         if fileManager.fileExists(atPath: WrappLayout(app: wrappPath).prefix.appendingPathComponent("dosdevices").path) {
-            // Documents leads where the A: drive does (WineDrives has why).
-            // The wrapp points both at the player's saves each time it starts.
+            // Each volume the launch gives a drive (`VOLUME --wine.drive=A:`)
+            // has one, standing in for the player's files until the wrapp
+            // points it at them each time it starts; Documents, where the
+            // saves volume is, leads where its drive does (WineDrives has
+            // why). A build with no launch recorded (Steam's, Big Fish's)
+            // gives the saves A:, as every wrapp's always were.
             let wine = Wine(wrapp: wrappPath)
-            try? FileManager.default.removeItem(at: wine.documents)
-            try FileManager.default.createSymbolicLink(
-                atPath: wine.documents.path,
-                withDestinationPath: try wine.drives.target(of: "a")
-            )
+            let volumes = launch.map { $0.volumes.filter { $0.options["wine.drive"] != nil } }
+                ?? [RecordedLaunch.Volume(name: "wine-documents", location: "wine:C:/users/crossover/Documents", options: ["wine.drive": "A:"])]
+            for volume in volumes {
+                guard let drive = volume.options["wine.drive"]?.lowercased().first else { continue }
+                if (try? wine.drives.target(of: drive)) == nil {
+                    try wine.drives.mount("/tmp/second-chance-nancy-drew-\(UUID().uuidString)", as: drive)
+                }
+                guard volume.location == "wine:C:/users/crossover/Documents" else { continue }
+                try? FileManager.default.removeItem(at: wine.documents)
+                try FileManager.default.createSymbolicLink(atPath: wine.documents.path, withDestinationPath: try wine.drives.target(of: drive))
+            }
         }
 
         // Configure game INI files for LCD mode and save path
@@ -316,6 +326,23 @@ class WrappBuildHelper {
     /// Configure game INI files
     /// Give every .ini in `gameDir` the nancy-drew module's settings
     /// (`DO nancy-drew.configure-ini`).
+    /// cnc-ddraw, for a Wine game the catalogue says draws with DirectDraw,
+    /// built by a source whose edition has no stage yet (Steam's, Big
+    /// Fish's): the wine module's `cnc-ddraw` function's steps, which a
+    /// bundle's stage runs itself (`DO wine.cnc-ddraw`), as the shared
+    /// prefix no longer has it.
+    func setUpCncDdraw(for gameInfo: GameInfo, in wrappPath: URL) async throws {
+        guard gameInfo.graphics == .directDraw, gameInfo.gameEngine != .scummvm,
+              let resources = Bundle.main.resourceURL else { return }
+        let steps = try await Blocking.run {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            return try BuildPlanner.functionSteps("wine", "cnc-ddraw", modules: modules)
+        }
+        for step in steps {
+            try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
+        }
+    }
+
     /// Whether a step copies into the app itself, outside the prefix: a
     /// `COPY` to a bare `/…` path. Builders run these after the cached
     /// install layer, which holds the prefix alone.

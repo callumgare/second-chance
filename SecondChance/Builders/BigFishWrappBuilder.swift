@@ -457,6 +457,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             let gameDirPath = "/" + installed.folder.path(relativeTo: layout.driveC)
             let gameExePath = runsInScummVM ? gameDirPath : gameDirPath + "/" + exe
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
+            try await helper.setUpCncDdraw(for: gameInfo, in: wrappPath)
 
             // ScummVM reads the game's files and runs nothing of Big Fish's.
             let launchFile: String?

@@ -42,6 +42,9 @@ struct ModuleDataTests {
         // A new version may drop it.
         let newVersion = ModuleReleases.Release(release: 2, versions: ["2"], functions: [], data: [], files: [:])
         #expect(ModuleReleases.compatibilityProblems(from: previous, to: newVersion).isEmpty)
+        // Data the module retires, never a bundle's to read, may go too.
+        let retiring = ModuleReleases.Release(release: 2, versions: ["1"], functions: ["functions/patch"], data: [], files: [:])
+        #expect(ModuleReleases.compatibilityProblems(from: previous, to: retiring, retired: ["patches.yaml"]).isEmpty)
     }
 
     /// A modules folder with the schema and one module, `demo`.

@@ -117,11 +117,12 @@ nonisolated enum ShippedBundles {
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let plan = try plan(forGame: slug, edition: edition, in: bundle)
             let used = plan?.target?.modules ?? composition.modules.map(\.rawValue)
-            // Each module's data files by hash, which its default updates
-            // compare (`when-changed`).
+            // Each module's data files and stages by hash, which its default
+            // updates compare (`when-changed`).
             let refs = try used.compactMap { id -> WrappLock.ModuleRef? in
                 guard let module = modules.first(where: { $0.manifest.id == id }) else { return nil }
-                let files = try (module.manifest.data ?? []).reduce(into: [String: String]()) { files, name in
+                let named = (module.manifest.data ?? []) + (module.manifest.stages ?? [])
+                let files = try named.reduce(into: [String: String]()) { files, name in
                     files[name] = try LayerKey.hash(file: module.file(name))
                 }
                 return WrappLock.ModuleRef(id: id, release: module.manifest.release, version: module.manifest.versions.first?.version,

@@ -390,15 +390,16 @@ the app's build id, from a signed-in Steam).
 - **A key is a hash of what the layer was made from** (`LayerKey`): its
   parent's key, and each input by name. The prefix's
   (`WineBuild.prefixLayerKey`) is the engine's version and prepared hash
-  (`Contents/Resources/engines/wine.json`), the wine module's release, a hash of
-  `Modules/wine/prefix.yaml` and of winetricks, and
-  `WineBuild.prefixCodeRevision`, raised by hand when the Swift that makes a
-  prefix (`WineManager.makeWinePrefix`) changes what it makes. A new Wine, or
-  a changed winetricks verb, `ddraw.ini` or registry setting, makes a fresh
-  prefix with nothing to clear.
+  (`Contents/Resources/engines/wine.json`), the wine module's `prefix`
+  stage's steps as planned (`Modules/wine/stages/prefix`), a hash of
+  winetricks, and `WineBuild.prefixCodeRevision`, raised by hand when the
+  Swift that makes a prefix (`WineManager.makeWinePrefix`, `WineSteps`)
+  changes what it makes. A new Wine, or a changed winetricks verb or registry
+  setting, makes a fresh prefix with nothing to clear. cnc-ddraw isn't in it:
+  a DirectDraw game's own stage sets it up (`DO wine.cnc-ddraw`).
 - **Every layer keeps its key's inputs**, so a miss is explained: the build
   logs which inputs differ from the layer last used for the same slot
-  (``No cached Wine prefix to use (`wine prefix.yaml` changed): making one``).
+  (``No cached Wine prefix to use (`wine prefix stage` changed): making one``).
 - **One build makes a layer; the rest wait and clone it.** A build takes a
   lock on the key (`flock`, so across processes too) before looking, makes the
   layer under a hidden name and renames it into place whole, so none is ever
@@ -452,9 +453,11 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   another folder, or when Wine would cross a major version that no applied
   update's `from` names. Wine within a major version is moved
   (`wineboot -u`, `WineManager.movePrefix`).
-- **The shipped defaults**: the wine module's `wine-prefix`, when
-  `prefix.yaml` changed, applies this set-up over the old prefix
-  (`WineManager.applyPrefixSetup`) with the game left installed. The steam
+- **The shipped defaults**: the wine module's `wine-prefix`, when its
+  `stages/prefix` changed (the lock records a hash of each module stage the
+  wrapp was built from), runs the stage's steps over the old prefix
+  (`WineManager.runPrefixStage`), and a DirectDraw game's cnc-ddraw steps,
+  with the game left installed. The steam
   module's `steam` builds afresh, from Steam, which needs no disc.
 - **Every wrapp has a launcher, which an update always brings.** The
   launcher's revision is a hash of the sources the wrapp's own code is built

@@ -16,10 +16,13 @@ struct BuildPlanTests {
     @Test("A disc edition: its stages in order, functions expanded, substitutions made")
     func blueMoonsDisc() throws {
         let plan = try #require(try plan("blue-moon", edition: "cd"))
-        #expect(plan.stages.map(\.name) == ["prefix", "disc"])
-        #expect(plan.stages[0].modules == ["wine"])
-        #expect(plan.stages[1].modules == ["installer", "nancy-drew", "wine"])
-        let steps = plan.stages[1].steps
+        // The wine module's prefix stage, which the bundle's is built from.
+        #expect(plan.stages.map(\.name) == ["wine/prefix", "prefix", "disc"])
+        #expect(plan.stages[1].modules == ["wine"])
+        // cnc-ddraw, as Blue Moon draws with DirectDraw, and the icon.
+        #expect(plan.stages[1].steps.map { "\($0.module ?? "").\($0.instruction)" } == ["wine.WINETRICKS", ".EDIT", ".COPY"])
+        #expect(plan.stages[2].modules == ["installer", "nancy-drew", "wine"])
+        let steps = plan.stages[2].steps
         let installDir = "C:/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon"
         #expect(steps.map { "\($0.module ?? "").\($0.instruction)" } == [
             "wine.KEEP-DISCS", "installer.RUN", ".RUN", ".EDIT",
@@ -42,7 +45,7 @@ struct BuildPlanTests {
         #expect(patch.origin.hasPrefix("nancy-drew/functions/patch:"))
         // The game's .ini settings, which the stage writes after its patches.
         #expect(steps[3].arguments == ["wine:\(installDir)/*.ini"])
-        #expect(plan.stages[1].steps[0].description
+        #expect(steps[0].description
                 == "WINE.KEEP-DISCS --combined=wine:C:/nancy-drew-installer/disk-combined --into=wine:C:/nancy-drew-installer input:disc-1 input:disc-2")
         #expect(steps[3].option("from-data") == "ini")
     }

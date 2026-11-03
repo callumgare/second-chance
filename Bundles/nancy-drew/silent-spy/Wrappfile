@@ -2,8 +2,7 @@ CONST install-dir = "C:/Program Files (x86)/Her Interactive/The Silent Spy"
 INPUT disc-1
 INPUT installer
 
-FROM scratch AS prefix
-USE wine@10
+FROM wine@10/prefix AS prefix
 USE nancy-drew # its clean-exit log
 COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
 ICON /Resources/nancy-drew.icns

@@ -60,7 +60,7 @@ struct UpdateWrappTests {
         }
         #expect(chain.applied == ["wine-prefix"])
         #expect(chain.moves.isEmpty)
-        #expect(target.modules.first { $0.id == "wine" }?.files?["prefix.yaml"] != nil)
+        #expect(target.modules.first { $0.id == "wine" }?.files?["stages/prefix"] != nil)
         #expect(target.launch?.program.hasPrefix("wine:C:/") == true)
     }
 

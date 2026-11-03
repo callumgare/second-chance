@@ -30,6 +30,11 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
 
     public var target: PlannedStage? { stages.last }
 
+    /// The steps of the bundle's own stages: what a builder runs, a module's
+    /// stage (`wine/prefix`, the prefix Wine's build makes) being the
+    /// module's to make.
+    public var bundleSteps: [PlannedStep] { stages.filter { !$0.isModuleStage }.flatMap(\.steps) }
+
     /// The file a step names in full form, if the plan read one.
     public func file(_ fullForm: String) -> URL? { files[fullForm] }
 }
@@ -40,6 +45,9 @@ public nonisolated struct PlannedStage: Sendable, Equatable {
     /// The modules it has, by id, its dependencies' and `FROM`'s included.
     public let modules: [String]
     public let steps: [PlannedStep]
+
+    /// A module's stage (`wine/prefix`), named `<module>/<stage>`.
+    public var isModuleStage: Bool { name.contains("/") }
 }
 
 /// One step, ready to run: every value substituted.
@@ -184,6 +192,18 @@ public nonisolated struct BuildPlanner {
         guard let target = edition.build?.target else { return nil }
         let recorder = Recorder()
         let plan = try plan(edition: edition, target: target, conditions: conditions, recorder: recorder)
+        // cnc-ddraw is for a game that draws with DirectDraw, and such a game
+        // needs it: the two are written together.
+        if let launch = plan.launch, launch.launcher(pathTypes) == .wine {
+            let cncDdraw = plan.stages.flatMap(\.steps).contains {
+                $0.module == ModuleID.wine.rawValue && $0.instruction == "WINETRICKS" && $0.arguments == ["cnc_ddraw"]
+            }
+            if cncDdraw != (launch.options["wine.graphics"] == "direct-draw") {
+                throw PlanError(description: cncDdraw
+                    ? "\(target) sets cnc-ddraw up, but its launch doesn't draw with DirectDraw (--wine.graphics=direct-draw)"
+                    : "\(target)'s launch draws with DirectDraw, but nothing sets cnc-ddraw up (DO wine.cnc-ddraw)")
+            }
+        }
         let unused = (edition.build?.inputs ?? []).map(\.id).filter { !recorder.usedInputs.contains($0) }
         if !unused.isEmpty {
             throw PlanError(description: "manifest.yaml's edition \(editionID) gives \(unused.joined(separator: ", ")), "
@@ -213,6 +233,17 @@ public nonisolated struct BuildPlanner {
             guard let stage = wrappfile.stage(named: name) else {
                 throw PlanError(description: "the Wrappfile has no stage called \(name)")
             }
+            // A module's stage that is a Wrappfile (`FROM wine@10/prefix`) is
+            // planned first, once, as a stage of its own (`wine/prefix`).
+            if case .module(let id, let constraint, let moduleStage) = stage.from,
+               let module = modules[id.lowercased()], let found = try moduleStageFile(moduleStage, of: module) {
+                let key = "\(module.manifest.id)/\(moduleStage)"
+                if modulesByStage[key] == nil {
+                    let planned = try context.planModuleStage(found, named: key, module: module, constraint: constraint)
+                    modulesByStage[key] = planned.modules
+                    stages.append(planned.stage)
+                }
+            }
             let planned = try context.plan(stage, globals: globals, inheriting: modulesByStage)
             modulesByStage[name] = planned.modules
             stages.append(planned.stage)
@@ -228,6 +259,54 @@ public nonisolated struct BuildPlanner {
         }
         plan.icon = recorded.icon
         return plan
+    }
+
+    /// A module's stage that is a Wrappfile (`stages/prefix`), parsed; nil
+    /// for one its Swift provides (`steam/client`) or none.
+    func moduleStageFile(_ name: String, of module: ModuleFolder) throws(PlanError) -> Stage? {
+        guard let path = module.manifest.stages?.first(where: { ($0 as NSString).lastPathComponent.lowercased() == name.lowercased() })
+        else { return nil }
+        guard let text = try? String(contentsOf: module.file(path), encoding: .utf8) else {
+            throw PlanError(description: "the \(module.manifest.id) module's \(path) can't be read")
+        }
+        do {
+            guard let stage = try WrappfileParser.parse(text).stage(named: name) else {
+                throw PlanError(description: "the \(module.manifest.id) module's \(path) has no stage called \(name)")
+            }
+            return stage
+        } catch let error as WrappfileError {
+            throw PlanError(description: "the \(module.manifest.id) module's \(path): \(error)")
+        } catch {
+            throw PlanError(description: "the \(module.manifest.id) module's \(path): \(error)")
+        }
+    }
+
+    /// A module's stage planned on its own (`wine/prefix`, as Wine's every
+    /// prefix is made), at the version `constraint` picks: what the build
+    /// makes the prefix with, and its layer is keyed on.
+    public static func moduleStage(_ id: String, _ name: String, constraint: String?, modules: [ModuleFolder]) throws -> PlannedStage? {
+        guard let module = modules.first(where: { $0.manifest.id == id }) else { return nil }
+        let manifest = try Manifest.decode(["format": 1, "id": "module/\(id)", "version": 1, "title": id,
+                                            "editions": [["id": "module", "source": "download"]]])
+        let planner = BuildPlanner(bundle: ProgramBundle(folder: module.folder, manifest: manifest), wrappfile: Wrappfile(), modules: modules)
+        guard let stage = try planner.moduleStageFile(name, of: module) else { return nil }
+        let context = Context(planner: planner, edition: manifest.editions[0], conditions: .thisMac, recorder: Recorder())
+        return try context.planModuleStage(stage, named: "\(id)/\(name)", module: module, constraint: constraint).stage
+    }
+
+    /// A module's function's steps, planned in a stage with nothing but
+    /// the module: what a builder with no plan of its own runs (cnc-ddraw
+    /// for a Steam or Big Fish DirectDraw game, until their editions have
+    /// stages).
+    public static func functionSteps(_ id: String, _ function: String, modules: [ModuleFolder]) throws -> [PlannedStep] {
+        guard let module = modules.first(where: { $0.manifest.id == id }) else { return [] }
+        let manifest = try Manifest.decode(["format": 1, "id": "module/\(id)", "version": 1, "title": id,
+                                            "editions": [["id": "module", "source": "download"]]])
+        let file = try WrappfileParser.parse("FROM scratch AS only\nUSE \(id)\nDO \(id).\(function)\n")
+        let planner = BuildPlanner(bundle: ProgramBundle(folder: module.folder, manifest: manifest), wrappfile: file, modules: modules)
+        let context = Context(planner: planner, edition: manifest.editions[0], conditions: .thisMac, recorder: Recorder())
+        guard let stage = file.stage(named: "only") else { return [] }
+        return try context.plan(stage, globals: try context.globalScope(), inheriting: [:]).stage.steps
     }
 
     /// The Wrappfile's global `CONST`s as `editionID` has them
@@ -355,13 +434,33 @@ public nonisolated struct BuildPlanner {
             switch stage.from {
             case .stage("previous"): scope.modules.fromPrevious = true
             case .stage(let parent): scope.modules = inheriting[parent] ?? StageModules()
-            case .module(let id, let constraint, _): try addModule(id, constraint: constraint, as: nil, to: &scope, origin: "Wrappfile:\(stage.line)")
+            case .module(let id, let constraint, let moduleStage):
+                if let inherited = inheriting["\(id.lowercased())/\(moduleStage)"] {
+                    scope.modules = inherited
+                } else {
+                    try addModule(id, constraint: constraint, as: nil, to: &scope, origin: "Wrappfile:\(stage.line)")
+                }
             case .scratch: break
             }
             var steps: [PlannedStep] = []
             try expand(stage.body, scope: &scope, origin: "Wrappfile", into: &steps)
             let planned = PlannedStage(name: stage.name ?? "", from: stage.from,
                                        modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps)
+            return (planned, scope.modules)
+        }
+
+        /// A module's stage, planned with the module as `self` and at the
+        /// version the bundle's `FROM` picked, which its own `USE` of the
+        /// module takes.
+        func planModuleStage(_ stage: Stage, named name: String, module: ModuleFolder,
+                             constraint: String?) throws(PlanError) -> (stage: PlannedStage, modules: StageModules) {
+            var scope = Scope()
+            scope.module = module
+            try addModule(module.manifest.id, constraint: constraint, as: nil, to: &scope, origin: name)
+            var steps: [PlannedStep] = []
+            let path = module.manifest.stages?.first { ($0 as NSString).lastPathComponent == stage.name } ?? "stages/\(stage.name ?? "")"
+            try expand(stage.body, scope: &scope, origin: "\(module.manifest.id)/\(path)", into: &steps)
+            let planned = PlannedStage(name: name, from: stage.from, modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps)
             return (planned, scope.modules)
         }
 

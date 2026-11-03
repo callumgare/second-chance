@@ -1,0 +1,20 @@
+# FROM wine@<version>/prefix
+#
+# The prefix every Wine program starts from: wineboot's, made by USE wine,
+# set up as each of these steps says. A bundle names the Wine it wants in
+# its FROM, and this stage's USE wine takes that version. The prefix layer
+# is keyed on these steps, so a change makes a fresh prefix, and the
+# wine-prefix update runs them over an old app's.
+FROM scratch AS prefix
+USE wine
+# C: at drive_c, and every other drive blocked, Z: (the whole Mac) included
+WINE.DRIVES --only=C:
+# Wine says yes to a game's display mode switch without making it, and
+# scales the game up to the real display: old games quit when the switch
+# fails, as it does on a display with no mode of the size they ask for (a
+# MacBook's built-in one has no 4:3 modes). Wine 10 reads this from the X11
+# Driver key whatever the driver; the wrapp's mode scaling helper scales
+# what Direct3D draws to match (docs/wine-in-process-helpers.md#mode-scaling).
+WINE.REGISTRY --progress=display --set x11-driver:EmulateModeset Y
+# The prefix's user folders unlinked from the Mac's home folder
+WINE.WINETRICKS --progress=disc isolate_home

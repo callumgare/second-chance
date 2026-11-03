@@ -55,6 +55,9 @@ public nonisolated enum WineBuild: BuildModule {
     public static let instructions = [
         // Installs a winetricks verb.
         InstructionSpec("WINETRICKS", arguments: 1...1),
+        // The prefix's drives: `--only=C:` removes every other, C: at drive_c,
+        // the rest blocked (Z:, the whole Mac, included).
+        InstructionSpec("DRIVES", options: ["only": .value], required: ["only"]),
         // Sets (`--set <key>:<name> <value>`) or removes (`--remove <key>:<name>`) a registry value.
         InstructionSpec("REGISTRY", options: ["set": .flag, "remove": .flag], arguments: 1...2),
         // Gives a folder in the prefix a drive, kept for later steps and at launch.
@@ -78,57 +81,29 @@ public nonisolated enum WineBuild: BuildModule {
         "VOLUME": ["drive": .value],
     ]
 
-    /// How the wine module sets a new prefix up, after wineboot
-    /// (`Modules/wine/prefix.yaml`), in order.
-    public struct PrefixSetup: Decodable, Sendable {
-        public let setup: [Step]
-
-        /// One step: exactly one of its actions, which the schema checks.
-        public struct Step: Decodable, Sendable {
-            public let registry: RegistryValue?
-            public let winetricks: String?
-            public let ddrawIni: [String: String]?
-            /// What the build's progress says meanwhile: display, graphics or disc.
-            public let progress: String?
+    /// The wine module's `prefix` stage (`Modules/wine/stages/prefix`), at
+    /// the Wine `constraint` picks: what every prefix is made with.
+    public static func prefixStage(modules root: URL, constraint: String? = "10") throws -> PlannedStage {
+        let modules = try ModuleLoader(root: root).loadAll().get()
+        guard let stage = try BuildPlanner.moduleStage(id.rawValue, "prefix", constraint: constraint, modules: modules) else {
+            throw ModuleReleases.RecordError(description: "The wine module has no prefix stage")
         }
-
-        public struct RegistryValue: Decodable, Sendable {
-            /// x11-driver, mac-driver or direct3d.
-            public let key: String
-            public let name: String
-            public let value: String
-        }
-    }
-
-    /// The prefix set-up in the wine module in `modules`.
-    public static func prefixSetup(modules root: URL) throws -> PrefixSetup {
-        try ModuleLoader.table("prefix.yaml", of: module(in: root), as: PrefixSetup.self)
-    }
-
-    static func module(in root: URL) throws -> ModuleFolder {
-        let loader = try ModuleLoader(root: root)
-        switch loader.load(root.appendingPathComponent(id.rawValue)) {
-        case .success(let module):
-            return module
-        case .failure(let problems):
-            throw ModuleReleases.RecordError(description: "The wine module has problems: \(problems)")
-        }
+        return stage
     }
 
     /// Raised whenever the Swift that makes a prefix (`WineManager`'s
-    /// `makeWinePrefix`) changes what it makes: the one input of the prefix
-    /// layer's key that can't be read from a file.
-    public static let prefixCodeRevision = 1
+    /// `makeWinePrefix`, and how it carries out the stage's steps) changes
+    /// what it makes: the one input of the prefix layer's key that can't be
+    /// read from a file.
+    public static let prefixCodeRevision = 2
 
-    /// The key of the layer a new prefix is (`USE wine`): the engine, the
-    /// wine module's release and the set-up it follows, and winetricks.
-    /// A change to any of them makes a fresh prefix, with nothing to clear.
-    public static func prefixLayerKey(engineVersion: String, modules root: URL, winetricks: URL?) throws -> LayerKey {
-        let module = try module(in: root)
-        return LayerKey(slot: "wine prefix", inputs: [
+    /// The key of the layer a new prefix is: the engine, the `prefix`
+    /// stage's steps as planned, and winetricks. A change to any of them
+    /// makes a fresh prefix, with nothing to clear.
+    public static func prefixLayerKey(engineVersion: String, stage: PlannedStage, winetricks: URL?) throws -> LayerKey {
+        LayerKey(slot: "wine prefix", inputs: [
             .init("wine engine", engineVersion.trimmingCharacters(in: .whitespacesAndNewlines)),
-            .init("wine release", String(module.manifest.release)),
-            .init("wine prefix.yaml", try LayerKey.hash(file: module.file("prefix.yaml"))),
+            .init("wine prefix stage", stage.steps.map(\.description).joined(separator: "\n")),
             .init("winetricks", try winetricks.map(LayerKey.hash(file:)) ?? "none"),
             .init("prefix code revision", String(prefixCodeRevision)),
         ])

@@ -147,6 +147,7 @@ final class FakeNetworkCounter: WineNetworkCounting, @unchecked Sendable {
 
 struct FakePreparer: SteamWrappPreparing {
     func prepare(wrappAt path: URL) async throws { try SteamWrappBuilderTests.fakeWrapp(at: path) }
+    func setUpGraphics(for gameInfo: GameInfo, in path: URL) async throws {}
 }
 
 @MainActor

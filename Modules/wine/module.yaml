@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 5
+release: 6
 native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -20,11 +20,14 @@ versions:
           size: 84533420
           urls: ["https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz"]
 runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
-data: ["prefix.yaml", "routine-errors.yaml"]
+data: ["routine-errors.yaml"]
+retired: ["prefix.yaml"]                     # The app's own; the prefix stage replaced it
+stages: ["stages/prefix"]                   # FROM wine@<version>/prefix
+functions: ["functions/cnc-ddraw"]          # DO wine.cnc-ddraw
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program with no menu, started and quit
 updates:
-  # A wrapp whose prefix was set up from another prefix.yaml gets this
-  # one's set-up applied over it (registry settings, cnc-ddraw and its
-  # ddraw.ini), keeping the game installed. Not on every release: most only
-  # change what happens at launch, which a new wrapp brings anyway.
-  - { id: "wine-prefix", when-changed: ["prefix.yaml"] }
+  # A wrapp whose prefix was set up by another prefix stage gets this
+  # one's steps run over it (and a DirectDraw game, its cnc-ddraw steps),
+  # keeping the game installed. Not on every release: most only change what
+  # happens at launch, which a new wrapp brings anyway.
+  - { id: "wine-prefix", when-changed: ["stages/prefix"] }

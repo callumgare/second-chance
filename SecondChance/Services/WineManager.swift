@@ -34,8 +34,8 @@ class WineManager {
     // MARK: - Wine Prefix Management
 
     /// The prefix layer's key for a wrapp: the Wine engine it carries, by
-    /// its version and prepared hash, and what the build sets a prefix up
-    /// with.
+    /// its version and prepared hash, and the wine module's `prefix` stage,
+    /// which the build sets a prefix up with.
     nonisolated static func prefixLayerKey(for wrappPath: URL) throws -> LayerKey {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
         let installed = EngineInstall.installed(in: wrappPath.appendingPathComponent("Contents"))
@@ -43,7 +43,7 @@ class WineManager {
             throw WrappBuildError.templateDamaged("The wrapp at \(wrappPath.path) has no Wine engine")
         }
         let engine = "\(wine.version) \(wine.hash)"
-        return try WineBuild.prefixLayerKey(engineVersion: engine, modules: resources.appendingPathComponent("Modules"),
+        return try WineBuild.prefixLayerKey(engineVersion: engine, stage: try prefixStage(),
                                             winetricks: Bundle.main.url(forResource: "winetricks", withExtension: nil))
     }
 
@@ -81,8 +81,6 @@ class WineManager {
             let (layer, built) = try await layers.layer(for: key) { content in
                 let configured = try await makeWinePrefix(at: wrappPath, bus: bus)
                 made = true
-                // A prefix where cnc-ddraw's settings couldn't be made is
-                // never cached for the builds after this one.
                 guard configured else { throw NotKept() }
                 logger.notice("Caching Wine prefix \(key.hash.prefix(12))...")
                 try await Blocking.run {
@@ -110,7 +108,7 @@ class WineManager {
             // prefix carries on with it.
             guard made else { throw error }
             if error is NotKept {
-                logger.warning("Not caching this Wine prefix, as cnc-ddraw isn't set up in it: the next build makes its own")
+                logger.warning("Not caching this Wine prefix: the next build makes its own")
             } else {
                 logger.warning("Couldn't cache the Wine prefix, so the next build will make its own: \(error.localizedDescription)")
             }
@@ -119,14 +117,14 @@ class WineManager {
         Wine(wrapp: wrappPath).drives.block("z")
     }
 
-    /// The wine module's prefix set-up, from the modules in Second Chance's
-    /// resources.
-    nonisolated static func prefixSetup() throws -> WineBuild.PrefixSetup {
+    /// The wine module's `prefix` stage (`Modules/wine/stages/prefix`), from
+    /// the modules in Second Chance's resources: what every prefix is made with.
+    nonisolated static func prefixStage() throws -> PlannedStage {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
-        return try WineBuild.prefixSetup(modules: resources.appendingPathComponent("Modules"))
+        return try WineBuild.prefixStage(modules: resources.appendingPathComponent("Modules"))
     }
 
-    /// What the build's progress says during a step of the set-up.
+    /// What the build's progress says during a step (`--progress=<id>`).
     nonisolated static func progressText(_ key: String) -> String? {
         switch key {
         case "display": String(localized: "Setting up the game's display")
@@ -145,92 +143,28 @@ class WineManager {
         }
     }
 
-    /// Set `settings` in cnc-ddraw's ddraw.ini, each `key=value` line
-    /// replaced. Whether every one is now set. See
-    /// docs/wine-in-process-helpers.md before changing them.
-    nonisolated static func configureDdrawIni(_ file: URL, settings: [String: String]) -> Bool {
-        do {
-            var lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: "\n")
-            var found = Set<String>()
-            for index in lines.indices {
-                let line = lines[index]
-                guard let equals = line.firstIndex(of: "=") else { continue }
-                let key = String(line[..<equals])
-                guard let value = settings[key] else { continue }
-                lines[index] = "\(key)=\(value)"
-                found.insert(key)
-            }
-            try lines.joined(separator: "\n").write(to: file, atomically: true, encoding: .utf8)
-            let missing = Set(settings.keys).subtracting(found)
-            guard missing.isEmpty else {
-                logger.error("cnc-ddraw's ddraw.ini doesn't have the \(missing.sorted().joined(separator: ", ")) settings to change: is this another cnc-ddraw?")
-                return false
-            }
-            logger.notice("✓ Configured cnc-ddraw: \(settings.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ", "))")
-            return true
-        } catch {
-            logger.error("Couldn't configure cnc-ddraw (\(file.path)): \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    /// Make the prefix from scratch: whether every step of the set-up took.
-    /// What it does is the prefix layer's, so a change here raises
-    /// `WineBuild.prefixCodeRevision`.
+    /// Make the prefix from scratch: wineboot's, then the wine module's
+    /// `prefix` stage's steps, in order. What it does is the prefix layer's,
+    /// so a change here raises `WineBuild.prefixCodeRevision`.
     private func makeWinePrefix(at wrappPath: URL, bus: EventBus<AppEvent>) async throws -> Bool {
-
         let wine = Wine(wrapp: wrappPath)
-
-        // Run wineboot to initialize (wineboot is a Windows program, so run it through wine)
         try await wine.run(.wine(["wineboot", "-u"]))
-
-        // Wait for wineserver to finish
         try await wine.server.waitUntilProgramsExit(timeout: nil)
-
-        // The rest is the wine module's data (Modules/wine/prefix.yaml), in
-        // order.
-        let configured = try await applyPrefixSetup(at: wrappPath, bus: bus)
-
-        // Only the drives a game needs (WineDrives has what each is for),
-        // and no Z: showing the whole Mac. The A: drive's place in /tmp
-        // stands in for the saves until the wrapp points it at them, and C:
-        // is relative so the prefix still works copied into a wrapp.
-        wine.drives.removeAll()
-        try wine.drives.mount("/tmp/second-chance-nancy-drew-\(UUID().uuidString)", as: "a")
-        try wine.drives.mount("../drive_c", as: "c")
-        wine.drives.block("bdefghijklmnopqrstuvwxyz")
-
-        // Ensure Wine server is fully shut down before caching
-        // This ensures all registry changes and file writes are flushed to disk
-        try await wine.server.waitUntilProgramsExit(timeout: nil)
-        return configured
+        try await runPrefixStage(at: wrappPath, bus: bus)
+        return true
     }
 
-    /// The wine module's set-up (`prefix.yaml`), applied to the prefix of
-    /// the wrapp at `wrappPath`: a new one, or an old wrapp's, which the
-    /// `wine-prefix` update brings up to this set-up with its game left
-    /// installed. Whether every step took.
-    func applyPrefixSetup(at wrappPath: URL, bus: EventBus<AppEvent>) async throws -> Bool {
-        let wine = Wine(wrapp: wrappPath)
-        let winetricks = Winetricks(wine: wine)
-        var configured = true
-        for step in try Self.prefixSetup().setup {
-            if let progress = step.progress.flatMap(Self.progressText) {
-                await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: progress)))
-            }
-            if let value = step.registry {
-                try await wine.registry.set(.string(value.value), for: value.name, in: Self.registryKey(value.key))
-            }
-            if let verb = step.winetricks {
-                try await winetricks.install(verb)
-            }
-            if let settings = step.ddrawIni {
-                configured = Self.configureDdrawIni(wine.driveC.appendingPathComponent("windows/syswow64/ddraw.ini"),
-                                                    settings: settings) && configured
-            }
+    /// The wine module's `prefix` stage's steps, run in the prefix of the
+    /// wrapp at `wrappPath`: a new one, or an old wrapp's, which the
+    /// `wine-prefix` update brings up to this stage with its game left
+    /// installed. Wine's server is let finish, so every registry change and
+    /// file is written before the prefix is cached.
+    func runPrefixStage(at wrappPath: URL, bus: EventBus<AppEvent>) async throws {
+        let steps = WineSteps(bus: bus)
+        for step in try Self.prefixStage().steps {
+            try await steps.run(step, wrappPath: wrappPath)
         }
-        try await wine.server.waitUntilProgramsExit(timeout: nil)
-        return configured
+        try await Wine(wrapp: wrappPath).server.waitUntilProgramsExit(timeout: nil)
     }
 
     /// Move the prefix of the wrapp at `wrappPath`, made by another Wine of

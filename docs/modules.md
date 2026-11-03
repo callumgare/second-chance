@@ -15,7 +15,8 @@ Modules/
   releases.json             each module's releases, as recorded (generated)
   wine/
     module.yaml
-    prefix.yaml             how a new prefix is set up (prefix.schema.json beside it)
+    stages/prefix           the Wrappfile a new prefix is set up by (FROM wine@10/prefix)
+    functions/cnc-ddraw     cnc-ddraw, for a DirectDraw game (DO wine.cnc-ddraw)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
   scummvm/  dosbox/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
@@ -49,14 +50,17 @@ native: "wine"                 # the Swift compiled into Second Chance it is
 versions:                      # what this release provides, as a bundle names it with @
   - version: "10.0_8"
     package: { … }             # an engine's: what it is made from (below)
-data: ["prefix.yaml", "routine-errors.yaml"]
+data: ["routine-errors.yaml"]
+retired: ["prefix.yaml"]       # data only Second Chance's Swift read, dropped (below)
+stages: ["stages/prefix"]      # Wrappfiles a bundle builds FROM (wine@10/prefix)
+functions: ["functions/cnc-ddraw"]
 updates:                       # its default updates, after a bundle's
-  - { id: "wine-prefix", when-changed: ["prefix.yaml"] }
+  - { id: "wine-prefix", when-changed: ["stages/prefix"] }
 ```
 
 A module's data tables are YAML, read as YAML 1.2 as bundles are
 ([program-bundles.md](program-bundles.md#how-a-manifest-is-read)), and a table
-with a schema beside it (`prefix.yaml` and `prefix.schema.json`) is checked
+with a schema beside it (`patches.json` and `patches.schema.json`) is checked
 against it whenever the module is loaded. A Wrappfile reads a table as
 `${<module>.data.<table>…}` (in the module's own functions,
 `${self.data.<table>…}`), and the module's release as `${<module>.version}`
@@ -174,7 +178,7 @@ none.
 
 | Module | Data | Read by |
 | --- | --- | --- |
-| `wine` | `prefix.yaml`: the registry setting, winetricks verbs and `ddraw.ini` settings a new prefix gets, in order | `WineManager`, as it makes a prefix |
+| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and `WineSteps`, which carries the steps out; Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
 | `steam` | `routine-errors.yaml`: what Steam logs as it starts | the same, for a game launched through Steam |
 | `nancy-drew` | `patches.json`: Her Interactive's patches ([game-patches.md](game-patches.md)) | `GamePatchCatalog`, and `setup-game-patches.sh`, which stages their archives in the app's download cache |
@@ -191,9 +195,9 @@ scenarios are data.
 
 The wrapp reads no YAML, as only the builder does, so what it needs of a
 module's data is generated as Swift by `sc generate` and checked in; a test
-fails when it isn't what the data makes. A change to `prefix.yaml`, or to
-the wine module's release, changes the prefix layer's key, so the next build
-makes a fresh prefix by itself
+fails when it isn't what the data makes. A change to the `prefix` stage's
+steps changes the prefix layer's key, so the next build makes a fresh prefix
+by itself
 ([wrapp-build.md](wrapp-build.md#the-layer-cache)).
 
 ## Releases
@@ -215,4 +219,7 @@ tests) fail on a module whose files differ from what its release recorded,
 naming the files. A new release is compared with the one before: for a
 version both provide, it may not drop a function or a data table, since a
 bundle can't choose a release and must keep working; that needs a new
-version. It may stop providing a version altogether.
+version. It may stop providing a version altogether. The one exception is a
+table only Second Chance's own Swift ever read, which no bundle could: the
+module names it under `retired`, and it goes (the wine module's
+`prefix.yaml`, which the `prefix` stage replaced).

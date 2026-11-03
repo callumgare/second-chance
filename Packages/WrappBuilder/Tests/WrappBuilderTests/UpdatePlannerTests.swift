@@ -31,7 +31,7 @@ struct UpdatePlannerTests {
     private func shippedLikeModules() throws -> [ModuleFolder] {
         [
             try module("wine", release: 2, version: "10.0_8",
-                       updates: [["id": "wine-prefix", "when-changed": ["prefix.yaml"]]]),
+                       updates: [["id": "wine-prefix", "when-changed": ["stages/prefix"]]]),
             try module("steam", release: 1, version: "1", updates: [["id": "steam", "fresh-build": true]]),
             try module("nancy-drew", release: 2, version: "1"),
         ]
@@ -42,7 +42,7 @@ struct UpdatePlannerTests {
         UpdatePlanner.Target(
             bundleVersion: 3, edition: edition,
             modules: [
-                .init(id: "wine", release: 2, version: "10.0_8", files: ["prefix.yaml": prefixHash]),
+                .init(id: "wine", release: 2, version: "10.0_8", files: ["stages/prefix": prefixHash]),
                 .init(id: "nancy-drew", release: 2, version: "1"),
             ] + extra,
             launch: RecordedLaunch(program: "wine:\(Self.installDir)/Game.exe")
@@ -56,7 +56,7 @@ struct UpdatePlannerTests {
             bundle: .init(id: "nancy-drew/example", version: bundle), edition: edition, source: "disk",
             composition: Composition(launcher: .wine),
             modules: [
-                .init(id: "wine", release: wineRelease, version: wine, files: prefixHash.map { ["prefix.yaml": $0] }),
+                .init(id: "wine", release: wineRelease, version: wine, files: prefixHash.map { ["stages/prefix": $0] }),
                 .init(id: "nancy-drew", release: 2, version: "1"),
             ] + extra,
             builtBy: "0.9.0"
@@ -92,7 +92,7 @@ struct UpdatePlannerTests {
         #expect(chain.previous["wine"] == "10.0_8")
     }
 
-    @Test("A changed prefix.yaml brings Wine's default update, done by its own Swift")
+    @Test("A changed prefix stage brings Wine's default update, done by its own Swift")
     func winePrefixUpdate() throws {
         let chain = try chain(try planner().plan(old: lock(wineRelease: 1, prefixHash: "old"), target: target()))
         #expect(chain.applied == ["wine-prefix"])
@@ -240,7 +240,7 @@ struct UpdatePlannerTests {
         #expect(made.launch?.program == "wine:\(Self.installDir)/Game.exe")
         #expect(made.source == "disk")
         #expect(made.modules.map(\.id) == ["wine"])
-        // Its prefix was set up from a prefix.yaml nothing recorded: Wine's
+        // Its prefix was set up by a prefix stage nothing recorded: Wine's
         // default update applies it again.
         let chain = try chain(try planner().plan(old: made, target: target()))
         #expect(chain.applied == ["wine-prefix"])
@@ -256,7 +256,7 @@ struct UpdatePlannerTests {
     func shippedDefaults() throws {
         let modules = Dictionary(uniqueKeysWithValues: try shippedModules().map { ($0.manifest.id, $0.manifest) })
         #expect(modules["wine"]?.updates?.map(\.id) == ["wine-prefix"])
-        #expect(modules["wine"]?.updates?.first?.whenChanged == ["prefix.yaml"])
+        #expect(modules["wine"]?.updates?.first?.whenChanged == ["stages/prefix"])
         #expect(modules["steam"]?.updates?.first?.freshBuild == true)
     }
 }

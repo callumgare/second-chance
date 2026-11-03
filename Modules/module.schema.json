@@ -84,6 +84,12 @@
       "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.(yaml|json)$" },
       "uniqueItems": true
     },
+    "retired": {
+      "description": "Data an earlier release had that only Second Chance's own code read, never a bundle, dropped without a new version.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9-]+\\.(yaml|json)$" },
+      "uniqueItems": true
+    },
     "assets": {
       "description": "Files the module carries for builds, tests or the wrapp, in its folder.",
       "type": "array",

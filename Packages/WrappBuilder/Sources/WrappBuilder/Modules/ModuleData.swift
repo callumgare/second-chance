@@ -18,9 +18,14 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     public let versions: [Version]
     public let dependsOn: [String]?
     public let data: [String]?
+    /// Data an earlier release had that only the app's own Swift read,
+    /// never a bundle, so dropping it needs no new version.
+    public let retired: [String]?
     public let assets: [String]?
     public let functions: [String]?
-    /// Steps run after every final stage that `USE`s the module.
+    /// Its stages that are Wrappfiles (`stages/prefix`), as a bundle builds
+    /// `FROM <module>/<stage>`.
+    public let stages: [String]?
     /// Its default updates, run after a bundle's for a wrapp whose copy of
     /// the module is behind this one (`UpdatePlanner`).
     public let updates: [Update]?
@@ -81,7 +86,9 @@ public nonisolated final class ModuleLoader {
 
     /// The module in `folder`, or what's wrong with it.
     public func load(_ folder: URL) -> Result<ModuleFolder, ProgramBundleLoader.Problems> {
-        let name = folder.path.hasPrefix(root.path + "/") ? String(folder.path.dropFirst(root.path.count + 1)) : folder.path
+        // Both resolved, as a temporary folder may be named by /var or /private/var.
+        let path = folder.resolvingSymlinksInPath().path, rootPath = root.resolvingSymlinksInPath().path
+        let name = path.hasPrefix(rootPath + "/") ? String(path.dropFirst(rootPath.count + 1)) : folder.path
         func problems(_ messages: [String]) -> Result<ModuleFolder, ProgramBundleLoader.Problems> {
             .failure(.init(all: messages.map { ProgramBundle.Problem(bundle: name, message: $0) }))
         }
@@ -226,7 +233,7 @@ public nonisolated struct ModuleReleases: Codable, Sendable, Equatable {
         }
         var messages = ["release \(now.release) isn't recorded: run `sc module release \(module.manifest.id)`"]
         if let previous = releases.filter({ $0.release < now.release }).max(by: { $0.release < $1.release }) {
-            messages += Self.compatibilityProblems(from: previous, to: now)
+            messages += Self.compatibilityProblems(from: previous, to: now, retired: module.manifest.retired ?? [])
         } else if let newer = releases.map(\.release).max(), newer > now.release {
             messages.append("its release is \(now.release), but release \(newer) was recorded: releases only count up")
         }
@@ -235,14 +242,15 @@ public nonisolated struct ModuleReleases: Codable, Sendable, Equatable {
 
     /// Within a version every release is backwards compatible: what a
     /// release provided for a version it still provides, the next one may
-    /// not take away. (It may stop providing a version altogether.)
-    static func compatibilityProblems(from previous: Release, to next: Release) -> [String] {
+    /// not take away. (It may stop providing a version altogether.) Data the
+    /// module says is `retired` was never a bundle's to read, so may go.
+    static func compatibilityProblems(from previous: Release, to next: Release, retired: [String] = []) -> [String] {
         guard !Set(previous.versions).isDisjoint(with: next.versions) else { return [] }
         var messages: [String] = []
         for function in previous.functions where !next.functions.contains(function) {
             messages.append("release \(next.release) drops the function \(function), which release \(previous.release) had: that needs a new version")
         }
-        for table in previous.data where !next.data.contains(table) {
+        for table in previous.data where !next.data.contains(table) && !retired.contains(table) {
             messages.append("release \(next.release) drops the data \(table), which release \(previous.release) had: that needs a new version")
         }
         return messages

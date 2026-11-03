@@ -5,8 +5,7 @@ INPUT disc-1
 INPUT disc-2
 INPUT installer
 
-FROM scratch AS prefix
-USE wine@10
+FROM wine@10/prefix AS prefix
 
 # How the game runs, whichever edition it came from
 FROM scratch AS scummvm

@@ -135,9 +135,11 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             ) { () async throws -> InstallLayer.Installed in
                 var gameExePath: String?
                 var configuredINI = false
-                for step in plan.stages.flatMap(\.steps) where !WrappBuildHelper.isAppStep(step) {
+                for step in plan.bundleSteps where !WrappBuildHelper.isAppStep(step) {
                     logger.debug("Plan step: \(step) (\(step.origin))")
                     switch (step.module, step.instruction) {
+                    case _ where WineSteps.handles(step):
+                        try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
                     case ("her-download", "INSTALL"):
                         gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
                                                                        answerFile: step.option("answer-file").flatMap(plan.file),
@@ -281,11 +283,14 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "her-mac") }) else {
                 throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-mac edition names no stage")
             }
-            let steps = plan.stages.flatMap(\.steps)
+            let steps = plan.bundleSteps
             for step in steps where !(step.module == "her-download" && step.instruction == "INSTALL")
                 && !(step.module == nil && step.instruction == "EDIT" && step.option("from-data") == "ini")
-                && !WrappBuildHelper.isAppStep(step) {
+                && !WrappBuildHelper.isAppStep(step) && !WineSteps.handles(step) {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the Mac download flow can't run \(step)")
+            }
+            for step in steps where WineSteps.handles(step) {
+                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
             }
             let configuresINI = steps.contains { $0.instruction == "EDIT" }
 

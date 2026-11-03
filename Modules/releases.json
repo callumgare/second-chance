@@ -810,6 +810,26 @@
         "versions" : [
           "10.0_8"
         ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "a6b85585278eb4a119c4a5df7fd6874cc931a60fe317ab6d6fec831faab3ad86",
+          "module.yaml" : "165cc82b2431e41f484676a00203de55ac37a96b229d3f40fd7277648a56f1f6",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "00c90907ce7e9e1298be2dfcef8ae80a68e668ae5c56c57d1c85ca3a5ce8623b",
+          "scenarios/starts-and-quits.yaml" : "e9315d8978315476450a102bdf4041163f8c93e4d6818c01924bd4e1c29f8030",
+          "stages/prefix" : "8d768324bbc5f9dd8b7ecdca4a851c9277d0f1d7f08c5f0b94335a07de14e732"
+        },
+        "functions" : [
+          "functions/cnc-ddraw"
+        ],
+        "release" : 6,
+        "versions" : [
+          "10.0_8"
+        ]
       }
     ]
   }

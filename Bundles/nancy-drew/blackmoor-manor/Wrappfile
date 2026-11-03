@@ -2,8 +2,8 @@ CONST install-dir = "C:/Nancy Drew/The Curse of Blackmoor Manor"
 INPUT disc-1
 INPUT installer
 
-FROM scratch AS prefix
-USE wine@10
+FROM wine@10/prefix AS prefix
+DO wine.cnc-ddraw
 COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
 ICON /Resources/nancy-drew.icns
 VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents

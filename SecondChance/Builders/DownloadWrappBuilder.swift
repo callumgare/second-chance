@@ -183,7 +183,7 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
     /// can't run yet, and fails before it copies anything wrongly.
     private func run(_ plan: BuildPlan, inputs: [String: URL], wrappPath: URL) async throws {
         let layout = WrappLayout(app: wrappPath)
-        for step in plan.stages.flatMap(\.steps) {
+        for step in plan.bundleSteps {
             logger.debug("Plan step: \(step) (\(step.origin))")
             guard step.module == nil, step.instruction == "COPY", let from = PlannedStep.input(in: step.option("from")),
                   let source = inputs[from],

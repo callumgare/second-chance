@@ -225,9 +225,19 @@ final class UpdateWrappBuilder {
                      gameInfo: GameInfo, settings: WrappSettings, source: WrappSource, input: WrappBuildInput) async throws {
         switch step {
         case .module("wine", let update) where update == "wine-prefix":
-            logger.notice("[Update] \(update): applying this Second Chance's Wine set-up to the game's prefix")
-            if !(try await wineManager.applyPrefixSetup(at: wrappPath, bus: bus)) {
-                logger.warning("[Update] Part of the Wine set-up didn't take; the game may not look as it should")
+            // The prefix stage's steps over the old prefix, with the game left
+            // installed; and for a DirectDraw game, its cnc-ddraw steps too,
+            // which the shared prefix no longer has.
+            logger.notice("[Update] \(update): running the wine module's prefix stage over the game's prefix")
+            try await wineManager.runPrefixStage(at: wrappPath, bus: bus)
+            let slug = gameInfo.id
+            let cncDdraw = try await Blocking.run {
+                (try ShippedBundles.plan(forGame: slug, edition: edition)?.bundleSteps ?? []).filter { step in
+                    step.origin.hasPrefix("wine/functions/cnc-ddraw")
+                }
+            }
+            for step in cncDdraw {
+                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
             }
         case .module(let module, let update):
             throw WrappBuildError.buildRecipeProblem("the \(module) module's \(update) update has no Swift to run it")
@@ -251,9 +261,11 @@ final class UpdateWrappBuilder {
         let gameDir = gameInfo.composition.launcher == .scummvm
             ? layout.onDriveC(settings.installerDir)
             : layout.onDriveC(settings.gameExePath).deletingLastPathComponent()
-        for step in plan.stages.flatMap(\.steps) {
+        for step in plan.bundleSteps {
             logger.debug("Update step: \(step) (\(step.origin))")
             switch (step.module, step.instruction) {
+            case _ where WineSteps.handles(step):
+                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
             case _ where GameInstallerRunner.isPatchStep(step):
                 try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
                                                        source: source, confirmFailure: input.confirmPatchFailure)

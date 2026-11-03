@@ -430,10 +430,11 @@ direct assignment.
   outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
   picks it up again.
 - - **The Wine prefix is a cached layer**, keyed on the engine, the wine
-  module's release and `prefix.yaml`, and winetricks, so changing the set-up's
-  data makes a fresh prefix by itself. The Swift that makes it isn't a file
-  the key can read: raise `WineBuild.prefixCodeRevision` when
-  `WineManager.makeWinePrefix` changes what it makes
+  module's `prefix` stage's steps (`Modules/wine/stages/prefix`), and
+  winetricks, so changing the stage makes a fresh prefix by itself. The Swift
+  that carries it out isn't a file the key can read: raise
+  `WineBuild.prefixCodeRevision` when `WineManager.makeWinePrefix` or
+  `WineSteps` changes what it makes
   ([docs/wrapp-build.md](docs/wrapp-build.md#the-layer-cache)).
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
@@ -486,12 +487,13 @@ direct assignment.
   `WrappTemplate/InProcessHelpers/`. Read
   [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before
   touching either, or cnc-ddraw's `ddraw.ini` settings in the wine module's
-  `Modules/wine/prefix.yaml`.
+  `Modules/wine/functions/cnc-ddraw`, which a DirectDraw game's stage runs
+  (`DO wine.cnc-ddraw`).
 - **Wine fakes a game's display mode switch.** Old games switch the display
   to the mode they were made for and quit (exit 0, a few seconds in) when
   Wine says `NtUserChangeDisplaySettings … returned -2`, which it does for a
   mode the Mac display lacks — every 4:3 mode on a MacBook's built-in one.
-  So the prefix has `EmulateModeset` on (`Modules/wine/prefix.yaml`): Wine says yes, leaves
+  So the prefix has `EmulateModeset` on (`Modules/wine/stages/prefix`): Wine says yes, leaves
   the display alone, and scales the game's windows up. Wine 10's Mac driver
   doesn't scale what Direct3D draws, so the wrapp's mode scaling helper does
   ([docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md#mode-scaling)).

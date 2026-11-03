@@ -121,7 +121,8 @@ public nonisolated struct WrappfileChecker {
                 }
             case .module(let id, let constraint, let stageName):
                 if let module = modules[id] {
-                    if !(native(module.manifest.native ?? "")?.stages ?? []).contains(stageName) {
+                    let wrappfiles = (module.manifest.stages ?? []).map { ($0 as NSString).lastPathComponent }
+                    if !(native(module.manifest.native ?? "")?.stages ?? []).contains(stageName), !wrappfiles.contains(stageName) {
                         found.errors.append("line \(stage.line): the \(id) module has no stage called \(stageName)")
                     }
                     if let constraint, !Self.satisfies(module, constraint) {

@@ -17,29 +17,36 @@ struct PrefixLayerKeyTests {
         return copy
     }
 
-    @Test func theKeyFollowsTheEngineTheSetUpAndWinetricks() throws {
+    @Test func theStageIsTodaysInOrder() throws {
+        let stage = try WineBuild.prefixStage(modules: modulesRoot)
+        #expect(stage.steps.map(\.instruction) == ["DRIVES", "REGISTRY", "WINETRICKS"])
+        #expect(stage.steps.map { $0.option("progress") } == [nil, "display", "disc"])
+    }
+
+    @Test func theKeyFollowsTheEngineTheStageAndWinetricks() throws {
         let modules = try copiedModules()
         defer { try? FileManager.default.removeItem(at: modules) }
         let winetricks = modules.appendingPathComponent("winetricks")
         try Data("#!/bin/sh\n".utf8).write(to: winetricks)
-        func key() throws -> LayerKey {
-            try WineBuild.prefixLayerKey(engineVersion: "wine sikarugir 10.0 (revision 8)\n", modules: modules, winetricks: winetricks)
+        func key(_ engine: String = "wine sikarugir 10.0 (revision 8)\n") throws -> LayerKey {
+            try WineBuild.prefixLayerKey(engineVersion: engine, stage: WineBuild.prefixStage(modules: modules), winetricks: winetricks)
         }
         let original = try key()
         #expect(try key() == original)
         #expect(original.inputs.first == LayerKey.Input("wine engine", "wine sikarugir 10.0 (revision 8)"))
+        #expect(try key("wine cx 24.0.7").hash != original.hash)
 
-        let otherEngine = try WineBuild.prefixLayerKey(engineVersion: "wine cx 24.0.7", modules: modules, winetricks: winetricks)
-        #expect(otherEngine.hash != original.hash)
-
-        // A change to the set-up is a new prefix, with nothing to clear.
-        let setup = modules.appendingPathComponent("wine/prefix.yaml")
-        try (String(contentsOf: setup, encoding: .utf8) + "\n# changed\n").write(to: setup, atomically: true, encoding: .utf8)
-        let changedSetup = try key()
-        #expect(changedSetup.hash != original.hash)
-        #expect(changedSetup.differences(from: original) == ["`wine prefix.yaml` changed"])
+        // A change to the stage's steps is a new prefix, with nothing to
+        // clear; a comment changes no step.
+        let stage = modules.appendingPathComponent("wine/stages/prefix")
+        let text = try String(contentsOf: stage, encoding: .utf8)
+        try (text + "\n# changed\n").write(to: stage, atomically: true, encoding: .utf8)
+        #expect(try key() == original)
+        try (text + "\nWINE.WINETRICKS corefonts\n").write(to: stage, atomically: true, encoding: .utf8)
+        let changedStage = try key()
+        #expect(changedStage.differences(from: original) == ["`wine prefix stage` changed"])
 
         try Data("#!/bin/sh\n# newer\n".utf8).write(to: winetricks)
-        #expect(try key().differences(from: changedSetup) == ["`winetricks` changed"])
+        #expect(try key().differences(from: changedStage) == ["`winetricks` changed"])
     }
 }

@@ -14,7 +14,7 @@ struct UpToDateTests {
         ] as [String: Any])
         let wine = try Manifest.decodeKebab(ModuleManifest.self, from: [
             "format": 1, "id": "wine", "release": 4, "versions": [["version": "10.0_8"]],
-            "updates": [["id": "wine-prefix", "when-changed": ["prefix.yaml"]]],
+            "updates": [["id": "wine-prefix", "when-changed": ["stages/prefix"]]],
         ] as [String: Any])
         return UpdatePlanner(manifest: manifest, modules: [ModuleFolder(folder: URL(fileURLWithPath: "/modules/wine"), manifest: wine)]) { _ in
             ["wine"]
@@ -22,7 +22,7 @@ struct UpToDateTests {
     }
 
     private func wine(package: String?) -> WrappLock.ModuleRef {
-        .init(id: "wine", release: 4, version: "10.0_8", files: ["prefix.yaml": "same"], package: package)
+        .init(id: "wine", release: 4, version: "10.0_8", files: ["stages/prefix": "same"], package: package)
     }
 
     private func target(launcher: String? = "launcher-1", package: String = "engine-1") -> UpdatePlanner.Target {

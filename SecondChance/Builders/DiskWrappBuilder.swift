@@ -176,7 +176,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
         }
 
-        for step in plan.stages.flatMap(\.steps) where !WrappBuildHelper.isAppStep(step) {
+        for step in plan.bundleSteps where !WrappBuildHelper.isAppStep(step) {
             logger.debug("Plan step: \(step) (\(step.origin))")
             switch (step.module, step.instruction) {
             case ("wine", "KEEP-DISCS"):
@@ -205,6 +205,8 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     automation: step.option("automation").flatMap(plan.file),
                     creates: try GameInstallerRunner.expectedProgram(of: step)
                 )
+            case _ where WineSteps.handles(step):
+                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
             case _ where GameInstallerRunner.isPatchStep(step):
                 try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
                                                        source: .disk, confirmFailure: input.confirmPatchFailure)

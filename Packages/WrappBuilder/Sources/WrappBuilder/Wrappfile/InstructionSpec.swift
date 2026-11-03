@@ -76,7 +76,7 @@ public nonisolated struct InstructionSpec: Sendable {
     /// Options every step takes: its name, for reports; and what a failure
     /// does, `--on-failure=ask` asking whether to carry on without it, where
     /// otherwise a failed step fails the build.
-    static let everyStep: [String: OptionKind] = ["name": .value, "on-failure": .value]
+    static let everyStep: [String: OptionKind] = ["name": .value, "on-failure": .value, "progress": .value]
 
     /// The core's instructions, which every stage has.
     public static let core: [String: InstructionSpec] = {
@@ -104,7 +104,10 @@ public nonisolated struct InstructionSpec: Sendable {
             InstructionSpec("REMOVE", arguments: 1...1, argumentRoles: [.location]),
             // `--ini=<section>.<key>=<value>`, or `--from-data=<table>`: the calling
             // module's table of replacements and settings (nancy-drew's `ini`).
-            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value], arguments: 1...1, argumentRoles: [.location]),
+            // `--must-exist`: each setting must already be in the file, or the
+            // step fails, naming those that aren't; without it one is added.
+            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value, "must-exist": .flag], arguments: 1...1,
+                            argumentRoles: [.location]),
         ]
         return Dictionary(uniqueKeysWithValues: specs.map { ($0.name, $0) })
     }()

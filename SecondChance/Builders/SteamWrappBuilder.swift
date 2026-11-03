@@ -25,11 +25,18 @@ import GameCatalog
 /// closure got was the `MainActor` object.
 protocol SteamWrappPreparing {
     func prepare(wrappAt path: URL) async throws
+    /// What the game draws with set up, once it's known: cnc-ddraw, for a
+    /// DirectDraw game.
+    func setUpGraphics(for gameInfo: GameInfo, in path: URL) async throws
 }
 
 struct SteamWrappPreparer: SteamWrappPreparing {
     let helper: WrappBuildHelper
     let clientCache: SteamClientCache
+
+    func setUpGraphics(for gameInfo: GameInfo, in path: URL) async throws {
+        try await helper.setUpCncDdraw(for: gameInfo, in: path)
+    }
 
     func prepare(wrappAt path: URL) async throws {
         try await helper.createBaseWrapp(at: path)
@@ -256,6 +263,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             let gameDirPath = "/" + gameDir.path(relativeTo: driveC)
             let gameExePath = composition.launcher == .scummvm ? gameDirPath : gameDirPath + "/" + exe
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
+            try await preparer.setUpGraphics(for: gameInfo, in: wrappPath)
 
             if runsWithoutSteam { try removeSteam(from: prefix) }
             try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)

@@ -4,8 +4,7 @@ CONST install-dir = "C:/Program Files (x86)/Her Interactive/Ghost Dogs of Moon L
 INPUT disc-1
 INPUT installer
 
-FROM scratch AS prefix
-USE wine@10
+FROM wine@10/prefix AS prefix
 
 # How the game runs, whichever edition it came from
 FROM scratch AS scummvm
