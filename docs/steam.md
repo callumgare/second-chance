@@ -58,9 +58,13 @@ the test host under xcodebuild — can still meet the prompts; answer them
    build. The cache leaves out the account's sign-in, licences, settings and
    games.
 3. **Sign in**: restore the shared session and start Steam silently. With no
-   session, or one Steam rejects, the GUI says to sign in in Steam's window
-   (QR or password), brings that window to the front (as a wrapp does; see
-   [Running](#running)) and waits up to 30 minutes; a headless build fails
+   session, or one Steam rejects, the GUI brings Steam's window to the front
+   once Steam has asked for a sign-in and the window is up (as a wrapp does;
+   see [Running](#running)), only then says to sign in there (QR or
+   password), and waits up to 30 minutes. ⌘C and ⌘V work in it: the build
+   has ⌘ act as Ctrl for `steam.exe` and `steamwebhelper.exe` alone
+   (`WineRegistry.letCommandActAsControl`), as Wine otherwise keeps ⌘ for
+   its own Mac menu and a Windows program knows only Ctrl. A headless build fails
    with `steamSignInRequired` instead. A Steam that exits first — missing
    from eight checks two seconds apart, since it restarts itself after an
    update — is started once more, and exiting again fails the build with

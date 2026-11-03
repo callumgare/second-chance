@@ -48,6 +48,20 @@ nonisolated public struct WineRegistry: Sendable {
         try await wine.run(.wine(["reg", "add", key.rawValue, "/v", name, "/t", type, "/d", data, "/f"]), timeout: timeout)
     }
 
+    /// Have ⌘ act as Ctrl in the windows of the programs named `exes`
+    /// (`steam.exe`), and in no others. Wine keeps ⌘ shortcuts for its own
+    /// Mac menu, so ⌘C and ⌘V never reach a Windows program, which knows only
+    /// Ctrl's: Steam's and Big Fish's sign-in forms want them. Not for a game,
+    /// whose ⌘Q has to stay a quit (Wine's `AppDefaults\<exe>\Mac Driver`).
+    public func letCommandActAsControl(in exes: [String]) async throws {
+        for exe in exes {
+            let key = Key(rawValue: #"HKEY_CURRENT_USER\Software\Wine\AppDefaults\"# + exe + #"\Mac Driver"#)
+            for name in ["LeftCommandIsCtrl", "RightCommandIsCtrl"] {
+                try await set(.string("y"), for: name, in: key)
+            }
+        }
+    }
+
     /// Delete `name` from `key`. Deleting what isn't there isn't an error.
     public func deleteValue(_ name: String, in key: Key, timeout: TimeInterval = 600) async throws {
         do {
