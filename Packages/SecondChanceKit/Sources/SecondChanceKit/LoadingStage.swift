@@ -24,6 +24,10 @@ import Foundation
 public enum LoadingStage: Equatable {
     /// The wrapp starting the game itself, until the game's window appears.
     case startingGame(title: String)
+    /// Big Fish's launcher starting a game it sold, until the game's window
+    /// appears: much slower than the game alone, as its copy protection
+    /// runs first, and runs slowly under Rosetta.
+    case bigFishStartingGame(title: String)
     /// Steam starting up, until it signs in or asks the player to.
     case startingSteam
     /// Steam updating itself before it starts: what the bootstrapper is
@@ -52,7 +56,7 @@ public enum LoadingStage: Equatable {
 
     public var message: String {
         switch self {
-        case .startingGame(let title): return String(localized: "Starting \(title)…")
+        case .startingGame(let title), .bigFishStartingGame(let title): return String(localized: "Starting \(title)…")
         case .startingSteam: return String(localized: "Starting Steam…")
         case .updatingSteam(.extracting), .updatingSteam(.installing): return String(localized: "Installing Steam's update…")
         case .updatingSteam(.restarting): return String(localized: "Starting the updated Steam…")
@@ -90,6 +94,8 @@ public enum LoadingStage: Equatable {
             return String(localized: "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here.")
         case .steamWaitingForPlayer:
             return String(localized: "Answer the question in Steam's window, and the game will carry on starting.")
+        case .bigFishStartingGame:
+            return String(localized: "Games from Big Fish take a minute or two to start.")
         case .lastSessionClosing, .startingGame, .steamStartingGame:
             return nil
         }
@@ -121,6 +127,7 @@ public enum LoadingStage: Equatable {
     public var logName: String {
         switch self {
         case .startingGame: return "startingGame"
+        case .bigFishStartingGame: return "bigFishStartingGame"
         case .startingSteam: return "startingSteam"
         case .updatingSteam: return "updatingSteam"
         case .connectingToSteam: return "connectingToSteam"
@@ -137,7 +144,7 @@ public enum LoadingStage: Equatable {
         switch self {
         case .startingSteam, .updatingSteam, .connectingToSteam, .signingInToSteam, .steamPlayingElsewhere, .steamWaitingForPlayer:
             return "Steam"
-        case .startingGame, .steamStartingGame, .lastSessionClosing: return "The game"
+        case .startingGame, .bigFishStartingGame, .steamStartingGame, .lastSessionClosing: return "The game"
         }
     }
 
@@ -176,6 +183,9 @@ public enum LoadingStage: Equatable {
         // Of 529 launches logged on two Macs, none took longer than 15 s
         // from the click to the game's window.
         case .startingGame: return 20
+        // White Wolf's window came 77–90 s after the click on an idle Mac,
+        // about three quarters of it Rosetta translating the copy protection.
+        case .bigFishStartingGame: return 120
         // Steam has signed in 22–77 s after it started, on an idle Mac.
         case .startingSteam: return 90
         // Online, it connects in a couple of seconds.
@@ -198,7 +208,7 @@ public enum LoadingStage: Equatable {
     /// session closing.
     var slowsUnderLoad: Bool {
         switch self {
-        case .startingGame, .startingSteam, .steamStartingGame: return true
+        case .startingGame, .bigFishStartingGame, .startingSteam, .steamStartingGame: return true
         default: return false
         }
     }
@@ -209,6 +219,7 @@ public enum LoadingStage: Equatable {
     var possibleFailureAfter: TimeInterval? {
         switch self {
         case .startingGame: return 30
+        case .bigFishStartingGame: return 180
         case .startingSteam: return 120
         case .connectingToSteam: return 60
         case .updatingSteam: return 0
@@ -228,6 +239,9 @@ public enum LoadingStage: Equatable {
         // with every core busy: 7 s starting a game, 83 s starting Steam,
         // and 30 s while Steam's ShowInterstitials step waited by itself.
         case .startingGame: return 20
+        // The copy protection keeps the CPU busy throughout, and Big Fish's
+        // launcher starts the game's programs one after another.
+        case .bigFishStartingGame: return 45
         case .startingSteam: return 45
         case .steamStartingGame: return 45
         // The bootstrapper logs its download four times a second: 30 s
@@ -248,7 +262,7 @@ public enum LoadingStage: Equatable {
         case .cpu, .newProcess, .output, .steamLaunchStep: break
         }
         switch self {
-        case .startingGame, .startingSteam, .steamStartingGame: return true
+        case .startingGame, .bigFishStartingGame, .startingSteam, .steamStartingGame: return true
         case .updatingSteam, .connectingToSteam, .signingInToSteam, .steamPlayingElsewhere, .steamWaitingForPlayer, .lastSessionClosing:
             return false
         }

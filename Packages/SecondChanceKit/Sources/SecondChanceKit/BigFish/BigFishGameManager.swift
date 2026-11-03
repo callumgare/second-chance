@@ -24,8 +24,11 @@ nonisolated public protocol BigFishGameManaging: Sendable {
     /// Start it, and wait until its page can be driven.
     func start(timeout: TimeInterval) async throws
     func isSignedIn() async throws -> Bool
-    /// Open its sign-in form, and bring its window to the front.
+    /// Show its window, which is otherwise kept off the screen, open its
+    /// sign-in form, and bring the window to the front.
     func showSignIn() async throws
+    /// Take its window off the screen again once the person has signed in.
+    func hideWindow()
     /// The Nancy Drew games (or anything else) the signed-in account owns.
     func ownedGames() async throws -> [BigFishOwnedGame]
     /// Ask it to download (then install and activate) `sku`: the full game,
@@ -54,15 +57,48 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
     /// Its programs, by process name: the window's, and its background services.
     public static let programs: Set<String> = ["bfgclient.exe", "bfggameservices.exe", "bfgipcmonitor.exe", "bfgprocess.exe"]
 
+    /// Where it keeps its sign-in in the registry, and the values that make
+    /// one: its tokens and when they expire, and the account's address. It
+    /// starts signed in from these alone (`BigFishSessionStore`).
+    public static let accountKey: WineRegistry.Key = #"HKEY_CURRENT_USER\Software\Big Fish Games\Client"#
+    public static let accountValues = ["AccessToken", "AccessExpires", "RefreshToken", "RefreshExpires", "Email", "EmailError"]
+
     public let wine: Wine
     private let state = NSLock()
     private var page: DevToolsPage?
     private var desktop: WineDesktop?
+    /// The exe of the game the Game Manager will start, whose in-process
+    /// helpers (native fullscreen, mode scaling) are armed through the Game
+    /// Manager's environment: a game it starts gets its, as one Steam starts
+    /// gets Steam's.
+    private let gameExe: URL?
     private let onOutputLine: (@Sendable (String) -> Void)?
 
-    public init(wrappPath: URL, prefixDir: URL? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
+    /// `gameExe`, the game's .exe, when the Game Manager will start a game
+    /// (a trial's Play Now) — not while a build installs one.
+    public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
         wine = Wine(wrapp: wrappPath, prefix: prefixDir)
+        self.gameExe = gameExe
         self.onOutputLine = onOutputLine
+    }
+
+    /// While this file exists the Game Manager's windows are on screen; they
+    /// are kept off it otherwise (`Wine.hiddenWindowsVariables`). Outside the
+    /// prefix, so it never ships in a wrapp.
+    let showWindowFile = FileManager.default.temporaryDirectory
+        .appendingPathComponent("second-chance-show-big-fish-\(UUID().uuidString)")
+
+    /// What its processes are started with: its windows hidden, and the
+    /// game's helpers armed when it will start a game. Without a game, the
+    /// windows of everything it runs are hidden too (the game's installer,
+    /// Microsoft's DirectX setup); with one, only its own, as the game is
+    /// one of the programs it runs.
+    var environment: [String: String] {
+        var environment = Wine.hiddenWindowsVariables(exe: gameExe == nil ? "*" : "bfgclient.exe", showFile: showWindowFile)
+        if let gameExe {
+            environment.merge(Wine.inProcessHelperVariables(gameExe: gameExe)) { _, game in game }
+        }
+        return environment
     }
 
     var clientDir: URL { wine.prefix.appendingPathComponent(Self.clientDirInPrefix) }
@@ -77,6 +113,7 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         let desktop = await WineDesktop.start(wine, logger: logger, outputLogger: outputLogger)
         state.withLock { self.desktop = desktop }
         _ = try wine.start(.program(Self.windowsClient, ["--remote-debugging-port=\(port)"]),
+                           environment: environment,
                            output: .log(outputLogger, onLine: onOutputLine))
         logger.notice("Started the Game Manager (DevTools on port \(port))")
 
@@ -114,8 +151,21 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
     }
 
     public func showSignIn() async throws {
-        try await currentPage().run(Script.openSignIn)
+        let page = try await currentPage()
+        try await waitForSignInForm(on: page)
+        // Only the sign-in dialog, centred in the window. The window keeps
+        // its size: the Game Manager holds it at its own minimum, whether
+        // macOS or Windows resizes it.
+        if try await !page.evaluate(Script.signInOnly, as: Bool.self) {
+            logger.warning("The Game Manager's sign-in dialog has changed, so its whole window is shown")
+        }
+        FileManager.default.createFile(atPath: showWindowFile.path, contents: nil)
+        logger.notice("Showing the Game Manager's sign-in form")
         await SteamSignInWindow.bringForward(window: "sign-in window", programs: ["bfgclient.exe"], store: "the Game Manager")
+    }
+
+    public func hideWindow() {
+        try? FileManager.default.removeItem(at: showWindowFile)
     }
 
     public func ownedGames() async throws -> [BigFishOwnedGame] {
@@ -150,14 +200,19 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         logger.notice("Signed the Game Manager out")
     }
 
-    public func signInForTesting(email: String, password: String) async throws {
-        let page = try await currentPage()
+    /// Open the sign-in form, and wait until it's there.
+    private func waitForSignInForm(on page: DevToolsPage) async throws {
         try await page.run(Script.openSignIn)
         let deadline = Date().addingTimeInterval(60)
         while try await !page.evaluate(Script.signInFormShown, as: Bool.self) {
             guard Date() < deadline else { throw BigFishError.couldNotStart("its sign-in form didn't appear") }
             try await Task.sleep(for: .milliseconds(500))
         }
+    }
+
+    public func signInForTesting(email: String, password: String) async throws {
+        let page = try await currentPage()
+        try await waitForSignInForm(on: page)
         // The expression holds the password: never log it.
         guard try await page.evaluate(Script.fillSignIn(email: email, password: password), as: Bool.self) else {
             throw BigFishError.couldNotStart("its sign-in form has changed")
@@ -167,6 +222,7 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
 
     public func shutdown(timeout: TimeInterval) async {
         let start = Date()
+        hideWindow()
         if let page = state.withLock({ page }) { await page.close() }
         state.withLock { desktop }?.release()
         // The Game Manager has no quit command line; its whole session goes.
@@ -199,6 +255,31 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
         static let openSignIn = "(() => { const a = document.querySelector('li.sign_in a'); if (a) jQuery(a).trigger('click'); return !!a; })()"
         static let signOut = "GM.auth.logout(); true"
         static let signInFormShown = "!!document.querySelector('#o_login_email') && !!document.querySelector('#o_login_submit a.btn_login')"
+        /// Show the sign-in dialog (SimpleModal's `#simplemodal-container`)
+        /// alone, centred in the window, without its close button, and keep
+        /// Escape from closing it. False when there's no such dialog.
+        static let signInOnly = """
+            (() => {
+              const dialog = document.querySelector('#simplemodal-container');
+              if (!dialog) return false;
+              if (document.getElementById('second-chance-sign-in-only')) return true;
+              const style = document.createElement('style');
+              style.id = 'second-chance-sign-in-only';
+              style.textContent = `
+                body * { visibility: hidden !important; }
+                #simplemodal-container, #simplemodal-container * { visibility: visible !important; }
+                #simplemodal-container { position: fixed !important; left: 50% !important; top: 50% !important;
+                  transform: translate(-50%, -50%) !important; }
+                #simplemodal-container .simplemodal-close, #simplemodal-container .overlay_close { display: none !important; }
+                .simplemodal-overlay { display: none !important; }
+                html, body { background: #fff !important; overflow: hidden !important; }`;
+              document.head.appendChild(style);
+              document.addEventListener('keydown', event => {
+                if (event.key === 'Escape') { event.stopImmediatePropagation(); event.preventDefault(); }
+              }, true);
+              return true;
+            })()
+            """
 
         /// Fill in the sign-in form and press its button, as a person would.
         static func fillSignIn(email: String, password: String) -> String {

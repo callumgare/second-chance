@@ -47,6 +47,10 @@ nonisolated public struct BigFishGameStatus: Codable, Equatable, Sendable {
         /// 0–1, when the size is known.
         case downloading(Double?)
         case installing(Double?)
+        /// Activating: the Game Manager runs the game's own Big Fish launcher,
+        /// a few times, with the install at 100% (it still says installing),
+        /// or a trial is unlocked (state 18).
+        case activating
         /// Installed and activated: ready to play.
         case ready
         case downloadFailed
@@ -59,7 +63,8 @@ nonisolated public struct BigFishGameStatus: Codable, Equatable, Sendable {
         switch state {
         case 5: .ready
         case 1, 16: .downloading(downloadSize > 0 ? min(1, downloadProgress / downloadSize) : nil)
-        case 4, 6, 11: .installing(installProgress > 0 ? min(1, installProgress / 100) : nil)
+        case 4, 6, 11: installProgress >= 100 ? .activating : .installing(installProgress > 0 ? installProgress / 100 : nil)
+        case 18: .activating
         case 7, 13: .downloadFailed
         case 9: .installFailed
         case 8, 20: .activationFailed

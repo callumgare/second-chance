@@ -537,6 +537,7 @@
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/emulated_mode_scaling.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/quit_watch.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/cocoa_start_wait.m",
+				"$(SRCROOT)/WrappTemplate/InProcessHelpers/hidden_windows.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/puppet_control.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/helper_common.h",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/patch-winemac.swift",

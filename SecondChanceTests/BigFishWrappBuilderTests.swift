@@ -46,6 +46,7 @@ final class FakeGameManager: BigFishGameManaging, @unchecked Sendable {
         record("showSignIn")
         if signsInWhenShown { lock.withLock { signedIn = true } }
     }
+    func hideWindow() { record("hideWindow") }
     func signInForTesting(email: String, password: String) async throws {
         record("signInForTesting \(email)")
         lock.withLock { signedIn = true }
@@ -111,6 +112,13 @@ final class FakeBigFishPreparer: BigFishWrappPreparing, @unchecked Sendable {
     func stopCancellingDirectXSetup(in path: URL) async { directX.append("stop") }
     private(set) var forgotAccount = 0
     func forgetAccount(in path: URL) async throws { forgotAccount += 1 }
+    private(set) var restoredSignIn = 0
+    private(set) var keptSignIn = 0
+    func restoreSignIn(into path: URL) async -> Bool {
+        restoredSignIn += 1
+        return true
+    }
+    func keepSignIn(from path: URL) async { keptSignIn += 1 }
 }
 
 /// Answers the game picker as a person would, offering what it was shown.
@@ -196,7 +204,7 @@ struct BigFishWrappBuilderTests {
         try WrappSettings(of: WrappLayout(app: wrapp))
     }
 
-    @Test("An owned game is downloaded, its launch file and edition recorded, and the person signed out")
+    @Test("An owned game is downloaded, its launch file and edition recorded, and the person's sign-in kept but not shipped")
     func ownedGame() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
         let run = try await build(game: Self.whiteWolf)
@@ -210,9 +218,12 @@ struct BigFishWrappBuilderTests {
         #expect(settings.bigFishLaunchFile == "/Program Files (x86)/Nancy Drew - \(title)/LaunchGame.bfg")
         #expect(settings.bigFishSKU == Self.whiteWolf)
         #expect(settings.bigFishTrial == nil)
-        #expect(run.manager?.calls == ["start", "download \(Self.whiteWolf) full", "signOut", "shutdown"])
+        // Started with the sign-in kept from before, kept again rather than
+        // signed out, then taken out of the app.
+        #expect(run.preparer.restoredSignIn == 1)
+        #expect(run.manager?.calls == ["start", "download \(Self.whiteWolf) full", "shutdown"])
+        #expect(run.preparer.keptSignIn == 1)
         #expect(run.preparer.directX == ["start", "stop"])
-        // Signing out leaves the account's tokens and cookies; they're taken out after.
         #expect(run.preparer.forgotAccount == 1)
         // The Game Manager stays: its services start the game.
         let client = wrapp.appendingPathComponent("Contents/SharedSupport/prefix").appendingPathComponent(BigFishGameManager.clientDirInPrefix)
@@ -235,6 +246,7 @@ struct BigFishWrappBuilderTests {
         #expect(settings.bigFishTrial == true)
         #expect(settings.bigFishSKU == Self.whiteWolf)
         #expect(run.manager?.calls == ["start", "download \(Self.whiteWolf) trial", "shutdown"])
+        #expect(run.preparer.restoredSignIn == 0 && run.preparer.keptSignIn == 0, "A trial touched the kept sign-in")
         #expect(!run.events.contains { if case .bigFishGamesOwned = $0 { return true }; return false })
     }
 
@@ -297,7 +309,10 @@ struct BigFishWrappBuilderTests {
         ]) { $0.signedIn = false }
         _ = try run.result.get()
         #expect(run.manager?.calls.contains("signInForTesting tester@example.com") == true)
+        // Its account is signed out, and neither uses nor replaces the person's kept sign-in.
         #expect(run.manager?.calls.contains("signOut") == true)
+        #expect(run.preparer.restoredSignIn == 0)
+        #expect(run.preparer.keptSignIn == 0)
     }
 
     @Test("From the app, the sign-in window comes forward and the person is told what to do")
@@ -306,7 +321,10 @@ struct BigFishWrappBuilderTests {
         let input = BigFishPickingInput(pick: Self.whiteWolf, environment: appEnvironment)
         let run = try await build(input: input) { $0.signedIn = false }
         _ = try run.result.get()
-        #expect(run.manager?.calls.contains("showSignIn") == true)
+        let calls = run.manager?.calls ?? []
+        let shown = try #require(calls.firstIndex(of: "showSignIn"))
+        let hidden = try #require(calls.firstIndex(of: "hideWindow"), "The Game Manager's window was left on screen after the sign-in")
+        #expect(shown < hidden)
         #expect(run.events.contains {
             if case .instructions(BigFishWrappBuilder.signInInstructions) = $0 { return true }
             return false
@@ -332,6 +350,8 @@ struct BigFishWrappBuilderTests {
         }
         #expect(throws: WrappBuildError.bigFishDownloadFailed) { try run.result.get() }
         #expect(run.manager?.calls.last == "shutdown")
+        // So trying again needn't sign in again.
+        #expect(run.preparer.keptSignIn == 1)
         #expect(run.preparer.directX.last == "stop")
         let working = run.events.compactMap { event -> URL? in
             if case .wrappStarted(let path) = event { return path }
@@ -357,26 +377,27 @@ struct BigFishWrappBuilderTests {
         #expect(throws: WrappBuildError.bigFishGameManagerQuit) { try run.result.get() }
     }
 
-    @Test("Progress says downloading, installing, then unlocking, with the download's figures")
+    @Test("Progress says downloading, installing, then activating, with the download's and install's figures")
     func progress() async throws {
         defer { try? FileManager.default.removeItem(at: base) }
         let run = try await build(game: Self.whiteWolf) {
             $0.states = [BigFishGameStatus(state: 0), BigFishGameStatus(state: 1, downloadProgress: 25, downloadSize: 100),
                          BigFishGameStatus(state: 1, downloadProgress: 50, downloadSize: 100), BigFishGameStatus(state: 4),
-                         BigFishGameStatus(state: 0), BigFishGameStatus(state: 5)]
+                         BigFishGameStatus(state: 4, installProgress: 40), BigFishGameStatus(state: 4, installProgress: 100),
+                         BigFishGameStatus(state: 5)]
         }
         _ = try run.result.get()
         let substeps = run.events.compactMap { event -> String? in
             if case .progress(.installingGame(let substep?, _)) = event { return substep }
             return nil
         }
-        let wanted = ["Waiting for the download to start", "Downloading the game", "Installing the game", "Unlocking the game"]
+        let wanted = ["Waiting for the download to start", "Downloading the game", "Installing the game", "Activating the game"]
         #expect(substeps.filter(wanted.contains) == wanted)
         let fractions = run.events.compactMap { event -> Double? in
             if case .stepProgress(let progress?) = event { return progress.fraction }
             return nil
         }
-        #expect(fractions == [0.25, 0.5])
+        #expect(fractions == [0.25, 0.5, 0.4], "Activating has no percentage of its own")
     }
 
     @Test("A ScummVM game runs from its folder, without Big Fish's Game Manager")
@@ -391,7 +412,7 @@ struct BigFishWrappBuilderTests {
         #expect(settings.bigFishLaunchFile == nil)
         let client = wrapp.appendingPathComponent("Contents/SharedSupport/prefix").appendingPathComponent(BigFishGameManager.clientDirInPrefix)
         #expect(!FileManager.default.fileExists(atPath: client.path))
-        #expect(run.manager?.calls.contains("signOut") == true)
+        #expect(run.preparer.keptSignIn == 1)
     }
 
     @Test("Headless with no game named fails before anything is made")

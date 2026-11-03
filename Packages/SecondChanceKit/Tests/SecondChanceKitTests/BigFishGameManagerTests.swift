@@ -24,6 +24,7 @@ struct BigFishGameManagerTests {
         (7, .downloadFailed), (13, .downloadFailed),
         (9, .installFailed),
         (8, .activationFailed), (20, .activationFailed),
+        (18, .activating),
         (17, .failed), (21, .failed),
     ])
     func readsTheGameManagersStates(state: Int, phase: BigFishGameStatus.Phase) {
@@ -35,6 +36,8 @@ struct BigFishGameManagerTests {
         #expect(BigFishGameStatus(state: 16, downloadProgress: 5, downloadSize: 0).phase == .downloading(nil))
         #expect(BigFishGameStatus(state: 4, installProgress: 50).phase == .installing(0.5))
         #expect(BigFishGameStatus(state: 6).phase == .installing(nil))
+        // The Game Manager activates a game with the install at 100%, still saying it's installing.
+        #expect(BigFishGameStatus(state: 4, installProgress: 100).phase == .activating)
     }
 
     @Test func decodesWhatThePageReturnsForAStatus() throws {
@@ -115,5 +118,18 @@ struct BigFishGameManagerTests {
     @Test func findsAFreePort() throws {
         let port = try #require(DevToolsPage.freePort())
         #expect((1024...65535).contains(port))
+    }
+
+    @Test func keepsItsWindowsHiddenAndArmsTheGamesHelpersOnlyForAGame() {
+        let app = URL(fileURLWithPath: "/Apps/Game.app")
+        let building = BigFishGameManager(wrappPath: app)
+        #expect(building.environment["HIDDEN_WINDOWS_EXE"] == "*", "What the Game Manager runs while building isn't hidden")
+        #expect(building.environment["HIDDEN_WINDOWS_SHOW_FILE"] == building.showWindowFile.path)
+        #expect(!building.showWindowFile.path.hasPrefix(app.path), "The show file would ship in the wrapp")
+        #expect(building.environment["QUIT_WATCH_EXE"] == nil)
+
+        let launching = BigFishGameManager(wrappPath: app, gameExe: URL(fileURLWithPath: "/x/Secrets.exe"))
+        #expect(launching.environment["HIDDEN_WINDOWS_EXE"] == "bfgclient.exe")
+        #expect(launching.environment["QUIT_WATCH_EXE"] == "Secrets.exe")
     }
 }

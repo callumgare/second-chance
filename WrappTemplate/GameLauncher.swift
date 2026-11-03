@@ -291,10 +291,13 @@ class GameLauncher {
     func waitForWineToEnd() async {
         guard config.gameEngine.runsInWine else { return }
         // Generous: it ends by itself in seconds, more on a loaded Mac, and
-        // only a session that is stuck reaches the kill.
+        // only a session that is stuck reaches the kill. Not for a Big Fish
+        // game: its launcher outlives it, running the game's Big Fish
+        // launcher again and then opening the Game Manager, which kept the
+        // session going for the whole wait. None of that is needed now.
         let server = config.wine.server
         let onQuitStep = onQuitStep
-        let periods = Self.quitPeriods(grace: 30)
+        let periods = Self.quitPeriods(grace: config.launchedByBigFish ? 0 : 30)
         await server.shutDown(gracePeriod: periods.grace, stopPeriod: periods.stop) { onQuitStep?(.init($0)) }
     }
 
@@ -617,7 +620,7 @@ class GameLauncher {
 
         switch config.gameEngine {
         case .wine where launchedByBigFish && config.bigFishTrial:
-            launchResult = await launchBigFishTrial()
+            launchResult = await launchBigFishTrial(activity: infoWindow?.activity)
         case .wine, .wineSteamSilent:
             let started = launchWineProcess(activity: infoWindow?.activity)
             // bfgprocess hands the launch on and exits within seconds.
@@ -797,8 +800,15 @@ class GameLauncher {
         }
         let game: WineProcess
         do {
+            var environment = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath))
+            if config.launchedByBigFish {
+                // Big Fish's launcher opens the Game Manager as the game ends:
+                // never seen, as its file to show it is never made.
+                let neverShown = FileManager.default.temporaryDirectory.appendingPathComponent("second-chance-never-shown")
+                environment.merge(Wine.hiddenWindowsVariables(exe: "bfgclient.exe", showFile: neverShown)) { game, _ in game }
+            }
             game = try wine.start(command,
-                                  environment: Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath)),
+                                  environment: environment,
                                   output: .log(wineOutputLogger, onLine: observe))
         } catch {
             logger.critical("ERROR: Failed to launch game: \(error)")
@@ -854,13 +864,27 @@ class GameLauncher {
     /// Start a Big Fish free trial: through the Game Manager's Play Now, as
     /// launching its `.bfg` file only opens the Game Manager for a trial. Only
     /// the integration tests build trials (docs/big-fish.md).
-    private func launchBigFishTrial() async -> (process: Process?, gamePid: Int32, gameExeName: String?) {
+    private func launchBigFishTrial(activity: LaunchActivityMonitor?) async -> (process: Process?, gamePid: Int32, gameExeName: String?) {
         let launchInfo = getGameLaunchInfo(config)
         guard let sku = config.bigFishSKU.flatMap(BigFishSKU.init) else {
             logger.critical("ERROR: no Big Fish SKU for a Big Fish trial")
             return (nil, -1, nil)
         }
-        let manager = BigFishGameManager(wrappPath: config.appPath, prefixDir: config.winePrefix)
+        // The game is the Game Manager's child, so it has the Game Manager's
+        // environment and output: the helpers are armed through them.
+        let helperReport = helperReport
+        let quitCheck = quitCheck
+        let startup = startupDiagnostics
+        let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
+        let manager = BigFishGameManager(wrappPath: config.appPath, prefixDir: config.winePrefix,
+                                         gameExe: launchInfo.gameExePath.map(URL.init(fileURLWithPath:)),
+                                         onOutputLine: { line in
+                                             startup?.observe(line: line)
+                                             helperReport?.observe(line: line)
+                                             quitCheck?.observe(line: line)
+                                             noDisplay.check(line)
+                                             activity?.noteOutput()
+                                         })
         do {
             try await manager.start(timeout: 600)
             try await manager.play(sku)

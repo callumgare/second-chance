@@ -98,6 +98,7 @@ struct SecondChanceApp: App {
 
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var wrappBuildViewModel: WrappBuildViewModel
+    @State private var signIns = StoreSignIns()
     @AppStorage(DebugCommands.settingKey) private var showDebugMenu = false
 
     private let appStartTime = Date()
@@ -218,8 +219,20 @@ struct SecondChanceApp: App {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesButton(updater: .shared)
             }
+            // Only while there's a sign-in to sign out of.
             CommandGroup(after: .appSettings) {
-                Button("Sign Out of Steam") { Self.signOutOfSteam() }
+                if signIns.steam {
+                    Button("Sign Out of Steam") {
+                        Self.signOutOfSteam()
+                        signIns.refresh()
+                    }
+                }
+                if signIns.bigFish {
+                    Button("Sign Out of Big Fish Games") {
+                        Self.signOutOfBigFish()
+                        signIns.refresh()
+                    }
+                }
             }
         }
 
@@ -239,6 +252,25 @@ struct SecondChanceApp: App {
         } catch {
             logger.error("Couldn't sign out of Steam: \(error.localizedDescription)")
             alert.messageText = String(localized: "Couldn't sign out of Steam")
+            alert.informativeText = error.localizedDescription
+            alert.alertStyle = .warning
+        }
+        alert.runModal()
+    }
+}
+
+/// Forget the Big Fish sign-in Second Chance keeps for the next build
+/// (docs/big-fish.md). The games' apps never have it, so they're unaffected.
+private extension SecondChanceApp {
+    static func signOutOfBigFish() {
+        let alert = NSAlert()
+        do {
+            try BigFishSessionStore().signOut()
+            alert.messageText = String(localized: "Signed out of Big Fish Games")
+            alert.informativeText = String(localized: "The next game you get from Big Fish Games will ask you to sign in. The games you have already play as before.")
+        } catch {
+            logger.error("Couldn't sign out of Big Fish Games: \(error.localizedDescription)")
+            alert.messageText = String(localized: "Couldn't sign out of Big Fish Games")
             alert.informativeText = error.localizedDescription
             alert.alertStyle = .warning
         }

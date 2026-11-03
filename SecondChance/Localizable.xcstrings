@@ -165,6 +165,9 @@
     "About the failure" : {
 
     },
+    "Activating the game" : {
+
+    },
     "Add a Comment…" : {
 
     },
@@ -210,7 +213,7 @@
     "Big Fish's Game Manager downloads the game, so how long this takes depends on your internet connection. You can leave it running and do something else." : {
 
     },
-    "Big Fish's Game Manager has opened in its own window. Sign in there with your Big Fish Games account, and installing carries on by itself. You're signed out again once the game is installed, so the game's app doesn't keep your sign-in." : {
+    "Big Fish's Game Manager has opened in its own window. Sign in there with your Big Fish Games account, and installing carries on by itself. Second Chance remembers your sign-in for the next game, but the game's app never keeps it." : {
 
     },
     "Big Fish's Game Manager installed the game, but couldn't unlock it to play on this Mac. Check that this Mac is connected to the internet, then try again." : {
@@ -309,6 +312,9 @@
     "Couldn't save the game's app in %@. Try again, and choose another folder, such as Applications." : {
 
     },
+    "Couldn't sign out of Big Fish Games" : {
+
+    },
     "Couldn't sign out of Steam" : {
 
     },
@@ -373,6 +379,9 @@
 
     },
     "Game" : {
+
+    },
+    "Games from Big Fish take a minute or two to start." : {
 
     },
     "Her Interactive made a fix for this game, \"%@\", and Second Chance couldn't add it. The game will still work without it. What it fixes:\n\n%@" : {
@@ -764,6 +773,9 @@
     "Sign In Again" : {
 
     },
+    "Sign Out of Big Fish Games" : {
+
+    },
     "Sign Out of Steam" : {
 
     },
@@ -771,6 +783,9 @@
 
     },
     "Signal" : {
+
+    },
+    "Signed out of Big Fish Games" : {
 
     },
     "Signed out of Steam" : {
@@ -920,6 +935,9 @@
     "The log file could not be saved. Please try again." : {
 
     },
+    "The next game you get from Big Fish Games will ask you to sign in. The games you have already play as before." : {
+
+    },
     "There isn't enough free space on your Mac to install the game. It needs about %@, and %@ is free. Free up some space, then try again." : {
       "localizations" : {
         "en" : {
@@ -974,9 +992,6 @@
 
     },
     "Try It" : {
-
-    },
-    "Unlocking the game" : {
 
     },
     "Unpacking the game" : {

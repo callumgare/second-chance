@@ -73,6 +73,12 @@ protocol BigFishWrappPreparing {
     /// signing out leaves its tokens and email in the registry, and the store's
     /// session cookies in the Game Manager's browser profile.
     func forgetAccount(in path: URL) async throws
+    /// Put the sign-in kept from an earlier build into the prefix, before the
+    /// Game Manager starts. False when none is kept.
+    func restoreSignIn(into path: URL) async -> Bool
+    /// Keep the Game Manager's sign-in for the next build, once it has
+    /// stopped (`BigFishSessionStore`).
+    func keepSignIn(from path: URL) async
 }
 
 /// The real `BigFishWrappPreparing`: Big Fish's installer, clicked through
@@ -92,17 +98,19 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
 
     private let helper: WrappBuildHelper
     private let bus: EventBus<AppEvent>
+    private let sessionStore: BigFishSessionStore
     private let lock = NSLock()
     private var directXCanceller: WineProcess?
 
-    init(helper: WrappBuildHelper, bus: EventBus<AppEvent>) {
+    init(helper: WrappBuildHelper, bus: EventBus<AppEvent>, sessionStore: BigFishSessionStore = BigFishSessionStore()) {
         self.helper = helper
         self.bus = bus
+        self.sessionStore = sessionStore
     }
 
     func prepare(wrappAt path: URL) async throws {
         try await helper.createBaseWrapp(at: path)
-        await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Installing Big Fish's Game Manager"))))
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Big Fish's Game Manager"))))
         do {
             try await installGameManager(in: path)
         } catch is CancellationError {
@@ -134,18 +142,20 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
         func windows(_ url: URL) -> String { GameInstallerRunner.windowsPath(of: url, driveC: layout.driveC) }
         await wine.server.stop()
         // The installer runs Big Fish's epoch.exe, which searches every drive,
-        // folder by folder, for a file a Big Fish CD would have. Z: is the
-        // whole Mac, which takes hours through Wine, so Z: shows an empty
-        // folder until the installer is done.
-        let restoreZ = try await Blocking.run { try Self.hideMacDrive(of: wine, prefix: layout.prefix) }
-        defer { restoreZ() }
+        // folder by folder, for a file a Big Fish CD would have: through a
+        // drive showing the whole Mac that took hours. The prefix has none
+        // (WineDrives), so it searches only C:.
         let desktop = await WineDesktop.start(wine, logger: logger, outputLogger: wineOutputLogger)
         do {
             // /ErrorStdOut: a script error is logged, not shown in a box nobody closes.
+            // Nothing of it is seen, the script's clicks included, nor of the
+            // Game Manager it starts as it finishes (hidden_windows.m): its
+            // file to show them is never made.
+            let neverShown = FileManager.default.temporaryDirectory.appendingPathComponent("second-chance-never-shown")
             try await wine.run(.program(windows(staging.appendingPathComponent("autoit/AutoIt3.exe")), [
                 "/ErrorStdOut", windows(staging.appendingPathComponent("\(Self.setupScript).au3")),
                 windows(installerCopy), windows(client),
-            ]), timeout: Self.installTimeout)
+            ]), environment: Wine.hiddenWindowsVariables(exe: "*", showFile: neverShown), timeout: Self.installTimeout)
         } catch {
             desktop?.release()
             await endSession(wine)
@@ -157,34 +167,12 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
             throw WrappBuildError.internalError("Big Fish's installer finished, but there's no \(client.path)")
         }
         logger.notice("Installed the Game Manager")
-    }
 
-    /// Point Z: (the Mac's whole disk) at an empty folder in the prefix, and
-    /// return what puts it back.
-    nonisolated static func hideMacDrive(of wine: Wine, prefix: URL) throws -> @Sendable () -> Void {
-        let drives = wine.drives
-        let original = try? drives.target(of: "Z")
-        let empty = prefix.appendingPathComponent("second-chance-empty-z")
-        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
-        try drives.mount(empty, as: "Z")
-        logger.notice("Z: shows an empty folder while Big Fish's installer runs (it was \(original ?? "nothing"))")
-        return {
-            do {
-                if let original {
-                    try drives.mount(original, as: "Z")
-                } else {
-                    try? FileManager.default.removeItem(at: drives.link("Z"))
-                }
-                try? FileManager.default.removeItem(at: empty)
-            } catch {
-                logger.error("Couldn't put Z: back to \(original ?? "nothing"): \(error.localizedDescription)")
-            }
-        }
+        // ⌘C and ⌘V in its sign-in form.
+        try await wine.registry.letCommandActAsControl(in: ["bfgclient.exe"])
     }
 
     /// The Game Manager's sign-in, as it keeps it in the registry.
-    static let accountKey: WineRegistry.Key = #"HKEY_CURRENT_USER\Software\Big Fish Games\Client"#
-    static let accountValues = ["AccessToken", "AccessExpires", "RefreshToken", "RefreshExpires", "Email", "EmailError"]
     /// Its browser profile: cookies (the store's session among them) and caches.
     static let browserProfile = "drive_c/ProgramData/Big Fish/cef"
 
@@ -195,11 +183,38 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
             if FileManager.default.fileExists(atPath: profile.path) { try FileManager.default.removeItem(at: profile) }
         }
         let wine = Wine(wrapp: path)
-        for name in Self.accountValues {
-            try await wine.registry.deleteValue(name, in: Self.accountKey)
+        for name in BigFishGameManager.accountValues {
+            try await wine.registry.deleteValue(name, in: BigFishGameManager.accountKey)
         }
         await endSession(wine)
         logger.notice("Took the Big Fish account out of the prefix: its registry values and the Game Manager's browser profile")
+    }
+
+    func restoreSignIn(into path: URL) async -> Bool {
+        let layout = WrappLayout(app: path)
+        let wine = Wine(wrapp: path)
+        do {
+            guard let fragment = try sessionStore.restore(into: layout.prefix) else { return false }
+            defer { BigFishSessionStore.removeFragment(from: layout.prefix) }
+            try await wine.run(.wine(["reg", "import", fragment]), timeout: 120)
+            await endSession(wine)
+            logger.notice("Put the kept Big Fish sign-in into the prefix")
+            return true
+        } catch {
+            // Not a failure: the person is asked to sign in instead.
+            logger.warning("Couldn't put the kept Big Fish sign-in into the prefix: \(ErrorChain.describe(error))")
+            return false
+        }
+    }
+
+    func keepSignIn(from path: URL) async {
+        let prefix = WrappLayout(app: path).prefix
+        let store = sessionStore
+        do {
+            _ = try await Blocking.run { try store.capture(from: prefix) }
+        } catch {
+            logger.warning("Couldn't keep the Big Fish sign-in for the next build: \(ErrorChain.describe(error))")
+        }
     }
 
     /// End the prefix's Wine session, and the Game Manager the installer started with it.
@@ -355,8 +370,8 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
     /// What the progress screen says while the Game Manager waits for a sign-in.
     static let signInInstructions = String(localized: """
         Big Fish's Game Manager has opened in its own window. Sign in there with your Big Fish Games account, \
-        and installing carries on by itself. You're signed out again once the game is installed, \
-        so the game's app doesn't keep your sign-in.
+        and installing carries on by itself. Second Chance remembers your sign-in for the next game, \
+        but the game's app never keeps it.
         """)
 
     func build(input: WrappBuildInput) async throws -> URL {
@@ -376,9 +391,16 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
         let manager = makeManager(wrappPath)
         var managerStarted = false
+        // A person's sign-in is kept for the next build, and the one kept from
+        // the last is used; never the test harness's, nor for a trial.
+        let usesKeptSignIn = !trial && input.bigFishTestSignIn == nil
+        var keepsSignIn = false
 
         do {
             try await preparer.prepare(wrappAt: wrappPath)
+            if usesKeptSignIn, await preparer.restoreSignIn(into: wrappPath) {
+                logger.notice("Starting the Game Manager with the sign-in kept from an earlier build")
+            }
 
             await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Starting Big Fish's Game Manager"))))
             managerStarted = true
@@ -393,6 +415,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                 choice = BigFishGameChoice(game: preselected, sku: BigFishSKU(product: product))
             } else {
                 try await signIn(manager, input: input)
+                keepsSignIn = usesKeptSignIn
                 choice = try await pickGame(manager, preselected: preselected, input: input)
             }
             let gameInfo = choice.game
@@ -408,12 +431,15 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             let installed = try await waitForInstall(manager, sku: choice.sku)
             await preparer.stopCancellingDirectXSetup(in: wrappPath)
 
-            // The person's sign-in mustn't ship in the app: anyone given a
-            // copy could use the account. An activated game plays signed out.
-            if !trial { try await signOut(manager) }
+            // The sign-in mustn't ship in the app: anyone given a copy could
+            // use the account. An activated game plays signed out. A person's
+            // is kept for the next build instead (signing out may end it with
+            // Big Fish too); the test harness's is signed out.
+            if !trial && !keepsSignIn { try await signOut(manager) }
             await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Closing Big Fish's Game Manager"))))
             await manager.shutdown(timeout: Self.shutdownTimeout)
             managerStarted = false
+            if keepsSignIn { await preparer.keepSignIn(from: wrappPath) }
             // Signing out leaves the account's tokens in the registry and the
             // store's session in the Game Manager's browser profile.
             try await preparer.forgetAccount(in: wrappPath)
@@ -455,6 +481,9 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
         } catch {
             await preparer.stopCancellingDirectXSetup(in: wrappPath)
             if managerStarted { await manager.shutdown(timeout: Self.shutdownTimeout) }
+            // So trying again needn't sign in again. Nothing, once the build
+            // has taken the account out.
+            if keepsSignIn { await preparer.keepSignIn(from: wrappPath) }
             await helper.removeTempWrapp(wrappPath)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
@@ -485,6 +514,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
         try await manager.showSignIn()
         await bus.publishWrappBuild(.instructions(Self.signInInstructions))
         let signedIn = try await waitForSignIn(manager, timeout: signInTimeout)
+        manager.hideWindow()
         await bus.publishWrappBuild(.instructions(nil))
         guard signedIn else {
             logger.warning("Nobody signed in to the Game Manager within \(Int(signInTimeout))s")
@@ -584,7 +614,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.bigFishInstallFailed
             case .activationFailed:
                 throw WrappBuildError.bigFishActivationFailed
-            case .installing:
+            case .installing, .activating:
                 sawInstalling = true
             case .downloading, .waiting:
                 break
@@ -609,13 +639,15 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
     }
 
     /// What the progress line says while the Game Manager gets the game.
-    /// Activation has no state of its own: it's the wait after installing.
+    /// Activation is mostly the install at 100% (`BigFishGameStatus.Phase`),
+    /// but also the wait after installing, and a ready state before the
+    /// game's folder has its `bfgstate.xml`.
     static func substep(for phase: BigFishGameStatus.Phase, afterInstalling: Bool) -> String {
         switch phase {
         case .downloading: return String(localized: "Downloading the game")
         case .installing: return String(localized: "Installing the game")
-        case .ready: return String(localized: "Unlocking the game")
-        case .waiting where afterInstalling: return String(localized: "Unlocking the game")
+        case .activating, .ready: return String(localized: "Activating the game")
+        case .waiting where afterInstalling: return String(localized: "Activating the game")
         default: return String(localized: "Waiting for the download to start")
         }
     }

@@ -344,5 +344,8 @@ confirmation, to the game's window:
 
 With the numbers above, a stuck launch now says it may have failed after
 30 s (Wine game), 120 s (Steam's start) or 60 s (Steam starting the game),
+or 180 s for a game Big Fish's launcher starts (`bigFishStartingGame`, slow
+to say so after 120 s: its copy protection runs first, and White Wolf's
+window took 77–90 s on an idle Mac; [big-fish.md](big-fish.md)),
 three times that on a heavily loaded Mac, against 50 s, 10 minutes and 5
 minutes before, when a busy Mac never said so at all.

@@ -6,6 +6,7 @@ import Testing
 struct LoadingStageTests {
     nonisolated static let timed: [LoadingStage] = [
         .startingGame(title: "Danger by Design"),
+        .bigFishStartingGame(title: "The White Wolf of Icicle Creek"),
         .startingSteam,
         .steamStartingGame(title: "Curse of Blackmoor Manor"),
     ]

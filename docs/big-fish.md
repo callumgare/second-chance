@@ -4,7 +4,10 @@ Big Fish Games sells 30 of the Nancy Drew games, as downloads its own app, the
 **Game Manager**, installs. The Big Fish source builds a wrapp from a game the
 person owns there: the Game Manager runs in the build's Wine prefix, they sign
 in in its own window, pick one of their games, and it downloads, installs and
-activates it.
+activates it. As with Steam, the Game Manager's window is only seen for the
+sign-in: otherwise it is kept off the screen, with no Dock icon
+([hidden windows](wine-in-process-helpers.md#hidden-windows)), and Second
+Chance's own window shows what it is doing.
 
 ## What Big Fish ships
 
@@ -58,17 +61,31 @@ activates it.
    finishes; only one runs in a prefix (a second hands over to the first and
    exits, so its DevTools port never answers), so the session is ended there.
    AutoIt and the installer are staged under `C:\second-chance-big-fish` and
-   removed after. While it runs, Z: shows an empty folder
-   (`BigFishWrappPreparer.hideMacDrive`): the installer runs Big Fish's
-   `epoch.exe`, which searches every drive, folder by folder, for a
-   `bfgextstate.json` a Big Fish CD would have, and Z: is the whole Mac,
-   which takes hours through Wine. The installer looks stuck on "Execute:
-   …\bfgclient\epoch.exe" meanwhile.
+   removed after. ⌘ is made to work as Ctrl for the Game Manager alone
+   (`WineRegistry.letCommandActAsControl`: `LeftCommandIsCtrl` and
+   `RightCommandIsCtrl` under Wine's `AppDefaults\bfgclient.exe\Mac Driver`),
+   so ⌘C and ⌘V work in its sign-in form: Wine otherwise keeps ⌘ for its own
+   Mac menu, and a Windows program knows only Ctrl. The installer runs Big Fish's `epoch.exe`, which searches
+   every drive, folder by folder, for a `bfgextstate.json` a Big Fish CD
+   would have. Given a drive showing the whole Mac, as Wine's Z: is unless
+   it's taken away, that takes hours through Wine, with the installer
+   looking stuck on "Execute: …\bfgclient\epoch.exe"; a prefix has no such
+   drive ([wrapp-build.md](wrapp-build.md#what-a-wrapp-holds)), so it
+   searches only C:.
 3. **It starts** with its DevTools port (`BigFishGameManager.start`).
-4. **Sign-in.** Already signed in is fine. Otherwise, from the app, the
-   Game Manager's sign-in form is opened and its window brought forward, the
-   progress screen tells the person to sign in there, and the build looks
-   every 2 s for up to 30 minutes, failing if the Game Manager quits. The
+4. **Sign-in.** A sign-in kept from an earlier build is put back first
+   ([below](#the-kept-sign-in)), so the Game Manager usually starts signed
+   in, and already signed in is fine. Otherwise, from the app, the
+   Game Manager's sign-in form is opened and, once it's there, the page is
+   restyled to show that dialog alone, centred in the window, without its close
+   button and with Escape doing nothing (`Script.signInOnly`); only then is
+   the window, hidden until now, shown and brought forward. It stays the
+   Game Manager's own size: the Game Manager holds its window at its
+   minimum, which is far bigger than the dialog, whether macOS or Windows
+   (AutoIt's `WinMove`) resizes it. The progress screen tells
+   the person to sign in there, and the build looks every 2 s for up to 30
+   minutes, failing if the Game Manager quits. Once they have signed in, the
+   window is hidden again (`hideWindow`). The
    person's password never passes through Second Chance. A headless build
    can't ask anyone, so it fails (`bigFishSignInRequired`) unless it's the
    test harness's: `BIG_FISH_TEST_SIGN_IN=1` with `BIG_FISH_EMAIL` and
@@ -82,17 +99,25 @@ activates it.
    the account has it, else any edition it has.
 6. **Download, install, activate.** `downloadNewGame` with
    `downloadFullVersion` false for a trial; then the game's state is read every
-   2 s for up to 4 hours. Downloading and installing show their progress; the
+   2 s for up to 4 hours. Downloading and installing show their progress.
+   Activation ("Activating the game", with no percentage) has no state of
+   its own for a game bought: the Game Manager runs the game's Big Fish
+   launcher a few times, each slowed by its copy protection (White Wolf's
+   took 2½ minutes), while it still says it's installing, at 100%. So the
+   install at 100% is activation, as are a trial's unlocking (state 18), the
    wait after installing, and a ready state before the game's folder has its
-   `bfgstate.xml`, is activation ("Unlocking the game"). A failed state fails
+   `bfgstate.xml`. A failed state fails
    the build as a download, install or activation failure, and so does the
    Game Manager quitting. Meanwhile `big-fish-directx-cancel.au3` cancels
    Microsoft's DirectX web setup, which each game's installer starts and would
    otherwise sit on its licence page.
-7. **Sign out**, and wait until the page says so: the wrapp mustn't carry the
-   person's sign-in, and an owned, activated game plays signed out. (Not for
-   a trial, which never signed in.) Then the Game Manager is shut down.
-   Signing out isn't enough on its own: the Game Manager keeps the account's
+7. **Keep the sign-in, or sign out.** The wrapp mustn't carry the sign-in,
+   and an owned, activated game plays signed out. A person's sign-in is kept
+   for the next build ([below](#the-kept-sign-in)): the Game Manager is shut
+   down signed in, and its values saved. The test harness's account is
+   signed out instead, waiting until the page says so. (Neither for a
+   trial, which never signed in.) Either way the account is then taken out
+   of the prefix. Signing out isn't enough on its own: the Game Manager keeps the account's
    access and refresh tokens and email in
    `HKCU\Software\Big Fish Games\Client`, and its browser profile
    (`C:\ProgramData\Big Fish\cef`) keeps the store's session cookies, so
@@ -111,6 +136,30 @@ activates it.
 A failure anywhere shuts the Game Manager down and removes the half-made
 wrapp. `BigFishWrappBuilderTests` drives all of this with a fake Game Manager
 and a fake preparer.
+
+## The kept sign-in
+
+As with Steam, a person signs in once, and later builds use that sign-in
+(`BigFishSessionStore`). The Game Manager keeps it as six values in
+`HKCU\Software\Big Fish Games\Client` (`BigFishGameManager.accountValues`):
+its access and refresh tokens, when each expires, and the account's address.
+It starts signed in from those alone, without its browser profile, which is
+226 MB of mostly cache. So after a build the person signed in to, once the
+Game Manager has stopped and Wine has written its registry, those lines of
+the prefix's `user.reg` are kept as a `.reg` fragment in
+`~/Library/Application Support/SecondChance/BigFish/sign-in.reg` (readable by
+the person alone), and the next build `reg import`s it before starting the
+Game Manager. A build that fails after the sign-in keeps it too, so trying
+again doesn't ask again. The build isn't signed out with the Game Manager's
+own sign-out, which may end the sign-in with Big Fish as well; the values
+are taken out of the wrapp instead.
+
+The refresh token lasts about a week from when it was last used. A kept
+sign-in that has run out finds the Game Manager signed out, and the person
+signs in as before, which keeps the new one. Neither a trial nor the test
+harness (`BIG_FISH_TEST_SIGN_IN`) uses or replaces it. *Sign Out of Big Fish
+Games*, in the Second Chance menu while one is kept (`StoreSignIns`),
+deletes it; the games already built play as before, as they never had it.
 
 ## Testing
 
@@ -155,7 +204,9 @@ since the download's size isn't known beforehand:
   `--source big-fish-trial`) builds every game's free trial, signed out, side
   by side with other builds. Each build's prefix is new, so each trial has
   its full 60 minutes; the launch only goes as far as the menu, which the
-  wrapp reaches by pressing the Game Manager's Play Now. It checks the
+  wrapp reaches by pressing the Game Manager's Play Now (with its window
+  hidden, and started with the game's in-process helpers armed, since the
+  game it starts takes its environment). It checks the
   wrapp records `BigFishTrial` and the English edition's SKU.
 
 Both download the Game Manager's installer once, before the first build

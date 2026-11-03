@@ -334,7 +334,9 @@ Rules the store follows, each from something seen to go wrong:
 
 Signing out — Second Chance's *Sign Out of Steam*, or `sc clean
 steam-session` — deletes the store; every Steam wrapp then asks for a
-sign-in once. `sc clean steam-client` drops the cached Steam client.
+sign-in once. The menu item is there only while the store holds a sign-in
+(`StoreSignIns`, which looks again each time a menu opens or Second Chance
+comes to the front, since builds and wrapps save and drop it). `sc clean steam-client` drops the cached Steam client.
 
 ## One wrapp on Steam at a time
 
