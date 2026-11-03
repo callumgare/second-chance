@@ -83,17 +83,25 @@ class WrappBuildViewModel {
     private(set) var successReportsQuestion: SuccessReportsQuestion?
     @ObservationIgnored private var successReportsAnswered: CheckedContinuation<Void, Never>?
 
-    /// Which game to get from a store, asked once it has said which the
-    /// account owns: the main window shows it in place of the build's
-    /// progress, whose last step (finding out what's owned) is over.
-    struct GameQuestion {
+    /// A question the build asks part way through, which the main window
+    /// shows in place of the build's progress (whose last step is over):
+    /// which game to get from a store, once it has said which the account
+    /// owns, and how a DRM-free Steam game should start.
+    struct BuildQuestion {
+        struct Choice {
+            let title: String
+            /// What picking it means, beneath it, if it needs saying.
+            var detail: String?
+        }
         let title: String
         let detail: String
-        let choices: [String]
+        /// What the list of choices is, for VoiceOver: "Games".
+        let choicesLabel: String
+        let choices: [Choice]
     }
-    /// Set only by `askWhichGame`, and by `UIStateCatalog` to picture it.
-    var gameQuestion: GameQuestion?
-    @ObservationIgnored private var gameQuestionAnswered: CheckedContinuation<Int?, Never>?
+    /// Set only by `ask`, and by `UIStateCatalog` to picture it.
+    var question: BuildQuestion?
+    @ObservationIgnored private var questionAnswered: CheckedContinuation<Int?, Never>?
 
     /// The failed build's report, for the error screen.
     let failureReport = FailureReportModel()
@@ -302,7 +310,7 @@ class WrappBuildViewModel {
         isCancelling = true
         buildTask.cancel()
         finishSuccessReportsQuestion()
-        answerGameQuestion(nil)
+        answerQuestion(nil)
     }
 
     /// The person cancelled a question that ends the build, which winds down
@@ -348,16 +356,16 @@ class WrappBuildViewModel {
         successReportsAnswered = nil
     }
 
-    // MARK: - Which game question
+    // MARK: - Build questions
 
     /// Show `question`, and wait for the index of the choice picked, or nil
     /// if the person cancelled it (or the build).
-    func askWhichGame(_ question: GameQuestion) async -> Int? {
+    func ask(_ question: BuildQuestion) async -> Int? {
         await withCheckedContinuation { continuation in
-            gameQuestionAnswered?.resume(returning: nil)
-            gameQuestionAnswered = continuation
-            gameQuestion = question
-            // The person has just signed in in the store's window, which
+            questionAnswered?.resume(returning: nil)
+            questionAnswered = continuation
+            self.question = question
+            // The person may have just signed in in a store's window, which
             // would otherwise stay in front of the question. The plain
             // activate() is only a request since macOS 14, which that
             // window, active as they signed in, can keep.
@@ -366,10 +374,10 @@ class WrappBuildViewModel {
         }
     }
 
-    func answerGameQuestion(_ choice: Int?) {
-        gameQuestion = nil
-        gameQuestionAnswered?.resume(returning: choice)
-        gameQuestionAnswered = nil
+    func answerQuestion(_ choice: Int?) {
+        question = nil
+        questionAnswered?.resume(returning: choice)
+        questionAnswered = nil
     }
 
     /// Drive any builder: build → completed, or route the failure. The bus

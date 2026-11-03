@@ -57,7 +57,7 @@ struct ContentView: View {
 
     private var currentStep: InstallerStep {
         // Which game to get is part of saying where it comes from.
-        if viewModel.gameQuestion != nil { return .source }
+        if viewModel.question != nil { return .source }
         return InstallerStep(viewModel.currentState) ?? .summary
     }
 

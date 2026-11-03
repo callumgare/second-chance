@@ -16,8 +16,8 @@ struct WrappBuildProgressView: View {
             completed
         } else if let question = viewModel.successReportsQuestion {
             successReports(question)
-        } else if let question = viewModel.gameQuestion {
-            whichGame(question)
+        } else if let question = viewModel.question {
+            buildQuestion(question)
         } else {
             inProgress
         }
@@ -65,35 +65,45 @@ struct WrappBuildProgressView: View {
         }
     }
 
-    @State private var chosenGame: Int?
+    @State private var chosenAnswer: Int?
 
-    /// Which game to get from a store: the games the account owns, the
-    /// first picked to start with. Double-clicking one picks it.
-    private func whichGame(_ question: WrappBuildViewModel.GameQuestion) -> some View {
+    /// A question the build asks (`BuildQuestion`): its choices in a list,
+    /// the first picked to start with. Double-clicking one picks it.
+    private func buildQuestion(_ question: WrappBuildViewModel.BuildQuestion) -> some View {
         InstallerPage(title: question.title) {
             Text(question.detail)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-            List(question.choices.indices, id: \.self, selection: $chosenGame) { index in
-                Text(question.choices[index])
+            List(question.choices.indices, id: \.self, selection: $chosenAnswer) { index in
+                let choice = question.choices[index]
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(choice.title)
+                    if let detail = choice.detail {
+                        Text(detail)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.vertical, choice.detail == nil ? 0 : 4)
             }
             .listStyle(.bordered)
             .contextMenu(forSelectionType: Int.self) { _ in
             } primaryAction: { selection in
-                if let index = selection.first { viewModel.answerGameQuestion(index) }
+                if let index = selection.first { viewModel.answerQuestion(index) }
             }
-            .accessibilityLabel("Games")
+            .accessibilityLabel(question.choicesLabel)
         } leading: {
             EmptyView()
         } trailing: {
-            Button("Cancel") { viewModel.answerGameQuestion(nil) }
+            Button("Cancel") { viewModel.answerQuestion(nil) }
                 .keyboardShortcut(.cancelAction)
-            Button("Continue") { viewModel.answerGameQuestion(chosenGame) }
+            Button("Continue") { viewModel.answerQuestion(chosenAnswer) }
                 .keyboardShortcut(.defaultAction)
-                .disabled(chosenGame == nil)
+                .disabled(chosenAnswer == nil)
         }
-        .onAppear { chosenGame = question.choices.isEmpty ? nil : 0 }
-        .accessibilityIdentifier("which-game-question")
+        .onAppear { chosenAnswer = question.choices.isEmpty ? nil : 0 }
+        .accessibilityIdentifier("build-question")
     }
 
     private var gameName: String? {

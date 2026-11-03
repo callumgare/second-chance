@@ -117,7 +117,7 @@ the test host under xcodebuild — can still meet the prompts; answer them
    `WrappBuildInput.chooseSteamGame` lists only those (`steamNoGamesOwned`
    when there are none), asking in Second Chance's main window, in place of
    the progress, which comes to the front as the person has just been in
-   Steam's window (`WrappBuildViewModel.askWhichGame`); for a DRM-free one it then asks how it launches
+   Steam's window (`WrappBuildViewModel.ask`); for a DRM-free one it then asks how it launches
    (`getSteamLaunchMode`, `STEAM_LAUNCH_MODE`), and the engine follows
    (`engineRouted`). Steam only installs a queued game when it starts, so the
    build then stops Steam — saving the session but leaving it in the prefix —

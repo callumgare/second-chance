@@ -348,6 +348,9 @@
     "Downloading the game" : {
 
     },
+    "Either way it's the same game. They differ in how quickly it starts and where your saves are kept." : {
+
+    },
     "Eject Disc 1" : {
 
     },
@@ -499,13 +502,13 @@
     "Keep Installing" : {
 
     },
+    "Keeps your saves in Steam Cloud, but starts slower." : {
+
+    },
     "Later reports are sent the same way." : {
 
     },
     "Launch Directly" : {
-
-    },
-    "Launch directly: starts faster and is more reliable, but saves stay on this Mac.\n\nLaunch via Steam: keeps your saves in Steam Cloud, but starts slower." : {
 
     },
     "Launch via Steam" : {
@@ -827,6 +830,9 @@
     "Starting the updated Steam…" : {
 
     },
+    "Starts faster and is more reliable, but saves stay on this Mac." : {
+
+    },
     "Steam can only play one game at a time. Answer Steam's question to stop the game there and play here." : {
 
     },
@@ -1025,6 +1031,9 @@
 
     },
     "Waiting for you to sign in to Steam" : {
+
+    },
+    "Ways to start the game" : {
 
     },
     "What failed" : {

@@ -36,7 +36,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | main window, the owned games   |
-/// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | NSAlert, two choices           |
+/// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | main window, two choices       |
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | NSAlert: try again, quit, cancel |
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `bigFishGameFromEnvironment`  | `BIG_FISH_GAME_SLUG`                    | nil: asked after sign-in       |
@@ -270,11 +270,12 @@ class WrappBuildInput {
         // (and so `owned` arrives): how the series is known.
         let games = owned
 
-        let question = WrappBuildViewModel.GameQuestion(
+        let question = WrappBuildViewModel.BuildQuestion(
             title: String(localized: "Which game do you want from Steam?"),
             detail: String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."),
-            choices: games.map(\.title))
-        guard let viewModel, let chosen = await viewModel.askWhichGame(question) else {
+            choicesLabel: String(localized: "Games"),
+            choices: games.map { .init(title: $0.title) })
+        guard let viewModel, let chosen = await viewModel.ask(question) else {
             // The first question the user is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }
@@ -294,21 +295,22 @@ class WrappBuildInput {
         }
         if isHeadlessRun { return .direct }
 
-        let alert = NSAlert()
-        alert.messageText = String(localized: "How should \(game.title) start?")
-        alert.informativeText = String(localized: """
-        Launch directly: starts faster and is more reliable, but saves stay on this Mac.
-
-        Launch via Steam: keeps your saves in Steam Cloud, but starts slower.
-        """)
-        alert.addButton(withTitle: String(localized: "Launch Directly"))
-        alert.addButton(withTitle: String(localized: "Launch via Steam"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
-        switch alert.runModalAskingForAttention() {
-        case .alertFirstButtonReturn: return .direct
-        case .alertSecondButtonReturn: return .steam
-        default: throw WrappBuildError.userCancelled
+        let modes: [GameInfo.SteamLaunchMode] = [.direct, .steam]
+        let question = WrappBuildViewModel.BuildQuestion(
+            title: String(localized: "How should \(game.title) start?"),
+            detail: String(localized: "Either way it's the same game. They differ in how quickly it starts and where your saves are kept."),
+            choicesLabel: String(localized: "Ways to start the game"),
+            choices: [
+                .init(title: String(localized: "Launch Directly"),
+                      detail: String(localized: "Starts faster and is more reliable, but saves stay on this Mac.")),
+                .init(title: String(localized: "Launch via Steam"),
+                      detail: String(localized: "Keeps your saves in Steam Cloud, but starts slower.")),
+            ])
+        guard let viewModel, let chosen = await viewModel.ask(question) else {
+            // Nothing is installed yet: back to the welcome screen.
+            throw cancelledBeforeStart()
         }
+        return modes[chosen]
     }
 
     /// Whether a person is there to sign in to Steam if it asks.
@@ -368,14 +370,15 @@ class WrappBuildInput {
     @MainActor
     func chooseBigFishGame(from owned: [BigFishGameChoice]) async throws -> BigFishGameChoice {
         if isHeadlessRun { throw WrappBuildError.missingRequiredParameter("BIG_FISH_GAME_SLUG") }
-        let question = WrappBuildViewModel.GameQuestion(
+        let question = WrappBuildViewModel.BuildQuestion(
             title: String(localized: "Which game do you want from Big Fish Games?"),
             detail: String(localized: """
                 These are the Nancy Drew games your Big Fish Games account has. \
                 Second Chance installs the one you pick through Big Fish's Game Manager.
                 """),
-            choices: owned.map(\.displayName))
-        guard let viewModel, let chosen = await viewModel.askWhichGame(question) else {
+            choicesLabel: String(localized: "Games"),
+            choices: owned.map { .init(title: $0.displayName) })
+        guard let viewModel, let chosen = await viewModel.ask(question) else {
             // The first question the person is asked: back to the welcome screen.
             throw cancelledBeforeStart()
         }

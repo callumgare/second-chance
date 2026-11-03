@@ -66,11 +66,24 @@ enum UIStateCatalog {
             }),
             window("steam-which-game", steam(String(localized: "Checking which games your Steam account owns")) {
                 $0.detectedGame = nil
-                $0.gameQuestion = WrappBuildViewModel.GameQuestion(
+                $0.question = WrappBuildViewModel.BuildQuestion(
                     title: String(localized: "Which game do you want from Steam?"),
                     detail: String(localized: "These are the Nancy Drew games your Steam account owns. Second Chance installs the one you pick through Steam."),
+                    choicesLabel: String(localized: "Games"),
                     choices: ["ghost-dogs", "haunted-carousel", "deception-island", "shadow-ranch", "blackmoor-manor"]
-                        .map { GameInfoProvider.shared.gameInfo(for: $0).title })
+                        .map { .init(title: GameInfoProvider.shared.gameInfo(for: $0).title) })
+            }),
+            window("steam-launch-mode", steam(String(localized: "Checking which games your Steam account owns")) {
+                $0.question = WrappBuildViewModel.BuildQuestion(
+                    title: String(localized: "How should \(GameInfoProvider.shared.gameInfo(for: "ghost-dogs").title) start?"),
+                    detail: String(localized: "Either way it's the same game. They differ in how quickly it starts and where your saves are kept."),
+                    choicesLabel: String(localized: "Ways to start the game"),
+                    choices: [
+                        .init(title: String(localized: "Launch Directly"),
+                              detail: String(localized: "Starts faster and is more reliable, but saves stay on this Mac.")),
+                        .init(title: String(localized: "Launch via Steam"),
+                              detail: String(localized: "Keeps your saves in Steam Cloud, but starts slower.")),
+                    ])
             }),
             window("big-fish-downloading", bigFish(String(localized: "Downloading the game")) {
                 $0.stepProgress = StepProgress(fraction: 0.42, text: "42% done")
