@@ -306,9 +306,8 @@ private struct Release {
         }
         try await ui.progressStep("Package", success: "Packaged \(repo.display(zip))") { _ in
             try? FileManager.default.removeItem(at: zip)
-            // ditto, not zip: the Wine and ScummVM payloads inside
-            // WrappTemplate.app are full of symlinks and extended attributes
-            // that `zip` would flatten.
+            // ditto, not zip: an app is full of symlinks and extended
+            // attributes (code signatures) that `zip` would flatten.
             let result = try await Proc.collect("/usr/bin/ditto", ["-c", "-k", "--keepParent", app.path, zip.path])
             guard result.succeeded else { throw SCError("ditto failed: \(result.error)") }
         }

@@ -88,15 +88,21 @@ struct Repo: Sendable {
             .appendingPathComponent("SecondChance/Steam/session")
     }
 
-    /// What the build downloads into `~/Library/Caches/SecondChance` (Wine,
-    /// Wineskin, AutoIt, ScummVM, the game patches, Steam's installer, Big
-    /// Fish's Game Manager installer `bfginstaller35.exe`): every
-    /// entry there but the caches `sc clean` has targets of its own for, and
-    /// the app's wrapp cache.
+    /// The engine store: prepared engines (docs/modules.md#the-engine-store).
+    static var engineStore: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/engines")
+    }
+
+    /// What the build downloads into `~/Library/Caches/SecondChance` (AutoIt,
+    /// the game patches, Steam's installer, Big Fish's Game Manager installer
+    /// `bfginstaller35.exe`, engines' and free games' files): every entry
+    /// there but the caches `sc clean` has targets of its own for, and the
+    /// app's wrapp cache.
     static var downloads: [URL] {
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SecondChance")
-        let kept: Set = ["layers", "wine-prefix-cache", "steam-client", "wrapp-cache", "wrapper-cache"]
+        let kept: Set = ["layers", "wine-prefix-cache", "steam-client", "engines", "wrapp-cache", "wrapper-cache"]
         let entries = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
         return entries.filter { !kept.contains($0.lastPathComponent) }
     }
