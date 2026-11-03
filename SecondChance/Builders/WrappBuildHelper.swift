@@ -343,6 +343,21 @@ class WrappBuildHelper {
         }
     }
 
+    /// The recorded launch's program is in the app, once the build has made
+    /// it: a Wine or DOSBox program's file, a ScummVM game's folder. A
+    /// launch that isn't a path in the app (`steam://`) isn't checked.
+    nonisolated static func checkLaunchProgram(_ launch: RecordedLaunch, in wrappPath: URL) throws {
+        guard launch.program.hasPrefix("wine:") || launch.program.hasPrefix("dosbox:") || launch.program.hasPrefix("scummvm:") else { return }
+        guard let location = WrappLayout(app: wrappPath).location(launch.program) else {
+            throw WrappBuildError.buildRecipeProblem("LAUNCH \(launch.program) isn't in the app")
+        }
+        guard FileManager.default.fileExists(atPath: location.path) else {
+            logger.critical("❌ The build didn't make what LAUNCH runs, \(launch.program) (\(location.path))")
+            throw WrappBuildError.gameExecutableNotFound
+        }
+        logger.notice("✓ LAUNCH's program is there: \(launch.program)")
+    }
+
     /// Whether a step copies into the app itself, outside the prefix: a
     /// `COPY` to a bare `/…` path. Builders run these after the cached
     /// install layer, which holds the prefix alone.
@@ -663,6 +678,7 @@ class WrappBuildHelper {
             try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: lockComposition)
         }
         lock.updated = updated
+        if let launch { try Self.checkLaunchProgram(launch, in: wrappPath) }
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,

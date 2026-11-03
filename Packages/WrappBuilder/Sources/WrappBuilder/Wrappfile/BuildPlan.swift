@@ -254,6 +254,14 @@ public nonisolated struct BuildPlanner {
         if var launch = recorded.launch {
             launch.volumes = recorded.volumes
             plan.launch = launch
+            // What an install expects to make is what the launch runs, when
+            // the launch is in the folder it installs into, so the two can't
+            // drift.
+            for step in stages.flatMap(\.steps) {
+                guard let creates = step.option("creates"), let into = step.option("into"),
+                      launch.program.hasPrefix(into + "/"), creates != launch.program else { continue }
+                throw PlanError(description: "\(step.origin): --creates=\(creates), but \(target) launches \(launch.program)")
+            }
         } else if !recorded.fromPrevious {
             throw PlanError(description: "manifest.yaml's edition \(edition.id) builds \(target), which reaches no LAUNCH")
         }

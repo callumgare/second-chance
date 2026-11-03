@@ -80,6 +80,22 @@ struct BuildPlanTests {
         #expect(try plan("old-clock", edition: "steam") == nil)
     }
 
+    @Test("An install's --creates is the launch's program when the launch is in its folder")
+    func createsIsTheLaunch() throws {
+        func plan(creates: String) throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            FROM wine@10/prefix AS only
+            USE installer
+            INSTALLER.RUN --from=/disc --into=C:/Game --creates=\(creates)
+            LAUNCH --wine.graphics=direct-3d C:/Game/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        #expect(try plan(creates: "C:/Game/Game.exe").launch?.program == "wine:C:/Game/Game.exe")
+        #expect(throws: BuildPlanner.PlanError.self) { try plan(creates: "C:/Game/Other.exe") }
+    }
+
     /// A planner over Old Clock's bundle and the shipped modules, for a
     /// Wrappfile of a test's own.
     private func planner(_ text: String, slug: String = "old-clock") throws -> (BuildPlanner, Wrappfile, ProgramBundle) {

@@ -149,7 +149,7 @@ class GameInstallerRunner {
                     gameExe = try await findGameExecutable(
                         before: exesBefore,
                         after: exesAfter,
-                        expectedPath: creates ?? gameInfo.internalGameExePath,
+                        expectedPath: creates,
                         driveCPath: driveCPath,
                         choose: chooseGameProgram
                     )

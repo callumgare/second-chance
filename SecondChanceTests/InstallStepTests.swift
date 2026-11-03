@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import SecondChance
 import WrappBuilder
+import WrappFormat
 
 /// What an install's and a patch's steps do with what they say: the
 /// expected program linked to the one an installer made, and patch steps
@@ -43,6 +44,21 @@ struct InstallStepTests {
         #expect(try FileManager.default.destinationOfSymbolicLink(atPath: folder.path) == "../Program Files/Her Interactive/Game")
         #expect(try FileManager.default.destinationOfSymbolicLink(atPath: folder.appendingPathComponent("Game.exe").path) == "Game2.exe")
         #expect(FileManager.default.fileExists(atPath: driveC.appendingPathComponent("Nancy Drew/Game/Game.exe").path))
+    }
+
+    @Test("What LAUNCH runs must be in the app once it's built; a steam:// launch isn't a path")
+    func launchProgramChecked() throws {
+        let driveC = try driveC()
+        let app = driveC.deletingLastPathComponent().appendingPathComponent("Game.app")
+        defer { try? FileManager.default.removeItem(at: driveC.deletingLastPathComponent()) }
+        let prefix = app.appendingPathComponent("Contents/SharedSupport/prefix")
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: driveC, to: prefix.appendingPathComponent("drive_c"))
+        let launch = RecordedLaunch(program: "wine:C:/Game/Game.exe")
+        #expect(throws: WrappBuildError.gameExecutableNotFound) { try WrappBuildHelper.checkLaunchProgram(launch, in: app) }
+        try make(prefix.appendingPathComponent("drive_c/Game/Game.exe"))
+        try WrappBuildHelper.checkLaunchProgram(launch, in: app)
+        try WrappBuildHelper.checkLaunchProgram(RecordedLaunch(program: "steam://rungameid/1"), in: app)
     }
 
     @Test("A patch step is told by its shape")

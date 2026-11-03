@@ -96,7 +96,7 @@ Modules' instructions, as the build modules declare them
 | `WINE.REGISTRY --set <key>:<name> <value>` / `--remove <key>:<name>` | Sets or removes a registry value. |
 | `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive, kept at launch. |
 | `WINE.KEEP-DISCS <disc input>… --into=<folder> [--combined=<folder>]` | Copies the discs it's given into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
-| `INSTALLER.RUN [--from=<input>] --into=<folder> [--creates=<program>] [--answer-file=…] [--automation=<script>] [--patch] [program]` | Runs a Windows installer: silently with an answer file. `--creates` is the program it should leave, linked to what it made if that's elsewhere; `--patch` runs a patcher in `--into`, looking for nothing afterwards. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
+| `INSTALLER.RUN [--from=<input>] --into=<folder> [--creates=<program>] [--answer-file=…] [--automation=<script>] [--patch] [program]` | Runs a Windows installer: silently with an answer file. `--creates` is the program it should leave, linked to what it made if that's elsewhere, and must be the target's `LAUNCH` program when that is under `--into`; `--patch` runs a patcher in `--into`, looking for nothing afterwards. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
 | `STEAM.INSTALL <input> --into=<folder>` | Installs the input's Steam app. |
 | `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--creates=<program>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
 
@@ -177,7 +177,9 @@ LAUNCH --wine.graphics=direct-draw "${const.install-dir}/Game.exe"
   `--wine.clean-exit-line` (Her's later engine's `Debug.LOG`).
 - **The last `LAUNCH` a stage reaches wins**, counting what it inherits
   through `FROM`, after `IF`s are decided; a stage with none has its
-  parent's. Every edition's target must reach one, which planning checks.
+  parent's. Every edition's target must reach one, which planning checks,
+  and a build fails when what it runs, a file or a ScummVM game's folder,
+  isn't in the app once it's built (`WrappBuildHelper.checkLaunchProgram`).
 - **`VOLUME`s build up**, inherited through `FROM`; `--remove` takes one
   off. The location is a path type's: `wine:C:/users/crossover/Documents`
   with `--wine.drive=A:`, `scummvm:saves/` and `scummvm:settings/`, or
