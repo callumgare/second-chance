@@ -89,6 +89,24 @@ SERVICE --ready=helper-ready "C:/Helper/helper.exe"
    generic judgement, for a game that needs its own. A game whose window
    comes up long after its splash's, say, or one that quits with exit code 1
    as normal.
+
+   The Nancy Drew games from Ghost of Thornton Hall on are the second kind:
+   they exit non-zero, and a line Her's engine writes to `Debug.LOG` says
+   whether they quit cleanly. The work this builds on gives the wine module
+   launch options for exactly that case, `--wine.clean-exit-log` and
+   `--wine.clean-exit-line`, which those games' bundles write. With signals
+   they become one:
+
+   ```dockerfile
+   SIGNAL nancy-drew-good-exit
+     WATCH --log="C:/users/crossover/Documents/*/Debug.LOG" --contains="ExitInstance(), good exit..."
+   END
+
+   LAUNCH --quit-cleanly=nancy-drew-good-exit … "${const.install-dir}/Thornton.exe"
+   ```
+
+   The signal belongs in the nancy-drew module, as `nancy-drew.good-exit`,
+   built from its `clean-exit-log.yaml`, and the two wine options go.
 3. **A build step waiting for one**, perhaps: `RUN --done=<signal>` for an
    installer that never exits on its own, which AutoIt closes today.
 
