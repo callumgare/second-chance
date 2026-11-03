@@ -110,9 +110,15 @@ public nonisolated enum EngineInstall {
                 folder = (folder as NSString).deletingLastPathComponent
             }
         }
+        // A folder left holding only `_CodeSignature` is empty too: an engine
+        // is signed after its list is made, so a framework's signature isn't
+        // in the list, and left behind it would leave half a framework that
+        // breaks the wrapp's own signing.
         for folder in folders.sorted(by: { $0.count > $1.count }) {
             let url = contents.appendingPathComponent(folder)
-            if (try? files.contentsOfDirectory(atPath: url.path))?.isEmpty == true { try files.removeItem(at: url) }
+            guard let left = try? files.contentsOfDirectory(atPath: url.path),
+                  left.allSatisfy({ $0 == "_CodeSignature" }) else { continue }
+            try files.removeItem(at: url)
         }
         try files.removeItem(at: list)
         try? files.removeItem(at: contents.appendingPathComponent(recordPath(module: module)))

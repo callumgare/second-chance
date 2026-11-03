@@ -55,6 +55,22 @@ struct EngineInstallTests {
         #expect(!FileManager.default.fileExists(atPath: contents.appendingPathComponent("SharedSupport").path))
     }
 
+    @Test("A framework signed after its engine was listed goes whole, its signature with it")
+    func signedFrameworkGoesWhole() throws {
+        let folder = try folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let contents = try launcher(in: folder)
+        let engine = try engine(in: folder)
+        // Signing the prepared engine adds what its list doesn't name.
+        let signature = engine.tree.appendingPathComponent("Frameworks/Engine.framework/Versions/A/_CodeSignature")
+        try FileManager.default.createDirectory(at: signature, withIntermediateDirectories: true)
+        try Data("signed".utf8).write(to: signature.appendingPathComponent("CodeResources"))
+        try EngineInstall.install(engine, into: contents)
+
+        try EngineInstall.remove(module: "wine", from: contents)
+        #expect(!FileManager.default.fileExists(atPath: contents.appendingPathComponent("Frameworks/Engine.framework").path))
+    }
+
     @Test("Two engines install side by side, and taking one out leaves the other whole")
     func twoEngines() throws {
         let folder = try folder()
