@@ -149,6 +149,37 @@ still wait until the steps are done. That splits how modules start ("needed
 by a step" before "services"), which is one reason to leave `RUN` out of
 the first version.
 
+## The save warning as a step
+
+The save warning (save often: the game may quit unexpectedly) comes before
+a Wine game starts, and never for ScummVM or DOSBox. Today a module's
+`runtime: { save-warning: … }` decides it, so a reader of a bundle can't
+see it, and nothing can say that one Wine game is steady enough to need
+none, or that one ScummVM game isn't. With steps before launch, it could
+be a step the bundle writes:
+
+```dockerfile
+BEFORE-LAUNCH --id=save-warning --every-launch
+  NOTICE --save-warning
+END
+```
+
+- **It runs before every launch**, not once (open question 4), and the
+  person can still turn it off with "Don't show again", which the app
+  records as it does today.
+- **It's text the app owns.** `NOTICE` names a notice the app has in its
+  string catalog (`--save-warning`), so the Wrappfile carries no text
+  people see, as `LAUNCH --fallback` doesn't.
+- **A module's stage can write it** (`prefix` built `FROM` a wine module
+  stage that has it), so Wine games keep it without each bundle repeating
+  it, and a bundle can still take it off.
+- **Scripting a launch past it** (`docs/wrapp-launch.md`) works as now.
+
+It would need steps before every launch, which this plan leaves out, and a
+notice shown before services start rather than behind them, as the save
+warning is today (module set-up starts behind it). Both are reasons it
+waits for this plan.
+
 ## Rough phases
 
 1. **The block and file operations.**
