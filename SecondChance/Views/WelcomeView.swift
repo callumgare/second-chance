@@ -116,13 +116,13 @@ struct WrappSourceRow: View {
 
 private extension WrappSource {
     /// An SF Symbol, or the source's logo (a template image in the asset
-    /// catalog: Steam's from Simple Icons, Her Interactive's H), drawn at
-    /// the same size. Big Fish Games has a fish: its logo isn't one we may use.
+    /// catalog: Steam's from Simple Icons, Her Interactive's H, Big Fish
+    /// Games's wordmark from Wikimedia Commons), drawn at the same size.
     var icon: Image {
         switch self {
         case .disk: return Image(systemName: "opticaldisc")
         case .steam: return Image("SteamLogo")
-        case .bigFish: return Image(systemName: "fish")
+        case .bigFish: return Image("BigFishLogo")
         case .herDownload: return Image("HerLogo")
         }
     }
