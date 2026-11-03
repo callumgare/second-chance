@@ -57,9 +57,10 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         case scummvm
         case wineSteam = "wine-steam"
         case wineSteamSilent = "wine-steam-silent"
+        case dosbox
 
-        /// Wine runs the game: every engine but ScummVM.
-        public var runsInWine: Bool { self != .scummvm }
+        /// Wine runs the game: every engine but ScummVM and DOSBox.
+        public var runsInWine: Bool { self != .scummvm && self != .dosbox }
 
         /// Steam has to be running, and signed in, before the game starts.
         public var needsSteam: Bool { self == .wineSteam || self == .wineSteamSilent }

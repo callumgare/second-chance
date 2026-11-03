@@ -111,6 +111,11 @@ public nonisolated enum ScummVMBuild: BuildModule {
     public static let id = ModuleID.scummvm
 }
 
+/// DOSBox Staging, which runs a DOS game from its folder, with no Wine.
+public nonisolated enum DOSBoxBuild: BuildModule {
+    public static let id = ModuleID.dosbox
+}
+
 /// Steam is installed into a wrapp's Wine by its build, so the template
 /// holds nothing of its.
 public nonisolated enum SteamBuild: BuildModule {
@@ -163,7 +168,8 @@ public nonisolated enum BigFishBuild: BuildModule {
 public nonisolated enum BuildModules {
     /// Every module a build knows.
     public static let known: [any BuildModule.Type] = [
-        WineBuild.self, ScummVMBuild.self, SteamBuild.self, BigFishBuild.self, InstallerBuild.self, DiscBuild.self,
+        WineBuild.self, ScummVMBuild.self, DOSBoxBuild.self, SteamBuild.self, BigFishBuild.self, InstallerBuild.self,
+        DiscBuild.self,
         HerDownloadBuild.self,
     ]
 

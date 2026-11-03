@@ -52,9 +52,9 @@ with no `explorer.exe` left to finish the job.
 
 A wrapp runs a composition of modules (`Composition`, from its settings):
 the one that starts the game, and the services started before it. Wine
-alone, ScummVM alone, Wine with Steam running beside it, Steam starting
-the game in Wine, or Big Fish's DRM starting it in Wine (`BigFishRuntime`,
-[big-fish.md](big-fish.md)). `RuntimeModules` makes one `RuntimeModule` for each, in
+alone, ScummVM alone, DOSBox alone, Wine with Steam running beside it,
+Steam starting the game in Wine, or Big Fish's DRM starting it in Wine
+(`BigFishRuntime`, [big-fish.md](big-fish.md)). `RuntimeModules` makes one `RuntimeModule` for each, in
 start order (a module's dependencies first: Steam and Big Fish run in Wine), and the
 launch asks them rather than asking which engine it has:
 
@@ -62,7 +62,7 @@ launch asks them rather than asking which engine it has:
 | --- | --- |
 | Before the window | `firstStage` (Steam: "Starting Steam"; Big Fish: the game, given longer), `showsSaveWarning` (Wine), `ownsProcess` (Wine: only this prefix's processes are the launch's progress), `connectSaves` (Wine: the A: drive and Documents) |
 | Getting going | `armWatchers` (Wine: the helpers' report, the quit check, copy protection; ScummVM: puppet control), then `prepare` in start order (Steam: start and sign in; Wine: the desktop, unless Steam started the session) |
-| The game | the launcher's `startGame`, and `findsGame`: a Wine program by its `.exe`, one Steam or Big Fish's DRM started (given up on when they go), or the launcher's own process (ScummVM); `windowMayBeAnotherProcess` for a game whose window is another process's of its `.exe` (Big Fish's, under Armadillo) |
+| The game | the launcher's `startGame`, and `findsGame`: a Wine program by its `.exe`, one Steam or Big Fish's DRM started (given up on when they go), or the launcher's own process (ScummVM, DOSBox); `windowMayBeAnotherProcess` for a game whose window is another process's of its `.exe` (Big Fish's, under Armadillo) |
 | After the game | `finishAfterGame`, last started first (Steam saves its sign-in, Wine lets its desktop go); then Wine's session is waited for |
 | Quitting | `finishForQuit`, last started first, on a background queue (Steam briefly, then Wine's server) |
 
@@ -70,7 +70,15 @@ Every line any module's processes print reaches every watcher
 (`LaunchWatchers`), so Steam's output feeds Wine's quit check, as it always
 has. A new engine is a new module conforming to these, listed in
 `RuntimeModules.known`, with a `TestModule` for WrappPuppeteer and a
-`BuildModule` for its template files.
+`BuildModule` that prepares its engine
+([modules.md](modules.md#engine-packages)).
+
+**DOSBox** (`DOSBoxRuntime`) starts DOSBox Staging with none of the
+person's own DOSBox settings (`--noprimaryconf --nolocalconf`), full screen,
+and runs the game's DOS program from its folder in the wrapp, mounted as C:,
+with the saves volume laid over it (`mount c … -t overlay`): what the game
+writes goes there, and the wrapp is never written to. `--exit` ends DOSBox
+when the game does.
 
 ## Wine's desktop
 

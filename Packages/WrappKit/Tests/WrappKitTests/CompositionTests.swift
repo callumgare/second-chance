@@ -31,9 +31,9 @@ struct CompositionTests {
 
     @Test("A composition no engine expresses is tagged by its launcher")
     func newCompositionsAreTaggedByLauncher() {
-        let composition = Composition(launcher: "dosbox")
+        let composition = Composition(launcher: "some-engine")
         #expect(composition.legacyEngine == nil)
-        #expect(composition.engineTag == "dosbox")
+        #expect(composition.engineTag == "some-engine")
     }
 
     @Test("A module id is written as its name")

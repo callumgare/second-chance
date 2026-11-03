@@ -34,13 +34,14 @@ public nonisolated enum GameCatalogSource {
             guard let appID = input.appId, let folder = input.commonFolder, let exe = input.exe else { return nil }
             return GameInfo.SteamApp(appID: appID, installDir: folder, exe: exe)
         }
-        let exe = manifest.variants?.lazy.compactMap { $0.launch?.wine?.exe }.first
+        let exe = manifest.variants?.lazy.compactMap { $0.launch?.wine?.exe ?? $0.launch?.dosbox?.exe }.first
         let graphics = manifest.variants?.lazy.compactMap { $0.launch?.wine?.graphics }.first
+        let variants = Set(manifest.variants?.map(\.id) ?? [])
         return GameInfo(
             id: manifest.name,
             title: manifest.title,
             diskCount: disc?.inputs?.count ?? 1,
-            gameEngine: manifest.variants?.contains { $0.id == "scummvm" } == true ? .scummvm : .wine,
+            gameEngine: variants.contains("scummvm") ? .scummvm : variants.contains("dosbox") ? .dosbox : .wine,
             graphics: graphics.flatMap(GameInfo.Graphics.init(rawValue:)),
             // Today's paths are from the root of drive C.
             internalGameExePath: exe.map { $0.hasPrefix("C:") ? String($0.dropFirst(2)) : $0 },
@@ -124,6 +125,7 @@ public nonisolated enum GameCatalogSource {
         case .scummvm: "scummvm"
         case .wineSteam: "wineSteam"
         case .wineSteamSilent: "wineSteamSilent"
+        case .dosbox: "dosbox"
         }
     }
 

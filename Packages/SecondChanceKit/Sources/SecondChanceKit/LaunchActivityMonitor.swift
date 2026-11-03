@@ -127,7 +127,7 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
         }
     }
 
-    /// The Wine programs (and ScummVM) running at one moment, with the CPU
+    /// The Wine programs (and ScummVM or DOSBox) running at one moment, with the CPU
     /// time each has used so far. Leaves out what the wrapp runs itself to
     /// check on the launch, which says nothing about it: Wine's desktop is
     /// checked for with `reg.exe`, a Wine program of its own each time, and
@@ -151,7 +151,7 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
             var names: Set<String> = []
             for process in processes.entries {
                 let name = process.name.lowercased()
-                guard process.isWine || name == "scummvm", !Self.ignored.contains(name),
+                guard process.isWine || name == "scummvm" || name == "dosbox", !Self.ignored.contains(name),
                       isOurs?(process.pid) ?? true else { continue }
                 cpu[process.pid] = process.cpuSeconds
                 if Self.steam.contains(name) { steamPids.insert(process.pid) }

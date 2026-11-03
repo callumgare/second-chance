@@ -531,10 +531,11 @@ class GameLauncher {
             }
         } else {
             gameStarted = true
-            // ScummVM is the game's own process, so there's nothing to find:
-            // wait for its window, as for a Wine game's.
-            _ = await gameMonitor.waitForGameToStart(gameExeName: "scummvm", gamePid: gamePid)
-            logger.notice("[Game Launch] Waiting for ScummVM's window...")
+            // ScummVM or DOSBox is the game's own process, so there's
+            // nothing to find: wait for its window, as for a Wine game's.
+            let engine = config.composition.launcher.rawValue
+            _ = await gameMonitor.waitForGameToStart(gameExeName: engine, gamePid: gamePid)
+            logger.notice("[Game Launch] Waiting for \(engine)'s window...")
             if await gameMonitor.activateGameWindow(gamePid: gamePid, infoWindow: infoWindow) {
                 windowAppeared = true
                 let pid = gamePid

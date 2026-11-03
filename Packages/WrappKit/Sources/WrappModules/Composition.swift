@@ -33,6 +33,7 @@ nonisolated public struct ModuleID: RawRepresentable, Hashable, Codable, Sendabl
     public static let scummvm: ModuleID = "scummvm"
     public static let steam: ModuleID = "steam"
     public static let bigFish: ModuleID = "big-fish"
+    public static let dosbox: ModuleID = "dosbox"
 }
 
 /// What a wrapp runs: the one module that starts the program (its
@@ -90,6 +91,7 @@ nonisolated public struct Composition: Codable, Sendable, Hashable, CustomString
         case .scummvm: self.init(launcher: .scummvm)
         case .wineSteamSilent: self.init(launcher: .wine, services: [.steam])
         case .wineSteam: self.init(launcher: .steam, services: [.steam])
+        case .dosbox: self.init(launcher: .dosbox)
         }
     }
 

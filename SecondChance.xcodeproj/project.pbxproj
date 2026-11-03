@@ -104,6 +104,7 @@
 				main.swift,
 				MainLogger.swift,
 				Modules/BigFishRuntime.swift,
+				Modules/DOSBoxRuntime.swift,
 				Modules/RuntimeModule.swift,
 				Modules/ScummVMRuntime.swift,
 				Modules/SteamRuntime.swift,

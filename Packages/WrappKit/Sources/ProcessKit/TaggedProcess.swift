@@ -43,7 +43,7 @@ nonisolated public final class TaggedProcess: @unchecked Sendable {
         get { process.environment }
         set { process.environment = newValue }
     }
-    var currentDirectoryURL: URL? {
+    public var currentDirectoryURL: URL? {
         get { process.currentDirectoryURL }
         set { process.currentDirectoryURL = newValue }
     }

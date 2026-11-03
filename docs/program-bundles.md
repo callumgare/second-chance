@@ -157,9 +157,11 @@ editions:
 - **`licence-file`** names the licence's own words in the unpacked input
   (`lure/LICENSE.txt`), saved into the app after what the person is told.
 
-The shipped ones are SkiFree (`freeware/skifree`, a bare exe under Wine) and
+The shipped ones are SkiFree (`freeware/skifree`, a bare exe under Wine),
 Lure of the Temptress (`freeware/lure-of-the-temptress`, a zip ScummVM hosts,
-under ScummVM). A ScummVM game needs its engine's data file in ScummVM's
+under ScummVM) and Tyrian 2000 (`freeware/tyrian-2000`, a zip of DOS files,
+under DOSBox, whose variant names the DOS program as `launch: { dosbox: {
+exe } }`). A ScummVM game needs its engine's data file in ScummVM's
 engine: the scummvm module's package names the ones the shipped bundles'
 engines use (`engine-data`, [modules.md](modules.md#engine-packages)), and a
 game whose file is missing stops at ScummVM's "Unable

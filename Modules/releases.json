@@ -34,6 +34,24 @@
         ]
       }
     ],
+    "dosbox" : [
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "30d2252ffc67e1e150f18b79d7fc654d830276d8a5e541e8e7daba48d2acaf5e",
+          "scenarios/starts-and-quits.yaml" : "3fdc2bc21154a2f00c40a53fd9752f4a0f5215bab254372a8088b969eb4faa68"
+        },
+        "functions" : [
+
+        ],
+        "release" : 1,
+        "versions" : [
+          "0.83.0"
+        ]
+      }
+    ],
     "her-download" : [
       {
         "data" : [

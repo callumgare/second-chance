@@ -135,6 +135,36 @@ struct ScummVMTestModule: TestModule {
     }
 }
 
+/// DOSBox is a single native process too, started full screen, so it is
+/// judged and ended as ScummVM is.
+struct DOSBoxTestModule: TestModule {
+    static let id = ModuleID.dosbox
+    let layout: WrappLayout
+
+    init(layout: WrappLayout, prefix: URL) {
+        self.layout = layout
+    }
+
+    var gameProcessName: String? { "dosbox" }
+    var judgesFocusByFullscreen: Bool { true }
+
+    var cleanupCommands: [[String]] {
+        Wrapp.pkillCommand(matchingFrom: layout.dosbox.path)
+    }
+
+    /// SIGTERM, before the caller's SIGKILL.
+    func endLeftovers() -> String? {
+        guard Wrapp.isSafeToKill(from: layout.dosbox.path) else { return nil }
+        let leftovers = "^" + Wrapp.extendedRegexEscaped(layout.dosbox.path)
+        if ProcessControl.anyRunning(matching: leftovers),
+           ProcessControl.end(matching: leftovers, signal: SIGTERM, timeout: 5) {
+            logger.notice("   DOSBox ended when asked")
+            return nil
+        }
+        return leftovers
+    }
+}
+
 /// The test modules a wrapp's composition has, in start order.
 struct TestModules {
     let all: [any TestModule]
@@ -143,7 +173,7 @@ struct TestModules {
     let launcher: (any TestModule)?
 
     static let known: [any TestModule.Type] = [
-        WineTestModule.self, SteamTestModule.self, BigFishTestModule.self, ScummVMTestModule.self,
+        WineTestModule.self, SteamTestModule.self, BigFishTestModule.self, ScummVMTestModule.self, DOSBoxTestModule.self,
     ]
 
     init(composition: Composition?, layout: WrappLayout, prefix: URL) {

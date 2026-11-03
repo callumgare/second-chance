@@ -40,12 +40,14 @@ public nonisolated struct EnginePackage: Decodable, Hashable, Sendable {
     }
 }
 
-public nonisolated struct EngineError: Error, CustomStringConvertible, Equatable {
+public nonisolated struct EngineError: LocalizedError, CustomStringConvertible, Equatable {
     public let description: String
 
     public init(_ description: String) {
         self.description = description
     }
+
+    public var errorDescription: String? { description }
 }
 
 nonisolated extension ModuleManifest {

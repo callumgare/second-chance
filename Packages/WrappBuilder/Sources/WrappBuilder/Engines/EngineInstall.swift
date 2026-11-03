@@ -38,9 +38,11 @@ public nonisolated enum EngineInstall {
     /// Across volumes, where a clone can't be made, the files are copied.
     public static func install(_ engine: EngineStore.Engine, into contents: URL) throws {
         let files = FileManager.default
-        var cloned: String?
+        // Each folder cloned whole. Not only the last: entries sort `-`
+        // before `/`, so `mapping/ASCII.TXT` comes after `mapping-unicode.org`.
+        var cloned: Set<String> = []
         for entry in try EngineTree.entries(in: engine.tree) {
-            if let cloned, entry.path.hasPrefix(cloned + "/") { continue }
+            if Self.folders(above: entry.path).contains(where: cloned.contains) { continue }
             let source = engine.tree.appendingPathComponent(entry.path)
             let destination = contents.appendingPathComponent(entry.path)
             var info = stat()
@@ -48,7 +50,7 @@ public nonisolated enum EngineInstall {
             if entry.kind == .directory {
                 guard !exists else { continue }
                 try place(source, at: destination)
-                cloned = entry.path
+                cloned.insert(entry.path)
                 continue
             }
             if exists {
@@ -61,6 +63,17 @@ public nonisolated enum EngineInstall {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let record = Record(module: engine.module, version: engine.version, hash: engine.hash)
         try encoder.encode(record).write(to: contents.appendingPathComponent(recordPath(module: engine.module)))
+    }
+
+    /// The folders `path` is in: `a/b` and `a` of `a/b/c`.
+    static func folders(above path: String) -> [String] {
+        var folders: [String] = []
+        var folder = (path as NSString).deletingLastPathComponent
+        while !folder.isEmpty {
+            folders.append(folder)
+            folder = (folder as NSString).deletingLastPathComponent
+        }
+        return folders
     }
 
     /// Clone `source` (a file, a link or a whole folder) to `destination`,

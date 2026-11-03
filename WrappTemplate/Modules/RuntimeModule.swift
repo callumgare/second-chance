@@ -211,7 +211,7 @@ nonisolated final class LaunchWatchers: @unchecked Sendable {
 
     /// Every module the wrapp knows how to run.
     nonisolated static let known: [any RuntimeModule.Type] = [
-        WineRuntime.self, SteamRuntime.self, BigFishRuntime.self, ScummVMRuntime.self,
+        WineRuntime.self, SteamRuntime.self, BigFishRuntime.self, ScummVMRuntime.self, DOSBoxRuntime.self,
     ]
 
     /// The modules `config`'s composition has, or nil when one is a module

@@ -121,7 +121,7 @@ struct MachOPatchTests {
 
 struct EnginePackageTests {
     @Test("Each engine module's newest version has a package with its prepared hash and the sources its Swift asks for",
-          arguments: [("wine", ["wine", "wineskin"]), ("scummvm", ["scummvm"])])
+          arguments: [("wine", ["wine", "wineskin"]), ("scummvm", ["scummvm"]), ("dosbox", ["dosbox"])])
     func shippedPackages(module id: String, sources: [String]) throws {
         let module = try #require(try ModuleLoader(root: modulesRoot).module(id))
         let (_, package) = try #require(module.manifest.package())

@@ -134,7 +134,7 @@ nonisolated public enum FailureSummary {
         // Debug lines are chatter by definition (msync start-up, fixme:).
         let engine = entries.filter { isEngineOutput($0) && $0.level != "debug" && $0.level != "trace" }.suffix(10)
         if !engine.isEmpty {
-            lines.append("Last Wine/ScummVM output:")
+            lines.append("Last Wine, ScummVM or DOSBox output:")
             lines += engine.map { "  \(oneLine($0))" }
         }
 
@@ -159,10 +159,10 @@ nonisolated public enum FailureSummary {
         entry.level == "error" || entry.level == "critical"
     }
 
-    /// Lines Wine, a Windows program or ScummVM printed, rather than ours
-    /// about them: the `Wine` and `ScummVM` categories.
+    /// Lines Wine, a Windows program, ScummVM or DOSBox printed, rather
+    /// than ours about them: the `Wine`, `ScummVM` and `DOSBox` categories.
     private static func isEngineOutput(_ entry: Entry) -> Bool {
-        entry.label.hasSuffix(".Wine") || entry.label.hasSuffix(".ScummVM")
+        entry.label.hasSuffix(".Wine") || entry.label.hasSuffix(".ScummVM") || entry.label.hasSuffix(".DOSBox")
     }
 
     private static func oneLine(_ entry: Entry) -> String {

@@ -100,6 +100,8 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
 
     public struct Launch: Decodable, Hashable, Sendable {
         public let wine: WineLaunch?
+        /// DOSBox's: the DOS program on the game's C: drive (`C:/Tyrian/TYRIAN.EXE`).
+        public let dosbox: WineLaunch?
     }
 
     public struct WineLaunch: Decodable, Hashable, Sendable {

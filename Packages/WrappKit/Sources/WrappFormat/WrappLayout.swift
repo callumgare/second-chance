@@ -30,6 +30,8 @@ nonisolated public struct WrappLayout: Sendable, Hashable {
     public var frameworks: URL { app.appendingPathComponent("Contents/Frameworks") }
     /// ScummVM, for a game it runs.
     public var scummvm: URL { app.appendingPathComponent("Contents/MacOS/scummvm") }
+    /// DOSBox Staging, for a game it runs.
+    public var dosbox: URL { app.appendingPathComponent("Contents/MacOS/dosbox") }
     /// The bundled Wine, for a game it runs.
     public var wine: URL { app.appendingPathComponent("Contents/SharedSupport/wine") }
     /// The Wine prefix the game is installed in.

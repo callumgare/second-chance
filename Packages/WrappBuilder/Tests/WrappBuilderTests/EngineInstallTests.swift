@@ -75,6 +75,24 @@ struct EngineInstallTests {
         #expect(FileManager.default.fileExists(atPath: contents.appendingPathComponent("Resources/engines/other.files").path))
     }
 
+    @Test("Folders whose names begin alike are each cloned whole, whatever order they sort in")
+    func foldersSortingAroundEachOther() throws {
+        let folder = try folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let contents = try launcher(in: folder)
+        let tree = folder.appendingPathComponent("tree-dosbox")
+        for path in ["Resources/mapping/ASCII.TXT", "Resources/mapping-unicode.org/CP437.TXT", "MacOS/dosbox"] {
+            let file = tree.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(path.utf8).write(to: file)
+        }
+        try EngineTree.writeList(module: "dosbox", in: tree)
+        try EngineInstall.install(EngineStore.Engine(module: "dosbox", version: "1", hash: String(repeating: "c", count: 64),
+                                                     tree: tree, prepared: true), into: contents)
+        #expect(FileManager.default.fileExists(atPath: contents.appendingPathComponent("Resources/mapping/ASCII.TXT").path))
+        #expect(FileManager.default.fileExists(atPath: contents.appendingPathComponent("Resources/mapping-unicode.org/CP437.TXT").path))
+    }
+
     @Test("An engine file with a launcher file's name stops the install")
     func collision() throws {
         let folder = try folder()

@@ -26,6 +26,15 @@ nonisolated extension GameInfoProvider {
             displayName: "SkiFree"
         ),
         GameInfo(
+            id: "tyrian-2000",
+            title: "Tyrian 2000",
+            diskCount: 1,
+            gameEngine: .dosbox,
+            internalGameExePath: "/Tyrian 2000/tyrian2k.exe",
+            program: "freeware/tyrian-2000",
+            displayName: "Tyrian 2000"
+        ),
+        GameInfo(
             id: "secrets-can-kill",
             title: "Secrets Can Kill",
             diskCount: 2,

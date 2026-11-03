@@ -17,7 +17,7 @@ Modules/
     module.yaml
     prefix.yaml             how a new prefix is set up (prefix.schema.json beside it)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
-  scummvm/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
+  scummvm/  dosbox/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
 
 `installer`, `disc`, `her-download` and `big-fish` are, so far, a `module.yaml` naming their
@@ -97,7 +97,12 @@ builds. Wine's:
   signed before it.
 
 ScummVM's copies the program, its frameworks, the data its GUI needs and the
-engine data files `engine-data` names, out of its disk image.
+engine data files `engine-data` names, out of its disk image. DOSBox
+Staging's copies its program and the libraries beside it into `MacOS`, and
+what it needs of its Resources (not its 40 MB manual) into the wrapp's,
+where it looks for them, and signs the program and libraries again, ad hoc:
+they come with hardened runtime, which would refuse puppet control's
+inserted library.
 
 **The prepared hash** (`EngineTree.hash`) covers each path, a file's
 contents, whether it is executable, a link's target, and the code signature

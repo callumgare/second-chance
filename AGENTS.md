@@ -278,7 +278,7 @@ The rules that keep it working:
   ([docs/program-bundles.md](docs/program-bundles.md)).
 - **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
   wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
-  `steam` or `big-fish`) and the services started before it — read from a wrapp's
+  `dosbox`, `steam` or `big-fish`) and the services started before it — read from a wrapp's
   settings or a game's `GameInfo.GameEngine`, which it replaces as the
   question every process asks: `composition.has(.wine)`, `launcher ==
   .steam`, never the engine's raw values. Each module does its own part in
@@ -680,8 +680,9 @@ backed up as a Passwords entry and imported once on each releasing Mac.
 - **Free games download, hidden.** The download source
   (`DownloadWrappBuilder`) builds a program its makers give away from the URLs
   its bundle names, and appears on the welcome screen only after a double-click
-  on the icon above the steps. Its programs are SkiFree and Lure of the
-  Temptress (`Bundles/freeware/`), the first beyond Nancy Drew
+  on the icon above the steps. Its programs are SkiFree, Lure of the
+  Temptress and Tyrian 2000 (`Bundles/freeware/`), the first beyond Nancy
+  Drew, one for each engine
   ([docs/program-bundles.md](docs/program-bundles.md#download-editions)).
 - The produced game app's process is named `WrappTemplate` in Activity Monitor.
   Renaming the executable per-game during configuration would read better.
