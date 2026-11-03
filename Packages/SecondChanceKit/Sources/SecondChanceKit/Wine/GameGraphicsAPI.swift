@@ -7,10 +7,13 @@
 //  cnc-ddraw, which swallows the player's first click unless the cursor lock
 //  gets it to take the mouse first, while a Direct3D game never goes near
 //  cnc-ddraw, and the cursor lock's middle clicks only get in the way — each
-//  one closes a menu the player has opened from the menu bar.
+//  one closes a menu the player has opened from the menu bar. When the .exe
+//  can't say, as an Armadillo-wrapped Big Fish edition's can't, the game
+//  catalog's `GameInfo.graphics` does.
 //  See docs/wine-in-process-helpers.md#cursor-lock.
 
 import Foundation
+import GameCatalog
 
 nonisolated public enum GameGraphicsAPI: Equatable, Sendable {
     /// Imports ddraw.dll, so it draws through cnc-ddraw.
@@ -27,6 +30,19 @@ nonisolated public enum GameGraphicsAPI: Equatable, Sendable {
             return
         }
         self.init(importedDLLs: imports)
+    }
+
+    /// From the .exe's imports, or, when they don't say, from what the
+    /// catalog knows about `game`: Armadillo hides the imports of every Big
+    /// Fish edition, which then went without native fullscreen's fit for a
+    /// Direct3D game and got the cursor lock's middle clicks.
+    public init(exeAt url: URL, game: GameInfo?) {
+        self.init(exeAt: url)
+        guard self == .unknown, let known = game?.graphics else { return }
+        switch known {
+        case .directDraw: self = .directDraw
+        case .direct3D: self = .direct3D
+        }
     }
 
     /// From the lower-cased names of the DLLs an .exe imports.

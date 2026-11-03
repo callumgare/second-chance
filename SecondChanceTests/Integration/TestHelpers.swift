@@ -417,7 +417,9 @@ enum AppPuppetRunner {
         // leaving WrappPuppeteer's failure to explain it.
         let requiredHelpers: [InProcessHelperReport.Helper]
         if WrappInfo.gameEngine(at: wrappURL)?.runsInWine == true {
-            let graphicsAPI = WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0) } ?? .unknown
+            // As the wrapp decides: the catalog says for a Big Fish .exe,
+            // whose imports Armadillo hides.
+            let graphicsAPI = WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0, game: game) } ?? .unknown
             requiredHelpers = [.nativeFullscreen]
                 + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
                 + (graphicsAPI.mayUseDirect3D ? [.modeScaling] : [])

@@ -6,6 +6,7 @@
 //  lock only where cnc-ddraw may be drawing.
 
 import Foundation
+import GameCatalog
 import Testing
 @testable import SecondChanceKit
 
@@ -125,5 +126,35 @@ struct GameGraphicsAPITests {
         // Its off switch.
         #expect(Wine.inProcessHelperVariables(
             gameExe: direct3D, environment: ["SECOND_CHANCE_MODE_SCALING": "0"])["EMULATED_MODE_SCALING_EXE"] == nil)
+    }
+
+    @Test("An .exe that can't say what it draws with goes by the catalog; one that can, by itself")
+    func fallsBackOnTheCatalog() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("GameGraphicsAPITests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // Armadillo leaves a Big Fish edition's .exe importing neither.
+        let wrapped = directory.appendingPathComponent("Wrapped.exe")
+        try Self.peImage(importing: ["kernel32.dll", "user32.dll"]).write(to: wrapped)
+        let direct3D = directory.appendingPathComponent("Wolf.exe")
+        try Self.peImage(importing: ["kernel32.dll", "d3d9.dll"]).write(to: direct3D)
+        let crystalSkull = GameInfoProvider.shared.gameInfo(for: "crystal-skull")
+        let shadowRanch = GameInfoProvider.shared.gameInfo(for: "shadow-ranch")
+
+        #expect(GameGraphicsAPI(exeAt: wrapped, game: crystalSkull) == .direct3D)
+        #expect(GameGraphicsAPI(exeAt: wrapped, game: shadowRanch) == .directDraw)
+        #expect(GameGraphicsAPI(exeAt: wrapped, game: nil) == .unknown)
+        #expect(GameGraphicsAPI(exeAt: direct3D, game: shadowRanch) == .direct3D)
+        // So a Big Fish Direct3D game gets no cursor lock.
+        #expect(Wine.inProcessHelperVariables(gameExe: wrapped, game: crystalSkull, environment: [:])["CURSOR_LOCK_EXE"] == nil)
+    }
+
+    @Test("Every Wine game in the catalog says what it draws with")
+    func catalogKnowsEveryWineGame() {
+        for game in GameInfoProvider.shared.allGames() {
+            #expect((game.graphics != nil) == game.gameEngine.runsInWine, "\(game.id)")
+        }
     }
 }

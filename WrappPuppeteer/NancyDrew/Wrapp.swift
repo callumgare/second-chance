@@ -79,7 +79,8 @@ struct Wrapp {
         let exePath = settings?.gameExePath ?? "/Game.exe"
         gameExeName = (exePath as NSString).lastPathComponent
         winePrefix = layout.prefix
-        graphics = engine?.runsInWine == true ? GameGraphicsAPI(exeAt: layout.onDriveC(exePath)) : .unknown
+        graphics = engine?.runsInWine == true
+            ? GameGraphicsAPI(exeAt: layout.onDriveC(exePath), game: GameInfoProvider.shared.gameInfo(for: gameSlug)) : .unknown
     }
 }
 

@@ -552,10 +552,11 @@ class GameLauncher {
         if config.gameEngine.runsInWine,
            let gameExePath = getGameLaunchInfo(config).gameExePath {
             let gameExe = URL(fileURLWithPath: gameExePath)
-            let graphics = GameGraphicsAPI(exeAt: gameExe)
+            let game = GameInfoProvider.shared.gameInfo(for: config.gameSlug)
+            let graphics = GameGraphicsAPI(exeAt: gameExe, game: game)
             logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
             helperReport = InProcessHelperReport(
-                armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe), logger: logger)
+                armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe, game: game), logger: logger)
             quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.gameEngine.needsSteam)
             copyProtection = CopyProtection(exeAt: gameExe)
             if let copyProtection {
@@ -800,7 +801,8 @@ class GameLauncher {
         }
         let game: WineProcess
         do {
-            var environment = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath))
+            var environment = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath),
+                                                            game: GameInfoProvider.shared.gameInfo(for: config.gameSlug))
             if config.launchedByBigFish {
                 // Big Fish's launcher opens the Game Manager as the game ends:
                 // never seen, as its file to show it is never made.
@@ -878,6 +880,7 @@ class GameLauncher {
         let noDisplay = NoDisplaySignal(onFirst: onNoDisplay)
         let manager = BigFishGameManager(wrappPath: config.appPath, prefixDir: config.winePrefix,
                                          gameExe: launchInfo.gameExePath.map(URL.init(fileURLWithPath:)),
+                                         game: GameInfoProvider.shared.gameInfo(for: config.gameSlug),
                                          onOutputLine: { line in
                                              startup?.observe(line: line)
                                              helperReport?.observe(line: line)

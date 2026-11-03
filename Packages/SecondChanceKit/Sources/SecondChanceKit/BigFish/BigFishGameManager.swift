@@ -72,13 +72,17 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
     /// Manager's environment: a game it starts gets its, as one Steam starts
     /// gets Steam's.
     private let gameExe: URL?
+    /// The game `gameExe` is, for what the catalog knows of it.
+    private let game: GameInfo?
     private let onOutputLine: (@Sendable (String) -> Void)?
 
     /// `gameExe`, the game's .exe, when the Game Manager will start a game
     /// (a trial's Play Now) — not while a build installs one.
-    public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
+    public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, game: GameInfo? = nil,
+                onOutputLine: (@Sendable (String) -> Void)? = nil) {
         wine = Wine(wrapp: wrappPath, prefix: prefixDir)
         self.gameExe = gameExe
+        self.game = game
         self.onOutputLine = onOutputLine
     }
 
@@ -96,7 +100,7 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
     var environment: [String: String] {
         var environment = Wine.hiddenWindowsVariables(exe: gameExe == nil ? "*" : "bfgclient.exe", showFile: showWindowFile)
         if let gameExe {
-            environment.merge(Wine.inProcessHelperVariables(gameExe: gameExe)) { _, game in game }
+            environment.merge(Wine.inProcessHelperVariables(gameExe: gameExe, game: game)) { _, game in game }
         }
         return environment
     }

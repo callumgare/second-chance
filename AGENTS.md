@@ -434,7 +434,8 @@ direct assignment.
   (which the games ignore, so the publisher logo isn't skipped) until Wine's
   cursor state shows the lock, and again on every return to the app.
   `Wine.inProcessHelperVariables` arms it alongside native fullscreen — but not for a game
-  whose `.exe` imports Direct3D rather than `ddraw.dll` (`GameGraphicsAPI`),
+  whose `.exe` imports Direct3D rather than `ddraw.dll` (`GameGraphicsAPI`, or
+  the catalog's `GameInfo.graphics` when Armadillo hides a Big Fish `.exe`'s imports),
   since those never use cnc-ddraw and its clicks close their menus; both live in
   `WrappTemplate/InProcessHelpers/`. Read
   [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before

@@ -216,13 +216,20 @@ helper kept clicking for its full 15 tries — again on every return to the app.
 So the wrapp arms it only where cnc-ddraw may be drawing. `GameGraphicsAPI`
 (`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/`) reads the DLLs the game's `.exe` imports, from its PE import
 directory: `ddraw.dll` means DirectDraw; `d3d8.dll` or `d3d9.dll` without it
-means Direct3D, and cursor lock stays unarmed. Anything else — an `.exe` that
-can't be read, or one importing neither, as a game that loads its graphics DLL
-at run time would — arms it as before. Every game checked fell cleanly on one
-side, the Steam copies too: Steam's DRM wrapper leaves the imports readable
-(Ghost of Thornton Hall's adds `steam_api.dll` beside `d3d9.dll`). The wrapp's
-log says which it found: `[Helpers] Thornton.exe draws with Direct3D, so cursor
-lock isn't needed`.
+means Direct3D, and cursor lock stays unarmed. Every game checked fell cleanly
+on one side, the Steam copies too: Steam's DRM wrapper leaves the imports
+readable (Ghost of Thornton Hall's adds `steam_api.dll` beside `d3d9.dll`).
+
+Big Fish's copies don't: Armadillo packs the `.exe`, leaving it importing
+neither ([big-fish.md](big-fish.md)). For an `.exe` like that, or one that
+can't be read, the game catalog says instead: every Wine game in it has
+`graphics`, from what its disc and Steam `.exe`s import (a test checks none is
+missing). Without that, a Big Fish Direct3D game got the cursor lock's 15
+middle clicks in its first minute, and WrappPuppeteer waited for them to end
+before clicking past a splash screen. Only a game the catalog doesn't know,
+whose `.exe` says nothing, arms it as before. The wrapp's log says which it
+found: `[Helpers] Thornton.exe draws with Direct3D, so cursor lock isn't
+needed`.
 
 ### What it does
 

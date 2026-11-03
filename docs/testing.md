@@ -639,7 +639,8 @@ screen recognised within its first six seconds.
 
 The references are files in `WrappPuppeteer/NancyDrew/assets/splash/`:
 `splash-any-<what it shows>.png` for the screens many games share — the Her
-Interactive logos and intro, the glowing "Nancy Drew" — and
+Interactive logos and intro, the glowing "Nancy Drew", and Big Fish's logo,
+on its own or above Her Interactive's, which Big Fish's editions open with — and
 `splash-<game slug>-<what it shows>.png` for one game's own, mostly title
 cards. A game is matched against its own and every `any` one. They're copied
 flat into the app's resources, so the names must be unique; WrappPuppeteer

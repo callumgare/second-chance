@@ -7,6 +7,7 @@
 //  See docs/wine-in-process-helpers.md.
 
 import Foundation
+import GameCatalog
 
 nonisolated extension Wine {
     /// The directory WrappPuppeteer gave the wrapp for its control sockets,
@@ -49,7 +50,7 @@ nonisolated extension Wine {
     /// work set on Steam as well as on the game.
     /// See docs/wine-in-process-helpers.md.
     public static func inProcessHelperVariables(
-        gameExe exeURL: URL, environment: [String: String] = ProcessInfo.processInfo.environment
+        gameExe exeURL: URL, game: GameInfo? = nil, environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
         let gameExe = exeURL.lastPathComponent
         var env: [String: String] = [:]
@@ -62,7 +63,7 @@ nonisolated extension Wine {
         // cnc-ddraw's swallowed first click — for comparison. A Direct3D game
         // never goes through cnc-ddraw, and the lock's middle clicks would
         // only close the menus a player opens from the menu bar.
-        let graphicsAPI = GameGraphicsAPI(exeAt: exeURL)
+        let graphicsAPI = GameGraphicsAPI(exeAt: exeURL, game: game)
         if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", graphicsAPI.mayUseCncDdraw {
             env["CURSOR_LOCK_EXE"] = gameExe
         }

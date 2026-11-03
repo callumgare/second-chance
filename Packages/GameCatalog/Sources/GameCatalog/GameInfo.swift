@@ -12,6 +12,11 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
     public let title: String
     public let diskCount: Int
     public let gameEngine: GameEngine
+    /// What a Wine game draws with, as its .exe's imports said in the
+    /// editions we could read. A wrapp goes by the .exe it has, and by this
+    /// only when the .exe can't say: Armadillo hides the imports of every
+    /// Big Fish edition (`GameGraphicsAPI`).
+    public let graphics: Graphics?
     public let steamDRM: SteamDRM?
     /// The game's Steam app ID, when it is sold (or was) on Steam.
     public let steamAppID: Int?
@@ -53,6 +58,11 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
 
         /// Steam starts the game (`-applaunch`), rather than the wrapp.
         public var launchedBySteam: Bool { self == .wineSteam }
+    }
+
+    public enum Graphics: String, Codable, Sendable {
+        case directDraw = "direct-draw"
+        case direct3D = "direct-3d"
     }
 
     public enum SteamDRM: String, Codable, Sendable {
@@ -114,6 +124,7 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         title: String,
         diskCount: Int = 1,
         gameEngine: GameEngine = .wine,
+        graphics: Graphics? = nil,
         internalGameExePath: String? = nil,
         steamDRM: SteamDRM? = nil,
         steam: SteamApp? = nil,
@@ -128,6 +139,7 @@ public nonisolated struct GameInfo: Codable, Identifiable, Hashable, Sendable {
         self.title = title
         self.diskCount = diskCount
         self.gameEngine = gameEngine
+        self.graphics = graphics
         self.steamDRM = steamDRM
         self.steamAppID = steam?.appID
         self.steamInstallDir = steam?.installDir
