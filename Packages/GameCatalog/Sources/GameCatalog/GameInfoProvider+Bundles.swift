@@ -30,7 +30,7 @@ nonisolated extension GameInfoProvider {
             title: "Tyrian 2000",
             diskCount: 1,
             gameEngine: .dosbox,
-            internalGameExePath: "/Tyrian 2000/tyrian2k.exe",
+            internalGameExePath: "/TYRIAN/TYRIAN2K.EXE",
             program: "freeware/tyrian-2000",
             displayName: "Tyrian 2000"
         ),

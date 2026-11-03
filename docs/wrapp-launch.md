@@ -75,9 +75,12 @@ has. A new engine is a new module conforming to these, listed in
 
 **DOSBox** (`DOSBoxRuntime`) starts DOSBox Staging with none of the
 person's own DOSBox settings (`--noprimaryconf --nolocalconf`), full screen,
-and runs the game's DOS program from its folder in the wrapp, mounted as C:,
-with the saves volume laid over it (`mount c … -t overlay`): what the game
-writes goes there, and the wrapp is never written to. `--exit` ends DOSBox
+and runs the game's DOS program at its DOS path on DOSBox's own C:, a
+folder in the wrapp (`Contents/SharedSupport/dosbox/c/`, as Wine's C: is the
+prefix's `drive_c`), so what the Wrappfile writes (`C:/TYRIAN/TYRIAN2K.EXE`)
+is what the game sees. The saves volume is laid over that C:
+(`mount c … -t overlay`): what the game writes goes there, and the wrapp is
+never written to. `--exit` ends DOSBox
 when the game does.
 
 ## Wine's desktop

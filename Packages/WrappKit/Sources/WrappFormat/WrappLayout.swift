@@ -58,4 +58,29 @@ nonisolated public struct WrappLayout: Sendable, Hashable {
     public static func onDriveC(_ windowsPath: String, in driveC: URL) -> URL {
         driveC.appendingPathComponent(String(windowsPath.drop { $0 == "/" }))
     }
+
+    /// DOSBox's C:, the drive the game sees: a folder of its own, as Wine's
+    /// C: is the prefix's `drive_c`.
+    public var dosboxC: URL { app.appendingPathComponent("Contents/SharedSupport/dosbox/c") }
+
+    /// Where a location in full form is in the app (docs/wrappfile.md#path-types):
+    /// `wine:C:/…` on the prefix's C: drive, `dosbox:C:/…` on DOSBox's, and a
+    /// bare `/…` in the app's `Contents/`, `/../` its top level. Nil for one
+    /// whose type has no place in the app, or a bare path that goes above it.
+    public func location(_ fullForm: String) -> URL? {
+        func onDrive(_ path: Substring, _ drive: URL) -> URL? {
+            guard path.hasPrefix("C:/") || path == "C:" else { return nil }
+            return drive.appendingPathComponent(String(path.dropFirst(2).drop { $0 == "/" }))
+        }
+        if fullForm.hasPrefix("wine:") { return onDrive(fullForm.dropFirst("wine:".count), driveC) }
+        if fullForm.hasPrefix("dosbox:") { return onDrive(fullForm.dropFirst("dosbox:".count), dosboxC) }
+        guard fullForm.hasPrefix("/") else { return nil }
+        // `/` is Contents/, one below the top: no `..` may climb past the top.
+        var depth = 1
+        for part in fullForm.split(separator: "/") {
+            depth += part == ".." ? -1 : part == "." ? 0 : 1
+            if depth < 0 { return nil }
+        }
+        return app.appendingPathComponent("Contents").appendingPathComponent(String(fullForm.dropFirst())).standardizedFileURL
+    }
 }

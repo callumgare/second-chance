@@ -1,8 +1,8 @@
-# Tyrian 2000: its DOS files, as the zip has them, for DOSBox to run.
+# Tyrian 2000: its DOS files, as the zip has them, for DOSBox to run. DOSBox's
+# C: is the C: the game sees, so the folder has a DOS name.
 
-CONST install-dir = "C:/Tyrian 2000"
 INPUT game
 
 FROM scratch AS download
 USE dosbox
-COPY --from=${input.game} tyrian2000 ${const.install-dir}/ # the zip's tyrian2000/ folder: the whole game
+COPY --from=${input.game} tyrian2000 C:/TYRIAN/ # the zip's tyrian2000/ folder: the whole game

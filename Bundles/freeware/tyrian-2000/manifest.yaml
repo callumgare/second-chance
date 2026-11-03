@@ -11,7 +11,7 @@ volumes:
 
 variants:
   - id: "dosbox"
-    launch: { dosbox: { exe: "C:/Tyrian 2000/tyrian2k.exe" } }
+    launch: { dosbox: { exe: "C:/TYRIAN/TYRIAN2K.EXE" } }
     volumes:
       - { source: "dosbox-saves" } # what the game writes, laid over its folder
 

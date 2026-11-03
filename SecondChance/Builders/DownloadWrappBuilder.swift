@@ -92,8 +92,11 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             // folder of the game's data, which it reads.
             let installDir = chosen.installDir.map { $0.hasPrefix("C:") ? String($0.dropFirst(2)) : $0 }
             let launcher = game.composition.launcher
+            // DOSBox's program is on its own C:, the others' on Wine's.
+            let layout = WrappLayout(app: wrappPath)
+            let drive = launcher == .dosbox ? layout.dosboxC : layout.driveC
             guard let exe = launcher == .scummvm ? installDir : game.internalGameExePath,
-                  FileManager.default.fileExists(atPath: WrappLayout(app: wrappPath).onDriveC(exe).path) else {
+                  FileManager.default.fileExists(atPath: WrappLayout.onDriveC(exe, in: drive).path) else {
                 throw WrappBuildError.gameExecutableNotFound
             }
             await bus.publishWrappBuild(.gameExeDetected(path: exe, gameInfo: game))
@@ -188,17 +191,14 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
                   step.arguments.count == 2 else {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the download flow can't run \(step)")
             }
-            // In full form (`wine:C:/…`, `dosbox:C:/…`), each on the C: drive
-            // until DOSBox's has a folder of its own; Lure's bare `C:/…` is
-            // allowed until it moves (LegacyPaths).
-            var destination = step.arguments[1]
-            for prefix in ["wine:", "dosbox:"] where destination.hasPrefix(prefix) {
-                destination = String(destination.dropFirst(prefix.count))
+            // In full form, through its type's place in the app (`wine:C:/…`
+            // in the prefix, a bare `/…` in Contents/); Lure's bare `C:/…`
+            // is allowed until it moves (LegacyPaths).
+            let destination = step.arguments[1]
+            let written = destination.hasPrefix("C:/") ? "wine:" + destination : destination
+            guard let target = layout.location(written) else {
+                throw WrappBuildError.buildRecipeProblem("\(step.origin): \(destination) has no place in the app")
             }
-            guard destination.hasPrefix("C:/") else {
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): \(step.arguments[1]) isn't on the C: drive")
-            }
-            let target = layout.onDriveC(String(destination.dropFirst(2)))
             let subpath = step.arguments[0] == "." ? "" : step.arguments[0]
             try await Blocking.run {
                 let files = FileManager.default

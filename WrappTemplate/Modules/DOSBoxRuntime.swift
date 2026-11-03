@@ -54,19 +54,21 @@ final class DOSBoxRuntime: GameStarting {
 
     nonisolated static func launchInfo(_ config: GameConfig) -> GameLaunchInfo {
         let layout = WrappLayout(app: config.appPath)
-        // The game's program, from the root of its C: drive in the wrapp.
-        let program = layout.onDriveC(config.gameExePath)
-        let folder = program.deletingLastPathComponent().path
+        // DOSBox's C: is the C: the game sees, a folder of its own in the
+        // wrapp; the program is at its DOS path on it (`/TYRIAN/TYRIAN2K.EXE`).
+        let parts = config.gameExePath.split(separator: "/").map(String.init)
+        let folder = "\\" + parts.dropLast().joined(separator: "\\")
         let writes = config.appSupportPath.path
         let arguments = [
             "--noprimaryconf",                               // None of the person's own DOSBox settings
             "--nolocalconf",
             "--working-dir", writes,                         // Where DOSBox may write (its captures)
             "--fullscreen",
-            "-c", "mount c \(quoted(folder))",               // The game's folder, in the wrapp
+            "-c", "mount c \(quoted(layout.dosboxC.path))",  // DOSBox's C:, in the wrapp
             "-c", "mount c \(quoted(writes)) -t overlay",    // What it writes, kept outside the wrapp
             "-c", "c:",
-            "-c", program.lastPathComponent,
+            "-c", "cd \(folder)",                            // The program's folder, as DOS names it
+            "-c", parts.last ?? "",
             "--exit",                                        // Quit when the game does
         ]
         return GameLaunchInfo(
