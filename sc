@@ -26,12 +26,27 @@ if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]
     # terminal: a spinner with the elapsed time, cleared once it's done.
     message="Building sc (Tools/sc has changed)"
     spinner=""
+    stop_spinner() {
+        if [[ -n "$spinner" ]]; then
+            kill "$spinner" 2>/dev/null || true
+            wait "$spinner" 2>/dev/null || true
+            spinner=""
+            printf '\r\033[K' >&2
+        fi
+    }
+    # ^C, or a kill, stops the spinner along with the build. A background
+    # job in a script ignores SIGINT, so on its own it outlived the build and
+    # the script, drawing over the shell's prompt.
+    trap 'stop_spinner; exit 130' INT
+    trap 'stop_spinner; exit 143' TERM
     if [[ -t 2 ]]; then
         (
             frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
             start=$SECONDS
             i=0
-            while :; do
+            # Until it's stopped, or the script has gone however it went
+            # ($$ is the script's PID, here too).
+            while kill -0 $$ 2>/dev/null; do
                 printf '\r  %s \033[2m%s · %ss\033[0m' "${frames:i++%10:1}" "$message" "$((SECONDS - start))" >&2
                 sleep 0.1
             done
@@ -42,11 +57,8 @@ if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]
     fi
     status=0
     output="$(swift build -c release --package-path "$package" 2>&1)" || status=$?
-    if [[ -n "$spinner" ]]; then
-        kill "$spinner" 2>/dev/null
-        wait "$spinner" 2>/dev/null || true
-        printf '\r\033[K' >&2
-    fi
+    stop_spinner
+    trap - INT TERM
     if [[ $status -ne 0 ]]; then
         printf '%s\n' "$output" >&2
         echo "sc: building Tools/sc failed (output above)" >&2
