@@ -7,7 +7,7 @@ series: "Nancy Drew"
 series-order: 12
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.blackmoor-manor"]
 
-volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+volumes:
   wine-documents:
     display-name: "saved games"
 
@@ -20,28 +20,34 @@ variants:
 editions:
   - id: "cd"
     source: "disc"
-    build: { target: "disc" }
-    inputs:
-      - { id: "disc-1" }
+    build:
+      target: "disc"
+      inputs:
+        disc-1: { type: "disc" }
     installer: { stubborn: true }
   - id: "her-windows"
     source: "her-download"
-    build: { target: "her-download" }
-    inputs: [{ id: "installer", format: "windows" }]
+    build:
+      target: "her-download"
+      inputs:
+        installer: { type: "her-download", format: "windows" }
     installer: { stubborn: true }
   - id: "steam"
     source: "steam"
-    inputs:
-      - { id: "game", app-id: 31830, common-folder: "Nancy Drew Curse of Blackmoor Manor", exe: "Game.exe" }
+    build:
+      inputs:
+        game: { type: "steam-game", app-id: 31830, common-folder: "Nancy Drew Curse of Blackmoor Manor", exe: "Game.exe" }
     drm: "launch-when-steam-running"
   - id: "big-fish"
     source: "big-fish"
-    inputs: [{ id: "game", product: 1439 }]
+    build:
+      inputs:
+        game: { type: "big-fish-game", product: 1439 }
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
 
-notes:                                       # for people only; nothing reads these
+notes:
   installer: "installshield"
   disc-answer-file: "installer-answer-files/blackmoor-manor.iss"
   quirks:

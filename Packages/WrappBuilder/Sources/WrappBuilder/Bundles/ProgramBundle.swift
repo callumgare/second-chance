@@ -170,10 +170,13 @@ public nonisolated final class ProgramBundleLoader {
                 messages.append("has two \(kind)s called \(id)")
             }
         }
+        // What each source's inputs can be: its own kind, and choices.
+        let kinds: [Manifest.Source: Manifest.InputType] = [
+            .disc: .disc, .herDownload: .herDownload, .steam: .steamGame, .bigFish: .bigFishGame, .download: .download,
+        ]
         for edition in manifest.editions {
-            let inputs = edition.inputs?.map(\.id) ?? []
-            for id in Set(inputs) where inputs.count(where: { $0 == id }) > 1 {
-                messages.append("edition \(edition.id) has two inputs called \(id)")
+            for input in edition.build?.inputs ?? [] where input.type != .choice && input.type != kinds[edition.source] {
+                messages.append("edition \(edition.id) is a \(edition.source.rawValue) edition, so its input \(input.id) can't be a \(input.type.rawValue)")
             }
         }
         return messages.sorted()

@@ -21,8 +21,12 @@ import Foundation
 ///   included (`WINE.MOUNT`, `wine.mount`), and kept in upper case. Stage
 ///   and function names are too, as Docker's stage names are, and kept in
 ///   lower case.
-/// - `${…}` substitutes, and may nest (`${data.patches.${id}.url}`); `$$`
-///   is a `$`.
+/// - `${…}` substitutes a reference (`${const.install-dir}`,
+///   `${self.data.patches[input.id].url}`): brackets, not a nested `${…}`,
+///   for a key worked out from a value. `$$` is a `$`.
+/// - `INPUT`, `CONST`, `VAR` and `SET` declare and assign values, with `=`
+///   spaced or not; `INPUT`s are only before the first `FROM` or at a
+///   function's top.
 public nonisolated enum WrappfileParser {
     public static func parse(_ text: String) throws(WrappfileError) -> Wrappfile {
         var parser = Parser(lines: try logicalLines(text))
@@ -42,6 +46,9 @@ public nonisolated enum WrappfileParser {
     struct RawWord {
         let text: String
         let quoted: Bool
+        /// Where in `text` a quote began partway through the word
+        /// (`${a}="b"`), which a condition splits.
+        var quoteStart: Int?
     }
 
     static func logicalLines(_ text: String) throws(WrappfileError) -> [Line] {
@@ -89,6 +96,7 @@ public nonisolated enum WrappfileParser {
         var words: [RawWord] = []
         var current = ""
         var quoted = false
+        var quoteStart: Int?
         var inQuotes = false
         var started = false
         var characters = Array(text)[...]
@@ -107,12 +115,13 @@ public nonisolated enum WrappfileParser {
             } else if character == "\"" {
                 inQuotes = true
                 // Quoted from its start: an argument, whatever it says.
-                if !started { quoted = true }
+                if !started { quoted = true } else if quoteStart == nil { quoteStart = current.count }
                 started = true
             } else if character == " " || character == "\t" {
-                if started { words.append(RawWord(text: current, quoted: quoted)) }
+                if started { words.append(RawWord(text: current, quoted: quoted, quoteStart: quoteStart)) }
                 current = ""
                 quoted = false
+                quoteStart = nil
                 started = false
             } else {
                 current.append(character)
@@ -120,7 +129,7 @@ public nonisolated enum WrappfileParser {
             }
         }
         if inQuotes { throw WrappfileError(line: line, message: "a quote isn't closed") }
-        if started { words.append(RawWord(text: current, quoted: quoted)) }
+        if started { words.append(RawWord(text: current, quoted: quoted, quoteStart: quoteStart)) }
         return words
     }
 
@@ -163,19 +172,21 @@ public nonisolated enum WrappfileParser {
         return parts
     }
 
+    /// A word, each `${…}` in it checked to be a reference.
     static func word(_ raw: RawWord, line: Int) throws(WrappfileError) -> Word {
-        Word(raw: raw.text, parts: try parts(of: raw.text, line: line))
+        let parts = try parts(of: raw.text, line: line)
+        for case .substitution(let inner) in parts {
+            do {
+                _ = try Reference.parse(inner)
+            } catch {
+                throw WrappfileError(line: line, message: error.message)
+            }
+        }
+        return Word(raw: raw.text, parts: parts, quoted: raw.quoted)
     }
 
-    /// `name` or `name=value`, as an `ARG` declares it.
-    static func argDeclaration(_ word: Word, line: Int) -> ArgDeclaration {
-        guard let equals = word.raw.firstIndex(of: "=") else {
-            return ArgDeclaration(name: word.raw, value: nil, line: line)
-        }
-        let value = String(word.raw[word.raw.index(after: equals)...])
-        return ArgDeclaration(name: String(word.raw[..<equals]),
-                              value: Word(raw: value, parts: (try? parts(of: value, line: line)) ?? [.text(value)]), line: line)
-    }
+    /// The keywords that declare or assign a value.
+    static var declarations: Set<String> { InstructionSpec.declarations }
 
     // MARK: - Structure
 
@@ -189,11 +200,13 @@ public nonisolated enum WrappfileParser {
             var file = Wrappfile()
             while index < lines.count {
                 let line = lines[index]
-                switch line.words[0].text.uppercased() {
-                case "ARG" where file.stages.isEmpty:
+                let keyword = line.words[0].text.uppercased()
+                switch keyword {
+                case "ARG":
+                    throw WrappfileError(line: line.number, message: "ARG is gone: INPUT declares a value from outside, CONST a fixed one")
+                case "INPUT", "CONST", "VAR":
                     index += 1
-                    guard line.words.count == 2 else { throw WrappfileError(line: line.number, message: "ARG takes one name, with its value: ARG name=value") }
-                    file.globalArgs.append(argDeclaration(try word(line.words[1], line: line.number), line: line.number))
+                    file.globals.append(try instruction(line))
                 case "FUNCTION":
                     index += 1
                     guard line.words.count == 2 else { throw WrappfileError(line: line.number, message: "FUNCTION takes one name") }
@@ -208,7 +221,7 @@ public nonisolated enum WrappfileParser {
                     file.stages.append(Stage(name: name?.lowercased(), from: source, body: body, line: line.number, nameAsWritten: name))
                 default:
                     throw WrappfileError(line: line.number,
-                                         message: "\(line.words[0].text) comes before the first FROM; only ARG and FUNCTION can")
+                                         message: "\(line.words[0].text) comes before the first FROM; only INPUT, CONST, VAR and FUNCTION can")
                 }
             }
             return file
@@ -254,6 +267,8 @@ public nonisolated enum WrappfileParser {
                     let body = try steps(until: ["END"], in: "LAYER", openedAt: line.number).steps
                     index += 1
                     collected.append(.layer(body, line: line.number))
+                case "ARG":
+                    throw WrappfileError(line: line.number, message: "ARG is gone: INPUT declares a value from outside, CONST a fixed one")
                 case "END", "ELSE":
                     throw WrappfileError(line: line.number, message: "\(keyword) without an IF\(keyword == "END" ? ", LAYER or FUNCTION" : "") to close")
                 case "FROM", "FUNCTION":
@@ -291,24 +306,52 @@ public nonisolated enum WrappfileParser {
             return .conditional(branches)
         }
 
+        /// `<a> = <b>` or `<a> != <b>`, spaced or not, each side a `${…}` or
+        /// a quoted string.
         func parseCondition(_ words: [RawWord], line: Int) throws(WrappfileError) -> Condition {
-            let texts = words.map(\.text)
-            if texts.count == 3, texts[1] == "has" {
-                return Condition(name: texts[0], comparison: .has, value: texts[2])
-            }
-            guard texts.count == 1 else {
-                throw WrappfileError(line: line, message: "a condition is name=value, name>=value, name has value or a bare name")
-            }
-            let text = texts[0]
-            for comparison in [Condition.Comparison.notEquals, .atLeast, .atMost, .equals, .greater, .less] {
-                if let range = text.range(of: comparison.rawValue) {
-                    let name = String(text[..<range.lowerBound])
-                    let value = String(text[range.upperBound...])
-                    guard !name.isEmpty, !value.isEmpty else { break }
-                    return Condition(name: name, comparison: comparison, value: value)
+            let usage = "a condition is <a> = <b> or <a> != <b>, each a ${…} or a quoted string: IF ${platform.arch} = \"arm64\""
+            // Split unquoted words at the operator, outside any ${…}.
+            var tokens: [RawWord] = []
+            for raw in words {
+                guard !raw.quoted else {
+                    tokens.append(raw)
+                    continue
                 }
+                var current = ""
+                var currentStart = 0
+                var position = 0
+                var depth = 0
+                var characters = Array(raw.text)[...]
+                func quotedFrom(_ start: Int) -> Bool { raw.quoteStart.map { $0 >= start } ?? false }
+                while let character = characters.popFirst() {
+                    position += 1
+                    if character == "{", current.last == "$" { depth += 1 }
+                    if character == "}", depth > 0 { depth -= 1 }
+                    if depth == 0, character == "!" || character == "=" {
+                        if !current.isEmpty { tokens.append(RawWord(text: current, quoted: quotedFrom(currentStart))) }
+                        current = ""
+                        if character == "!" {
+                            guard characters.popFirst() == "=" else { throw WrappfileError(line: line, message: usage) }
+                            tokens.append(RawWord(text: "!=", quoted: false))
+                        } else {
+                            tokens.append(RawWord(text: "=", quoted: false))
+                        }
+                        currentStart = position + (character == "!" ? 1 : 0)
+                        if character == "!" { position += 1 }
+                        continue
+                    }
+                    current.append(character)
+                }
+                if !current.isEmpty { tokens.append(RawWord(text: current, quoted: quotedFrom(currentStart))) }
             }
-            return Condition(name: text, comparison: nil, value: nil)
+            guard tokens.count == 3, !tokens[1].quoted, let comparison = Condition.Comparison(rawValue: tokens[1].text) else {
+                throw WrappfileError(line: line, message: usage)
+            }
+            let sides = [tokens[0], tokens[2]]
+            for side in sides where !side.quoted && !(side.text.hasPrefix("${") && side.text.hasSuffix("}")) {
+                throw WrappfileError(line: line, message: "\(side.text) in a condition is neither a ${…} nor a quoted string")
+            }
+            return Condition(left: try word(sides[0], line: line), comparison: comparison, right: try word(sides[1], line: line))
         }
 
         func instruction(_ line: Line) throws(WrappfileError) -> Instruction {
@@ -318,11 +361,17 @@ public nonisolated enum WrappfileParser {
             // program are words options. Elsewhere options go anywhere
             // (`STEAM.INSTALL game --into=…`).
             let keyword = line.words[0].text.uppercased()
+            if WrappfileParser.declarations.contains(keyword) { return try declaration(line, keyword: keyword) }
             let runsAProgram = keyword == "RUN" || keyword.hasSuffix(".RUN")
-            for raw in line.words.dropFirst() {
+            var words = Array(line.words.dropFirst())[...]
+            while let raw = words.popFirst() {
                 if !runsAProgram || arguments.isEmpty, !raw.quoted, raw.text.hasPrefix("--"), raw.text.count > 2 {
                     let body = raw.text.dropFirst(2)
-                    if let equals = body.firstIndex(of: "=") {
+                    if body == "env", let value = words.first, value.text.contains("=") {
+                        // `--env NAME=<value>`, as Docker writes it.
+                        words.removeFirst()
+                        options.append(InstructionOption(name: "env", value: try word(value, line: line.number)))
+                    } else if let equals = body.firstIndex(of: "=") {
                         let value = RawWord(text: String(body[body.index(after: equals)...]), quoted: false)
                         options.append(InstructionOption(name: String(body[..<equals]), value: try word(value, line: line.number)))
                     } else {
@@ -331,6 +380,57 @@ public nonisolated enum WrappfileParser {
                 } else {
                     arguments.append(try word(raw, line: line.number))
                 }
+            }
+            return Instruction(keyword: keyword, options: options, arguments: arguments, line: line.number)
+        }
+
+        /// `INPUT <name> [--default=<value>] [--secret]`, or `CONST`, `VAR`
+        /// or `SET` `<name> [= <value>]`, `=` spaced or not: an instruction
+        /// whose arguments are the name and the value.
+        func declaration(_ line: Line, keyword: String) throws(WrappfileError) -> Instruction {
+            var options: [InstructionOption] = []
+            var rest: [RawWord] = []
+            for raw in line.words.dropFirst() {
+                if keyword == "INPUT", !raw.quoted, raw.text.hasPrefix("--") {
+                    let body = raw.text.dropFirst(2)
+                    if let equals = body.firstIndex(of: "=") {
+                        let value = RawWord(text: String(body[body.index(after: equals)...]), quoted: false)
+                        options.append(InstructionOption(name: String(body[..<equals]), value: try word(value, line: line.number)))
+                    } else {
+                        options.append(InstructionOption(name: String(body), value: nil))
+                    }
+                } else {
+                    rest.append(raw)
+                }
+            }
+            // name, =, value as written in one, two or three words.
+            var parts: [RawWord] = []
+            for raw in rest {
+                if !raw.quoted, raw.text != "=", let equals = raw.text.firstIndex(of: "="), parts.isEmpty {
+                    parts.append(RawWord(text: String(raw.text[..<equals]), quoted: false))
+                    parts.append(RawWord(text: "=", quoted: false))
+                    let after = String(raw.text[raw.text.index(after: equals)...])
+                    if !after.isEmpty { parts.append(RawWord(text: after, quoted: false)) }
+                } else if !raw.quoted, raw.text.hasPrefix("="), raw.text.count > 1, parts.count == 1 {
+                    parts.append(RawWord(text: "=", quoted: false))
+                    parts.append(RawWord(text: String(raw.text.dropFirst()), quoted: false))
+                } else {
+                    parts.append(raw)
+                }
+            }
+            let usage = keyword == "INPUT" ? "INPUT is INPUT <name> [--default=<value>] [--secret]"
+                : "\(keyword) is \(keyword) <name>\(keyword == "VAR" ? " [= <value>]" : " = <value>")"
+            guard let name = parts.first, !name.quoted, !name.text.isEmpty else {
+                throw WrappfileError(line: line.number, message: usage)
+            }
+            var arguments = [Word(raw: name.text, parts: [.text(name.text)])]
+            switch parts.count {
+            case 1 where keyword == "INPUT" || keyword == "VAR":
+                break
+            case 3 where keyword != "INPUT" && parts[1].text == "=" && !parts[1].quoted:
+                arguments.append(try word(parts[2], line: line.number))
+            default:
+                throw WrappfileError(line: line.number, message: usage)
             }
             return Instruction(keyword: keyword, options: options, arguments: arguments, line: line.number)
         }

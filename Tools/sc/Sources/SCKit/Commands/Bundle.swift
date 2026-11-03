@@ -30,6 +30,8 @@ struct BundlePlanCommand: AsyncParsableCommand {
     @Argument(help: "The edition's id (cd, her-windows, steam).")
     var edition: String
 
+    @OptionGroup var inputs: InputOptions
+
     func run() async throws {
         let session = try Session.start(global)
         let modules = try loadModules(session)
@@ -47,7 +49,7 @@ struct BundlePlanCommand: AsyncParsableCommand {
         }
         let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
         guard let plan = try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules)
-            .plan(edition: edition, conditions: .thisMac) else {
+            .plan(edition: edition, conditions: conditions()) else {
             session.ui.result("\(edition) names no stage: a module's default stages build it.")
             return
         }
@@ -57,6 +59,15 @@ struct BundlePlanCommand: AsyncParsableCommand {
                 session.ui.result("  \(step)    # \(step.origin)")
             }
         }
+    }
+}
+
+extension BundlePlanCommand {
+    /// This Mac, with the inputs given.
+    func conditions() throws -> BuildConditions {
+        var conditions = BuildConditions.thisMac
+        conditions.choices = try inputs.parsed()
+        return conditions
     }
 }
 

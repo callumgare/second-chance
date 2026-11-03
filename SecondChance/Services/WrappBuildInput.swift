@@ -37,7 +37,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// | `getHerInstallerPath()`       | `HER_INSTALLER_PATH`                    | NSOpenPanel (.exe, .dmg or .app) |
 /// | `steamGameFromEnvironment`    | `STEAM_GAME_SLUG`                       | nil: asked after sign-in       |
 /// | `chooseSteamGame(from:)`      | — (only asked when the above is nil)    | main window, the owned games   |
-/// | `getSteamLaunchMode(for:)`    | `STEAM_LAUNCH_MODE` (`steam`/`direct`)  | main window, two choices       |
+/// | `getSteamLaunchMode(for:)`    | `SECOND_CHANCE_INPUTS`'s `launch-mode`, or `STEAM_LAUNCH_MODE` (`steam`/`direct`) | main window, two choices |
 /// | `askAboutSteamInUse(_:)`      | — (headless: nil, the build fails)      | main window: try again, quit, cancel |
 /// | `takeSteamSignInAfreshRequest()` | — (headless: never)                  | the progress screen's button   |
 /// | `bigFishGameFromEnvironment`  | `BIG_FISH_GAME_SLUG`                    | nil: asked after sign-in       |
@@ -419,12 +419,23 @@ class WrappBuildInput {
         }
     }
 
+    /// The values `SECOND_CHANCE_INPUTS` gives the edition's inputs, by name
+    /// (`{"launch-mode":"steam"}`): JSON, as an environment variable's name
+    /// can't keep an input's case and hyphens.
+    func inputs() throws -> [String: String] {
+        guard let json = environment["SECOND_CHANCE_INPUTS"], !json.isEmpty else { return [:] }
+        guard let parsed = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: String] else {
+            throw WrappBuildError.invalidPath("SECOND_CHANCE_INPUTS must be a JSON object of names to text, not \(json)")
+        }
+        return parsed
+    }
+
     /// How a DRM-free Steam game should start. Only asked when the game
     /// offers the choice; the engine behind each answer is not the user's
     /// concern, so the question is about what they'll notice.
     @MainActor
     func getSteamLaunchMode(for game: GameInfo) async throws -> GameInfo.SteamLaunchMode {
-        if let value = environment["STEAM_LAUNCH_MODE"] {
+        if let value = try inputs()["launch-mode"] ?? environment["STEAM_LAUNCH_MODE"] {
             guard let mode = GameInfo.SteamLaunchMode(rawValue: value.lowercased()) else {
                 throw WrappBuildError.invalidPath("STEAM_LAUNCH_MODE must be steam or direct, not \(value)")
             }

@@ -17,8 +17,8 @@ struct WrappfileGrammarTests {
         let open = try #require(match.range(of: "("))
         let close = try #require(match.range(of: ")", range: open.upperBound..<match.endIndex))
         let named = Set(match[open.upperBound..<close.lowerBound].split(separator: "|").map(String.init))
-        // ARG and USE have rules of their own, which name what follows them
-        #expect(repository["arg"] != nil && repository["use"] != nil)
-        #expect(named.union(["ARG", "USE"]) == Set(InstructionSpec.core.keys))
+        // USE and the declarations have rules of their own, which name what follows them
+        #expect(repository["declaration"] != nil && repository["use"] != nil)
+        #expect(named.union(["USE"]) == Set(InstructionSpec.core.keys))
     }
 }

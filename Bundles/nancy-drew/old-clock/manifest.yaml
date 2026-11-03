@@ -7,7 +7,7 @@ series: "Nancy Drew"
 series-order: 13
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.old-clock"]
 
-volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+volumes:
   wine-documents:
     display-name: "saved games"
 
@@ -20,33 +20,39 @@ variants:
 editions:
   - id: "cd"
     source: "disc"
-    build: { target: "disc" }
-    inputs:
-      - { id: "disc-1" }
+    build:
+      target: "disc"
+      inputs:
+        disc-1: { type: "disc" }
     installer: { stubborn: true }
   - id: "her-windows"
     source: "her-download"
-    build: { target: "her-download" }
-    inputs: [{ id: "installer", format: "windows" }]
+    build:
+      target: "her-download"
+      inputs:
+        installer: { type: "her-download", format: "windows" }
     installer: { stubborn: true }
   - id: "steam"
     source: "steam"
-    inputs:
-      - { id: "game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock", exe: "Game.exe" }
+    build:
+      inputs:
+        game: { type: "steam-game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock", exe: "Game.exe" }
+        launch-mode: # DRM-free, so it can start without Steam
+          type: "choice"
+          options: ["direct", "steam"]
+          default: "direct" # pre-selected; what a headless build takes
+          prompt: "How should the game start?"
     drm: "no"
-    choices:                                 # DRM-free, so it can start without Steam
-      launch-mode:
-        options: ["direct", "steam"]
-        default: "direct"                    # pre-selected; what a headless build takes
-        prompt: "How should the game start?"
   - id: "big-fish"
     source: "big-fish"
-    inputs: [{ id: "game", product: 1297 }]
+    build:
+      inputs:
+        game: { type: "big-fish-game", product: 1297 }
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
 
-notes:                                       # for people only; nothing reads these
+notes:
   installer: "installshield"
   disc-answer-file: "installer-answer-files/old-clock.iss"
   quirks:

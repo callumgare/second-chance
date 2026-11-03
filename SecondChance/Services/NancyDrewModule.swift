@@ -146,7 +146,7 @@ nonisolated enum ShippedBundles {
                                  savesVolume: mounted.first,
                                  scummvmSettingsVolume: mounted.contains("scummvm-settings") ? "scummvm-settings" : nil)
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
-            let args = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).globalArgs(edition: edition)
+            let args = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).globalConstants(edition: edition)
             lock.args = args.isEmpty ? nil : args
             lock.launcher = launcherRevision(in: bundle)
             return lock
@@ -236,7 +236,7 @@ nonisolated enum ShippedBundles {
                 guard edition.source == .download, let licence = edition.licence, let input = edition.inputs?.first else { return nil }
                 return DownloadEdition(game: game, edition: edition.id, licence: licence, licenceFrom: edition.licenceFrom,
                                        licenceFile: edition.licenceFile, input: input,
-                                       installDir: planner.globalArgs(edition: edition.id)["install-dir"])
+                                       installDir: planner.globalConstants(edition: edition.id)["install-dir"])
             }
         }
     }

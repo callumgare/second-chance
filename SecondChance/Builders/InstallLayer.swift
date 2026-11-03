@@ -83,13 +83,11 @@ struct InstallLayer {
         let steps = plan.stages.flatMap(\.steps)
         var keyed: [LayerKey.Input] = [.init("edition", plan.edition),
                                        .init("plan", steps.map(\.description).joined(separator: "\n"))]
-        // The bundle's files the steps read, by their place in the bundle,
-        // so where Second Chance is installed doesn't change the key.
-        let assets = Set(steps.flatMap { $0.options.values.flatMap { $0 } + $0.arguments }.filter { $0.hasPrefix("asset:") })
-        for asset in assets.sorted() {
-            let path = String(asset.dropFirst("asset:".count))
-            let name = path.range(of: "/Bundles/").map { String(path[$0.upperBound...]) } ?? URL(fileURLWithPath: path).lastPathComponent
-            keyed.append(.init("asset \(name)", try LayerKey.hash(file: URL(fileURLWithPath: path))))
+        // The bundle's and modules' files the steps read, by their full form
+        // (`bundle:assets/disc.iss`), so where Second Chance is installed
+        // doesn't change the key.
+        for (name, file) in plan.files.sorted(by: { $0.key < $1.key }) {
+            keyed.append(.init("file \(name)", try LayerKey.hash(file: file)))
         }
         let modules = resources.appendingPathComponent("Modules")
         let loader = try ModuleLoader(root: modules)

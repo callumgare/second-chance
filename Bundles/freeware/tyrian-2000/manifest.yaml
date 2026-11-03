@@ -5,7 +5,7 @@ version: 1
 title: "Tyrian 2000"
 display-name: "Tyrian 2000"
 
-volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+volumes:
   dosbox-saves:
     display-name: "saved games"
 
@@ -13,27 +13,29 @@ variants:
   - id: "dosbox"
     launch: { dosbox: { exe: "C:/Tyrian 2000/tyrian2k.exe" } }
     volumes:
-      - { source: "dosbox-saves" }           # what the game writes, laid over its folder
+      - { source: "dosbox-saves" } # what the game writes, laid over its folder
 
 editions:
   - id: "download"
     source: "download"
-    build: { target: "download" }
-    licence: "free-release"                  # its makers gave it away in 2004
+    build:
+      target: "download"
+      inputs:
+        game:
+          type: "download"
+          urls: # OpenTyrian's host; then the 2014 Wayback copy of that URL
+            - "https://www.camanis.net/tyrian/tyrian2000.zip"
+            - "https://web.archive.org/web/20140616163436id_/http://www.camanis.net/tyrian/tyrian2000.zip"
+          sha256: "348bc76e73514e452279b8730cf217daf0f70a282f07b6b94af653d87e921667"
+          size: 5051363
+          unpack: "zip"
+          install: "none"
+    licence: "free-release" # its makers gave it away in 2004
     licence-from: "its makers' freeware release, as the OpenTyrian project hosts it"
-    inputs:
-      - id: "game"
-        urls:                                # OpenTyrian's host; then the 2014 Wayback copy of that URL
-          - "https://www.camanis.net/tyrian/tyrian2000.zip"
-          - "https://web.archive.org/web/20140616163436id_/http://www.camanis.net/tyrian/tyrian2000.zip"
-        sha256: "348bc76e73514e452279b8730cf217daf0f70a282f07b6b94af653d87e921667"
-        size: 5051363
-        unpack: "zip"
-        install: "none"
 
 tests:
   scenario: "dosbox/starts-and-quits"
 
-notes:                                       # for people only; nothing reads these
+notes:
   about: "Eclipse Software's 1995 shoot-'em-up, in its 1999 Tyrian 2000 edition, freeware since 2004. The first DOSBox program."
   checked: "2026-11-03: the OpenTyrian URL gives the file with this sha256; the 2014 Wayback capture is the same file (CDX digest = its SHA-1)."

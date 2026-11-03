@@ -91,11 +91,16 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let launch: Launch?
     }
 
-    /// The Wrappfile stage built (`target`), and the stage it starts from
-    /// on a fresh build (`base`).
+    /// The Wrappfile stage built (`target`), the stage it starts from on a
+    /// fresh build (`base`), and what the Wrappfile's `INPUT`s are given, by
+    /// name. An edition with no stage yet has inputs and no target.
     public struct Build: Decodable, Hashable, Sendable {
-        public let target: String
+        public let target: String?
         public let base: String?
+        /// Keyed by name in the manifest; each with its name as its `id`
+        /// here, sorted, as a key's case and hyphens wouldn't survive
+        /// decoding (`Manifest.decode`).
+        public let inputs: [Input]?
     }
 
     public struct Launch: Decodable, Hashable, Sendable {
@@ -113,13 +118,10 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public struct Edition: Decodable, Hashable, Sendable {
         public let id: String
         public let source: Source
-        public let inputs: [Input]?
         public let detect: Detect?
         public let installer: Installer?
         public let drm: String?
         public let build: Build?
-        /// Its choices, by name: each an `ARG` its stages may read.
-        public let choices: [String: Choice]?
         /// A download edition's: what the person is told about where it
         /// comes from (`free-release`, …), and who gives the permission.
         public let licence: Licence?
@@ -127,10 +129,28 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         /// The licence's own words: a file in the unpacked input.
         public let licenceFile: String?
 
-        /// The choice called `name` (`launch-mode`), however its key was
-        /// decoded.
-        public func choice(_ name: String) -> Choice? {
-            choices?[name] ?? choices?[WrappfileChecker.camelCase(name)]
+        /// Its inputs but its choices, sorted by name, each with its name as
+        /// its `id` (`disc-1`, `disc-2`).
+        public var inputs: [Input]? {
+            let given = (build?.inputs ?? []).filter { $0.type != .choice }
+            return given.isEmpty ? nil : given
+        }
+
+        /// Its choices, by name as written (`launch-mode`).
+        public var choices: [String: Choice]? {
+            let found = (build?.inputs ?? []).compactMap { input -> (String, Choice)? in
+                guard input.type == .choice, let options = input.options, let fallback = input.default else { return nil }
+                return (input.id, Choice(options: options, default: fallback, prompt: input.prompt))
+            }
+            return found.isEmpty ? nil : Dictionary(uniqueKeysWithValues: found)
+        }
+
+        /// The choice called `name` (`launch-mode`).
+        public func choice(_ name: String) -> Choice? { choices?[name] }
+
+        /// The input called `name`, a choice or not.
+        public func input(_ name: String) -> Input? {
+            build?.inputs?.first { $0.id == name }
         }
     }
 
@@ -146,6 +166,7 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public struct Choice: Decodable, Hashable, Sendable {
         public let options: [String]
         public let `default`: String
+        public var prompt: String?
     }
 
     public enum Source: String, Decodable, Hashable, Sendable {
@@ -156,9 +177,11 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         case download
     }
 
-    /// One input; which fields it has depends on the edition's source.
+    /// One input; which fields it has depends on its type.
     public struct Input: Decodable, Hashable, Sendable {
+        /// Its name in the edition's `build.inputs`.
         public let id: String
+        public let type: InputType
         public let format: String?
         public let appId: Int?
         public let commonFolder: String?
@@ -172,6 +195,32 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
         public let size: Int?
         public let unpack: String?
         public let install: String?
+        /// A choice's: its answers, the one taken unasked, and the question.
+        public let options: [String]?
+        public let `default`: String?
+        public let prompt: String?
+
+        /// Its fields as `${input.<name>.<field>}` reads them.
+        public var fields: [String: String] {
+            var fields = ["id": id, "type": type.rawValue]
+            fields["format"] = format
+            fields["app-id"] = appId.map(String.init)
+            fields["common-folder"] = commonFolder
+            fields["exe"] = exe
+            fields["product"] = product.map(String.init)
+            fields["sha256"] = sha256
+            return fields
+        }
+    }
+
+    /// How the person gives an input.
+    public enum InputType: String, Decodable, Hashable, Sendable {
+        case disc
+        case herDownload = "her-download"
+        case steamGame = "steam-game"
+        case bigFishGame = "big-fish-game"
+        case download
+        case choice
     }
 
     /// How an edition is recognised (`Detection/`): its aliases and codes
@@ -192,7 +241,26 @@ nonisolated extension Manifest {
     /// Decodes JSON-shaped values a schema has checked, with the manifest's
     /// kebab-case keys (`display-name`) as Swift's camel case.
     static func decode(_ document: Any) throws -> Manifest {
-        try decodeKebab(Manifest.self, from: document)
+        try decodeKebab(Manifest.self, from: namingInputs(document))
+    }
+
+    /// Each edition's `build.inputs`, a mapping by name, as a list of the
+    /// inputs with their names as `id`s, sorted: decoding would turn a key
+    /// into camel case, which loses `disc-1`'s hyphen.
+    static func namingInputs(_ document: Any) -> Any {
+        guard var manifest = document as? [String: Any], let editions = manifest["editions"] as? [Any] else { return document }
+        manifest["editions"] = editions.map { item -> Any in
+            guard var edition = item as? [String: Any], var build = edition["build"] as? [String: Any],
+                  let inputs = build["inputs"] as? [String: Any] else { return item }
+            build["inputs"] = inputs.keys.sorted().map { name -> Any in
+                var input = inputs[name] as? [String: Any] ?? [:]
+                input["id"] = name
+                return input
+            }
+            edition["build"] = build
+            return edition
+        }
+        return manifest
     }
 
     /// Decodes JSON-shaped values into `T`, with kebab-case keys as camel

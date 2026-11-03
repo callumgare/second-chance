@@ -5,6 +5,6 @@
 # WrappBuildHelper.configureGameINI does today. Run after every final stage
 # that uses the module (its `assemble`), with the bundle's install folder.
 FUNCTION configure-ini
-  ARG into
-  EDIT "${into}/*.ini" --from-data=ini
+  INPUT into
+  EDIT "${input.into}/*.ini" --from-data=ini
 END

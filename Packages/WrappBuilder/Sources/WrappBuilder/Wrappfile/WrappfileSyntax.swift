@@ -2,7 +2,7 @@
 //  WrappfileSyntax.swift
 //  WrappBuilder
 //
-//  A Wrappfile, parsed: its global ARGs, functions and stages.
+//  A Wrappfile, parsed: its global declarations, functions and stages.
 
 import Foundation
 
@@ -10,8 +10,8 @@ import Foundation
 /// in stages, with functions of shared steps. Parsing only reads the text;
 /// `WrappfileChecker` says whether it makes sense for its bundle.
 public nonisolated struct Wrappfile: Sendable, Equatable {
-    /// `ARG <name>=<value>` before the first `FROM`.
-    public var globalArgs: [ArgDeclaration] = []
+    /// `INPUT`, `CONST` and `VAR` before the first `FROM`, in order.
+    public var globals: [Instruction] = []
     public var functions: [WrappfileFunction] = []
     public var stages: [Stage] = []
 
@@ -20,10 +20,25 @@ public nonisolated struct Wrappfile: Sendable, Equatable {
     public func function(named name: String) -> WrappfileFunction? { functions.first { $0.name == name.lowercased() } }
 }
 
-public nonisolated struct ArgDeclaration: Sendable, Equatable {
+/// `INPUT`, `CONST`, `VAR` or `SET`: a name, and the value it's given.
+public nonisolated struct Declaration: Sendable, Equatable {
+    public let kind: Kind
     public let name: String
     public let value: Word?
     public let line: Int
+
+    public enum Kind: String, Sendable {
+        case input = "INPUT", const = "CONST", variable = "VAR", set = "SET"
+    }
+
+    /// The declaration an instruction makes, if it's one.
+    public init?(_ instruction: Instruction) {
+        guard let kind = Kind(rawValue: instruction.keyword), let name = instruction.arguments.first?.raw else { return nil }
+        self.kind = kind
+        self.name = name
+        self.value = kind == .input ? instruction.option("default")?.value : instruction.arguments.dropFirst().first
+        self.line = instruction.line
+    }
 }
 
 public nonisolated struct WrappfileFunction: Sendable, Equatable {
@@ -34,12 +49,12 @@ public nonisolated struct WrappfileFunction: Sendable, Equatable {
     /// As written, for the warning about upper case.
     public var nameAsWritten: String?
 
-    /// Its parameters: the `ARG`s its body declares, with their defaults.
-    public var parameters: [ArgDeclaration] {
+    /// Its parameters: the `INPUT`s at its top, with their defaults.
+    public var parameters: [Declaration] {
         body.compactMap { step in
-            guard case .instruction(let instruction) = step, instruction.keyword == "ARG",
-                  let word = instruction.arguments.first else { return nil }
-            return WrappfileParser.argDeclaration(word, line: instruction.line)
+            guard case .instruction(let instruction) = step, let declaration = Declaration(instruction),
+                  declaration.kind == .input else { return nil }
+            return declaration
         }
     }
 }
@@ -150,36 +165,41 @@ public nonisolated struct Word: Sendable, Equatable, CustomStringConvertible {
     /// As written, quotes removed.
     public let raw: String
     public let parts: [Part]
+    /// Whether it was written in quotes, which keeps a lone `${…}` text.
+    public var quoted = false
 
     public enum Part: Sendable, Equatable {
         case text(String)
-        /// What's between `${` and `}`: `install-dir`, `inputs.game.app-id`,
-        /// `assets/disc.iss`, `data.patches.${id}.url`.
+        /// What's between `${` and `}`: `input.disc-1`, `const.install-dir`,
+        /// `self.data.patches[input.id].url`.
         case substitution(String)
     }
 
     public var description: String { raw }
 
-    /// Every substitution in it, those nested in another's included.
+    /// Every substitution in it.
     public var substitutions: [String] {
-        parts.flatMap { part -> [String] in
-            guard case .substitution(let inner) = part else { return [] }
-            let nested = (try? WrappfileParser.parts(of: inner, line: 0)) ?? []
-            return [inner] + nested.compactMap { if case .substitution(let s) = $0 { s } else { nil } }
+        parts.compactMap { part in
+            if case .substitution(let inner) = part { inner } else { nil }
         }
+    }
+
+    /// The reference it is, when it's one `${…}` and nothing else.
+    public var lone: Reference? {
+        guard parts.count == 1, case .substitution(let inner) = parts[0] else { return nil }
+        return try? Reference.parse(inner)
     }
 }
 
-/// An `IF` condition: `arch=arm64`, `macos>=26`, `launch-mode!=steam`,
-/// `updates has taffy-patch`, or a bare name that holds when it's set
-/// (`updates`).
+/// An `IF` condition: two expressions, each a `${…}` or a quoted string,
+/// compared (`${input.launch-mode} = "direct"`).
 public nonisolated struct Condition: Sendable, Equatable {
-    public let name: String
-    public let comparison: Comparison?
-    public let value: String?
+    public let left: Word
+    public let comparison: Comparison
+    public let right: Word
 
     public enum Comparison: String, Sendable {
-        case equals = "=", notEquals = "!=", atLeast = ">=", atMost = "<=", greater = ">", less = "<", has = "has"
+        case equals = "=", notEquals = "!="
     }
 }
 

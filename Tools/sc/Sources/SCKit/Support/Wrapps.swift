@@ -265,6 +265,8 @@ struct WrappSourceOptions: ParsableArguments {
     @Option(help: "What to do when an official game patch fails to apply: continue or cancel. Default: continue.")
     var patchFailure: PatchFailurePolicy?
 
+    @OptionGroup var inputs: InputOptions
+
     var input: WrappSourceInput {
         switch from {
         case .disk: disk
@@ -325,6 +327,7 @@ struct WrappBuilder {
         // A disc of another game fails the build instead of building that game.
         env["EXPECTED_GAME_SLUG"] = game.slug
         if let policy = source.patchFailure { env["PATCH_FAILURE_POLICY"] = policy.rawValue }
+        if let json = try source.inputs.environmentValue() { env["SECOND_CHANCE_INPUTS"] = json }
         env.merge(debug.environment) { _, new in new }
 
         toggle?.start()
@@ -505,5 +508,36 @@ final class LaunchToggle: @unchecked Sendable {
         TTY.leaveKeyMode()
         footer?.remove()
         footer = nil
+    }
+}
+
+/// `--input <name>=<value>`: a value for one of the edition's inputs (a
+/// choice's answer, `launch-mode=steam`), as the app takes them headless.
+struct InputOptions: ParsableArguments {
+    @Option(name: .customLong("input"), help: ArgumentHelp(
+        "A value for one of the edition's inputs, as <name>=<value> (launch-mode=steam). Repeat it for more.",
+        valueName: "name=value"
+    ))
+    var values: [String] = []
+
+    /// The values by name.
+    func parsed() throws -> [String: String] {
+        var parsed: [String: String] = [:]
+        for value in values {
+            guard let equals = value.firstIndex(of: "="), equals != value.startIndex else {
+                throw SCError("--input \(value) isn't <name>=<value>.", hints: ["For example: --input launch-mode=steam"])
+            }
+            parsed[String(value[..<equals])] = String(value[value.index(after: equals)...])
+        }
+        return parsed
+    }
+
+    /// `SECOND_CHANCE_INPUTS`: the values as JSON, since an environment
+    /// variable's name can't keep an input's case and hyphens; nil for none.
+    func environmentValue() throws -> String? {
+        let parsed = try parsed()
+        guard !parsed.isEmpty else { return nil }
+        let data = try JSONSerialization.data(withJSONObject: parsed, options: [.sortedKeys])
+        return String(decoding: data, as: UTF8.self)
     }
 }

@@ -1,27 +1,24 @@
-# The Haunting of Castle Malloy: how Second Chance builds it. Written from what its builders did
-# for it when bundles came in; change it as the game needs.
-
-ARG install-dir="C:/Program Files (x86)/Nancy Drew/The Haunting of Castle Malloy"
+CONST install-dir = "C:/Program Files (x86)/Nancy Drew/The Haunting of Castle Malloy"
+INPUT disc-1
+INPUT disc-2
+INPUT installer
 
 FROM scratch AS prefix
-USE wine@10                                # set up as the wine module's prefix.yaml says
+USE wine@10
 
 # The CD edition: the disc kept in the wrapp, as the game checks for it
 FROM prefix AS disc
-ARG install-dir
 USE installer
 USE nancy-drew
-WINE.KEEP-DISCS --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
-INSTALLER.RUN --from=disc-1 --into=${install-dir}
-DO nancy-drew.patch --id=castle-malloy-walk-in-place-cd --into=${install-dir}
+WINE.KEEP-DISCS ${input.disc-1} ${input.disc-2} --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
+INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir}
+DO nancy-drew.patch --id=castle-malloy-walk-in-place-cd --into=${const.install-dir}
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
 # Windows game is taken out
 FROM prefix AS her-download
-ARG install-dir
 USE her-download
 USE nancy-drew
-HER-DOWNLOAD.INSTALL installer --into=${install-dir}
-DO nancy-drew.patch --id=castle-malloy-walk-in-place-download --into=${install-dir}
+HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
+DO nancy-drew.patch --id=castle-malloy-walk-in-place-download --into=${const.install-dir}
 
-# Steam's edition names no stage: the steam module's default stages build it.

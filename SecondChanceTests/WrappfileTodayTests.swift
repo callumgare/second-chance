@@ -45,7 +45,8 @@ struct WrappfileTodayTests {
             #expect((install.option("stubborn") != nil) == game.doesNotExitInNonInteractiveMode)
             #expect((install.option("answer-file") != nil) == (ShippedBundles.asset("disc.iss", ofGame: game.id) != nil))
             let exeFolder = try #require(game.internalGameExePath.map { "C:" + ($0 as NSString).deletingLastPathComponent })
-            #expect(file.globalArgs.first { $0.name == "install-dir" }?.value?.raw == exeFolder)
+            let installDir = file.globals.compactMap(Declaration.init).first { $0.kind == .const && $0.name == "install-dir" }
+            #expect(installDir?.value?.raw == exeFolder)
         }
         let patches = GamePatchCatalog.shared.automaticPatches(forGame: game.id, source: .disk).map(\.id)
         #expect(patchIDs(steps) == patches)

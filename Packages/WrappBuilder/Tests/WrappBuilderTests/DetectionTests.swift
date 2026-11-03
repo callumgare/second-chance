@@ -211,7 +211,9 @@ struct DetectionTests {
     editions:
       - id: "cd"
         source: "disc"
-        inputs: [{ id: "disc-1" }]
+        build:
+          inputs:
+            disc-1: { type: "disc" }
         detect:
           aliases: ["Nancy Drew OC"]
           codes: ["OCK"]

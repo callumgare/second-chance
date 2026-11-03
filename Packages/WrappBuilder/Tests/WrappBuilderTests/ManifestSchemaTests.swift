@@ -13,10 +13,16 @@ struct ManifestSchemaTests {
     editions:
       - id: "cd"
         source: "disc"
-        inputs: [{ id: "disc-1" }]
+        build:
+          target: "disc"
+          inputs:
+            disc-1: { type: "disc" }
       - id: "steam"
         source: "steam"
-        inputs: [{ id: "game", app-id: 31880, common-folder: "Old Clock", exe: "Game.exe" }]
+        build:
+          inputs:
+            game: { type: "steam-game", app-id: 31880, common-folder: "Old Clock", exe: "Game.exe" }
+            launch-mode: { type: "choice", options: ["direct", "steam"], default: "direct", prompt: "How should the game start?" }
         drm: "no"
     notes:
       anything: [goes, here, yes, 10.10]
@@ -42,15 +48,19 @@ struct ManifestSchemaTests {
         // but true is a boolean, which a title can't be
         ("title: \"Secret of the Old Clock\"", "title: true", "/title: must be text, in quotes"),
         // a version-like name reads as a number
-        ("common-folder: \"Old Clock\"", "common-folder: 10.10", "/editions/1/inputs/0/common-folder: must be text, in quotes"),
+        ("common-folder: \"Old Clock\"", "common-folder: 10.10", "/editions/1/build/inputs/game/common-folder: must be text, in quotes"),
         // a quoted number isn't a number
-        ("app-id: 31880", "app-id: \"31880\"", "/editions/1/inputs/0/app-id: must be a whole number"),
+        ("app-id: 31880", "app-id: \"31880\"", "/editions/1/build/inputs/game/app-id: must be a whole number"),
         // a mistyped key is caught, not dropped
         ("drm: \"no\"", "dmr: \"no\"", "/editions/1: dmr isn't something this can have; is it mistyped?"),
         // a value from the wrong list
         ("source: \"disc\"", "source: \"cdrom\"", "/editions/0/source: must be one of: disc, her-download, steam, big-fish, download"),
-        // a Steam field on a disc edition
-        ("inputs: [{ id: \"disc-1\" }]", "inputs: [{ id: \"disc-1\", app-id: 1 }]", "/editions/0/inputs/0: app-id isn't something this can have; is it mistyped?"),
+        // a Steam field on a disc
+        ("disc-1: { type: \"disc\" }", "disc-1: { type: \"disc\", app-id: 1 }", "/editions/0/build/inputs/disc-1"),
+        // an input of no type there is
+        ("disc-1: { type: \"disc\" }", "disc-1: { type: \"cd\" }", "/editions/0/build/inputs/disc-1"),
+        // choices are inputs now
+        ("    drm: \"no\"", "    drm: \"no\"\n    choices: {}", "/editions/1: choices isn't something this can have"),
         // the id needs a namespace
         ("id: \"nancy-drew/old-clock\"", "id: \"old-clock\"", "/id: isn't written as it should be"),
     ] as [(String, String, String?)])

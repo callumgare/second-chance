@@ -23,14 +23,19 @@
           "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
           "payload": { "type": "string", "minLength": 1 },
           "action": { "enum": ["run-installer", "copy-into-game-dir", "extract-into-game-dir"] },
-          "destinationSubdirectory": { "type": "string" },
+          "destinationSubdirectory": {
+            "description": "Where in the game's folder the patch goes; the folder itself when left out.",
+            "type": "string",
+            "default": ""
+          },
           "edition": { "enum": ["any", "cd", "digital-download"] },
           "automatic": { "type": "boolean" },
           "fixes": { "type": "string" },
           "sourceUrl": { "type": "string", "pattern": "^https://" },
           "automation": {
-            "description": "The AutoIt script in the module's assets/ (without .au3) that drives a patcher with no silent mode.",
-            "enum": ["her-update-wizard", "update-installation-wizard"]
+            "description": "The AutoIt script in the module's assets/ (without .au3) that drives a patcher with no silent mode; none for a patcher that runs silently.",
+            "enum": ["none", "her-update-wizard", "update-installation-wizard"],
+            "default": "none"
           }
         }
       }

@@ -64,7 +64,7 @@ struct ProgramBundleTests {
         version: 1
         title: "Test"
         editions:
-        \(editions ?? "  - { id: \"cd\", source: \"disc\", inputs: [{ id: \"disc-1\" }] }")
+        \(editions ?? "  - { id: \"cd\", source: \"disc\", build: { inputs: { disc-1: { type: \"disc\" } } } }")
 
         """
         try manifest.write(to: folder.appendingPathComponent("manifest.yaml"), atomically: true, encoding: .utf8)

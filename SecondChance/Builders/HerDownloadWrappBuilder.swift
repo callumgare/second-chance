@@ -140,7 +140,8 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                     switch (step.module, step.instruction) {
                     case ("her-download", "INSTALL"):
                         gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
-                                                                       answerFile: step.option("answer-file"), input: input)
+                                                                       answerFile: step.option("answer-file").flatMap(plan.file),
+                                                                       input: input)
                     case _ where step.name.map(isPatch(of: gameInfo)) == true:
                         guard let gameExePath else {
                             throw WrappBuildError.buildRecipeProblem("\(step.origin): a patch before the game is installed")
@@ -192,14 +193,13 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// is and asks its questions itself. Patches are steps of their own.
     /// The game's program, from the root of drive C.
     private func installWindowsDownload(
-        _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: String?, input: WrappBuildInput
+        _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: URL?, input: WrappBuildInput
     ) async throws -> String {
         let driveCPath = WrappLayout(app: wrappPath).driveC
         let installerBaseDir = driveCPath.appendingPathComponent(WrappLayout.installersFolder)
         await bus.publishWrappBuild(.progress(.copyingInstaller(substep: String(localized: "Unpacking the installer"))))
         let unpacked = try await installerRunner.unpackInstallShieldLauncher(installer, at: wrappPath)
-        if unpacked, let answerFile {
-            let source = URL(fileURLWithPath: answerFile.hasPrefix("asset:") ? String(answerFile.dropFirst("asset:".count)) : answerFile)
+        if unpacked, let source = answerFile {
             let destination = installerBaseDir.appendingPathComponent("setup.iss")
             try FileManager.default.createDirectory(at: installerBaseDir, withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: destination)

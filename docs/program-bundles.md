@@ -41,27 +41,50 @@ variants:                       # how it runs: in Wine, starting this program
 editions:                       # what it was sold as, and where each comes from
   - id: "cd"
     source: "disc"
-    inputs:
-      - { id: "disc-1" }
+    build:
+      target: "disc"            # the Wrappfile's stage that builds it
+      inputs:                   # what its INPUTs are given, by name
+        disc-1: { type: "disc" }
     installer: { stubborn: true }   # its installer doesn't exit when run silently
   - id: "her-windows"
     source: "her-download"
-    inputs: [{ id: "installer", format: "windows" }]
+    build:
+      target: "her-download"
+      inputs:
+        installer: { type: "her-download", format: "windows" }
   - id: "steam"
     source: "steam"
-    inputs:
-      - { id: "game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock", exe: "Game.exe" }
+    build:                      # no target: its builder builds it, as before Wrappfiles
+      inputs:
+        game: { type: "steam-game", app-id: 31880, common-folder: "Nancy Drew Secret of the Old Clock", exe: "Game.exe" }
+        launch-mode:            # a question, whose answer is the input's value
+          type: "choice"
+          options: ["direct", "steam"]
+          default: "direct"     # what a headless build takes
+          prompt: "How should the game start?"
     drm: "no"                   # left out when not known
   - id: "big-fish"
     source: "big-fish"
-    inputs: [{ id: "game", product: 1297 }]   # its number in Big Fish's SKUs
+    build:
+      inputs:
+        game: { type: "big-fish-game", product: 1297 }   # its number in Big Fish's SKUs
 
 notes:                          # for people only; nothing reads these
   installer: "installshield"
 ```
 
-The schema describes every field, including those nothing reads yet
-(choices). `updates` is read when an old wrapp is updated
+An edition's `build.inputs` are keyed by the name its Wrappfile's `INPUT`
+declares and `${input.<name>}` reads ([wrappfile.md](wrappfile.md#values)).
+`type` says how the person gives it, and which fields it has: `disc`,
+`her-download`, `steam-game`, `big-fish-game`, `download`, or `choice`, a
+question whose prompt is looked up in the string catalog. An edition's
+inputs are of its source's type, or choices. Every input the target reads
+with no default must be given, and every one given must be read: one nothing
+reads is a typo, or something asked for no reason. An edition with no
+target yet (Steam's, Big Fish's) isn't checked: its builder reads its inputs
+itself.
+
+The schema describes every field. `updates` is read when an old wrapp is updated
 ([wrapp-build.md](wrapp-build.md#updating-a-wrapp)), and `tests` (the
 scenario and its parameters) by WrappPuppeteer, with the needles in the
 bundle's `tests/needles/` ([testing.md](testing.md#needles)). What today's code reads
@@ -71,13 +94,13 @@ into `GameInfo`, by field:
 | --- | --- |
 | `id` (the part after the `/`) | `id`, the game's slug |
 | `title` | `title` |
-| the `disc` edition's `inputs`, one per disc | `diskCount` |
+| the `disc` edition's `build.inputs`, one per disc | `diskCount` |
 | a variant called `scummvm` | `gameEngine: .scummvm`; otherwise `.wine` |
 | the `wine` variant's `launch.wine.exe` | `internalGameExePath`, without `C:` |
 | the `wine` variant's `launch.wine.graphics` | `graphics`: what the game draws with, for an `.exe` that can't say (`GameGraphicsAPI`) |
-| the `steam` edition's input: `app-id`, `common-folder`, `exe` | `steamAppID`, `steamInstallDir`, `steamExePath` |
+| the `steam` edition's `steam-game` input: `app-id`, `common-folder`, `exe` | `steamAppID`, `steamInstallDir`, `steamExePath` |
 | the `steam` edition's `drm` | `steamDRM`: `no`, `launch-when-steam-running`, `launch-via-steam-only`, or left out when not known |
-| the `big-fish` edition's input: `product` | `bigFishProduct` |
+| the `big-fish` edition's `big-fish-game` input: `product` | `bigFishProduct` |
 | any edition's `installer.stubborn` | `doesNotExitInNonInteractiveMode` |
 | editions' `detect.aliases` and `detect.codes` | `detectionAliases`, `detectionCodes` |
 | `series`, then `series-order` | the order of `allGames()` |
@@ -128,18 +151,20 @@ Second Chance downloads ([wrapp-build.md](wrapp-build.md#the-download-source)):
 editions:
   - id: "download"
     source: "download"
-    build: { target: "download" }
+    build:
+      target: "download"
+      inputs:
+        game:
+          type: "download"
+          urls: # tried in order; the hash alone decides
+            - "https://ski.ihoc.net/ski32.exe"
+            - "https://web.archive.org/web/20110929074042id_/http://ski.ihoc.net/ski32.exe"
+          sha256: "3572d375…"
+          size: 118784
+          unpack: "none"
+          install: "none"
     licence: "free-release"
     licence-from: "the author's website"
-    inputs:
-      - id: "game"
-        urls:                                # tried in order; the hash alone decides
-          - "https://ski.ihoc.net/ski32.exe"
-          - "https://web.archive.org/web/20110929074042id_/http://ski.ihoc.net/ski32.exe"
-        sha256: "3572d375…"
-        size: 118784
-        unpack: "none"
-        install: "none"
 ```
 
 - **`urls`**: the publisher's, or a distributor it names; then the Wayback

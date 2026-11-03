@@ -43,6 +43,9 @@ public nonisolated struct InstructionSpec: Sendable {
         case input
         /// A path in what `COPY --from` copies from: a stage, or an input.
         case copySource
+        /// A file the build reads: the bundle's, written as a relative path,
+        /// or a module's (`module:<id>/<path>`).
+        case file
         /// Text, used as it is: a program's own arguments, a URL.
         case text
     }
@@ -76,9 +79,10 @@ public nonisolated struct InstructionSpec: Sendable {
     /// The core's instructions, which every stage has.
     public static let core: [String: InstructionSpec] = {
         let specs = [
-            InstructionSpec("ARG", arguments: 1...1),
             InstructionSpec("USE", arguments: 1...3),
-            InstructionSpec("RUN", options: ["mount": .repeated, "creates": .value, "on-failure": .value,
+            // `--env NAME=<value>`, as many as needed: the only way a value
+            // reaches a program's environment.
+            InstructionSpec("RUN", options: ["mount": .repeated, "env": .repeated, "creates": .value, "on-failure": .value,
                                              "describe": .value, "if-skipped": .value, "ask": .value],
                             arguments: 1...Int.max, argumentRoles: [.program, .text], optionRoles: ["creates": .location]),
             InstructionSpec("COPY", options: ["from": .value], arguments: 2...2, argumentRoles: [.copySource, .location]),
@@ -100,7 +104,11 @@ public nonisolated struct InstructionSpec: Sendable {
     public static let mountTypes: Set<String> = ["source", "cache", "secret", "bind", "fetch"]
 
     /// What each core mount field is; plain text for the rest.
-    public static let mountFieldRoles: [String: Role] = ["target": .location]
+    public static let mountFieldRoles: [String: Role] = ["target": .location, "source": .file]
+
+    /// The keywords that declare or assign a value, which have rules of
+    /// their own.
+    public static let declarations: Set<String> = ["INPUT", "CONST", "VAR", "SET"]
 
     /// The words that start or end a block, or a stage: compared in upper
     /// case, as every keyword is.

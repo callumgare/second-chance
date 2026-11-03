@@ -187,9 +187,12 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     gameSlug: gameInfo.id,
                     disk2: { try await self.resolveDisk2(gameInfo: gameInfo, disk1: disk1Root, input: input) }
                 )
-            case ("installer", "RUN") where step.option("from") == "disc-1" && step.arguments.isEmpty:
+            case ("installer", "RUN") where PlannedStep.input(in: step.option("from")) == "disc-1" && step.arguments.isEmpty:
                 if let answerFile = step.option("answer-file") {
-                    try installAnswerFile(answerFile, into: layout.driveC.appendingPathComponent(WrappLayout.installersFolder))
+                    guard let file = plan.file(answerFile) else {
+                        throw WrappBuildError.buildRecipeProblem("\(step.origin): the plan has no file \(answerFile)")
+                    }
+                    try installAnswerFile(file, into: layout.driveC.appendingPathComponent(WrappLayout.installersFolder))
                 }
                 await announceInstall()
                 installed = try await installerRunner.installGameWithWine(
@@ -242,10 +245,9 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         return { ids.contains($0) }
     }
 
-    /// Put the plan's answer file (`asset:<path>`) where the installer
-    /// runner looks for one: `setup.iss` among the installer's discs.
-    private func installAnswerFile(_ asset: String, into installers: URL) throws {
-        let source = URL(fileURLWithPath: asset.hasPrefix("asset:") ? String(asset.dropFirst("asset:".count)) : asset)
+    /// Put the plan's answer file (`bundle:assets/disc.iss`) where the
+    /// installer runner looks for one: `setup.iss` among the installer's discs.
+    private func installAnswerFile(_ source: URL, into installers: URL) throws {
         let destination = installers.appendingPathComponent("setup.iss")
         try fileManager.createDirectory(at: installers, withIntermediateDirectories: true)
         if fileManager.fileExists(atPath: destination.path) {

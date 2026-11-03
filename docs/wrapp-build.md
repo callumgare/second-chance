@@ -65,7 +65,7 @@ other builders are the same shape with less in the middle.
 | 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` and installs Wine, which runs the installer, and the engine the game runs, from the engine store ([the template](#the-template)) | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). Cancelling stops it, and the bytes copied show on the progress bar, full once it's done (the total is how full the disc is, which counts its file system too). Meanwhile, one Wine run marks D: on as CD drives (`DriveMarking`, `WineDrives.setKind(_:of:)` with several letters): each run starts Wine's session afresh, and marking each drive after the copy left the screen still for 8 to 18 s a drive; a wait that's left once the copy is done says "Getting the discs ready". The copies stay in the finished wrapp, mounted as CD drives, because some games check for their disc before they will play | `.progress(.copyingInstaller)`, `.stepProgress` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
-| 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `WINE.KEEP-DISCS` is steps 5–6; `INSTALLER.RUN --from=disc-1` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (`--stubborn` from the plan); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each `DO nancy-drew.patch` step applies that one patch (`applyGamePatch`); the module's `EDIT --from-data=ini` sets the game's .ini files. A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
+| 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `WINE.KEEP-DISCS` is steps 5–6; `INSTALLER.RUN --from=${input.disc-1}` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (`--stubborn` from the plan); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each `DO nancy-drew.patch` step applies that one patch (`applyGamePatch`); the module's `EDIT --from-data=ini` sets the game's .ini files. A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 8 | `cleanupUnusedEngine` takes out each engine the composition doesn't run (`EngineInstall.remove`): Wine, for a ScummVM game | — |
 | 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` (and the game INI, when the plan didn't) | `.progress(.configuringWrapp)`, `.wrappConfigured` |
 | 10 | `helper.finalize` — take the quarantine off, sign, ask where to save (`getSaveLocation`), move it there (`saveWrapp`) | `.signed`, `.progress(.savingApp)`, `.completed` |
@@ -426,7 +426,7 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
 - **What it was built from is its lock** (`WrappLock.json`, `WrappLock`):
   the bundle's version, each module's version and release and a hash of each
   of its data files, an engine's prepared hash (`package`), the launcher's
-  revision, the Wrappfile's global `ARG`s (`install-dir`), and how it was
+  revision, the Wrappfile's global `CONST`s (`install-dir`), and how it was
   updated, if it was. A wrapp from before locks gets one made up from its
   settings and its Wine's version file (`WrappLock.madeUp`), at bundle version
   0, with the disc edition for a wrapp that never recorded its source.
@@ -758,7 +758,7 @@ otherwise. Headless, it is `INSTALLATION_SOURCE=download` with
   plainly.
 - **Unpacking**: `unpack: none` puts the file itself in a folder named for the
   input, `zip` that folder's contents (`ditto`). The edition's Wrappfile stage
-  then copies it in (`COPY --from=<input> . ${install-dir}/`), which is the only
+  then copies it in (`COPY --from=${input.game} . ${const.install-dir}/`), which is the only
   instruction a download edition can run so far; an `install` program and other
   archive formats come when an edition needs them.
 

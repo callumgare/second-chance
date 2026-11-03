@@ -7,7 +7,7 @@ series: "Nancy Drew"
 series-order: 24
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.waters-edge"]
 
-volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+volumes:
   wine-documents:
     display-name: "saved games"
 
@@ -20,32 +20,40 @@ variants:
 editions:
   - id: "cd"
     source: "disc"
-    build: { target: "disc" }
-    inputs:
-      - { id: "disc-1" }
-      - { id: "disc-2" }
+    build:
+      target: "disc"
+      inputs:
+        disc-1: { type: "disc" }
+        disc-2: { type: "disc" }
     detect: { aliases: ["shadow waters edge"] }
   - id: "her-windows"
     source: "her-download"
-    build: { target: "her-download" }
-    inputs: [{ id: "installer", format: "windows" }]
+    build:
+      target: "her-download"
+      inputs:
+        installer: { type: "her-download", format: "windows" }
   - id: "her-mac"
     source: "her-download"
-    build: { target: "her-mac" }
-    inputs: [{ id: "installer", format: "mac" }]
+    build:
+      target: "her-mac"
+      inputs:
+        installer: { type: "her-download", format: "mac" }
   - id: "steam"
     source: "steam"
-    inputs:
-      - { id: "game", app-id: 200080, common-folder: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe" }
+    build:
+      inputs:
+        game: { type: "steam-game", app-id: 200080, common-folder: "Nancy Drew - Shadow Waters Edge", exe: "Shadow.exe" }
     drm: "launch-when-steam-running"
   - id: "big-fish"
     source: "big-fish"
-    inputs: [{ id: "game", product: 6327 }]
+    build:
+      inputs:
+        game: { type: "big-fish-game", product: 6327 }
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
 
-notes:                                       # for people only; nothing reads these
+notes:
   quirks:
     - "Her's Mac download hasn't been looked inside: it is taken to be a Cider build, as Trail of the Twister's is."
     - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

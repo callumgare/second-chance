@@ -7,20 +7,21 @@ For now Wrappfiles are parsed and checked, and each game's says what its builder
 does today; the builders don't run them yet.
 
 ```dockerfile
-# A global build argument, written once
-ARG install-dir="C:/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon"
+# A fixed value, and the inputs the editions give, written once
+CONST install-dir = "C:/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon"
+INPUT disc-1
+INPUT disc-2
 
 FROM scratch AS prefix
-USE wine@10                         # a module, with a version constraint
+USE wine@10 # a module, with a version constraint
 
 # The CD edition (its manifest says build: { target: "disc" })
 FROM prefix AS disc
-ARG install-dir                     # a stage brings in a global ARG to use it
 USE installer
-USE nancy-drew AS nd                # a module, known in this stage as nd
-WINE.KEEP-DISCS --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
-INSTALLER.RUN --from=disc-1 --into=${install-dir} --answer-file=${assets/disc.iss}
-DO nd.patch --id=blue-moon-taffy-sort --into=${install-dir}
+USE nancy-drew AS nd # a module, known in this stage as nd
+WINE.KEEP-DISCS ${input.disc-1} ${input.disc-2} --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
+INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss
+DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 ```
 
 ## Syntax
@@ -53,26 +54,31 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${install-dir}
   the first word that isn't one is the program, and everything after it is the
   program's arguments; other instructions take options anywhere
   (`STEAM.INSTALL game --into=…`).
-- **`${…}` substitutes**: an `ARG` the stage has brought in (`${install-dir}`,
-  with a default `${name:-default}`), an input's field (`${inputs.game.app-id}`),
-  a bundle file (`${assets/disc.iss}`), or in a module's function, its data
-  (`${data.patches.${id}.url}`, nested). `$$` is a `$`.
+- **`${…}` reads a value** through its namespace ([Values](#values)):
+  `${const.install-dir}`, `${input.game.app-id}`,
+  `${self.data.patches[input.id].url}`. `$$` is a `$`.
+- **A relative path is a file of the bundle's**, or in a module's file, of the
+  module's: `--answer-file=assets/disc.iss`. Another module's is written in
+  full, `module:installer/autoit`. Planning writes each in full
+  (`bundle:assets/disc.iss`), and checks it's there.
 - **Blocks**: `IF <condition>` … `ELSE IF <condition>` … `ELSE` … `END`,
-  `LAYER` … `END` and `FUNCTION <name>` … `END`. Conditions are `name=value`,
-  `!=`, `>=`, `<=`, `>`, `<`, `name has value`, or a bare name.
+  `LAYER` … `END` and `FUNCTION <name>` … `END`. A condition compares two
+  expressions, each a `${…}` or a quoted string, with `=` or `!=`, spaced or
+  not: `IF ${platform.arch} = "arm64"`.
 
 ## Instructions
 
 | Instruction | Does |
 | --- | --- |
 | `FROM scratch` / `FROM <stage>` / `FROM <module>[@<constraint>]/<stage>` `[AS <name>]` | Starts a stage from the bare template, another stage (`base` and `previous` are supplied), or a module's (`FROM steam/client`). A stage built from another keeps its modules. |
-| `ARG <name>[=<value>]` | Before the first `FROM`, a global build argument with its value; in a stage, brings a global one or a choice in. |
+| `INPUT <name> [--default=<value>] [--secret]` | Declares a value from outside, before the first `FROM` or at a function's top ([Values](#values)). |
+| `CONST <name> = <value>`, `VAR <name> [= <value>]`, `SET <name> = <value>` | A fixed value; a value worked out in the Wrappfile; and a new value for a `VAR`. |
 | `USE <module>[@<constraint>] [AS <name>]` | Adds a module, and what it depends on: its instructions are then `<NAME>.INSTRUCTION`, its functions `DO <name>.<function>`, and its path types, options and mount fields are the stage's ([below](#what-modules-add)). |
-| `RUN [--mount=…] [--creates=…] <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `source`, `cache`, `secret`, `bind`, `fetch`. |
-| `COPY [--from=<stage or input>] <src> <dest>` | Copies files. |
+| `RUN [--mount=…] [--creates=…] [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `source`, `cache`, `secret`, `bind`, `fetch`. `--env` is the only way a value reaches a program's environment. |
+| `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files. |
 | `ADD --checksum=sha256:<hash> [--unpack=zip --member=<file> [--extract]] <url> <dest>` | A download, found in the download cache first. |
 | `EXPORT`, `MOVE`, `REMOVE`, `EDIT <file> --ini=…` / `--from-data=<table>` | File changes Second Chance makes itself. |
-| `FUNCTION <name>` … `END`, `DO <name>` / `DO <alias>.<name>` | Named steps, with `ARG`s as parameters (`--id=…`): a bundle's own, or a module's (in its `functions/`). |
+| `FUNCTION <name>` … `END`, `DO <name>` / `DO <alias>.<name>` | Named steps, with `INPUT`s as parameters (`--id=…`): a bundle's own, or a module's (in its `functions/`). |
 
 Every step takes `--name=<id>`, naming it for conditions and reports.
 
@@ -84,10 +90,62 @@ Modules' instructions, as the build modules declare them
 | `WINE.WINETRICKS <verb>` | Installs a winetricks verb. |
 | `WINE.REGISTRY --set <key>:<name> <value>` / `--remove <key>:<name>` | Sets or removes a registry value. |
 | `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive, kept at launch. |
-| `WINE.KEEP-DISCS --into=<folder> [--combined=<folder>]` | Copies every disc the edition declares into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
+| `WINE.KEEP-DISCS <disc input>… --into=<folder> [--combined=<folder>]` | Copies the discs it's given into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
 | `INSTALLER.RUN [--from=<input>] --into=<folder> [--answer-file=…] [--stubborn] [program]` | Runs a Windows installer: silently with an answer file, watched and closed when it won't exit (`--stubborn`). Without a program, the installer on the input, found as today. |
 | `STEAM.INSTALL <input> --into=<folder>` | Installs the input's Steam app. |
 | `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--answer-file=…]` | Installs Her Interactive's download. |
+
+An input is always written `${input.<name>}` where an instruction takes one.
+
+## Values
+
+Every value is read through a namespace in `${…}`, which says where it
+comes from:
+
+| Namespace | What it is | Declared by |
+| --- | --- | --- |
+| `input.<name>` | a value from outside: the edition's (its `build.inputs`), a `DO`'s option, or the `INPUT`'s default | `INPUT` |
+| `const.<name>` | a fixed value | `CONST` |
+| `var.<name>` | a value the Wrappfile works out | `VAR`, changed by `SET` |
+| `platform.arch`, `platform.macos` | the Mac building | the core |
+| `module.<name>.version`, `module.<name>.data.<table>…` | a module the stage uses, by its id or `AS` name: the version `USE` picked, and its data | the module |
+| `self.…` | in a module's own files, that module, whatever a bundle calls it | the module |
+
+- **Values are text or objects**: a data table's entry, or an input with its
+  fields (`${input.game.app-id}`). An `IF` compares text.
+- **A module can be named at the root**: `${nancy-drew.data.patches}`,
+  `${wine.version}`. The core's namespaces always win: a module named like
+  one is warned about, and read through `${module.<name>.…}`.
+- **Brackets hold a key worked out from another value**:
+  `${self.data.patches[input.id].url}`. A `${…}` never holds another, and
+  there are no modifiers (`:-`).
+- **A module's data has a schema** (each table's `.schema.json` beside it),
+  which the checker reads to check a `${….data.…}` path, and whose
+  `default`s fill in a field a table leaves out.
+- **Every value is known when planning.** An app never works one out.
+- **Scopes**: the file, a stage, a function and an `IF`'s branch, the
+  innermost winning. Globals reach every stage. A `CONST` can't be set or
+  declared again within its scope; a `VAR` in a branch shadows one outside
+  it, and a `SET` changes the innermost `VAR` of its name. Reading a `VAR`
+  before anything has set it is an error.
+- **`INPUT`s are declared before the first `FROM`**, or as a function's
+  parameters at its top. An input missing is an error only if the build
+  reads it; an edition giving one its target never reads is an error.
+- **A function reads its caller's values only through its own `INPUT`s**:
+  each is given by the `DO`'s option, or else the caller's input or
+  constant of the same name, or else its default. An edition's value always
+  beats an `INPUT`'s default.
+- **`--secret`** keeps an input out of every step's text: it reaches a
+  program only through `--env` or a `secret` mount, the step keeps
+  `${input.<name>}`, and the builder fills it in, so it's never in a layer's
+  key, a plan or a log.
+- **A reference to something undeclared is an error everywhere**, in any
+  branch, reached or not. An `INPUT`, `CONST` or `VAR` nothing reads is a
+  warning.
+
+`sc bundle plan` and `sc wrapp build` take inputs with `--input
+<name>=<value>` (`--input launch-mode=steam`); the app takes them headless
+as JSON in `SECOND_CHANCE_INPUTS`.
 
 ## What modules add
 
@@ -148,8 +206,10 @@ and the modules (`WrappfileChecker`), naming each problem's line:
   from. A path a function writes, or one a `${…}` starts, is checked when the
   build is planned, in the stage that has it;
 - stage and function names follow Docker's rule;
-- every `${…}` names something there is: an `ARG` the stage brought in, an
-  input an edition has, an asset in the bundle;
+- every `${…}` names something there is ([Values](#values)), in any branch,
+  and a `${….data.…}` path is one its table's schema allows; every file the
+  bundle names is in it; an input is written `${input.<name>}` wherever one
+  is taken; `INPUT`s are only global or at a function's top;
 - every stage, function, module (at a version its constraint allows) and
   input named exists, and every function is given its parameters;
 - every edition's and variant's `build` names a stage, and the manifest's
@@ -183,19 +243,19 @@ A change to the syntax above means a change to the grammar.
 Before a build runs anything, its edition's target is worked out into a plan
 (`BuildPlanner`): the stages it needs, dependencies first; each step with its
 functions expanded, `${…}` substituted and `IF`s decided for this build (the
-Mac's `arch` and `macos`, the edition's choices, the updates it applies); and
-each module's `assemble` steps after the target's own. Every path comes out
-in full form and every module option keyed by the module's id, and each
-instruction in upper case. A module function's
-`${data.<table>.<key>.<field>}` reads the module's table, where a key is an
-object's property or, in a list (or a table that is one list under one key,
-as `patches.json` is), the item with that `id`. `${assets/…}` becomes
-`asset:<path>`, for the step to mount. `sc bundle plan <bundle id> <edition>` prints
-one, each step with where it was written:
+Mac, and the edition's inputs); and each module's `assemble` steps after the
+target's own. Every path comes out in full form, every module option keyed
+by the module's id, each instruction in upper case, and a whole input as its
+token (`input:disc-1`), so a builder tells an input from text. A key into a
+module's data is an object's property or, in a list (or a table that is one
+list under one key, as `patches.json` is), the item with that `id`. The
+files the steps read are recorded with the plan, for install layers to hash.
+`sc bundle plan <bundle id> <edition>` prints one, each step with where it
+was written:
 
 ```text
 FROM prefix AS disc   [installer, nancy-drew, wine]
-  INSTALLER.RUN --answer-file=asset:…/blue-moon/assets/disc.iss --from=disc-1 --into=wine:C:/…    # Wrappfile:15
+  INSTALLER.RUN --answer-file=bundle:assets/disc.iss --from=input:disc-1 --into=wine:C:/…    # Wrappfile:15
   EDIT --from-data=ini wine:C:/…/*.ini    # nancy-drew/functions/configure-ini:9 from nancy-drew/module.yaml (assemble):2
 ```
 

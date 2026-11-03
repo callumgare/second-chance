@@ -96,7 +96,10 @@ privacy prompts (which Steam waits on) aren't addressed to `sc`; see
 [steam.md](steam.md).
 
 `--from steam` builds any game on Steam that the signed-in account owns;
-`--steam-launch steam|direct` answers the launch question for a DRM-free one.
+`--steam-launch steam|direct` answers the launch question for a DRM-free one,
+as `--input launch-mode=steam` does. `--input <name>=<value>` gives any of the
+edition's inputs a value (repeat it for more), and `sc bundle plan` takes it
+too; the app is handed them as JSON in `SECOND_CHANCE_INPUTS`.
 It needs the shared Steam sign-in to exist already — a headless build can't
 show Steam's sign-in window — so sign in once by building a Steam game from
 the app. [steam.md](steam.md) has the details.

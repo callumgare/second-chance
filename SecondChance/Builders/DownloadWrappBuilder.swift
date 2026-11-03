@@ -183,7 +183,8 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
         let layout = WrappLayout(app: wrappPath)
         for step in plan.stages.flatMap(\.steps) {
             logger.debug("Plan step: \(step) (\(step.origin))")
-            guard step.module == nil, step.instruction == "COPY", let from = step.option("from"), let source = inputs[from],
+            guard step.module == nil, step.instruction == "COPY", let from = PlannedStep.input(in: step.option("from")),
+                  let source = inputs[from],
                   step.arguments.count == 2 else {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the download flow can't run \(step)")
             }

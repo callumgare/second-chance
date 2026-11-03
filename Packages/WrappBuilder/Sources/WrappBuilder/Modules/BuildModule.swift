@@ -28,6 +28,10 @@ public nonisolated protocol BuildModule: Sendable {
     /// `<alias>.<field>=…` in a `--mount=`.
     static var mountFields: [String: Set<String>] { get }
 
+    /// Files its Swift provides rather than its folder, which a Wrappfile
+    /// names as `module:<id>/<path>` (the installer module's `autoit`).
+    static var providedFiles: Set<String> { get }
+
     /// Lay an engine version's downloaded sources out as a wrapp's
     /// `Contents/` (`EnginePreparer`), returning the files to sign once the
     /// tree is hashed; only an engine's module has one.
@@ -39,6 +43,7 @@ nonisolated extension BuildModule {
     public static var stages: [String] { [] }
     public static var coreOptions: [String: [String: InstructionSpec.OptionKind]] { [:] }
     public static var mountFields: [String: Set<String>] { [:] }
+    public static var providedFiles: Set<String> { [] }
 
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         throw EngineError("the \(id.rawValue) module has no engine to prepare")
@@ -54,10 +59,11 @@ public nonisolated enum WineBuild: BuildModule {
         InstructionSpec("REGISTRY", options: ["set": .flag, "remove": .flag], arguments: 1...2),
         // Gives a folder in the prefix a drive, kept for later steps and at launch.
         InstructionSpec("MOUNT", options: ["cdrom": .flag], arguments: 2...2, argumentRoles: [.location, .text]),
-        // Copies every disc the edition declares into `--into` (`<into>/disk-<n>`),
-        // and for more than one disc merges them into `--combined` as well, giving
-        // each a drive from D: in order: for a game that checks for its disc.
+        // Copies the discs it's given into `--into` (`<into>/disk-<n>`), and for
+        // more than one merges them into `--combined` as well, giving each a
+        // drive from D: in order: for a game that checks for its disc.
         InstructionSpec("KEEP-DISCS", options: ["into": .value, "combined": .value], required: ["into"],
+                        arguments: 1...Int.max, argumentRoles: [.input],
                         optionRoles: ["into": .location, "combined": .location]),
     ]
 
@@ -154,8 +160,10 @@ public nonisolated enum InstallerBuild: BuildModule {
         InstructionSpec("RUN", options: ["from": .value, "into": .value, "answer-file": .value, "stubborn": .flag,
                                          "driver": .value, "msi-properties": .value, "mount": .repeated],
                         required: ["into"], arguments: 0...Int.max, argumentRoles: [.program, .text],
-                        optionRoles: ["from": .input, "into": .location]),
+                        optionRoles: ["from": .input, "into": .location, "answer-file": .file]),
     ]
+    /// AutoIt, which Second Chance carries: `module:installer/autoit`.
+    public static let providedFiles: Set<String> = ["autoit"]
 }
 
 /// The person's own disc, brought in as a source input.
@@ -171,7 +179,7 @@ public nonisolated enum HerDownloadBuild: BuildModule {
         // `HER-DOWNLOAD.INSTALL installer [--into=…] [--answer-file=…]`: where the
         // download's installer puts the game when `--into` is left out.
         InstructionSpec("INSTALL", options: ["into": .value, "answer-file": .value], arguments: 1...1,
-                        argumentRoles: [.input], optionRoles: ["into": .location]),
+                        argumentRoles: [.input], optionRoles: ["into": .location, "answer-file": .file]),
     ]
 }
 

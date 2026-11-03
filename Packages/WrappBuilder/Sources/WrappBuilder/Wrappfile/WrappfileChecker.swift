@@ -35,15 +35,35 @@ public nonisolated struct WrappfileChecker {
     }
 
     /// What a stage knows at a point: its modules, by the name it knows
-    /// each by (in lower case), and the ARGs it has brought in.
+    /// each by (in lower case), and the values declared, innermost last.
     struct Scope {
         var aliases: [String: String] = [:]
-        var args: Set<String> = []
+        var frames: [[String: Declared]] = [[:]]
         /// In a function, which runs in whichever stage calls it: its paths
         /// are checked when it's planned.
         var inFunction = false
+        /// Past a function's top, where its INPUTs are.
+        var pastTop = false
 
         var moduleIDs: Set<ModuleID> { Set(aliases.values.map(ModuleID.init(rawValue:))) }
+
+        func declared(_ name: String) -> Declared? {
+            for frame in frames.reversed() {
+                if let found = frame[name] { return found }
+            }
+            return nil
+        }
+    }
+
+    /// A name a declaration made, and whether anything reads it.
+    final class Declared {
+        let kind: Declaration.Kind
+        let line: Int
+        var used = false
+        init(_ kind: Declaration.Kind, line: Int) {
+            self.kind = kind
+            self.line = line
+        }
     }
 
     /// What the checker finds: errors, which stop a bundle loading, and
@@ -60,7 +80,11 @@ public nonisolated struct WrappfileChecker {
     public func findings(_ file: Wrappfile) -> Findings {
         var found = Findings()
         var scopes: [String: Scope] = [:]
-        let globals = Set(file.globalArgs.map(\.name))
+        var all: [(name: String, declared: Declared)] = []
+        var globals = Scope()
+        for instruction in file.globals {
+            check(instruction, in: &globals, file: file, scopes: [:], found: &found, all: &all)
+        }
         for duplicate in Self.duplicates(file.stages.compactMap(\.name)) {
             found.errors.append("two stages are called \(duplicate)")
         }
@@ -69,14 +93,20 @@ public nonisolated struct WrappfileChecker {
         }
         for function in file.functions {
             checkName(function.nameAsWritten ?? function.name, kind: "FUNCTION", line: function.line, found: &found)
-            var scope = Scope(aliases: allModuleAliases, args: Set(function.parameters.map(\.name)), inFunction: true)
-            check(function.body, in: &scope, file: file, scopes: scopes, found: &found)
+            if modules[function.name] != nil {
+                found.warnings.append("line \(function.line): FUNCTION \(function.name) is named like a module: DO \(function.name).… is this "
+                    + "function's, and the module's functions are written DO module.\(function.name).<function>")
+            }
+            var scope = Scope(aliases: allModuleAliases, inFunction: true)
+            check(function.body, in: &scope, file: file, scopes: scopes, found: &found, all: &all)
         }
         for stage in file.stages {
             if let name = stage.nameAsWritten ?? stage.name {
                 checkName(name, kind: "stage", line: stage.line, found: &found)
             }
-            var scope = Scope()
+            var scope = globals
+            scope.aliases = [:]
+            scope.frames.append([:])
             switch stage.from {
             case .scratch:
                 break
@@ -102,8 +132,11 @@ public nonisolated struct WrappfileChecker {
                     found.errors.append("line \(stage.line): FROM \(id)/\(stageName), but there's no \(id) module")
                 }
             }
-            check(stage.body, in: &scope, file: file, globals: globals, scopes: scopes, found: &found)
+            check(stage.body, in: &scope, file: file, scopes: scopes, found: &found, all: &all)
             if let name = stage.name { scopes[name] = scope }
+        }
+        for (name, declared) in all where !declared.used {
+            found.warnings.append("line \(declared.line): \(declared.kind.rawValue) \(name) is never read")
         }
         found.errors += manifestProblems(file)
         return found
@@ -123,38 +156,41 @@ public nonisolated struct WrappfileChecker {
 
     // MARK: - Steps
 
-    func check(_ steps: [Step], in scope: inout Scope, file: Wrappfile, globals: Set<String> = [],
-               scopes: [String: Scope], found: inout Findings) {
+    func check(_ steps: [Step], in scope: inout Scope, file: Wrappfile, scopes: [String: Scope], found: inout Findings,
+               all: inout [(name: String, declared: Declared)]) {
         for step in steps {
             switch step {
             case .instruction(let instruction):
-                check(instruction, in: &scope, file: file, globals: globals, scopes: scopes, found: &found)
+                check(instruction, in: &scope, file: file, scopes: scopes, found: &found, all: &all)
             case .conditional(let branches):
-                // A branch's USEs and ARGs reach no further than it.
+                scope.pastTop = true
+                // A branch is a scope: its USEs and declarations reach no further than it.
                 for branch in branches {
                     var inner = scope
-                    check(branch.steps, in: &inner, file: file, globals: globals, scopes: scopes, found: &found)
+                    inner.frames.append([:])
+                    if let condition = branch.condition {
+                        let at = "line \(branch.line): IF"
+                        checkReferences([condition.left, condition.right], at: at, scope: inner, found: &found)
+                    }
+                    check(branch.steps, in: &inner, file: file, scopes: scopes, found: &found, all: &all)
                 }
             case .layer(let steps, _):
-                check(steps, in: &scope, file: file, globals: globals, scopes: scopes, found: &found)
+                scope.pastTop = true
+                check(steps, in: &scope, file: file, scopes: scopes, found: &found, all: &all)
             }
         }
     }
 
-    func check(_ instruction: Instruction, in scope: inout Scope, file: Wrappfile, globals: Set<String>,
-               scopes: [String: Scope], found: inout Findings) {
+    func check(_ instruction: Instruction, in scope: inout Scope, file: Wrappfile, scopes: [String: Scope], found: inout Findings,
+               all: inout [(name: String, declared: Declared)]) {
         let at = "line \(instruction.line): \(instruction.keyword)"
         let spec: InstructionSpec
-        switch instruction.keyword {
-        case "ARG":
-            let declaration = WrappfileParser.argDeclaration(instruction.arguments.first ?? Word(raw: "", parts: []), line: instruction.line)
-            if !scope.inFunction, declaration.value != nil {
-                found.errors.append("\(at) \(declaration.name) can't be given a value in a stage: give it one before the first FROM")
-            } else if !scope.inFunction, !globals.contains(declaration.name), !isChoice(declaration.name) {
-                found.errors.append("\(at) \(declaration.name), but there's no global ARG or choice called that")
-            }
-            scope.args.insert(declaration.name)
+        if let declaration = Declaration(instruction) {
+            checkDeclaration(declaration, instruction, in: &scope, found: &found, all: &all)
             return
+        }
+        scope.pastTop = true
+        switch instruction.keyword {
         case "USE":
             let words = instruction.arguments.map(\.raw)
             guard words.count == 1 || (words.count == 3 && words[1].uppercased() == "AS") else {
@@ -171,6 +207,10 @@ public nonisolated struct WrappfileChecker {
                 found.errors.append("\(at) \(words[0]): no version of \(id) is \(constraint)")
             }
             let alias = words.count == 3 ? words[2].lowercased() : nil
+            if Reference.coreNamespaces.contains(alias ?? Self.ownName(id)) {
+                found.warnings.append("\(at) \(words.joined(separator: " ")): \(alias ?? Self.ownName(id)) is a namespace of the core's, "
+                    + "which always wins: this module is read as ${module.\(alias ?? Self.ownName(id)).…}")
+            }
             if let alias, let other = scope.aliases[alias], other != id {
                 found.errors.append("\(at) \(id) AS \(words[2]), but \(alias) is \(other) already")
             }
@@ -183,7 +223,7 @@ public nonisolated struct WrappfileChecker {
             return
         case "DO":
             checkDo(instruction, scope: scope, file: file, found: &found)
-            checkSubstitutions(instruction, scope: scope, found: &found)
+            checkReferences(instruction.options.compactMap(\.value), at: at, scope: scope, found: &found)
             return
         default:
             if let alias = instruction.moduleAlias {
@@ -211,18 +251,63 @@ public nonisolated struct WrappfileChecker {
             }
         }
         checkOptions(instruction, spec: spec, scope: scope, found: &found)
-        checkSubstitutions(instruction, scope: scope, found: &found)
+        checkReferences(instruction.arguments + instruction.options.compactMap(\.value), at: at, scope: scope, found: &found)
         checkPaths(instruction, spec: spec, scope: scope, scopes: scopes, file: file, found: &found)
-        if spec.firstArgumentIsInput, let input = instruction.arguments.first?.raw, !inputIDs.contains(input) {
-            found.errors.append("\(at) \(input), but no edition has an input called that")
+        // An input is written as one, ${input.<name>}, wherever one is taken.
+        var inputWords = instruction.arguments.enumerated().filter { spec.role(ofArgument: $0.offset) == .input }.map(\.element)
+        inputWords += instruction.options.filter { spec.role(ofOption: $0.name) == .input }.compactMap(\.value)
+        for word in inputWords where !Self.isWholeInput(word, scope: scope) {
+            found.errors.append("\(at) \(word.raw): an input is written ${input.<name>}, naming an INPUT")
         }
-        if instruction.keyword == "COPY", let from = instruction.option("from")?.value?.raw,
-           file.stage(named: from) == nil, !inputIDs.contains(from), from != "previous", from != "base" {
-            found.errors.append("\(at) --from=\(from), but there's no stage or input called that")
+        if instruction.keyword == "COPY", let from = instruction.option("from")?.value,
+           !Self.isWholeInput(from, scope: scope), file.stage(named: from.raw) == nil, from.raw != "previous", from.raw != "base" {
+            found.errors.append("\(at) --from=\(from.raw), but there's no stage called that (an input is written ${input.<name>})")
         }
-        if spec.role(ofOption: "from") == .input, let from = instruction.option("from")?.value?.raw, !inputIDs.contains(from) {
-            found.errors.append("\(at) --from=\(from), but no edition has an input called that")
+    }
+
+    /// Whether `word` is a whole input, `${input.<name>}`, of an INPUT in scope.
+    static func isWholeInput(_ word: Word, scope: Scope) -> Bool {
+        guard let reference = word.lone, reference.root == "input", reference.segments.count == 2,
+              let name = reference.plainPath.first else { return false }
+        return scope.declared(name)?.kind == .input
+    }
+
+    /// `INPUT`, `CONST`, `VAR` or `SET`: where it may be, and what it names.
+    func checkDeclaration(_ declaration: Declaration, _ instruction: Instruction, in scope: inout Scope, found: inout Findings,
+                          all: inout [(name: String, declared: Declared)]) {
+        let at = "line \(instruction.line): \(declaration.kind.rawValue) \(declaration.name)"
+        let isGlobal = scope.frames.count == 1 && !scope.inFunction
+        if let value = declaration.value {
+            checkReferences([value], at: at, scope: scope, found: &found)
         }
+        for option in instruction.options where !["default", "secret"].contains(option.name) || declaration.kind != .input {
+            found.errors.append("\(at) takes no --\(option.name)")
+        }
+        switch declaration.kind {
+        case .input:
+            if !(isGlobal || (scope.inFunction && !scope.pastTop && scope.frames.count == 1)) {
+                found.errors.append("\(at): an INPUT is declared before the first FROM, or at a function's top")
+                return
+            }
+        case .const:
+            if scope.declared(declaration.name)?.kind == .const {
+                found.errors.append("\(at): \(declaration.name) is a CONST already, which can't be declared again")
+                return
+            }
+        case .variable:
+            break
+        case .set:
+            switch scope.declared(declaration.name)?.kind {
+            case .variable?: return
+            case let kind?: found.errors.append("\(at): \(declaration.name) is a\(kind == .input ? "n" : "") \(kind.rawValue), which can't be set")
+            case nil: found.errors.append("\(at), but there's no VAR called \(declaration.name)")
+            }
+            return
+        }
+        if !scope.inFunction { scope.pastTop = true }
+        let declared = Declared(declaration.kind, line: instruction.line)
+        scope.frames[scope.frames.count - 1][declaration.name] = declared
+        all.append((declaration.name, declared))
     }
 
     func checkOptions(_ instruction: Instruction, spec: InstructionSpec, scope: Scope, found: inout Findings) {
@@ -318,6 +403,16 @@ public nonisolated struct WrappfileChecker {
                 // In the stage it's copied from; a path in an input is the input's.
                 guard let copyFrom else { return }
                 (modules, pathRole) = (copyFrom.moduleIDs, .location)
+            case .file:
+                // A bundle's file, as a relative path, is there; a module's
+                // function's are checked when it's planned.
+                if !scope.inFunction, !word.raw.contains("${"), !word.raw.hasPrefix("module:"), !word.raw.hasPrefix("/") {
+                    let relative = word.raw.hasPrefix("bundle:") ? String(word.raw.dropFirst("bundle:".count)) : word.raw
+                    if !FileManager.default.fileExists(atPath: bundleFolder.appendingPathComponent(relative).path) {
+                        found.errors.append("\(at) \(word.raw): the bundle has no \(relative)")
+                    }
+                }
+                return
             case .input, .text: return
             }
             if let problem = pathProblem(word.raw, as: pathRole, modules: modules, inFunction: scope.inFunction) {
@@ -392,7 +487,7 @@ public nonisolated struct WrappfileChecker {
             found.errors.append("\(at) takes the function's name, then its parameters as --name=value")
             return
         }
-        let parameters: [ArgDeclaration]
+        let parameters: [Declaration]
         if let dot = name.firstIndex(of: ".") {
             let alias = name[..<dot].lowercased()
             let functionName = name[name.index(after: dot)...].lowercased()
@@ -417,30 +512,86 @@ public nonisolated struct WrappfileChecker {
             found.errors.append("\(at) \(name) takes no --\(option.name)")
         }
         for parameter in parameters where parameter.value == nil && instruction.option(parameter.name) == nil {
+            // The caller's input or constant of the same name gives it otherwise.
+            if let caller = scope.declared(parameter.name), caller.kind == .input || caller.kind == .const {
+                caller.used = true
+                continue
+            }
             found.errors.append("\(at) \(name) needs --\(parameter.name)")
         }
     }
 
-    func checkSubstitutions(_ instruction: Instruction, scope: Scope, found: inout Findings) {
-        let words = instruction.arguments + instruction.options.compactMap(\.value)
-        for substitution in words.flatMap(\.substitutions) {
-            let at = "line \(instruction.line): ${\(substitution)}"
-            if substitution.hasPrefix("assets/") {
-                if !scope.inFunction, !FileManager.default.fileExists(atPath: bundleFolder.appendingPathComponent(substitution).path) {
-                    found.errors.append("\(at): the bundle has no \(substitution)")
-                }
-            } else if substitution.hasPrefix("inputs.") {
-                let id = substitution.split(separator: ".").dropFirst().first.map(String.init) ?? ""
-                if !inputIDs.contains(id) { found.errors.append("\(at): no edition has an input called \(id)") }
-            } else if substitution.hasPrefix("data.") {
-                if !scope.inFunction { found.errors.append("\(at): only a module's function reads its data") }
-            } else {
-                let name = substitution.split(separator: ":", maxSplits: 1).first.map(String.init) ?? substitution
-                let hasDefault = substitution.contains(":-")
-                if !scope.args.contains(name), !hasDefault {
-                    found.errors.append("\(at): nothing called \(name) is brought into the stage (ARG \(name))")
+    /// Every `${…}` in `words` names something there is: a declared
+    /// `INPUT`, `CONST` or `VAR` (in any branch, reached or not), a field of
+    /// the platform, or a module of the stage, its data checked against
+    /// the table's schema.
+    func checkReferences(_ words: [Word], at: String, scope: Scope, found: inout Findings) {
+        for word in words {
+            for expression in word.substitutions {
+                guard let reference = try? Reference.parse(expression) else { continue }
+                for each in reference.all {
+                    if let problem = referenceProblem(each, scope: scope) {
+                        found.errors.append("\(at) ${\(expression)}: \(problem)")
+                    }
                 }
             }
+        }
+    }
+
+    func referenceProblem(_ reference: Reference, scope: Scope) -> String? {
+        let path = reference.plainPath
+        switch reference.root {
+        case "input", "const", "var":
+            guard let name = path.first else { return "name what it reads: ${\(reference.root).<name>}" }
+            guard let declared = scope.declared(name) else {
+                let kind = reference.root == "var" ? "VAR" : reference.root.uppercased()
+                return "no \(kind) called \(name) here"
+                    + (scope.inFunction && reference.root != "input" ? " (a function reads its caller's values only through its own INPUTs)" : "")
+            }
+            let expected: Declaration.Kind = reference.root == "input" ? .input : reference.root == "const" ? .const : .variable
+            guard declared.kind == expected else {
+                let namespace = declared.kind == .input ? "input" : declared.kind == .const ? "const" : "var"
+                return "\(name) is a\(declared.kind == .input ? "n" : "") \(declared.kind.rawValue): read it as ${\(namespace).\(name)}"
+            }
+            declared.used = true
+            return nil
+        case "platform":
+            return ["arch", "macos"].contains(path.first ?? "") && path.count == 1 ? nil : "the platform has arch and macos"
+        case "program":
+            return "program is only read by a signal, which nothing has yet"
+        case "self":
+            return "self is only in a module's own files"
+        case "module":
+            guard let name = path.first else { return "name the module: ${module.<name>.…}" }
+            guard let id = scope.aliases[name.lowercased()] else { return "the stage has no module called \(name)" }
+            return moduleReferenceProblem(id, Array(reference.segments.dropFirst(2)))
+        case let root:
+            guard let id = scope.aliases[root.lowercased()] else {
+                return "\(root) is no namespace (input, const, var, platform, module, self), and no module of the stage"
+            }
+            return moduleReferenceProblem(id, Array(reference.segments.dropFirst()))
+        }
+    }
+
+    /// A module's `version`, or a path into its data that its table's
+    /// schema allows, as far as the schema can tell.
+    func moduleReferenceProblem(_ id: String, _ segments: [Reference.Segment]) -> String? {
+        guard case .name(let field)? = segments.first else { return "a module has version and data" }
+        switch field {
+        case "version":
+            return segments.count == 1 ? nil : "a version is text, with nothing in it"
+        case "data":
+            guard case .name(let table)? = segments.dropFirst().first else { return "name a table: data.<table>" }
+            guard let module = modules[id],
+                  let file = module.manifest.data?.first(where: { ($0 as NSString).deletingPathExtension == table }) else {
+                return "the \(id) module has no data table \(table)"
+            }
+            let schemaURL = module.file((file as NSString).deletingPathExtension + ".schema.json")
+            guard let data = try? Data(contentsOf: schemaURL),
+                  let schema = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            return SchemaPath.problem(Array(segments.dropFirst(2)), schema: schema, table: table)
+        default:
+            return "a module has version and data, not \(field)"
         }
     }
 
@@ -451,7 +602,7 @@ public nonisolated struct WrappfileChecker {
         let builds = manifest.editions.compactMap { edition in edition.build.map { ("edition \(edition.id)", $0) } }
             + (manifest.variants ?? []).compactMap { variant in variant.build.map { ("variant \(variant.id)", $0) } }
         for (owner, build) in builds {
-            for stage in [build.target] + (build.base.map { [$0] } ?? []) where file.stage(named: stage) == nil {
+            for stage in [build.target, build.base].compactMap({ $0 }) where file.stage(named: stage) == nil {
                 problems.append("manifest.yaml's \(owner) builds \(stage), which the Wrappfile has no stage called")
             }
         }
@@ -463,16 +614,10 @@ public nonisolated struct WrappfileChecker {
 
     // MARK: - Helpers
 
-    var inputIDs: Set<String> { Set(manifest.editions.flatMap { $0.inputs?.map(\.id) ?? [] }) }
-
     /// Every module by its own name: what a function, which runs in its
     /// caller's stage, may name.
     var allModuleAliases: [String: String] {
         Dictionary(modules.keys.map { (Self.ownName($0), $0) }, uniquingKeysWith: { first, _ in first })
-    }
-
-    func isChoice(_ name: String) -> Bool {
-        manifest.editions.contains { $0.choice(name) != nil }
     }
 
     func addModule(_ id: String, as alias: String?, to scope: inout Scope) {
@@ -556,4 +701,51 @@ nonisolated enum LegacyPaths {
     static let unclaimedDrivePaths: Set<String> = ["freeware/lure-of-the-temptress"]
 
     static func allowsUnclaimedDrivePaths(_ bundle: String) -> Bool { unclaimedDrivePaths.contains(bundle) }
+}
+
+/// A path into a data table, against the table's JSON Schema: each name a
+/// property the schema has, through `$ref`s, items and a table that is one
+/// list (looked up by `id`), as far as the schema says.
+nonisolated enum SchemaPath {
+    static func problem(_ segments: [Reference.Segment], schema root: [String: Any], table: String) -> String? {
+        var node: [String: Any]? = resolve(root, root: root)
+        var walked = table
+        for segment in segments {
+            guard let current = node else { return nil }
+            let name: String?
+            if case .name(let text) = segment { name = text } else { name = nil }
+            let properties = current["properties"] as? [String: Any] ?? [:]
+            if let name, let property = properties[name] as? [String: Any] {
+                node = resolve(property, root: root)
+                walked += ".\(name)"
+                continue
+            }
+            // A list's item, or a table that is one list under a single key, by its id.
+            if let items = current["items"] as? [String: Any] {
+                node = resolve(items, root: root)
+                continue
+            }
+            let lists = properties.values.compactMap { ($0 as? [String: Any]).map { resolve($0, root: root) } }.filter { $0["items"] != nil }
+            if lists.count == 1, let items = lists[0]["items"] as? [String: Any] {
+                node = resolve(items, root: root)
+                continue
+            }
+            if let additional = current["additionalProperties"] as? [String: Any] {
+                node = resolve(additional, root: root)
+                continue
+            }
+            if let name, current["properties"] != nil, current["additionalProperties"] as? Bool == false {
+                return "\(walked) has no \(name)"
+            }
+            return nil
+        }
+        return nil
+    }
+
+    static func resolve(_ schema: [String: Any], root: [String: Any]) -> [String: Any] {
+        guard let ref = schema["$ref"] as? String, ref.hasPrefix("#/$defs/"),
+              let defs = root["$defs"] as? [String: Any],
+              let target = defs[String(ref.dropFirst("#/$defs/".count))] as? [String: Any] else { return schema }
+        return resolve(target, root: root)
+    }
 }

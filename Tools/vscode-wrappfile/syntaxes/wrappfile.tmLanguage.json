@@ -7,7 +7,7 @@
         { "include": "#comment" },
         { "include": "#from" },
         { "include": "#use" },
-        { "include": "#arg" },
+        { "include": "#declaration" },
         { "include": "#function" },
         { "include": "#do" },
         { "include": "#condition" },
@@ -45,8 +45,9 @@
                 "6": { "name": "entity.name.namespace.module.wrappfile" }
             }
         },
-        "arg": {
-            "match": "(?i)^\\s*(ARG)\\s+([^\\s=]+)(=)?",
+        "declaration": {
+            "comment": "INPUT, CONST, VAR and SET: a name, then = and a value, spaced or not.",
+            "match": "(?i)^\\s*(INPUT|CONST|VAR|SET)\\s+([^\\s=]+)\\s*(=)?",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" },
                 "2": { "name": "variable.other.readwrite.wrappfile" },
@@ -78,11 +79,7 @@
             "patterns": [
                 { "include": "#comment" },
                 {
-                    "match": "(?<!\\S)has(?!\\S)",
-                    "name": "keyword.operator.word.wrappfile"
-                },
-                {
-                    "match": "!=|>=|<=|=|>|<",
+                    "match": "!=|=",
                     "name": "keyword.operator.comparison.wrappfile"
                 },
                 { "include": "#words" }
@@ -164,6 +161,7 @@
             ]
         },
         "substitution": {
+            "comment": "${namespace.path[key].field}: a namespace (or a module's name), names, and a key worked out from a value in brackets.",
             "begin": "\\$\\{",
             "beginCaptures": {
                 "0": { "name": "punctuation.definition.variable.begin.wrappfile" }
@@ -174,16 +172,35 @@
             },
             "name": "variable.other.substitution.wrappfile",
             "patterns": [
-                { "include": "#substitution" },
                 {
-                    "match": ":-",
-                    "name": "keyword.operator.default.wrappfile"
+                    "match": "(?<=\\$\\{|\\[)(input|const|var|platform|module|self|program)(?=\\.)",
+                    "name": "support.variable.namespace.wrappfile"
+                },
+                {
+                    "begin": "\\[",
+                    "beginCaptures": {
+                        "0": { "name": "punctuation.section.brackets.begin.wrappfile" }
+                    },
+                    "end": "\\]",
+                    "endCaptures": {
+                        "0": { "name": "punctuation.section.brackets.end.wrappfile" }
+                    },
+                    "patterns": [
+                        {
+                            "match": "^(input|const|var|platform|module|self)(?=\\.)",
+                            "name": "support.variable.namespace.wrappfile"
+                        }
+                    ]
+                },
+                {
+                    "match": "\\.",
+                    "name": "punctuation.accessor.wrappfile"
                 }
             ]
         },
         "path-type": {
-            "comment": "A path in a module's type, in full form: wine:C:/…, steam://….",
-            "match": "(?<=^|[\\s=,\"])(wine|dosbox|scummvm|steam|big-fish)(:)",
+            "comment": "A path in a module's type, in full form (wine:C:/…, steam://…), or a bundle's or module's file (bundle:…, module:…).",
+            "match": "(?<=^|[\\s=,\"])(wine|dosbox|scummvm|steam|big-fish|bundle|module)(:)",
             "captures": {
                 "1": { "name": "storage.type.path-type.wrappfile" },
                 "2": { "name": "punctuation.separator.path-type.wrappfile" }

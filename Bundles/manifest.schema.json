@@ -198,13 +198,17 @@
       }
     },
     "build": {
-      "description": "The Wrappfile stage to build (target), and the stage it starts from on a fresh build (base).",
+      "description": "The Wrappfile stage to build (target), the stage it starts from on a fresh build (base), and what the Wrappfile's INPUTs are given, by name. An edition with no stage yet (Steam's, Big Fish's) has inputs and no target.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["target"],
       "properties": {
         "target": { "$ref": "#/$defs/name" },
-        "base": { "$ref": "#/$defs/name" }
+        "base": { "$ref": "#/$defs/name" },
+        "inputs": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/name" },
+          "additionalProperties": { "$ref": "#/$defs/input" }
+        }
       }
     },
     "variant": {
@@ -331,11 +335,24 @@
         }
       }
     },
-    "choice": {
+    "input": {
+      "description": "An input, read in the Wrappfile as ${input.<name>}: its type says how the person gives it, and which fields it has.",
+      "oneOf": [
+        { "$ref": "#/$defs/disc-input" },
+        { "$ref": "#/$defs/her-download-input" },
+        { "$ref": "#/$defs/steam-input" },
+        { "$ref": "#/$defs/big-fish-input" },
+        { "$ref": "#/$defs/download-input" },
+        { "$ref": "#/$defs/choice-input" }
+      ]
+    },
+    "choice-input": {
+      "description": "A question the person is asked, whose answer is the input's value.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["options", "default", "prompt"],
+      "required": ["type", "options", "default", "prompt"],
       "properties": {
+        "type": { "const": "choice" },
         "options": { "type": "array", "items": { "$ref": "#/$defs/name" }, "minItems": 2, "uniqueItems": true },
         "default": { "$ref": "#/$defs/name" },
         "prompt": { "type": "string", "minLength": 1 }
@@ -349,11 +366,6 @@
         "source": {
           "description": "Where the edition comes from: brought by the person (disc, her-download) or chosen from a list (steam, big-fish, download).",
           "enum": ["disc", "her-download", "steam", "big-fish", "download"]
-        },
-        "inputs": {
-          "description": "What the build brings in, each used in the Wrappfile by its id; the fields are the source's.",
-          "type": "array",
-          "minItems": 1
         },
         "build": { "$ref": "#/$defs/build" },
         "patches": { "type": "array", "items": { "$ref": "#/$defs/name" }, "uniqueItems": true },
@@ -369,35 +381,14 @@
             }
           }
         },
-        "choices": {
-          "type": "object",
-          "propertyNames": { "$ref": "#/$defs/name" },
-          "additionalProperties": { "$ref": "#/$defs/choice" }
-        },
         "runtime": { "$ref": "#/$defs/runtime" },
         "tests": { "$ref": "#/$defs/tests" }
       },
       "allOf": [
         {
-          "if": { "properties": { "source": { "const": "disc" } } },
-          "then": {
-            "required": ["inputs"],
-            "properties": { "inputs": { "type": "array", "items": { "$ref": "#/$defs/disc-input" } } }
-          }
-        },
-        {
-          "if": { "properties": { "source": { "const": "her-download" } } },
-          "then": {
-            "required": ["inputs"],
-            "properties": { "inputs": { "type": "array", "items": { "$ref": "#/$defs/her-download-input" }, "maxItems": 1 } }
-          }
-        },
-        {
           "if": { "properties": { "source": { "const": "steam" } } },
           "then": {
-            "required": ["inputs"],
             "properties": {
-              "inputs": { "type": "array", "items": { "$ref": "#/$defs/steam-input" }, "maxItems": 1 },
               "drm": {
                 "description": "What the game's DRM needs; left out when not known.",
                 "enum": ["no", "launch-when-steam-running", "launch-via-steam-only"]
@@ -406,18 +397,10 @@
           }
         },
         {
-          "if": { "properties": { "source": { "const": "big-fish" } } },
-          "then": {
-            "required": ["inputs"],
-            "properties": { "inputs": { "type": "array", "items": { "$ref": "#/$defs/big-fish-input" }, "maxItems": 1 } }
-          }
-        },
-        {
           "if": { "properties": { "source": { "const": "download" } } },
           "then": {
             "required": ["licence"],
             "properties": {
-              "inputs": { "type": "array", "items": { "$ref": "#/$defs/download-input" } },
               "licence": { "enum": ["freeware-licensed", "free-release", "shareware", "abandonware"] },
               "licence-from": { "type": "string", "minLength": 1 },
               "licence-file": {
@@ -434,9 +417,9 @@
     "disc-input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id"],
+      "required": ["type"],
       "properties": {
-        "id": { "$ref": "#/$defs/name" },
+        "type": { "const": "disc" },
         "requires": {
           "description": "A file only this disc has, to check the right disc was put in.",
           "$ref": "#/$defs/relative-path"
@@ -447,9 +430,9 @@
     "her-download-input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "format"],
+      "required": ["type", "format"],
       "properties": {
-        "id": { "$ref": "#/$defs/name" },
+        "type": { "const": "her-download" },
         "format": {
           "description": "Which of Her Interactive's downloads: a Windows installer, or a Mac app.",
           "enum": ["windows", "mac"]
@@ -459,9 +442,9 @@
     "steam-input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "app-id"],
+      "required": ["type", "app-id"],
       "properties": {
-        "id": { "$ref": "#/$defs/name" },
+        "type": { "const": "steam-game" },
         "app-id": { "type": "integer", "minimum": 1 },
         "common-folder": {
           "description": "The folder under steamapps/common/ Steam installs the app into, as its app info says.",
@@ -478,9 +461,9 @@
     "big-fish-input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "product"],
+      "required": ["type", "product"],
       "properties": {
-        "id": { "$ref": "#/$defs/name" },
+        "type": { "const": "big-fish-game" },
         "product": {
           "description": "The game's product number on Big Fish Games, the number in each of its SKUs (F2435T1L1: product 2435), whichever its language.",
           "type": "integer",
@@ -491,9 +474,9 @@
     "download-input": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "urls", "sha256"],
+      "required": ["type", "urls", "sha256"],
       "properties": {
-        "id": { "$ref": "#/$defs/name" },
+        "type": { "const": "download" },
         "urls": { "type": "array", "items": { "type": "string", "pattern": "^https://" }, "minItems": 1 },
         "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
         "size": { "type": "integer", "minimum": 1 },

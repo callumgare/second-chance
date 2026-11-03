@@ -15,20 +15,20 @@ struct WrappfileCheckerTests {
     }
 
     private static let valid = """
-    ARG install-dir="C:/Nancy Drew/Secret of the Old Clock"
+    CONST install-dir = "C:/Nancy Drew/Secret of the Old Clock"
+    INPUT disc-1
+    INPUT installer
     FROM scratch AS prefix
     USE wine@10
     FROM prefix AS disc
-    ARG install-dir
     USE installer
     USE nancy-drew AS nd
-    WINE.KEEP-DISCS --into=C:/nancy-drew-installer
-    INSTALLER.RUN --from=disc-1 --into=${install-dir} --answer-file=${assets/disc.iss} --stubborn
-    DO nd.patch --id=x --into=${install-dir}
+    WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
+    INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss --stubborn
+    DO nd.patch --id=x --into=${const.install-dir}
     FROM prefix AS her-download
-    ARG install-dir
     USE her-download
-    HER-DOWNLOAD.INSTALL installer --into=${install-dir}
+    HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
     """
 
     @Test func aValidWrappfileHasNoProblems() throws {
@@ -36,43 +36,71 @@ struct WrappfileCheckerTests {
     }
 
     @Test(arguments: [
-        ("WINE.KEEP-DISCS --into=C:/nancy-drew-installer", "WINE.KEEP-DISCS --into=C:/x --cdrom",
-         "line 8: WINE.KEEP-DISCS takes no --cdrom"),
-        ("USE nancy-drew AS nd", "USE nancy-drew", "line 10: DO nd.patch: the stage doesn't USE a module called nd"),
-        ("USE wine@10", "USE wine@11", "line 3: USE wine@11: no version of wine is 11"),
-        ("DO nd.patch --id=x --into=${install-dir}", "DO nd.patch --id=x", "line 10: DO nd.patch needs --into"),
-        ("DO nd.patch --id=x --into=${install-dir}", "DO nd.nothing", "line 10: DO nd.nothing: the nancy-drew module has no function called nothing"),
-        ("${assets/disc.iss}", "${assets/missing.iss}", "line 9: ${assets/missing.iss}: the bundle has no assets/missing.iss"),
-        ("FROM prefix AS her-download\nARG install-dir", "FROM prefix AS her-download",
-         "line 13: ${install-dir}: nothing called install-dir is brought into the stage (ARG install-dir)"),
-        ("--from=disc-1", "--from=disc-9", "line 9: INSTALLER.RUN --from=disc-9, but no edition has an input called that"),
-        ("FROM prefix AS disc", "FROM nowhere AS disc", "line 4: FROM nowhere, but no stage before it is called that"),
+        ("WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer", "WINE.KEEP-DISCS ${input.disc-1} --into=C:/x --cdrom",
+         "line 9: WINE.KEEP-DISCS takes no --cdrom"),
+        ("USE nancy-drew AS nd", "USE nancy-drew", "line 11: DO nd.patch: the stage doesn't USE a module called nd"),
+        ("USE wine@10", "USE wine@11", "line 5: USE wine@11: no version of wine is 11"),
+        ("DO nd.patch --id=x --into=${const.install-dir}", "DO nd.patch --id=x", "line 11: DO nd.patch needs --into"),
+        ("DO nd.patch --id=x --into=${const.install-dir}", "DO nd.nothing", "line 11: DO nd.nothing: the nancy-drew module has no function called nothing"),
+        ("assets/disc.iss", "assets/missing.iss", "line 10: INSTALLER.RUN assets/missing.iss: the bundle has no assets/missing.iss"),
+        ("--from=${input.disc-1}", "--from=${input.disc-9}", "line 10: INSTALLER.RUN ${input.disc-9}: no INPUT called disc-9 here"),
+        ("--from=${input.disc-1}", "--from=disc-1", "line 10: INSTALLER.RUN disc-1: an input is written ${input.<name>}"),
+        ("FROM prefix AS disc", "FROM nowhere AS disc", "line 6: FROM nowhere, but no stage before it is called that"),
         ("USE installer", "USE installer\nRUN --mount=type=disk,id=disc-1 D:/setup.exe",
-         "line 7: RUN --mount type=disk isn't a mount type"),
+         "line 8: RUN --mount type=disk isn't a mount type"),
         ("USE installer", "USE installer\nRUN --mount=type=volume,source=x,target=C:/x C:/x.exe",
-         "line 7: RUN --mount type=volume isn't a mount type"),
+         "line 8: RUN --mount type=volume isn't a mount type"),
         // Paths: a short form no module of the stage claims, or a type the stage hasn't.
-        ("FROM prefix AS her-download", "FROM scratch AS other\nCOPY --from=disc-1 . C:/x\nFROM prefix AS her-download",
-         "line 12: COPY C:/x: no module of this stage handles C: paths (it uses none)"),
-        ("USE installer", "USE installer\nRUN steam:x", "line 7: RUN steam:x: steam: paths are steam's, which the stage doesn't USE"),
-        ("USE installer", "USE installer\nCOPY --from=disc-1 . steam:x", "line 7: COPY steam:x: a steam: path isn't a location"),
-        ("USE installer", "USE installer\nREMOVE /../../x", "line 7: REMOVE /../../x: it goes above the app's top level"),
+        ("FROM prefix AS her-download", "FROM scratch AS other\nCOPY --from=${input.disc-1} . C:/x\nFROM prefix AS her-download",
+         "line 13: COPY C:/x: no module of this stage handles C: paths (it uses none)"),
+        ("USE installer", "USE installer\nRUN steam:x", "line 8: RUN steam:x: steam: paths are steam's, which the stage doesn't USE"),
+        ("USE installer", "USE installer\nCOPY --from=${input.disc-1} . steam:x", "line 8: COPY steam:x: a steam: path isn't a location"),
+        ("USE installer", "USE installer\nREMOVE /../../x", "line 8: REMOVE /../../x: it goes above the app's top level"),
         // A module's options and mount fields.
         ("USE installer", "USE installer\nRUN --wine.nothing=1 C:/x.exe",
-         "line 7: RUN --wine.nothing: the wine module adds no option nothing to RUN"),
+         "line 8: RUN --wine.nothing: the wine module adds no option nothing to RUN"),
         ("USE installer", "USE installer\nRUN --mount=type=source,from=disc-1,wine.letter=D: C:/x.exe",
-         "line 7: RUN --mount=…,wine.letter=…: the wine module adds no field letter to a source mount"),
+         "line 8: RUN --mount=…,wine.letter=…: the wine module adds no field letter to a source mount"),
         ("USE installer", "USE installer\nRUN --mount=type=source,from=disc-1,steam.drive=D: C:/x.exe",
-         "line 7: RUN --mount=…,steam.drive=…: the stage doesn't USE a module called steam"),
+         "line 8: RUN --mount=…,steam.drive=…: the stage doesn't USE a module called steam"),
         // Names.
-        ("FROM prefix AS disc", "FROM prefix AS 1disc", "line 4: stage name 1disc must start with a letter"),
+        ("FROM prefix AS disc", "FROM prefix AS 1disc", "line 6: stage name 1disc must start with a letter"),
         ("FROM prefix AS disc", "FROM prefix AS disc\nFROM prefix AS DISC", "two stages are called disc"),
-        ("USE installer", "USE installer\nCOPY.RUN x", "line 7: COPY.RUN isn't an instruction: COPY is the core's"),
+        ("USE installer", "USE installer\nCOPY.RUN x", "line 8: COPY.RUN isn't an instruction: COPY is the core's"),
+        // Values: every reference names something declared, in any branch.
+        ("USE installer", "USE installer\nIF ${platform.arch} = \"x\"\n  REMOVE ${const.typo}\nEND",
+         "line 9: REMOVE ${const.typo}: no CONST called typo here"),
+        ("USE installer", "USE installer\nREMOVE ${input.install-dir}", "line 8: REMOVE ${input.install-dir}: install-dir is a CONST"),
+        ("USE installer", "USE installer\nREMOVE ${platform.cpu}", "line 8: REMOVE ${platform.cpu}: the platform has arch and macos"),
+        ("USE nancy-drew AS nd", "USE nancy-drew AS nd\nREMOVE ${nd.data.nothing.x}",
+         "line 9: REMOVE ${nd.data.nothing.x}: the nancy-drew module has no data table nothing"),
+        ("USE nancy-drew AS nd", "USE nancy-drew AS nd\nREMOVE ${nd.data.patches[input.disc-1].ulr}",
+         "line 9: REMOVE ${nd.data.patches[input.disc-1].ulr}: patches"),
+        ("USE installer", "USE installer\nREMOVE ${self.data.x}", "line 8: REMOVE ${self.data.x}: self is only in a module's own files"),
+        ("USE installer", "USE installer\nINPUT late", "line 8: INPUT late: an INPUT is declared before the first FROM"),
+        ("USE installer", "USE installer\nSET install-dir = \"x\"", "line 8: SET install-dir: install-dir is a CONST, which can't be set"),
+        ("USE installer", "USE installer\nSET nothing = \"x\"", "line 8: SET nothing, but there's no VAR called nothing"),
+        ("USE installer", "USE installer\nCONST install-dir = \"x\"", "line 8: CONST install-dir: install-dir is a CONST already"),
     ])
     func catches(_ original: String, _ replacement: String, _ expected: String) throws {
         #expect(Self.valid.contains(original))
         let found = try problems(Self.valid.replacingOccurrences(of: original, with: replacement))
         #expect(found.contains { $0.hasPrefix(expected) }, "\(found)")
+    }
+
+    @Test("A function reads its caller's values only through its own INPUTs")
+    func functionsReadOnlyTheirInputs() throws {
+        let file = Self.valid + "\nFUNCTION f\n  INPUT x\n  REMOVE ${input.x}/${const.install-dir}\nEND"
+        #expect(try problems(file).contains { $0.contains("${const.install-dir}: no CONST called install-dir here (a function reads") })
+    }
+
+    @Test("What nothing reads is warned about")
+    func unusedWarnings() throws {
+        let folder = bundlesRoot.appendingPathComponent("nancy-drew/old-clock")
+        let manifest = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules()).load(folder).get().manifest
+        let found = WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: try shippedModules())
+            .findings(try WrappfileParser.parse("CONST spare = \"x\"\n" + Self.valid))
+        #expect(found.warnings.contains("line 1: CONST spare is never read"))
     }
 
     @Test func aTargetMustBeAStage() throws {
@@ -86,6 +114,7 @@ struct WrappfileCheckerTests {
             .replacingOccurrences(of: "FROM", with: "from").replacingOccurrences(of: " AS ", with: " as ")
             .replacingOccurrences(of: "USE", with: "use").replacingOccurrences(of: "WINE.KEEP-DISCS", with: "wine.keep-discs")
             .replacingOccurrences(of: "INSTALLER.RUN", with: "Installer.Run").replacingOccurrences(of: "DO nd.", with: "do ND.")
+            .replacingOccurrences(of: "CONST", with: "const").replacingOccurrences(of: "INPUT", with: "input")
         #expect(try problems(lower) == [])
     }
 
@@ -100,7 +129,7 @@ struct WrappfileCheckerTests {
         let found = WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: try shippedModules())
             .findings(try WrappfileParser.parse(file))
         #expect(found.errors == [])
-        #expect(found.warnings.contains { $0.hasPrefix("line 4: stage name Disc is written in upper case") })
+        #expect(found.warnings.contains { $0.hasPrefix("line 6: stage name Disc is written in upper case") })
         #expect(found.warnings.contains { $0.contains("copy is a core instruction") })
     }
 
@@ -129,9 +158,12 @@ struct WrappfileCheckerTests {
         USE wine
         RUN --wine.desktop=on --mount=type=cache,wine.size=1 C:/a.exe
         RUN stub:C:/b.exe
-        COPY --from=disc-1 . C:/c
+        COPY --from=nothere . C:/c
         """)
-        #expect(checker.problems(file).filter { $0.hasPrefix("line") } == ["line 5: COPY C:/c: no module of this stage handles C: paths (it uses wine)"])
+        #expect(checker.problems(file).filter { $0.hasPrefix("line") }.sorted() == [
+            "line 5: COPY --from=nothere, but there's no stage called that (an input is written ${input.<name>})",
+            "line 5: COPY C:/c: no module of this stage handles C: paths (it uses wine)",
+        ])
     }
 
     @Test func modulesFunctionsParseAndCheck() throws {

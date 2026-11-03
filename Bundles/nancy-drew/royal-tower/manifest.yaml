@@ -7,45 +7,51 @@ series: "Nancy Drew"
 series-order: 5
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.royal-tower"]
 
-volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+volumes:
   scummvm-saves:
     display-name: "saved games"
   scummvm-settings:
-    in-use-when: "never"                     # only ScummVM's settings
+    in-use-when: "never" # only ScummVM's settings
     display-name: "settings"
-  wine-documents:                            # Wine saves from before the game ran in ScummVM
+  wine-documents: # Wine saves from before the game ran in ScummVM
     in-use-when: ["*/*.Hi*Save", "*/*.SAV", "*/HICONTINUE.*"]
     display-name: "saved games from before"
 
 variants:
   - id: "scummvm"
     volumes:
-      - { source: "scummvm-saves" }          # ScummVM's save path
-      - { source: "scummvm-settings" }       # its settings file, scummvm.ini
+      - { source: "scummvm-saves" } # ScummVM's save path
+      - { source: "scummvm-settings" } # its settings file, scummvm.ini
 
 editions:
   - id: "cd"
     source: "disc"
-    build: { target: "disc" }
-    inputs:
-      - { id: "disc-1" }
+    build:
+      target: "disc"
+      inputs:
+        disc-1: { type: "disc" }
   - id: "her-windows"
     source: "her-download"
-    build: { target: "her-download" }
-    inputs: [{ id: "installer", format: "windows" }]
+    build:
+      target: "her-download"
+      inputs:
+        installer: { type: "her-download", format: "windows" }
   - id: "steam"
     source: "steam"
-    inputs:
-      - { id: "game", app-id: 615780, common-folder: "Nancy Drew Treasure in the Royal Tower", exe: "game.exe" }
+    build:
+      inputs:
+        game: { type: "steam-game", app-id: 615780, common-folder: "Nancy Drew Treasure in the Royal Tower", exe: "game.exe" }
     drm: "no"
   - id: "big-fish"
     source: "big-fish"
-    inputs: [{ id: "game", product: 5229 }]
+    build:
+      inputs:
+        game: { type: "big-fish-game", product: 5229 }
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
 
-notes:                                       # for people only; nothing reads these
+notes:
   installer: "installshield"
   disc-answer-file: "installer-answer-files/royal-tower.iss"
   quirks:

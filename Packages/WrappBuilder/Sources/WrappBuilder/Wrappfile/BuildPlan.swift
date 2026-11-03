@@ -17,8 +17,15 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
     public let edition: String
     /// Dependencies first; the last is the target.
     public let stages: [PlannedStage]
+    /// The bundle's and modules' files its steps read, by their full form
+    /// (`bundle:assets/disc.iss`, `module:nancy-drew/assets/x.au3`), with
+    /// where each is: what install layers hash and builders read.
+    public var files: [String: URL] = [:]
 
     public var target: PlannedStage? { stages.last }
+
+    /// The file a step names in full form, if the plan read one.
+    public func file(_ fullForm: String) -> URL? { files[fullForm] }
 }
 
 public nonisolated struct PlannedStage: Sendable, Equatable {
@@ -31,7 +38,7 @@ public nonisolated struct PlannedStage: Sendable, Equatable {
 
 /// One step, ready to run: every value substituted.
 public nonisolated struct PlannedStep: Sendable, Equatable, CustomStringConvertible {
-    /// `RUN`, `COPY`, … for a core instruction, or `MOUNT` for `wine.MOUNT`.
+    /// `RUN`, `COPY`, … for a core instruction, or `MOUNT` for `WINE.MOUNT`.
     public let instruction: String
     /// The module whose instruction it is, by id; nil for the core's.
     public let module: String?
@@ -57,15 +64,26 @@ public nonisolated struct PlannedStep: Sendable, Equatable, CustomStringConverti
         }
         return ([keyword] + rendered + arguments).joined(separator: " ")
     }
+
+    /// How a whole input is written in a planned step (`input:disc-1`), so a
+    /// builder tells an input from text that looks like one.
+    public static func inputToken(_ name: String) -> String { "input:\(name)" }
+
+    /// The input a word names, if it's an input's token.
+    public static func input(in word: String?) -> String? {
+        guard let word, word.hasPrefix("input:") else { return nil }
+        return String(word.dropFirst("input:".count))
+    }
 }
 
 /// What a build knows before it starts, which `IF`s and `${…}` read.
 public nonisolated struct BuildConditions: Sendable {
-    /// `arch`: `arm64` or `x86_64`, the Mac building the wrapp.
+    /// `${platform.arch}`: `arm64` or `x86_64`, the Mac building the wrapp.
     public var arch: String
-    /// `macos`: its major version.
+    /// `${platform.macos}`: its major version.
     public var macos: Int
-    /// The edition's choices, as chosen (or defaulted).
+    /// Values given to the edition's inputs (a choice's answer), by name,
+    /// over their defaults.
     public var choices: [String: String]
     /// The updates this build applies (empty on a fresh build).
     public var updates: [String]
@@ -117,22 +135,21 @@ public nonisolated struct BuildPlanner {
 
     /// The problems planning finds in any edition's target, for either kind
     /// of Mac and every value of every choice: what only a plan shows (a
-    /// function's path in a stage without its module) found when a bundle
-    /// is checked, not when it's built.
+    /// function's path in a stage without its module, an input given but
+    /// never used) found when a bundle is checked, not when it's built.
     public func problemsPlanningEveryTarget() -> [String] {
         var problems: [String] = []
-        for edition in bundle.manifest.editions where edition.build != nil {
-            let choices = (edition.choices ?? [:]).map { (WrappfileChecker.kebabCase($0.key), $0.value.options) }
+        for edition in bundle.manifest.editions where edition.build?.target != nil {
             var combinations: [[String: String]] = [[:]]
-            for (name, options) in choices {
-                combinations = combinations.flatMap { combination in options.map { combination.merging([name: $0]) { $1 } } }
+            for (name, choice) in (edition.choices ?? [:]).sorted(by: { $0.key < $1.key }) {
+                combinations = combinations.flatMap { combination in choice.options.map { combination.merging([name: $0]) { $1 } } }
             }
             for arch in ["arm64", "x86_64"] {
                 for combination in combinations {
                     do {
                         _ = try plan(edition: edition.id, conditions: BuildConditions(arch: arch, macos: 15, choices: combination))
                     } catch {
-                        let chosen = combination.isEmpty ? "" : ", " + combination.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+                        let chosen = combination.sorted { $0.key < $1.key }.map { ", \($0.key)=\($0.value)" }.joined()
                         problems.append("edition \(edition.id) (\(arch)\(chosen)) doesn't plan: \(error.description)")
                     }
                 }
@@ -142,13 +159,22 @@ public nonisolated struct BuildPlanner {
     }
 
     /// The plan for `editionID`, built for `conditions`. Nil for an edition
-    /// with no `build`: a module's default stages build it.
+    /// with no target: its builder builds it, as it did before Wrappfiles.
+    /// An input the edition gives that the target never reads is an error,
+    /// as it's a typo or something asked for no reason.
     public func plan(edition editionID: String, conditions: BuildConditions) throws(PlanError) -> BuildPlan? {
         guard let edition = bundle.manifest.editions.first(where: { $0.id == editionID }) else {
             throw PlanError(description: "\(bundle.manifest.id) has no edition called \(editionID)")
         }
         guard let target = edition.build?.target else { return nil }
-        return try plan(edition: editionID, target: target, conditions: conditions)
+        let recorder = Recorder()
+        let plan = try plan(edition: edition, target: target, conditions: conditions, recorder: recorder)
+        let unused = (edition.build?.inputs ?? []).map(\.id).filter { !recorder.usedInputs.contains($0) }
+        if !unused.isEmpty {
+            throw PlanError(description: "manifest.yaml's edition \(editionID) gives \(unused.joined(separator: ", ")), "
+                + "which \(target) never reads")
+        }
+        return plan
     }
 
     /// The plan that builds the stage `target` for `editionID`: the
@@ -157,31 +183,55 @@ public nonisolated struct BuildPlanner {
         guard let edition = bundle.manifest.editions.first(where: { $0.id == editionID }) else {
             throw PlanError(description: "\(bundle.manifest.id) has no edition called \(editionID)")
         }
-        var choices = Dictionary(uniqueKeysWithValues: (edition.choices ?? [:]).map { (WrappfileChecker.kebabCase($0.key), $0.value.default) })
-        choices.merge(conditions.choices) { $1 }
-        var effective = conditions
-        effective.choices = choices
-        let context = Context(planner: self, edition: edition, conditions: effective)
+        return try plan(edition: edition, target: target, conditions: conditions, recorder: Recorder())
+    }
+
+    func plan(edition: Manifest.Edition, target: String, conditions: BuildConditions,
+              recorder: Recorder) throws(PlanError) -> BuildPlan {
+        let context = Context(planner: self, edition: edition, conditions: conditions, recorder: recorder)
         var order: [String] = []
         try context.collect(target.lowercased(), into: &order)
+        let globals = try context.globalScope()
         var stages: [PlannedStage] = []
-        var modulesByStage: [String: [String: String]] = [:]
+        var modulesByStage: [String: StageModules] = [:]
         for name in order {
             guard let stage = wrappfile.stage(named: name) else {
                 throw PlanError(description: "the Wrappfile has no stage called \(name)")
             }
-            let planned = try context.plan(stage, inheriting: modulesByStage, isTarget: name == target.lowercased())
-            modulesByStage[name] = planned.aliases
+            let planned = try context.plan(stage, globals: globals, inheriting: modulesByStage, isTarget: name == target.lowercased())
+            modulesByStage[name] = planned.modules
             stages.append(planned.stage)
         }
-        return BuildPlan(edition: editionID, stages: stages)
+        var plan = BuildPlan(edition: edition.id, stages: stages)
+        plan.files = recorder.files
+        return plan
     }
 
-    /// The Wrappfile's global `ARG`s as `editionID` has them
+    /// The Wrappfile's global `CONST`s as `editionID` has them
     /// (`install-dir`), for its lock.
-    public func globalArgs(edition editionID: String) -> [String: String] {
-        guard let edition = bundle.manifest.editions.first(where: { $0.id == editionID }) else { return [:] }
-        return Context(planner: self, edition: edition, conditions: .thisMac).globals
+    public func globalConstants(edition editionID: String) -> [String: String] {
+        guard let edition = bundle.manifest.editions.first(where: { $0.id == editionID }),
+              let scope = try? Context(planner: self, edition: edition, conditions: .thisMac, recorder: Recorder()).globalScope()
+        else { return [:] }
+        var values: [String: String] = [:]
+        for (name, binding) in scope.frames.first ?? [:] {
+            if case .const(let value) = binding, let text = value.text { values[name] = text }
+        }
+        return values
+    }
+
+    /// What planning records as it goes: the edition's inputs read, and the
+    /// files steps name.
+    final class Recorder: @unchecked Sendable {
+        var usedInputs: Set<String> = []
+        var files: [String: URL] = [:]
+    }
+
+    /// A stage's modules: by the name it knows each by, and the version of
+    /// each it has.
+    struct StageModules {
+        var aliases: [String: String] = [:]
+        var versions: [String: String] = [:]
     }
 
     // MARK: - Working it out
@@ -190,13 +240,66 @@ public nonisolated struct BuildPlanner {
         let planner: BuildPlanner
         let edition: Manifest.Edition
         let conditions: BuildConditions
+        let recorder: Recorder
 
-        var globals: [String: String] {
-            var values: [String: String] = [:]
-            for arg in planner.wrappfile.globalArgs {
-                values[arg.name] = arg.value.map { (try? substitute($0, in: Scope(values: values), origin: "")) ?? $0.raw } ?? ""
+        /// What a name is bound to in a scope.
+        enum Binding {
+            /// An `INPUT`: the edition's input, by name, for a global one;
+            /// a value for a function's; nil when nothing gives it one.
+            case input(WrappValue?, editionInput: String?, secret: Bool)
+            case const(WrappValue)
+            /// A `VAR`: nil until something sets it.
+            case variable(WrappValue?)
+        }
+
+        /// What a stage, function or branch knows as it's planned.
+        struct Scope {
+            var modules = StageModules()
+            /// Innermost last: the file's, a stage's or function's, then each
+            /// branch's.
+            var frames: [[String: Binding]] = [[:]]
+            /// In a module's function: the module, `self`.
+            var module: ModuleFolder?
+            /// In a function, which reads its caller's values only through
+            /// its own `INPUT`s.
+            var inFunction = false
+            /// The stages planned before this one, with their modules: where
+            /// a `COPY --from=<stage>` path is.
+            var otherStages: [String: StageModules] = [:]
+
+            func binding(_ name: String) -> Binding? {
+                for frame in frames.reversed() {
+                    if let found = frame[name] { return found }
+                }
+                return nil
             }
-            return values
+
+            mutating func declare(_ name: String, _ binding: Binding) {
+                frames[frames.count - 1][name] = binding
+            }
+
+            /// Sets the innermost `VAR` called `name`; false when there's none.
+            mutating func set(_ name: String, _ value: WrappValue) -> Bool {
+                for index in frames.indices.reversed() {
+                    if case .variable = frames[index][name] {
+                        frames[index][name] = .variable(value)
+                        return true
+                    }
+                    if frames[index][name] != nil { return false }
+                }
+                return false
+            }
+
+            var moduleIDs: Set<ModuleID> { Set(modules.aliases.values.map(ModuleID.init(rawValue:))) }
+        }
+
+        /// The file's `INPUT`s, `CONST`s and `VAR`s, in order.
+        func globalScope() throws(PlanError) -> Scope {
+            var scope = Scope()
+            for instruction in planner.wrappfile.globals {
+                try declare(instruction, in: &scope, origin: "Wrappfile:\(instruction.line)")
+            }
+            return scope
         }
 
         /// The stages `name` needs, dependencies first.
@@ -216,37 +319,25 @@ public nonisolated struct BuildPlanner {
             order.append(name)
         }
 
-        /// What a stage knows as it's planned: its modules by alias, and the
-        /// values its `${…}` read.
-        struct Scope {
-            var aliases: [String: String] = [:]
-            var values: [String: String] = [:]
-            /// In a module's function: the module whose data `${data.…}` reads.
-            var dataModule: ModuleFolder?
-            /// In a module's function, `assets/` is the module's.
-            var assetsRoot: URL?
-            /// The stages planned before this one, by name, with their
-            /// modules: where a `COPY --from=<stage>` path is.
-            var otherStages: [String: [String: String]] = [:]
-        }
-
-        func plan(_ stage: Stage, inheriting: [String: [String: String]],
-                  isTarget: Bool) throws(PlanError) -> (stage: PlannedStage, aliases: [String: String]) {
-            var scope = Scope()
+        func plan(_ stage: Stage, globals: Scope, inheriting: [String: StageModules],
+                  isTarget: Bool) throws(PlanError) -> (stage: PlannedStage, modules: StageModules) {
+            var scope = globals
+            scope.frames.append([:])
             scope.otherStages = inheriting
             switch stage.from {
-            case .stage(let parent): scope.aliases = inheriting[parent] ?? [:]
-            case .module(let id, _, _): addModule(id, as: nil, to: &scope)
+            case .stage(let parent): scope.modules = inheriting[parent] ?? StageModules()
+            case .module(let id, let constraint, _): try addModule(id, constraint: constraint, as: nil, to: &scope, origin: "Wrappfile:\(stage.line)")
             case .scratch: break
             }
             var steps: [PlannedStep] = []
             try expand(stage.body, scope: &scope, origin: "Wrappfile", into: &steps)
             if isTarget {
                 // Each module's `assemble` steps, after the stage's own, with
-                // the bundle's global install-dir.
-                var assembleScope = scope
-                assembleScope.values = globals
-                for id in Set(scope.aliases.values).sorted() {
+                // the bundle's global values.
+                var assembleScope = globals
+                assembleScope.modules = scope.modules
+                assembleScope.otherStages = inheriting
+                for id in Set(scope.modules.aliases.values).sorted() {
                     guard let module = planner.modules[id] else { continue }
                     for line in module.manifest.assemble ?? [] {
                         guard let parsed = try? WrappfileParser.parse("FROM scratch\n" + line) else {
@@ -257,15 +348,26 @@ public nonisolated struct BuildPlanner {
                 }
             }
             let planned = PlannedStage(name: stage.name ?? "", from: stage.from,
-                                       modules: Array(Set(scope.aliases.values)).sorted(), steps: steps)
-            return (planned, scope.aliases)
+                                       modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps)
+            return (planned, scope.modules)
         }
 
-        func addModule(_ id: String, as alias: String?, to scope: inout Scope) {
-            scope.aliases[(alias ?? WrappfileChecker.ownName(id)).lowercased()] = id
-            for dependency in planner.modules[id]?.manifest.dependsOn ?? [] {
-                let dependencyID = WrappfileChecker.splitConstraint(dependency).id.lowercased()
-                if !scope.aliases.values.contains(dependencyID) { addModule(dependencyID, as: nil, to: &scope) }
+        func addModule(_ id: String, constraint: String?, as alias: String?, to scope: inout Scope, origin: String) throws(PlanError) {
+            let id = id.lowercased()
+            let module = planner.modules[id]
+            let versions = (module?.manifest.versions ?? []).map(\.version)
+                .filter { version in constraint.map { WrappfileChecker.matches(version, $0) } ?? true }
+                .sorted { WrappfileChecker.compare($0, $1) == .orderedAscending }
+            if let had = scope.modules.versions[id], let constraint, !WrappfileChecker.matches(had, constraint) {
+                throw PlanError(description: "\(origin): the stage has \(id) \(had) already, which isn't \(constraint)")
+            }
+            if scope.modules.versions[id] == nil, let picked = versions.last { scope.modules.versions[id] = picked }
+            scope.modules.aliases[(alias ?? WrappfileChecker.ownName(id)).lowercased()] = id
+            for dependency in module?.manifest.dependsOn ?? [] {
+                let (dependencyID, dependencyConstraint) = WrappfileChecker.splitConstraint(dependency)
+                if !scope.modules.aliases.values.contains(dependencyID.lowercased()) {
+                    try addModule(dependencyID, constraint: dependencyConstraint, as: nil, to: &scope, origin: origin)
+                }
             }
         }
 
@@ -277,11 +379,17 @@ public nonisolated struct BuildPlanner {
                 case .layer(let inner, _):
                     try expand(inner, scope: &scope, origin: origin, into: &steps)
                 case .conditional(let branches):
-                    for branch in branches where try branch.condition.map({ condition throws(PlanError) in
-                        try holds(condition, scope: scope, origin: Self.locate(origin, line: branch.line))
-                    }) ?? true {
+                    for branch in branches {
+                        if let condition = branch.condition {
+                            guard try holds(condition, scope: scope, origin: Self.locate(origin, line: branch.line)) else { continue }
+                        }
+                        // A branch is a scope: its declarations are its own, and
+                        // a SET of an outer VAR changes it.
                         var inner = scope
+                        inner.frames.append([:])
                         try expand(branch.steps, scope: &inner, origin: origin, into: &steps)
+                        inner.frames.removeLast()
+                        scope.frames = inner.frames
                         break
                     }
                 }
@@ -292,93 +400,168 @@ public nonisolated struct BuildPlanner {
                     into steps: inout [PlannedStep]) throws(PlanError) {
             let at = Self.locate(origin, line: instruction.line)
             switch instruction.keyword {
-            case "ARG":
-                guard let word = instruction.arguments.first else { return }
-                let declaration = WrappfileParser.argDeclaration(word, line: instruction.line)
-                if scope.dataModule != nil {
-                    // A function's parameter: given by DO, or its default.
-                    if scope.values[declaration.name] == nil, let value = declaration.value {
-                        scope.values[declaration.name] = try substitute(value, in: scope, origin: at)
-                    }
-                } else if let value = conditions.choices[declaration.name] ?? globals[declaration.name] {
-                    scope.values[declaration.name] = value
-                }
+            case "INPUT", "CONST", "VAR", "SET":
+                try declare(instruction, in: &scope, origin: at)
             case "USE":
                 let words = instruction.arguments.map(\.raw)
-                let id = WrappfileChecker.splitConstraint(words.first ?? "").id.lowercased()
-                addModule(id, as: words.count == 3 ? words[2] : nil, to: &scope)
+                let (id, constraint) = WrappfileChecker.splitConstraint(words.first ?? "")
+                try addModule(id, constraint: constraint, as: words.count == 3 ? words[2] : nil, to: &scope, origin: at)
             case "DO":
                 try expandFunction(instruction, scope: scope, origin: at, into: &steps)
             default:
-                let module = instruction.moduleAlias.map { scope.aliases[$0] ?? $0 }
+                let module = instruction.moduleAlias.map { scope.modules.aliases[$0] ?? $0 }
                 let spec = spec(of: instruction, module: module)
-                let stageModules = Set(scope.aliases.values.map(ModuleID.init(rawValue:)))
+                let stageModules = scope.moduleIDs
                 var options: [String: [String]] = [:]
                 for option in instruction.options {
-                    var value = try option.value.map { word throws(PlanError) in try substitute(word, in: scope, origin: at) } ?? ""
+                    var role = spec?.role(ofOption: option.name) ?? .text
+                    if instruction.keyword == "COPY", option.name == "from" { role = .input }
+                    var value = try option.value.map { word throws(PlanError) in
+                        try substitute(word, in: scope, origin: at, as: role)
+                    } ?? ""
                     if option.name == "mount" {
                         value = try plannedMount(value, scope: scope, modules: stageModules, origin: at)
-                    } else if let spec {
-                        value = try fullForm(value, role: spec.role(ofOption: option.name), modules: stageModules, origin: at)
+                    } else if role != .input {
+                        value = try fullForm(value, role: role, scope: scope, modules: stageModules, origin: at)
                     }
                     options[moduleOptionName(option.name, scope: scope), default: []].append(value)
                 }
                 var arguments: [String] = []
                 for (index, word) in instruction.arguments.enumerated() {
-                    let value = try substitute(word, in: scope, origin: at)
-                    var role = spec?.role(ofArgument: index) ?? .text
+                    let role = spec?.role(ofArgument: index) ?? .text
+                    let value = try substitute(word, in: scope, origin: at, as: role)
                     if role == .copySource {
                         // A path in the stage copied from is that stage's; one in an input is the input's.
                         guard let from = instruction.option("from")?.value?.raw.lowercased(),
-                              let copied = scope.otherStages[from].map({ Set($0.values.map(ModuleID.init(rawValue:))) }) else {
+                              let copied = scope.otherStages[from] else {
                             arguments.append(value)
                             continue
                         }
-                        arguments.append(try fullForm(value, role: .location, modules: copied, origin: at))
+                        let modules = Set(copied.aliases.values.map(ModuleID.init(rawValue:)))
+                        arguments.append(try fullForm(value, role: .location, scope: scope, modules: modules, origin: at))
                         continue
                     }
-                    if role == .input { role = .text }
-                    arguments.append(try fullForm(value, role: role, modules: stageModules, origin: at))
+                    arguments.append(role == .input ? value : try fullForm(value, role: role, scope: scope, modules: stageModules, origin: at))
                 }
                 steps.append(PlannedStep(instruction: instruction.name, module: module, options: options,
                                          arguments: arguments, name: options["name"]?.first, origin: at))
             }
         }
 
+        /// `INPUT`, `CONST`, `VAR` or `SET`, in `scope`.
+        func declare(_ instruction: Instruction, in scope: inout Scope, origin: String) throws(PlanError) {
+            guard let declaration = Declaration(instruction) else { return }
+            let name = declaration.name
+            switch declaration.kind {
+            case .input:
+                let secret = instruction.option("secret") != nil
+                let fallback = try declaration.value.map { word throws(PlanError) in try evaluate(word, in: scope, origin: origin) }
+                if scope.inFunction {
+                    // Given by DO (bound before the body runs), or else read
+                    // from the caller by name, or else the default.
+                    if case .input(let given?, let editionInput, _) = scope.binding(name) {
+                        scope.declare(name, .input(given, editionInput: editionInput, secret: secret))
+                    } else {
+                        scope.declare(name, .input(fallback, editionInput: nil, secret: secret))
+                    }
+                } else if let input = edition.input(name) {
+                    let value: WrappValue
+                    if input.type == .choice {
+                        value = .text(conditions.choices[name] ?? input.default ?? "")
+                    } else {
+                        value = .object(input.fields.mapValues(WrappValue.text))
+                    }
+                    scope.declare(name, .input(value, editionInput: name, secret: secret))
+                } else if let given = conditions.choices[name] {
+                    scope.declare(name, .input(.text(given), editionInput: nil, secret: secret))
+                } else {
+                    scope.declare(name, .input(fallback, editionInput: nil, secret: secret))
+                }
+            case .const:
+                guard let word = declaration.value else { return }
+                scope.declare(name, .const(try evaluate(word, in: scope, origin: origin)))
+            case .variable:
+                scope.declare(name, .variable(try declaration.value.map { word throws(PlanError) in
+                    try evaluate(word, in: scope, origin: origin)
+                }))
+            case .set:
+                guard let word = declaration.value else { return }
+                let value = try evaluate(word, in: scope, origin: origin)
+                if !scope.set(name, value) {
+                    throw PlanError(description: "\(origin): SET \(name), but there's no VAR called that")
+                }
+            }
+        }
+
         func expandFunction(_ instruction: Instruction, scope: Scope, origin: String,
                             into steps: inout [PlannedStep]) throws(PlanError) {
             guard let name = instruction.arguments.first?.raw.lowercased() else { return }
-            var inner = Scope(aliases: scope.aliases, values: [:], dataModule: nil, assetsRoot: scope.assetsRoot,
-                              otherStages: scope.otherStages)
+            var inner = Scope(modules: scope.modules, frames: [[:]], module: nil, inFunction: true, otherStages: scope.otherStages)
             let function: WrappfileFunction
             let source: String
             if let dot = name.firstIndex(of: ".") {
                 let alias = String(name[..<dot])
                 let functionName = String(name[name.index(after: dot)...])
-                guard let id = scope.aliases[alias], let module = planner.modules[id],
-                      let path = module.manifest.functions?.first(where: { ($0 as NSString).lastPathComponent.lowercased() == functionName }),
+                let module: ModuleFolder?
+                if alias == "self" {
+                    module = scope.module
+                } else if alias == "module" {
+                    module = nil
+                } else {
+                    module = scope.modules.aliases[alias].flatMap { planner.modules[$0] }
+                }
+                guard let module, let path = module.manifest.functions?.first(where: {
+                          ($0 as NSString).lastPathComponent.lowercased() == functionName
+                      }),
                       let text = try? String(contentsOf: module.file(path), encoding: .utf8),
                       let file = try? WrappfileParser.parse(text), let found = file.function(named: functionName) else {
                     throw PlanError(description: "\(origin): no function \(name)")
                 }
                 function = found
-                source = "\(id)/\(path)"
-                inner.dataModule = module
-                inner.assetsRoot = module.folder
+                source = "\(module.manifest.id)/\(path)"
+                inner.module = module
             } else {
                 guard let found = planner.wrappfile.function(named: name) else {
                     throw PlanError(description: "\(origin): no function \(name)")
                 }
                 function = found
                 source = "Wrappfile"
-                inner.dataModule = scope.dataModule
+                inner.module = scope.module
             }
-            for option in instruction.options {
-                inner.values[option.name] = try option.value.map { word throws(PlanError) in try substitute(word, in: scope, origin: origin) } ?? ""
+            // Its INPUTs: the DO's options, or else the caller's input or
+            // constant of the same name; its own default otherwise.
+            for parameter in function.parameters {
+                if let option = instruction.option(parameter.name) {
+                    let value = try option.value.map { word throws(PlanError) in try evaluate(word, in: scope, origin: origin) } ?? .text("")
+                    var editionInput: String?
+                    if let reference = option.value?.lone, reference.root == "input", reference.segments.count == 2,
+                       case .input(_, let fromEdition, _) = scope.binding(reference.plainPath.first ?? "") {
+                        editionInput = fromEdition
+                    }
+                    inner.declare(parameter.name, .input(value, editionInput: editionInput, secret: false))
+                } else {
+                    switch scope.binding(parameter.name) {
+                    case .input(let value?, let editionInput, let secret):
+                        if let editionInput { recorder.usedInputs.insert(editionInput) }
+                        inner.declare(parameter.name, .input(value, editionInput: editionInput, secret: secret))
+                    case .const(let value):
+                        inner.declare(parameter.name, .input(value, editionInput: nil, secret: false))
+                    default:
+                        break
+                    }
+                }
             }
-            // A bundle function's ARGs are its parameters too: mark it a function.
-            if inner.dataModule == nil { inner.dataModule = ModuleFolder.none }
+            for option in instruction.options where option.name != "name" && !function.parameters.contains(where: { $0.name == option.name }) {
+                throw PlanError(description: "\(origin): DO \(name) takes no --\(option.name)")
+            }
             try expand(function.body, scope: &inner, origin: "\(source) from \(origin)", into: &steps)
+        }
+
+        /// `origin` with `line` after its file: `nancy-drew/functions/patch:30
+        /// from Wrappfile:16`.
+        static func locate(_ origin: String, line: Int) -> String {
+            guard let from = origin.range(of: " from ") else { return "\(origin):\(line)" }
+            return "\(origin[..<from.lowerBound]):\(line)\(origin[from.lowerBound...])"
         }
 
         // MARK: - Paths and modules' additions
@@ -395,11 +578,11 @@ public nonisolated struct BuildPlanner {
         func moduleOptionName(_ name: String, scope: Scope) -> String {
             guard let dot = name.firstIndex(of: ".") else { return name }
             let alias = name[..<dot].lowercased()
-            return "\(scope.aliases[alias] ?? alias).\(name[name.index(after: dot)...])"
+            return "\(scope.modules.aliases[alias] ?? alias).\(name[name.index(after: dot)...])"
         }
 
         /// A `--mount=` value with its fields' aliases made ids and its
-        /// paths in full form.
+        /// paths and files in full form.
         func plannedMount(_ value: String, scope: Scope, modules: Set<ModuleID>, origin: String) throws(PlanError) -> String {
             var fields: [String] = []
             for part in value.split(separator: ",", omittingEmptySubsequences: false) {
@@ -411,25 +594,27 @@ public nonisolated struct BuildPlanner {
                 }
                 var text = String(pair[1])
                 if let role = InstructionSpec.mountFieldRoles[key] {
-                    text = try fullForm(text, role: role, modules: modules, origin: origin)
+                    text = try fullForm(text, role: role, scope: scope, modules: modules, origin: origin)
                 }
                 fields.append("\(key)=\(text)")
             }
             return fields.joined(separator: ",")
         }
 
-        /// `path` in its full form (`C:/x` as `wine:C:/x`), for the stage's
-        /// `modules`: what `sc bundle plan`, layer keys and builders see, so
-        /// each says which type took a path. The stage-dependent checks the
-        /// checker can't make in a function's body are made here.
-        func fullForm(_ path: String, role: InstructionSpec.Role, modules: Set<ModuleID>, origin: String) throws(PlanError) -> String {
+        /// `path` in its full form (`C:/x` as `wine:C:/x`, `assets/disc.iss`
+        /// as `bundle:assets/disc.iss`), for the stage's `modules`: what `sc
+        /// bundle plan`, layer keys and builders see, so each says which type
+        /// took a path. The stage-dependent checks the checker can't make in a
+        /// function's body are made here.
+        func fullForm(_ path: String, role: InstructionSpec.Role, scope: Scope, modules: Set<ModuleID>,
+                      origin: String) throws(PlanError) -> String {
             let pathRole: PathType.Role
             switch role {
             case .location, .copySource: pathRole = .location
             case .program: pathRole = .program
+            case .file: return try fileFullForm(path, scope: scope, origin: origin)
             case .input, .text: return path
             }
-            if path.hasPrefix("asset:") { return path }
             if let (type, _) = planner.pathTypes.split(path) {
                 guard type.roles.contains(pathRole) else {
                     throw PlanError(description: "\(origin): \(path): a \(type.name): path isn't a \(pathRole.rawValue)")
@@ -460,170 +645,233 @@ public nonisolated struct BuildPlanner {
             }
         }
 
-        /// `origin` with `line` after its file: `nancy-drew/functions/patch:30
-        /// from Wrappfile:16`.
-        static func locate(_ origin: String, line: Int) -> String {
-            guard let from = origin.range(of: " from ") else { return "\(origin):\(line)" }
-            return "\(origin[..<from.lowerBound]):\(line)\(origin[from.lowerBound...])"
+        /// A file the build reads, in full form: a relative path is the
+        /// bundle's, or in a module's function the module's; `module:<id>/…`
+        /// is another module's. Recorded with where it is, and refused when
+        /// it isn't there (but for one a module's Swift provides).
+        func fileFullForm(_ path: String, scope: Scope, origin: String) throws(PlanError) -> String {
+            let fullForm: String
+            let location: URL?
+            if path.hasPrefix("bundle:") || path.hasPrefix("module:") || path.hasPrefix("/") {
+                fullForm = path
+            } else if let module = scope.module {
+                fullForm = "module:\(module.manifest.id)/\(path)"
+            } else {
+                fullForm = "bundle:\(path)"
+            }
+            if fullForm.hasPrefix("bundle:") {
+                location = planner.bundle.folder.appendingPathComponent(String(fullForm.dropFirst("bundle:".count)))
+            } else if fullForm.hasPrefix("module:") {
+                let rest = fullForm.dropFirst("module:".count)
+                let id = String(rest.prefix { $0 != "/" })
+                let file = String(rest.dropFirst(id.count + 1))
+                guard let module = planner.modules[id] else {
+                    throw PlanError(description: "\(origin): \(fullForm): there's no \(id) module")
+                }
+                if planner.native(module.manifest.native ?? "")?.providedFiles.contains(file) == true { return fullForm }
+                location = module.file(file)
+            } else {
+                return path
+            }
+            if let location {
+                guard FileManager.default.fileExists(atPath: location.path) else {
+                    throw PlanError(description: "\(origin): \(fullForm): there's no such file")
+                }
+                recorder.files[fullForm] = location
+            }
+            return fullForm
         }
 
         // MARK: - Values
 
         func holds(_ condition: Condition, scope: Scope, origin: String) throws(PlanError) -> Bool {
-            let name = try substitute(Word(raw: condition.name, parts: (try? WrappfileParser.parts(of: condition.name, line: 0)) ?? []),
-                                      in: scope, origin: origin)
-            let actual: String?
-            var list: [String]?
-            switch condition.name {
-            case "arch": actual = conditions.arch
-            case "macos": actual = String(conditions.macos)
-            case "updates":
-                list = conditions.updates
-                actual = conditions.updates.isEmpty ? nil : conditions.updates.joined(separator: ",")
-            default:
-                if condition.name.hasPrefix("previous.") {
-                    let key = String(condition.name.dropFirst("previous.".count))
-                    if key == "skipped" { list = conditions.previous["skipped"]?.split(separator: ",").map(String.init) ?? [] }
-                    actual = conditions.previous[key]
-                } else if condition.name.contains("${") {
-                    actual = name
-                } else {
-                    actual = scope.values[condition.name] ?? conditions.choices[condition.name]
-                }
-            }
-            guard let comparison = condition.comparison, let expected = condition.value else {
-                return actual != nil && actual != ""
-            }
-            if comparison == .has { return (list ?? []).contains(expected) }
-            guard let actual else { return comparison == .notEquals }
-            switch comparison {
-            case .equals: return actual == expected
-            case .notEquals: return actual != expected
-            case .atLeast: return actual.compare(expected, options: .numeric) != .orderedAscending
-            case .atMost: return actual.compare(expected, options: .numeric) != .orderedDescending
-            case .greater: return actual.compare(expected, options: .numeric) == .orderedDescending
-            case .less: return actual.compare(expected, options: .numeric) == .orderedAscending
-            case .has: return false
+            let left = try substitute(condition.left, in: scope, origin: origin, as: .text)
+            let right = try substitute(condition.right, in: scope, origin: origin, as: .text)
+            switch condition.comparison {
+            case .equals: return left == right
+            case .notEquals: return left != right
             }
         }
 
-        func substitute(_ word: Word, in scope: Scope, origin: String) throws(PlanError) -> String {
+        /// A declaration's right-hand side: a lone `${…}` keeps its value as
+        /// it is (an object stays one); anything else is text.
+        func evaluate(_ word: Word, in scope: Scope, origin: String) throws(PlanError) -> WrappValue {
+            if !word.quoted, let reference = word.lone {
+                return try value(of: reference, in: scope, origin: origin, whole: true)
+            }
+            return .text(try substitute(word, in: scope, origin: origin, as: .text))
+        }
+
+        /// A word as text. A whole input where an input is taken is its
+        /// token (`input:disc-1`); a secret input's reference is left as it
+        /// is, for the builder to fill in, so it never reaches a step's text.
+        func substitute(_ word: Word, in scope: Scope, origin: String, as role: InstructionSpec.Role) throws(PlanError) -> String {
+            if role == .input, let reference = word.lone, reference.root == "input", reference.segments.count == 2,
+               let name = reference.plainPath.first, case .input(_, let editionInput?, _) = scope.binding(name) {
+                recorder.usedInputs.insert(editionInput)
+                if case .input(.text?, _, _)? = scope.binding(name) {
+                    throw PlanError(description: "\(origin): ${\(reference)} is a choice, not an input to take things from")
+                }
+                return PlannedStep.inputToken(editionInput)
+            }
             var result = ""
             for part in word.parts {
                 switch part {
-                case .text(let text): result += text
-                case .substitution(let expression): result += try value(of: expression, in: scope, origin: origin)
+                case .text(let text):
+                    result += text
+                case .substitution(let expression):
+                    let reference: Reference
+                    do {
+                        reference = try Reference.parse(expression)
+                    } catch {
+                        throw PlanError(description: "\(origin): \(error.message)")
+                    }
+                    if reference.root == "input", let name = reference.plainPath.first,
+                       case .input(_, _, true)? = scope.binding(name) {
+                        result += "${\(expression)}"
+                        continue
+                    }
+                    switch try value(of: reference, in: scope, origin: origin, whole: false) {
+                    case .text(let text): result += text
+                    default:
+                        throw PlanError(description: "\(origin): ${\(expression)} isn't text: name a field of it")
+                    }
                 }
             }
             return result
         }
 
-        func value(of expression: String, in scope: Scope, origin: String) throws(PlanError) -> String {
-            // Nested substitutions first: data.patches.${id}.url
-            let resolved: String
-            if expression.contains("${") {
-                let parts = (try? WrappfileParser.parts(of: expression, line: 0)) ?? []
-                resolved = try substitute(Word(raw: expression, parts: parts), in: scope, origin: origin)
-            } else {
-                resolved = expression
-            }
-            if resolved.hasPrefix("assets/") {
-                // A bundle file (or, in a module's function, the module's),
-                // mounted for the step: the executor picks where.
-                let root = scope.assetsRoot ?? planner.bundle.folder
-                return "asset:" + root.appendingPathComponent(resolved).path
-            }
-            if resolved.hasPrefix("inputs.") {
-                let parts = resolved.split(separator: ".").map(String.init)
-                guard parts.count == 3, let input = edition.inputs?.first(where: { $0.id == parts[1] }) else {
-                    throw PlanError(description: "\(origin): ${\(resolved)}: no such input")
+        /// What `reference` names.
+        func value(of reference: Reference, in scope: Scope, origin: String, whole: Bool) throws(PlanError) -> WrappValue {
+            let at = "\(origin): ${\(reference)}"
+            var remaining = Array(reference.segments.dropFirst())
+            func nextName() throws(PlanError) -> String {
+                guard case .name(let name)? = remaining.first else {
+                    throw PlanError(description: "\(at): a name is missing")
                 }
-                let fields: [String: String?] = ["id": input.id, "format": input.format, "app-id": input.appId.map(String.init),
-                                                 "common-folder": input.commonFolder, "exe": input.exe]
-                guard let value = fields[parts[2]] ?? nil else {
-                    throw PlanError(description: "\(origin): ${\(resolved)}: input \(parts[1]) has no \(parts[2])")
+                remaining.removeFirst()
+                return name
+            }
+            var current: WrappValue
+            switch reference.root {
+            case "input":
+                let name = try nextName()
+                guard case .input(let value, let editionInput, _)? = scope.binding(name) else {
+                    throw PlanError(description: "\(at): no INPUT called \(name) here")
                 }
-                return value
+                if let editionInput { recorder.usedInputs.insert(editionInput) }
+                guard let value else {
+                    throw PlanError(description: "\(at): manifest.yaml's edition \(edition.id) gives no \(name), and the INPUT has no default")
+                }
+                current = value
+            case "const", "var":
+                let name = try nextName()
+                switch scope.binding(name) {
+                case .const(let value) where reference.root == "const":
+                    current = value
+                case .variable(let value) where reference.root == "var":
+                    guard let value else { throw PlanError(description: "\(at): VAR \(name) is read before anything sets it") }
+                    current = value
+                default:
+                    throw PlanError(description: "\(at): no \(reference.root.uppercased()) called \(name) here")
+                }
+            case "platform":
+                switch try nextName() {
+                case "arch": current = .text(conditions.arch)
+                case "macos": current = .text(String(conditions.macos))
+                case let other: throw PlanError(description: "\(at): platform has no \(other) (arch, macos)")
+                }
+            case "program":
+                throw PlanError(description: "\(at): program is only read by a signal")
+            case "self":
+                guard let module = scope.module else { throw PlanError(description: "\(at): self is only in a module's files") }
+                current = try moduleValue(module, remaining: &remaining, scope: scope, at: at)
+            case "module":
+                let name = try nextName()
+                guard let id = scope.modules.aliases[name.lowercased()], let module = planner.modules[id] else {
+                    throw PlanError(description: "\(at): the stage has no module called \(name)")
+                }
+                current = try moduleValue(module, remaining: &remaining, scope: scope, at: at)
+            case let root:
+                guard let id = scope.modules.aliases[root.lowercased()], let module = planner.modules[id] else {
+                    throw PlanError(description: "\(at): \(root) is no namespace, and no module of the stage")
+                }
+                current = try moduleValue(module, remaining: &remaining, scope: scope, at: at)
             }
-            if resolved.hasPrefix("data.") {
-                return try dataValue(resolved, in: scope, origin: origin)
-            }
-            // name, name:-default, name:dir, name:file
-            var name = resolved
-            var fallback: String?
-            var part: String?
-            if let range = resolved.range(of: ":-") {
-                name = String(resolved[..<range.lowerBound])
-                fallback = String(resolved[range.upperBound...])
-            } else if let colon = resolved.lastIndex(of: ":"), ["dir", "file"].contains(String(resolved[resolved.index(after: colon)...])) {
-                name = String(resolved[..<colon])
-                part = String(resolved[resolved.index(after: colon)...])
-            }
-            guard let value = scope.values[name], !value.isEmpty || fallback == nil else {
-                if let fallback { return fallback }
-                throw PlanError(description: "\(origin): ${\(resolved)}: nothing called \(name) is brought in")
-            }
-            switch part {
-            case "dir": return (value as NSString).deletingLastPathComponent
-            case "file": return (value as NSString).lastPathComponent
-            default: return value
-            }
+            return try walk(current, remaining, scope: scope, origin: origin, at: at)
         }
 
-        /// `data.<table>.<key>.<field>…` in the function's module: a table's
-        /// key is a property of an object, or the `id` of an item in a list
-        /// (a table that is one list under a single key, as `patches.json`'s
-        /// `patches`, is looked up by its items' ids).
-        func dataValue(_ expression: String, in scope: Scope, origin: String) throws(PlanError) -> String {
-            let fallback: String?
-            var path = expression
-            if let range = expression.range(of: ":-") {
-                fallback = String(expression[range.upperBound...])
-                path = String(expression[..<range.lowerBound])
-            } else {
-                fallback = nil
-            }
-            let parts = path.split(separator: ".").map(String.init).dropFirst()
-            guard let module = scope.dataModule, module.manifest.id != ModuleFolder.none.manifest.id, let table = parts.first,
-                  let file = module.manifest.data?.first(where: { ($0 as NSString).deletingPathExtension == table }),
-                  var node = try? ModuleLoader.table(file, of: module) else {
-                throw PlanError(description: "\(origin): ${\(expression)}: no data table \(parts.first ?? "")")
-            }
-            for key in parts.dropFirst() {
-                guard let next = Self.lookup(key, in: node) else {
-                    if let fallback { return fallback }
-                    throw PlanError(description: "\(origin): ${\(expression)}: \(table) has no \(key)")
+        /// A module's `version`, or a table of its `data`.
+        func moduleValue(_ module: ModuleFolder, remaining: inout [Reference.Segment], scope: Scope, at: String) throws(PlanError) -> WrappValue {
+            guard case .name(let field)? = remaining.first else { throw PlanError(description: "\(at): name version or data") }
+            remaining.removeFirst()
+            switch field {
+            case "version":
+                let id = module.manifest.id.lowercased()
+                guard let version = scope.modules.versions[id] ?? module.manifest.versions.last?.version else {
+                    throw PlanError(description: "\(at): \(id) has no version")
                 }
-                node = next
-            }
-            switch node {
-            case let text as String: return text
-            case let flag as Bool: return flag ? "true" : "false"
-            case let number as Int: return String(number)
-            case let number as Double: return String(number)
+                return .text(version)
+            case "data":
+                guard case .name(let table)? = remaining.first else { throw PlanError(description: "\(at): name a table") }
+                remaining.removeFirst()
+                guard let file = module.manifest.data?.first(where: { ($0 as NSString).deletingPathExtension == table }) else {
+                    throw PlanError(description: "\(at): \(module.manifest.id) has no data table \(table)")
+                }
+                do {
+                    return try ModuleTables.shared.table(file, of: module)
+                } catch {
+                    throw PlanError(description: "\(at): \(module.manifest.id)'s \(file) couldn't be read: \(error)")
+                }
             default:
-                if let fallback { return fallback }
-                throw PlanError(description: "\(origin): ${\(expression)} isn't a value")
+                throw PlanError(description: "\(at): a module has version and data, not \(field)")
             }
         }
 
-        static func lookup(_ key: String, in node: Any) -> Any? {
-            if let object = node as? [String: Any] {
-                if let value = object[key] { return value }
-                let lists = object.values.compactMap { $0 as? [Any] }
-                if lists.count == 1 { return lookup(key, in: lists[0]) }
-                return nil
+        /// `value` down `segments`: each a property, or an item of a list by
+        /// its `id`, a bracket's key worked out first.
+        func walk(_ value: WrappValue, _ segments: [Reference.Segment], scope: Scope, origin: String, at: String) throws(PlanError) -> WrappValue {
+            var current = value
+            for segment in segments {
+                let key: String
+                switch segment {
+                case .name(let name): key = name
+                case .key(let inner):
+                    guard let text = try self.value(of: inner, in: scope, origin: origin, whole: false).text else {
+                        throw PlanError(description: "\(at): [\(inner)] isn't text")
+                    }
+                    key = text
+                }
+                guard let next = current.member(key) else {
+                    throw PlanError(description: "\(at): there's no \(key)")
+                }
+                current = next
             }
-            if let list = node as? [Any] {
-                return list.first { ($0 as? [String: Any])?["id"] as? String == key }
-            }
-            return nil
+            return current
         }
     }
 }
 
-nonisolated extension ModuleFolder {
-    /// Marks a bundle's own function's scope, which has no module data.
-    static let none = ModuleFolder(folder: URL(fileURLWithPath: "/"), manifest: ModuleManifest(
-        format: 1, id: "", release: 1, native: nil, versions: [], dependsOn: nil, data: nil, assets: nil, functions: nil, assemble: nil, updates: nil))
+/// Modules' data tables, read once each, with their schemas' defaults
+/// filled in.
+nonisolated final class ModuleTables: @unchecked Sendable {
+    static let shared = ModuleTables()
+    private let lock = NSLock()
+    private var cache: [URL: WrappValue] = [:]
+
+    func table(_ file: String, of module: ModuleFolder) throws -> WrappValue {
+        let url = module.file(file)
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = cache[url] { return cached }
+        var data = try ModuleLoader.table(file, of: module)
+        let schemaFile = module.file((file as NSString).deletingPathExtension + ".schema.json")
+        if let schemaData = try? Data(contentsOf: schemaFile),
+           let schema = try JSONSerialization.jsonObject(with: schemaData) as? [String: Any] {
+            data = SchemaDefaults.fill(data, schema: schema, root: schema)
+        }
+        let value = WrappValue(data)
+        cache[url] = value
+        return value
+    }
 }

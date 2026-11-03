@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "nancy-drew"
-release: 6
+release: 7
 versions:
   - { version: "1" }
 depends-on: ["wine@10"]                      # its installers and patches run in Wine
@@ -13,6 +13,6 @@ assets:
   - "needles"                                            # WrappPuppeteer's: what its scenario looks for, by tag
   - "scenarios/quit-from-menu.yaml"                      # and the scenario every game's bundle names
 functions: ["functions/patch", "functions/configure-ini"]   # DO nancy-drew.<name>
-assemble: ["DO nancy-drew.configure-ini --into=${install-dir}"]   # after every final stage that USEs it; install-dir is the bundle's global ARG
+assemble: ["DO nancy-drew.configure-ini --into=${const.install-dir}"]   # after every final stage that USEs it, with the bundle's install-dir
 notes:
   about: "What every Nancy Drew game shares: Her Interactive's installers, patches, settings and screens."

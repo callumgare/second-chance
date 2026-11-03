@@ -7,45 +7,51 @@ series: "Nancy Drew"
 series-order: 4
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.haunted-mansion"]
 
-volumes:                                     # kept outside the app: Application Support/<bundle id>/volumes/
+volumes:
   scummvm-saves:
     display-name: "saved games"
   scummvm-settings:
-    in-use-when: "never"                     # only ScummVM's settings
+    in-use-when: "never" # only ScummVM's settings
     display-name: "settings"
-  wine-documents:                            # Wine saves from before the game ran in ScummVM
+  wine-documents: # Wine saves from before the game ran in ScummVM
     in-use-when: ["*/*.Hi*Save", "*/*.SAV", "*/HICONTINUE.*"]
     display-name: "saved games from before"
 
 variants:
   - id: "scummvm"
     volumes:
-      - { source: "scummvm-saves" }          # ScummVM's save path
-      - { source: "scummvm-settings" }       # its settings file, scummvm.ini
+      - { source: "scummvm-saves" } # ScummVM's save path
+      - { source: "scummvm-settings" } # its settings file, scummvm.ini
 
 editions:
   - id: "cd"
     source: "disc"
-    build: { target: "disc" }
-    inputs:
-      - { id: "disc-1" }
+    build:
+      target: "disc"
+      inputs:
+        disc-1: { type: "disc" }
   - id: "her-windows"
     source: "her-download"
-    build: { target: "her-download" }
-    inputs: [{ id: "installer", format: "windows" }]
+    build:
+      target: "her-download"
+      inputs:
+        installer: { type: "her-download", format: "windows" }
   - id: "steam"
     source: "steam"
-    inputs:
-      - { id: "game", app-id: 615770, common-folder: "Nancy Drew Message in a Haunted Mansion", exe: "Game.exe" }
+    build:
+      inputs:
+        game: { type: "steam-game", app-id: 615770, common-folder: "Nancy Drew Message in a Haunted Mansion", exe: "Game.exe" }
     drm: "no"
   - id: "big-fish"
     source: "big-fish"
-    inputs: [{ id: "game", product: 5517 }]
+    build:
+      inputs:
+        game: { type: "big-fish-game", product: 5517 }
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
 
-notes:                                       # for people only; nothing reads these
+notes:
   quirks:
     - "Runs in ScummVM, which reads the installed data; Wine only installs it."
     - "Her's Windows download has no answer file, so it installs with its wizard and can't be built headless."

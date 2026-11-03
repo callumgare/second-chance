@@ -57,7 +57,14 @@ updates:                       # its default updates, after a bundle's
 A module's data tables are YAML, read as YAML 1.2 as bundles are
 ([program-bundles.md](program-bundles.md#how-a-manifest-is-read)), and a table
 with a schema beside it (`prefix.yaml` and `prefix.schema.json`) is checked
-against it whenever the module is loaded. A module's `updates` are run after a
+against it whenever the module is loaded. A Wrappfile reads a table as
+`${<module>.data.<table>…}` (in the module's own functions,
+`${self.data.<table>…}`), and the module's release as `${<module>.version}`
+([wrappfile.md](wrappfile.md#values)). The schema is what the checker
+checks such a path against, and a field it gives a `default` reads as that
+when a table leaves it out, so a function needs no fallback
+(`patches.schema.json` gives `destinationSubdirectory` `""` and `automation`
+`none`). A module's `updates` are run after a
 bundle's for a wrapp whose copy of the module is behind, as
 [wrapp-build.md](wrapp-build.md#updating-a-wrapp) describes; one with no
 `build` is done by the module's own Swift. The rest of the format (functions,
