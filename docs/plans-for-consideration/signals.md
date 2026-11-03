@@ -8,10 +8,7 @@ appearing.
 
 It builds on work proposed with it, which isn't built yet either:
 
-- `SERVICE` taking a program, where only a module's service programs can be
-  services, as each knows when it's ready (`steam://client`, ready once
-  signed in);
-- `LAUNCH`;
+- `LAUNCH`, whose program's path type says which engine starts it;
 - values read through namespaces in `${…}` (`${input.…}`, `${const.…}`),
   all known when planning;
 - path types (`wine:C:/…`).
@@ -31,6 +28,40 @@ line, a file, a window, a process.
 The same idea covers more than readiness. A launch's "started", "failed"
 and "quit cleanly" are what the loading window and the quit watch work out
 today, in Swift, the same way for every game.
+
+## `SERVICE`
+
+A program running beside the game while someone plays (a service) is
+behaviour a reader should see on its own line, not in a flag on `LAUNCH`.
+The work this builds on leaves it out, because nothing needs one yet (the
+only one would be Steam running beside a game it doesn't start, which is no
+longer built) and a service has to say when it's ready, which is what
+signals are for. So it's designed here:
+
+```text
+SERVICE [--name=<id>] [--ready=<signal>] [--env NAME=<value>]… <program> [<argument>…]
+SERVICE --remove <program or name>
+```
+
+- **It takes a program, as `LAUNCH` and `RUN` do**, under the same path
+  type rules. Services start before the launch in the order written, and
+  stop after it in the reverse order.
+- **Each waits until it's ready before the next starts**: until its
+  `--ready` signal, or, for a program a module registers as a service
+  program (`steam://client`, ready once signed in), the module's own
+  readiness check, which `--ready` can still override. A program with
+  neither is an error, saying nothing would tell when it was ready.
+- **Wine's desktop isn't a service.** It's how the wine module gets going
+  (`WineDesktop`), and comes before any service.
+- **Services build up and are inherited through `FROM`.** Unlike `LAUNCH`,
+  later ones don't replace earlier ones.
+- **`SERVICE --remove` takes one off**, named by its `--name` or its program
+  in either form; removing one the stage doesn't have is an error.
+- **A module taken out of the stage takes its services with it**:
+  `STEAM.REMOVE` drops a `SERVICE steam://client`.
+- **A launch's `--fallback` runs with the same services.**
+- **It's recorded with the launch**, not a step, so it changes no layer
+  key. `--env` on a service is refused for a secret input, as on `LAUNCH`.
 
 ## The shape
 
