@@ -96,6 +96,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits; or Wine's desktop (`WineDesktop`) and ending a Wine session, how Wine behaves under load, a launch's diagnostics bundles, or scripting a launch past the save warning |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
 | [docs/failure-reports.md](docs/failure-reports.md) | You are touching failure or crash reporting — `Packages/SecondChanceKit/Sources/SecondChanceReporting/`, Sentry and its set-up, the report-level setting, what a basic or detailed report contains and how it is redacted, the error screens' report callout, adding a failure that should be reported, or the success reports that count builds and launches |
+| [docs/plans-for-consideration/](docs/plans-for-consideration/) | You are about to build something a program needs and want to know whether it was already thought through. Designs worked out but deliberately not built yet — never cite one as current behaviour |
 | [docs/historical-plans/](docs/historical-plans/)   | You want the reasoning behind a past design decision. Frozen records of what was intended at a moment — never cite one as current behaviour                                |
 | [docs/historical-plans/2026-11-03-engines-on-demand.md](docs/historical-plans/2026-11-03-engines-on-demand.md) | You want to know why Wine, ScummVM and DOSBox are fetched from their makers and prepared on the Mac that builds rather than shipped in Second Chance, why a prepared engine is hashed before it's signed, how `install_name_tool` was avoided, or why nothing is downloaded in the background |
 | [docs/historical-plans/2026-11-03-generic-programs.md](docs/historical-plans/2026-11-03-generic-programs.md) | You want to know why each game is a program bundle built by a Wrappfile from modules, why builds cache layers, how a wrapp updates from itself, or what was weighed from other projects (Docker, Lutris, Bottles, Wineskin…) along the way |
@@ -145,6 +146,11 @@ Documentation is part of a change, not a follow-up to it.
   They are not updated as the code moves on. If one has to be edited because it
   is actively misleading someone, mark the edit inline as post-implementation,
   dated, with who changed it and why — never a silent rewrite.
+- Plans under `docs/plans-for-consideration/` are designs worked out but put
+  off until something needs them. Each says what would prompt building it and
+  what it builds on. Like frozen plans they aren't kept current as the code
+  moves on: whoever takes one up checks it against the code first, and once
+  it's built it moves to `docs/historical-plans/` as any finished plan does.
 - In any files that are commited (unlike files such as this in the .local dir) you should never refer to details specific
 to the current user's setup such as file paths outside the source code repo or remote machines they may connect to for testing.
 
