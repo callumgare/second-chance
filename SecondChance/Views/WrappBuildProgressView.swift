@@ -6,7 +6,10 @@
 
 import SwiftUI
 import GameCatalog
+import Logging
 import SecondChanceKit
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildProgressView")
 
 struct WrappBuildProgressView: View {
     @Environment(WrappBuildViewModel.self) var viewModel
@@ -221,13 +224,36 @@ struct WrappBuildProgressView: View {
                     viewModel.reset()
                 }
                 if let url = viewModel.builtWrappURL {
+                    // Until the game's app has launched, when its Dock icon
+                    // and loading window take over saying it's starting.
+                    if startingGame {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel("Starting the game")
+                    }
                     Button("Play Now") {
-                        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-                        viewModel.reset()
+                        play(url)
                     }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(startingGame)
                 }
             }
+        }
+    }
+
+    @State private var startingGame = false
+
+    /// Open the game's app, the screen staying as it is: Done goes back to
+    /// the start.
+    private func play(_ url: URL) {
+        startingGame = true
+        Task {
+            do {
+                _ = try await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            } catch {
+                logger.error("Couldn't open the game's app \(url.path): \(error.localizedDescription)")
+            }
+            startingGame = false
         }
     }
 
