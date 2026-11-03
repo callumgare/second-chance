@@ -265,7 +265,7 @@ succeeds without them.
   Lake all use the ScummVM engine, yet Her Interactive only ever shipped
   Windows patchers, which rewrite the game's data files. Those data files are
   what ScummVM reads, so patching them is meaningful — and Wine is still in the
-  wrapp at that moment, because `cleanupUnusedEngine` strips it one step later.
+  wrapp at that moment, because `cleanupUnusedEngine` takes it out one step later.
   This is why `installGameWithScummVM` applies patches at all, and it is the
   only window in which it can. These patchers were written to target a normal
   Windows install rather than the disk layout a ScummVM wrapp uses, so treat

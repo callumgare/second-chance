@@ -170,8 +170,6 @@ struct SteamWrappBuilderTests {
         try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
             .write(to: contents.appendingPathComponent("Info.plist"))
         try fm.copyItem(atPath: "/usr/bin/true", toPath: contents.appendingPathComponent("MacOS/WrappTemplate").path)
-        fm.createFile(atPath: contents.appendingPathComponent("Resources/wine-files").path, contents: Data())
-        fm.createFile(atPath: contents.appendingPathComponent("Resources/scummvm-files").path, contents: Data())
         try fm.createSymbolicLink(atPath: contents.appendingPathComponent("SharedSupport/prefix/dosdevices/a:").path,
                                   withDestinationPath: "/tmp")
     }

@@ -378,9 +378,10 @@ button, for checking a crash end to end.
 ## Linking
 
 The static `Sentry` product is linked into Second Chance and WrappTemplate.
-**It must stay static in WrappTemplate**: a wrapp's `Contents/Frameworks` is
-replaced by the engine's (`setupWineFramework`), and the wrapp is only ad-hoc
-signed on the outer bundle. `check-output-collisions.sh` fails the build if
+**It must stay static in WrappTemplate**: engines are installed into a
+wrapp's `Contents/Frameworks` beside the launcher's files, which keeps nothing
+there of its own but the in-process helpers, and the wrapp is only ad-hoc
+signed on the outer bundle. `check-static-linking.sh` fails the build if
 Sentry is linked dynamically.
 
 Xcode still embeds an empty 52 KB `Sentry.framework` that only carries

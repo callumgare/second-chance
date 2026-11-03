@@ -69,7 +69,10 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
         let unpacked = FileManager.default.temporaryDirectory.appendingPathComponent("SecondChance-download-\(UUID().uuidString)")
         logger.notice("Temporary wrapp: \(wrappPath.path)")
         do {
-            try await helper.createBaseWrapp(at: wrappPath)
+            // A game Wine doesn't run needs no Wine to build: its files are
+            // only copied in.
+            try await helper.createBaseWrapp(at: wrappPath, composition: game.composition,
+                                             buildsWithWine: game.composition.has(.wine))
             let request = try DownloadRequest(chosen.input)
             let big = (request.size ?? 0) > Self.bigDownload
             await bus.publishWrappBuild(.progress(.copyingInstaller(substep: big

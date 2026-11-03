@@ -89,7 +89,7 @@ touching — the rows say _when_ to read, not what is in them:
 | [docs/modules.md](docs/modules.md)                 | You are touching `Modules/` — a module's `module.yaml` or its data (the wine module's prefix set-up, routine Wine errors), its releases and `sc module`, an engine's package and how it is prepared (`EnginePreparer`, `MachOPatch`, `sc engine prepare`), or the Swift generated from modules' data (`sc generate`); or what the nancy-drew module holds: Her patches' list, the AutoIt scripts, the .ini settings, the clean-exit log, WrappPuppeteer's needles |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
-| [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`WrappTemplate/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
+| [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`Packages/WrappBuilder/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
 | [docs/her-download.md](docs/her-download.md)       | You are touching the Her Download source — `HerDownloadWrappBuilder`, `CiderPackage`, unpacking an InstallShield launcher, the `her-download/` answer files, what a Windows or Mac download from Her Interactive contains, or how the game is told from one |
 | [docs/wrapp-launch.md](docs/wrapp-launch.md)       | You are touching what a wrapp does between being opened and the game's window appearing — its loading window's stages and when it says a launch is slow or may have failed, the signs of progress it watches, what starts behind the save warning, or the launch timings and load experiments behind those numbers; or what the wrapp's Dock icon does while the game runs, or its window while it quits; or Wine's desktop (`WineDesktop`) and ending a Wine session, how Wine behaves under load, a launch's diagnostics bundles, or scripting a launch past the save warning |
 | [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) | You are touching what runs inside the game's Wine process — native fullscreen or the cnc-ddraw cursor lock in `WrappTemplate/InProcessHelpers/`, how they are loaded and armed, or cnc-ddraw's `ddraw.ini` settings — or a game's first click seems to do nothing, or a wrapp says a game "quit unexpectedly" |
@@ -233,9 +233,10 @@ The rules that keep it working:
   packages' together, or the same code means different things in each.
 - **A new file is picked up by being in the folder**; nothing to tick in
   Xcode. A file in an app's folder can't be used by the package.
-- **Products stay static.** Don't mark a library `.dynamic`: a wrapp's
-  `Contents/Frameworks` is replaced by the engine's
-  (`check-output-collisions.sh` checks).
+- **Products stay static.** Don't mark a library `.dynamic`: engines are
+  installed into a wrapp's `Contents/Frameworks` beside the launcher's
+  files, and a launcher framework there could collide with one
+  (`check-static-linking.sh` checks).
 
 ### Key abstractions
 
@@ -559,8 +560,12 @@ direct assignment.
   build settings can't express, and Xcode merges it with the generated keys.
   Other keys still go in build settings. The file is excluded from the
   target's synchronized folder, so it isn't copied in as a resource.
-- **Bundled resources**: `WrappTemplate.app` template, Wine engine, `winetricks`, AutoIt, and ScummVM are bundled. Test
+- **Bundled resources**: the `WrappTemplate.app` template (the launcher alone), `winetricks` and AutoIt are bundled. Test
   that features work with bundled paths, not just system-installed equivalents.
+- **Engines aren't bundled.** Wine and ScummVM are fetched from their makers and prepared the first time a build
+  on that Mac needs one, then kept in the engine store, and each wrapp holds its own copy
+  ([docs/modules.md](docs/modules.md#engine-packages)). Nothing fetches one ahead of a build. `sc engine fetch` fills
+  the store, so a test needn't wait for it.
 
 ## Terminology
 

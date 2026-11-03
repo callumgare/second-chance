@@ -83,7 +83,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         do {
             // Each disc is copied, and the game installed from the copies.
             try await helper.ensureRoomToBuild(from: disk1Root, copies: 2 * max(gameInfo.diskCount, 1))
-            try await helper.createBaseWrapp(at: wrappPath)
+            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
 
             // The game's bundle says what its disc edition's build runs
             // (its Wrappfile's `disc` stage); each step is run here, as the

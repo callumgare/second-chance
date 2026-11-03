@@ -147,8 +147,9 @@ nonisolated extension WineBuild {
     /// Sikarugir's Wine (`wine`) in `SharedSupport/wine`, and the frameworks
     /// of its wrapper template (`wineskin`) in `Frameworks`: its Mac driver
     /// patched to load the in-process helpers, the wrapper's Swift modules
-    /// dropped; the driver, what got a run path, and every unsigned program
-    /// and DLL of the wrapper's are to be signed. Wine finds the
+    /// dropped, and its 32-bit ntdll given the Rosetta fault fix
+    /// (`RosettaFaultFix`); the driver, what got a run path, and every
+    /// unsigned program and DLL of the wrapper's are to be signed. Wine finds the
     /// frameworks through `DYLD_FALLBACK_LIBRARY_PATH` (`Wine`), but a
     /// program asking for `@rpath/` (wineserver's libinotify) needs a run
     /// path to them, which is added as `install_name_tool` would.
@@ -171,6 +172,19 @@ nonisolated extension WineBuild {
 
         let driver = wine.appendingPathComponent("lib/wine/x86_64-unix/winemac.so")
         if try MachOPatch.addWeakDylib(driver, reference: helpersReference) { toSign.append(driver) }
+
+        // Rosetta 2 raises faults Windows wouldn't for two things the DRM on
+        // Big Fish's games (Armadillo) does: an fs: access with the 0x67
+        // address-size prefix, which it can't run, and the Windows 9x SoftICE
+        // probes, which code takes because Wine on macOS runs 32-bit code in
+        // an LDT segment. The patch has Wine's 32-bit ntdll deal with them
+        // before any exception handler sees them. A Windows DLL: nothing to sign.
+        // See docs/big-fish.md#armadillo-under-rosetta.
+        let ntdll = wine.appendingPathComponent("lib/wine/i386-windows/ntdll.dll")
+        try await Blocking.run {
+            let (patched, outcome) = try RosettaFaultFix.patch(Data(contentsOf: ntdll))
+            if outcome == .patched { try patched.write(to: ntdll) }
+        }
 
         // A framework that loses its Swift modules is sealed again, or its
         // seal names files that are gone ("a sealed resource is missing or

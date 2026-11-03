@@ -33,17 +33,16 @@ class WineManager {
 
     // MARK: - Wine Prefix Management
 
-    /// The prefix layer's key for a wrapp: the Wine engine it carries, and
-    /// what the build sets a prefix up with.
+    /// The prefix layer's key for a wrapp: the Wine engine it carries, by
+    /// its version and prepared hash, and what the build sets a prefix up
+    /// with.
     nonisolated static func prefixLayerKey(for wrappPath: URL) throws -> LayerKey {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
-        let versionFile = WrappLayout(app: wrappPath).wine.appendingPathComponent("version")
-        let engine: String
-        do {
-            engine = try String(contentsOf: versionFile, encoding: .utf8)
-        } catch {
-            throw WrappBuildError.templateDamaged("Couldn't read the Wine engine's version from \(versionFile.path): \(error.localizedDescription)")
+        let installed = EngineInstall.installed(in: wrappPath.appendingPathComponent("Contents"))
+        guard let wine = installed.first(where: { $0.module == ModuleID.wine.rawValue }) else {
+            throw WrappBuildError.templateDamaged("The wrapp at \(wrappPath.path) has no Wine engine")
         }
+        let engine = "\(wine.version) \(wine.hash)"
         return try WineBuild.prefixLayerKey(engineVersion: engine, modules: resources.appendingPathComponent("Modules"),
                                             winetricks: Bundle.main.url(forResource: "winetricks", withExtension: nil))
     }

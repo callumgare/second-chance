@@ -1,6 +1,6 @@
 // fault_fix.c — runs inside Wine's 32-bit ntdll, before any exception handler,
 // for faults Rosetta 2 raises that Windows wouldn't. RosettaFaultFix.swift
-// (Packages/SecondChanceKit) embeds the machine code this compiles to;
+// (Packages/WrappBuilder) embeds the machine code this compiles to;
 // regenerate.sh rebuilds it. docs/big-fish.md#armadillo-under-rosetta has why.
 //
 // 1. An fs: access with the 0x67 address-size prefix (16-bit addressing in

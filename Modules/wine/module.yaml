@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 4
+release: 5
 native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -9,7 +9,7 @@ versions:
   - version: "10.0_8"
     package:
       # EngineTree's hash of the prepared tree (`sc engine prepare`).
-      prepared: "bbf9fa215e2d5fb07465c985aa0716a2dfcba6f212b8a7b76ba739d5cc97f32e"
+      prepared: "c0e4d94e6f596d534a18b600856e390c8c00b97370fea8ad71ab98b17149d908"
       sources:
         - id: "wine"
           sha256: "2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68"

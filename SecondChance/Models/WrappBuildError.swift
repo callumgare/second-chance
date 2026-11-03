@@ -73,6 +73,9 @@ enum WrappBuildError: LocalizedError, Equatable {
     /// None of the places a free game's bundle names had its file, or
     /// none answered (each is in the log and reported).
     case downloadUnavailable(title: String)
+    /// What the game runs in (Wine, ScummVM) couldn't be fetched from any
+    /// of the places its module names (each is in the log).
+    case engineUnavailable
     case gameExecutableNotFound
     case userCancelled
     case userCancelledBeforeStart
@@ -284,6 +287,11 @@ enum WrappBuildError: LocalizedError, Equatable {
             return String(localized: """
                 \(title) can't be downloaded right now. The places that had it don't have it any more, \
                 or aren't answering. Try again later.
+                """)
+        case .engineUnavailable:
+            return String(localized: """
+                Second Chance couldn't download what the game needs to run. Check that you're connected \
+                to the internet, then try again.
                 """)
         case .gameExecutableNotFound:
             return String(localized: "The installer finished, but the game wasn't installed. Try again, and if the installer asks you questions, choose the options it suggests.")

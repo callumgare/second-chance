@@ -56,7 +56,6 @@ custom_rules:
     message: "Log through swift-log instead (AGENTS.md, Code Conventions). sc's own output goes through its terminal UI."
     excluded:
       - "Tools/sc/"
-      - "WrappTemplate/InProcessHelpers/patch-winemac.swift"
       - "WrappPuppeteer/main.swift"
       # Tests print their own console output on purpose.
       - "SecondChanceTests/"

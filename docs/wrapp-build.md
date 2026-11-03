@@ -62,11 +62,11 @@ other builders are the same shape with less in the middle.
 | 1 | — | `.started(source: .disk)` |
 | 2 | `input.getDisk1Path()`; mount it if it's a file rather than a folder | `.isoMounted` |
 | 3 | Turn down an installed game (`GameDetector.isInstalledGame`), then `GameDetector.detectGame(fromDisk:)` → slug → `GameInfo`, then, for a Wine game, find its installer (`GameDetector.installerLookup`) | `.progress(.detectingGame)`, `.gameDetected` |
-| 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` | `.progress(.settingUpWrapp)` |
+| 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` and installs Wine, which runs the installer, and the engine the game runs, from the engine store ([the template](#the-template)) | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). Cancelling stops it, and the bytes copied show on the progress bar, full once it's done (the total is how full the disc is, which counts its file system too). Meanwhile, one Wine run marks D: on as CD drives (`DriveMarking`, `WineDrives.setKind(_:of:)` with several letters): each run starts Wine's session afresh, and marking each drive after the copy left the screen still for 8 to 18 s a drive; a wait that's left once the copy is done says "Getting the discs ready". The copies stay in the finished wrapp, mounted as CD drives, because some games check for their disc before they will play | `.progress(.copyingInstaller)`, `.stepProgress` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
 | 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `wine.KEEP-DISCS` is steps 5–6; `installer.RUN --from=disc-1` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (`--stubborn` from the plan); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each `DO nancy-drew.patch` step applies that one patch (`applyGamePatch`); the module's `EDIT --from-data=ini` sets the game's .ini files. A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
-| 8 | `cleanupUnusedEngine` strips the files of each module the composition doesn't run (`BuildModules`) | — |
+| 8 | `cleanupUnusedEngine` takes out each engine the composition doesn't run (`EngineInstall.remove`): Wine, for a ScummVM game | — |
 | 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` (and the game INI, when the plan didn't) | `.progress(.configuringWrapp)`, `.wrappConfigured` |
 | 10 | `helper.finalize` — take the quarantine off, sign, ask where to save (`getSaveLocation`), move it there (`saveWrapp`) | `.signed`, `.progress(.savingApp)`, `.completed` |
 | 11 | Unmount ISOs; launch if requested | — |
@@ -389,8 +389,8 @@ the app's build id, from a signed-in Steam).
 
 - **A key is a hash of what the layer was made from** (`LayerKey`): its
   parent's key, and each input by name. The prefix's
-  (`WineBuild.prefixLayerKey`) is the engine's version
-  (`Contents/SharedSupport/wine/version`), the wine module's release, a hash of
+  (`WineBuild.prefixLayerKey`) is the engine's version and prepared hash
+  (`Contents/Resources/engines/wine.json`), the wine module's release, a hash of
   `Modules/wine/prefix.yaml` and of winetricks, and
   `WineBuild.prefixCodeRevision`, raised by hand when the Swift that makes a
   prefix (`WineManager.makeWinePrefix`) changes what it makes. A new Wine, or
@@ -623,11 +623,27 @@ so the stderr mirror still fires) and pass back the output and exit code;
 ## The template
 
 `WrappTemplate.app` is built as its own target and embedded at
-`Second Chance.app/Contents/Resources/WrappTemplate.app`. `createBaseWrapp`
-copies it wholesale — both engines included — and `cleanupUnusedEngine` later
-strips whichever one this game doesn't need. The copy is `cp -ac`: each file is
-an APFS clone, so it is near instant and takes no space until a file changes;
-on a volume that can't clone, a full `cp -a` is made instead.
+`Second Chance.app/Contents/Resources/WrappTemplate.app`. It is the launcher
+alone, about 17 MB: no engine. `createBaseWrapp` copies it, and then installs
+the engines the build needs from the engine store
+([modules.md](modules.md#the-engine-store)), which fetches and prepares each
+the first time a build on that Mac needs it:
+
+- **Wine**, whenever the build runs a Windows program (an installer, a
+  patch) or the game runs in it. A download whose game isn't Wine's (Lure of
+  the Temptress, under ScummVM) needs none, and gets a bare C: drive.
+- **The engine the game runs**, from its composition (ScummVM).
+
+An engine is cloned in beside the launcher's files (`EngineInstall`), with its
+list of files and a record of which engine it is in `Resources/engines/`, and
+a file that is already the launcher's stops the build rather than being
+replaced. `cleanupUnusedEngine` takes out, by that list, each engine the game
+doesn't run. An engine nobody can fetch fails the build as
+`engineUnavailable`, which asks the person to check they are online.
+
+The template copy is `cp -ac`: each file is an APFS clone, so it is near
+instant and takes no space until a file changes; on a volume that can't
+clone, a full `cp -a` is made instead.
 
 `saveWrapp` never deletes an earlier copy of the game's app before the new one
 is safely beside it: it moves the new app into the destination folder under a

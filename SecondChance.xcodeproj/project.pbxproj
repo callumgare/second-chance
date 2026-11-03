@@ -112,9 +112,8 @@
 				PuppetServer.swift,
 				Resources/Assets.xcassets,
 				Resources/Localizable.xcstrings,
-				Resources/scummvm-files,
+				Resources/scummvm.ini,
 				Resources/WrappTemplateIcon.icon,
-				Resources/wine-files,
 				StartupDiagnostics.swift,
 				Subcommands.swift,
 				UIStateCatalog.swift,
@@ -304,9 +303,8 @@
 				E24D78DA2F063E1E00B38683 /* Sources */,
 				E2E831292F166FF900C3064A /* Frameworks */,
 				E2E831282F166FE100C3064A /* Resources */,
-				E2A159062F064DDD00292958 /* Download And Copy Wine Files */,
-				E2FA29BF2F089B2B00638A54 /* Download And Copy ScummVM Files */,
-				E2467E6E2F24D0A800D4773B /* Check for collisions */,
+				E2A159062F064DDD00292958 /* Build In-Process Helpers */,
+				E2467E6E2F24D0A800D4773B /* Check static linking */,
 				E2D5E0112F01000000000001 /* Stamp Sentry DSN */,
 			);
 			buildRules = (
@@ -485,7 +483,7 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/WrappTemplate/stamp-sentry-dsn.sh\"\n";
 		};
-		E2467E6E2F24D0A800D4773B /* Check for collisions */ = {
+		E2467E6E2F24D0A800D4773B /* Check static linking */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -493,19 +491,18 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/WrappTemplate/check-output-collisions.sh",
-				"$(DERIVED_FILE_DIR)/scummvm-setup-last-run",
-				"$(DERIVED_FILE_DIR)/wine-setup-last-run",
+				"$(SRCROOT)/WrappTemplate/check-static-linking.sh",
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/MacOS/$(PRODUCT_NAME)",
 			);
-			name = "Check for collisions";
+			name = "Check static linking";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/check-output-collisions-last-run",
+				"$(DERIVED_FILE_DIR)/check-static-linking-last-run",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/WrappTemplate/check-output-collisions.sh\"\n";
+			shellScript = "\"${SRCROOT}/WrappTemplate/check-static-linking.sh\"\n";
 		};
 		E25DDA6952206C43D18B125E /* Download And Copy AutoIt Files */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -548,7 +545,7 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${SRCROOT}/WrappTemplate/setup-game-patches.sh\"\n";
 		};
-		E2A159062F064DDD00292958 /* Download And Copy Wine Files */ = {
+		E2A159062F064DDD00292958 /* Build In-Process Helpers */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -556,7 +553,7 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/WrappTemplate/setup-wine.sh",
+				"$(SRCROOT)/WrappTemplate/build-in-process-helpers.sh",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/native_fullscreen.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/display_below_notch.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/cursor_lock.m",
@@ -566,40 +563,16 @@
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/hidden_windows.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/puppet_control.m",
 				"$(SRCROOT)/WrappTemplate/InProcessHelpers/helper_common.h",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/patch-winemac.swift",
-				"$(SRCROOT)/WrappTemplate/RosettaFaultFix/main.swift",
-				"$(SRCROOT)/Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/RosettaFaultFix.swift",
 			);
-			name = "Download And Copy Wine Files";
+			name = "Build In-Process Helpers";
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/wine-setup-last-run",
+				"$(BUILT_PRODUCTS_DIR)/$(PRODUCT_NAME).app/Contents/Frameworks/in_process_helpers.dylib",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/WrappTemplate/setup-wine.sh\"\n";
-		};
-		E2FA29BF2F089B2B00638A54 /* Download And Copy ScummVM Files */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/WrappTemplate/setup-scummvm.sh",
-				"$(SRCROOT)/WrappTemplate/scummvm.ini",
-			);
-			name = "Download And Copy ScummVM Files";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/scummvm-setup-last-run",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"$SRCROOT/WrappTemplate/setup-scummvm.sh\"\n";
+			shellScript = "\"${SRCROOT}/WrappTemplate/build-in-process-helpers.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

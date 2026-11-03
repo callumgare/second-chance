@@ -101,12 +101,18 @@ struct WindowsExecutableTests {
         #expect(try #require(WindowsExecutable(data: slice)).versionStrings == ["ProductName": "Wine"])
     }
 
-    nonisolated static let winesExplorer = Bundle.main.resourceURL?.appendingPathComponent(
-        "WrappTemplate.app/Contents/SharedSupport/wine/lib/wine/i386-windows/explorer.exe")
+    /// Wine's explorer.exe in a Wine this Mac's engine store has prepared
+    /// (`sc engine fetch wine`), if it has one.
+    nonisolated static let winesExplorer: URL? = {
+        let store = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SecondChance/engines")
+        let trees = (try? FileManager.default.contentsOfDirectory(at: store, includingPropertiesForKeys: nil)) ?? []
+        return trees.map { $0.appendingPathComponent("SharedSupport/wine/lib/wine/i386-windows/explorer.exe") }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+    }()
 
     @Test("Wine's own explorer.exe reads as Wine",
-          .enabled(if: winesExplorer.map { FileManager.default.fileExists(atPath: $0.path) } ?? false,
-                   "No Wine bundled in the test host"))
+          .enabled(if: winesExplorer != nil, "No Wine in this Mac's engine store (sc engine fetch wine)"))
     func readsWinesExplorer() throws {
         let explorer = try #require(Self.winesExplorer)
         let strings = try #require(WindowsExecutable(contentsOf: explorer)).versionStrings

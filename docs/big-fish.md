@@ -222,9 +222,11 @@ of `~/Library/Caches/SecondChance`'s downloads.
 Every Armadillo-wrapped program crashed at once under Wine on Apple silicon,
 with `virtual_setup_exception stack overflow … addr 0x7ffe4800`. Two things
 Rosetta 2 does differently from an Intel CPU running Windows cause it. Both are
-fixed in Wine's 32-bit `ntdll.dll`, which the build patches as it bundles the
-engine (`setup-wine.sh` → `WrappTemplate/RosettaFaultFix/`, the patcher in
-`Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/RosettaFaultFix.swift`).
+fixed in Wine's 32-bit `ntdll.dll`, which is patched as Wine is prepared for
+the engine store (`WineBuild.prepare`, the patcher in
+`Packages/WrappBuilder/Sources/WrappBuilder/Engines/RosettaFaultFix.swift`, the
+code it adds in `Packages/WrappBuilder/RosettaFaultFix/`;
+[modules.md](modules.md#engine-packages)).
 
 1. **An `fs:` access with the `0x67` address-size prefix** (16-bit addressing in
    32-bit code). Armadillo removes each of its exception handlers with

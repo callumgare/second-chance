@@ -27,9 +27,10 @@ let package = Package(
     defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
-        // Left to Xcode to link statically: a wrapp's Contents/Frameworks
-        // is replaced by the engine's, so a dynamic library wouldn't
-        // survive (WrappTemplate/check-output-collisions.sh checks).
+        // Left to Xcode to link statically: engines are installed into a
+        // wrapp's Contents/Frameworks beside the launcher's files, where a
+        // framework of ours could collide with one of theirs
+        // (WrappTemplate/check-static-linking.sh checks).
         .library(name: "SecondChanceKit", targets: ["SecondChanceKit"]),
         .library(name: "SecondChanceReporting", targets: ["SecondChanceReporting"]),
     ],

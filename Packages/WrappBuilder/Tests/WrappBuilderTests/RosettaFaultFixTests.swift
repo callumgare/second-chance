@@ -1,5 +1,5 @@
 import Foundation
-@testable import SecondChanceKit
+@testable import WrappBuilder
 import Testing
 
 @Suite("Rosetta fault fix")

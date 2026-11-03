@@ -713,6 +713,9 @@
     "Second Chance can't use this Mac download. It may not have finished downloading: download it again, or download the Windows version from Her Interactive instead." : {
 
     },
+    "Second Chance couldn't download what the game needs to run. Check that you're connected to the internet, then try again." : {
+
+    },
     "Second Chance couldn't find this disc's installer" : {
 
     },

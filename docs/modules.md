@@ -87,6 +87,9 @@ builds. Wine's:
   padding (`MachOPatch`), as `install_name_tool` would, which only comes
   with Xcode's tools. Every other Wine program finds the frameworks through
   `DYLD_FALLBACK_LIBRARY_PATH` (`Wine`).
+- Wine's 32-bit `ntdll.dll` gets the Rosetta fault fix (`RosettaFaultFix`),
+  which lets programs wrapped in Armadillo, as Big Fish's games are, run
+  under Rosetta ([big-fish.md](big-fish.md#armadillo-under-rosetta)).
 - The wrapper's Swift modules are dropped, and the framework they were in
   is sealed again.
 - Every unsigned program and DLL is signed, deepest first: signing a
@@ -137,9 +140,9 @@ It is a cache: a wrapp holds its own copy of its engine, so clearing it costs
 only the next build's download. `sc engine fetch [<id>…]` fills it here, as
 a build would.
 
-For now the template still carries both engines, built by `setup-wine.sh`
-and `setup-scummvm.sh`, and builds copy them from it. Builds taking engines
-from the store instead is what comes next.
+A build installs the engines it needs from the store
+([wrapp-build.md](wrapp-build.md#the-template)); Second Chance itself carries
+none.
 
 ## What lives where
 

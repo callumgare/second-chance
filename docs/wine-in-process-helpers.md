@@ -19,13 +19,14 @@ wrapp does not have:
 ## How they get into the game process
 
 All of them are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
-by `WrappTemplate/setup-wine.sh` (an Xcode build phase of the WrappTemplate
-target — add any new source to that phase's input files too, or edits to it
-won't rebuild). `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
+by `WrappTemplate/build-in-process-helpers.sh` (an Xcode build phase of the
+WrappTemplate target — add any new source to that phase's input files too, or
+edits to it won't rebuild). `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
 its entry point before dyld runs initializers, so an inserted dylib is mapped
-but its constructor never runs. Instead `patch-winemac.swift` gives Wine's Mac
-driver, `winemac.so`, a weak dependency on the dylib. The header comment of
-`native_fullscreen.m` has the details.
+but its constructor never runs. Instead preparing Wine (`WineBuild.prepare`,
+[modules.md](modules.md#engine-packages)) gives Wine's Mac driver,
+`winemac.so`, a weak dependency on the dylib (`MachOPatch`). The header
+comment of `native_fullscreen.m` has the details.
 
 Every process that talks to the Mac driver loads `winemac.so` — `explorer.exe`
 as well as the game — so each helper checks whether it is in the game before
@@ -631,8 +632,8 @@ when the directory is set, `GameLauncher` starts it with
 `PUPPET_CONTROL_EXE=scummvm`; the other two helpers stay unarmed in it, their
 variables unset. dyld kills a process whose inserted dylib is missing, so the
 wrapp checks the file first and runs the game without puppet control if it
-isn't there. ScummVM wrapps keep the dylib for this: `setup-wine.sh` leaves it
-off `wine-files`, the list of what a ScummVM wrapp removes. If wrapps are ever
+isn't there. ScummVM wrapps keep the dylib for this: it is the launcher's, not
+Wine's, so taking Wine out of a ScummVM wrapp leaves it. If wrapps are ever
 signed with hardened runtime, `scummvm` will need the
 `com.apple.security.cs.allow-dyld-environment-variables` entitlement for this
 to keep working.

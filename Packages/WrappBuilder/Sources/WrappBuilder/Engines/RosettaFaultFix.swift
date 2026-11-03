@@ -1,18 +1,17 @@
 //
 //  RosettaFaultFix.swift
-//  SecondChanceKit
+//  WrappBuilder
 //
 //  Patches Wine's 32-bit ntdll.dll so that two kinds of fault Rosetta 2 raises
 //  where Windows wouldn't are dealt with before any exception handler sees
 //  them: an fs: access with the 0x67 address-size prefix, which Rosetta can't
 //  run, and the Windows 9x SoftICE probes (int 68h, int 41h), which code takes
 //  because Wine on macOS runs 32-bit code in an LDT segment. Armadillo, the DRM
-//  on Big Fish's games, trips over both. WrappTemplate/RosettaFaultFix/fault_fix.c
+//  on Big Fish's games, trips over both. Packages/WrappBuilder/RosettaFaultFix/fault_fix.c
 //  is the code that does it; docs/big-fish.md#armadillo-under-rosetta has why.
 //
-//  The build patches the engine once, as it bundles it (setup-wine.sh compiles
-//  this file into a small tool), so every Wine program a wrapp or a build runs
-//  has it. It is Foundation alone, so the tool needs nothing else.
+//  Wine is patched once, as it is prepared (`WineBuild.prepare`), so every
+//  Wine program a wrapp or a build runs has it.
 
 import Foundation
 
@@ -124,7 +123,7 @@ public nonisolated enum RosettaFaultFix {
         for byte in 0..<4 { bytes[offset + byte] = UInt8(truncatingIfNeeded: raw >> (8 * UInt32(byte))) }
     }
 
-    /// fault_fix.c compiled by WrappTemplate/RosettaFaultFix/regenerate.sh:
+    /// fault_fix.c compiled by Packages/WrappBuilder/RosettaFaultFix/regenerate.sh:
     /// `int __stdcall bf_fault_fix(const u32 *record, u8 *context)`.
     static let code: [UInt8] = [
         0x83, 0xec, 0x08, 0x8b, 0x44, 0x24, 0x0c, 0x81, 0x38, 0x05, 0x00, 0x00,

@@ -117,7 +117,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             // Unpacked, then installed: the installer's own size each time,
             // and as much again for what it was compressed from.
             try await helper.ensureRoomToBuild(from: installer, copies: 3)
-            try await helper.createBaseWrapp(at: wrappPath)
+            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
             // The game's bundle says what building Her's Windows download
             // runs (its Wrappfile's her-download stage).
             guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "her-windows") }) else {
@@ -282,7 +282,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
 
         do {
             try await helper.ensureRoomToBuild(from: image, copies: 3)
-            try await helper.createBaseWrapp(at: wrappPath)
+            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
             let driveCPath = WrappLayout(app: wrappPath).driveC
             // The game's bundle says what building Her's Mac download runs
             // (its Wrappfile's her-mac stage): taking the game out of the

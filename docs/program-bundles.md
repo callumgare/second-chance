@@ -159,11 +159,10 @@ editions:
 
 The shipped ones are SkiFree (`freeware/skifree`, a bare exe under Wine) and
 Lure of the Temptress (`freeware/lure-of-the-temptress`, a zip ScummVM hosts,
-under ScummVM). A ScummVM game needs its engine's data file in the template:
-the scummvm module's package names the ones the shipped bundles' engines use
-(`engine-data`, [modules.md](modules.md#engine-packages); `setup-scummvm.sh`
-copies the same list into the template for now), and a game whose file is
-missing stops at ScummVM's "Unable
+under ScummVM). A ScummVM game needs its engine's data file in ScummVM's
+engine: the scummvm module's package names the ones the shipped bundles'
+engines use (`engine-data`, [modules.md](modules.md#engine-packages)), and a
+game whose file is missing stops at ScummVM's "Unable
 to locate the 'lure.dat' engine data file", naming its engine's.
 
 A download edition is the first of a **program beyond Nancy Drew**, in a

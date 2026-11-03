@@ -99,7 +99,7 @@ final class UpdateWrappBuilder {
         logger.notice("Temporary wrapp: \(wrappPath.path)")
         do {
             try await helper.ensureRoomToBuild(from: WrappLayout(app: old).prefix, copies: 1)
-            try await helper.createBaseWrapp(at: wrappPath)
+            try await helper.createBaseWrapp(at: wrappPath, composition: composition, buildsWithWine: composition.has(.wine))
             await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
             await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
             try await carryOver(from: old, into: wrappPath, composition: composition)
