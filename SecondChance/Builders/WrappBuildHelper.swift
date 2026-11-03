@@ -280,14 +280,18 @@ class WrappBuildHelper {
         try settings.write(to: WrappLayout(app: wrappPath))
         logger.notice("Created AppSettings.plist with engine: \(settings.engine.rawValue)")
 
-        // Documents leads where the A: drive does (WineDrives has why). The
-        // wrapp points both at the player's saves each time it starts.
-        let wine = Wine(wrapp: wrappPath)
-        try? FileManager.default.removeItem(at: wine.documents)
-        try FileManager.default.createSymbolicLink(
-            atPath: wine.documents.path,
-            withDestinationPath: try wine.drives.target(of: "a")
-        )
+        // A build that ran Wine has a prefix with drives; one that didn't (a
+        // download ScummVM runs) has a bare C: drive, and nothing to point.
+        if fileManager.fileExists(atPath: WrappLayout(app: wrappPath).prefix.appendingPathComponent("dosdevices").path) {
+            // Documents leads where the A: drive does (WineDrives has why).
+            // The wrapp points both at the player's saves each time it starts.
+            let wine = Wine(wrapp: wrappPath)
+            try? FileManager.default.removeItem(at: wine.documents)
+            try FileManager.default.createSymbolicLink(
+                atPath: wine.documents.path,
+                withDestinationPath: try wine.drives.target(of: "a")
+            )
+        }
 
         // Configure game INI files for LCD mode and save path
         if configureINI {
