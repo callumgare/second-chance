@@ -20,7 +20,7 @@ nonisolated enum WrappBuildState: Equatable {
     case completed
     case error(String)
 
-    private var baseText: String {
+    var baseText: String {
         switch self {
         case .idle:
             return "Ready"

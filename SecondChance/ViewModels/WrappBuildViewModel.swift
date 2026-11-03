@@ -197,6 +197,7 @@ class WrappBuildViewModel {
         } ?? true
 
         guard isNewStep else { return }
+        let previous = lastProgressState
 
         // The substep too: the screen hides it for the first 5 s, but it's
         // what says how far a step got (Steam's "Connecting to Steam").
@@ -204,10 +205,20 @@ class WrappBuildViewModel {
         logger.notice("━━━ \(state.displayText)\(state.elapsedSeconds == nil ? substep : "") ━━━")
         LogContext.enterStage(state.displayText)
 
-        stepStartTime = Date()
-        shouldShowElapsed = false
         lastProgressState = state
         stepProgress = nil
+
+        // A new substep of the step under way shows at once once the step
+        // has shown its own: the 5 s are the step's, not each substep's, or
+        // the screen would fall back to the step's name between them.
+        if let previous, previous.baseText == state.baseText, let startTime = stepStartTime {
+            let elapsed = Date().timeIntervalSince(startTime)
+            currentState = withElapsedSeconds(state, elapsed: shouldShowElapsed ? Int(elapsed) : nil)
+            return
+        }
+
+        stepStartTime = Date()
+        shouldShowElapsed = false
         stopStepTimer()
 
         // Initially show state without elapsed time (substep hidden until 5 s)
@@ -279,6 +290,16 @@ class WrappBuildViewModel {
         isCancelling = true
         buildTask.cancel()
         finishSuccessReportsQuestion()
+    }
+
+    /// The person cancelled a question that ends the build, which winds down
+    /// as a cancelled build does: "Stopping…" while it stops Steam or Big
+    /// Fish and removes the half-made app, rather than the step it was on,
+    /// and then the welcome screen.
+    func windDownAfterCancelledQuestion() {
+        guard buildTask != nil, !isCancelling else { return }
+        logger.notice("The person cancelled a question, so the build is stopping")
+        isCancelling = true
     }
 
     // MARK: - Success reports question

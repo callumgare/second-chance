@@ -445,7 +445,7 @@ class WrappBuildHelper {
             return
         }
 
-        await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Installing Steam"))))
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Steam"))))
 
         let wine = Wine(wrapp: wrappPath)
         await wine.server.stop()

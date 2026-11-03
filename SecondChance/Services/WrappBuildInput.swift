@@ -66,6 +66,14 @@ class WrappBuildInput {
         self.viewModel = viewModel
     }
 
+    /// The error a question cancelled back to the welcome screen ends the
+    /// build with, the screen meanwhile saying it's stopping: the build
+    /// may have Steam or Big Fish to stop and a half-made app to remove.
+    private func cancelledBeforeStart() -> WrappBuildError {
+        viewModel?.windDownAfterCancelledQuestion()
+        return .userCancelledBeforeStart
+    }
+
     // MARK: - Input Paths
 
     /// First game disk (directory or ISO). Cancelling this very first prompt
@@ -79,7 +87,7 @@ class WrappBuildInput {
         guard let url = await selectDisc(message: "Put the first game disc in your Mac's disc drive, then select it here.") else {
             // Cancelling the very first dialog means the user never started —
             // distinct from cancelling a later prompt mid-install.
-            throw WrappBuildError.userCancelledBeforeStart
+            throw cancelledBeforeStart()
         }
         viewModel?.chosenInstaller = url
         return url
@@ -233,7 +241,7 @@ class WrappBuildInput {
 
         guard let url = await runOpenPanel(panel) else {
             // The first question asked: back to the welcome screen.
-            throw WrappBuildError.userCancelledBeforeStart
+            throw cancelledBeforeStart()
         }
         viewModel?.chosenInstaller = url
         return url
@@ -272,7 +280,7 @@ class WrappBuildInput {
         alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
             // The first question the user is asked: back to the welcome screen.
-            throw WrappBuildError.userCancelledBeforeStart
+            throw cancelledBeforeStart()
         }
         return games[menu.indexOfSelectedItem]
     }
@@ -377,7 +385,7 @@ class WrappBuildInput {
         alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
             // The first question the person is asked: back to the welcome screen.
-            throw WrappBuildError.userCancelledBeforeStart
+            throw cancelledBeforeStart()
         }
         return owned[menu.indexOfSelectedItem]
     }
@@ -579,7 +587,7 @@ class WrappBuildInput {
             return .installAnyway
         default:
             logger.notice("Unrecognised game: cancelled")
-            throw WrappBuildError.userCancelledBeforeStart
+            throw cancelledBeforeStart()
         }
     }
 
@@ -637,7 +645,7 @@ class WrappBuildInput {
             return .chooseAnother
         default:
             logger.notice("No installer recognised: cancelled")
-            throw WrappBuildError.userCancelledBeforeStart
+            throw cancelledBeforeStart()
         }
     }
 
@@ -690,7 +698,7 @@ class WrappBuildInput {
         alert.addButton(withTitle: String(localized: "Cancel"))
         guard alert.runModalAskingForAttention() == .alertFirstButtonReturn else {
             logger.notice("Rosetta is missing, and the person chose not to install it")
-            throw WrappBuildError.userCancelledBeforeStart
+            throw cancelledBeforeStart()
         }
 
         await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Rosetta"))))
@@ -699,7 +707,7 @@ class WrappBuildInput {
         await bus.publishWrappBuild(.progress(.idle))
         switch outcome {
         case .installed: return
-        case .cancelled: throw WrappBuildError.userCancelledBeforeStart
+        case .cancelled: throw cancelledBeforeStart()
         case .failed: throw WrappBuildError.rosettaInstallFailed
         }
     }

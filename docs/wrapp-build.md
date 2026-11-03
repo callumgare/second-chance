@@ -278,7 +278,12 @@ already; see the historical plan.
 
 `.progress(WrappBuildState)` carries the same state enum the UI renders, so
 step display and the event stream can't drift apart. The ViewModel hides
-substeps and elapsed time for the first 5 s so fast steps don't flash.
+substeps and elapsed time for a step's first 5 s so fast steps don't flash;
+the 5 s are the step's, so once they are up a new substep shows at once
+rather than the step's name for another 5 s. Name a step for what the person
+would call it: Steam's and Big Fish's client installs are
+`.settingUpWrapp`, as the screen says "Installing the game…" for
+`.installingGame` until its substep shows.
 
 `.instructions(String?)` is for what the person has to *do* for the build to
 go on — sign in to Steam's window, click through an installer that runs
