@@ -23,5 +23,10 @@ struct PrefixSetupTests {
         #expect(WineSteps.edit(text, settings: [("ddraw", "nosuchsetting", "1")], mustExist: true).missing == ["ddraw.nosuchsetting"])
         #expect(WineSteps.edit("[a]\nx=1\n[b]\n", settings: [("a", "y", "2"), ("c", "z", "3")], mustExist: false).text
                 == "[a]\nx=1\ny=2\n[b]\n\n[c]\nz=3")
+        // A Windows program's file, as cnc-ddraw's is: CRLF kept.
+        let crlf = WineSteps.edit("; cnc-ddraw\r\n\r\n[ddraw]\r\nwindowed=false\r\nmaintas=false\r\n",
+                                  settings: [("ddraw", "windowed", "true"), ("ddraw", "maintas", "true")], mustExist: true)
+        #expect(crlf.missing.isEmpty)
+        #expect(crlf.text == "; cnc-ddraw\r\n\r\n[ddraw]\r\nwindowed=true\r\nmaintas=true\r\n")
     }
 }

@@ -422,9 +422,11 @@ enum AppPuppetRunner {
         // leaving WrappPuppeteer's failure to explain it.
         let requiredHelpers: [InProcessHelperReport.Helper]
         if WrappInfo.gameEngine(at: wrappURL)?.runsInWine == true {
-            // As the wrapp decides: the catalog says for a Big Fish .exe,
-            // whose imports Armadillo hides.
-            let graphicsAPI = WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0, game: game) } ?? .unknown
+            // As the wrapp decides: what its launch declares, or for a wrapp
+            // built before launches were recorded, its .exe's imports (or the
+            // catalog, for a Big Fish .exe, whose imports Armadillo hides).
+            let declared = GameGraphicsAPI(declared: WrappInfo.settings(at: wrappURL)?.launch.options["wine.graphics"])
+            let graphicsAPI = declared ?? WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0, game: game) } ?? .unknown
             requiredHelpers = [.nativeFullscreen]
                 + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
                 + (graphicsAPI.mayUseDirect3D ? [.modeScaling] : [])
@@ -830,7 +832,9 @@ extension WrappInfo {
     static func gameExe(at wrappPath: URL) -> URL? {
         guard let launch = settings(at: wrappPath)?.launch else { return nil }
         let layout = WrappLayout(app: wrappPath)
-        return layout.location(launch.program.hasPrefix("scummvm:") ? launch.path : launch.program)
+        // Steam's and Big Fish's launches name the program they start.
+        let program = launch.options["steam.exe"] ?? launch.options["big-fish.exe"] ?? launch.program
+        return layout.location(program.hasPrefix("scummvm:") ? launch.path : program)
     }
 
     /// The game's engine from the wrapp's AppSettings.plist.

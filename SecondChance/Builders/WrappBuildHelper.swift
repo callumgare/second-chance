@@ -141,6 +141,17 @@ class WrappBuildHelper {
         return wanted.compactMap { id in modules.first { $0.manifest.id == id.rawValue && $0.manifest.package() != nil } }
     }
 
+    /// The engines `composition` runs that the wrapp at `path` doesn't have
+    /// yet, put in: for a build that made its base before it knew the game
+    /// (Steam's, Big Fish's), whose launch turns out to be ScummVM's.
+    func installMissingEngines(at path: URL, composition: Composition) async throws {
+        let installed = Set(EngineInstall.installed(in: path.appendingPathComponent("Contents")).map(\.module))
+        for module in try engineModules(composition: composition, buildsWithWine: false)
+        where !installed.contains(module.manifest.id) {
+            try await installEngine(module, into: path)
+        }
+    }
+
     /// Put `module`'s engine into the wrapp at `path`, from the store, which
     /// fetches and prepares it the first time a build on this Mac needs it.
     private func installEngine(_ module: ModuleFolder, into path: URL) async throws {

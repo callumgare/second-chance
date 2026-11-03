@@ -92,10 +92,12 @@ struct WineSteps {
 
     /// `text`, an .ini file's, with `settings` set: the lines changed, and
     /// those not there added at the end of their section (or a new one),
-    /// or with `mustExist`, named as missing.
+    /// or with `mustExist`, named as missing. Its line endings are kept:
+    /// Windows programs' files (cnc-ddraw's) end lines with CRLF.
     nonisolated static func edit(_ text: String, settings: [(section: String, key: String, value: String)],
                                  mustExist: Bool) -> (text: String, missing: [String]) {
-        var lines = text.components(separatedBy: "\n")
+        let newline = text.contains("\r\n") ? "\r\n" : "\n"
+        var lines = text.components(separatedBy: newline)
         var missing: [String] = []
         for setting in settings {
             var section = ""
@@ -124,6 +126,6 @@ struct WineSteps {
                 lines += ["[\(setting.section)]", "\(setting.key)=\(setting.value)"]
             }
         }
-        return (lines.joined(separator: "\n"), missing)
+        return (lines.joined(separator: newline), missing)
     }
 }

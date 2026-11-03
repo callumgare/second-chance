@@ -298,6 +298,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             if composition.launcher != .scummvm {
                 await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
             }
+            try await helper.installMissingEngines(at: wrappPath, composition: composition)
             try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
 
             let finalPath = try await helper.completeBuild(
