@@ -48,6 +48,32 @@ nonisolated public struct WineRegistry: Sendable {
         try await wine.run(.wine(["reg", "add", key.rawValue, "/v", name, "/t", type, "/d", data, "/f"]), timeout: timeout)
     }
 
+    /// Set several values in `key` with one Wine run, through a `.reg` file
+    /// `reg import` reads: `set` starts the session again for each.
+    public func set(_ values: [(name: String, value: Value)], in key: Key, timeout: TimeInterval = 600) async throws {
+        let lines = values.map { "\(Self.quoted($0.name))=\(Self.regData($0.value))" }
+        let text = "REGEDIT4\r\n\r\n[\(key.rawValue)]\r\n" + lines.joined(separator: "\r\n") + "\r\n"
+        let name = "second-chance-\(UUID().uuidString).reg"
+        let file = wine.prefix.appendingPathComponent("drive_c/windows/temp").appendingPathComponent(name)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        try await importFile(atWindowsPath: #"C:\windows\temp\"# + name, timeout: timeout)
+    }
+
+    /// `name` as a `.reg` file writes a name or a string.
+    static func quoted(_ name: String) -> String {
+        "\"" + name.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+    }
+
+    /// `value` as a `.reg` file writes it.
+    static func regData(_ value: Value) -> String {
+        switch value {
+        case .string(let string): quoted(string)
+        case .dword(let number): "dword:" + String(format: "%08x", number)
+        }
+    }
+
     /// Have ⌘ act as Ctrl in the windows of the programs named `exes`
     /// (`steam.exe`), and in no others. Wine keeps ⌘ shortcuts for its own
     /// Mac menu, so ⌘C and ⌘V never reach a Windows program, which knows only

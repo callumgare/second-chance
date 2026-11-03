@@ -399,6 +399,9 @@
     "Games from Big Fish take a minute or two to start." : {
 
     },
+    "Getting the discs ready" : {
+
+    },
     "Her Interactive made a fix for this game, \"%@\", and Second Chance couldn't add it. The game will still work without it. What it fixes:\n\n%@" : {
       "localizations" : {
         "en" : {
@@ -834,6 +837,9 @@
 
     },
     "Starting Steam…" : {
+
+    },
+    "Starting the game" : {
 
     },
     "Starting the updated Steam" : {

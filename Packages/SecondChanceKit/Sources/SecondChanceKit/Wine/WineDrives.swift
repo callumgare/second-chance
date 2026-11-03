@@ -77,6 +77,13 @@ nonisolated public struct WineDrives: Sendable {
         try await wine.registry.set(.string(kind.rawValue), for: "\(letter.lowercased()):", in: .wineDrives)
     }
 
+    /// Tell Wine what kind of drive each of `letters` is, with one Wine run.
+    /// Nothing need be at a letter yet: Wine reads its kind when it finds a
+    /// drive there.
+    public func setKind(_ kind: Kind, of letters: [Character]) async throws {
+        try await wine.registry.set(letters.map { ("\($0.lowercased()):", .string(kind.rawValue)) }, in: .wineDrives)
+    }
+
     /// The target `letter` shows, as it was mounted.
     public func target(of letter: Character) throws -> String {
         try FileManager.default.destinationOfSymbolicLink(atPath: link(letter).path)
