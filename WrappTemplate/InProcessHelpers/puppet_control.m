@@ -403,21 +403,25 @@ static NSString *mouseCommand(double x, double y, BOOL click) {
 
 /// Hand activation to the app with `pid`, so it can make itself active:
 /// WrappPuppeteer switching away from the game, as Cmd-Tab would. Since
-/// macOS 14 only the active app may hand it on; the game is.
+/// macOS 14 only the active app may hand it on; the game is. Whether AppKit
+/// has the method is asked of AppKit, not @available, as for capturing
+/// (`canListOwnWindows`): in ScummVM, linked against the 10.14 SDK,
+/// @available said macOS 14 wasn't there on macOS 15.
 static NSString *yieldCommand(pid_t pid) {
-    if (@available(macOS 14.0, *)) {
-        __block BOOL found = NO;
-        BOOL ran = onMainThread(^BOOL {
-            NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-            if (!app) return NO;
-            [NSApp yieldActivationToApplication:app];
-            found = YES;
-            return YES;
-        });
-        if (!ran) return found ? @"error timed out" : @"error no such app";
-        return @"ok";
-    }
-    return @"error needs macOS 14";
+    if (![NSApplication instancesRespondToSelector:@selector(yieldActivationToApplication:)]) return @"error needs macOS 14";
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+    __block BOOL found = NO;
+    BOOL ran = onMainThread(^BOOL {
+        NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+        if (!app) return NO;
+        [NSApp yieldActivationToApplication:app];
+        found = YES;
+        return YES;
+    });
+#pragma clang diagnostic pop
+    if (!ran) return found ? @"error timed out" : @"error no such app";
+    return @"ok";
 }
 
 /// Ask the app to quit as its Quit menu item does: Wine's is ⌘⌥Q, and
