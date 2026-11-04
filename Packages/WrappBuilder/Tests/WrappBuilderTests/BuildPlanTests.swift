@@ -18,7 +18,7 @@ struct BuildPlanTests {
         let plan = try #require(try plan("blue-moon", edition: "cd"))
         // The wine module's prefix stage, which the bundle's is built from.
         #expect(plan.stages.map(\.name) == ["wine/prefix", "prefix", "disc"])
-        #expect(plan.stages[1].modules == ["wine"])
+        #expect(plan.stages[1].modules == ["nancy-drew", "wine"])
         // cnc-ddraw, as Blue Moon draws with DirectDraw, and the icon.
         #expect(plan.stages[1].steps.map { "\($0.module ?? "").\($0.instruction)" } == ["wine.WINETRICKS", ".EDIT", ".COPY"])
         #expect(plan.stages[2].modules == ["installer", "nancy-drew", "wine"])
@@ -95,6 +95,19 @@ struct BuildPlanTests {
         #expect(direct.bundleSteps.last?.instruction == "REMOVE")
         #expect(direct.launch?.program == exe)
         #expect(direct.launch?.fallback == nil)
+    }
+
+    @Test("A CONST can be built from another")
+    func constFromConst() throws {
+        let (planner, _, bundle) = try planner("""
+        CONST folder = "C:/Game"
+        CONST program = "${const.folder}/Game.exe"
+        FROM wine@10/prefix AS only
+        LAUNCH --wine.graphics=direct-3d ${const.program}
+        """)
+        let plan = try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        #expect(plan.launch?.program == "wine:C:/Game/Game.exe")
     }
 
     @Test("An install's --creates is the launch's program when the launch is in its folder")

@@ -1,33 +1,36 @@
 CONST install-dir = "C:/Program Files (x86)/Her Interactive/The Silent Spy"
+CONST program = "${const.install-dir}/Spy.exe"
 INPUT disc-1
 INPUT installer
 INPUT game
 
+# What the app has whichever edition it's built from
+FUNCTION shared
+  DO nancy-drew.set-icon
+  VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+END
+
 FROM wine@10/prefix AS prefix
 USE nancy-drew # its clean-exit log
-COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
-ICON /Resources/nancy-drew.icns
-VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO shared
 # Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
 LAUNCH --wine.graphics=direct-3d \
     --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
     --wine.clean-exit-line="${nancy-drew.data.clean-exit-log.marker}" \
-    "${const.install-dir}/Spy.exe"
+    ${const.program}
 
 # The CD edition: the disc kept in the wrapp, as the game checks for it
 FROM prefix AS disc
 USE installer
-USE nancy-drew
 WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
-INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --creates="${const.install-dir}/Spy.exe"
+INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --creates=${const.program}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
 # Windows game is taken out
 FROM prefix AS her-download
 USE her-download
-USE nancy-drew
-HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates="${const.install-dir}/Spy.exe"
+HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates=${const.program}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Her Interactive's Mac download: a Cider app, whose Windows game is taken
@@ -35,34 +38,29 @@ DO nancy-drew.configure-ini --into=${const.install-dir}
 # apply.
 FROM prefix AS her-mac
 USE her-download
-USE nancy-drew
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Steam's: the game installed by Steam, which starts it
 FROM steam@1/client AS steam
 USE nancy-drew # its clean-exit log
-COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
-ICON /Resources/nancy-drew.icns
-VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO shared
 DO steam.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 # Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
 LAUNCH --wine.graphics=direct-3d \
     --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
     --wine.clean-exit-line="${nancy-drew.data.clean-exit-log.marker}" \
-    --steam.exe="${const.install-dir}/Spy.exe" steam://rungameid/${input.game.app-id}
+    --steam.exe=${const.program} steam://rungameid/${input.game.app-id}
 
 # Big Fish's: the game installed by its Game Manager, whose DRM starts it
 FROM big-fish@1/manager AS big-fish
 USE nancy-drew # its clean-exit log
-COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
-ICON /Resources/nancy-drew.icns
-VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO shared
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 # Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
 LAUNCH --wine.graphics=direct-3d \
     --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
     --wine.clean-exit-line="${nancy-drew.data.clean-exit-log.marker}" \
-    --big-fish.exe="${const.install-dir}/Spy.exe" "big-fish:${const.install-dir}/LaunchGame.bfg"
+    --big-fish.exe=${const.program} "big-fish:${const.install-dir}/LaunchGame.bfg"

@@ -699,7 +699,8 @@ keeps, SkiFree and Tyrian among them. A Wrappfile's `ICON` names an `.icns` a
 `COPY` put in the app's `Resources/`; `completeBuild` checks it's there, sets
 `CFBundleIconFile` to it and removes `CFBundleIconName`, which names the
 generic icon in the asset catalog and would win over the file. The Nancy Drew
-games' icon is the nancy-drew module's `assets/nancy-drew.icns`. An engine nobody can fetch fails the build as
+games' icon is the nancy-drew module's `assets/nancy-drew.icns`, which its
+`set-icon` function copies in and names (`DO nancy-drew.set-icon`). An engine nobody can fetch fails the build as
 `engineUnavailable`, which asks the person to check they are online.
 
 The template copy is `cp -ac`: each file is an APFS clone, so it is near

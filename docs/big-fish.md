@@ -50,13 +50,11 @@ prefix), the same shape as Steam's ([steam.md](steam.md#building)):
 ```dockerfile
 FROM big-fish@1/manager AS big-fish
 USE nancy-drew
-COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
-ICON /Resources/nancy-drew.icns
-VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO shared                    # the bundle's: the icon, the saves volume
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 LAUNCH --wine.graphics=direct-3d \
-    --big-fish.exe="${const.install-dir}/Game.exe" "big-fish:${const.install-dir}/LaunchGame.bfg"
+    --big-fish.exe=${const.program} "big-fish:${const.install-dir}/LaunchGame.bfg"
 ```
 
 The manager stage installs the Game Manager (`BIG-FISH.MANAGER`, its

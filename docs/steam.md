@@ -49,14 +49,10 @@ itself built from the wine module's prefix):
 ```dockerfile
 FROM steam@1/client AS steam
 USE nancy-drew
-DO wine.cnc-ddraw
-COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
-ICON /Resources/nancy-drew.icns
-VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+DO shared                    # the bundle's: cnc-ddraw, the icon, the saves volume
 DO steam.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
-LAUNCH --wine.graphics=direct-draw \
-    --steam.exe="${const.install-dir}/Game.exe" steam://rungameid/${input.game.app-id}
+LAUNCH --wine.graphics=direct-draw --steam.exe=${const.program} steam://rungameid/${input.game.app-id}
 ```
 
 The client stage installs Steam (`STEAM.CLIENT`) and has ⌘ act as Ctrl in its

@@ -21,10 +21,19 @@ struct WrappfileTodayTests {
     }
 
     /// A target's instructions, and those of the `<target>-files` stage its
-    /// data is copied from, for a ScummVM game whose data needs Wine.
+    /// data is copied from, for a ScummVM game whose data needs Wine; a
+    /// function of the bundle's own a stage calls (`DO after-install`) is
+    /// followed into its body.
     private func instructions(_ file: Wrappfile, stage: String) throws -> [Instruction] {
+        func expanded(_ instructions: [Instruction]) -> [Instruction] {
+            instructions.flatMap { instruction -> [Instruction] in
+                guard instruction.keyword == "DO", let name = instruction.arguments.first?.raw, !name.contains("."),
+                      let function = file.function(named: name) else { return [instruction] }
+                return expanded(function.body.flatMap(\.instructions))
+            }
+        }
         let files = file.stage(named: stage + "-files")?.body.flatMap(\.instructions) ?? []
-        return try files + #require(file.stage(named: stage), "no \(stage) stage").body.flatMap(\.instructions)
+        return try expanded(files + #require(file.stage(named: stage), "no \(stage) stage").body.flatMap(\.instructions))
     }
 
     private func patchIDs(_ instructions: [Instruction]) -> [String] {

@@ -165,12 +165,32 @@ in the Dockerfile: it depends on where the build put the program and which
 modules are left in the app.
 
 ```dockerfile
+CONST program = "${const.install-dir}/Game.exe"
+
+# What the app has whichever edition it's built from
+FUNCTION shared
+  DO wine.cnc-ddraw
+  DO nancy-drew.set-icon      # COPY assets/nancy-drew.icns /Resources/…, ICON it
+  VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+END
+
 FROM wine@10/prefix AS prefix
-COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
-ICON /Resources/nancy-drew.icns
-VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
-LAUNCH --wine.graphics=direct-draw "${const.install-dir}/Game.exe"
+USE nancy-drew
+DO shared
+LAUNCH --wine.graphics=direct-draw ${const.program}
 ```
+
+What a bundle repeats in several stages it writes once: a `CONST` for a
+path (the program, which `--creates` and each `LAUNCH` name), a `FUNCTION`
+of its own for steps (`app`, above, called by the `prefix` stage and by
+Steam's and Big Fish's, which are built from module stages instead), and a
+module's function for what every program of a series does (the Nancy Drew
+games' icon). What a function records (its `ICON`, `VOLUME`s) is the calling
+stage's, and it uses the caller's modules. A module used in a base stage
+(`prefix`) needn't be used again in the stages built from it. A ScummVM
+game's `scummvm` stage writes the icon's `COPY` and `ICON` itself: using
+nancy-drew there would bring in Wine, which it depends on, and a ScummVM
+app keeps no Wine.
 
 - **`LAUNCH`'s program's path type is what starts it**: `C:/…/Game.exe` in a
   Wine stage is Wine's, `/SharedSupport/game/` ScummVM's (with the game's id

@@ -190,7 +190,7 @@ none.
 | `nancy-drew` | `assets/*.au3`: the AutoIt scripts that click through an installer that won't run silently, and patchers with no silent mode | `GameInstallerRunner` |
 | `nancy-drew` | `needles/`: the splash screens many games share and the main menu's Exit, and `scenarios/quit-from-menu.yaml`, the test every game's bundle names ([testing.md](testing.md#scenarios)) | WrappPuppeteer (`TestData`), from the source tree or its bundle's copy |
 
-| `nancy-drew` | `functions/patch`, `functions/configure-ini`: Wrappfile functions (`DO nancy-drew.patch --id=… --into=…`), which each stage that installs a Wine game writes; `assets/installshield-custom-dialog-automate.au3`, the script `INSTALLER.RUN --automation` names for an InstallShield installer that won't exit by itself; `assets/nancy-drew.icon`, the games' icon, and `assets/nancy-drew.icns` compiled from it by `sc generate` for their `ICON` | the Wrappfile checker, for now |
+| `nancy-drew` | `functions/patch`, `functions/configure-ini`, `functions/set-icon`: Wrappfile functions (`DO nancy-drew.patch --id=… --into=…`), the first two written by each stage that installs a Wine game, the last (the games' icon, `COPY` and `ICON`) by every game's; `assets/installshield-custom-dialog-automate.au3`, the script `INSTALLER.RUN --automation` names for an InstallShield installer that won't exit by itself; `assets/nancy-drew.set-icon`, the games' icon, and `assets/nancy-drew.icns` compiled from it by `sc generate` for their `ICON` | the Wrappfile checker, for now |
 
 Second Chance's app finds the nancy-drew module through `NancyDrewModule`.
 The quit scenario itself is still Swift (`NancyDrewQuitScenario`), until
