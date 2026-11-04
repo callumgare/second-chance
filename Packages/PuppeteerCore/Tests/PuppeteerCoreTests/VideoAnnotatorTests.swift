@@ -26,6 +26,14 @@ struct VideoAnnotatorTests {
         #expect(captions.map(\.end) == [1, 1.5, 4.5, 10, 12])
     }
 
+    @Test("Events at the same moment make no caption overlap another")
+    func simultaneousEvents() {
+        let events = [VideoAnnotator.Event(time: 4, text: "A"), .init(time: 4, text: "B"), .init(time: 5, text: "C")]
+        let captions = VideoAnnotator.captions(events, end: 9)
+        #expect(captions.map(\.text) == ["", "B", "C", ""])
+        #expect(zip(captions, captions.dropFirst()).allSatisfy { $0.end == $1.start })
+    }
+
     @Test("A recording comes back as a movie with its chapters and a caption track")
     func annotates() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("annotate-\(UUID().uuidString)")

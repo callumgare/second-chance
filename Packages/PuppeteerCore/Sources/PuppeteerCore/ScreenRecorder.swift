@@ -120,6 +120,11 @@ public nonisolated final class ScreenRecorder: NSObject, SCStreamOutput, @unchec
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
+            // Frames in the order they were shown: a recording whose frames
+            // are reordered (B-frames) can't be copied into a movie with
+            // its chapters (VideoAnnotator), and steps back frame by frame
+            // less readily.
+            AVVideoCompressionPropertiesKey: [AVVideoAllowFrameReorderingKey: false],
         ])
         input.expectsMediaDataInRealTime = true
         guard writer.canAdd(input) else { throw Failure(description: "the video writer won't take a \(width)x\(height) video") }

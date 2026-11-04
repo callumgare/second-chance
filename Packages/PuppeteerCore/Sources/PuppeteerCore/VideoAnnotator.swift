@@ -120,11 +120,11 @@ public nonisolated enum VideoAnnotator {
             let start = max(event.time, cursor)
             let next = index + 1 < sorted.count ? sorted[index + 1].time : end
             let stop = min(start + captionSeconds, max(next, start), end)
+            // An event at the same moment as the next has no time of its own.
+            guard stop > start else { continue }
             if start > cursor { cues.append((cursor, start, "")) }
-            if stop > start {
-                cues.append((start, stop, event.text))
-                cursor = stop
-            }
+            cues.append((start, stop, event.text))
+            cursor = stop
         }
         if end > cursor { cues.append((cursor, end, "")) }
         return cues
@@ -162,9 +162,16 @@ public nonisolated enum VideoAnnotator {
     }
 
     /// A text sample for each span: its text, UTF-8 behind a 16-bit length.
+    /// Each span's boundaries are rounded to the movie's timescale first, so
+    /// one ends where the next starts, and one that rounds to nothing (an
+    /// event a millisecond before the next) is left out.
     static func samples(_ spans: [(start: TimeInterval, end: TimeInterval, text: String)],
                         format: CMFormatDescription) throws -> [CMSampleBuffer] {
-        try spans.map { span in
+        let timescale: CMTimeScale = 600
+        func ticks(_ seconds: TimeInterval) -> CMTimeValue { CMTimeValue((seconds * Double(timescale)).rounded()) }
+        return try spans.compactMap { span -> CMSampleBuffer? in
+            let (start, end) = (ticks(span.start), ticks(span.end))
+            guard end > start else { return nil }
             let text = Data(span.text.utf8.prefix(Int(UInt16.max)))
             var bytes = Data([UInt8(text.count >> 8), UInt8(text.count & 0xFF)])
             bytes.append(text)
@@ -175,8 +182,8 @@ public nonisolated enum VideoAnnotator {
             guard status == noErr, let block else { throw Failure(description: "can't make a text sample (\(status))") }
             status = bytes.withUnsafeBytes { CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: bytes.count) }
             guard status == noErr else { throw Failure(description: "can't fill a text sample (\(status))") }
-            var timing = CMSampleTimingInfo(duration: CMTime(seconds: span.end - span.start, preferredTimescale: 600),
-                                            presentationTimeStamp: CMTime(seconds: span.start, preferredTimescale: 600),
+            var timing = CMSampleTimingInfo(duration: CMTime(value: end - start, timescale: timescale),
+                                            presentationTimeStamp: CMTime(value: start, timescale: timescale),
                                             decodeTimeStamp: .invalid)
             var size = bytes.count
             var sample: CMSampleBuffer?
