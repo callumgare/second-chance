@@ -199,7 +199,12 @@ struct GameDetectorBeforeBundlesTests {
             let now = await Blocking.run { GameDetector.shippedIndex.detect(source) }
             let slug: String = if case .recognised(let match) = now { GameDetector.slug(of: match.bundleID) } else { GameInfo.unknownGame.id }
             let game = image.deletingLastPathComponent().lastPathComponent
-            #expect(slug == before, "\(game)/\(image.lastPathComponent): \(now), before \(before)")
+            // A program beyond Nancy Drew (one with a `program` id) came after
+            // bundles: before them, its disc could only be unknown.
+            let cameBefore = GameInfoProvider.shared.allGames().first { $0.id == game }?.program == nil
+            if cameBefore {
+                #expect(slug == before, "\(game)/\(image.lastPathComponent): \(now), before \(before)")
+            }
             if image.lastPathComponent == "disk-1.iso" {
                 #expect(slug == game, "\(game)'s first disc is \(slug)")
             }
