@@ -23,12 +23,16 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 /// and finishing the file never wait on the main thread, which a run blocks.
 public nonisolated final class ScreenRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
     public let file: URL
+    /// The log line saying when the video's first frame was, in seconds
+    /// since 1970 after it.
+    public static let startedMarker = "🎥 Screen recording's first frame at "
     private let queue = DispatchQueue(label: "au.gare.callum.second-chance.WrappPuppeteer.ScreenRecorder")
     // Touched only on `queue`, once `start` has set them up.
     private var stream: SCStream?
     private var writer: AVAssetWriter?
     private var input: AVAssetWriterInput?
     private var sessionStarted = false
+    private var firstFrameAt: Date?
     private var stopped = false
 
     private init(file: URL) {
@@ -58,6 +62,10 @@ public nonisolated final class ScreenRecorder: NSObject, SCStreamOutput, @unchec
         logger.notice("🎥 Recording the screen to \(file.path), for at most \(Int(limit))s")
         return recorder
     }
+
+    /// When the video's first frame came: its time 0, on the clock the logs
+    /// use. Nil before one has.
+    public var firstFrame: Date? { queue.sync { firstFrameAt } }
 
     /// Stop recording and finish the file; waits a few seconds at most.
     /// Safe to call when it has already stopped.
@@ -137,6 +145,10 @@ public nonisolated final class ScreenRecorder: NSObject, SCStreamOutput, @unchec
         if !sessionStarted {
             writer.startSession(atSourceTime: sampleBuffer.presentationTimeStamp)
             sessionStarted = true
+            firstFrameAt = Date()
+            // The video's time 0 on the clock the logs use, so what they say
+            // happened can be placed in the video (VideoAnnotator).
+            logger.notice("\(Self.startedMarker)\(String(format: "%.3f", Date().timeIntervalSince1970))")
         }
         if input.isReadyForMoreMediaData { input.append(sampleBuffer) }
     }

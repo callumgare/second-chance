@@ -13,7 +13,7 @@ import Synchronization
 /// File-scope entry to avoid nested type inference issues under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor.
 nonisolated public struct Entry: Sendable {
     public let seq: UInt64
-    let timestamp: Date
+    public let timestamp: Date
     public let level: String
     public let label: String
     public let message: String

@@ -480,7 +480,12 @@ enum AppPuppetRunner {
         // Recording: kept, as an attachment, only when the launch fails.
         let screenRecording = FileManager.default.temporaryDirectory
             .appendingPathComponent("wrapp-puppeteer-screen-\(UUID().uuidString).mp4")
-        defer { try? FileManager.default.removeItem(at: screenRecording) }
+        // A failed run's, with what happened marked in it.
+        let annotatedRecording = screenRecording.deletingPathExtension().appendingPathExtension("mov")
+        defer {
+            try? FileManager.default.removeItem(at: screenRecording)
+            try? FileManager.default.removeItem(at: annotatedRecording)
+        }
         do {
             let (observedExitCode, pid) = try await Self.launchViaLaunchServices(
                 appBundle: appBundle,
@@ -500,7 +505,8 @@ enum AppPuppetRunner {
                       attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, requiredLines: requiredLines, onWarning: onWarning)
             return (exitCode: observedExitCode, pid: pid)
         } catch {
-            attachScreenRecording(screenRecording, gameSlug: gameSlug, attemptLabel: attemptLabel)
+            attachScreenRecording(FileManager.default.fileExists(atPath: annotatedRecording.path) ? annotatedRecording : screenRecording,
+                                  gameSlug: gameSlug, attemptLabel: attemptLabel)
             throw error
         }
     }
@@ -635,12 +641,13 @@ enum AppPuppetRunner {
         }
     }
 
-    /// Attach the run's screen recording, for a launch that failed; nothing
+    /// Attach the run's screen recording, for a launch that failed: the
+    /// `.mov` with what happened marked when WrappPuppeteer made one. Nothing
     /// when WrappPuppeteer had no Screen Recording, so made none.
     private static func attachScreenRecording(_ file: URL, gameSlug: String, attemptLabel: String) {
         guard FileManager.default.fileExists(atPath: file.path) else { return }
         do {
-            Attachment.record(try Data(contentsOf: file), named: "screen-recording-\(attemptLabel)-\(gameSlug).mp4")
+            Attachment.record(try Data(contentsOf: file), named: "screen-recording-\(attemptLabel)-\(gameSlug).\(file.pathExtension)")
         } catch {
             Attachment.record(Data("Couldn't read \(file.path): \(error.localizedDescription)\n".utf8),
                               named: "screen-recording-\(attemptLabel)-\(gameSlug).txt")
