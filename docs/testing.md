@@ -392,7 +392,14 @@ caught), stopping when the run ends or after `--screen-recording-limit`
 seconds (2 minutes): a launch that's fine takes seconds, and a long capture
 wears a test Mac down, as screenshots do. The test deletes the video when
 the launch passes and attaches it to the results when it fails, as
-`screen-recording-<attempt>-<slug>.mp4`. Without the permission there's no
+`screen-recording-<attempt>-<slug>.mov`. Once the recording has stopped
+WrappPuppeteer writes it again beside it as a `.mov`, without encoding it
+again (a second or so), with what happened marked as chapters and captions:
+its own steps (the game's process and window found, each screen matched,
+each click) and the wrapp's launch, from its launch log, each placed by the
+recording's first frame, whose time it logs (`VideoAnnotator`,
+`RecordingEvents`). It does so whether or not the run then fails, and at
+the limit too, so a run killed later still has one. Without the permission there's no
 video and a log line says so. WrappPuppeteer is signed with the development
 team, so a grant in System Settings survives rebuilds.
 

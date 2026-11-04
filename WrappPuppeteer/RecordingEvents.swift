@@ -2,7 +2,7 @@
 //  RecordingEvents.swift
 //  WrappPuppeteer
 //
-//  What happened during a failed run, marked in its screen recording: this
+//  What happened during a run, marked in its screen recording: this
 //  run's steps, from its own log, and the wrapp's, from its launch log, each
 //  at the moment it happened in the video (VideoAnnotator).
 
@@ -16,13 +16,14 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 nonisolated enum RecordingEvents {
     /// Write the recording again, beside it as a `.mov`, with what happened
     /// in this run marked as chapters and captions; nil when it can't be.
-    static func annotate(_ recorder: ScreenRecorder, gameSlug: String) -> URL? {
-        guard let start = recorder.firstFrame, FileManager.default.fileExists(atPath: recorder.file.path) else { return nil }
+    @discardableResult
+    static func annotate(_ video: URL, firstFrame start: Date, gameSlug: String) -> URL? {
+        guard FileManager.default.fileExists(atPath: video.path) else { return nil }
         let events = (ownEvents(LogStore.shared.snapshot().entries, since: start)
             + wrappEvents(launchLog(gameSlug: gameSlug, since: start), since: start)).sorted { $0.time < $1.time }
-        let output = recorder.file.deletingPathExtension().appendingPathExtension("mov")
+        let output = video.deletingPathExtension().appendingPathExtension("mov")
         do {
-            try VideoAnnotator.annotate(recorder.file, events: events, to: output)
+            try VideoAnnotator.annotate(video, events: events, to: output)
             logger.notice("🎥 Screen recording, with \(events.count) events marked: \(output.path)")
             return output
         } catch {

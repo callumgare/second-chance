@@ -44,8 +44,8 @@ func printUsage() {
                                its window went fullscreen: what a click skips
         --screen-recording <f> Record the whole screen to the video <f> (.mp4) from
                                the start, if WrappPuppeteer has Screen Recording;
-                               if the run fails, also <f> as a .mov with its steps
-                               and the wrapp's marked as chapters and captions
+                               then <f> as a .mov with its steps and the wrapp's
+                               marked as chapters and captions
         --screen-recording-limit <s>
                                Stop that recording after <s> seconds (default: 120)
         --quit-from-menu       Once at the menu, quit with the game's Quit menu item
@@ -269,14 +269,19 @@ ProcessCleanup.limitRuntime(to: options.maxRuntime)
 // The whole screen while the game starts, for working out a failure: a
 // launch that's fine takes seconds, so the limit stops it well before a long
 // run ends (ScreenRecorder).
-let recorder = screenRecording.flatMap { ScreenRecorder.start(to: $0, limit: screenRecordingLimit) }
-let scenario = NancyDrewQuitScenario(wrapp: Wrapp(appPath: path), options: options)
+// Once it's finished, what happened is marked in it, beside it as a .mov: a
+// second or so, so whether or not the run then fails, and at the limit even
+// if the run is later killed.
+let wrapp = Wrapp(appPath: path)
+let gameSlug = wrapp.gameSlug
+let recorder = screenRecording.flatMap {
+    ScreenRecorder.start(to: $0, limit: screenRecordingLimit) { file, firstFrame in
+        RecordingEvents.annotate(file, firstFrame: firstFrame, gameSlug: gameSlug)
+    }
+}
+let scenario = NancyDrewQuitScenario(wrapp: wrapp, options: options)
 let result = scenario.run()
 recorder?.stop()
-// A failed run's recording gets what happened marked in it, beside it as a .mov.
-if case .failed = result, let recorder {
-    _ = RecordingEvents.annotate(recorder, gameSlug: scenario.wrapp.gameSlug)
-}
 switch result {
 case .passed:
     logger.notice("WRAPP_PUPPETEER: run_succeeded")

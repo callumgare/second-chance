@@ -35,19 +35,26 @@ public nonisolated final class ScreenRecorder: NSObject, SCStreamOutput, @unchec
     private var firstFrameAt: Date?
     private var stopped = false
 
-    private init(file: URL) {
+    /// Called once the file is finished, by the limit or by `stop`, with its
+    /// first frame's time, on the recorder's queue (so not to ask the
+    /// recorder anything): the caller marks what happened in it then.
+    private let onFinished: (@Sendable (_ file: URL, _ firstFrame: Date) -> Void)?
+
+    private init(file: URL, onFinished: (@Sendable (_ file: URL, _ firstFrame: Date) -> Void)?) {
         self.file = file
+        self.onFinished = onFinished
     }
 
     /// Start recording the main display to `file` (replacing it), stopping by
     /// itself after `limit` seconds. Nil, with the reason logged, without
     /// Screen Recording or when ScreenCaptureKit won't start.
-    public static func start(to file: URL, limit: TimeInterval) -> ScreenRecorder? {
+    public static func start(to file: URL, limit: TimeInterval,
+                             onFinished: (@Sendable (_ file: URL, _ firstFrame: Date) -> Void)? = nil) -> ScreenRecorder? {
         guard CGPreflightScreenCaptureAccess() else {
             logger.notice("No screen recording: WrappPuppeteer doesn't have Screen Recording")
             return nil
         }
-        let recorder = ScreenRecorder(file: file)
+        let recorder = ScreenRecorder(file: file, onFinished: onFinished)
         do {
             try recorder.begin()
         } catch {
@@ -62,10 +69,6 @@ public nonisolated final class ScreenRecorder: NSObject, SCStreamOutput, @unchec
         logger.notice("🎥 Recording the screen to \(file.path), for at most \(Int(limit))s")
         return recorder
     }
-
-    /// When the video's first frame came: its time 0, on the clock the logs
-    /// use. Nil before one has.
-    public var firstFrame: Date? { queue.sync { firstFrameAt } }
 
     /// Stop recording and finish the file; waits a few seconds at most.
     /// Safe to call when it has already stopped.
@@ -180,6 +183,7 @@ public nonisolated final class ScreenRecorder: NSObject, SCStreamOutput, @unchec
             try Self.wait("Finishing the video") { finished in writer.finishWriting { finished(nil) } }
             if let error = writer.error { throw error }
             logger.notice("🎥 Screen recording saved: \(file.path)")
+            if let firstFrameAt { onFinished?(file, firstFrameAt) }
         } catch {
             logger.warning("Screen recording: \(error)")
         }
