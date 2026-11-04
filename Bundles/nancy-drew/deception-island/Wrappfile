@@ -53,7 +53,18 @@ LAUNCH --wine.graphics=direct-draw --steam.exe=${const.program} steam://rungamei
 # Big Fish's: the game installed by its Game Manager, whose DRM starts it
 FROM big-fish@1/manager AS big-fish
 DO pre-install-setup
+DO big-fish.cnc-ddraw                    # Armadillo rebuilds the game's imports
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO post-install-setup
+# Big Fish's Game.ini names the game's folders under \Program Files, where a
+# 32-bit Windows put it; here it's in Program Files (x86), and the game
+# stopped at "Unable to open CAL or CIF TREE file"
+EDIT "${const.install-dir}/Game.ini" --must-exist \
+    --ini="Nancy Data.IDPath=\Nancy Drew\Danger on Deception Island\" \
+    --ini="Nancy Data.CifTreePath=\Nancy Drew\Danger on Deception Island\ciftree\" \
+    --ini="Nancy Data.HDVideoPath=\Nancy Drew\Danger on Deception Island\HDVideo\" \
+    --ini="Nancy Data.CDVideoPath=\Nancy Drew\Danger on Deception Island\CDVideo\" \
+    --ini="Nancy Data.HDSoundPath=\Nancy Drew\Danger on Deception Island\HDSound\" \
+    --ini="Nancy Data.CDSoundPath=\Nancy Drew\Danger on Deception Island\CDSound\"
 LAUNCH --wine.graphics=direct-draw \
     --big-fish.exe=${const.program} "big-fish:${const.install-dir}/LaunchGame.bfg"

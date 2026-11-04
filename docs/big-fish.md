@@ -65,7 +65,22 @@ and activate the game, declining DirectX's setup (`BIG-FISH.INSTALL
 the game in, then signs out and takes the account out of the prefix
 (`BIG-FISH.SIGN-OUT`). The launch is the folder's `LaunchGame.bfg`, which
 Big Fish's DRM starts, naming the program it starts (`--big-fish.exe`) for
-the wrapp to find the game's process by. A ScummVM game's stage installs it
+the wrapp to find the game's process by. A DirectDraw game's stage also has
+`DO big-fish.cnc-ddraw` (`Modules/big-fish/functions/cnc-ddraw`), after the
+wine module's cnc-ddraw: cnc-ddraw then hooks the Windows functions
+themselves (`hook=2`) rather than the game's imports, which Armadillo
+rebuilds after cnc-ddraw has patched them. Without it the game read the
+unscaled mouse, so in fullscreen its cursor sat at the picture's edge and no
+click reached its menu.
+
+Under Armadillo the game runs as two processes of the same `.exe`, and the
+window is the second's; the first, its launcher, ends once an owned game has
+started, while a trial's stays as long as the game. So the wrapp watches the
+process whose window it found, not the first it saw, to tell when the game
+has ended (`GameLauncher`, `windowMayBeAnotherProcess`). Its in-process
+helpers reach an owned game through every program of its Wine session, as a
+Windows service starts it
+([wine-in-process-helpers.md](wine-in-process-helpers.md)). A ScummVM game's stage installs it
 in a stage of its own and copies its data into the app, which keeps no Wine
 and so no Game Manager.
 
