@@ -20,6 +20,11 @@ public nonisolated protocol ModuleExecutor: Sendable {
     /// declare, and only those.
     static var handles: [String] { get }
 
+    /// The revision of what its Swift makes, raised whenever a change to it
+    /// changes what a step makes: part of every one of its steps' keys, so
+    /// layers its earlier Swift made aren't restored.
+    static var revision: Int { get }
+
     /// What a step's key needs beyond its text: a disc's listing, an
     /// installer's fingerprint.
     func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs
@@ -40,6 +45,8 @@ public nonisolated protocol ModuleExecutor: Sendable {
 }
 
 nonisolated extension ModuleExecutor {
+    public static var revision: Int { 1 }
+
     public func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs { KeyInputs() }
 
     public func runProgram(_ program: ProgramRun, in context: any StepContext) async throws -> Int32 {

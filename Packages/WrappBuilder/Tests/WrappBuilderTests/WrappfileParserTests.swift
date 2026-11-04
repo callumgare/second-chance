@@ -34,7 +34,7 @@ struct WrappfileParserTests {
     FROM --module=steam@2 client AS steam
     VAR mode
     IF ${input.disc-1.id} = "disc-1"
-      LAYER
+      LAYER-HINT
         SET mode="x"
         RUN cmd /c echo $$HOME page#anchor
       END
@@ -146,7 +146,7 @@ struct WrappfileParserTests {
         else if ${platform.macos} = "26"
           run x
         else
-          layer
+          layer-hint
             Module.Wine.Registry --set k v
           end
         end
@@ -167,7 +167,7 @@ struct WrappfileParserTests {
     @Test(arguments: [
         ("RUN x", "line 1: RUN comes before the first FROM; only INPUT, CONST, VAR and FUNCTION can"),
         ("FROM scratch\nIF ${platform.arch} = \"arm64\"\nRUN x", "line 2: IF has no END"),
-        ("FROM scratch\nEND", "line 2: END without an IF, LAYER or FUNCTION to close"),
+        ("FROM scratch\nEND", "line 2: END without an IF, LAYER-HINT or FUNCTION to close"),
         ("FROM scratch\nRUN \"x", "line 2: a quote isn't closed"),
         ("FROM scratch\nRUN ${x", "line 2: a ${ isn't closed, or is empty"),
         ("FROM scratch\nIF ${a.b} = \"b\"\nELSE\nELSE IF ${c.d} = \"d\"\nEND", "line 4: nothing can follow ELSE but END"),

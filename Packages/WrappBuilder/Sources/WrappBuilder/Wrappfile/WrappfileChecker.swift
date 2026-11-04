@@ -182,7 +182,8 @@ public nonisolated struct WrappfileChecker {
                     }
                     check(branch.steps, in: &inner, file: file, scopes: scopes, found: &found, all: &all)
                 }
-            case .layer(let steps, _):
+            case .layer(let steps, let line):
+                if steps.isEmpty { found.errors.append("line \(line): LAYER-HINT holds no steps") }
                 scope.pastTop = true
                 check(steps, in: &scope, file: file, scopes: scopes, found: &found, all: &all)
             }

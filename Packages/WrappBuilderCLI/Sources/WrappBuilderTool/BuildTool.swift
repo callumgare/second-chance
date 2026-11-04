@@ -132,6 +132,8 @@ nonisolated struct EventPrinter: Sendable {
             case .stepProgress(let progress): guard let text = progress?.text else { return }; line = "  \(text)"
             case .substep(let text): line = "  \(text)"
             case .module(let id, let name, _, _): line = "  \(id).\(name)"
+            case .replayed(let inner):
+                if case .stepStarted(let ref) = inner { line = "↺ \(ref.step)" } else { return }
             }
         }
         FileHandle.standardOutput.write(Data((line + "\n").utf8))

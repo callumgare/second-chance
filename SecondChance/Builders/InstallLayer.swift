@@ -27,6 +27,15 @@ nonisolated enum LayerCachePolicy: String, Sendable {
     /// The prefix and the installed game.
     case all
 
+    /// As the runner's policy: `prefix` is its `modules`.
+    nonisolated var runnerPolicy: LayerPolicy {
+        switch self {
+        case .all: .all
+        case .prefix: .modules
+        case .off: .off
+        }
+    }
+
     static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> LayerCachePolicy {
         if let value = environment["SECOND_CHANCE_LAYER_CACHE"], let policy = LayerCachePolicy(rawValue: value) {
             return policy

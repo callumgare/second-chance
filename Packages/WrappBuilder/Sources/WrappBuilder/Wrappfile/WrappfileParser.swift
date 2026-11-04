@@ -273,13 +273,15 @@ public nonisolated enum WrappfileParser {
                 case "IF":
                     collected.append(try conditional(first: line))
                 case "LAYER":
-                    let body = try steps(until: ["END"], in: "LAYER", openedAt: line.number).steps
+                    throw WrappfileError(line: line.number, message: "LAYER is LAYER-HINT now: a hint where layers would best be kept, never a promise")
+                case "LAYER-HINT":
+                    let body = try steps(until: ["END"], in: "LAYER-HINT", openedAt: line.number).steps
                     index += 1
                     collected.append(.layer(body, line: line.number))
                 case "ARG":
                     throw WrappfileError(line: line.number, message: "ARG is gone: INPUT declares a value from outside, CONST a fixed one")
                 case "END", "ELSE":
-                    throw WrappfileError(line: line.number, message: "\(keyword) without an IF\(keyword == "END" ? ", LAYER or FUNCTION" : "") to close")
+                    throw WrappfileError(line: line.number, message: "\(keyword) without an IF\(keyword == "END" ? ", LAYER-HINT or FUNCTION" : "") to close")
                 case "FROM", "FUNCTION":
                     throw WrappfileError(line: line.number, message: "\(keyword) can't be inside \(block ?? "a stage")")
                 default:

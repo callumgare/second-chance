@@ -144,5 +144,5 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
 
     /// The words that start or end a block, or a stage: compared in upper
     /// case, as every keyword is.
-    static let blockWords: Set<String> = ["IF", "ELSE", "END", "FROM", "AS", "FUNCTION", "LAYER"]
+    static let blockWords: Set<String> = ["IF", "ELSE", "END", "FROM", "AS", "FUNCTION", "LAYER-HINT"]
 }

@@ -43,21 +43,22 @@ enum AppRunner {
             providedFile: { fullForm in fullForm == "module:installer:/autoit" ? autoIt : nil },
             engine: { module, version in try await helper.engine(module, version: version) },
             moduleFolders: ModuleSteps.moduleFolders())
-        // The wine module's prefix from its layer, as every build has made
-        // it, until the runner keeps layers of its own: its engine and
-        // helpers laid in by its setup steps, then the prefix restored or
-        // made (`WineManager.createWinePrefix`).
-        let steps = configuration
-        let wineManager = WineManager.shared
-        configuration.moduleStage = { stage, tree in
-            guard stage.module == "wine", stage.name == "wine/prefix" else { return false }
-            let runner = PlanRunner(plan: BuildPlan(edition: "", stages: [stage]), configuration: steps)
-            for (index, step) in stage.steps.enumerated() where step.setup && step.instruction != "PREFIX" {
-                try await runner.runStep(step, stage: stage.name, index: index, in: tree)
+        // Layers (docs/wrapp-build.md#the-layer-cache): the store builds
+        // share, with the policy `SECOND_CHANCE_LAYER_CACHE` sets, a module's
+        // suggestion where its `build:` says an instruction is expensive.
+        let declarations = ModuleSteps.moduleDeclarations()
+        configuration.layers = WineManager.shared.layers
+        configuration.layerPolicy = LayerCachePolicy.current().runnerPolicy
+        configuration.layerEveryStep = ProcessInfo.processInfo.environment["SECOND_CHANCE_LAYER_EVERY_STEP"] == "1"
+        configuration.suggestsLayer = { step in step.module.flatMap { declarations[$0]?.instruction(step.instruction)?.layer } ?? false }
+        configuration.readsData = { step in
+            guard let module = step.module else { return [] }
+            return (declarations[module]?.instruction(step.instruction)?.readsData ?? []).flatMap { table in
+                ["\(table).yaml", "\(table).json"]
             }
-            try await wineManager.createWinePrefix(at: tree, bus: bus)
-            return true
         }
+        let revisions = executors.mapValues { type(of: $0).revision }
+        configuration.revision = { step in step.module.flatMap { revisions[$0] } ?? CoreInstructions.revision }
         return (configuration, emitter)
     }
 
@@ -108,6 +109,8 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
             var events: [WrappBuildEvent] = [event.isRestored
                 ? .stepRestored(name: ref.name, keyword: ref.step.keyword)
                 : .stepStarted(name: ref.name, keyword: ref.step.keyword)]
+            // A step's `--progress`, until the Wrappfiles EMIT it instead.
+            if let key = ref.step.option("progress"), let text = WineManager.progressText(key) { nextSubstep = text }
             let reached = Self.phaseByInstruction[ref.step.keyword].flatMap(SecondChanceEmits.phases.firstIndex(of:))
             if let reached, reached > (phase ?? -1) {
                 phase = reached
@@ -138,6 +141,10 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
             return phase == nil ? [] : [.progress(state(substep: text))]
         case .module:
             return []
+        case .replayed(let inner):
+            // A step restored from a layer moves the sidebar as one that ran.
+            if case .stepStarted(let ref) = inner { return translate(.stepRestored(ref)) }
+            return translate(inner)
         }
     }
 

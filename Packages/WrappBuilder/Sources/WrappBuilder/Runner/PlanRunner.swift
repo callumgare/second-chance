@@ -36,6 +36,21 @@ public nonisolated struct RunnerConfiguration: Sendable {
     public var pathTypes: PathTypeRegistry
     /// Each module's folder, by id, for what its executor reads of its own.
     public var moduleFolders: [String: URL]
+    /// Where layers are kept, and which (decisions 12 to 15 of the builders
+    /// plan); none without a store.
+    public var layers: LayerStore?
+    public var layerPolicy: LayerPolicy = .off
+    /// `--debug layer-every-step`: a layer after every step, for finding
+    /// which step of a group broke.
+    public var layerEveryStep = false
+    /// Whether a step's module says a layer after it is worth keeping
+    /// (`layer: suggested`).
+    public var suggestsLayer: @Sendable (PlannedStep) -> Bool = { _ in false }
+    /// The data tables a step's executor reads in Swift (`reads-data`), as
+    /// files of its module's folder (`ini.yaml`).
+    public var readsData: @Sendable (PlannedStep) -> [String] = { _ in [] }
+    /// The revision of the Swift that carries a step out, in its key.
+    public var revision: @Sendable (PlannedStep) -> Int = { _ in 1 }
 
     public init(executors: [String: any ModuleExecutor] = [:], inputs: any InputProvider = GivenInputs([:]),
                 emitter: any EventEmitter,
@@ -94,17 +109,39 @@ public nonisolated struct PlanRunner: Sendable {
     /// shared down a linear chain, cloned where stages branch: `StageTrees`):
     /// the target's tree, which is the wrapp. The other stages' trees stay in
     /// the folder, for whoever owns it to remove.
+    ///
+    /// With a layer store, every step is keyed first (`StepKeys`), and each
+    /// stage restores its deepest kept layer and runs from the step after
+    /// it; a stage nothing still to run reads isn't built at all. A layer is
+    /// kept after a step where one is suggested and the policy allows.
     @concurrent
     public func build(in folder: URL) async throws -> URL {
         let trees = StageTrees(plan: plan, in: folder)
         guard let target = trees.target else { throw StepFailure.recipe("the plan has no stages") }
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let layering = try await Layering(plan: plan, configuration: configuration, trees: trees.trees)
+            let needed = layering.neededStages()
+            var logs: [URL: [BuildEvent]] = [:]
             for (stage, start) in zip(plan.stages, trees.starts) {
                 try Task.checkCancellation()
-                try StageTrees.prepare(start)
+                guard needed.contains(stage.name) else {
+                    logger.notice("[Layer] Not building \(stage.name): nothing still to run reads it")
+                    continue
+                }
                 guard let tree = trees.trees[stage.name] else { continue }
-                try await run(stage, in: tree, trees: trees.trees)
+                // The events kept with a layer are the lasting ones of every
+                // step the tree holds, its parents' included.
+                switch start {
+                case .clone(let parent, _): logs[tree] = logs[parent] ?? []
+                case .empty: logs[tree] = []
+                case .parentsTree: break
+                }
+                let restoredThrough = try await layering.restore(stage, into: tree, start: start, emitter: configuration.emitter,
+                                                                 log: &logs[tree, default: []])
+                if restoredThrough == nil { try StageTrees.prepare(start) }
+                try await run(stage, in: tree, trees: trees.trees, from: (restoredThrough ?? -1) + 1, layering: layering,
+                              log: &logs[tree, default: []])
             }
         } catch {
             await finish()
@@ -115,20 +152,32 @@ public nonisolated struct PlanRunner: Sendable {
     }
 
     func run(_ stage: PlannedStage, in tree: URL, trees: [String: URL]) async throws {
+        var log: [BuildEvent] = []
+        try await run(stage, in: tree, trees: trees, from: 0, layering: nil, log: &log)
+    }
+
+    func run(_ stage: PlannedStage, in tree: URL, trees: [String: URL], from first: Int, layering: Layering?,
+             log: inout [BuildEvent]) async throws {
         try Task.checkCancellation()
-        if try await configuration.moduleStage(stage, tree) {
+        if first == 0, try await configuration.moduleStage(stage, tree) {
             logger.notice("[Runner] The \(stage.name) stage was made for the build")
             return
         }
         if stage.isModuleStage, !runsItself(stage) {
             throw StepFailure.recipe("nothing carries out the \(stage.name) stage's steps in this build")
         }
-        for (index, step) in stage.steps.enumerated() {
+        let recorder = LogRecorder(inner: configuration.emitter)
+        for (index, step) in stage.steps.enumerated() where index >= first {
             try Task.checkCancellation()
-            emit(stage.emits(before: index))
-            try await run(step, at: StepRef(stage: stage.name, index: index, step: step), in: tree, trees: trees)
+            emit(stage.emits(before: index), to: recorder)
+            let skipped = try await run(step, at: StepRef(stage: stage.name, index: index, step: step), in: tree, trees: trees,
+                                        emitter: recorder)
+            if skipped { layering?.taint() }
+            log += recorder.take()
+            try await layering?.keepIfSuggested(stage, index: index, tree: tree, log: log, executors: Array(configuration.executors.values))
         }
-        emit(stage.emits(before: stage.steps.count))
+        emit(stage.emits(before: stage.steps.count), to: recorder)
+        log += recorder.take()
     }
 
     /// Whether every step of a module's stage has someone to carry it out.
@@ -140,13 +189,17 @@ public nonisolated struct PlanRunner: Sendable {
     /// itself and hands this the ones an executor carries out, until every
     /// source builds through `run(in:)`.
     public func runStep(_ step: PlannedStep, stage: String, index: Int, in tree: URL) async throws {
-        try await run(step, at: StepRef(stage: stage, index: index, step: step), in: tree, trees: [:])
+        _ = try await run(step, at: StepRef(stage: stage, index: index, step: step), in: tree, trees: [:], emitter: configuration.emitter)
     }
 
-    func run(_ step: PlannedStep, at ref: StepRef, in tree: URL, trees: [String: URL]) async throws {
+    /// Whether the step was skipped (`--on-failure=ask`, and carried on without).
+    @discardableResult
+    func run(_ step: PlannedStep, at ref: StepRef, in tree: URL, trees: [String: URL], emitter: any EventEmitter) async throws -> Bool {
+        var configuration = configuration
+        configuration.emitter = emitter
         let context = LocalStepContext(tree: tree, step: step, plan: plan, configuration: configuration, trees: trees)
-        configuration.emitter.emit(.stepStarted(ref))
-        configuration.emitter.emit(.stepProgress(nil))
+        emitter.emit(.stepStarted(ref))
+        emitter.emit(.stepProgress(nil))
         logger.notice("Step: \(step) (\(step.origin))")
         let started = ContinuousClock.now
         do {
@@ -177,16 +230,17 @@ public nonisolated struct PlanRunner: Sendable {
             logger.error("[Runner] \(ref.name) failed: \(message)")
             guard try await configuration.ask(.confirmStepFailure(name: ref.name, message: message)) == .yes else { throw error }
             logger.warning("[Runner] Carrying on without \(ref.name)")
-            configuration.emitter.emit(.stepSkipped(ref, message: message))
-            return
+            emitter.emit(.stepSkipped(ref, message: message))
+            return true
         }
-        logger.debug("[Runner] \(ref.name) took \(ContinuousClock.now - started)")
-        configuration.emitter.emit(.stepDone(ref))
+        logger.notice("[Runner] \(ref.name) took \(ContinuousClock.now - started)")
+        emitter.emit(.stepDone(ref))
+        return false
     }
 
     /// A stage's `EMIT`s, as the build reaches them.
-    func emit(_ emits: [PlannedEmit]) {
-        for emitted in emits { configuration.emitter.emit(.emitted(emitted.text)) }
+    func emit(_ emits: [PlannedEmit], to emitter: (any EventEmitter)? = nil) {
+        for emitted in emits { (emitter ?? configuration.emitter).emit(.emitted(emitted.text)) }
     }
 
     func finish() async {

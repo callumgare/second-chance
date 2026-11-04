@@ -45,6 +45,13 @@ struct ModuleSteps {
         return FileManager.default.fileExists(atPath: tools.path) ? tools : nil
     }
 
+    /// What each shipped module declares, by id (`build:`).
+    nonisolated static func moduleDeclarations() -> [String: ModuleDeclarations] {
+        guard let modules = Bundle.main.resourceURL?.appendingPathComponent("Modules"),
+              let loaded = try? ModuleLoader(root: modules).loadAll().get() else { return [:] }
+        return Dictionary(uniqueKeysWithValues: loaded.map { ($0.manifest.id, $0.declarations) })
+    }
+
     /// The shipped modules' folders, by id, for what an executor reads of
     /// its own module's.
     nonisolated static func moduleFolders() -> [String: URL] {

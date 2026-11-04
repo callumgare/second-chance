@@ -106,6 +106,9 @@ public nonisolated enum BuildEvent: Sendable, Equatable, Codable {
     /// One of a module's own events, which its caller decodes by the
     /// module's package: the builder carries it without reading it.
     case module(id: String, name: String, payload: Data, lasting: Bool)
+    /// An event a restored layer kept, emitted again as the layer is
+    /// restored: what a fresh build would have shown.
+    indirect case replayed(BuildEvent)
 
     public struct Progress: Sendable, Equatable, Codable {
         public var fraction: Double?
@@ -124,6 +127,7 @@ public nonisolated enum BuildEvent: Sendable, Equatable, Codable {
         case .stepStarted, .stepRestored, .stepDone, .stepSkipped, .emitted: true
         case .instructions, .stepProgress, .substep: false
         case .module(_, _, _, let lasting): lasting
+        case .replayed: false
         }
     }
 }

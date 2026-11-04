@@ -215,10 +215,14 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         return DirectorySize.measure(folder).bytes
     }
 
-    /// Wine's server let finish, so the registry is written to its files
-    /// and nothing is running in the tree.
+    /// Wine's session ended, so wineserver has written the registry to its
+    /// files and nothing is running in the tree; nothing to wait for when
+    /// no wineserver is running for it.
     public func checkpoint(_ context: any StepContext) async throws {
-        try await Wine(wrapp: context.tree).server.waitUntilProgramsExit(timeout: nil)
+        let server = Wine(wrapp: context.tree).server
+        guard await server.isRunning else { return }
+        try await server.waitUntilProgramsExit(timeout: nil)
+        await server.stop()
     }
 
     /// The helpers the Mac driver loads, laid in the tree's `Frameworks/`.

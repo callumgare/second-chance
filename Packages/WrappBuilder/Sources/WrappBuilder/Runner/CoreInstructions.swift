@@ -12,7 +12,11 @@ import WrappFormat
 
 /// The core's instructions, carried out in the step's tree. Each step that
 /// needs a mount says so with its own `--mount`.
-nonisolated enum CoreInstructions {
+public nonisolated enum CoreInstructions {
+    /// The revision of what the core's instructions make (see
+    /// `ModuleExecutor.revision`).
+    public static let revision = 1
+
     static func run(_ step: PlannedStep, in context: LocalStepContext) async throws {
         switch step.instruction {
         case "COPY": try await copy(step, in: context)

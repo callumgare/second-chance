@@ -138,3 +138,60 @@ struct PlanRunnerTests {
         await #expect(throws: StepFailure.self) { try await run([step("RUN", "/bin/sh")], in: tree) }
     }
 }
+
+/// Layers kept by the runner and restored by the next build.
+struct RunnerLayerTests {
+    /// Writes a file per step into the tree, and counts what ran.
+    final class Writer: ModuleExecutor {
+        static let handles = ["WRITE"]
+        let ran = Mutex<[String]>([])
+        func run(_ step: PlannedStep, in context: any StepContext) async throws {
+            ran.withLock { $0.append(step.arguments[0]) }
+            let file = WrappLayout(app: context.tree).resources.appendingPathComponent(step.arguments[0])
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(step.arguments[0].utf8).write(to: file)
+        }
+    }
+
+    private func write(_ name: String) -> PlannedStep {
+        PlannedStep(instruction: "WRITE", module: "fake", options: [:], arguments: [name], name: nil, origin: "Wrappfile:1")
+    }
+
+    private func build(_ steps: [PlannedStep], store: LayerStore, executor: Writer, recorder: PlanRunnerTests.Recorder,
+                       in folder: URL) async throws -> URL {
+        var configuration = RunnerConfiguration(executors: ["fake": executor], emitter: recorder,
+                                                fetch: { _, _, _ in throw StepFailure.failed("no downloads") })
+        configuration.layers = store
+        configuration.layerPolicy = .all
+        configuration.suggestsLayer = { _ in true }
+        let plan = BuildPlan(edition: "e", stages: [PlannedStage(name: "only", from: .scratch, modules: ["fake"], steps: steps)])
+        return try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
+    }
+
+    @Test("A second build restores the deepest layer and runs only what's after it, replaying what the layer kept")
+    func restoresTheDeepestLayer() async throws {
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("layers-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let store = LayerStore(root: scratch.appendingPathComponent("store"))
+        let first = Writer()
+        _ = try await build([write("a"), write("b")], store: store, executor: first, recorder: .init(), in: scratch.appendingPathComponent("one"))
+        #expect(first.ran.withLock { $0 } == ["a", "b"])
+
+        // The same steps: everything restored.
+        let second = Writer(), recorder = PlanRunnerTests.Recorder()
+        let tree = try await build([write("a"), write("b")], store: store, executor: second, recorder: recorder, in: scratch.appendingPathComponent("two"))
+        #expect(second.ran.withLock { $0 }.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: WrappLayout(app: tree).resources.appendingPathComponent("b").path))
+        #expect(recorder.all.contains { if case .replayed(.stepDone) = $0 { true } else { false } })
+
+        // A changed second step: the first restored, the second run again.
+        let third = Writer()
+        _ = try await build([write("a"), write("c")], store: store, executor: third, recorder: .init(), in: scratch.appendingPathComponent("three"))
+        #expect(third.ran.withLock { $0 } == ["c"])
+
+        // A changed first step changes every key after it.
+        let fourth = Writer()
+        _ = try await build([write("z"), write("c")], store: store, executor: fourth, recorder: .init(), in: scratch.appendingPathComponent("four"))
+        #expect(fourth.ran.withLock { $0 } == ["z", "c"])
+    }
+}

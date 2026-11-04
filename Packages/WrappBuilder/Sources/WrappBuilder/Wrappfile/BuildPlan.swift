@@ -386,6 +386,8 @@ public nonisolated struct BuildPlanner {
     final class Recorder: @unchecked Sendable {
         var usedInputs: Set<String> = []
         var files: [String: URL] = [:]
+        /// The tables read since the last step was planned, which it's given.
+        var tablesRead: [String] = []
     }
 
     /// A stage's modules, by the name it knows each by, and the version of
@@ -572,7 +574,15 @@ public nonisolated struct BuildPlanner {
                 case .instruction(let instruction):
                     try expand(instruction, scope: &scope, origin: origin, into: &steps)
                 case .layer(let inner, _):
+                    // A block's steps are one layer: kept after its last,
+                    // none after the rest. The outermost block decides.
+                    let start = steps.count
                     try expand(inner, scope: &scope, origin: origin, into: &steps)
+                    let real = steps.indices.filter { $0 >= start && !(steps[$0].module == nil && steps[$0].instruction == "EMIT") }
+                    for index in real {
+                        steps[index].inLayerHint = true
+                        steps[index].endsLayerHint = index == real.last
+                    }
                 case .conditional(let branches):
                     for branch in branches {
                         if let condition = branch.condition {
@@ -659,8 +669,11 @@ public nonisolated struct BuildPlanner {
                     }
                     arguments.append(role == .input ? value : try fullForm(value, role: role, scope: scope, modules: stageModules, origin: at))
                 }
-                steps.append(PlannedStep(instruction: instruction.name, module: module, options: options,
-                                         arguments: arguments, name: options["name"]?.first, origin: at))
+                var step = PlannedStep(instruction: instruction.name, module: module, options: options,
+                                       arguments: arguments, name: options["name"]?.first, origin: at)
+                step.tables = recorder.tablesRead
+                recorder.tablesRead = []
+                steps.append(step)
             }
         }
 
@@ -1177,6 +1190,9 @@ public nonisolated struct BuildPlanner {
                     throw PlanError(description: "\(at): \(module.manifest.id) has no data table \(table)")
                 }
                 do {
+                    let fullForm = "module:\(module.manifest.id):/\(file)"
+                    recorder.files[fullForm] = module.file(file)
+                    if !recorder.tablesRead.contains(fullForm) { recorder.tablesRead.append(fullForm) }
                     return try ModuleTables.shared.table(file, of: module)
                 } catch {
                     throw PlanError(description: "\(at): \(module.manifest.id)'s \(file) couldn't be read: \(error)")

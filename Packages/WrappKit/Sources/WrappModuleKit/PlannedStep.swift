@@ -24,6 +24,13 @@ public nonisolated struct PlannedStep: Sendable, Equatable, CustomStringConverti
     /// Planned by `USE` to set a module up in a tree that hasn't it (its
     /// engine, its `setup:` steps), rather than written.
     public var setup: Bool = false
+    /// Inside a `LAYER-HINT` block, and whether it's the block's last step:
+    /// a layer after it is worth keeping, and none after the steps before.
+    public var inLayerHint: Bool = false
+    public var endsLayerHint: Bool = false
+    /// The data tables its values were read from, by full form
+    /// (`module:nancy-drew:/patches.json`), which are part of its key.
+    public var tables: [String] = []
 
     public init(instruction: String, module: String?, options: [String: [String]], arguments: [String], name: String?, origin: String,
                 setup: Bool = false) {

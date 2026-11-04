@@ -87,7 +87,7 @@
             ]
         },
         "block": {
-            "match": "(?i)^\\s*(ELSE|END|LAYER)(?=\\s|$)",
+            "match": "(?i)^\\s*(ELSE|END|LAYER-HINT)(?=\\s|$)",
             "captures": {
                 "1": { "name": "keyword.control.wrappfile" }
             }
