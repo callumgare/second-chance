@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "scummvm"
-release: 3
+release: 4
 native: "scummvm"                            # its Swift: ScummVMRuntime, ScummVMBuild
 versions:
   # ScummVM's own Mac build, prepared on the Mac that builds
@@ -21,4 +21,6 @@ versions:
       # lure for Lure of the Temptress.
       engine-data: ["nancy.dat", "lure.dat"]
 runtime: { save-warning: false }
-assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a game with no menu to quit from, started and quit
+assets:
+  - "scenarios/starts-and-quits.yaml"   # WrappPuppeteer's: a game with no menu to quit from, started and quit
+  - "needles"                           # WrappPuppeteer's: what its scenario looks for, by tag

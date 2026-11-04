@@ -1,0 +1,6 @@
+# ScummVM's warning before a game it doesn't fully support (every Director
+# game): kept for the player, so they know to save often, and clicked past
+# under test.
+kind: "text"
+tags: ["unsupported-warning"]
+text: { strings: ["Start anyway"] }

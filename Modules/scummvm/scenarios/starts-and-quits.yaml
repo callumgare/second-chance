@@ -5,6 +5,12 @@
 goal: "program-ends"
 timeout: 120
 handlers:
+  # A game ScummVM doesn't fully support starts behind its warning, which
+  # the player sees too: Start anyway
+  - id: "unsupported-warning"
+    when: "unsupported-warning"
+    retry-after: 2
+    do: ["click"]
   - id: "running"
     when: "running"
     do: ["quit"]

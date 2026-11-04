@@ -685,7 +685,10 @@ A program with no menu to quit from uses its engine module's
 `scenarios/starts-and-quits.yaml` (the wine, scummvm or dosbox module's):
 when its bundle's `running` needles show, it quits. SkiFree's is
 the text on its slope ("Start", "Chris Pirih"), Lure of the Temptress's the
-word under Revolution's logo.
+word under Revolution's logo. The scummvm module's first clicks **Start
+anyway** on ScummVM's warning that a game isn't fully supported (every
+Director game), the module's own `unsupported-warning` needle: the warning
+is kept for the player, so they know to save often.
 
 An edition with another title screen adds a needle under the same tag, and
 leaves the scenario alone. Handler patches by id and shared fragments of
