@@ -63,6 +63,7 @@ END
 # Big Fish's: the game installed by its Game Manager, whose DRM starts it
 FROM big-fish@1/manager AS big-fish
 DO pre-install-setup
+DO big-fish.cnc-ddraw                    # Armadillo rebuilds the game's imports
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO post-install-setup
 LAUNCH --wine.graphics=direct-draw \

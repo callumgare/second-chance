@@ -1,0 +1,12 @@
+# DO big-fish.cnc-ddraw
+#
+# For a game Big Fish sells that draws with DirectDraw, after the wine
+# module's cnc-ddraw (DO wine.cnc-ddraw): cnc-ddraw hooks the Windows
+# functions themselves (hook=2, Microsoft Detours) rather than the game's
+# imports. Armadillo, which wraps every Big Fish edition, unpacks the game
+# and rebuilds its imports after cnc-ddraw has patched them, so the game read
+# the unscaled mouse: on a fullscreen display the cursor sat at the picture's
+# edge and no click reached the menu.
+FUNCTION cnc-ddraw
+  EDIT C:/windows/syswow64/ddraw.ini --must-exist --ini=ddraw.hook=2
+END

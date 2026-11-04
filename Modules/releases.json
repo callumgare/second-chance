@@ -32,6 +32,25 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "03f2c643526ea3056128951b15c35cea7c7f248323289eec722719c5fef94b59",
+          "functions/install" : "303ac1285da4764a4a626be2219358abd15dfeac1963de541cf6f6e3cd9b1c51",
+          "module.yaml" : "b070f76b7fc0191d1e3a9df102160c6b1bc1fbdb50814fe6750068430d61a3e6",
+          "stages/manager" : "168a8bdcff746d800535ff56bb4991256d38b622b972af395801244a2bab01e5"
+        },
+        "functions" : [
+          "functions/install",
+          "functions/cnc-ddraw"
+        ],
+        "release" : 3,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "disc" : [
