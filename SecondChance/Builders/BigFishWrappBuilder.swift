@@ -60,16 +60,22 @@ struct BigFishGameChoice: Equatable {
     }
 }
 
-/// The parts of a Big Fish build that need Wine: making the wrapp with the
-/// Game Manager installed in it, and cancelling the DirectX setup a game's
-/// installer starts. Tests stand in a fake.
-protocol BigFishWrappPreparing {
-    /// The template, a Wine prefix and the Game Manager, installed and not
-    /// running: the big-fish module's `manager` stage.
-    func prepare(wrappAt path: URL) async throws
-    /// One of the Wine steps a game's Big Fish stage has of its own
-    /// (cnc-ddraw's), carried out in the wrapp's prefix.
-    func run(_ step: PlannedStep, in path: URL) async throws
+/// The parts of a Big Fish build that need Wine: the tree the Game Manager
+/// is installed in, installing it, and cancelling the DirectX setup a game's
+/// installer starts. Tests stand in a fake, which also stands in for the
+/// module stages and Wine's steps in the edition's build.
+protocol BigFishWrappPreparing: Sendable {
+    /// The big-fish module's `manager` stage's tree, in `folder`, built by
+    /// the runner: a Wine prefix with the Game Manager installed, not running.
+    func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL
+    /// `BIG-FISH.MANAGER`: the Game Manager installed in `tree`'s prefix.
+    func installGameManager(_ step: PlannedStep, in tree: URL) async throws
+    /// Whether it made `stage` in `tree` itself, as a test's fake does the
+    /// module stages; the runner makes the rest.
+    func makeStage(_ stage: PlannedStage, in tree: URL) async throws -> Bool
+    /// What carries out the wine module's steps: the wine executor, or a
+    /// test's stand-in, which runs nothing.
+    func wineExecutor(_ real: any ModuleExecutor) -> any ModuleExecutor
     /// Start dismissing Microsoft's DirectX web setup, which a game's
     /// installer runs and the games don't need, until `stopCancellingDirectXSetup`.
     func startCancellingDirectXSetup(in path: URL) async
@@ -88,9 +94,14 @@ protocol BigFishWrappPreparing {
     func keepSignIn(from path: URL) async
 }
 
+extension BigFishWrappPreparing {
+    func makeStage(_ stage: PlannedStage, in tree: URL) async throws -> Bool { false }
+    func wineExecutor(_ real: any ModuleExecutor) -> any ModuleExecutor { real }
+}
+
 /// The real `BigFishWrappPreparing`: Big Fish's installer, clicked through
 /// with AutoIt.
-final class BigFishWrappPreparer: BigFishWrappPreparing {
+final class BigFishWrappPreparer: BigFishWrappPreparing, @unchecked Sendable {
     /// It's about 144 MB: anything much smaller is an error page.
     nonisolated static let installerMinimumSize = 50_000_000
     static let setupScript = "big-fish-game-manager-setup"
@@ -100,47 +111,40 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
     static let stagingFolder = "second-chance-big-fish"
     static let installTimeout: TimeInterval = 30 * 60
 
-    private let helper: WrappBuildHelper
     private let bus: EventBus<AppEvent>
     private let sessionStore: BigFishSessionStore
     private let lock = NSLock()
     private var directXCanceller: WineProcess?
 
-    init(helper: WrappBuildHelper, bus: EventBus<AppEvent>, sessionStore: BigFishSessionStore = BigFishSessionStore()) {
-        self.helper = helper
+    init(bus: EventBus<AppEvent>, sessionStore: BigFishSessionStore = BigFishSessionStore()) {
         self.bus = bus
         self.sessionStore = sessionStore
     }
 
-    func run(_ step: PlannedStep, in path: URL) async throws {
-        try await ModuleSteps(bus: bus).run(step, wrappPath: path)
+    /// The wine module's prefix, then the big-fish module's `manager` stage
+    /// (`FROM --module=big-fish@1 manager`): the Game Manager installed, and
+    /// ⌘ acting as Ctrl in its window. Built before the game is known, as
+    /// the Game Manager must be signed in to say which games the account
+    /// owns, in a tree that's thrown away after: the edition's build starts
+    /// from the same stage's layer.
+    func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL {
+        let stages = try await BigFishWrappBuilder.managerStages()
+        return try await PlanRunner(plan: BuildPlan(edition: "big-fish-manager", stages: stages), configuration: configuration)
+            .build(in: folder)
     }
 
-    /// The template and the wine module's prefix, then the big-fish
-    /// module's `manager` stage's steps (`FROM big-fish@1/manager`): the
-    /// Game Manager installed, and ⌘ acting as Ctrl in its window.
-    func prepare(wrappAt path: URL) async throws {
-        try await helper.createBaseWrapp(at: path)
-        for step in try await BigFishWrappBuilder.managerStage().steps {
-            switch (step.module, step.instruction) {
-            case ("big-fish", "MANAGER"):
-                let (url, sha256) = try Self.installerFetch(of: step)
-                await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Big Fish's Game Manager"))))
-                do {
-                    try await installGameManager(from: url, sha256: sha256, in: path)
-                } catch is CancellationError {
-                    throw CancellationError()
-                } catch {
-                    logger.error("Couldn't install the Game Manager: \(ErrorChain.describe(error))")
-                    let buildError = WrappBuildError(error)
-                    if case .internalError = buildError { throw WrappBuildError.bigFishGameManagerInstallFailed }
-                    throw buildError
-                }
-            case _ where ModuleSteps.handles(step):
-                try await run(step, in: path)
-            default:
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
-            }
+    func installGameManager(_ step: PlannedStep, in tree: URL) async throws {
+        let (url, sha256) = try Self.installerFetch(of: step)
+        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Big Fish's Game Manager"))))
+        do {
+            try await installGameManager(from: url, sha256: sha256, in: tree)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.error("Couldn't install the Game Manager: \(ErrorChain.describe(error))")
+            let buildError = WrappBuildError(error)
+            if case .internalError = buildError { throw WrappBuildError.bigFishGameManagerInstallFailed }
+            throw buildError
         }
     }
 
@@ -359,6 +363,87 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
 }
 
 /// Builds a wrapp from a game in the person's Big Fish Games library.
+/// The big-fish module's executor, until its kit moves into its package:
+/// `BIG-FISH.MANAGER`, `INSTALL` and `SIGN-OUT`, carried out by the Big Fish
+/// builder's own code. A Game Manager started by `INSTALL` runs until
+/// `SIGN-OUT` (or the build's end), which stops it and takes the account out.
+nonisolated final class BigFishExecutor: ModuleExecutor, @unchecked Sendable {
+    static let handles = ["MANAGER", "INSTALL", "SIGN-OUT"]
+
+    let builder: BigFishWrappBuilder
+    /// The game, and its edition when the person picked it already; nil
+    /// for one named up front, which `INSTALL` finds among what the account owns.
+    let game: GameInfo
+    let chosen: BigFishGameChoice?
+    let input: WrappBuildInput
+    let trial: Bool
+    let usesKeptSignIn: Bool
+    private let lock = NSLock()
+    private var state = BigFishSession()
+
+    init(builder: BigFishWrappBuilder, game: GameInfo, chosen: BigFishGameChoice?, input: WrappBuildInput, trial: Bool,
+         usesKeptSignIn: Bool) {
+        self.builder = builder
+        self.game = game
+        self.chosen = chosen
+        self.input = input
+        self.trial = trial
+        self.usesKeptSignIn = usesKeptSignIn
+    }
+
+    /// The edition `INSTALL` installed, for the wrapp's settings.
+    var installed: BigFishGameChoice? { lock.withLock { state.choice } }
+
+    /// The game, and whether as a trial: the Game Manager installs whatever
+    /// version Big Fish has now, which nothing says beforehand.
+    func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs {
+        guard step.instruction == "INSTALL" else { return KeyInputs() }
+        return KeyInputs([KeyInput("big-fish game", chosen?.sku.description ?? game.id), KeyInput("trial", String(trial))])
+    }
+
+    func run(_ step: PlannedStep, in context: any StepContext) async throws {
+        switch step.instruction {
+        case "MANAGER":
+            try await builder.installGameManager(step, in: context.tree)
+        case "INSTALL":
+            let choice = try await builder.install(step, in: context.tree, executor: self)
+            lock.withLock { state.choice = choice }
+        case "SIGN-OUT":
+            try await builder.signOut(in: context.tree, executor: self)
+        default:
+            throw StepFailure.recipe("\(step.origin): the big-fish module has no instruction \(step.instruction)")
+        }
+    }
+
+    /// What `INSTALL` started, for `SIGN-OUT` and the build's end to stop.
+    func update(_ change: (inout BigFishSession) -> Void) { lock.withLock { change(&state) } }
+    var session: BigFishSession { lock.withLock { state } }
+
+    /// A Game Manager this build started, stopped, and a person's sign-in
+    /// kept, so trying again needn't sign in again.
+    func finish() async {
+        let session = lock.withLock { () -> BigFishSession in
+            let session = state
+            state.manager = nil
+            state.directX = nil
+            state.keepsSignIn = false
+            return session
+        }
+        await builder.end(session)
+    }
+}
+
+/// What a Big Fish build's `INSTALL` leaves running, or to do.
+nonisolated struct BigFishSession: @unchecked Sendable {
+    var manager: BigFishGameManaging?
+    var tree: URL?
+    /// The tree whose DirectX setup is being cancelled.
+    var directX: URL?
+    /// Whether the person's sign-in is kept for the next build.
+    var keepsSignIn = false
+    var choice: BigFishGameChoice?
+}
+
 final class BigFishWrappBuilder: WrappBuildStrategy {
     private let helper: WrappBuildHelper
     private let installerRunner: GameInstallerRunner
@@ -401,7 +486,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
         self.installerRunner = installerRunner
         self.gameInfoProvider = gameInfoProvider
         self.makeManager = makeManager ?? { BigFishGameManager(wrappPath: $0) }
-        self.preparer = preparer ?? BigFishWrappPreparer(helper: helper, bus: bus)
+        self.preparer = preparer ?? BigFishWrappPreparer(bus: bus)
         self.signInPollInterval = signInPollInterval
         self.installPollInterval = installPollInterval
         self.managerExitedChecks = managerExitedChecks
@@ -428,39 +513,40 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }
-
-        let wrappPath = helper.createTemporaryWrappPath()
-        logger.notice("Temporary wrapp: \(wrappPath.path)")
-        let manager = makeManager(wrappPath)
-        var managerStarted = false
         // A person's sign-in is kept for the next build, and the one kept from
         // the last is used; never the test harness's, nor for a trial.
         let usesKeptSignIn = !trial && input.bigFishTestSignIn == nil
-        var keepsSignIn = false
 
+        // ── Which game ─────────────────────────────────────────────────
+        // One named up front is found among what the account owns as it's
+        // installed. Otherwise the Game Manager signs in, in the manager
+        // stage's tree, says which games the account owns and is asked
+        // which to build; then the tree is thrown away. The edition's build
+        // starts from the same stage's layer, the sign-in kept between them.
+        let gameInfo: GameInfo
+        let chosen: BigFishGameChoice?
+        if let preselected {
+            gameInfo = preselected
+            chosen = nil
+        } else {
+            let scratch = helper.createBuildFolder()
+            do {
+                let choice = try await identify(in: scratch, input: input, usesKeptSignIn: usesKeptSignIn)
+                gameInfo = choice.game
+                chosen = choice
+            } catch {
+                await helper.removeTempWrapp(scratch)
+                await bus.publishWrappBuild(.failed(WrappBuildError(error)))
+                throw error
+            }
+            await helper.removeTempWrapp(scratch)
+        }
+
+        // ── Build ──────────────────────────────────────────────────────
+        let folder = helper.createBuildFolder()
+        logger.notice("Working folder: \(folder.path)")
+        await bus.publishWrappBuild(.wrappStarted(path: folder))
         do {
-            try await preparer.prepare(wrappAt: wrappPath)
-            if usesKeptSignIn, await preparer.restoreSignIn(into: wrappPath) {
-                logger.notice("Starting the Game Manager with the sign-in kept from an earlier build")
-            }
-
-            await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Starting Big Fish's Game Manager"))))
-            managerStarted = true
-            try await manager.start(timeout: Self.startTimeout)
-
-            // ── Sign in and pick the game ──────────────────────────────
-            let choice: BigFishGameChoice
-            if trial, let preselected {
-                guard let product = preselected.bigFishProduct else {
-                    throw WrappBuildError.internalError("\(preselected.title) has no Big Fish product")
-                }
-                choice = BigFishGameChoice(game: preselected, sku: BigFishSKU(product: product))
-            } else {
-                try await signIn(manager, input: input)
-                keepsSignIn = usesKeptSignIn
-                choice = try await pickGame(manager, preselected: preselected, input: input)
-            }
-            let gameInfo = choice.game
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
             // The game's Big Fish edition: Big Fish's DRM starts a Wine game;
@@ -472,40 +558,27 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             }
             let composition = Composition(launch: launch)
             await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
-            logger.notice("Building \(gameInfo.title) from Big Fish (\(choice.sku)\(trial ? ", free trial" : "")), engine \(composition.engineTag)")
+            logger.notice("Building \(gameInfo.title) from Big Fish\(chosen.map { " (\($0.sku))" } ?? "")\(trial ? ", free trial" : ""), engine \(composition.engineTag)")
+            let template = try await helper.template()
 
-            for step in plan.bundleSteps {
-                logger.debug("Plan step: \(step) (\(step.origin))")
-                switch (step.module, step.instruction) {
-                case ("big-fish", "INSTALL"):
-                    // ── Download, install and activate ─────────────────
-                    if step.has("decline-directx") { await preparer.startCancellingDirectXSetup(in: wrappPath) }
-                    try await manager.download(choice.sku, fullVersion: !trial)
-                    let installed = try await waitForInstall(manager, sku: choice.sku)
-                    await preparer.stopCancellingDirectXSetup(in: wrappPath)
-                    try linkInstalledGame(step, folder: installed.folder, wrappPath: wrappPath)
-                case ("big-fish", "SIGN-OUT"):
-                    // The sign-in mustn't ship in the app: anyone given a copy could
-                    // use the account. An activated game plays signed out. A person's
-                    // is kept for the next build instead (signing out may end it with
-                    // Big Fish too); the test harness's is signed out.
-                    if !trial && !keepsSignIn { try await signOut(manager) }
-                    await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Closing Big Fish's Game Manager"))))
-                    await manager.shutdown(timeout: Self.shutdownTimeout)
-                    managerStarted = false
-                    if keepsSignIn { await preparer.keepSignIn(from: wrappPath) }
-                    // Signing out leaves the account's tokens in the registry and the
-                    // store's session in the Game Manager's browser profile.
-                    try await preparer.forgetAccount(in: wrappPath)
-                case _ where ModuleSteps.handles(step):
-                    try await preparer.run(step, in: wrappPath)
-                case _ where WrappBuildHelper.isAppStep(step):
-                    continue  // after the steps that put things in the prefix
-                default:
-                    throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
-                }
+            let executor = BigFishExecutor(builder: self, game: gameInfo, chosen: chosen, input: input, trial: trial,
+                                           usesKeptSignIn: usesKeptSignIn)
+            let (configuration, emitter) = runnerConfiguration(game: gameInfo, input: input, executor: executor)
+            let wrappPath: URL
+            do {
+                wrappPath = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
+            } catch let error as StepFailure {
+                await emitter.finish()
+                throw WrappBuildError.buildRecipeProblem(error.description)
+            } catch {
+                await emitter.finish()
+                throw error
             }
-            try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
+            await emitter.finish()
+            try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
+            guard let installed = executor.installed else {
+                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s Big Fish edition installs no game")
+            }
 
             // What the game is, as the build's events and the legacy settings say it.
             let runsInScummVM = composition.launcher == .scummvm
@@ -516,28 +589,146 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             if !runsInScummVM {
                 await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
             }
-            try await helper.installMissingEngines(at: wrappPath, composition: composition)
-            try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
 
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .bigFish,
                 gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent, composition: composition,
-                bigFishLaunchFile: runsInScummVM ? nil : drivePath(launch.program), bigFishSKU: choice.sku.description,
+                bigFishLaunchFile: runsInScummVM ? nil : drivePath(launch.program), bigFishSKU: installed.sku.description,
                 bigFishTrial: trial ? true : nil, edition: "big-fish",
                 launch: launch, app: plan.app, input: input
             )
+            await helper.removeTempWrapp(folder)
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
-            await preparer.stopCancellingDirectXSetup(in: wrappPath)
-            if managerStarted { await manager.shutdown(timeout: Self.shutdownTimeout) }
-            // So trying again needn't sign in again. Nothing, once the build
-            // has taken the account out.
-            if keepsSignIn { await preparer.keepSignIn(from: wrappPath) }
-            await helper.removeTempWrapp(wrappPath)
+            await helper.removeTempWrapp(folder)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }
+    }
+
+    /// What the runner is given: Second Chance's, with the big-fish executor
+    /// and Wine's steps through the preparer, which a test stands in for.
+    private func runnerConfiguration(game: GameInfo, input: WrappBuildInput, executor: BigFishExecutor)
+        -> (RunnerConfiguration, OrderedEmitter) {
+        var (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs([:]),
+                                                               downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
+                                                               executors: ["big-fish": executor])
+        if let wine = configuration.executors["wine"] { configuration.executors["wine"] = preparer.wineExecutor(wine) }
+        let preparer = preparer
+        configuration.moduleStage = { stage, tree in try await preparer.makeStage(stage, in: tree) }
+        return (configuration, emitter)
+    }
+
+    /// Sign the Game Manager in in the manager stage's tree, list what the
+    /// account owns and ask which edition to build; then stop it, keeping
+    /// a person's sign-in for the build to start with.
+    private func identify(in folder: URL, input: WrappBuildInput, usesKeptSignIn: Bool) async throws -> BigFishGameChoice {
+        let executor = BigFishExecutor(builder: self, game: .unknownGame, chosen: nil, input: input, trial: false,
+                                       usesKeptSignIn: usesKeptSignIn)
+        let (configuration, emitter) = runnerConfiguration(game: .unknownGame, input: input, executor: executor)
+        let tree: URL
+        do {
+            tree = try await preparer.prepare(in: folder, runner: configuration)
+        } catch {
+            await emitter.finish()
+            throw error
+        }
+        await emitter.finish()
+        do {
+            let manager = try await startManager(in: tree, executor: executor)
+            try await signIn(manager, input: input)
+            executor.update { $0.keepsSignIn = usesKeptSignIn }
+            let choice = try await pickGame(manager, preselected: nil, input: input)
+            await executor.finish()
+            return choice
+        } catch {
+            await executor.finish()
+            throw error
+        }
+    }
+
+    // MARK: - For the executor
+
+    func installGameManager(_ step: PlannedStep, in tree: URL) async throws {
+        try await preparer.installGameManager(step, in: tree)
+    }
+
+    /// The Game Manager started in `tree`, with the sign-in kept from an
+    /// earlier build when the build uses it.
+    private func startManager(in tree: URL, executor: BigFishExecutor) async throws -> BigFishGameManaging {
+        let manager = makeManager(tree)
+        if executor.usesKeptSignIn, await preparer.restoreSignIn(into: tree) {
+            logger.notice("Starting the Game Manager with the sign-in kept from an earlier build")
+        }
+        await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Starting Big Fish's Game Manager"))))
+        executor.update {
+            $0.manager = manager
+            $0.tree = tree
+        }
+        try await manager.start(timeout: Self.startTimeout)
+        return manager
+    }
+
+    /// `BIG-FISH.INSTALL`: the Game Manager started and signed in (but not
+    /// for a trial), the edition found, downloaded, installed and activated,
+    /// and `--into` made a link to the folder it installed the game in.
+    func install(_ step: PlannedStep, in tree: URL, executor: BigFishExecutor) async throws -> BigFishGameChoice {
+        let manager = try await startManager(in: tree, executor: executor)
+        let choice: BigFishGameChoice
+        if executor.trial {
+            guard let product = executor.game.bigFishProduct else {
+                throw WrappBuildError.internalError("\(executor.game.title) has no Big Fish product")
+            }
+            choice = BigFishGameChoice(game: executor.game, sku: BigFishSKU(product: product))
+        } else {
+            try await signIn(manager, input: executor.input)
+            executor.update { $0.keepsSignIn = executor.usesKeptSignIn }
+            if let chosen = executor.chosen {
+                choice = chosen
+            } else {
+                choice = try await pickGame(manager, preselected: executor.game, input: executor.input)
+            }
+        }
+        if step.has("decline-directx") {
+            await preparer.startCancellingDirectXSetup(in: tree)
+            executor.update { $0.directX = tree }
+        }
+        try await manager.download(choice.sku, fullVersion: !executor.trial)
+        let installed = try await waitForInstall(manager, sku: choice.sku)
+        await preparer.stopCancellingDirectXSetup(in: tree)
+        executor.update { $0.directX = nil }
+        try linkInstalledGame(step, folder: installed.folder, wrappPath: tree)
+        return choice
+    }
+
+    /// `BIG-FISH.SIGN-OUT`: the sign-in mustn't ship in the app, as anyone
+    /// given a copy could use the account; an activated game plays signed
+    /// out. A person's is kept for the next build instead (signing out may
+    /// end it with Big Fish too); the test harness's is signed out.
+    func signOut(in tree: URL, executor: BigFishExecutor) async throws {
+        let session = executor.session
+        if let manager = session.manager {
+            if !executor.trial && !session.keepsSignIn { try await signOut(manager) }
+            await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Closing Big Fish's Game Manager"))))
+            await manager.shutdown(timeout: Self.shutdownTimeout)
+        }
+        executor.update {
+            $0.manager = nil
+            $0.keepsSignIn = false
+        }
+        if session.keepsSignIn { await preparer.keepSignIn(from: tree) }
+        // Signing out leaves the account's tokens in the registry and the
+        // store's session in the Game Manager's browser profile.
+        try await preparer.forgetAccount(in: tree)
+    }
+
+    /// What a build's end stops: the DirectX canceller, the Game Manager,
+    /// and the person's sign-in kept, so trying again needn't sign in again.
+    func end(_ session: BigFishSession) async {
+        if let directX = session.directX { await preparer.stopCancellingDirectXSetup(in: directX) }
+        if let manager = session.manager { await manager.shutdown(timeout: Self.shutdownTimeout) }
+        if session.keepsSignIn, let tree = session.tree { await preparer.keepSignIn(from: tree) }
     }
 
     // MARK: - Steps
@@ -730,6 +921,15 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                 throw WrappBuildError.buildRecipeProblem("the big-fish module has no manager stage")
             }
             return stage
+        }
+    }
+
+    /// The big-fish module's `manager` stage and the stages it's built from.
+    nonisolated static func managerStages(in bundle: Bundle = .main) async throws -> [PlannedStage] {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
+        return try await Blocking.run {
+            try BuildPlanner.moduleStages("big-fish", "manager", constraint: nil,
+                                          modules: try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get())
         }
     }
 

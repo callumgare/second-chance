@@ -99,18 +99,34 @@ final class FakeGameManager: BigFishGameManaging, @unchecked Sendable {
     }
 }
 
-/// Makes the smallest wrapp the helper can finish, with the Game Manager's
-/// folder in it, and notes the DirectX canceller starting and stopping.
+/// Makes the manager stage's tree as the smallest wrapp, and the module
+/// stages in the edition's build as a fake prefix with the Game Manager's
+/// folder in it; notes the DirectX canceller starting and stopping.
 final class FakeBigFishPreparer: BigFishWrappPreparing, @unchecked Sendable {
     private(set) var directX: [String] = []
 
-    func prepare(wrappAt path: URL) async throws {
-        try SteamWrappBuilderTests.fakeWrapp(at: path)
-        let client = path.appendingPathComponent("Contents/SharedSupport/prefix").appendingPathComponent(BigFishGameManager.clientDirInPrefix)
+    func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL {
+        let tree = folder.appendingPathComponent("big-fish-manager.app")
+        try SteamWrappBuilderTests.fakeWrapp(at: tree)
+        try Self.fakeGameManager(in: tree)
+        return tree
+    }
+    func installGameManager(_ step: PlannedStep, in tree: URL) async throws {
+        try Self.fakeGameManager(in: tree)
+    }
+    func makeStage(_ stage: PlannedStage, in tree: URL) async throws -> Bool {
+        guard stage.isModuleStage else { return false }
+        _ = try await FakePreparer().makeStage(stage, in: tree)
+        if stage.name.hasPrefix("big-fish/") { try Self.fakeGameManager(in: tree) }
+        return true
+    }
+    func wineExecutor(_ real: any ModuleExecutor) -> any ModuleExecutor { FakePreparer.NoWine() }
+
+    static func fakeGameManager(in tree: URL) throws {
+        let client = tree.appendingPathComponent("Contents/SharedSupport/prefix").appendingPathComponent(BigFishGameManager.clientDirInPrefix)
         try FileManager.default.createDirectory(at: client, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: client.appendingPathComponent("bfgclient.exe").path, contents: Data("MZ".utf8))
     }
-    func run(_ step: PlannedStep, in path: URL) async throws {}
     func startCancellingDirectXSetup(in path: URL) async { directX.append("start") }
     func stopCancellingDirectXSetup(in path: URL) async { directX.append("stop") }
     private(set) var forgotAccount = 0
@@ -158,7 +174,10 @@ struct BigFishWrappBuilderTests {
     struct Run {
         let result: Result<URL, Error>
         let events: [WrappBuildEvent]
+        /// The last Game Manager the build made: the edition's build's.
         let manager: FakeGameManager?
+        /// Every one, in order: one to say what the account owns, when the person picks, then the build's.
+        let managers: [FakeGameManager]
         let preparer: FakeBigFishPreparer
     }
 
@@ -174,6 +193,7 @@ struct BigFishWrappBuilderTests {
         if let game { environment["BIG_FISH_GAME_SLUG"] = try Self.game(game).id }
         environment.merge(extra) { _, new in new }
         var manager: FakeGameManager?
+        var managers: [FakeGameManager] = []
         let preparer = FakeBigFishPreparer()
         let builder = BigFishWrappBuilder(
             helper: WrappBuildHelper(bus: bus),
@@ -184,6 +204,7 @@ struct BigFishWrappBuilderTests {
                               BigFishOwnedGame(sku: Self.hauntedMansion, title: "Haunted Mansion")]
                 configure(fake)
                 manager = fake
+                managers.append(fake)
                 return fake
             },
             preparer: preparer,
@@ -198,7 +219,7 @@ struct BigFishWrappBuilderTests {
         } catch {
             result = .failure(error)
         }
-        return Run(result: result, events: events.all, manager: manager, preparer: preparer)
+        return Run(result: result, events: events.all, manager: manager, managers: managers, preparer: preparer)
     }
 
     var appEnvironment: [String: String] { ["OUTPUT_PATH": base.appendingPathComponent("out").path] }
@@ -273,6 +294,11 @@ struct BigFishWrappBuilderTests {
         let wolf = try Self.game(Self.whiteWolf).title, mansion = try Self.game(Self.hauntedMansion).title
         #expect(input.offered == [mansion, wolf, "\(wolf) (in French)"])
         #expect(try settings(wrapp).bigFishSKU == Self.whiteWolfFrench)
+        // One Game Manager says what the account owns, then the build's starts
+        // with the sign-in it kept, and nothing is listed or picked again.
+        #expect(run.managers.count == 2)
+        #expect(run.preparer.restoredSignIn == 2 && run.preparer.keptSignIn == 2)
+        #expect(run.events.filter { if case .bigFishGamesOwned = $0 { return true }; return false }.count == 1)
     }
 
     @Test("Named up front, the English edition is chosen over another the account also owns")

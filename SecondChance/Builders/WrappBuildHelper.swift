@@ -141,17 +141,6 @@ class WrappBuildHelper {
         return wanted.compactMap { id in modules.first { $0.manifest.id == id.rawValue && $0.manifest.package() != nil } }
     }
 
-    /// The engines `composition` runs that the wrapp at `path` doesn't have
-    /// yet, put in: for a build that made its base before it knew the game
-    /// (Steam's, Big Fish's), whose launch turns out to be ScummVM's.
-    func installMissingEngines(at path: URL, composition: Composition) async throws {
-        let installed = Set(EngineInstall.installed(in: path.appendingPathComponent("Contents")).map(\.module))
-        for module in try engineModules(composition: composition, buildsWithWine: false)
-        where !installed.contains(module.manifest.id) {
-            try await installEngine(module, into: path)
-        }
-    }
-
     /// Put `module`'s engine into the wrapp at `path`, from the store, which
     /// fetches and prepares it the first time a build on this Mac needs it.
     private func installEngine(_ module: ModuleFolder, into path: URL) async throws {
@@ -360,51 +349,6 @@ class WrappBuildHelper {
     /// install layer, which holds the prefix alone.
     nonisolated static func isAppStep(_ step: PlannedStep) -> Bool {
         step.module == nil && step.instruction == "COPY" && step.arguments.last?.hasPrefix("/") == true
-    }
-
-    /// The plan's steps that copy into the app: a bundle's or module's file
-    /// (the icon), an input's files as they are (a disc's data), or a folder
-    /// of another stage's (a game's data, out of the prefix it was installed
-    /// in). `input` gives each input's folder by name. Publishes the game's
-    /// data as installed once one is copied.
-    func runAppSteps(_ plan: BuildPlan, wrappPath: URL, gameInfo: GameInfo,
-                     input: (String) async throws -> URL?) async throws {
-        let layout = WrappLayout(app: wrappPath)
-        var copiedData = false
-        for step in plan.stages.flatMap(\.steps) where Self.isAppStep(step) {
-            logger.debug("Plan step: \(step) (\(step.origin))")
-            guard step.arguments.count == 2, let destination = layout.location(step.arguments[1]) else {
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
-            }
-            let source: URL
-            if step.option("from") == nil {
-                guard let file = plan.file(step.arguments[0]) else {
-                    throw WrappBuildError.buildRecipeProblem("\(step.origin): the plan has no file \(step.arguments[0])")
-                }
-                try copyFile(file, to: destination)
-                continue
-            } else if let name = PlannedStep.input(in: step.option("from")) {
-                guard let folder = try await input(name) else {
-                    throw WrappBuildError.buildRecipeProblem("\(step.origin): this build has no \(name)")
-                }
-                source = step.arguments[0] == "." ? folder : folder.appendingPathComponent(step.arguments[0])
-            } else {
-                guard let folder = layout.location(step.arguments[0]) else {
-                    throw WrappBuildError.buildRecipeProblem("\(step.origin): \(step.arguments[0]) has no place in the app")
-                }
-                source = folder
-            }
-            if !copiedData {
-                await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
-                await bus.publishWrappBuild(.engineRouted(composition: gameInfo.composition, gameInfo: gameInfo))
-                copiedData = true
-            }
-            try await copyContents(of: source, into: destination)
-            logger.notice("Copied \(step.arguments[0]) from \(step.option("from") ?? "") into \(step.arguments[1])")
-        }
-        if copiedData {
-            await bus.publishWrappBuild(.gameExeDetected(path: "/SharedSupport/game", gameInfo: gameInfo))
-        }
     }
 
     /// A bundle's or module's file copied into the app (`COPY <file> <dest>`):
