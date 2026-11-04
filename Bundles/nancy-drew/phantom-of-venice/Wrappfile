@@ -7,12 +7,12 @@ INPUT game
 
 # What the app has whichever edition it's built from
 FUNCTION shared
+  USE nancy-drew
   DO nancy-drew.set-icon
   VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
 END
 
 FROM wine@10/prefix AS prefix
-USE nancy-drew
 DO shared
 LAUNCH --wine.graphics=direct-3d ${const.program}
 
@@ -32,7 +32,6 @@ DO nancy-drew.configure-ini --into=${const.install-dir}
 
 # Steam's: the game installed by Steam, which starts it
 FROM steam@1/client AS steam
-USE nancy-drew
 DO shared
 DO steam.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
@@ -40,7 +39,6 @@ LAUNCH --wine.graphics=direct-3d --steam.exe=${const.program} steam://rungameid/
 
 # Big Fish's: the game installed by its Game Manager, whose DRM starts it
 FROM big-fish@1/manager AS big-fish
-USE nancy-drew
 DO shared
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}

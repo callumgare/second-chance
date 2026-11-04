@@ -225,6 +225,15 @@ public nonisolated struct WrappfileChecker {
         case "DO":
             checkDo(instruction, scope: scope, file: file, found: &found)
             checkReferences(instruction.options.compactMap(\.value), at: at, scope: scope, found: &found)
+            // A function of the bundle's own USEs its modules for the stage
+            // that calls it, as if written there.
+            if let name = instruction.arguments.first?.raw, !name.contains("."), let function = file.function(named: name) {
+                for use in function.body.flatMap(\.instructions) where use.keyword == "USE" {
+                    let words = use.arguments.map(\.raw)
+                    guard let first = words.first, modules[Self.splitConstraint(first).0.lowercased()] != nil else { continue }
+                    addModule(Self.splitConstraint(first).0.lowercased(), as: words.count == 3 ? words[2].lowercased() : nil, to: &scope)
+                }
+            }
             return
         default:
             if let alias = instruction.moduleAlias {

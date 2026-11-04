@@ -97,6 +97,23 @@ struct BuildPlanTests {
         #expect(direct.launch?.fallback == nil)
     }
 
+    @Test("A function's USE is the calling stage's, as if written there")
+    func functionUses() throws {
+        let (planner, _, bundle) = try planner("""
+        FUNCTION shared
+          USE nancy-drew
+        END
+        FROM wine@10/prefix AS only
+        DO shared
+        DO nancy-drew.configure-ini --into=C:/Game
+        LAUNCH --wine.graphics=direct-3d C:/Game/Game.exe
+        """)
+        let plan = try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        #expect(plan.target?.modules.contains("nancy-drew") == true)
+        #expect(plan.target?.steps.last?.option("from-data") == "ini")
+    }
+
     @Test("A CONST can be built from another")
     func constFromConst() throws {
         let (planner, _, bundle) = try planner("""

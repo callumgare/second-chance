@@ -704,11 +704,9 @@ public nonisolated struct BuildPlanner {
                 throw PlanError(description: "\(origin): DO \(name) takes no --\(option.name)")
             }
             try expand(function.body, scope: &inner, origin: "\(source) from \(origin)", into: &steps)
-            // What a function records (its LAUNCH, VOLUMEs, ICON) is the
-            // calling stage's.
-            scope.modules.launch = inner.modules.launch
-            scope.modules.volumes = inner.modules.volumes
-            scope.modules.icon = inner.modules.icon
+            // What a function records (its LAUNCH, VOLUMEs, ICON) and the
+            // modules it USEs are the calling stage's, as if written there.
+            scope.modules = inner.modules
         }
 
         /// `LAUNCH`, `VOLUME` or `ICON`: recorded with the stage, in full

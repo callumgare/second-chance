@@ -48,8 +48,7 @@ itself built from the wine module's prefix):
 
 ```dockerfile
 FROM steam@1/client AS steam
-USE nancy-drew
-DO shared                    # the bundle's: cnc-ddraw, the icon, the saves volume
+DO shared                    # the bundle's: nancy-drew, cnc-ddraw, the icon, the saves volume
 DO steam.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 LAUNCH --wine.graphics=direct-draw --steam.exe=${const.program} steam://rungameid/${input.game.app-id}

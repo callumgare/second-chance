@@ -169,13 +169,13 @@ CONST program = "${const.install-dir}/Game.exe"
 
 # What the app has whichever edition it's built from
 FUNCTION shared
+  USE nancy-drew
   DO wine.cnc-ddraw
   DO nancy-drew.set-icon      # COPY assets/nancy-drew.icns /Resources/…, ICON it
   VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
 END
 
 FROM wine@10/prefix AS prefix
-USE nancy-drew
 DO shared
 LAUNCH --wine.graphics=direct-draw ${const.program}
 ```
@@ -185,8 +185,8 @@ path (the program, which `--creates` and each `LAUNCH` name), a `FUNCTION`
 of its own for steps (`app`, above, called by the `prefix` stage and by
 Steam's and Big Fish's, which are built from module stages instead), and a
 module's function for what every program of a series does (the Nancy Drew
-games' icon). What a function records (its `ICON`, `VOLUME`s) is the calling
-stage's, and it uses the caller's modules. A module used in a base stage
+games' icon). What a function records (its `ICON`, `VOLUME`s) and the modules it `USE`s
+are the calling stage's, as if written there, and it can use the caller's. A module used in a base stage
 (`prefix`) needn't be used again in the stages built from it. A ScummVM
 game's `scummvm` stage writes the icon's `COPY` and `ICON` itself: using
 nancy-drew there would bring in Wine, which it depends on, and a ScummVM

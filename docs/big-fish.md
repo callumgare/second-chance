@@ -49,8 +49,7 @@ prefix), the same shape as Steam's ([steam.md](steam.md#building)):
 
 ```dockerfile
 FROM big-fish@1/manager AS big-fish
-USE nancy-drew
-DO shared                    # the bundle's: the icon, the saves volume
+DO shared                    # the bundle's: nancy-drew, the icon, the saves volume
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
 LAUNCH --wine.graphics=direct-3d \
