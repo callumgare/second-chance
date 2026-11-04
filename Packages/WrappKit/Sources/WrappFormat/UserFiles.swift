@@ -12,10 +12,15 @@ import Foundation
 ///
 /// ```text
 /// <Application Support>/<bundle id>/
-///   volumes/<volume>/    one folder per volume: the person's files, and the
-///                        program's own settings beside them
-///   wrapp-settings/      Second Chance's settings for the wrapp
+///   stores/<owner>/<name>/  one folder per kept store of the app's
+///                           (`app` for the Wrappfile's own, a module's id
+///                           for a module's): the person's files, and the
+///                           program's own settings beside them
+///   wrapp-settings/         Second Chance's settings for the wrapp
 /// ```
+///
+/// Before stores, an app's own were `volumes/<name>/`, which
+/// `moveVolumesIntoStores` renames.
 ///
 /// `appSupport` is `~/Library/Application Support`, or what
 /// `SECOND_CHANCE_APP_SUPPORT_DIR` names in its place, so a test never
@@ -39,8 +44,26 @@ nonisolated public struct UserFilesLayout: Sendable, Equatable {
     }
 
     public var folder: URL { appSupport.appendingPathComponent(bundleID, isDirectory: true) }
-    public func volume(_ name: String) -> URL {
-        folder.appendingPathComponent("volumes", isDirectory: true).appendingPathComponent(name, isDirectory: true)
+    /// One of the app's own kept stores, by its name (`wine-documents`).
+    public func volume(_ name: String) -> URL { store(owner: "app", name: name) }
+
+    /// A kept store of the app's, by owner and name.
+    public func store(owner: String, name: String) -> URL {
+        folder.appendingPathComponent("stores", isDirectory: true).appendingPathComponent(owner, isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true)
+    }
+
+    /// `volumes/`, as a wrapp built before stores kept the app's own,
+    /// renamed `stores/app/` if there's none yet. True when it moved.
+    @discardableResult
+    public func moveVolumesIntoStores() throws -> Bool {
+        let volumes = folder.appendingPathComponent("volumes", isDirectory: true)
+        let stores = folder.appendingPathComponent("stores/app", isDirectory: true)
+        let files = FileManager.default
+        guard files.fileExists(atPath: volumes.path), !files.fileExists(atPath: stores.path) else { return false }
+        try files.createDirectory(at: stores.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try files.moveItem(at: volumes, to: stores)
+        return true
     }
     public var settings: URL { folder.appendingPathComponent("wrapp-settings", isDirectory: true) }
 
@@ -166,7 +189,7 @@ nonisolated public struct UserFilesMove: Sendable {
             try files.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             if files.fileExists(atPath: target.path) { try files.removeItem(at: target) }
             try files.moveItem(at: old, to: target)
-            outcome.log.append("Moved \(old.lastPathComponent) whole into volumes/\(linkVolume)")
+            outcome.log.append("Moved \(old.lastPathComponent) whole into stores/app/\(linkVolume)")
             return
         }
         for (relative, destination) in destinations.sorted(by: { $0.key < $1.key }) where destination != .settings {
@@ -254,7 +277,7 @@ nonisolated public struct UserFilesMove: Sendable {
         do {
             try FileManager.default.createDirectory(at: layout.volume(linkVolume), withIntermediateDirectories: true)
             try FileManager.default.createSymbolicLink(at: old, withDestinationURL: layout.volume(linkVolume))
-            outcome.log.append("Left \(old.lastPathComponent) as a link to \(layout.bundleID)/volumes/\(linkVolume)")
+            outcome.log.append("Left \(old.lastPathComponent) as a link to \(layout.bundleID)/stores/app/\(linkVolume)")
         } catch {
             outcome.log.append("Couldn't leave \(old.lastPathComponent) as a link: \(error.localizedDescription)")
         }

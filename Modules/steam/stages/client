@@ -6,7 +6,7 @@
 # DO steam.install. STEAM.REMOVE takes all of this away again.
 FROM --module=wine@10 prefix AS client
 USE steam
-STEAM.CLIENT
+STEAM.CLIENT --client-store=client
 WINE.REGISTRY --set "HKEY_CURRENT_USER\Software\Wine\AppDefaults\steam.exe\Mac Driver:LeftCommandIsCtrl" y
 WINE.REGISTRY --set "HKEY_CURRENT_USER\Software\Wine\AppDefaults\steam.exe\Mac Driver:RightCommandIsCtrl" y
 WINE.REGISTRY --set "HKEY_CURRENT_USER\Software\Wine\AppDefaults\steamwebhelper.exe\Mac Driver:LeftCommandIsCtrl" y

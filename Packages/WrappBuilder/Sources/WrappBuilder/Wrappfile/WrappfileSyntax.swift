@@ -12,6 +12,8 @@ import Foundation
 public nonisolated struct Wrappfile: Sendable, Equatable {
     /// `INPUT`, `CONST` and `VAR` before the first `FROM`, in order.
     public var globals: [Instruction] = []
+    /// `STORE` and `LOCK` before the first `FROM`, in order.
+    public var storeDeclarations: [Instruction] = []
     public var functions: [WrappfileFunction] = []
     public var stages: [Stage] = []
 

@@ -64,9 +64,9 @@ struct WrappfileCheckerTests {
         // A module's options and mount fields.
         ("USE installer", "USE installer\nRUN --wine.nothing=1 C:/x.exe",
          "line 9: RUN --wine.nothing: the wine module adds no option nothing to RUN"),
-        ("USE installer", "USE installer\nRUN --mount=type=cache,id=x,wine.letter=D: C:/x.exe",
-         "line 9: RUN --mount=…,wine.letter=…: the wine module adds no field letter to a cache mount"),
-        ("USE installer", "USE installer\nRUN --mount=type=cache,id=x,steam.drive=D: C:/x.exe",
+        ("USE installer", "USE installer\nRUN --mount=type=bind,id=x,wine.letter=D: C:/x.exe",
+         "line 9: RUN --mount=…,wine.letter=…: the wine module adds no field letter to a bind mount"),
+        ("USE installer", "USE installer\nRUN --mount=type=bind,id=x,steam.drive=D: C:/x.exe",
          "line 9: RUN --mount=…,steam.drive=…: the stage doesn't USE a module called steam"),
         // Names.
         ("FROM prefix AS disc", "FROM prefix AS 1disc", "line 7: stage name 1disc must start with a letter"),
@@ -165,7 +165,7 @@ struct WrappfileCheckerTests {
         let file = try WrappfileParser.parse("""
         FROM scratch AS x
         USE wine
-        RUN --wine.desktop=on --mount=type=cache,wine.size=1 C:/a.exe
+        RUN --wine.desktop=on --mount=type=bind,wine.size=1 C:/a.exe
         RUN stub:C:/b.exe
         COPY --from=nothere . C:/c
         """)
@@ -179,7 +179,7 @@ struct WrappfileCheckerTests {
     nonisolated static let stub: ModuleDeclarations = {
         var stub = ModuleDeclarations()
         stub.coreOptions = ["RUN": ["desktop": .value]]
-        stub.mountFields = ["cache": ["size"]]
+        stub.mountFields = ["bind": ["size"]]
         return stub
     }()
 

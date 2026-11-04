@@ -36,7 +36,7 @@ struct GameConfig {
     let bundleId: String
     /// Where the player's saves, and the game's settings that live beside
     /// them, are kept: the volume the game saves in
-    /// (`Application Support/<bundle id>/volumes/<volume>/`), or for a wrapp
+    /// (`Application Support/<bundle id>/stores/app/<store>/`), or for a wrapp
     /// built before volumes, its folder in Application Support.
     let appSupportPath: URL
     /// Where Second Chance's own settings for this wrapp are kept (the save
@@ -348,6 +348,12 @@ func userFiles(layout: WrappLayout, bundleId: String) -> (saves: URL, settings: 
     let fileManager = FileManager.default
     let underTest = ProcessInfo.processInfo.environment["SECOND_CHANCE_APP_SUPPORT_DIR"].map { !$0.isEmpty } ?? false
     let userFiles = UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: bundleId)
+    // Built before stores, the app's own were its volumes/.
+    do {
+        if try userFiles.moveVolumesIntoStores() { configLogger.notice("Moved the app's volumes/ into stores/app/") }
+    } catch {
+        configLogger.error("Couldn't move the app's volumes/ into stores/app/: \(error)")
+    }
     let lock: WrappLock?
     do {
         lock = try WrappLock(of: layout)

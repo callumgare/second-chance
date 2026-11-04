@@ -31,9 +31,9 @@ nonisolated enum BuilderDeclarations {
         "installer": ["RUN": ["from", "into", "answer-file", "automation", "creates", "patch", "mount"]],
         // HerDownloadWrappBuilder.
         "her-download": ["INSTALL": ["into", "answer-file", "automation", "creates"]],
-        // SteamWrappBuilder; its install's mounts are checked (`checkMounts`).
-        "steam": ["CLIENT": [], "INSTALL": ["into", "mount"], "SIGN-OUT": [], "REMOVE": []],
+        // SteamWrappBuilder's executor, which takes its stores.
+        "steam": ["CLIENT": ["client-store"], "INSTALL": ["into", "sign-in-store", "client-store"], "SIGN-OUT": [], "REMOVE": []],
         // BigFishWrappBuilder.
-        "big-fish": ["MANAGER": ["mount"], "INSTALL": ["into", "decline-directx"], "SIGN-OUT": []],
+        "big-fish": ["MANAGER": ["mount"], "INSTALL": ["into", "decline-directx", "sign-in-store"], "SIGN-OUT": []],
     ]
 }

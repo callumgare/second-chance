@@ -89,6 +89,26 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "45759de30e014534e387a6ee4fbec962b830a9a7521354ae7a7d0ae22efac2a3",
+          "functions/install" : "e6a53c1995676d5d57f4aea2787005c54651c264b7f0fb000fda96158772e618",
+          "module.yaml" : "f28067c80993822220357bc201b48d905eec23bf1f4c971a91331b6ccb8d3e73",
+          "stages/manager" : "464310766553362192c264b8693c6fd04ad34d1ba2a1b675f96c802ef76d1b4b",
+          "stores" : "0bbf70ffa45157ceb387a8d74a8eab30de2f305227f8150a0a6400173746f688"
+        },
+        "functions" : [
+          "functions/install",
+          "functions/cnc-ddraw"
+        ],
+        "release" : 6,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "disc" : [
@@ -152,6 +172,22 @@
 
         ],
         "release" : 2,
+        "versions" : [
+          "0.83.0"
+        ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "421c6355f46de6a0b0dd8447b7e6fcca2502072d552ceb4a272510db6353c5be",
+          "scenarios/starts-and-quits.yaml" : "3fdc2bc21154a2f00c40a53fd9752f4a0f5215bab254372a8088b969eb4faa68"
+        },
+        "functions" : [
+
+        ],
+        "release" : 3,
         "versions" : [
           "0.83.0"
         ]
@@ -1193,6 +1229,26 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/install" : "2c0bc26f9e30ecf7ca46a100f0ddb7d184e9137b6f99f71fe95877ef699ca551",
+          "module.yaml" : "7c5d526c8ca904ee0a6e8010d993a6a8a59d475c3d58df2fb88dd5a17974b950",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "39570faa9291b3d0d0d8e9ba0eb4650fc8520ac8736624093401bca780e5f01c",
+          "stages/client" : "d458b230900c920989494452c8480c11ebc759ac85ef86a7ab334f5669d6ed4a",
+          "stores" : "8a5899788b0961641fe4efb7ed13f54a2e0cbe421d9f33b69b09ec7baa366f8e"
+        },
+        "functions" : [
+          "functions/install"
+        ],
+        "release" : 6,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "wine" : [
@@ -1395,6 +1451,26 @@
           "functions/cnc-ddraw"
         ],
         "release" : 10,
+        "versions" : [
+          "10.0_8"
+        ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "dbef27aea259f5b8d074e51ab99b22b15e7252f9a3b47b899dc1c1df823aa989",
+          "module.yaml" : "638a73c27426638b0fdee99bc9727f03b866812b3e282cf3a0ce0dcf5aa93bf2",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "00c90907ce7e9e1298be2dfcef8ae80a68e668ae5c56c57d1c85ca3a5ce8623b",
+          "scenarios/starts-and-quits.yaml" : "e9315d8978315476450a102bdf4041163f8c93e4d6818c01924bd4e1c29f8030",
+          "stages/prefix" : "077e8e05e3104a30ff558b219b69fe40a014e3471a19f1b855b4b56db907cd22"
+        },
+        "functions" : [
+          "functions/cnc-ddraw"
+        ],
+        "release" : 11,
         "versions" : [
           "10.0_8"
         ]

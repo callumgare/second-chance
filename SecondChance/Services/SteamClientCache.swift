@@ -34,8 +34,8 @@ nonisolated final class SteamClientCache: @unchecked Sendable {
 
     let directory: URL
 
-    init(directory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("SecondChance/steam-client")) {
+    /// The steam module's `client` store (`Modules/steam/stores`), a cache.
+    init(directory: URL = StoreLocations.sharedCache(owner: "steam", name: "client")) {
         self.directory = directory
     }
 

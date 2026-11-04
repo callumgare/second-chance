@@ -28,6 +28,9 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     /// Its stages that are Wrappfiles (`stages/prefix`), as a bundle builds
     /// `FROM <module>/<stage>`.
     public let stages: [String]?
+    /// Its files of `STORE` and `LOCK` lines (`stores`), which every stage
+    /// and function of the module sees.
+    public let stores: [String]?
     /// Its default updates, run after a bundle's for a wrapp whose copy of
     /// the module is behind this one (`UpdatePlanner`).
     public let updates: [Update]?
@@ -55,11 +58,15 @@ public nonisolated struct ModuleFolder: Sendable {
     public let manifest: ModuleManifest
     /// What it adds to a build: its `module.yaml`'s `build:`.
     public let declarations: ModuleDeclarations
+    /// The stores and locks its `stores` files declare.
+    public let stores: StoreDeclarations
 
-    public init(folder: URL, manifest: ModuleManifest, declarations: ModuleDeclarations = .none) {
+    public init(folder: URL, manifest: ModuleManifest, declarations: ModuleDeclarations = .none,
+                stores: StoreDeclarations = StoreDeclarations()) {
         self.folder = folder
         self.manifest = manifest
         self.declarations = declarations
+        self.stores = stores
     }
 
     /// A file the module carries, by its path in the module's folder.
@@ -133,7 +140,7 @@ public nonisolated final class ModuleLoader {
         if manifest.id != name {
             messages.append("its id is \(manifest.id), but its folder says \(name)")
         }
-        for path in (manifest.data ?? []) + (manifest.assets ?? []) + (manifest.functions ?? [])
+        for path in (manifest.data ?? []) + (manifest.assets ?? []) + (manifest.functions ?? []) + (manifest.stores ?? [])
             where !FileManager.default.fileExists(atPath: folder.appendingPathComponent(path).path) {
             messages.append("names \(path), which isn't in its folder")
         }
@@ -149,7 +156,22 @@ public nonisolated final class ModuleLoader {
                 messages.append("\(table) \(error)")
             }
         }
-        return messages.isEmpty ? .success(ModuleFolder(folder: folder, manifest: manifest, declarations: declarations)) : problems(messages)
+        var stores = StoreDeclarations()
+        for path in manifest.stores ?? [] {
+            do {
+                let parsed = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent(path), encoding: .utf8))
+                if !parsed.stages.isEmpty || !parsed.functions.isEmpty || !parsed.globals.isEmpty {
+                    messages.append("\(path) holds only STORE and LOCK lines")
+                }
+                stores.merge(try StoreDeclarations.parse(parsed.storeDeclarations, module: manifest.id, origin: "\(manifest.id)/\(path)"))
+            } catch let error as StoreDeclarations.Problem {
+                messages.append(error.description)
+            } catch {
+                messages.append("\(path) \(error)")
+            }
+        }
+        return messages.isEmpty
+            ? .success(ModuleFolder(folder: folder, manifest: manifest, declarations: declarations, stores: stores)) : problems(messages)
     }
 
     /// The `$id` of the schema in `file`, added to the validator the first

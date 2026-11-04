@@ -304,21 +304,23 @@ class WrappBuildHelper {
         // A build that ran Wine has a prefix with drives; one that didn't (a
         // download ScummVM runs) has a bare C: drive, and nothing to point.
         if fileManager.fileExists(atPath: WrappLayout(app: wrappPath).prefix.appendingPathComponent("dosdevices").path) {
-            // Each volume the launch gives a drive (`VOLUME --wine.drive=A:`)
-            // has one, standing in for the player's files until the wrapp
-            // points it at them each time it starts; Documents, where the
-            // saves volume is, leads where its drive does (WineDrives has
-            // why). A build with no launch recorded (Steam's, Big Fish's)
-            // gives the saves A:, as every wrapp's always were.
+            // Each store the launch mounts as a drive (`target=A:`) has one,
+            // standing in for the player's files until the wrapp points it at
+            // them each time it starts; Documents, where the same store is
+            // mounted too, leads where its drive does (WineDrives has why). A
+            // build with no launch recorded gives the saves A:, as every
+            // wrapp's always were.
             let wine = Wine(wrapp: wrappPath)
-            let volumes = launch.map { $0.volumes.filter { $0.options["wine.drive"] != nil } }
-                ?? [RecordedLaunch.Volume(name: "wine-documents", location: "wine:C:/users/crossover/Documents", options: ["wine.drive": "A:"])]
-            for volume in volumes {
-                guard let drive = volume.options["wine.drive"]?.lowercased().first else { continue }
+            let mounts = launch?.mounts ?? [
+                RecordedLaunch.Mount(store: "app:wine-documents", target: "wine:A:"),
+                RecordedLaunch.Mount(store: "app:wine-documents", target: "wine:C:/users/crossover/Documents"),
+            ]
+            for mount in mounts {
+                guard let drive = mount.wineDrive else { continue }
                 if (try? wine.drives.target(of: drive)) == nil {
                     try wine.drives.mount("/tmp/second-chance-nancy-drew-\(UUID().uuidString)", as: drive)
                 }
-                guard volume.location == "wine:C:/users/crossover/Documents" else { continue }
+                guard mounts.contains(where: { $0.store == mount.store && $0.target == "wine:C:/users/crossover/Documents" }) else { continue }
                 try? FileManager.default.removeItem(at: wine.documents)
                 try FileManager.default.createSymbolicLink(atPath: wine.documents.path, withDestinationPath: try wine.drives.target(of: drive))
             }

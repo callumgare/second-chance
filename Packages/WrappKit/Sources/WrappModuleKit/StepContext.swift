@@ -52,6 +52,12 @@ public nonisolated protocol StepContext: Sendable {
 
     /// The build's log, for this step.
     var log: Logger { get }
+
+    /// The folder of a store the step is given (an option whose role is
+    /// `store`, which the plan names in full: `steam:sign-in`), held under
+    /// its lock until the step ends. A kept store only for its own module's
+    /// executor.
+    func store(_ name: String) async throws -> URL
 }
 
 nonisolated extension StepContext {
@@ -109,6 +115,11 @@ public nonisolated enum BuildEvent: Sendable, Equatable, Codable {
     /// An event a restored layer kept, emitted again as the layer is
     /// restored: what a fresh build would have shown.
     indirect case replayed(BuildEvent)
+    /// A store's lock is someone else's (`holder`, as its file names
+    /// them), so the build waits for it.
+    case lockWaiting(lock: String, holder: String?)
+    /// The build has the lock, after waiting `seconds` for it.
+    case lockAcquired(lock: String, seconds: Double)
 
     public struct Progress: Sendable, Equatable, Codable {
         public var fraction: Double?
@@ -125,7 +136,7 @@ public nonisolated enum BuildEvent: Sendable, Equatable, Codable {
     public var lasting: Bool {
         switch self {
         case .stepStarted, .stepRestored, .stepDone, .stepSkipped, .emitted: true
-        case .instructions, .stepProgress, .substep: false
+        case .instructions, .stepProgress, .substep, .lockWaiting, .lockAcquired: false
         case .module(_, _, _, let lasting): lasting
         case .replayed: false
         }

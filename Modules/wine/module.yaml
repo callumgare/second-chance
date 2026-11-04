@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 10
+release: 11
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -65,5 +65,3 @@ build:
     # click, and window (fullscreen or windowed), overriding what the program
     # asks for when the wrapp gets it wrong.
     LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value }
-    # A volume's: the drive it's given.
-    VOLUME: { drive: value }

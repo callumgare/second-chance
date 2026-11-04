@@ -68,8 +68,8 @@ struct BuildPlanTests {
         #expect(scarlet.stages.map(\.name) == ["scummvm", "disc"])
         #expect(scarlet.target?.modules == ["scummvm"])
         #expect(scarlet.target?.steps.map(\.description) == ["COPY --from=input:disc-1 . /SharedSupport/game/"])
-        #expect(scarlet.launch == RecordedLaunch(program: "scummvm:/SharedSupport/game/", arguments: ["nancy:nancy6"], volumes: [
-            .init(name: "scummvm-saves", location: "scummvm:saves/"), .init(name: "scummvm-settings", location: "scummvm:settings/"),
+        #expect(scarlet.launch == RecordedLaunch(program: "scummvm:/SharedSupport/game/", arguments: ["nancy:nancy6"], mounts: [
+            .init(store: "app:scummvm-saves", target: "scummvm:saves/"), .init(store: "app:scummvm-settings", target: "scummvm:settings/"),
         ], format: RecordedLaunch.currentFormat))
         #expect(scarlet.icon == "/Resources/nancy-drew.icns")
     }
@@ -319,7 +319,7 @@ struct BuildPlanTests {
         FROM scratch AS only
         USE wine AS w
         USE dosbox
-        RUN --mount=type=cache,id=disc,w.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path
+        RUN --mount=type=bind,id=disc,w.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path
         COPY --from=x . dosbox:C:/GAME/
         REMOVE /SharedSupport/x
         FROM scratch AS lonely
@@ -327,7 +327,7 @@ struct BuildPlanTests {
         DO drop --into=C:/y
         """
         #expect(try steps(text).map(\.description) == [
-            "RUN --mount=type=cache,id=disc,wine.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path",
+            "RUN --mount=type=bind,id=disc,wine.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path",
             "COPY --from=x . dosbox:C:/GAME/",
             "REMOVE /SharedSupport/x",
         ])

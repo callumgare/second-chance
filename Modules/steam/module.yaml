@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "steam"
-release: 5
+release: 6
 native: "steam"                              # its Swift: the Steam client, SteamRuntime, SteamBuild
 versions:
   - { version: "1" }                         # Steam updates itself, so the version is the module's own
@@ -9,20 +9,29 @@ depends-on: ["wine@10"]                      # Steam runs in the wrapp's Wine
 data: ["routine-errors.yaml"]
 stages: ["stages/client"]                   # FROM --module=steam@1 client
 functions: ["functions/install"]            # DO steam.install
+stores: ["stores"]                           # steam:client, steam:sign-in and their locks
 updates:
   # A Steam game comes back from Steam with the shared sign-in, needing no
   # disc, so a wrapp with another Steam is built afresh rather than moved.
   - { id: "steam", fresh-build: true }
 build:
   instructions:
-    # Installs Steam's client in the prefix.
-    CLIENT: { layer: suggested }
-    # Has Steam install the input's app (STEAM.INSTALL game --into=…), with the
-    # shared sign-in (a secret mount) and the cached client (a cache one), and
-    # makes --into a link to the folder Steam put it in.
+    # Installs Steam's client in the prefix, from the client store when it has
+    # one (--client-store=client).
+    CLIENT:
+      options: { client-store: { kind: value, role: store } }
+      required: [client-store]
+      layer: suggested
+    # Has Steam install the input's app (STEAM.INSTALL game --into=…), signed
+    # in with the shared sign-in (--sign-in-store=sign-in) and with the client
+    # store's client (--client-store=client), and makes --into a link to the
+    # folder Steam put it in.
     INSTALL:
-      options: { into: { kind: value, role: location }, mount: repeated }
-      required: [into]
+      options:
+        into: { kind: value, role: location }
+        sign-in-store: { kind: value, role: store }
+        client-store: { kind: value, role: store }
+      required: [into, sign-in-store, client-store]
       arguments: { count: 1, roles: [input] }
       may-ask: true
     # Takes the sign-in out of the prefix, saved to the shared store first:

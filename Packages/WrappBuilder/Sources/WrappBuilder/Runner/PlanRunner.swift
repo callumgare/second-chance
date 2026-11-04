@@ -7,6 +7,7 @@
 
 import Foundation
 import Logging
+import WrappFormat
 import WrappModules
 
 /// What a run of a plan is given by its caller: who carries out each
@@ -51,6 +52,12 @@ public nonisolated struct RunnerConfiguration: Sendable {
     public var readsData: @Sendable (PlannedStep) -> [String] = { _ in [] }
     /// The revision of the Swift that carries a step out, in its key.
     public var revision: @Sendable (PlannedStep) -> Int = { _ in 1 }
+    /// Where the build's stores are, and whose; nil for a build that keeps
+    /// none, in which a store mount fails.
+    public var stores: StoreSettings?
+    /// The build's, by which it holds a store's lock: a step of the same
+    /// build shares it, another build waits.
+    public var buildToken = UUID()
 
     public init(executors: [String: any ModuleExecutor] = [:], inputs: any InputProvider = GivenInputs([:]),
                 emitter: any EventEmitter,
@@ -203,9 +210,10 @@ public nonisolated struct PlanRunner: Sendable {
         logger.notice("Step: \(step) (\(step.origin))")
         let started = ContinuousClock.now
         do {
-            // Its bind and fetch mounts, put in place for it and taken away
-            // after, whoever carries it out.
-            let mounts = (step.options["mount"] ?? []).filter { ["bind", "fetch"].contains(PlannedStep.fields(ofMount: $0)["type"]) }
+            // Its mounts, put in place for it and taken away after, whoever
+            // carries it out; and its stores' locks let go.
+            defer { context.holds.releaseAll() }
+            let mounts = (step.options["mount"] ?? []).filter { ["bind", "fetch", "store"].contains(PlannedStep.fields(ofMount: $0)["type"]) }
             let placed = try await Mounts.place(mounts, for: step, in: context)
             do {
                 if let module = step.module {
@@ -245,5 +253,13 @@ public nonisolated struct PlanRunner: Sendable {
 
     func finish() async {
         for executor in configuration.executors.values { await executor.finish() }
+        // The build's session stores end with it.
+        if let session = configuration.stores?.locations.session, FileManager.default.fileExists(atPath: session.path) {
+            do {
+                try FileManager.default.removeItem(at: session)
+            } catch {
+                logger.warning("[Runner] Couldn't remove the build's session stores: \(error.localizedDescription)")
+            }
+        }
     }
 }

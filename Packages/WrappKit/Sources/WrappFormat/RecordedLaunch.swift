@@ -2,8 +2,8 @@
 //  RecordedLaunch.swift
 //  WrappFormat
 //
-//  How a wrapp starts its program, as its Wrappfile's LAUNCH and VOLUMEs
-//  said when it was built.
+//  How a wrapp starts its program, as its Wrappfile's LAUNCHes said when
+//  it was built.
 
 import Foundation
 import GameCatalog
@@ -12,7 +12,7 @@ import WrappModules
 /// What a wrapp runs, recorded by the build from its plan
 /// (docs/wrappfile.md#launch): the program in its full form, which says the
 /// module that starts it, its arguments, environment and module options,
-/// the program to fall back to, and the volumes it sees. The wrapp reads
+/// the program to fall back to, and the stores it sees. The wrapp reads
 /// this, never Wrappfile syntax; a wrapp built before it was recorded has
 /// one made from its legacy settings (`WrappSettings.launch`).
 nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
@@ -26,8 +26,8 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     public var options: [String: String]
     /// The program offered when the launch fails or seems stuck, in full form.
     public var fallback: String?
-    /// The volumes the program sees, in order.
-    public var volumes: [Volume]
+    /// The stores the program sees, where it sees them, in order.
+    public var mounts: [Mount]
     /// What the launch says for itself: nil (1) for one recorded before
     /// `--wine.cursor-lock`, whose wrapp works it out as it did then;
     /// `currentFormat` for one that says it.
@@ -36,23 +36,35 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// The format a build records now.
     public static let currentFormat = 2
 
-    /// One of the bundle's volumes, where the program sees it.
-    public struct Volume: Codable, Sendable, Equatable {
-        public var name: String
-        /// In full form: `wine:C:/users/crossover/Documents`, `scummvm:saves/`.
-        public var location: String
-        /// Its modules' options: `wine.drive`, `dosbox.overlay`.
+    /// A store, where the program sees it
+    /// (`LAUNCH --mount=type=store,source=<store>,target=<path>`).
+    public struct Mount: Codable, Sendable, Equatable {
+        /// By its full name: `app:wine-documents`, `steam:sign-in`.
+        public var store: String
+        /// In full form: `wine:A:`, `wine:C:/users/crossover/Documents`, `scummvm:saves/`.
+        public var target: String
+        /// Its modules' fields: `dosbox.overlay`.
         public var options: [String: String]
 
-        public init(name: String, location: String, options: [String: String] = [:]) {
-            self.name = name
-            self.location = location
+        public init(store: String, target: String, options: [String: String] = [:]) {
+            self.store = store
+            self.target = target
             self.options = options
+        }
+
+        /// The store's own name, without its owner: what an app's own
+        /// store's folder, and the manifest's `volumes:`, call it.
+        public var name: String { store.split(separator: ":", maxSplits: 1).last.map(String.init) ?? store }
+
+        /// The Wine drive it's mounted as (`wine:A:`), in lower case.
+        public var wineDrive: Character? {
+            guard target.count == 7, target.hasPrefix("wine:"), target.hasSuffix(":") else { return nil }
+            return target.dropFirst(5).first.map { Character($0.lowercased()) }
         }
     }
 
     public init(program: String, arguments: [String] = [], environment: [String: String] = [:],
-                options: [String: String] = [:], fallback: String? = nil, volumes: [Volume] = [],
+                options: [String: String] = [:], fallback: String? = nil, mounts: [Mount] = [],
                 format: Int? = nil) {
         self.format = format
         self.program = program
@@ -60,7 +72,7 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         self.environment = environment
         self.options = options
         self.fallback = fallback
-        self.volumes = volumes
+        self.mounts = mounts
     }
 
     /// The module that starts it: its program's path type's.
@@ -83,12 +95,12 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         }
     }
 
-    /// The volume a module keeps the person's saves in: Wine's at the
-    /// Documents folder, ScummVM's `saves/`, DOSBox's overlay.
+    /// The store a module keeps the person's saves in, by its own name:
+    /// Wine's at the Documents folder, ScummVM's `saves/`, DOSBox's overlay.
     public var savesVolume: String? {
-        volumes.first { volume in
-            volume.location.hasPrefix("wine:C:/users/") || volume.location == "scummvm:saves/"
-                || volume.options["dosbox.overlay"] != nil
+        mounts.first { mount in
+            mount.target.hasPrefix("wine:C:/users/") || mount.target == "scummvm:saves/"
+                || mount.options["dosbox.overlay"] != nil
         }?.name
     }
 
@@ -113,9 +125,9 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         choosesItsHelpers ? options["wine.cursor-lock"] != nil : inferred
     }
 
-    /// The volume ScummVM keeps its settings in, `scummvm:settings/`.
+    /// The store ScummVM keeps its settings in, `scummvm:settings/`.
     public var scummvmSettingsVolume: String? {
-        volumes.first { $0.location == "scummvm:settings/" }?.name
+        mounts.first { $0.target == "scummvm:settings/" }?.name
     }
 }
 

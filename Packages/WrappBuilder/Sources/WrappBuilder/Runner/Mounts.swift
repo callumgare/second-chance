@@ -9,13 +9,18 @@ import Logging
 import ProcessKit
 
 /// The mount realisers, one per core type: `bind` (a file of the bundle's
-/// or a module's) and `fetch` (a download, by its hash). Each puts its
-/// source at its `target` before the step, as a clone, so the step can't
-/// change the original, and takes it away after.
+/// or a module's) and `fetch` (a download, by its hash), each put at its
+/// `target` before the step as a clone, so the step can't change the
+/// original, and taken away after; and `store`, its target a link to the
+/// store's folder while the step runs, so what the step changes there it
+/// changes in the store, then gone, or with `snapshot` a clone of what the
+/// store holds left in the tree.
 nonisolated enum Mounts {
-    /// What a step's mounts put in its tree, for `remove`.
+    /// What a step's mounts put in its tree, for `remove`: each target,
+    /// and for a snapshot the store it's cloned from.
     struct Placed: Sendable {
         var items: [URL] = []
+        var snapshots: [URL: URL] = [:]
     }
 
     static func place(_ mounts: [String], for step: PlannedStep, in context: LocalStepContext) async throws -> Placed {
@@ -27,6 +32,25 @@ nonisolated enum Mounts {
                     throw StepFailure.recipe("\(step.origin): a mount names its target: \(mount)")
                 }
                 let target = try context.location(targetPath)
+                if fields["type"] == "store" {
+                    guard let name = fields["source"] else {
+                        throw StepFailure.recipe("\(step.origin): a store mount names its store: \(mount)")
+                    }
+                    // A build step never changes a kept store; a module's executor may
+                    // its own, given as an option rather than a mount.
+                    let folder = try await context.use(store: name) { _ in false }
+                    try await Blocking.run {
+                        let files = FileManager.default
+                        if files.fileExists(atPath: target.path) || (try? files.destinationOfSymbolicLink(atPath: target.path)) != nil {
+                            throw StepFailure.failed("\(step.origin): a mount's target is there already: \(targetPath)")
+                        }
+                        try files.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try files.createSymbolicLink(at: target, withDestinationURL: folder)
+                    }
+                    placed.items.append(target)
+                    if fields["snapshot"] != nil { placed.snapshots[target] = folder }
+                    continue
+                }
                 let source: URL
                 let work: URL?
                 switch fields["type"] {
@@ -72,6 +96,8 @@ nonisolated enum Mounts {
             await Blocking.run {
                 do {
                     try FileManager.default.removeItem(at: item)
+                    // A snapshot leaves what the store holds now in the tree.
+                    if let store = placed.snapshots[item] { try FileCopy.clone(store, to: item) }
                 } catch {
                     log.warning("Couldn't take the mount \(item.lastPathComponent) away: \(error.localizedDescription)")
                 }

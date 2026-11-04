@@ -4,12 +4,13 @@ INPUT installer
 INPUT game
 CONST install-dir = "C:/Program Files (x86)/Nancy Drew/Shadow at the Water's Edge"
 CONST program = "${const.install-dir}/Shadow.exe"
+STORE wine-documents
 
 # What the app has whichever edition it's built from
 FUNCTION pre-install-setup
   USE nancy-drew
   DO nancy-drew.set-icon
-  VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+  LAUNCH --mount=type=store,source=wine-documents,target=A: --mount=type=store,source=wine-documents,target=C:/users/crossover/Documents
 END
 
 # Her's patches, for the editions they update

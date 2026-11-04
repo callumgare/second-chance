@@ -8,6 +8,7 @@
 //  it quits. See docs/steam.md.
 
 import Foundation
+import WrappFormat
 import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.SteamSession")
@@ -29,11 +30,11 @@ nonisolated public final class SteamSessionStore: @unchecked Sendable {
     static let registrySection = #"[Software\\Valve\\Steam]"#
     static let registryValue = "AutoLoginUser"
 
-    /// `~/Library/Application Support/SecondChance/Steam`.
-    public static var defaultRoot: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("SecondChance/Steam")
-    }
+    /// The steam module's `sign-in` store (`Modules/steam/stores`):
+    /// `~/Library/Application Support/SecondChance/stores/steam/sign-in`.
+    /// 1.1.0 kept it in `SecondChance/Steam`, where Second Chance leaves a
+    /// link to it (`AppMigrations`).
+    public static var defaultRoot: URL { StoreLocations.shared(owner: "steam", name: "sign-in") }
 
     let root: URL
     public var sessionDir: URL { root.appendingPathComponent("session") }

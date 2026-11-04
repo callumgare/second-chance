@@ -132,6 +132,8 @@ nonisolated struct EventPrinter: Sendable {
             case .stepProgress(let progress): guard let text = progress?.text else { return }; line = "  \(text)"
             case .substep(let text): line = "  \(text)"
             case .module(let id, let name, _, _): line = "  \(id).\(name)"
+            case .lockWaiting(let lock, let holder): line = "⏸ waiting for the \(lock) lock, held by \(holder ?? "something else")"
+            case .lockAcquired(let lock, let seconds): line = "▸ got the \(lock) lock after \(Int(seconds))s"
             case .replayed(let inner):
                 if case .stepStarted(let ref) = inner { line = "↺ \(ref.step)" } else { return }
             }

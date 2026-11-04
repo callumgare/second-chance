@@ -19,6 +19,8 @@ nonisolated struct LocalStepContext: StepContext {
     /// Each stage's tree, by name; empty while every stage shares one.
     var trees: [String: URL] = [:]
     let log = Logger(label: "au.gare.callum.second-chance.SecondChance.Step")
+    /// The stores' locks the step holds, let go when it ends.
+    var holds = StoreHolds()
 
     var emitter: any EventEmitter { configuration.emitter }
 
@@ -39,6 +41,33 @@ nonisolated struct LocalStepContext: StepContext {
     }
 
     func ask(_ question: StepQuestion) async throws -> StepAnswer { try await configuration.ask(question) }
+
+    /// A store the step is given, by full name: its folder, held under its
+    /// lock until the step ends.
+    func store(_ name: String) async throws -> URL {
+        try await use(store: name, keepAllowed: { $0.owner == step.module })
+    }
+
+    /// A store's folder, with its lock taken for the step: a kept one only
+    /// where `keepAllowed` says.
+    func use(store name: String, keepAllowed: (StoreDeclaration) -> Bool) async throws -> URL {
+        guard let store = plan.stores.stores[name] else {
+            throw StepFailure.recipe("\(step.origin): the plan has no store \(name)")
+        }
+        guard let settings = configuration.stores else {
+            throw StepFailure.recipe("\(step.origin): this build keeps no stores, so can't use \(name)")
+        }
+        if store.retention == .keep, !keepAllowed(store) {
+            throw StepFailure.recipe("\(step.origin): \(name) is a kept store, which a build step can't use")
+        }
+        if let lockName = store.lock {
+            guard let lock = plan.stores.locks[lockName] else {
+                throw StepFailure.recipe("\(step.origin): \(name)'s lock \(lockName) isn't declared")
+            }
+            holds.add(try await StoreLock.take(lock, token: configuration.buildToken, settings: settings, emitter: emitter, origin: step.origin))
+        }
+        return try StoreRuns.folder(of: store, settings: settings, origin: step.origin)
+    }
 
     /// The program through its path type's module, with `mounts` put in
     /// place first and taken away after, whatever happens.

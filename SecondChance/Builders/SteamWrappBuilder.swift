@@ -113,9 +113,15 @@ nonisolated final class SteamExecutor: ModuleExecutor, @unchecked Sendable {
         let tree = context.tree
         switch step.instruction {
         case "CLIENT":
+            // The client store, held for the install.
+            _ = try await context.store(try Self.store(step, "client-store"))
             try await builder.installClient(in: tree)
         case "INSTALL":
-            try SteamWrappBuilder.checkMounts(of: step)
+            // The sign-in and client stores, held for the install: the
+            // builder keeps both where the stores are (SteamSessionStore,
+            // SteamClientCache), which taking them here declares and locks.
+            _ = try await context.store(try Self.store(step, "sign-in-store"))
+            _ = try await context.store(try Self.store(step, "client-store"))
             let client = await builder.makeClient(tree)
             let run = SteamRun(), prefix = WrappLayout(app: tree).prefix
             let quit = await builder.registerQuitStop(client: client, run: run, prefix: prefix)
@@ -133,6 +139,12 @@ nonisolated final class SteamExecutor: ModuleExecutor, @unchecked Sendable {
         default:
             throw StepFailure.recipe("\(step.origin): the steam module has no instruction \(step.instruction)")
         }
+    }
+
+    /// The store a step's `option` names, in full.
+    static func store(_ step: PlannedStep, _ option: String) throws -> String {
+        guard let name = step.option(option) else { throw StepFailure.recipe("\(step.origin): \(step.keyword) needs --\(option)") }
+        return name
     }
 
     /// A Steam this build started, stopped, its sign-in saved and taken out.
@@ -159,7 +171,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     private let gameInfoProvider: GameInfoProvider
     private let sessionStore: SteamSessionStore
     private let clientCache: SteamClientCache
-    private let lockRoot: URL
+    private let lockFile: URL
     private let clientMaker: (URL) -> SteamClientDriving
     private let preparer: SteamWrappPreparing
     /// How often the sign-in wait looks at Steam.
@@ -200,7 +212,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         gameInfoProvider: GameInfoProvider = .shared,
         sessionStore: SteamSessionStore = SteamSessionStore(),
         clientCache: SteamClientCache = .shared,
-        lockRoot: URL = SteamSessionStore.defaultRoot,
+        lockFile: URL = SteamActiveLock.defaultFile,
         makeClient: ((URL) -> SteamClientDriving)? = nil,
         preparer: SteamWrappPreparing? = nil,
         signInPollInterval: Duration = .seconds(2),
@@ -224,7 +236,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         self.gameInfoProvider = gameInfoProvider
         self.sessionStore = sessionStore
         self.clientCache = clientCache
-        self.lockRoot = lockRoot
+        self.lockFile = lockFile
         self.clientMaker = makeClient ?? { SteamClient(wrappPath: $0) }
         self.preparer = preparer ?? SteamWrappPreparer(helper: helper, clientCache: clientCache)
         self.bus = bus
@@ -233,8 +245,9 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// Take the one-Steam-at-a-time lock, asking the person what to do while
     /// a game holds it: they can quit it themselves and try again, have it
     /// quit for them, or give up, which is a cancel rather than a failure.
-    private func takeSteamLock(input: WrappBuildInput) async throws -> SteamActiveLock {
-        let taking = try await SteamActiveLock.take(root: lockRoot, bundleID: SteamLockHolder.buildBundleID) {
+    private func takeSteamLock(input: WrappBuildInput, token: UUID) async throws -> SteamActiveLock {
+        let taking = try await SteamActiveLock.take(file: lockFile, bundleID: SteamLockHolder.buildBundleID,
+                                                    token: token) {
             await input.askAboutSteamInUse($0)
         }
         switch taking {
@@ -259,9 +272,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         }
 
         // ── One Steam at a time ────────────────────────────────────────
+        // Held for the build's token, which its runner's steps hold the
+        // steam module's lock by too: the same lock (`ProcessLocks`).
+        let lockToken = UUID()
         let lock: SteamActiveLock
         do {
-            lock = try await takeSteamLock(input: input)
+            lock = try await takeSteamLock(input: input, token: lockToken)
         } catch {
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
@@ -276,7 +292,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         let scratch = helper.createBuildFolder()
         let identified: (game: GameInfo, launchMode: String?)
         do {
-            identified = try await identify(in: scratch, preselected: preselected, input: input)
+            identified = try await identify(in: scratch, preselected: preselected, input: input, lockToken: lockToken)
         } catch {
             await helper.removeTempWrapp(scratch)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
@@ -308,7 +324,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
             let executor = SteamExecutor(builder: self, game: gameInfo, appID: steam.appID, installDir: steam.installDir, plan: plan,
                                          input: input, releaseLock: { lock.release() })
-            let (configuration, emitter) = runnerConfiguration(game: gameInfo, input: input, executors: ["steam": executor])
+            let (configuration, emitter) = runnerConfiguration(game: gameInfo, input: input, executors: ["steam": executor],
+                                                               lockToken: lockToken)
             let wrappPath: URL
             do {
                 wrappPath = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
@@ -349,11 +366,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
 
     /// What the runner is given: Second Chance's, with the steam executor
     /// and Wine's steps through the preparer, which a test stands in for.
-    private func runnerConfiguration(game: GameInfo, input: WrappBuildInput, executors: [String: any ModuleExecutor])
-        -> (RunnerConfiguration, OrderedEmitter) {
+    private func runnerConfiguration(game: GameInfo, input: WrappBuildInput, executors: [String: any ModuleExecutor],
+                                     lockToken: UUID) -> (RunnerConfiguration, OrderedEmitter) {
         var (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs([:]),
                                                                downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
                                                                executors: executors)
+        configuration.buildToken = lockToken
         if let wine = configuration.executors["wine"] { configuration.executors["wine"] = preparer.wineExecutor(wine) }
         let preparer = preparer
         configuration.moduleStage = { stage, tree in try await preparer.makeStage(stage, in: tree) }
@@ -363,11 +381,12 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// Sign in to Steam in the client stage's tree, list what the account
     /// owns and ask which to build (or check a game named up front is
     /// owned), and the launch mode; then stop Steam, its sign-in saved.
-    private func identify(in folder: URL, preselected: GameInfo?, input: WrappBuildInput) async throws -> (game: GameInfo, launchMode: String?) {
-        let (configuration, emitter) = runnerConfiguration(game: GameInfo.unknownGame, input: input,
-                                                           executors: ["steam": SteamExecutor(builder: self, game: .unknownGame, appID: 0,
-                                                                                              installDir: "", plan: BuildPlan(edition: "", stages: []),
-                                                                                              input: input, releaseLock: {})])
+    private func identify(in folder: URL, preselected: GameInfo?, input: WrappBuildInput,
+                          lockToken: UUID) async throws -> (game: GameInfo, launchMode: String?) {
+        let executor = SteamExecutor(builder: self, game: .unknownGame, appID: 0, installDir: "", plan: BuildPlan(edition: "", stages: []),
+                                     input: input, releaseLock: {})
+        let (configuration, emitter) = runnerConfiguration(game: GameInfo.unknownGame, input: input, executors: ["steam": executor],
+                                                           lockToken: lockToken)
         let tree: URL
         do {
             tree = try await preparer.prepare(in: folder, runner: configuration)
@@ -789,20 +808,5 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                                                name: nil, origin: "STEAM.REMOVE, undoing \(step.origin)"), in: wrappPath)
         }
         logger.notice("Removed the Steam client from the wrapp")
-    }
-}
-
-extension SteamWrappBuilder {
-    /// The mounts `STEAM.INSTALL` is given are the ones this build gives
-    /// it, the shared sign-in and the cached client: another would be
-    /// accepted and ignored.
-    nonisolated static func checkMounts(of step: PlannedStep) throws {
-        let given = Set(step.options["mount"] ?? [])
-        let carried: Set = ["type=secret,id=steam-sign-in", "type=cache,id=steam-client"]
-        guard given.isSubset(of: carried) else {
-            let extra = given.subtracting(carried).sorted().joined(separator: ", ")
-            throw WrappBuildError.buildRecipeProblem(
-                "\(step.origin): STEAM.INSTALL is given the sign-in and the client as \(carried.sorted().joined(separator: " and ")), not \(extra)")
-        }
     }
 }

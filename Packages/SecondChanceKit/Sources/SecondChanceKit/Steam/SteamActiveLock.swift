@@ -8,6 +8,7 @@
 
 import Foundation
 import Logging
+import WrappFormat
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.Steam")
 
@@ -18,32 +19,38 @@ nonisolated public final class SteamActiveLock: @unchecked Sendable {
         case heldBy(SteamLockHolder)
     }
 
-    private let fd: Int32
+    /// The steam module's `steam` lock (`Modules/steam/stores`), which a
+    /// build's steps using Steam's sign-in store hold too, and which a 1.1.0
+    /// app reaches through the link left at its old place
+    /// (`SecondChance/Steam/active-wrapp.lock`, `AppMigrations`).
+    public static var defaultFile: URL { StoreLocations.sharedLockFile(owner: "steam", name: "steam") }
+
+    private let file: URL
+    private let token: UUID
     private let state = NSLock()
     private var released = false
 
-    private init(fd: Int32) { self.fd = fd }
+    private init(file: URL, token: UUID) {
+        self.file = file
+        self.token = token
+    }
 
-    /// Try to take the lock in `root` (the session store's directory) for the
-    /// wrapp `bundleID`. It is an `flock`, so it is released when this
-    /// process exits, however it exits — a crashed wrapp never leaves it held.
-    /// Close-on-exec, so no program started from here (Wine, Steam) carries
-    /// the lock on after the process that took it.
-    public static func acquire(root: URL = SteamSessionStore.defaultRoot, bundleID: String) throws -> Outcome {
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let path = root.appendingPathComponent("active-wrapp.lock").path
-        let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
-        guard fd >= 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: path]) }
-        guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
-            let holder = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
-            close(fd)
-            let lines = holder.split(whereSeparator: \.isNewline).map(String.init)
-            return .heldBy(SteamLockHolder(pid: lines.first.flatMap { Int32($0) }, bundleID: lines.count > 1 ? lines[1] : nil))
+    /// Try to take the lock in `root` (a test's folder) for the wrapp
+    /// `bundleID`.
+    public static func acquire(root: URL, bundleID: String, token: UUID = UUID()) throws -> Outcome {
+        try acquire(file: root.appendingPathComponent("active-wrapp.lock"), bundleID: bundleID, token: token)
+    }
+
+    /// Try to take the lock for the wrapp `bundleID`, for `token`: a build
+    /// gives its runner's, so its steps that use Steam's stores share it
+    /// (`ProcessLocks`). An `flock`, so it is released when this process
+    /// exits, however it exits: a crashed wrapp never leaves it held.
+    public static func acquire(file: URL = defaultFile, bundleID: String, token: UUID = UUID()) throws -> Outcome {
+        guard try ProcessLocks.tryTake(file, token: token, holder: bundleID) else {
+            let holder = ProcessLocks.holder(of: file)
+            return .heldBy(SteamLockHolder(pid: holder.pid, bundleID: holder.name))
         }
-        ftruncate(fd, 0)
-        let record = "\(getpid())\n\(bundleID)\n"
-        _ = record.withCString { pwrite(fd, $0, strlen($0), 0) }
-        return .acquired(SteamActiveLock(fd: fd))
+        return .acquired(SteamActiveLock(file: file, token: token))
     }
 
     /// What came of waiting for the lock (`take`).
@@ -58,10 +65,15 @@ nonisolated public final class SteamActiveLock: @unchecked Sendable {
     /// Take the lock, asking `ask` what to do each time another process
     /// holds it: try again once they've quit it themselves, have it quit
     /// for them, or give up. `ask` gives nil when there's nobody to ask.
-    public static func take(root: URL = SteamSessionStore.defaultRoot, bundleID: String,
+    public static func take(root: URL, bundleID: String, token: UUID = UUID(),
+                            ask: (SteamLockHolder) async -> SteamLockHolder.Choice?) async throws -> Taking {
+        try await take(file: root.appendingPathComponent("active-wrapp.lock"), bundleID: bundleID, token: token, ask: ask)
+    }
+
+    public static func take(file: URL = defaultFile, bundleID: String, token: UUID = UUID(),
                             ask: (SteamLockHolder) async -> SteamLockHolder.Choice?) async throws -> Taking {
         while true {
-            switch try acquire(root: root, bundleID: bundleID) {
+            switch try acquire(file: file, bundleID: bundleID, token: token) {
             case .acquired(let lock):
                 return .acquired(lock)
             case .heldBy(let holder):
@@ -88,9 +100,7 @@ nonisolated public final class SteamActiveLock: @unchecked Sendable {
             return !released
         }
         guard first else { return }
-        ftruncate(fd, 0)
-        flock(fd, LOCK_UN)
-        close(fd)
+        ProcessLocks.release(file, token: token)
     }
 
     deinit { release() }

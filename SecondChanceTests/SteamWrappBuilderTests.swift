@@ -253,7 +253,7 @@ struct SteamWrappBuilderTests {
             installerRunner: GameInstallerRunner(catalog: GamePatchCatalog(manifestURL: base.appendingPathComponent("none.json")), bus: bus),
             sessionStore: SteamSessionStore(root: base.appendingPathComponent("store")),
             clientCache: SteamClientCache(directory: base.appendingPathComponent("client-cache")),
-            lockRoot: base.appendingPathComponent("store"),
+            lockFile: base.appendingPathComponent("store/active-wrapp.lock"),
             makeClient: { path in
                 let fake = FakeSteamClient(wrappPath: path)
                 fake.owned = Set(GameInfoProvider.shared.allGames().compactMap(\.steamAppID))

@@ -115,6 +115,7 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
         case "copy-source": .copySource
         case "file": .file
         case "text": .text
+        case "store": .store
         default: throw Problem(description: "\(path): \(word) isn't a role")
         }
     }

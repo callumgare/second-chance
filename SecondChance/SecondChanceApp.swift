@@ -16,6 +16,8 @@ private var signalSources: [DispatchSourceSignal] = []
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Before anything uses Steam's or Big Fish's sign-in.
+        AppMigrations.run()
         // No Dock icon, and not brought to the front as it starts (TestHost).
         if TestHost.hidesUI {
             NSApp.setActivationPolicy(.accessory)

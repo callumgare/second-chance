@@ -3,6 +3,8 @@
 INPUT disc-1
 INPUT installer
 CONST install-dir = "C:/Program Files (x86)/Her Interactive/Stay Tuned for Danger"
+STORE scummvm-saves
+STORE scummvm-settings
 
 FROM --module=wine@10 prefix AS prefix
 
@@ -11,8 +13,8 @@ FROM scratch AS scummvm
 USE scummvm
 COPY module:nancy-drew:/assets/nancy-drew.icns /Resources/nancy-drew.icns
 APP --icon=/Resources/nancy-drew.icns
-VOLUME scummvm-saves scummvm:saves/
-VOLUME scummvm-settings scummvm:settings/
+LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/
+LAUNCH --mount=type=store,source=scummvm-settings,target=scummvm:settings/
 LAUNCH /SharedSupport/game/ nancy:nancy2
 
 # The CD edition: the disc's data, patched through Wine

@@ -4,7 +4,7 @@
   "title": "Second Chance module",
   "description": "A module's module.yaml: its id, its release and the versions that release provides, what it depends on, and the data it carries. docs/modules.md describes every field.",
   "$defs": {
-    "role": { "enum": ["location", "program", "input", "copy-source", "file", "text"] },
+    "role": { "enum": ["location", "program", "input", "copy-source", "file", "text", "store"] },
     "kind": { "enum": ["value", "flag", "repeated"] },
     "option": {
       "description": "Whether it takes a value (value), none (flag) or may be given many times (repeated); and what its value is, where it isn't text.",
@@ -113,6 +113,11 @@
     },
     "stages": { "type": "array", "items": { "type": "string" } },
     "functions": { "type": "array", "items": { "type": "string" } },
+    "stores": {
+      "description": "Files of STORE and LOCK lines, every stage and function of the module seeing the stores they declare (docs/wrappfile.md#stores).",
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "data": {
       "description": "Tables of the module's own, each a YAML file in its folder (or JSON, which YAML 1.2 reads too), read as ${data.<table>.<key>.<field>}.",
       "type": "array",

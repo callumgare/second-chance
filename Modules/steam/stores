@@ -1,0 +1,17 @@
+# The steam module's stores (docs/wrappfile.md#stores), which every stage
+# and function of the module sees.
+#
+# One Steam at a time: two signed in to the same account would knock each
+# other off, and both would save the session back when they quit. Every
+# Steam app takes this lock while Steam runs, and a build's step while it
+# uses the sign-in.
+LOCK steam --scope=global
+# Two first builds at once don't both lay a client into the one folder.
+LOCK client --scope=global
+# Steam's client, kept between builds, so Steam needn't update itself each
+# time: a cache, as it can always be downloaded again.
+STORE client --retention=cache --scope=global --exclusive=client
+# The one sign-in every Steam app and build shares, kept until someone signs
+# out (docs/steam.md). Only the steam module's own instructions use it at
+# build time; it's never part of an app.
+STORE sign-in --scope=global --exclusive=steam

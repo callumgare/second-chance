@@ -2,10 +2,12 @@
 # folder, for ScummVM to read.
 
 INPUT game
+STORE scummvm-saves
+STORE scummvm-settings
 
 FROM scratch AS download
 USE scummvm
 COPY --from=${input.game} lure /SharedSupport/game/ # the zip's lure/ folder: the game's data and its licence
-VOLUME scummvm-saves scummvm:saves/
-VOLUME scummvm-settings scummvm:settings/
+LAUNCH --mount=type=store,source=scummvm-saves,target=scummvm:saves/
+LAUNCH --mount=type=store,source=scummvm-settings,target=scummvm:settings/
 LAUNCH /SharedSupport/game/ lure

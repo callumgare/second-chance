@@ -47,8 +47,8 @@
             }
         },
         "declaration": {
-            "comment": "INPUT, CONST, VAR and SET: a name, then = and a value, spaced or not.",
-            "match": "(?i)^\\s*(INPUT|CONST|VAR|SET)\\s+([^\\s=]+)\\s*(=)?",
+            "comment": "INPUT, CONST, VAR and SET: a name, then = and a value, spaced or not; STORE and LOCK: a name, then options.",
+            "match": "(?i)^\\s*(INPUT|CONST|VAR|SET|STORE|LOCK)\\s+([^\\s=]+)\\s*(=)?",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" },
                 "2": { "name": "variable.other.readwrite.wrappfile" },
@@ -93,7 +93,7 @@
             }
         },
         "instruction": {
-            "match": "(?i)^\\s*(RUN|COPY|ADD|MOVE|REMOVE|EDIT|LAUNCH|VOLUME|APP|EMIT)(?=\\s|$)",
+            "match": "(?i)^\\s*(RUN|COPY|ADD|MOVE|REMOVE|EDIT|LAUNCH|APP|EMIT)(?=\\s|$)",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" }
             }

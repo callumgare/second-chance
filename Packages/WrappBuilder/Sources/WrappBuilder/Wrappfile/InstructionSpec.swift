@@ -57,6 +57,10 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
         case file
         /// Text, used as it is: a program's own arguments, a URL.
         case text
+        /// A store, by its short name in its owner's files or its full name
+        /// (`--sign-in-store=sign-in`): checked as declared, and planned as
+        /// its full name.
+        case store
     }
 
     public init(_ name: String, options: [String: OptionKind] = [:], required: Set<String> = [],
@@ -105,11 +109,11 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
             InstructionSpec("ADD", options: ["checksum": .value, "unpack": .value, "member": .value, "extract": .flag],
                             required: ["checksum"], arguments: 2...2, argumentRoles: [.text, .location]),
             // How the wrapp starts its program: recorded with the plan, not a step.
-            InstructionSpec("LAUNCH", options: ["fallback": .value, "env": .repeated], arguments: 1...Int.max,
+            // `--mount=type=store,source=<store>,target=<path>`, as many as
+            // needed: the stores the program sees, inherited through FROM. A
+            // LAUNCH of mounts alone adds them and leaves the program as it is.
+            InstructionSpec("LAUNCH", options: ["fallback": .value, "env": .repeated, "mount": .repeated], arguments: 0...Int.max,
                             argumentRoles: [.program, .text], optionRoles: ["fallback": .program]),
-            // A volume of the manifest's, where the program sees it; or with
-            // --remove, one taken off. Recorded with the launch.
-            InstructionSpec("VOLUME", options: ["remove": .flag], arguments: 1...2, argumentRoles: [.text, .location]),
             // What the app is: its id when the caller gives none, its name, and
             // its icon, an .icns in its Resources/. Recorded with the plan.
             InstructionSpec("APP", options: ["default-id": .value, "name": .value, "icon": .value],
@@ -128,8 +132,9 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
         return Dictionary(uniqueKeysWithValues: specs.map { ($0.name, $0) })
     }()
 
-    /// The mount types `RUN --mount=type=…` takes.
-    public static let mountTypes: Set<String> = ["cache", "secret", "bind", "fetch"]
+    /// The mount types `RUN --mount=type=…` takes: a store, a file of the
+    /// bundle's or a module's, or a download.
+    public static let mountTypes: Set<String> = ["store", "bind", "fetch"]
 
     /// What each core mount field is; plain text for the rest.
     public static let mountFieldRoles: [String: Role] = ["target": .location, "source": .file]
@@ -139,8 +144,8 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
     public static let declarations: Set<String> = ["INPUT", "CONST", "VAR", "SET"]
 
     /// What's recorded with the plan rather than run as a step: the launch,
-    /// its volumes, and what the app is.
-    public static let recorded: Set<String> = ["LAUNCH", "VOLUME", "APP"]
+    /// with its mounts, and what the app is.
+    public static let recorded: Set<String> = ["LAUNCH", "APP"]
 
     /// The words that start or end a block, or a stage: compared in upper
     /// case, as every keyword is.

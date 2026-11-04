@@ -191,6 +191,9 @@ public nonisolated enum WrappfileParser {
     // MARK: - Structure
 
     struct Parser {
+        static let volumeIsGone = "VOLUME is gone: a store is declared with STORE <name> before the first FROM, "
+            + "and mounted with LAUNCH --mount=type=store,source=<name>,target=<path> (wrapp-builder fmt --migrate rewrites it)"
+
         var lines: [Line]
         var index = 0
 
@@ -207,6 +210,11 @@ public nonisolated enum WrappfileParser {
                 case "INPUT", "CONST", "VAR":
                     index += 1
                     file.globals.append(try instruction(line))
+                case "STORE", "LOCK":
+                    index += 1
+                    file.storeDeclarations.append(try instruction(line))
+                case "VOLUME":
+                    throw WrappfileError(line: line.number, message: Self.volumeIsGone)
                 case "FUNCTION":
                     index += 1
                     guard line.words.count == 2 else { throw WrappfileError(line: line.number, message: "FUNCTION takes one name") }
@@ -221,7 +229,7 @@ public nonisolated enum WrappfileParser {
                     file.stages.append(Stage(name: name?.lowercased(), from: source, body: body, line: line.number, nameAsWritten: name))
                 default:
                     throw WrappfileError(line: line.number,
-                                         message: "\(line.words[0].text) comes before the first FROM; only INPUT, CONST, VAR and FUNCTION can")
+                                         message: "\(line.words[0].text) comes before the first FROM; only INPUT, CONST, VAR, STORE, LOCK and FUNCTION can")
                 }
             }
             return file
@@ -284,6 +292,10 @@ public nonisolated enum WrappfileParser {
                     throw WrappfileError(line: line.number, message: "\(keyword) without an IF\(keyword == "END" ? ", LAYER-HINT or FUNCTION" : "") to close")
                 case "FROM", "FUNCTION":
                     throw WrappfileError(line: line.number, message: "\(keyword) can't be inside \(block ?? "a stage")")
+                case "STORE", "LOCK":
+                    throw WrappfileError(line: line.number, message: "\(keyword) comes before the first FROM, or in a module's stores file")
+                case "VOLUME":
+                    throw WrappfileError(line: line.number, message: Self.volumeIsGone)
                 default:
                     collected.append(.instruction(try instruction(line)))
                 }

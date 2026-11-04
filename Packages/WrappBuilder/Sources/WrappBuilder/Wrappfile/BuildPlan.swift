@@ -33,6 +33,8 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
     /// the id to give it when the caller gives none.
     public var app = RecordedApp()
     public var icon: String? { app.icon }
+    /// The stores and locks its steps and launch may use, by full name.
+    public var stores = StoreDeclarations()
 
     public init(edition: String, stages: [PlannedStage]) {
         self.edition = edition
@@ -183,6 +185,9 @@ public nonisolated struct BuildPlanner {
     /// Where on the Mac the build may read the bundle's files from: the
     /// caller's grant (decision 24 of the builders plan).
     let hostPaths: HostPaths
+    /// The Wrappfile's stores and locks, and every module's
+    /// (docs/wrappfile.md#stores); or what's wrong with the Wrappfile's.
+    let stores: Result<StoreDeclarations, StoreDeclarations.Problem>
 
     public struct PlanError: Error, CustomStringConvertible, Equatable {
         public let description: String
@@ -199,6 +204,19 @@ public nonisolated struct BuildPlanner {
         self.modules = Dictionary(modules.map { ($0.manifest.id.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
         self.pathTypes = pathTypes
         self.declarations = declarations
+        stores = Result { () throws(StoreDeclarations.Problem) -> StoreDeclarations in
+            var all = try StoreDeclarations.parse(wrappfile.storeDeclarations, module: nil, origin: "Wrappfile")
+            for module in modules { all.merge(module.stores) }
+            return all
+        }
+    }
+
+    /// The stores and locks, or why the Wrappfile's can't be read.
+    func storeDeclarations() throws(PlanError) -> StoreDeclarations {
+        switch stores {
+        case .success(let stores): stores
+        case .failure(let problem): throw PlanError(description: problem.description)
+        }
     }
 
     /// The problems planning finds in any edition's target, for either kind
@@ -293,9 +311,10 @@ public nonisolated struct BuildPlanner {
         }
         var plan = BuildPlan(edition: edition.id, stages: stages)
         plan.files = recorder.files
+        plan.stores = try storeDeclarations()
         let recorded = modulesByStage[target.lowercased()] ?? StageModules()
         if var launch = recorded.launch {
-            launch.volumes = recorded.volumes
+            launch.mounts = recorded.mounts
             plan.launch = launch
             // What an install expects to make is what the launch runs, when
             // the launch is in the folder it installs into, so the two can't
@@ -392,12 +411,12 @@ public nonisolated struct BuildPlanner {
 
     /// A stage's modules, by the name it knows each by, and the version of
     /// each it has; and what's recorded rather than run, inherited through
-    /// `FROM` as the modules are: its launch, volumes and `APP`.
+    /// `FROM` as the modules are: its launch, the stores it mounts, and `APP`.
     struct StageModules {
         var aliases: [String: String] = [:]
         var versions: [String: String] = [:]
         var launch: RecordedLaunch?
-        var volumes: [RecordedLaunch.Volume] = []
+        var mounts: [RecordedLaunch.Mount] = []
         var app = RecordedApp()
         /// The modules the stage's tree has been set up with (an engine, a
         /// module's `setup:` steps): what `USE` plans no second time.
@@ -812,20 +831,26 @@ public nonisolated struct BuildPlanner {
                 throw PlanError(description: "\(origin): DO \(name) takes no --\(option.name)")
             }
             try expand(function.body, scope: &inner, origin: "\(source) from \(origin)", into: &steps)
-            // What a function records (its LAUNCH, VOLUMEs, APP) and the
+            // What a function records (its LAUNCH and its mounts, APP) and the
             // modules it USEs are the calling stage's, as if written there.
             scope.modules = inner.modules
         }
 
-        /// `LAUNCH`, `VOLUME` or `APP`: recorded with the stage, in full
-        /// form, rather than run. The last `LAUNCH` a stage reaches wins,
-        /// fallback and all; volumes build up, and `--remove` takes one off.
+        /// `LAUNCH` or `APP`: recorded with the stage, in full form, rather
+        /// than run. The last `LAUNCH` with a program a stage reaches wins,
+        /// fallback and all; its store mounts build up, and one with
+        /// `remove` takes the store's off.
         func record(_ instruction: Instruction, scope: inout Scope, origin: String) throws(PlanError) {
             guard let spec = InstructionSpec.core[instruction.keyword] else { return }
             let modules = scope.moduleIDs
             var options: [String: String] = [:]
             var environment: [String: String] = [:]
+            var mounts: [String] = []
             for option in instruction.options {
+                if option.name == "mount" {
+                    if let word = option.value { mounts.append(try substitute(word, in: scope, origin: origin, as: .text)) }
+                    continue
+                }
                 let key = moduleOptionName(option.name, scope: scope)
                 let role = moduleOptionRole(key, of: instruction.keyword) ?? spec.role(ofOption: option.name)
                 let text = try option.value.map { word throws(PlanError) in try substitute(word, in: scope, origin: origin, as: role) } ?? ""
@@ -847,7 +872,11 @@ public nonisolated struct BuildPlanner {
             }
             switch instruction.keyword {
             case "LAUNCH":
-                guard let program = arguments.first else { return }
+                for mount in mounts { try recordMount(mount, scope: &scope, modules: modules, origin: origin) }
+                guard let program = arguments.first else {
+                    guard !mounts.isEmpty else { throw PlanError(description: "\(origin): LAUNCH names its program, or the stores it mounts") }
+                    return
+                }
                 let fallback = options.removeValue(forKey: "fallback")
                 if let window = options["wine.window"], !["fullscreen", "windowed"].contains(window) {
                     throw PlanError(description: "\(origin): --wine.window=\(window): it's fullscreen or windowed, or left out for what the program asks for")
@@ -856,22 +885,42 @@ public nonisolated struct BuildPlanner {
                                             options: options, fallback: fallback, format: RecordedLaunch.currentFormat)
                 try checkLaunch(launch, origin: origin)
                 scope.modules.launch = launch
-            case "VOLUME":
-                guard let name = arguments.first else { return }
-                if options.removeValue(forKey: "remove") != nil {
-                    guard scope.modules.volumes.contains(where: { $0.name == name }) else {
-                        throw PlanError(description: "\(origin): VOLUME --remove \(name), but the stage has no volume called that")
-                    }
-                    scope.modules.volumes.removeAll { $0.name == name }
-                } else if arguments.count == 2 {
-                    scope.modules.volumes.removeAll { $0.name == name }
-                    scope.modules.volumes.append(RecordedLaunch.Volume(name: name, location: arguments[1], options: options))
-                }
             default:
                 if let icon = options["icon"] { scope.modules.app.icon = icon }
                 if let name = options["name"] { scope.modules.app.name = name }
                 if let id = options["default-id"] { scope.modules.app.defaultID = id }
             }
+        }
+
+        /// One of `LAUNCH`'s `--mount=`s: a store, where the program sees it,
+        /// added to the stage's; or with `remove`, the store's taken off.
+        func recordMount(_ value: String, scope: inout Scope, modules: Set<ModuleID>, origin: String) throws(PlanError) {
+            let fields = PlannedStep.fields(ofMount: try plannedMount(value, scope: scope, modules: modules, origin: origin))
+            guard fields["type"] == "store", let store = fields["source"] else {
+                throw PlanError(description: "\(origin): a launch mounts stores: --mount=type=store,source=<store>,target=<path>")
+            }
+            if fields["remove"] != nil {
+                guard scope.modules.mounts.contains(where: { $0.store == store }) else {
+                    throw PlanError(description: "\(origin): the launch doesn't mount \(store) to remove it")
+                }
+                scope.modules.mounts.removeAll { $0.store == store }
+                return
+            }
+            guard let target = fields["target"] else {
+                throw PlanError(description: "\(origin): a launch's mount names its target: --mount=type=store,source=\(store),target=<path>")
+            }
+            if fields["files"] != nil {
+                throw PlanError(description: "\(origin): a launch's mount can't take files= yet")
+            }
+            var options = fields
+            for key in ["type", "source", "target"] { options.removeValue(forKey: key) }
+            // Its modules' fields (dosbox.overlay) alone.
+            for key in options.keys.sorted() where !key.contains(".") {
+                throw PlanError(description: "\(origin): a launch's store mount takes no \(key)")
+            }
+            let mount = RecordedLaunch.Mount(store: store, target: target, options: options)
+            scope.modules.mounts.removeAll { $0.store == store && $0.target == target }
+            scope.modules.mounts.append(mount)
         }
 
         /// What a launch must say for the module that starts it.
@@ -940,9 +989,10 @@ public nonisolated struct BuildPlanner {
         }
 
         /// A `--mount=` value with its fields' aliases made ids and its
-        /// paths and files in full form.
+        /// paths and files in full form, and a store's source its full name.
         func plannedMount(_ value: String, scope: Scope, modules: Set<ModuleID>, origin: String) throws(PlanError) -> String {
             var fields: [String] = []
+            let isStore = PlannedStep.fields(ofMount: value)["type"] == "store"
             for part in value.split(separator: ",", omittingEmptySubsequences: false) {
                 let pair = part.split(separator: "=", maxSplits: 1)
                 let key = moduleOptionName(String(pair[0]), scope: scope)
@@ -951,12 +1001,25 @@ public nonisolated struct BuildPlanner {
                     continue
                 }
                 var text = String(pair[1])
-                if let role = InstructionSpec.mountFieldRoles[key] {
+                if isStore, key == "source" {
+                    text = try storeName(text, scope: scope, origin: origin)
+                } else if let role = InstructionSpec.mountFieldRoles[key] {
                     text = try fullForm(text, role: role, scope: scope, modules: modules, origin: origin)
                 }
                 fields.append("\(key)=\(text)")
             }
             return fields.joined(separator: ",")
+        }
+
+        /// A store's full name, as the file `scope` is in names it: the
+        /// Wrappfile by a short name it declares, a module by its own short
+        /// names; either by a full name.
+        func storeName(_ name: String, scope: Scope, origin: String) throws(PlanError) -> String {
+            let stores = try planner.storeDeclarations()
+            guard let full = stores.resolve(name, module: scope.module?.manifest.id) else {
+                throw PlanError(description: "\(origin): there's no store called \(name) (a store is declared with STORE <name>)")
+            }
+            return full
         }
 
         /// `path` in its full form (`C:/x` as `wine:C:/x`, `assets/disc.iss`
@@ -972,6 +1035,7 @@ public nonisolated struct BuildPlanner {
             case .program: pathRole = .program
             case .file: return try fileFullForm(path, scope: scope, origin: origin)
             case .input, .text: return path
+            case .store: return try storeName(path, scope: scope, origin: origin)
             }
             if let (type, _) = planner.pathTypes.split(path) {
                 guard type.roles.contains(pathRole) else {

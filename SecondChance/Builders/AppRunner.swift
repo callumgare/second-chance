@@ -59,6 +59,18 @@ enum AppRunner {
         }
         let revisions = executors.mapValues { type(of: $0).revision }
         configuration.revision = { step in step.module.flatMap { revisions[$0] } ?? CoreInstructions.revision }
+        // Stores (docs/wrappfile.md#stores): their folders, and whose lock a
+        // build holds. Under test, in a folder of the run's own, so a unit
+        // test makes nothing in the person's; the Steam and Big Fish sign-ins
+        // the integration tests sign in with are their builders' to find.
+        let session = FileManager.default.temporaryDirectory.appendingPathComponent("SecondChance-stores-\(UUID().uuidString)")
+        var locations = StoreLocations.current(session: session)
+        if TestHost.isRunning {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("SecondChance-test-stores", isDirectory: true)
+            locations = StoreLocations(appSupport: root, caches: root.appendingPathComponent("Caches"), session: session)
+        }
+        configuration.stores = StoreSettings(locations: locations, appID: WrappLock.wrappBundleID(program: game.programID),
+                                             holder: SteamLockHolder.buildBundleID)
         return (configuration, emitter)
     }
 
@@ -95,6 +107,12 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
     private var phase: Int?
     /// The substep an `EMIT` gave the next step.
     private var nextSubstep: String?
+
+    /// What the progress screen says while the build waits for a store's lock.
+    static let lockWaitingInstructions = String(localized: """
+        Another game's app, or another build, is using something this build needs. \
+        Building carries on by itself once it's closed.
+        """)
 
     /// The phase each instruction reaches when the Wrappfile emits none.
     static let phaseByInstruction: [String: String] = [
@@ -141,6 +159,12 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
             return phase == nil ? [] : [.progress(state(substep: text))]
         case .module:
             return []
+        case .lockWaiting:
+            // Another app or build has what this one needs (Steam's sign-in):
+            // it carries on by itself once that's closed.
+            return [.instructions(Self.lockWaitingInstructions)]
+        case .lockAcquired:
+            return [.instructions(nil)]
         case .replayed(let inner):
             // A step restored from a layer moves the sidebar as one that ran.
             if case .stepStarted(let ref) = inner { return translate(.stepRestored(ref)) }

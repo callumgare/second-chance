@@ -165,7 +165,7 @@ struct WrappfileParserTests {
     }
 
     @Test(arguments: [
-        ("RUN x", "line 1: RUN comes before the first FROM; only INPUT, CONST, VAR and FUNCTION can"),
+        ("RUN x", "line 1: RUN comes before the first FROM; only INPUT, CONST, VAR, STORE, LOCK and FUNCTION can"),
         ("FROM scratch\nIF ${platform.arch} = \"arm64\"\nRUN x", "line 2: IF has no END"),
         ("FROM scratch\nEND", "line 2: END without an IF, LAYER-HINT or FUNCTION to close"),
         ("FROM scratch\nRUN \"x", "line 2: a quote isn't closed"),

@@ -155,13 +155,17 @@ final class BigFishWrappPreparer: BigFishWrappPreparing, @unchecked Sendable {
     /// as it finishes, and only one runs in a prefix, so the session is
     /// ended afterwards for the build to start its own.
     private func installGameManager(from url: URL, sha256: String, in path: URL) async throws {
-        let installer = try await Self.gameManagerInstaller(from: url, sha256: sha256)
         let layout = WrappLayout(app: path)
         let wine = Wine(wrapp: path)
         let staging = try await stage(script: Self.setupScript, in: layout.driveC)
         defer { removeStaging(in: layout.driveC) }
+        // The stage's fetch mount, which the runner puts there; or, for a
+        // build that doesn't (the integration tests' fetch), downloaded here.
         let installerCopy = staging.appendingPathComponent("bfginstaller35.exe")
-        try await Blocking.run { try FileManager.default.copyItem(at: installer, to: installerCopy) }
+        if !FileManager.default.fileExists(atPath: installerCopy.path) {
+            let installer = try await Self.gameManagerInstaller(from: url, sha256: sha256)
+            try await Blocking.run { try FileManager.default.copyItem(at: installer, to: installerCopy) }
+        }
         let client = layout.prefix.appendingPathComponent(BigFishGameManager.clientDirInPrefix).appendingPathComponent("bfgclient.exe")
 
         func windows(_ url: URL) -> String { GameInstallerRunner.windowsPath(of: url, driveC: layout.driveC) }
@@ -406,6 +410,14 @@ nonisolated final class BigFishExecutor: ModuleExecutor, @unchecked Sendable {
         case "MANAGER":
             try await builder.installGameManager(step, in: context.tree)
         case "INSTALL":
+            // The person's kept sign-in, held for the install; a trial and the
+            // test harness's account never touch it.
+            if usesKeptSignIn {
+                guard let store = step.option("sign-in-store") else {
+                    throw StepFailure.recipe("\(step.origin): BIG-FISH.INSTALL needs --sign-in-store")
+                }
+                _ = try await context.store(store)
+            }
             let choice = try await builder.install(step, in: context.tree, executor: self)
             lock.withLock { state.choice = choice }
         case "SIGN-OUT":

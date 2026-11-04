@@ -1,0 +1,9 @@
+# The big-fish module's stores (docs/wrappfile.md#stores), which every stage
+# and function of the module sees.
+#
+# One Game Manager signed in with the person's account at a time.
+LOCK manager --scope=global
+# The person's Big Fish sign-in, kept for the next build (docs/big-fish.md).
+# Only the big-fish module's own instructions use it at build time; it's
+# never part of an app.
+STORE sign-in --scope=global --exclusive=manager

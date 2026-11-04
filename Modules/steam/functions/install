@@ -1,15 +1,15 @@
 # DO steam.install --game=<the edition's steam-game input> --into=<the game's folder>
 #
 # Steam installs the game, signed in with the sign-in Second Chance keeps
-# for every Steam game (a secret: never part of the app), with the client
-# kept between builds (a cache, so Steam needn't update itself each time).
+# for every Steam game (the sign-in store: never part of the app), with the
+# client kept between builds (the client store, so Steam needn't update
+# itself each time).
 # --into becomes a link to the folder Steam put the game in. Then the
 # sign-in is taken out of the prefix, saved for the next build first, so
 # the app carries none: anyone given a copy could use the account.
 FUNCTION install
   INPUT game
   INPUT into
-  STEAM.INSTALL ${input.game} --into=${input.into} \
-      --mount=type=secret,id=steam-sign-in --mount=type=cache,id=steam-client
+  STEAM.INSTALL ${input.game} --into=${input.into} --sign-in-store=sign-in --client-store=client
   STEAM.SIGN-OUT
 END

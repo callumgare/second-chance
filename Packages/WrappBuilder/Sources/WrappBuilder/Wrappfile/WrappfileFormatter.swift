@@ -179,14 +179,69 @@ public nonisolated enum WrappfileFormatter {
 public nonisolated enum WrappfileMigration {
     public static func migrate(_ tree: WrappfileSyntaxTree) -> WrappfileSyntaxTree {
         var migrated = tree
+        var stores: [String] = []
         migrated.nodes = tree.nodes.map { node in
             guard case .instruction(var lines) = node else { return node }
             for index in lines.indices {
                 lines[index].code = migrate(code: lines[index].code, first: index == 0)
             }
+            if lines.count == 1, let (launch, store) = migrateVolume(lines[0].code) {
+                lines[0].code = launch
+                if !stores.contains(store) { stores.append(store) }
+            }
             return .instruction(lines)
         }
-        return migrated
+        return declaring(stores, in: migrated)
+    }
+
+    /// A `VOLUME` as the `LAUNCH` that mounts its store now, and the store
+    /// it names: `VOLUME --wine.drive=A: <store> <path>` at both the drive
+    /// and the path, `VOLUME --dosbox.overlay <store> <path>` as an overlay.
+    static func migrateVolume(_ code: String) -> (launch: String, store: String)? {
+        let indent = String(code.prefix { $0 == " " })
+        let words = code.split(separator: " ").map(String.init)
+        guard words.first?.uppercased() == "VOLUME" else { return nil }
+        var drive: String?
+        var overlay = false
+        var rest: [String] = []
+        for word in words.dropFirst() {
+            if word.lowercased().hasPrefix("--wine.drive=") {
+                drive = String(word.dropFirst("--wine.drive=".count))
+            } else if word.lowercased() == "--dosbox.overlay" {
+                overlay = true
+            } else {
+                rest.append(word)
+            }
+        }
+        guard rest.count == 2 else { return nil }
+        let (store, target) = (rest[0], rest[1])
+        var mounts = (drive.map { [$0] } ?? []).map { "--mount=type=store,source=\(store),target=\($0)" }
+        mounts.append("--mount=type=store,source=\(store),target=\(target)\(overlay ? ",dosbox.overlay" : "")")
+        return (indent + "LAUNCH " + mounts.joined(separator: " "), store)
+    }
+
+    /// `STORE <name>` for each of `stores` the file doesn't declare, after
+    /// its last `INPUT`, `CONST`, `VAR` or `STORE` before the first
+    /// `FUNCTION` or `FROM`.
+    static func declaring(_ stores: [String], in tree: WrappfileSyntaxTree) -> WrappfileSyntaxTree {
+        guard !stores.isEmpty else { return tree }
+        var tree = tree
+        var insertAt = 0
+        var declared: Set<String> = []
+        for (index, node) in tree.nodes.enumerated() {
+            guard case .instruction(let lines) = node else { continue }
+            let keyword = WrappfileFormatter.keyword(lines[0].code)
+            if keyword == "FUNCTION" || keyword == "FROM" { break }
+            if ["INPUT", "CONST", "VAR", "STORE", "LOCK"].contains(keyword) { insertAt = index + 1 }
+            if keyword == "STORE", let name = lines[0].code.split(separator: " ").dropFirst().first(where: { !$0.hasPrefix("--") }) {
+                declared.insert(String(name))
+            }
+        }
+        let lines = stores.filter { !declared.contains($0) }.map {
+            WrappfileSyntaxTree.Node.instruction([WrappfileSyntaxTree.PhysicalLine(code: "STORE \($0)", comment: nil, gap: "")])
+        }
+        tree.nodes.insert(contentsOf: lines, at: insertAt)
+        return tree
     }
 
     static func migrate(code: String, first: Bool) -> String {

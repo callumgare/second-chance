@@ -9,6 +9,6 @@
 FUNCTION install
   INPUT game
   INPUT into
-  BIG-FISH.INSTALL ${input.game} --into=${input.into} --decline-directx
+  BIG-FISH.INSTALL ${input.game} --into=${input.into} --decline-directx --sign-in-store=sign-in
   BIG-FISH.SIGN-OUT
 END

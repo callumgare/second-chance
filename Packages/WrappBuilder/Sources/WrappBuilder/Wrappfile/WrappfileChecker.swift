@@ -75,6 +75,9 @@ public nonisolated struct WrappfileChecker {
     public struct Findings {
         public var errors: [String] = []
         public var warnings: [String] = []
+        /// The Wrappfile's stores and every module's, which mounts are
+        /// checked against.
+        var stores = StoreDeclarations()
     }
 
     public func problems(_ file: Wrappfile) -> [String] { findings(file).errors }
@@ -85,6 +88,12 @@ public nonisolated struct WrappfileChecker {
         var found = Findings()
         var scopes: [String: Scope] = [:]
         var all: [(name: String, declared: Declared)] = []
+        do {
+            found.stores = try StoreDeclarations.parse(file.storeDeclarations, module: nil, origin: "Wrappfile")
+        } catch {
+            found.errors.append(error.description)
+        }
+        for module in modules.values { found.stores.merge(module.stores) }
         var globals = Scope()
         for instruction in file.globals {
             check(instruction, in: &globals, file: file, scopes: [:], found: &found, all: &all)
@@ -277,10 +286,6 @@ public nonisolated struct WrappfileChecker {
            !(icon.hasPrefix("/Resources/") && icon.hasSuffix(".icns")) {
             found.errors.append("\(at) \(icon): an app's icon is an .icns in its Resources/: /Resources/<name>.icns")
         }
-        if instruction.keyword == "VOLUME", let name = instruction.arguments.first?.raw, !name.contains("${"),
-           manifest.volumes?[name] == nil {
-            found.errors.append("\(at) \(name), but manifest.yaml has no volume called that")
-        }
         // A patcher isn't an install: it looks for no program afterwards.
         if spec.options["patch"] != nil, instruction.option("patch") != nil, instruction.option("creates") != nil {
             found.errors.append("\(at) --patch takes no --creates: a patcher is run in its folder, and nothing is looked for afterwards")
@@ -384,6 +389,14 @@ public nonisolated struct WrappfileChecker {
             }
             if option.name == "mount" {
                 checkMount(option, at: at, scope: scope, found: &found)
+                if instruction.keyword == "LAUNCH" {
+                    checkLaunchMount(option, at: at, found: &found)
+                } else if option.fields["type"] == "store" {
+                    checkStepStore(option.fields["source"], at: at, owner: nil, found: &found)
+                }
+            } else if (spec.optionRoles[option.name] ?? .text) == .store {
+                let owner = instruction.moduleAlias.map { scope.aliases[$0.lowercased()] ?? $0.lowercased() }
+                checkStepStore(option.value?.raw, at: at, owner: owner, found: &found)
             }
         }
         for name in spec.required where instruction.option(name) == nil {
@@ -391,6 +404,44 @@ public nonisolated struct WrappfileChecker {
         }
         if !spec.arguments.contains(instruction.arguments.count) {
             found.errors.append("\(at) takes \(Self.describe(spec.arguments)), not \(instruction.arguments.count)")
+        }
+    }
+
+    /// A store a build step mounts (`owner` nil) or a module's instruction
+    /// is given: one that's declared, and not a kept one, which a build
+    /// mustn't change; but for a module's own executor, given its own
+    /// module's (decision 23 of the builders plan).
+    func checkStepStore(_ name: String?, at: String, owner: String?, found: inout Findings) {
+        guard let name, !name.contains("${") else { return }
+        guard let full = found.stores.resolve(name, module: nil) ?? found.stores.resolve(name, module: owner),
+              let store = found.stores.stores[full] else {
+            found.errors.append("\(at) there's no store called \(name) (a store is declared with STORE <name>)")
+            return
+        }
+        if store.retention == .keep && store.owner != owner {
+            found.errors.append("\(at) \(full) is a kept store, which a build step can't use: it lasts beyond the build, "
+                + "so only its own module's instructions may change it")
+        }
+    }
+
+    /// One of `LAUNCH`'s mounts: a declared store, and an app's own one
+    /// named in the manifest's `volumes:`, which says what it holds.
+    func checkLaunchMount(_ option: InstructionOption, at: String, found: inout Findings) {
+        let fields = option.fields
+        guard fields["type"] == "store" else {
+            found.errors.append("\(at) a launch mounts stores: --mount=type=store,source=<store>,target=<path>")
+            return
+        }
+        guard let name = fields["source"], !name.contains("${") else { return }
+        guard let full = found.stores.resolve(name, module: nil), let store = found.stores.stores[full] else {
+            found.errors.append("\(at) there's no store called \(name) (a store is declared with STORE <name>)")
+            return
+        }
+        if store.owner == "app", manifest.volumes?[store.name] == nil {
+            found.errors.append("\(at) \(store.name), but manifest.yaml has no volume called that")
+        }
+        if fields["target"] == nil, fields["remove"] == nil {
+            found.errors.append("\(at) a launch's mount names its target: --mount=type=store,source=\(name),target=<path>")
         }
     }
 
@@ -459,7 +510,7 @@ public nonisolated struct WrappfileChecker {
                     }
                 }
                 return
-            case .input, .text: return
+            case .input, .text, .store: return
             }
             if let problem = pathProblem(word.raw, as: pathRole, modules: modules, inFunction: scope.inFunction) {
                 found.errors.append("\(at) \(word.raw): \(problem)")
@@ -471,7 +522,8 @@ public nonisolated struct WrappfileChecker {
         for option in instruction.options {
             guard let value = option.value else { continue }
             if option.name == "mount" {
-                for (field, text) in option.fields {
+                let isStore = option.fields["type"] == "store"
+                for (field, text) in option.fields where !(isStore && field == "source") {
                     if let role = InstructionSpec.mountFieldRoles[field] {
                         check(Word(raw: text, parts: (try? WrappfileParser.parts(of: text, line: 0)) ?? []), role)
                     }

@@ -7,6 +7,7 @@
 //  starts signed in. See docs/big-fish.md.
 
 import Foundation
+import WrappFormat
 import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.BigFish")
@@ -17,11 +18,9 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sha
 /// profile, which is mostly cache. They're kept as a `.reg` fragment that
 /// `reg import` puts back into the next build's prefix.
 nonisolated public final class BigFishSessionStore: Sendable {
-    /// `~/Library/Application Support/SecondChance/BigFish`.
-    public static var defaultRoot: URL {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("SecondChance/BigFish")
-    }
+    /// The big-fish module's `sign-in` store (`Modules/big-fish/stores`):
+    /// `~/Library/Application Support/SecondChance/stores/big-fish/sign-in`.
+    public static var defaultRoot: URL { StoreLocations.shared(owner: "big-fish", name: "sign-in") }
 
     /// Where a restored fragment is put in the prefix, for Wine's `reg import`.
     public static let fragmentWindowsPath = #"C:\windows\temp\second-chance-big-fish-sign-in.reg"#
