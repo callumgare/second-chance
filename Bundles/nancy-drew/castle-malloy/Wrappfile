@@ -1,25 +1,24 @@
-CONST install-dir = "C:/Program Files (x86)/Nancy Drew/The Haunting of Castle Malloy"
-CONST program = "${const.install-dir}/CastleMalloy.exe"
 INPUT disc-1
 INPUT disc-2
 INPUT installer
 INPUT game
+CONST install-dir = "C:/Program Files (x86)/Nancy Drew/The Haunting of Castle Malloy"
+CONST program = "${const.install-dir}/CastleMalloy.exe"
 
 # What the app has whichever edition it's built from
-FUNCTION shared
+FUNCTION pre-install-setup
   USE nancy-drew
   DO nancy-drew.set-icon
   VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
 END
 
 # What every install of the game ends with: its .ini settings
-FUNCTION installed
-  INPUT install-dir
-  DO nancy-drew.configure-ini --into=${input.install-dir}
+FUNCTION post-install-setup
+  DO nancy-drew.configure-ini --into=${const.install-dir}
 END
 
 FROM wine@10/prefix AS prefix
-DO shared
+DO pre-install-setup
 LAUNCH --wine.graphics=direct-3d ${const.program}
 
 # The CD edition: the disc kept in the wrapp, as the game checks for it
@@ -28,7 +27,7 @@ USE installer
 WINE.KEEP-DISCS ${input.disc-1} ${input.disc-2} --into=C:/nancy-drew-installer --combined=C:/nancy-drew-installer/disk-combined
 INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --creates=${const.program}
 DO nancy-drew.patch --id=castle-malloy-walk-in-place-cd --into=${const.install-dir}
-DO installed
+DO post-install-setup
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
 # Windows game is taken out
@@ -36,19 +35,19 @@ FROM prefix AS her-download
 USE her-download
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates=${const.program}
 DO nancy-drew.patch --id=castle-malloy-walk-in-place-download --into=${const.install-dir}
-DO installed
+DO post-install-setup
 
 # Steam's: the game installed by Steam, which starts it
 FROM steam@1/client AS steam
-DO shared
+DO pre-install-setup
 DO steam.install --game=${input.game} --into=${const.install-dir}
-DO installed
+DO post-install-setup
 LAUNCH --wine.graphics=direct-3d --steam.exe=${const.program} steam://rungameid/${input.game.app-id}
 
 # Big Fish's: the game installed by its Game Manager, whose DRM starts it
 FROM big-fish@1/manager AS big-fish
-DO shared
+DO pre-install-setup
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
-DO installed
+DO post-install-setup
 LAUNCH --wine.graphics=direct-3d \
     --big-fish.exe=${const.program} "big-fish:${const.install-dir}/LaunchGame.bfg"

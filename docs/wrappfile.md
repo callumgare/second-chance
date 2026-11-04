@@ -135,17 +135,23 @@ comes from:
   `default`s fill in a field a table leaves out.
 - **Every value is known when planning.** An app never works one out.
 - **Scopes**: the file, a stage, a function and an `IF`'s branch, the
-  innermost winning. Globals reach every stage. A `CONST` can't be set or
+  innermost winning. Globals reach every stage, and the bundle's own
+  functions, defined in the file. A `CONST` can't be set or
   declared again within its scope; a `VAR` in a branch shadows one outside
   it, and a `SET` changes the innermost `VAR` of its name. Reading a `VAR`
   before anything has set it is an error.
 - **`INPUT`s are declared before the first `FROM`**, or as a function's
-  parameters at its top. An input missing is an error only if the build
+  parameters at its top. By convention, though nothing checks it, a file's
+  `INPUT`s come before its `CONST`s and `VAR`s: what it's given, then what
+  it works out. An input missing is an error only if the build
   reads it; an edition giving one its target never reads is an error.
-- **A function reads its caller's values only through its own `INPUT`s**:
-  each is given by the `DO`'s option, or else the caller's input or
-  constant of the same name, or else its default. An edition's value always
-  beats an `INPUT`'s default.
+- **A function reads what's declared where it's defined, not where it's
+  called**: a bundle's function, the file's `INPUT`s and `CONST`s
+  (`${const.install-dir}`); a module's, only what its own file declares.
+  A stage's values reach a function only as its `INPUT`s, each given by the
+  `DO`'s option or else its default, never by a caller's value that
+  happens to share its name. An edition's value always beats an `INPUT`'s
+  default.
 - **`--secret`** keeps an input out of every step's text: it reaches a
   program only through `--env` or a `secret` mount, the step keeps
   `${input.<name>}`, and the builder fills it in, so it's never in a layer's
@@ -168,7 +174,7 @@ modules are left in the app.
 CONST program = "${const.install-dir}/Game.exe"
 
 # What the app has whichever edition it's built from
-FUNCTION shared
+FUNCTION pre-install-setup
   USE nancy-drew
   DO wine.cnc-ddraw
   DO nancy-drew.set-icon      # COPY assets/nancy-drew.icns /Resources/…, ICON it
@@ -176,15 +182,15 @@ FUNCTION shared
 END
 
 FROM wine@10/prefix AS prefix
-DO shared
+DO pre-install-setup
 LAUNCH --wine.graphics=direct-draw ${const.program}
 ```
 
 What a bundle repeats in several stages it writes once: a `CONST` for a
 path (the program, which `--creates` and each `LAUNCH` name), a `FUNCTION`
-of its own for steps (`shared`, above, called by the `prefix` stage and by
+of its own for steps (`pre-install-setup`, above, called by the `prefix` stage and by
 Steam's and Big Fish's, which are built from module stages instead;
-`installed`, the `.ini` settings every install ends with; `patch`, Her's
+`post-install-setup`, the `.ini` settings every install ends with; `patch`, Her's
 patches where two editions share them), and a
 module's function for what every program of a series does (the Nancy Drew
 games' icon). What a function records (its `ICON`, `VOLUME`s) and the modules it `USE`s

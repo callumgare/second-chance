@@ -22,7 +22,7 @@ struct WrappfileTodayTests {
 
     /// A target's instructions, and those of the `<target>-files` stage its
     /// data is copied from, for a ScummVM game whose data needs Wine; a
-    /// function of the bundle's own a stage calls (`DO after-install`) is
+    /// function of the bundle's own a stage calls (`DO patch`) is
     /// followed into its body.
     private func instructions(_ file: Wrappfile, stage: String) throws -> [Instruction] {
         func expanded(_ instructions: [Instruction]) -> [Instruction] {

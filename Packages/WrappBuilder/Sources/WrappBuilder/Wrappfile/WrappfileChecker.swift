@@ -44,6 +44,9 @@ public nonisolated struct WrappfileChecker {
         var inFunction = false
         /// Past a function's top, where its INPUTs are.
         var pastTop = false
+        /// How many frames a function's scope starts with: the file's, then
+        /// its own; an INPUT goes in its own, at its top.
+        var functionFrames = 1
 
         var moduleIDs: Set<ModuleID> { Set(aliases.values.map(ModuleID.init(rawValue:))) }
 
@@ -97,7 +100,10 @@ public nonisolated struct WrappfileChecker {
                 found.warnings.append("line \(function.line): FUNCTION \(function.name) is named like a module: DO \(function.name).… is this "
                     + "function's, and the module's functions are written DO module.\(function.name).<function>")
             }
-            var scope = Scope(aliases: allModuleAliases, inFunction: true)
+            // It sees what's declared where it's defined, the file's globals,
+            // beneath its own INPUTs and values.
+            var scope = Scope(aliases: allModuleAliases, frames: globals.frames + [[:]], inFunction: true,
+                              functionFrames: globals.frames.count + 1)
             check(function.body, in: &scope, file: file, scopes: scopes, found: &found, all: &all)
         }
         for stage in file.stages {
@@ -307,7 +313,7 @@ public nonisolated struct WrappfileChecker {
         }
         switch declaration.kind {
         case .input:
-            if !(isGlobal || (scope.inFunction && !scope.pastTop && scope.frames.count == 1)) {
+            if !(isGlobal || (scope.inFunction && !scope.pastTop && scope.frames.count == scope.functionFrames)) {
                 found.errors.append("\(at): an INPUT is declared before the first FROM, or at a function's top")
                 return
             }
@@ -537,11 +543,6 @@ public nonisolated struct WrappfileChecker {
             found.errors.append("\(at) \(name) takes no --\(option.name)")
         }
         for parameter in parameters where parameter.value == nil && instruction.option(parameter.name) == nil {
-            // The caller's input or constant of the same name gives it otherwise.
-            if let caller = scope.declared(parameter.name), caller.kind == .input || caller.kind == .const {
-                caller.used = true
-                continue
-            }
             found.errors.append("\(at) \(name) needs --\(parameter.name)")
         }
     }
@@ -571,7 +572,7 @@ public nonisolated struct WrappfileChecker {
             guard let declared = scope.declared(name) else {
                 let kind = reference.root == "var" ? "VAR" : reference.root.uppercased()
                 return "no \(kind) called \(name) here"
-                    + (scope.inFunction && reference.root != "input" ? " (a function reads its caller's values only through its own INPUTs)" : "")
+                    + (scope.inFunction && reference.root != "input" ? " (a function reads the file's values and its own INPUTs, not its caller's)" : "")
             }
             let expected: Declaration.Kind = reference.root == "input" ? .input : reference.root == "const" ? .const : .variable
             guard declared.kind == expected else {

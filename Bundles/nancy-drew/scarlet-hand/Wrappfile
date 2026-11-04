@@ -1,9 +1,9 @@
 # ScummVM reads the game's data from the app's own folder; Wine is only
 # what some editions need to get the data out, and isn't kept.
-CONST install-dir = "C:/Program Files (x86)/Her Interactive/Secret of the Scarlet Hand"
 INPUT disc-1
 INPUT installer
 INPUT game
+CONST install-dir = "C:/Program Files (x86)/Her Interactive/Secret of the Scarlet Hand"
 
 FROM wine@10/prefix AS prefix
 

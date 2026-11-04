@@ -114,6 +114,23 @@ struct BuildPlanTests {
         #expect(plan.target?.steps.last?.option("from-data") == "ini")
     }
 
+    @Test("A function of the bundle's sees the file's CONSTs, where it's defined")
+    func functionSeesGlobals() throws {
+        let (planner, _, bundle) = try planner("""
+        CONST install-dir = "C:/Game"
+        FUNCTION installed
+          USE nancy-drew
+          DO nancy-drew.configure-ini --into=${const.install-dir}
+        END
+        FROM wine@10/prefix AS only
+        DO installed
+        LAUNCH --wine.graphics=direct-3d ${const.install-dir}/Game.exe
+        """)
+        let plan = try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        #expect(plan.target?.steps.last?.arguments == ["wine:C:/Game/*.ini"])
+    }
+
     @Test("A CONST can be built from another")
     func constFromConst() throws {
         let (planner, _, bundle) = try planner("""
@@ -241,21 +258,25 @@ struct BuildPlanTests {
         #expect(run.option("into") == "wine:C:/disc")
     }
 
-    @Test("A function reads its caller's values only through its INPUTs: a DO's option, else the caller's of that name, else its default")
+    @Test("A function's INPUT is a DO's option, else its default, never a caller's value of the same name")
     func functionInputs() throws {
-        let text = """
-        CONST into = "C:/caller"
-        FUNCTION drop
-          INPUT into
-          INPUT name --default="default"
-          REMOVE "${input.into}/${input.name}"
-        END
-        FROM scratch AS only
-        USE wine
-        DO drop
-        DO drop --into=C:/given --name=x
-        """
-        #expect(try steps(text).flatMap(\.arguments) == ["wine:C:/caller/default", "wine:C:/given/x"])
+        func text(_ calls: String) -> String {
+            """
+            CONST into = "C:/caller"
+            FUNCTION drop
+              INPUT into
+              INPUT name --default="default"
+              REMOVE "${input.into}/${input.name}"
+            END
+            FROM scratch AS only
+            USE wine
+            \(calls)
+            """
+        }
+        #expect(try steps(text("DO drop --into=C:/given")).flatMap(\.arguments) == ["wine:C:/given/default"])
+        #expect(try steps(text("DO drop --into=C:/given --name=x")).flatMap(\.arguments) == ["wine:C:/given/x"])
+        // The CONST called into is the file's, not the INPUT's value.
+        #expect(throws: BuildPlanner.PlanError.self) { try steps(text("DO drop")) }
     }
 
     @Test("A module's data reads its schema's defaults, and self is the module whatever its AS name")

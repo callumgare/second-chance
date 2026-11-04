@@ -93,10 +93,14 @@ struct WrappfileCheckerTests {
         #expect(found.contains { $0.hasPrefix(expected) }, "\(found)")
     }
 
-    @Test("A function reads its caller's values only through its own INPUTs")
-    func functionsReadOnlyTheirInputs() throws {
-        let file = Self.valid + "\nFUNCTION f\n  INPUT x\n  REMOVE ${input.x}/${const.install-dir}\nEND"
-        #expect(try problems(file).contains { $0.contains("${const.install-dir}: no CONST called install-dir here (a function reads") })
+    @Test("A function reads the file's values, where it's defined, and its own INPUTs, but not its caller's")
+    func functionsReadWhereDefined() throws {
+        // The file's CONST, as the function is the file's.
+        let globals = Self.valid + "\nFUNCTION f\n  INPUT x\n  REMOVE ${input.x}/${const.install-dir}\nEND"
+        #expect(try problems(globals) == [])
+        // A stage's CONST isn't the function's, though the stage calls it.
+        let stages = Self.valid + "\nFROM prefix AS other\nCONST here = \"y\"\nDO g\nFUNCTION g\n  REMOVE C:/${const.here}\nEND"
+        #expect(try problems(stages).contains { $0.contains("${const.here}: no CONST called here here (a function reads the file's values") })
     }
 
     @Test("What nothing reads is warned about")

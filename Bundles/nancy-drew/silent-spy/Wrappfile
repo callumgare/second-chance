@@ -1,24 +1,23 @@
-CONST install-dir = "C:/Program Files (x86)/Her Interactive/The Silent Spy"
-CONST program = "${const.install-dir}/Spy.exe"
 INPUT disc-1
 INPUT installer
 INPUT game
+CONST install-dir = "C:/Program Files (x86)/Her Interactive/The Silent Spy"
+CONST program = "${const.install-dir}/Spy.exe"
 
 # What the app has whichever edition it's built from
-FUNCTION shared
+FUNCTION pre-install-setup
   USE nancy-drew
   DO nancy-drew.set-icon
   VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
 END
 
 # What every install of the game ends with: its .ini settings
-FUNCTION installed
-  INPUT install-dir
-  DO nancy-drew.configure-ini --into=${input.install-dir}
+FUNCTION post-install-setup
+  DO nancy-drew.configure-ini --into=${const.install-dir}
 END
 
 FROM wine@10/prefix AS prefix
-DO shared
+DO pre-install-setup
 # Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
 LAUNCH --wine.graphics=direct-3d \
     --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
@@ -30,14 +29,14 @@ FROM prefix AS disc
 USE installer
 WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
 INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --creates=${const.program}
-DO installed
+DO post-install-setup
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
 # Windows game is taken out
 FROM prefix AS her-download
 USE her-download
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates=${const.program}
-DO installed
+DO post-install-setup
 
 # Her Interactive's Mac download: a Cider app, whose Windows game is taken
 # out where Cider had it. Her's patches update older builds than it, so none
@@ -45,13 +44,13 @@ DO installed
 FROM prefix AS her-mac
 USE her-download
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
-DO installed
+DO post-install-setup
 
 # Steam's: the game installed by Steam, which starts it
 FROM steam@1/client AS steam
-DO shared
+DO pre-install-setup
 DO steam.install --game=${input.game} --into=${const.install-dir}
-DO installed
+DO post-install-setup
 # Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
 LAUNCH --wine.graphics=direct-3d \
     --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \
@@ -60,9 +59,9 @@ LAUNCH --wine.graphics=direct-3d \
 
 # Big Fish's: the game installed by its Game Manager, whose DRM starts it
 FROM big-fish@1/manager AS big-fish
-DO shared
+DO pre-install-setup
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
-DO installed
+DO post-install-setup
 # Her's later engine exits non-zero; its Debug.LOG says whether it quit cleanly
 LAUNCH --wine.graphics=direct-3d \
     --wine.clean-exit-log="${nancy-drew.data.clean-exit-log.file}" \

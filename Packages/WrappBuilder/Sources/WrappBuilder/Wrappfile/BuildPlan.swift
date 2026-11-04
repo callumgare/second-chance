@@ -378,7 +378,7 @@ public nonisolated struct BuildPlanner {
             /// In a module's function: the module, `self`.
             var module: ModuleFolder?
             /// In a function, which reads its caller's values only through
-            /// its own `INPUT`s.
+            /// its own `INPUT`s, and those declared where it's defined.
             var inFunction = false
             /// The stages planned before this one, with their modules: where
             /// a `COPY --from=<stage>` path is.
@@ -676,9 +676,13 @@ public nonisolated struct BuildPlanner {
                 function = found
                 source = "Wrappfile"
                 inner.module = scope.module
+                // A function sees what's declared where it's defined: a
+                // bundle's, the file's globals, the first of any scope's
+                // frames. A module's sees its own file's, which declares none.
+                inner.frames = [scope.frames.first ?? [:], [:]]
             }
-            // Its INPUTs: the DO's options, or else the caller's input or
-            // constant of the same name; its own default otherwise.
+            // Its INPUTs: the DO's options; its own default otherwise. Never
+            // a caller's value that happens to have the same name.
             for parameter in function.parameters {
                 if let option = instruction.option(parameter.name) {
                     let value = try option.value.map { word throws(PlanError) in try evaluate(word, in: scope, origin: origin) } ?? .text("")
@@ -688,16 +692,6 @@ public nonisolated struct BuildPlanner {
                         editionInput = fromEdition
                     }
                     inner.declare(parameter.name, .input(value, editionInput: editionInput, secret: false))
-                } else {
-                    switch scope.binding(parameter.name) {
-                    case .input(let value?, let editionInput, let secret):
-                        if let editionInput { recorder.usedInputs.insert(editionInput) }
-                        inner.declare(parameter.name, .input(value, editionInput: editionInput, secret: secret))
-                    case .const(let value):
-                        inner.declare(parameter.name, .input(value, editionInput: nil, secret: false))
-                    default:
-                        break
-                    }
                 }
             }
             for option in instruction.options where option.name != "name" && !function.parameters.contains(where: { $0.name == option.name }) {

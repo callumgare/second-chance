@@ -1,7 +1,7 @@
 # SkiFree: one program, copied in as it comes, nothing to install.
 
-CONST install-dir = "C:/SkiFree"
 INPUT game
+CONST install-dir = "C:/SkiFree"
 
 FROM wine@10/prefix AS download
 COPY --from=${input.game} . ${const.install-dir}/ # the edition's download input, unpacked as its manifest says

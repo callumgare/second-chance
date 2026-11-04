@@ -1,9 +1,9 @@
 # ScummVM reads the game's data from the app's own folder; Wine is only
 # what some editions need to get the data out, and isn't kept.
-CONST install-dir = "C:/Program Files (x86)/Her Interactive/Secrets Can Kill"
 INPUT disc-1
 INPUT disc-2
 INPUT installer
+CONST install-dir = "C:/Program Files (x86)/Her Interactive/Secrets Can Kill"
 
 FROM wine@10/prefix AS prefix
 
