@@ -1072,9 +1072,12 @@ and the Game Manager fail in ways that look like their own bugs. In one run
 896 helpers held 895 of 1,020, and games failed across every source that
 passed again once they were gone.
 
-`sc test integration` ends them before each run (`LeakedHelpers`), when
-there are more than 20, leaving the newest five, so a test Mac's runs don't
-add up. Count them with `ps -axo comm= | grep -c SafariPlatformSupport.Helper`.
+`sc test integration` ends the ones a run started as it finishes
+(`LeakedHelpers`): those that weren't running when it began, as its wrapps
+are gone by then. Which wrapp each belongs to only root can read
+(`launchctl procinfo`). A run that was stopped can't, so before each run it
+also ends what has built up, when there are more than 20, leaving the
+newest five. Count them with `ps -axo comm= | grep -c SafariPlatformSupport.Helper`.
 They can be ended by hand too (by pid, never `pkill` on a pattern), and
 launchd starts one again when it's next wanted; a reboot clears them too.
 

@@ -165,6 +165,7 @@ struct TestRunner {
                                   "Games on Big Fish: \(Catalog.games.filter(\.isOnBigFish).map(\.slug).joined(separator: ", "))"])
         }
         await LeakedHelpers.clear(ui: ui)
+        let helpersBefore = await LeakedHelpers.running()
         let dotEnv = DotEnv.load(repo)
         if sources.contains(.bigFish) && BigFishSourceOptions.testAccount(dotEnv: dotEnv) == nil {
             ui.warning("The owned Big Fish suite will skip every game: .env has no Big Fish test account.",
@@ -267,6 +268,7 @@ struct TestRunner {
             ui.warning("Some games weren't tested: the screen was locked or the display asleep, so they couldn't come to the front.",
                        next: "Keep the Mac awake and unlocked for the run (caffeinate -d), and run those games again.")
         }
+        await LeakedHelpers.endStarted(since: helpersBefore, ui: ui)
         return TestRun(name: "Integration", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle))
     }
 
