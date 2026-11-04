@@ -844,7 +844,9 @@ within 60 s. That goes through Wine (or ScummVM) rather than the game, and it
 once hung for good: with the game's process made an accessory app, White
 Wolf's main thread waited in `terminate:` for an answer that never came. A
 game that doesn't close fails the run, with a capture of its window. The
-relaunch's time is in the **Launch** column too. It's skipped in a VM.
+relaunch's time is in the **Launch** column too. It's skipped in a VM, and
+for a DirectDraw game's Big Fish free trial, whose DRM turns the quit down
+(the same game from its disc quits); only the tests build trials.
 
 ### The picture's bars and shape
 

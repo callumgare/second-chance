@@ -125,7 +125,7 @@ struct IntegrationGameRun {
             // goes through Wine rather than the game: it has hung for good
             // when the game's process had no Dock icon of its own. Not in a
             // VM, whose runner launches only the one way.
-            if exitCode == 0, VMTarget.current == nil {
+            if exitCode == 0, VMTarget.current == nil, quitsFromMenu {
                 outcome.phase("relaunching to quit from the menu")
                 let menuExit = try await outcome.timed(.launch) {
                     try await AppPuppetRunner.run(wrappURL: wrapp, game: game, quitFromMenu: true) { outcome.warn($0) }
@@ -135,6 +135,15 @@ struct IntegrationGameRun {
             await InstalledGameCheck.run(wrapp: wrapp, game: game, outcome: outcome)
             outcome.completed = true
         }
+    }
+
+    /// Whether the relaunch that quits through the game's Quit menu item
+    /// tests the game. Not for a DirectDraw game's Big Fish free trial: the
+    /// trial's DRM turns the quit down (the game is asked, and carries on),
+    /// where the same game from its disc, with the same cnc-ddraw, quits.
+    /// Only the integration tests build trials, so no player meets it.
+    var quitsFromMenu: Bool {
+        !(source == "big-fish-trial" && game.graphics == .directDraw)
     }
 
     // MARK: - Whether the Mac can test it
