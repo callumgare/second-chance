@@ -51,6 +51,21 @@ by the Steam client, which has the environment it was started with — not the
 `-applaunch` call's — so the wrapp's `SteamClient` sets them on every Steam
 process it runs. Steam's own processes have other names and never arm.
 
+A game Big Fish owns is started by its DRM service, `bfggameservices.exe`
+(`bfgprocess.exe` only hands it the game's `.bfg`), and a Windows service
+has the environment `services.exe` started with: the session's first
+program's, not the `bfgprocess` call's. So for an owned Big Fish game every
+Wine program the wrapp starts carries the variables (`Wine.sessionVariables`,
+`BigFishRuntime.sessionVariables`), whichever starts the session. (Writing
+them into the prefix's registry environment doesn't reach a service: Wine's
+`services.exe` passes its own environment on rather than building one from
+the registry.) Nor does the game have any output of the wrapp's to write
+its helpers' reports to, so they also append each line to the file
+`SECOND_CHANCE_HELPER_REPORTS` names, which the wrapp reads as it would the
+game's output (`HelperReportFile`). A Big Fish free trial is started by the
+Game Manager's Play Now instead, which passes its environment on as any
+program does.
+
 They log to os_log under subsystem `com.secondchance.gamewrapper` (categories
 `NativeFullscreen`, `CursorLock`, `EmulatedMode` and `PuppetControl`), and
 additionally append to the file named

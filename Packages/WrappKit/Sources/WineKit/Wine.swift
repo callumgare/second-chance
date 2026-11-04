@@ -22,6 +22,12 @@ nonisolated public struct Wine: Sendable {
     let binDir: URL
     public let prefix: URL
     let frameworksDir: URL
+    /// More variables for every program run through this Wine, beneath
+    /// Second Chance's own: for a game a program the session started earlier
+    /// starts, such as a Windows service, whose environment is the
+    /// session's (`services.exe` passes its own on), not that of whatever
+    /// asked it to act.
+    public var sessionVariables: [String: String] = [:]
 
     /// The Windows user name: whose folder under `drive_c/users` the saves are in.
     public static let username = "crossover"
@@ -94,6 +100,7 @@ nonisolated public struct Wine: Sendable {
             "MVK_CONFIG_FAST_MATH_ENABLED": "0",
             "DOTNET_EnableWriteXorExecute": "0"
         ].merging(Self.syncVariables()) { $1 }
+            .merging(sessionVariables) { ours, _ in ours }
     }
 
     /// `WINEMSYNC` and `WINEESYNC`: how Wine's programs wait on each other

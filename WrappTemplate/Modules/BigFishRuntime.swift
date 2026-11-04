@@ -49,6 +49,30 @@ final class BigFishRuntime: GameStarting {
         )
     }
 
+    /// What every Wine program of an owned game's session runs with
+    /// (`GameConfig.wineSessionVariables`): the game's in-process helpers,
+    /// and the Game Manager's windows hidden, as Big Fish's launcher opens it
+    /// as the game ends (never seen, as its file to show it is never made).
+    /// Not just what `bfgprocess` is given: it hands the game to Big Fish's
+    /// DRM service, which starts it with the environment `services.exe`
+    /// passes on, the one the session's first program started with, and
+    /// with no output of the wrapp's for its helpers' reports.
+    /// Nothing for a trial, which `startTrial` starts with them itself, or a
+    /// game that isn't Big Fish's.
+    nonisolated static func sessionVariables(_ config: GameConfig) -> [String: String] {
+        guard config.bigFishLaunchFile != nil, !config.bigFishTrial,
+              let gameExe = WineRuntime.launchInfo(config).gameExePath else { return [:] }
+        // The catalog says what the game draws with: Armadillo hides its .exe's imports.
+        var variables = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExe),
+                                                      game: GameInfoProvider.shared.gameInfo(for: config.gameSlug))
+        let neverShown = FileManager.default.temporaryDirectory.appendingPathComponent("second-chance-never-shown")
+        variables.merge(Wine.hiddenWindowsVariables(exe: "bfgclient.exe", showFile: neverShown)) { game, _ in game }
+        // The service starts the game with no output of the wrapp's, so its
+        // helpers' reports come through a file (`WineRuntime.prepare`).
+        variables[HelperReportFile.variable] = HelperReportFile.url().path
+        return variables
+    }
+
     var findsGame: GameDiscovery { .wineProgramStartedElsewhere }
 
     // Big Fish's games run under Armadillo as two processes of the same exe;
@@ -58,22 +82,16 @@ final class BigFishRuntime: GameStarting {
     func startGame(_ launch: LaunchContext) async -> LaunchResult {
         if config.bigFishTrial { return await startTrial(launch) }
         let launchInfo = Self.launchInfo(config)
-        guard let command = launchInfo.wineCommand, let gameExeUnixPath = launchInfo.gameExePath else {
+        guard let command = launchInfo.wineCommand, launchInfo.gameExePath != nil else {
             logger.critical("ERROR: no game program to run for a Big Fish game")
             return .failed
         }
         logger.notice("Launching game through Big Fish: \(launchInfo.executable) with arguments: \(launchInfo.arguments.joined(separator: " "))")
         let watchers = launch.watchers
         let diagnostics = launch.modules.module(WineRuntime.self)?.diagnostics
-        // The catalog says what the game draws with: Armadillo hides its .exe's imports.
-        var environment = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath),
-                                                        game: GameInfoProvider.shared.gameInfo(for: config.gameSlug))
-        // Big Fish's launcher opens the Game Manager as the game ends: never
-        // seen, as its file to show it is never made.
-        let neverShown = FileManager.default.temporaryDirectory.appendingPathComponent("second-chance-never-shown")
-        environment.merge(Wine.hiddenWindowsVariables(exe: "bfgclient.exe", showFile: neverShown)) { game, _ in game }
+        // The helpers' variables are the session's (`sessionVariables`).
         do {
-            _ = try config.wine.start(command, environment: environment,
+            _ = try config.wine.start(command,
                                       output: .log(outputLogger, onLine: { line in
                                           diagnostics?.observe(line: line)
                                           watchers.observe(line: line)

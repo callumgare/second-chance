@@ -19,6 +19,9 @@ final class WineRuntime: GameStarting {
     /// The desktop `prepare` started, if it did; claimed once, by the
     /// game's end or a quit, whichever comes first (`releaseDesktop`).
     private let desktop = Mutex<WineDesktop?>(nil)
+    /// Where the game's helpers' reports come from when they can't come
+    /// through its output (`HelperReportFile`); stopped with the desktop.
+    private let helperReports = Mutex<HelperReportFile?>(nil)
     /// Captures a diagnostics bundle if the game starts badly. Made with the
     /// module, so a launch that stalls before the game starts can be
     /// captured too.
@@ -92,6 +95,12 @@ final class WineRuntime: GameStarting {
     /// the wait looks stuck. See `WineDesktop`. Under Steam, Steam's start
     /// has started the session already.
     func prepare(_ launch: LaunchContext) async -> PrepareOutcome {
+        if let path = config.wineSessionVariables[HelperReportFile.variable] {
+            let file = HelperReportFile(url: URL(fileURLWithPath: path))
+            let watchers = launch.watchers
+            file.start { line in watchers.observe(line: line) }
+            helperReports.withLock { $0 = file }
+        }
         guard !config.composition.has(.steam) else { return .ready }
         // Debug switch, for comparing against Wine's own on-demand start.
         guard ProcessInfo.processInfo.environment["SECOND_CHANCE_PRESTART_DESKTOP"] != "0" else {
@@ -214,6 +223,10 @@ final class WineRuntime: GameStarting {
     /// keeps the whole Wine session alive. See `WineDesktop.release`. Any
     /// thread: the quit's cleanup releases it from its background queue.
     private nonisolated func releaseDesktop() {
+        helperReports.withLock { file in
+            file?.stop()
+            file = nil
+        }
         let claimed = desktop.withLock { desktop in
             defer { desktop = nil }
             return desktop

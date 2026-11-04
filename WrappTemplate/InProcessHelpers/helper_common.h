@@ -35,10 +35,16 @@
 //
 //      second-chance-helper[<helper>] <notice|warning|error>: <message>
 //
+//  A game Wine starts with no output of the wrapp's to write to -- an owned
+//  Big Fish game, which Big Fish's DRM service starts -- also appends each
+//  line to the file SECOND_CHANCE_HELPER_REPORTS names, which the wrapp
+//  reads instead (HelperReportFile.swift).
+//
 
 #ifndef HELPER_COMMON_H
 #define HELPER_COMMON_H
 
+#include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -110,7 +116,17 @@ static inline void helperReport(const char *helper, const char *level, const cha
     char line[1200];
     int length = snprintf(line, sizeof(line), "second-chance-helper[%s] %s: %s\n", helper, level, message);
     if (length > (int)sizeof(line) - 1) length = (int)sizeof(line) - 1;
-    if (length > 0) write(STDERR_FILENO, line, (size_t)length);
+    if (length <= 0) return;
+    write(STDERR_FILENO, line, (size_t)length);
+    const char *reports = getenv("SECOND_CHANCE_HELPER_REPORTS");
+    if (reports && *reports) {
+        // O_APPEND keeps each line whole, whichever process writes it.
+        int fd = open(reports, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            write(fd, line, (size_t)length);
+            close(fd);
+        }
+    }
 }
 
 // ## Cursor lock, for puppet control

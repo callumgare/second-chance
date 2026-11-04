@@ -54,9 +54,18 @@ struct GameConfig {
     /// wrapp starts it with the Game Manager's Play Now, the only way a trial
     /// starts.
     var bigFishTrial = false
+    /// What every Wine program of the game's session runs with
+    /// (`Wine.sessionVariables`): an owned Big Fish game's in-process
+    /// helpers (`BigFishRuntime.sessionVariables`), as a Windows service
+    /// starts it. Empty for every other game.
+    var wineSessionVariables: [String: String] = [:]
 
     /// The wrapp's Wine, running in the prefix the game runs in.
-    nonisolated var wine: Wine { Wine(wrapp: appPath, prefix: winePrefix) }
+    nonisolated var wine: Wine {
+        var wine = Wine(wrapp: appPath, prefix: winePrefix)
+        wine.sessionVariables = wineSessionVariables
+        return wine
+    }
 
     /// Whether this launch has a program to fall back to when it fails
     /// (`LAUNCH --fallback`): a DRM-free game the person chose to launch
@@ -279,7 +288,7 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
 
     let files = userFiles(layout: layout, bundleId: bundleId)
 
-    return GameConfig(
+    var config = GameConfig(
         appPath: appPath,
         winePrefix: winePrefix,
         gameExePath: settings.recordedLaunch.flatMap(drivePath(of:)) ?? settings.gameExePath,
@@ -299,6 +308,8 @@ func loadConfig(customWinePrefix: URL? = nil) -> GameConfig? {
         bigFishSKU: settings.bigFishSKU,
         bigFishTrial: settings.bigFishTrial ?? false
     )
+    config.wineSessionVariables = BigFishRuntime.sessionVariables(config)
+    return config
 }
 
 /// A Wine or DOSBox launch's program as a path from the root of its C:

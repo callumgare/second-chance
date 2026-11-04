@@ -568,7 +568,11 @@ class GameLauncher {
 
         // Wait for game to stop
         logger.notice("[Game Launch] Waiting for game to stop...")
-        await gameMonitor.waitForGameToStop(gamePid: gamePid, process: launchResult.process)
+        // The game is the process its window is: under Armadillo (Big Fish's)
+        // the first is only its launcher, which an owned game's ends once the
+        // game has started.
+        let stopPid = launcher.windowMayBeAnotherProcess ? gameWindowPid.withLock({ $0 }) ?? gamePid : gamePid
+        await gameMonitor.waitForGameToStop(gamePid: stopPid, process: launchResult.process)
         gameWindowPid.withLock { $0 = nil }
         // Judged straight away: how soon after a Wine error it came matters.
         // A wrapp that is quitting stopped the game itself, and a game killed
