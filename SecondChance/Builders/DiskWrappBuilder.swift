@@ -134,7 +134,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .disk,
                 gameExePath: installed.gameExePath, installerDir: installed.installerDir,
-                configureINI: false, launch: plan.launch, app: plan.app, input: input
+                launch: plan.launch, app: plan.app, input: input
             )
 
             // Builder-owned resources: unmount now the build is complete.
@@ -205,18 +205,12 @@ final class DiskWrappBuilder: WrappBuildStrategy {
                     automation: step.option("automation").flatMap(plan.file),
                     creates: try GameInstallerRunner.expectedProgram(of: step)
                 )
-            case _ where WineSteps.handles(step):
-                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
+            case _ where ModuleSteps.handles(step):
+                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
+                if step.module == "nancy-drew" { configuredINI = true }
             case _ where GameInstallerRunner.isPatchStep(step):
                 try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
                                                        source: .disk, confirmFailure: input.confirmPatchFailure)
-            case (nil, "EDIT") where step.option("from-data") == "ini":
-                // The nancy-drew module's .ini settings, in the folder the
-                // stage names: the game's.
-                if let installed {
-                    try helper.configureGameINI(in: layout.onDriveC(installed.gameExePath).deletingLastPathComponent())
-                }
-                configuredINI = true
             default:
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the disc flow can't run \(step)")
             }

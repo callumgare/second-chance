@@ -10,21 +10,24 @@ struct PrefixSetupTests {
     func readsTheWineModulesStage() throws {
         let steps = try WineManager.prefixStage().steps
         #expect(steps.map(\.instruction) == ["DRIVES", "REGISTRY", "WINETRICKS"])
-        #expect(steps.allSatisfy(WineSteps.handles))
+        #expect(steps.allSatisfy(ModuleSteps.handles))
         #expect(steps.compactMap { $0.option("progress") }.allSatisfy { WineManager.progressText($0) != nil })
     }
 
     @Test(".ini settings are set line by line, added where missing, and with --keys-must-exist named instead")
     func editsIni() {
         let text = "[ddraw]\nwindowed=false\nmaintas=false\nfullscreen=true\n"
-        let edited = WineSteps.edit(text, settings: [("ddraw", "windowed", "true"), ("ddraw", "maintas", "true")], mustExist: true)
+        func edit(_ text: String, settings: [(String, String, String)], mustExist: Bool) -> (text: String, missing: [String]) {
+            IniEdit.edit(text, settings: settings.map { IniEdit.Setting(section: $0.0, key: $0.1, value: $0.2) }, keysMustExist: mustExist)
+        }
+        let edited = edit(text, settings: [("ddraw", "windowed", "true"), ("ddraw", "maintas", "true")], mustExist: true)
         #expect(edited.text == "[ddraw]\nwindowed=true\nmaintas=true\nfullscreen=true\n")
         #expect(edited.missing.isEmpty)
-        #expect(WineSteps.edit(text, settings: [("ddraw", "nosuchsetting", "1")], mustExist: true).missing == ["ddraw.nosuchsetting"])
-        #expect(WineSteps.edit("[a]\nx=1\n[b]\n", settings: [("a", "y", "2"), ("c", "z", "3")], mustExist: false).text
+        #expect(edit(text, settings: [("ddraw", "nosuchsetting", "1")], mustExist: true).missing == ["ddraw.nosuchsetting"])
+        #expect(edit("[a]\nx=1\n[b]\n", settings: [("a", "y", "2"), ("c", "z", "3")], mustExist: false).text
                 == "[a]\nx=1\ny=2\n[b]\n\n[c]\nz=3")
         // A Windows program's file, as cnc-ddraw's is: CRLF kept.
-        let crlf = WineSteps.edit("; cnc-ddraw\r\n\r\n[ddraw]\r\nwindowed=false\r\nmaintas=false\r\n",
+        let crlf = edit("; cnc-ddraw\r\n\r\n[ddraw]\r\nwindowed=false\r\nmaintas=false\r\n",
                                   settings: [("ddraw", "windowed", "true"), ("ddraw", "maintas", "true")], mustExist: true)
         #expect(crlf.missing.isEmpty)
         #expect(crlf.text == "; cnc-ddraw\r\n\r\n[ddraw]\r\nwindowed=true\r\nmaintas=true\r\n")

@@ -39,6 +39,7 @@ let package = Package(
         .package(url: "https://github.com/getsentry/sentry-cocoa", from: "9.32.0"),
         .package(path: "../GameCatalog"),
         .package(path: "../WrappKit"),
+        .package(path: "../Modules/wine"),
     ],
     targets: [
         // Second Chance's own shared code: the loading and log windows,
@@ -54,7 +55,7 @@ let package = Package(
                 .product(name: "WrappLogging", package: "WrappKit"),
                 .product(name: "ProcessKit", package: "WrappKit"),
                 .product(name: "WindowsFormats", package: "WrappKit"),
-                .product(name: "WineKit", package: "WrappKit"),
+                .product(name: "WineKit", package: "wine"),
                 .product(name: "WrappFormat", package: "WrappKit"),
                 .product(name: "WrappModules", package: "WrappKit"),
             ],

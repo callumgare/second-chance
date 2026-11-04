@@ -113,7 +113,7 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
     }
 
     func run(_ step: PlannedStep, in path: URL) async throws {
-        try await WineSteps(bus: bus).run(step, wrappPath: path)
+        try await ModuleSteps(bus: bus).run(step, wrappPath: path)
     }
 
     /// The template and the wine module's prefix, then the big-fish
@@ -136,7 +136,7 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
                     if case .internalError = buildError { throw WrappBuildError.bigFishGameManagerInstallFailed }
                     throw buildError
                 }
-            case _ where WineSteps.handles(step):
+            case _ where ModuleSteps.handles(step):
                 try await run(step, in: path)
             default:
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
@@ -497,12 +497,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                     // Signing out leaves the account's tokens in the registry and the
                     // store's session in the Game Manager's browser profile.
                     try await preparer.forgetAccount(in: wrappPath)
-                case (nil, "EDIT") where step.option("from-data") == "ini":
-                    guard let files = step.arguments.first, let folder = WrappLayout(app: wrappPath).location(files)?.deletingLastPathComponent() else {
-                        throw WrappBuildError.buildRecipeProblem("\(step.origin): EDIT's files aren't in the app")
-                    }
-                    try helper.configureGameINI(in: folder)
-                case _ where WineSteps.handles(step):
+                case _ where ModuleSteps.handles(step):
                     try await preparer.run(step, in: wrappPath)
                 case _ where WrappBuildHelper.isAppStep(step):
                     continue  // after the steps that put things in the prefix
@@ -528,7 +523,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                 wrapp: wrappPath, gameInfo: gameInfo, source: .bigFish,
                 gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent, composition: composition,
                 bigFishLaunchFile: runsInScummVM ? nil : drivePath(launch.program), bigFishSKU: choice.sku.description,
-                bigFishTrial: trial ? true : nil, configureINI: false, edition: "big-fish",
+                bigFishTrial: trial ? true : nil, edition: "big-fish",
                 launch: launch, app: plan.app, input: input
             )
             await helper.launchIfAsked(finalPath, input: input)

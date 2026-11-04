@@ -19,6 +19,14 @@ public nonisolated enum EngineTree {
         "Resources/engines/\(module).files"
     }
 
+    /// The folder of a prepared tree a build uses but no wrapp gets (the
+    /// wine engine's cabextract, for winetricks): left out of the list, and
+    /// of what's installed into a wrapp.
+    public static let buildTools = "build-tools"
+
+    /// Whether `path` is in `buildTools`.
+    public static func isBuildTool(_ path: String) -> Bool { path == buildTools || path.hasPrefix(buildTools + "/") }
+
     /// Every regular file and link in `folder`, by its path in it, sorted.
     public static func files(in folder: URL) throws -> [String] {
         try entries(in: folder).filter { $0.kind != .directory }.map(\.path)
@@ -28,7 +36,7 @@ public nonisolated enum EngineTree {
     public static func writeList(module: String, in folder: URL) throws {
         let list = folder.appendingPathComponent(listPath(module: module))
         try FileManager.default.createDirectory(at: list.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let files = try files(in: folder).filter { $0 != listPath(module: module) } + [listPath(module: module)]
+        let files = try files(in: folder).filter { $0 != listPath(module: module) && !isBuildTool($0) } + [listPath(module: module)]
         try Data((files.sorted().joined(separator: "\n") + "\n").utf8).write(to: list)
     }
 

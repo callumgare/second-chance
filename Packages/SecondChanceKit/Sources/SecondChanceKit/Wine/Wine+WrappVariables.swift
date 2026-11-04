@@ -113,7 +113,7 @@ nonisolated extension Wine {
     /// The variables that keep the windows and Dock icon of the program
     /// running `exe` (or, for `*`, of every program they reach) off the
     /// screen, except while `showFile` exists: Big Fish's Game Manager, which
-    /// people only see to sign in (`InProcessHelpers/hidden_windows.m`).
+    /// people only see to sign in (the wine module's `InProcessHelpers/hidden_windows.m`).
     public static func hiddenWindowsVariables(exe: String, showFile: URL) -> [String: String] {
         ["HIDDEN_WINDOWS_EXE": exe, "HIDDEN_WINDOWS_SHOW_FILE": showFile.path]
     }

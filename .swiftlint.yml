@@ -13,6 +13,7 @@ included:
 excluded:
   # SwiftPM's checkouts and build products when a package is built on its own.
   - Packages/*/.build
+  - Packages/Modules/*/.build
   - Tools/sc/.build
   # Generated: ajv's minified script, as a Swift string (Packages/WrappBuilder/JavaScript/build.sh).
   - Packages/WrappBuilder/Sources/WrappBuilder/Bundles/AjvScript.swift
@@ -73,16 +74,16 @@ custom_rules:
     regex: '\btry\??\s+\w+\.run\(\)'
     message: "Start Wine with runWithoutCrashHandler(), or it inherits Sentry's exception ports and hangs at its third fault (docs/failure-reports.md#child-processes)."
     included:
-      - "Packages/WrappKit/Sources/WineKit/"
+      - "Packages/Modules/wine/Sources/WineKit/"
       - "Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/"
       - "Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/"
     severity: error
   wine_path_outside_library:
     name: "Run Wine through the Wine library"
     regex: '\.binDir\b'
-    message: "Start Wine programs with Wine.run, output(of:) or start (Packages/WrappKit/Sources/WineKit/WineProcess.swift) rather than from Wine's own folder; shellExports or WineCommand.commandLine(in:) give it for running by hand."
+    message: "Start Wine programs with Wine.run, output(of:) or start (Packages/Modules/wine/Sources/WineKit/WineProcess.swift) rather than from Wine's own folder; shellExports or WineCommand.commandLine(in:) give it for running by hand."
     excluded:
-      - "Packages/WrappKit/Sources/WineKit/"
+      - "Packages/Modules/wine/Sources/WineKit/"
     severity: error
   no_privacy_annotation:
     name: "No privacy: annotations"

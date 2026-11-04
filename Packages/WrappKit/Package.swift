@@ -34,7 +34,6 @@ let package = Package(
         .library(name: "WrappLogging", targets: ["WrappLogging"]),
         .library(name: "ProcessKit", targets: ["ProcessKit"]),
         .library(name: "WindowsFormats", targets: ["WindowsFormats"]),
-        .library(name: "WineKit", targets: ["WineKit"]),
         .library(name: "WrappFormat", targets: ["WrappFormat"]),
         .library(name: "WrappModules", targets: ["WrappModules"]),
         .library(name: "WrappModuleKit", targets: ["WrappModuleKit"]),
@@ -68,11 +67,6 @@ let package = Package(
             swiftSettings: swiftSettings
         ),
         // The Wine library: every Wine program starts through it.
-        .target(
-            name: "WineKit",
-            dependencies: ["WrappLogging", "ProcessKit", "WrappFormat", .product(name: "Logging", package: "swift-log")],
-            swiftSettings: swiftSettings
-        ),
         // Modules: their ids, and the composition of them a wrapp runs.
         .target(
             name: "WrappModules",
@@ -100,7 +94,7 @@ let package = Package(
         .testTarget(
             name: "WrappKitTests",
             dependencies: [
-                "WrappLogging", "ProcessKit", "WindowsFormats", "WineKit", "WrappFormat", "WrappModules", "WrappModuleKit",
+                "WrappLogging", "ProcessKit", "WindowsFormats", "WrappFormat", "WrappModules", "WrappModuleKit",
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],

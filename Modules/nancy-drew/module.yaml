@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "nancy-drew"
-release: 13
+release: 14
+native: "nancy-drew"                         # its Swift: Packages/Modules/nancy-drew
 versions:
   - { version: "1" }
 depends-on: ["wine@10"]                      # its installers and patches run in Wine
@@ -18,3 +19,8 @@ allow-paths: ["assets/"]                     # its functions read its AutoIt scr
 functions: ["functions/patch", "functions/configure-ini", "functions/set-icon"]   # DO nancy-drew.<name>
 notes:
   about: "What every Nancy Drew game shares: Her Interactive's installers, patches, settings and screens."
+build:
+  instructions:
+    # What every .ini file in the game's folder has changed once it's
+    # installed, as ini.yaml says.
+    CONFIGURE-INI: { arguments: { count: 1, roles: [location] }, reads-data: [ini] }

@@ -138,8 +138,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 for step in plan.bundleSteps where !WrappBuildHelper.isAppStep(step) {
                     logger.debug("Plan step: \(step) (\(step.origin))")
                     switch (step.module, step.instruction) {
-                    case _ where WineSteps.handles(step):
-                        try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
+                    case _ where ModuleSteps.handles(step):
+                        try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
+                        if step.module == "nancy-drew" { configuredINI = true }
                     case ("her-download", "INSTALL"):
                         gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
                                                                        answerFile: step.option("answer-file").flatMap(plan.file),
@@ -149,11 +150,6 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                     case _ where GameInstallerRunner.isPatchStep(step):
                         try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
                                                                source: .herDownload, confirmFailure: input.confirmPatchFailure)
-                    case (nil, "EDIT") where step.option("from-data") == "ini":
-                        if let gameExePath {
-                            try helper.configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
-                        }
-                        configuredINI = true
                     default:
                         throw WrappBuildError.buildRecipeProblem("\(step.origin): the Her download flow can't run \(step)")
                     }
@@ -174,7 +170,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 gameExePath: gameExePath,
-                configureINI: false,
+
                 edition: "her-windows",
                 plan: plan,
                 input: input
@@ -285,14 +281,13 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             }
             let steps = plan.bundleSteps
             for step in steps where !(step.module == "her-download" && step.instruction == "INSTALL")
-                && !(step.module == nil && step.instruction == "EDIT" && step.option("from-data") == "ini")
-                && !WrappBuildHelper.isAppStep(step) && !WineSteps.handles(step) {
+                && !WrappBuildHelper.isAppStep(step) && !ModuleSteps.handles(step) {
                 throw WrappBuildError.buildRecipeProblem("\(step.origin): the Mac download flow can't run \(step)")
             }
-            for step in steps where WineSteps.handles(step) {
-                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
+            // The game's .ini settings once it's out of the Cider app, below.
+            for step in steps where ModuleSteps.handles(step) && step.module != "nancy-drew" {
+                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
             }
-            let configuresINI = steps.contains { $0.instruction == "EDIT" }
 
             await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Unpacking the game"))))
             try await publishEngineRoute(for: gameInfo)
@@ -316,6 +311,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             let movedExe = try moveExtractedGame(gameExe, to: into, driveC: driveCPath)
             let gameExePath = "/" + movedExe.path(relativeTo: driveCPath)
             await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
+            for step in steps where step.module == "nancy-drew" && ModuleSteps.handles(step) {
+                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
+            }
             try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
 
             // Her Interactive's patches are Windows updaters that look for
@@ -330,7 +328,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
                 wrappPath: wrappPath,
                 gameInfo: gameInfo,
                 gameExePath: gameExePath,
-                configureINI: configuresINI,
+
                 edition: "her-mac",
                 plan: plan,
                 input: input
@@ -362,7 +360,6 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         wrappPath: URL,
         gameInfo: GameInfo,
         gameExePath: String,
-        configureINI: Bool,
         edition: String,
         plan: BuildPlan,
         input: WrappBuildInput
@@ -373,7 +370,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         let gameDir = (gameExePath as NSString).deletingLastPathComponent
         let finalPath = try await helper.completeBuild(
             wrapp: wrappPath, gameInfo: gameInfo, source: .herDownload,
-            gameExePath: inPrefix ? gameExePath : "", installerDir: inPrefix ? gameDir : "", configureINI: configureINI,
+            gameExePath: inPrefix ? gameExePath : "", installerDir: inPrefix ? gameDir : "",
             edition: edition, launch: plan.launch, app: plan.app, input: input
         )
         await helper.launchIfAsked(finalPath, input: input)

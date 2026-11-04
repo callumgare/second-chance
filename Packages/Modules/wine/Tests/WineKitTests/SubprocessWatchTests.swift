@@ -1,8 +1,8 @@
 import Testing
 import Foundation
 @testable import ProcessKit
-@testable import WindowsFormats
 @testable import WineKit
+@testable import WindowsFormats
 @testable import WrappFormat
 @testable import WrappLogging
 

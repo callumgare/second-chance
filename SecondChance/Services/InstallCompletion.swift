@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import SecondChanceKit
 
 nonisolated enum InstallCompletion {
 

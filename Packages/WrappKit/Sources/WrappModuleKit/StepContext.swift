@@ -28,6 +28,11 @@ public nonisolated protocol StepContext: Sendable {
     /// disc 2 is asked for when a step needs it.
     func input(_ name: String) async throws -> URL
 
+    /// A file of a module's own folder (its data tables, assets), by the
+    /// module's id and the file's path in it: what an executor reads of its
+    /// own module's, as its `reads-data` says.
+    func moduleFile(_ module: String, _ path: String) -> URL?
+
     /// Where events go.
     var emitter: any EventEmitter { get }
 

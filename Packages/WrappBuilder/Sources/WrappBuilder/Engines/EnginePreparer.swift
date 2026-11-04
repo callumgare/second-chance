@@ -152,7 +152,8 @@ nonisolated extension WineBuild {
     /// unsigned program and DLL of the wrapper's are to be signed. Wine finds the
     /// frameworks through `DYLD_FALLBACK_LIBRARY_PATH` (`Wine`), but a
     /// program asking for `@rpath/` (wineserver's libinotify) needs a run
-    /// path to them, which is added as `install_name_tool` would.
+    /// path to them, which is added as `install_name_tool` would. The
+    /// wrapper's cabextract is kept in `build-tools/`, for winetricks.
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         var toSign: [URL] = []
         let wine = job.tree.appendingPathComponent("SharedSupport/wine")
@@ -164,6 +165,14 @@ nonisolated extension WineBuild {
         try FileManager.default.createDirectory(at: wrapper, withIntermediateDirectories: true)
         try await job.run("/usr/bin/tar", ["-xf", try job.source("wineskin").path, "-C", wrapper.path, "--strip-components=1"])
         try await job.run("/usr/bin/ditto", ["--rsrc", wrapper.appendingPathComponent("Contents/Frameworks").path, frameworks.path])
+
+        // The wrapper's cabextract, which winetricks needs for any verb that
+        // unpacks a Microsoft redistributable (directmusic, d3dx9, vcrun):
+        // kept for builds, and never installed into a wrapp.
+        let cabextract = job.tree.appendingPathComponent("\(EngineTree.buildTools)/cabextract")
+        try FileManager.default.createDirectory(at: cabextract.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: wrapper.appendingPathComponent("Contents/Configure.app/Contents/Resources/cabextract"), to: cabextract)
+        toSign.append(cabextract)
 
         for program in try FileManager.default.contentsOfDirectory(at: wine.appendingPathComponent("bin"), includingPropertiesForKeys: nil)
         where try MachOPatch.dependencies(of: program).contains(where: { $0.hasPrefix("@rpath/") }) {

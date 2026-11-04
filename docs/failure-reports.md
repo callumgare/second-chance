@@ -344,10 +344,10 @@ puts them back, all under a lock. The child, and anything it starts, keeps
 the default ports, so its faults reach Wine. A crash on another of our threads
 in that moment still reaches Sentry's signal handler; only its Mach handler
 misses it. Every Wine, `wineserver` and winetricks process starts this way,
-as all of them start in one place (`Packages/WrappKit/Sources/WineKit/WineProcess.swift`), and so
+as all of them start in one place (`Packages/Modules/wine/Sources/WineKit/WineProcess.swift`), and so
 does ScummVM (`TaggedProcess`). A
 SwiftLint rule (`wine_without_crash_handler`) rejects a bare `run()` in
-`Packages/WrappKit/Sources/WineKit/`, `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/` and `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, and `ChildProcessTests` checks that a
+`Packages/Modules/wine/Sources/WineKit/`, `Packages/SecondChanceKit/Sources/SecondChanceKit/Wine/` and `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, and `ChildProcessTests` checks that a
 child started this way faults normally while one started with `run()`
 hangs.
 

@@ -14,6 +14,7 @@ PLIST="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
 cd "${SRCROOT}"
 
 REVISION="$(find WrappTemplate Packages/WrappKit/Sources Packages/SecondChanceKit/Sources Packages/GameCatalog/Sources \
+    Packages/Modules/wine/Sources/WineKit Packages/Modules/wine/InProcessHelpers \
     -type f ! -name '.DS_Store' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1)"
 if [ "${CONFIGURATION}" = "Debug" ]; then
     REVISION="debug-${REVISION}"

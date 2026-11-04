@@ -14,13 +14,19 @@ import Foundation
 /// instruction declares is read, so none is accepted and ignored.
 nonisolated enum BuilderDeclarations {
     static let handled: [String: [String: Set<String>]] = [
-        // WineSteps, and DiskWrappBuilder's discs (`checkKeptDiscs`).
+        // ModuleSteps, and DiskWrappBuilder's discs (`checkKeptDiscs`).
         "wine": [
             "WINETRICKS": [],
             "DRIVES": ["only"],
             "REGISTRY": ["set", "remove"],
             "KEEP-DISCS": ["into", "combined"],
+            // The wine module's executor.
+            "MOUNT": ["cdrom"],
+            "HELPERS": [],
+            "PREFIX": [],
         ],
+        // The nancy-drew module's executor.
+        "nancy-drew": ["CONFIGURE-INI": []],
         // GameInstallerRunner, and its patch steps.
         "installer": ["RUN": ["from", "into", "answer-file", "automation", "creates", "patch", "mount"]],
         // HerDownloadWrappBuilder.

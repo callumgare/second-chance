@@ -30,31 +30,6 @@ nonisolated enum NancyDrewModule {
     static func patchesManifest(in bundle: Bundle = .main) -> URL? {
         folder(in: bundle)?.appendingPathComponent("patches.json")
     }
-
-    /// What a game's .ini files have changed after it installs (`ini.yaml`).
-    struct IniSettings: Decodable {
-        let replace: [Replacement]?
-        let set: [Setting]?
-
-        struct Replacement: Decodable {
-            let from: String
-            let to: String
-            /// What says the file has it already, for the log.
-            let already: String?
-        }
-
-        struct Setting: Decodable {
-            let key: String
-            let value: String
-        }
-    }
-
-    static func iniSettings(in bundle: Bundle = .main) throws -> IniSettings {
-        guard let folder = folder(in: bundle) else { throw CocoaError(.fileNoSuchFile) }
-        let loader = try ModuleLoader(root: folder.deletingLastPathComponent())
-        guard let module = loader.module("nancy-drew") else { throw CocoaError(.fileReadCorruptFile) }
-        return try ModuleLoader.table("ini.yaml", of: module, as: IniSettings.self)
-    }
 }
 
 /// Downloads Second Chance ships, by their sha256: the archives a build

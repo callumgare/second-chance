@@ -34,6 +34,11 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
     public var app = RecordedApp()
     public var icon: String? { app.icon }
 
+    public init(edition: String, stages: [PlannedStage]) {
+        self.edition = edition
+        self.stages = stages
+    }
+
     public var target: PlannedStage? { stages.last }
 
     /// The steps of the bundle's own stages: what a builder runs, a module's

@@ -3,7 +3,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-# Builds the in-process helpers into the template's Frameworks.
+# Builds the wine module's in-process helpers into the template's Frameworks.
 #
 # The helpers have to run inside the Wine process that owns the game window:
 # macOS only lets a process fullscreen its own NSWindow, or send its own window

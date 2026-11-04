@@ -27,5 +27,8 @@ xcuserdata/
 # What `swift build` or `swift test` leave in a package under Packages/. Xcode
 # resolves the package's dependencies in the project's own Package.resolved.
 /Packages/*/.build
+/Packages/Modules/*/.build
 /Packages/*/.swiftpm
+/Packages/Modules/*/.swiftpm
 /Packages/*/Package.resolved
+/Packages/Modules/*/Package.resolved

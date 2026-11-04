@@ -11,6 +11,7 @@ import Testing
 @testable import SecondChance
 @testable import SecondChanceKit
 @testable import WineKit
+import WineExecutor
 
 @Suite("Wine registry and winetricks")
 struct WineRegistryTests {
@@ -78,9 +79,6 @@ struct WineRegistryTests {
         let script = try Self.script(in: fake, "exit 1")
         await #expect(throws: WineError.winetricksFailed(trick: "isolate_home")) {
             try await Winetricks(wine: fake.wine, script: script).install("isolate_home")
-        }
-        await #expect(throws: WineError.winetricksNotFound) {
-            try await Winetricks(wine: fake.wine, script: nil).install("isolate_home")
         }
     }
 

@@ -41,7 +41,7 @@ public nonisolated enum EngineInstall {
         // Each folder cloned whole. Not only the last: entries sort `-`
         // before `/`, so `mapping/ASCII.TXT` comes after `mapping-unicode.org`.
         var cloned: Set<String> = []
-        for entry in try EngineTree.entries(in: engine.tree) {
+        for entry in try EngineTree.entries(in: engine.tree) where !EngineTree.isBuildTool(entry.path) {
             if Self.folders(above: entry.path).contains(where: cloned.contains) { continue }
             let source = engine.tree.appendingPathComponent(entry.path)
             let destination = contents.appendingPathComponent(entry.path)

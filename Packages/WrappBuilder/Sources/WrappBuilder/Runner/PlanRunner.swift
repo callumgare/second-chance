@@ -29,6 +29,8 @@ public nonisolated struct RunnerConfiguration: Sendable {
     /// module's prefix, until its executor makes it), in the tree.
     public var moduleStage: @Sendable (PlannedStage, URL) async throws -> Void
     public var pathTypes: PathTypeRegistry
+    /// Each module's folder, by id, for what its executor reads of its own.
+    public var moduleFolders: [String: URL]
 
     public init(executors: [String: any ModuleExecutor] = [:], inputs: any InputProvider = GivenInputs([:]),
                 emitter: any EventEmitter,
@@ -36,7 +38,8 @@ public nonisolated struct RunnerConfiguration: Sendable {
                 fetch: @escaping @Sendable (URL, String, @escaping @Sendable (Int64, Int64?) -> Void) async throws -> URL,
                 providedFile: @escaping @Sendable (String) -> URL? = { _ in nil },
                 moduleStage: @escaping @Sendable (PlannedStage, URL) async throws -> Void = { _, _ in },
-                pathTypes: PathTypeRegistry = .shipped) {
+                pathTypes: PathTypeRegistry = .shipped, moduleFolders: [String: URL] = [:]) {
+        self.moduleFolders = moduleFolders
         self.executors = executors
         self.inputs = inputs
         self.emitter = emitter
@@ -92,6 +95,13 @@ public nonisolated struct PlanRunner: Sendable {
     /// Whether every step of a module's stage has someone to carry it out.
     func runsItself(_ stage: PlannedStage) -> Bool {
         stage.steps.allSatisfy { step in step.module.map { configuration.executors[$0] != nil } ?? true }
+    }
+
+    /// One step, in `tree`: for a builder that carries out a plan's steps
+    /// itself and hands this the ones an executor carries out, until every
+    /// source builds through `run(in:)`.
+    public func runStep(_ step: PlannedStep, stage: String, index: Int, in tree: URL) async throws {
+        try await run(step, at: StepRef(stage: stage, index: index, step: step), in: tree)
     }
 
     func run(_ step: PlannedStep, at ref: StepRef, in tree: URL) async throws {

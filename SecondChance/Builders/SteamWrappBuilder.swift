@@ -38,7 +38,7 @@ struct SteamWrappPreparer: SteamWrappPreparing {
     let clientCache: SteamClientCache
 
     func run(_ step: PlannedStep, in path: URL) async throws {
-        try await WineSteps(bus: helper.bus).run(step, wrappPath: path)
+        try await ModuleSteps(bus: helper.bus).run(step, wrappPath: path)
     }
 
     /// The template and the wine module's prefix, then the steam module's
@@ -51,7 +51,7 @@ struct SteamWrappPreparer: SteamWrappPreparing {
         for step in try await SteamWrappBuilder.clientStage().steps {
             switch (step.module, step.instruction) {
             case ("steam", "CLIENT"): try await helper.installSteamClient(in: path)
-            case _ where WineSteps.handles(step): try await run(step, in: path)
+            case _ where ModuleSteps.handles(step): try await run(step, in: path)
             default: throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
             }
         }
@@ -277,12 +277,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                     lock.release()
                 case ("steam", "REMOVE"):
                     try await removeSteam(from: wrappPath, keeping: plan)
-                case (nil, "EDIT") where step.option("from-data") == "ini":
-                    guard let files = step.arguments.first, let folder = WrappLayout(app: wrappPath).location(files)?.deletingLastPathComponent() else {
-                        throw WrappBuildError.buildRecipeProblem("\(step.origin): EDIT's files aren't in the app")
-                    }
-                    try helper.configureGameINI(in: folder)
-                case _ where WineSteps.handles(step):
+                case _ where ModuleSteps.handles(step):
                     try await preparer.run(step, in: wrappPath)
                 case _ where WrappBuildHelper.isAppStep(step):
                     continue  // after the steps that put things in the prefix
@@ -306,7 +301,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 wrapp: wrappPath, gameInfo: gameInfo, source: .steam,
                 gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent,
                 steamID: runsWithoutSteam ? nil : String(steam.appID), composition: composition,
-                steamLaunchMode: launchMode, configureINI: false, edition: "steam",
+                steamLaunchMode: launchMode, edition: "steam",
                 launch: launch, app: plan.app, input: input
             )
             await helper.launchIfAsked(finalPath, input: input)

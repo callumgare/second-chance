@@ -6,6 +6,7 @@
 //  Running Wine programs is `Wine`'s (SecondChanceKit's Wine/).
 
 import Foundation
+import WineExecutor
 import Logging
 import SecondChanceKit
 import WrappBuilder
@@ -36,7 +37,8 @@ class WineManager {
     /// The prefix layer's key for a wrapp: the Wine engine it carries, by
     /// its version and prepared hash, and the wine module's `prefix` stage,
     /// which the build sets a prefix up with.
-    nonisolated static func prefixLayerKey(for wrappPath: URL) throws -> LayerKey {
+    nonisolated static func prefixLayerKey(for wrappPath: URL,
+                                           winetricks: URL? = Winetricks.bundledScript(in: .main)) throws -> LayerKey {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
         let installed = EngineInstall.installed(in: wrappPath.appendingPathComponent("Contents"))
         guard let wine = installed.first(where: { $0.module == ModuleID.wine.rawValue }) else {
@@ -44,7 +46,7 @@ class WineManager {
         }
         let engine = "\(wine.version) \(wine.hash)"
         return try WineBuild.prefixLayerKey(engineVersion: engine, stage: try prefixStage(),
-                                            winetricks: Bundle.main.url(forResource: "winetricks", withExtension: nil))
+                                            winetricks: winetricks)
     }
 
     /// Clear every cached layer, the prefix among them.
@@ -162,7 +164,7 @@ class WineManager {
     /// installed. Wine's server is let finish, so every registry change and
     /// file is written before the prefix is cached.
     func runPrefixStage(at wrappPath: URL, bus: EventBus<AppEvent>) async throws {
-        let steps = WineSteps(bus: bus)
+        let steps = ModuleSteps(bus: bus)
         for step in try Self.prefixStage().steps {
             try await steps.run(step, wrappPath: wrappPath)
         }

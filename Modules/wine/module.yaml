@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 7
+release: 9
 native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -9,7 +9,7 @@ versions:
   - version: "10.0_8"
     package:
       # EngineTree's hash of the prepared tree (`sc engine prepare`).
-      prepared: "c0e4d94e6f596d534a18b600856e390c8c00b97370fea8ad71ab98b17149d908"
+      prepared: "4f93ad37e135a82f7b1c501777d818a7448056ec52c71c8f4954593ee0b14bbe"
       sources:
         - id: "wine"
           sha256: "2a6bcf2a3bf13cddf825599b6bc1e3659cbf71e1282c6d77141a92f6ac8d4c68"
@@ -41,6 +41,12 @@ build:
     # Sets (--set <key>:<name> <value>) or removes (--remove <key>:<name>) a
     # registry value.
     REGISTRY: { options: { set: flag, remove: flag }, arguments: { count: "1...2" } }
+    # Gives a folder in the prefix a drive, kept for later steps and at launch.
+    MOUNT: { options: { cdrom: flag }, arguments: { count: 2, roles: [location, text] } }
+    # Lays in the in-process helpers the Mac driver loads.
+    HELPERS: {}
+    # Makes the prefix: wineboot's.
+    PREFIX: { layer: suggested }
     # Copies the discs it's given into --into (<into>/disk-<n>), and for more
     # than one merges them into --combined as well, giving each a drive from
     # D: in order: for a game that checks for its disc.
@@ -50,6 +56,8 @@ build:
       arguments: { count: "1...", roles: [input] }
       layer: suggested
       may-ask: true                             # disc 2 is asked for when it's needed
+  # What USE plans in a tree that doesn't have the module yet.
+  setup: [HELPERS, PREFIX]
   core-options:
     # A launch's: what the program draws with (direct-draw, direct-3d or
     # unknown), the log and line that say a non-zero exit was a clean quit,

@@ -119,11 +119,10 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
             // here: not a step, so in no key and keeping no layer.
             InstructionSpec("EMIT", arguments: 1...1, argumentRoles: [.text]),
             InstructionSpec("REMOVE", arguments: 1...1, argumentRoles: [.location]),
-            // `--ini=<section>.<key>=<value>`, or `--from-data=<table>`: the calling
-            // module's table of replacements and settings (nancy-drew's `ini`).
+            // `--ini=<section>.<key>=<value>`, as many as needed.
             // `--keys-must-exist`: each setting must already be in the file, or
             // the step fails, naming those that aren't; without it one is added.
-            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value, "keys-must-exist": .flag, "create": .flag], arguments: 1...1,
+            InstructionSpec("EDIT", options: ["ini": .repeated, "keys-must-exist": .flag, "create": .flag], arguments: 1...1,
                             argumentRoles: [.location]),
         ]
         return Dictionary(uniqueKeysWithValues: specs.map { ($0.name, $0) })

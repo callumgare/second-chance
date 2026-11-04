@@ -21,7 +21,7 @@ let package = Package(
         // Loading and checking program bundles, for `sc bundle`.
         .package(path: "../../Packages/WrappBuilder"),
         // Ending a puppet session's Wine, for `sc puppet`.
-        .package(path: "../../Packages/WrappKit"),
+        .package(path: "../../Packages/Modules/wine"),
         // The builder's own tool, whose module, engine and fmt commands sc
         // runs as its own.
         .package(path: "../../Packages/WrappBuilderCLI"),
@@ -36,7 +36,7 @@ let package = Package(
             dependencies: [
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "WrappBuilder", package: "WrappBuilder"),
-                .product(name: "WineKit", package: "WrappKit"),
+                .product(name: "WineKit", package: "wine"),
                 .product(name: "WrappBuilderTool", package: "WrappBuilderCLI"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Subprocess", package: "swift-subprocess"),

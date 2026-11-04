@@ -9,8 +9,8 @@ import Foundation
 import Testing
 import GameCatalog
 @testable import ProcessKit
-@testable import WindowsFormats
 @testable import WineKit
+@testable import WindowsFormats
 @testable import WrappFormat
 @testable import WrappLogging
 

@@ -238,7 +238,6 @@ class WrappBuildHelper {
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,
-        configureINI: Bool = true,
         bundleID: String? = nil,
         launch: RecordedLaunch? = nil,
         app: RecordedApp = RecordedApp()
@@ -335,16 +334,8 @@ class WrappBuildHelper {
                 try FileManager.default.createSymbolicLink(atPath: wine.documents.path, withDestinationPath: try wine.drives.target(of: drive))
             }
         }
-
-        // Configure game INI files for LCD mode and save path
-        if configureINI {
-            try configureGameINI(in: WrappLayout(app: wrappPath).onDriveC(gameExePath).deletingLastPathComponent())
-        }
     }
 
-    /// Configure game INI files
-    /// Give every .ini in `gameDir` the nancy-drew module's settings
-    /// (`DO nancy-drew.configure-ini`).
     /// The recorded launch's program is in the app, once the build has made
     /// it: a Wine or DOSBox program's file, a ScummVM game's folder. A
     /// launch that isn't a path in the app (`steam://`) isn't checked.
@@ -477,97 +468,6 @@ class WrappBuildHelper {
         }
     }
 
-    func configureGameINI(in gameDir: URL) throws {
-        logger.notice("Configuring game INI files in: \(gameDir.path)")
-
-        // Check if directory exists
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: gameDir.path, isDirectory: &isDirectory), isDirectory.boolValue else {
-            logger.warning("⚠️ Warning: Game directory not found at \(gameDir.path)")
-            return
-        }
-
-        // Find INI files in game directory
-        let contents = try? fileManager.contentsOfDirectory(
-            at: gameDir,
-            includingPropertiesForKeys: nil,
-            options: []
-        )
-
-        guard let contents else {
-            logger.warning("⚠️ Warning: Failed to read game directory at \(gameDir.path)")
-            return
-        }
-
-        let iniFiles = contents.filter({ $0.pathExtension.lowercased() == "ini" })
-
-        if iniFiles.isEmpty {
-            // Normal for ScummVM games and some installers: nothing to configure.
-            logger.notice("No INI files to configure in the game directory")
-            logger.debug("   Files found in directory:")
-            for file in contents {
-                logger.debug("     - \(file.lastPathComponent)")
-            }
-            return
-        }
-
-        logger.notice("Found \(iniFiles.count) INI file\(iniFiles.count == 1 ? "" : "s") to configure")
-        let settings = try NancyDrewModule.iniSettings()
-
-        for iniFile in iniFiles {
-            logger.notice("  Processing: \(iniFile.lastPathComponent)")
-
-            // Written back in the encoding it came in: the game reads it.
-            guard let (originalContent, encoding) = TextFile.read(iniFile) else {
-                logger.warning("    ⚠️ Failed to read file")
-                continue
-            }
-
-            var content = originalContent
-            var modified = false
-
-            // The nancy-drew module's settings (Modules/nancy-drew/ini.yaml):
-            // LCD mode, and saves in Documents.
-            for replacement in settings.replace ?? [] {
-                if content.contains(replacement.from) {
-                    content = content.replacingOccurrences(of: replacement.from, with: replacement.to)
-                    logger.notice("    ✅ Set \(replacement.to)")
-                    modified = true
-                } else if let already = replacement.already, content.contains(already) {
-                    logger.notice("    ℹ️ \(already) already")
-                } else {
-                    logger.notice("    ℹ️ No \(replacement.from) setting found")
-                }
-            }
-            for setting in settings.set ?? [] {
-                let line = "\(setting.key)=\(setting.value)"
-                let pattern = try Regex("\(setting.key)=.*")
-                if let match = content.firstMatch(of: pattern) {
-                    let oldValue = String(content[match.range])
-                    content = content.replacing(pattern) { _ in line }
-                    logger.notice("    ✅ Updated \(setting.key)")
-                    logger.notice("       Old: \(oldValue)")
-                    logger.notice("       New: \(line)")
-                    modified = true
-                } else {
-                    logger.notice("    ℹ️ No \(setting.key) setting found")
-                }
-            }
-
-            // Write back if modified
-            if modified {
-                do {
-                    try content.write(to: iniFile, atomically: true, encoding: encoding)
-                    logger.notice("    ✅ Saved changes to \(iniFile.lastPathComponent)")
-                } catch {
-                    logger.warning("    ⚠️ Failed to save changes: \(error)")
-                }
-            } else {
-                logger.notice("    ℹ️ No changes needed")
-            }
-        }
-    }
-
     // MARK: - Steam Client
 
     static let steamInstallerURL = "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe"
@@ -675,7 +575,6 @@ class WrappBuildHelper {
         bigFishLaunchFile: String? = nil,
         bigFishSKU: String? = nil,
         bigFishTrial: Bool? = nil,
-        configureINI: Bool = true,
         edition: String? = nil,
         updated: WrappLock.UpdateRecord? = nil,
         launch: RecordedLaunch? = nil,
@@ -696,7 +595,7 @@ class WrappBuildHelper {
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,
             bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial,
-            configureINI: configureINI, bundleID: lock.wrappBundleID, launch: launch, app: app
+            bundleID: lock.wrappBundleID, launch: launch, app: app
         )
         // A program whose launch has no Wine (a ScummVM game whose data is in
         // the app) keeps no prefix: what was built in one isn't the app's.

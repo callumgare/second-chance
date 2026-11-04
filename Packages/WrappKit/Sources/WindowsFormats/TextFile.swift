@@ -1,6 +1,6 @@
 //
 //  TextFile.swift
-//  SecondChance
+//  WindowsFormats
 //
 //  The text files games and installers leave (INI files, `setup.ini`,
 //  `autorun.inf`, installer logs) were written on Windows: in UTF-16 with a
@@ -10,10 +10,10 @@
 
 import Foundation
 
-nonisolated enum TextFile {
+public nonisolated enum TextFile {
     /// The file's text, and the encoding it was in (to write it back in);
     /// nil if it can't be read.
-    static func read(_ url: URL) -> (text: String, encoding: String.Encoding)? {
+    public static func read(_ url: URL) -> (text: String, encoding: String.Encoding)? {
         guard let data = try? Data(contentsOf: url) else { return nil }
         if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]),
            let text = String(data: data, encoding: .utf16) {
@@ -31,7 +31,7 @@ nonisolated enum TextFile {
     }
 
     /// Just the text.
-    static func text(of url: URL) -> String? {
+    public static func text(of url: URL) -> String? {
         read(url)?.text
     }
 }

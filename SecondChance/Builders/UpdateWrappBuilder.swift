@@ -237,7 +237,7 @@ final class UpdateWrappBuilder {
                 }
             }
             for step in cncDdraw {
-                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
+                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
             }
         case .module(let module, let update):
             throw WrappBuildError.buildRecipeProblem("the \(module) module's \(update) update has no Swift to run it")
@@ -264,13 +264,11 @@ final class UpdateWrappBuilder {
         for step in plan.bundleSteps {
             logger.debug("Update step: \(step) (\(step.origin))")
             switch (step.module, step.instruction) {
-            case _ where WineSteps.handles(step):
-                try await WineSteps(bus: bus).run(step, wrappPath: wrappPath)
+            case _ where ModuleSteps.handles(step):
+                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
             case _ where GameInstallerRunner.isPatchStep(step):
                 try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
                                                        source: source, confirmFailure: input.confirmPatchFailure)
-            case (nil, "EDIT") where step.option("from-data") == "ini":
-                if gameInfo.composition.launcher != .scummvm { try helper.configureGameINI(in: gameDir) }
             case ("wine", "KEEP-DISCS"), ("installer", "RUN"), ("her-download", "INSTALL"):
                 throw WrappBuildError.updateNeedsSource(reason: "\(step.origin) installs the game again", source: source)
             default:

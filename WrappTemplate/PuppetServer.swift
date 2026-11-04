@@ -7,7 +7,7 @@
 //  and click its own windows with no permission. WrappPuppeteer passes
 //  SECOND_CHANCE_PUPPET_DIR, and this answers on wrapp.sock there; the game's
 //  window is served separately, from inside the game's process, on game-<pid>.sock
-//  (InProcessHelpers/puppet_control.m). A player's launch never sets the
+//  (the wine module's InProcessHelpers/puppet_control.m). A player's launch never sets the
 //  variable, so nothing listens. See docs/wine-in-process-helpers.md.
 //
 //  One request per connection, one line each way:

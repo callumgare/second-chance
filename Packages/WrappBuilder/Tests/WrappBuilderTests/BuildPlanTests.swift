@@ -25,7 +25,7 @@ struct BuildPlanTests {
         let steps = plan.stages[2].steps
         let installDir = "C:/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon"
         #expect(steps.map { "\($0.module ?? "").\($0.instruction)" } == [
-            "wine.KEEP-DISCS", "installer.RUN", ".RUN", ".EDIT",
+            "wine.KEEP-DISCS", "installer.RUN", ".RUN", "nancy-drew.CONFIGURE-INI",
         ])
         let install = steps[1]
         #expect(install.option("into") == "wine:" + installDir)
@@ -44,10 +44,9 @@ struct BuildPlanTests {
         #expect(mounts.contains { $0.contains("source=module:installer:/autoit") })
         #expect(patch.origin.hasPrefix("nancy-drew/functions/patch:"))
         // The game's .ini settings, which the stage writes after its patches.
-        #expect(steps[3].arguments == ["wine:\(installDir)/*.ini"])
+        #expect(steps[3].arguments == ["wine:\(installDir)"])
         #expect(steps[0].description
                 == "WINE.KEEP-DISCS --combined=wine:C:/nancy-drew-installer/disk-combined --into=wine:C:/nancy-drew-installer input:disc-1 input:disc-2")
-        #expect(steps[3].option("from-data") == "ini")
     }
 
     @Test("Each kind of patch takes its own branch")
@@ -86,7 +85,7 @@ struct BuildPlanTests {
         #expect(steam.stages[1].steps.map { "\($0.module ?? "").\($0.instruction)" }
                 == ["steam.CLIENT", "wine.REGISTRY", "wine.REGISTRY", "wine.REGISTRY", "wine.REGISTRY"])
         #expect(steam.bundleSteps.map { "\($0.module ?? "").\($0.instruction)" }
-                == ["wine.WINETRICKS", ".EDIT", ".COPY", "steam.INSTALL", "steam.SIGN-OUT", ".EDIT"])
+                == ["wine.WINETRICKS", ".EDIT", ".COPY", "steam.INSTALL", "steam.SIGN-OUT", "nancy-drew.CONFIGURE-INI"])
         let exe = "wine:C:/Nancy Drew/Secret of the Old Clock/Game.exe"
         #expect(steam.launch?.program == "steam://rungameid/31880")
         #expect(steam.launch?.options == ["wine.graphics": "direct-draw", "wine.cursor-lock": "", "steam.exe": exe])
@@ -111,7 +110,7 @@ struct BuildPlanTests {
         let plan = try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
                                     conditions: BuildConditions(arch: "arm64", macos: 15))
         #expect(plan.target?.modules.contains("nancy-drew") == true)
-        #expect(plan.target?.steps.last?.option("from-data") == "ini")
+        #expect(plan.target?.steps.last?.keyword == "NANCY-DREW.CONFIGURE-INI")
     }
 
     @Test("A function of the bundle's sees the file's CONSTs, where it's defined")
@@ -128,7 +127,7 @@ struct BuildPlanTests {
         """)
         let plan = try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
                                     conditions: BuildConditions(arch: "arm64", macos: 15))
-        #expect(plan.target?.steps.last?.arguments == ["wine:C:/Game/*.ini"])
+        #expect(plan.target?.steps.last?.arguments == ["wine:C:/Game"])
     }
 
     @Test("A CONST can be built from another")

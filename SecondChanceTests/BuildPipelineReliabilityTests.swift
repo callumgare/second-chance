@@ -2,6 +2,7 @@ import Foundation
 import Synchronization
 import Testing
 @testable import SecondChance
+import WindowsFormats
 
 @Suite("Build pipeline reliability")
 struct BuildPipelineReliabilityTests {

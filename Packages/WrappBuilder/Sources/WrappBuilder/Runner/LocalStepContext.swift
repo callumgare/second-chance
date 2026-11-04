@@ -27,6 +27,10 @@ nonisolated struct LocalStepContext: StepContext {
 
     func input(_ name: String) async throws -> URL { try await configuration.inputs.input(name) }
 
+    func moduleFile(_ module: String, _ path: String) -> URL? {
+        configuration.moduleFolders[module.lowercased()].map { $0.appendingPathComponent(path) }
+    }
+
     func ask(_ question: StepQuestion) async throws -> StepAnswer { try await configuration.ask(question) }
 
     /// The program through its path type's module, with `mounts` put in

@@ -22,6 +22,8 @@
 		E25C0B102F01000000000001 /* GameCatalog in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0B012F01000000000001 /* GameCatalog */; };
 		E25C0D102F01000000000001 /* WrappBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0D012F01000000000001 /* WrappBuilder */; };
 		E25C0D112F01000000000001 /* WrappBuilder in Frameworks */ = {isa = PBXBuildFile; productRef = E25C0D052F01000000000001 /* WrappBuilder */; };
+		E25C10102F01000000000001 /* WineExecutor in Frameworks */ = {isa = PBXBuildFile; productRef = E25C10012F01000000000001 /* WineExecutor */; };
+		E25C11102F01000000000001 /* NancyDrewExecutor in Frameworks */ = {isa = PBXBuildFile; productRef = E25C11012F01000000000001 /* NancyDrewExecutor */; };
 		E25C0E102F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
 		E25C0E112F01000000000001 /* Modules in Resources */ = {isa = PBXBuildFile; fileRef = E25C0E032F01000000000001 /* Modules */; };
 		E25C0F102F01000000000001 /* Bundles in Resources */ = {isa = PBXBuildFile; fileRef = E25C0F032F01000000000001 /* Bundles */; };
@@ -182,6 +184,8 @@
 				E25C0A112F01000000000001 /* SecondChanceReporting in Frameworks */,
 				E25C0B102F01000000000001 /* GameCatalog in Frameworks */,
 				E25C0D102F01000000000001 /* WrappBuilder in Frameworks */,
+				E25C10102F01000000000001 /* WineExecutor in Frameworks */,
+				E25C11102F01000000000001 /* NancyDrewExecutor in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -292,6 +296,8 @@
 				E25C0A022F01000000000001 /* SecondChanceReporting */,
 				E25C0B012F01000000000001 /* GameCatalog */,
 				E25C0D012F01000000000001 /* WrappBuilder */,
+				E25C10012F01000000000001 /* WineExecutor */,
+				E25C11012F01000000000001 /* NancyDrewExecutor */,
 			);
 			productName = SecondChance;
 			productReference = E21733912F04AA580058E8E9 /* Second Chance.app */;
@@ -393,6 +399,8 @@
 				E25C0B002F01000000000001 /* XCLocalSwiftPackageReference "Packages/GameCatalog" */,
 				E25C0C002F01000000000001 /* XCLocalSwiftPackageReference "Packages/PuppeteerCore" */,
 				E25C0D002F01000000000001 /* XCLocalSwiftPackageReference "Packages/WrappBuilder" */,
+				E25C10002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/wine" */,
+				E25C11002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/nancy-drew" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E21733922F04AA580058E8E9 /* Products */;
@@ -576,16 +584,16 @@
 			inputFileListPaths = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/WrappTemplate/build-in-process-helpers.sh",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/native_fullscreen.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/display_below_notch.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/cursor_lock.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/emulated_mode_scaling.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/quit_watch.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/cocoa_start_wait.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/hidden_windows.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/puppet_control.m",
-				"$(SRCROOT)/WrappTemplate/InProcessHelpers/helper_common.h",
+				"$(SRCROOT)/Packages/Modules/wine/build-in-process-helpers.sh",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/native_fullscreen.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/display_below_notch.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/cursor_lock.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/quit_watch.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/hidden_windows.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/puppet_control.m",
+				"$(SRCROOT)/Packages/Modules/wine/InProcessHelpers/helper_common.h",
 			);
 			name = "Build In-Process Helpers";
 			outputFileListPaths = (
@@ -595,7 +603,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/WrappTemplate/build-in-process-helpers.sh\"\n";
+			shellScript = "\"${SRCROOT}/Packages/Modules/wine/build-in-process-helpers.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -1111,6 +1119,14 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/WrappBuilder;
 		};
+		E25C10002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/wine" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Modules/wine;
+		};
+		E25C11002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/nancy-drew" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Packages/Modules/nancy-drew";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1180,6 +1196,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E25C0D002F01000000000001 /* XCLocalSwiftPackageReference "Packages/WrappBuilder" */;
 			productName = WrappBuilder;
+		};
+		E25C10012F01000000000001 /* WineExecutor */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E25C10002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/wine" */;
+			productName = WineExecutor;
+		};
+		E25C11012F01000000000001 /* NancyDrewExecutor */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E25C11002F01000000000001 /* XCLocalSwiftPackageReference "Packages/Modules/nancy-drew" */;
+			productName = NancyDrewExecutor;
 		};
 		E25C0D052F01000000000001 /* WrappBuilder */ = {
 			isa = XCSwiftPackageProductDependency;

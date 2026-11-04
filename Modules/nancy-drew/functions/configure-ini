@@ -5,5 +5,5 @@
 # that installs the game ends with it, given the bundle's install folder.
 FUNCTION configure-ini
   INPUT into
-  EDIT "${input.into}/*.ini" --from-data=ini
+  NANCY-DREW.CONFIGURE-INI ${input.into}
 END

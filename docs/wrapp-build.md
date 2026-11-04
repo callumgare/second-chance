@@ -330,7 +330,7 @@ record, which `sc wrapp build` shows after the stage.
 ## Running Wine
 
 Every Wine, `wineserver` and winetricks process — the build's and the wrapp's
-— starts in one place, `Packages/WrappKit/Sources/WineKit/WineProcess.swift`. `Wine(wrapp:prefix:)`
+— starts in one place, `Packages/Modules/wine/Sources/WineKit/WineProcess.swift`. `Wine(wrapp:prefix:)`
 names one wrapp's Wine and the prefix it runs in (the wrapp's own unless given
 another), and a `WineCommand` says what to run: `.program(exe, args)`,
 `.start(exe, args)` for `wine start /wait`, `.wine(args)` for a builtin such as
@@ -364,7 +364,7 @@ which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
 GCD queues call it through `Blocking.wait` (`Packages/WrappKit/Sources/ProcessKit/Blocking.swift`), the
 build's blocking work goes the other way through `Blocking.run`, and a
 SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
-`Packages/WrappKit/Sources/WineKit/`.
+`Packages/Modules/wine/Sources/WineKit/`.
 
 ## The layer cache
 
