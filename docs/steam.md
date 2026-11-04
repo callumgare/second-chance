@@ -43,15 +43,15 @@ the test host under xcodebuild — can still meet the prompts; answer them
 ## Building
 
 A game's Steam edition has a stage like any other, `steam`, built `FROM
-steam@1/client`, the steam module's own stage (`Modules/steam/stages/client`,
+--module=steam@1 client`, the steam module's own stage (`Modules/steam/stages/client`,
 itself built from the wine module's prefix):
 
 ```dockerfile
-FROM steam@1/client AS steam
+FROM --module=steam@1 client AS steam
 DO pre-install-setup                    # the bundle's: nancy-drew, cnc-ddraw, the icon, the saves volume
 DO steam.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}
-LAUNCH --wine.graphics=direct-draw --steam.exe=${const.program} steam://rungameid/${input.game.app-id}
+LAUNCH --wine.cursor-lock --wine.graphics=direct-draw --steam.exe=${const.program} steam://rungameid/${input.game.app-id}
 ```
 
 The client stage installs Steam (`STEAM.CLIENT`) and has ⌘ act as Ctrl in its

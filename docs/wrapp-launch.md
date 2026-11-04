@@ -51,7 +51,7 @@ with no `explorer.exe` left to finish the job.
 ## Modules
 
 A wrapp starts its program as its build recorded it (`WrappSettings.launch`,
-from the Wrappfile's `LAUNCH` and `VOLUME`s: [wrappfile.md](wrappfile.md#the-launch-volumes-and-icon)):
+from the Wrappfile's `LAUNCH` and `VOLUME`s: [wrappfile.md](wrappfile.md#the-launch-volumes-and-app)):
 a Wine program at its C: path, ScummVM on the game's data folder in the app
 with the game's id (`nancy:nancy7`), DOSBox on its own C:. A wrapp built
 before launches were recorded has one made from its older settings, in one
@@ -77,9 +77,10 @@ launch asks them rather than asking which engine it has:
 Every line any module's processes print reaches every watcher
 (`LaunchWatchers`), so Steam's output feeds Wine's quit check, as it always
 has. A new engine is a new module conforming to these, listed in
-`RuntimeModules.known`, with a `TestModule` for WrappPuppeteer and a
+`RuntimeModules.known`, with a `TestModule` for WrappPuppeteer, a
 `BuildModule` that prepares its engine
-([modules.md](modules.md#engine-packages)).
+([modules.md](modules.md#engine-packages)), and what it adds to a build
+declared in its `module.yaml` ([modules.md](modules.md#what-a-module-declares)).
 
 **DOSBox** (`DOSBoxRuntime`) starts DOSBox Staging with none of the
 person's own DOSBox settings (`--noprimaryconf --nolocalconf`), full screen,

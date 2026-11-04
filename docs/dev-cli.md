@@ -28,7 +28,7 @@ nearest command's help.
 ./sc release --plain-notes             # Release with the commit-message notes as they are
 ./sc release --notes-model opus        # Rewrite the notes with a model other than Sonnet
 ./sc release --build-only              # Build and zip the next version, changing nothing
-./sc lint                              # SwiftLint and markdownlint, as CI runs them
+./sc lint                              # SwiftLint, markdownlint and the Wrappfiles' format, as CI runs them
 ./sc setup                             # Once per clone: tools, commit hook, completions, Wrappfile highlighting
 ./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
 ./sc clean engines                     # Prepare engines afresh, from their downloads
@@ -101,7 +101,7 @@ privacy prompts (which Steam waits on) aren't addressed to `sc`; see
 
 `sc generate` writes the Swift made from `Bundles/` and `Modules/`, and
 compiles each module's Icon Composer icons (`assets/<name>.icon`) to the
-`.icns` a Wrappfile's `ICON` names (`xcrun actool`, which only Xcode has, so
+`.icns` a Wrappfile's `APP --icon` names (`xcrun actool`, which only Xcode has, so
 the `.icns` is checked in).
 
 `--from steam` builds any game on Steam that the signed-in account owns;
@@ -131,7 +131,9 @@ module release <id>` records one ([modules.md](modules.md#releases)). `sc engine
 downloads as a build would, and checks or prints its hash, `sc engine
 fetch [<id>…]` puts engines in this Mac's engine store, and `sc engine check`
 asks each engine's downloads are still where their modules say
-([modules.md](modules.md#engine-packages)).
+([modules.md](modules.md#engine-packages)). `sc module` and `sc engine` run
+the same code as `wrapp-builder module` and `wrapp-builder engine`
+([below](#wrapp-builder)), over the repo's `Modules/`.
 
 **Results on stdout, everything else on stderr.** `wrapp build`, `wrapp update`
 and `app build` print a path on stdout, so `open "$(./sc wrapp build stay-tuned)"`
@@ -308,11 +310,44 @@ Swift code — rules in `.swiftlint.yml` — and markdownlint-cli2, pinned to
 `CONTRIBUTING.md`, `AGENTS.md` and `docs/*.md` — rules in
 `.markdownlint.jsonc`, ignores in `.markdownlint-cli2.jsonc`. The files are
 listed rather than globbed, since a glob from the root walks the installers
-and build output before any ignore applies. Each linter is a step whose output
-shows when it fails, and the command exits 1 if either does. CI's Lint job runs
+and build output before any ignore applies. Then it checks every Wrappfile
+in `Bundles/` and `Modules/` (the bundles' `Wrappfile`s and the modules'
+stages and functions) is formatted, as `wrapp-builder fmt --check --migrate`
+would, so syntax that has changed fails it too
+([wrappfile.md](wrappfile.md#style)); `wrapp-builder fmt --migrate` fixes
+what it finds. Each linter is a step whose output shows when it fails, and
+the command exits 1 if any does. CI's Lint job runs
 it, and shellcheck over `./sc` and the build phases' scripts (`.shellcheckrc`), and `sc release` runs the same check
 ([releasing.md](releasing.md#lint-first)). `sc setup` checks `swiftlint` and
 `npx` are installed. `swiftlint --fix` fixes much of what SwiftLint finds.
+
+## wrapp-builder
+
+`wrapp-builder` is the builder's own command-line tool, in its own package,
+`Packages/WrappBuilderCLI/`: it checks, plans and formats Wrappfiles, and
+looks after modules and engines, knowing nothing of Second Chance's, so it
+can move with the builder. Its commands are in the library
+`WrappBuilderTool`, which `sc` links, so `sc module`, `sc engine` and `sc
+lint`'s format check are the same code. Run it from the repo root:
+
+```bash
+swift run --package-path Packages/WrappBuilderCLI wrapp-builder check Bundles/nancy-drew/old-clock
+swift run --package-path Packages/WrappBuilderCLI wrapp-builder plan Bundles/nancy-drew/old-clock --edition cd
+swift run --package-path Packages/WrappBuilderCLI wrapp-builder fmt --check Bundles Modules
+```
+
+| Command | Does |
+| --- | --- |
+| `check <bundle folder>` | Parses and checks the bundle's manifest and Wrappfile, planning every edition, without building it ([wrappfile.md](wrappfile.md#checking)). |
+| `plan <bundle folder> [--target <stage>] [--edition <id>] [--input <name>=<value>]… [--allow-path <folder>]…` | Prints what building a stage would run, each step with where it was written ([wrappfile.md](wrappfile.md#plans)). `--target` picks a stage other than the edition's; `--edition` whose inputs it's given (by default, the first whose target it is); `--allow-path` a folder of the bundle's it may read beside its manifest's `allow-paths`, or `*` for any path, with a warning ([wrappfile.md](wrappfile.md#what-a-build-may-read)). |
+| `fmt <file or folder>… [--check] [--migrate]` | Writes Wrappfiles in the one style, in place, a folder searched for bundles' `Wrappfile`s and modules' stages and functions ([wrappfile.md](wrappfile.md#style)). `--check` changes nothing, names each file that isn't formatted, and fails if any isn't; `--migrate` rewrites syntax that has changed first. |
+| `module check [<id>…]`, `module release <id>` | Checks modules against the schema and their recorded releases, and records one's files as its release ([modules.md](modules.md#releases)). |
+| `engine prepare <id> [--version <v>] [--into <folder>]`, `engine fetch [<id>…] [--version <v>]`, `engine check` | Prepares an engine and prints its tree's hash, puts engines in this Mac's engine store, and checks each engine's downloads are still there ([modules.md](modules.md#engine-packages)). |
+
+Every command but `fmt` takes `--modules <dir>`, the modules folder, by
+default `./Modules`. A failure prints `error:` and its reason and exits
+non-zero. Its tests (`Tests/WrappBuilderToolTests/`) run with `swift test`,
+and in `sc test unit`.
 
 ## GUI session and remote Macs
 

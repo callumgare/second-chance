@@ -28,16 +28,16 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 
 - **Keywords are case-insensitive, and written in upper case**, as in
   Docker: `from` and `run` are `FROM` and `RUN`. A module's instructions
-  follow the same convention, its name included (`WINE.MOUNT`, not
-  `wine.MOUNT`), and the module part matches whatever case it's written in.
+  follow the same convention, its name included (`WINE.REGISTRY`, not
+  `wine.REGISTRY`), and the module part matches whatever case it's written in.
   Everywhere else a module is named it's in lower case, as a name: `USE
-  nancy-drew AS nd`, `FROM steam/client`, `DO nd.patch`, `--wine.drive`.
+  nancy-drew AS nd`, `FROM --module=steam client`, `DO nd.patch`, `--wine.drive`.
   Two module names that differ only in case are the same name.
 - **A module's name can match a core instruction, and the core always
   wins.** `USE foo AS copy` is allowed, with a warning, and `COPY` is still
   the core's; that module's instructions are written in full,
   `MODULE.COPY.<INSTRUCTION>`, which works for any module
-  (`MODULE.WINE.MOUNT`).
+  (`MODULE.WINE.REGISTRY`).
 - **Stage and function names follow Docker's rule for stage names**: they
   are case-insensitive (`FROM Prefix` finds `AS prefix`), and must start with
   a letter followed by letters, digits, `-`, `_` and `.`. One written in upper
@@ -59,8 +59,11 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
   `${self.data.patches[input.id].url}`. `$$` is a `$`.
 - **A relative path is a file of the bundle's**, or in a module's file, of the
   module's: `--answer-file=assets/disc.iss`. Another module's is written in
-  full, `module:installer/autoit`. Planning writes each in full
-  (`bundle:assets/disc.iss`), and checks it's there.
+  full, `module:<id>:/<path>` (`module:installer:/autoit`), the `:/` keeping a
+  namespaced id's `/` apart from the path's; the older `module:<id>/<path>` is
+  refused. Planning writes each in full (`bundle:assets/disc.iss`), and checks
+  it's there and is in a folder the build may read
+  ([below](#what-a-build-may-read)).
 - **Blocks**: `IF <condition>` … `ELSE IF <condition>` … `ELSE` … `END`,
   `LAYER` … `END` and `FUNCTION <name>` … `END`. A condition compares two
   expressions, each a `${…}` or a quoted string, with `=` or `!=`, spaced or
@@ -70,31 +73,31 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 
 | Instruction | Does |
 | --- | --- |
-| `FROM scratch` / `FROM <stage>` / `FROM <module>[@<constraint>]/<stage>` `[AS <name>]` | Starts a stage from the bare template, another stage (`base` and `previous` are supplied), or a module's (`FROM steam/client`). A stage built from another keeps its modules. |
+| `FROM scratch` / `FROM <stage>` / `FROM --module=<module>[@<constraint>] <stage>` `[AS <name>]` | Starts a stage from the bare template, another stage (`previous`, the old wrapp an update is built from, is supplied), or a module's (`FROM --module=steam@1 client`), named with a flag as Docker's `FROM --platform=` is. The older `FROM steam@1/client` is refused. A stage built from another keeps its modules. |
 | `INPUT <name> [--default=<value>] [--secret]` | Declares a value from outside, before the first `FROM` or at a function's top ([Values](#values)). |
 | `CONST <name> = <value>`, `VAR <name> [= <value>]`, `SET <name> = <value>` | A fixed value; a value worked out in the Wrappfile; and a new value for a `VAR`. |
 | `USE <module>[@<constraint>] [AS <name>]` | Adds a module, and what it depends on: its instructions are then `<NAME>.INSTRUCTION`, its functions `DO <name>.<function>`, and its path types, options and mount fields are the stage's ([below](#what-modules-add)). |
-| `RUN [--mount=…] [--creates=…] [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `source`, `cache`, `secret`, `bind`, `fetch`. `--env` is the only way a value reaches a program's environment. |
+| `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `cache`, `secret`, `bind`, `fetch`. `--env` is the only way a value reaches a program's environment. |
 | `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files: from another stage or an input, or without `--from`, a bundle's or module's file. |
 | `ADD --checksum=sha256:<hash> [--unpack=zip --member=<file> [--extract]] <url> <dest>` | A download, found in the download cache first. |
-| `MOVE`, `REMOVE`, `EDIT <file> --ini=…` / `--from-data=<table>` | File changes Second Chance makes itself. |
-| `LAUNCH [--fallback=<program>] [--env NAME=<value>]… <program> [<argument>…]` | How the app starts its program ([below](#the-launch-volumes-and-icon)). |
+| `MOVE`, `REMOVE`, `EDIT <file> --ini=…` / `--from-data=<table>` `[--keys-must-exist]` | File changes Second Chance makes itself. With `--keys-must-exist`, each setting must already be in the file, or the step fails naming those that aren't; without it, a missing one is added. The older `--must-exist` is refused, with a message saying so. |
+| `LAUNCH [--fallback=<program>] [--env NAME=<value>]… <program> [<argument>…]` | How the app starts its program ([below](#the-launch-volumes-and-app)). |
 | `VOLUME [--<module>.<option>]… <volume> <location>`, `VOLUME --remove <volume>` | Where the program sees one of the manifest's volumes. |
-| `ICON /Resources/<name>.icns` | The app's icon. |
+| `APP [--default-id=<id>] [--name=<name>] [--icon=/Resources/<name>.icns]` | What the app is: the id it gets when the build is given none, its name, and its icon ([below](#the-launch-volumes-and-app)). It replaces `ICON`, which is refused. |
 | `FUNCTION <name>` … `END`, `DO <name>` / `DO <alias>.<name>` | Named steps, with `INPUT`s as parameters (`--id=…`): a bundle's own, or a module's (in its `functions/`). |
 
 Every step takes `--name=<id>`, naming it for reports, and
 `--on-failure=ask`, which asks whether to carry on without a step that
 failed; without it, a failed step fails the build.
 
-Modules' instructions, as the build modules declare them
-(`Packages/WrappBuilder/Sources/WrappBuilder/Modules/BuildModule.swift`):
+Modules' instructions, as each module's `module.yaml` declares them
+([modules.md](modules.md#what-a-module-declares)):
 
 | Instruction | Does |
 | --- | --- |
 | `WINE.WINETRICKS <verb>` | Installs a winetricks verb. |
 | `WINE.REGISTRY --set <key>:<name> <value>` / `--remove <key>:<name>` | Sets or removes a registry value. The key is a name the module knows (`x11-driver`, `mac-driver`, `direct3d`) or written in full (`HKEY_CURRENT_USER\Software\Wine\…`). |
-| `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive, kept at launch. |
+| `WINE.DRIVES --only=C:` | The prefix's drives: every other is removed, C: is `drive_c`, and the rest (Z:, the whole Mac, included) blocked. |
 | `WINE.KEEP-DISCS <disc input>… --into=<folder> [--combined=<folder>]` | Copies the discs it's given into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
 | `INSTALLER.RUN [--from=<input>] --into=<folder> [--creates=<program>] [--answer-file=…] [--automation=<script>] [--patch] [program]` | Runs a Windows installer: silently with an answer file. `--creates` is the program it should leave, linked to what it made if that's elsewhere, and must be the target's `LAUNCH` program when that is under `--into`; `--patch` runs a patcher in `--into`, looking for nothing afterwards. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
 | `STEAM.CLIENT` | Installs Steam's client in the prefix (the steam module's `client` stage). |
@@ -164,7 +167,7 @@ comes from:
 <name>=<value>` (`--input launch-mode=steam`); the app takes them headless
 as JSON in `SECOND_CHANCE_INPUTS`.
 
-## The launch, volumes and icon
+## The launch, volumes and app
 
 How the app starts its program is decided by the build, as Docker keeps `CMD`
 in the Dockerfile: it depends on where the build put the program and which
@@ -177,13 +180,13 @@ CONST program = "${const.install-dir}/Game.exe"
 FUNCTION pre-install-setup
   USE nancy-drew
   DO wine.cnc-ddraw
-  DO nancy-drew.set-icon      # COPY assets/nancy-drew.icns /Resources/…, ICON it
+  DO nancy-drew.set-icon      # COPY assets/nancy-drew.icns /Resources/…, APP --icon it
   VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
 END
 
-FROM wine@10/prefix AS prefix
+FROM --module=wine@10 prefix AS prefix
 DO pre-install-setup
-LAUNCH --wine.graphics=direct-draw ${const.program}
+LAUNCH --wine.cursor-lock --wine.graphics=direct-draw ${const.program}
 ```
 
 What a bundle repeats in several stages it writes once: a `CONST` for a
@@ -193,10 +196,11 @@ Steam's and Big Fish's, which are built from module stages instead;
 `post-install-setup`, the `.ini` settings every install ends with; `patch`, Her's
 patches where two editions share them), and a
 module's function for what every program of a series does (the Nancy Drew
-games' icon). What a function records (its `ICON`, `VOLUME`s) and the modules it `USE`s
+games' icon). What a function records (its `APP`, `VOLUME`s) and the modules it `USE`s
 are the calling stage's, as if written there, and it can use the caller's. A module used in a base stage
 (`prefix`) needn't be used again in the stages built from it. A ScummVM
-game's `scummvm` stage writes the icon's `COPY` and `ICON` itself: using
+game's `scummvm` stage writes the icon's `COPY` and `APP --icon` itself
+(`COPY module:nancy-drew:/assets/nancy-drew.icns …`): using
 nancy-drew there would bring in Wine, which it depends on, and a ScummVM
 app keeps no Wine.
 
@@ -209,6 +213,21 @@ app keeps no Wine.
   ([wine-in-process-helpers.md](wine-in-process-helpers.md)). A game whose
   non-zero exit is judged by a log says so with `--wine.clean-exit-log` and
   `--wine.clean-exit-line` (Her's later engine's `Debug.LOG`).
+- **`--wine.cursor-lock` asks for the cursor lock**, which keeps cnc-ddraw
+  from swallowing the game's first click
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#cursor-lock)):
+  the wrapp arms it only when the launch says so. Planning refuses a target
+  that sets cnc-ddraw up (`DO wine.cnc-ddraw`) and whose launch doesn't ask
+  for it, and every Nancy Drew DirectDraw game's launches do. A launch
+  recorded before the option (format 1) keeps having it worked out from what
+  the game draws with.
+- **`--wine.window=fullscreen` or `windowed`** overrides native fullscreen,
+  for a program the wrapp gets wrong: `windowed` leaves it unarmed, keeping
+  the program in its window, and `fullscreen` is to make it fullscreen
+  whatever it asks for, though the helper doesn't act on that yet
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#native-fullscreen)).
+  Left out, native fullscreen works as it always has. Any other value is
+  refused when planning. ScummVM and DOSBox games are always fullscreen.
 - **A Steam launch is `steam://rungameid/<app id>`**, with no arguments, and
   names the program Steam starts, `--steam.exe=<its path in Wine>`, which the
   app finds the game's process by; as Steam starts a Windows game in the
@@ -229,28 +248,40 @@ app keeps no Wine.
   off. The location is a path type's: `wine:C:/users/crossover/Documents`
   with `--wine.drive=A:`, `scummvm:saves/` and `scummvm:settings/`, or
   `--dosbox.overlay` laid over a DOSBox drive.
-- **`ICON` names an `.icns` in the app's `/Resources/`**, which a `COPY`
-  put there; the build sets it as the app's icon. An app with no `ICON` has
-  the template's own, a generic one. An `.icns`, not an Icon Composer
+- **`APP --icon` names an `.icns` in the app's `/Resources/`**, which a
+  `COPY` put there; the build sets it as the app's icon. An app with no icon
+  has the template's own, a generic one. An `.icns`, not an Icon Composer
   `.icon`, as only Xcode compiles those: a module's `assets/<name>.icon` is
   compiled to `<name>.icns` beside it by `sc generate`.
+- **`APP --name`** is the app's name, in place of the game's title, and
+  **`APP --default-id`** its bundle id when whoever runs the build gives
+  none. The caller's id always wins, and Second Chance always gives one
+  (`WrappLock.wrappBundleID`), so for now `--default-id` is for another
+  builder; with neither, the build fails rather than name an app by
+  accident. For each of the three, the last `APP` a stage reaches wins,
+  inherited through `FROM`.
 - **None of them is a step**: the plan records them (`BuildPlan.launch`,
-  `.icon`), so they change no layer key, and the build writes the launch
+  `.app`), so they change no layer key, and the build writes the launch
   into the app's settings (`WrappSettings.recordedLaunch`, the `Launch` key),
-  which the app reads ([wrapp-launch.md](wrapp-launch.md)).
+  which the app reads ([wrapp-launch.md](wrapp-launch.md)). A launch records
+  its format, 2 now (`RecordedLaunch.format`), so the app can tell one
+  recorded before an option it reads.
 
 ## What modules add
 
-A module with Swift can add to the core's instructions, in any stage that has
-it (through `USE` or `FROM`), with nothing else written. A module someone adds
-with functions alone adds nothing, since nothing would carry it out.
+A module can add to the core's instructions, in any stage that has it
+(through `USE` or `FROM`), with nothing else written. What it adds, it
+declares in its `module.yaml`; for now only a module whose Swift today's
+builders know can add anything, since nothing else would carry it out.
 
 | Kind | Written as | Example |
 | --- | --- | --- |
 | **Path types** | a path in full form, `<type>:<path>`, or a short form the type claims | `wine:C:/Game.exe`, or just `C:/Game.exe` |
 | **Options** on a core instruction | `--<module>.<option>=…` | `RUN --wine.desktop=… …` |
-| **Fields** on a core mount type | `<module>.<field>=…` in `--mount=` | `--mount=type=source,from=disc-1,wine.drive=D:` |
+| **Fields** on a core mount type | `<module>.<field>=…` in `--mount=` | `--mount=type=cache,id=…,wine.size=1`, were the wine module to declare a `size` field |
 
+No shipped module declares mount fields yet; what each module adds is in
+its `module.yaml`'s `build:` ([modules.md](modules.md#what-a-module-declares)).
 Options and fields keep their module's name (the stage's name for it, in
 lower case), as a bare `--desktop` wouldn't say whose it is. Planning
 rewrites a stage's alias to the module's id, so `sc bundle plan`, layer keys
@@ -286,8 +317,9 @@ builder and the app both read:
 
 ## Checking
 
-`sc bundle check` and the unit tests check every Wrappfile against its manifest
-and the modules (`WrappfileChecker`), naming each problem's line:
+`sc bundle check`, `wrapp-builder check <bundle folder>` and the unit tests
+check every Wrappfile against its manifest and the modules' declarations
+(`WrappfileChecker`), naming each problem's line:
 
 - every instruction is the core's or one of a module the stage has, with
   options it takes (a module's `--<module>.<option>` and mount fields
@@ -300,13 +332,19 @@ and the modules (`WrappfileChecker`), naming each problem's line:
 - stage and function names follow Docker's rule;
 - every `${…}` names something there is ([Values](#values)), in any branch,
   and a `${….data.…}` path is one its table's schema allows; every file the
-  bundle names is in it; an input is written `${input.<name>}` wherever one
+  bundle names is in it, in a folder its manifest's `allow-paths` names
+  ([below](#what-a-build-may-read)), and every module file is written
+  `module:<id>:/<path>`; an input is written `${input.<name>}` wherever one
   is taken; `INPUT`s are only global or at a function's top;
 - every stage, function, module (at a version its constraint allows) and
   input named exists, and every function is given its parameters;
 - every edition's `build` names a stage, and the manifest's `setup` a
-  function; a `VOLUME` names one of the manifest's volumes, and an `ICON` an
-  `.icns` in the app's `/Resources/`;
+  function; a `VOLUME` names one of the manifest's volumes, and an `APP
+  --icon` an `.icns` in the app's `/Resources/`;
+- no syntax that has gone is used: `ICON`, `EDIT --must-exist`, `FROM
+  <module>/<stage>` and `module:<id>/<path>` are each refused with what's
+  written now, which `wrapp-builder fmt --migrate` rewrites them as
+  ([Style](#style));
 - every edition's target plans, for either kind of Mac and every value of
   every choice, and reaches a `LAUNCH`, so a problem only a plan shows fails
   the check, not a build.
@@ -352,9 +390,72 @@ FROM prefix AS disc   [installer, nancy-drew, wine]
   EDIT --from-data=ini wine:C:/…/*.ini    # nancy-drew/functions/configure-ini:9 from Wrappfile:17
 ```
 
-`WrappfileTodayTests` checks each game's Wrappfile against what its builder
-does today: the discs it keeps, the installer's options and answer file, and
-the patches `GamePatchCatalog` applies, for the disc and Her download editions.
-Steam editions name no stage: the steam module's default stages build them.
-Nor do Big Fish's: `BigFishWrappBuilder` builds them, as it did before
-Wrappfiles.
+`wrapp-builder plan <bundle folder>` prints the same, with `--target` for a
+stage other than the edition's, `--edition` for whose inputs it's given,
+`--input <name>=<value>`, and `--allow-path` ([below](#what-a-build-may-read)).
+
+`WrappfileTodayTests` checks each Nancy Drew game's Wrappfile against what
+its builder does today. Its disc stage keeps the discs (`WINE.KEEP-DISCS`,
+with `--combined` exactly when there's more than one) and runs one
+`INSTALLER.RUN`, with an answer file exactly when the bundle has
+`assets/disc.iss`, into the `install-dir` the game's exe is in; a ScummVM
+game's installs nothing, is built from its `scummvm` stage, and keeps the
+discs only when it has a `disc-files` stage. Its Her download stage runs
+`HER-DOWNLOAD.INSTALL`, with an answer file exactly when the bundle has
+`assets/her-download.iss`, and its Her Mac stage patches nothing. Each
+edition's patches (`DO nancy-drew.patch`) are the ones its builder applies,
+in order (`TestFixtures/edition-patches.json`), and a Steam edition's
+`launch-mode` is a choice exactly where today's Steam build asks it.
+
+## What a build may read
+
+A Wrappfile names files on the Mac building it: an answer file, an AutoIt
+script, an icon. A build reads only those in folders it has been allowed,
+never one for being beside the Wrappfile, so a bundle can't read the rest of
+the Mac, or a file of its own it didn't mean to ship:
+
+- **A bundle's are the folders its manifest's `allow-paths` names**, each
+  relative to the bundle's folder and ending in `/`: `allow-paths:
+  ["assets/"]`, for a Nancy Drew bundle's answer files. Second
+  Chance gives the builder these.
+- **A module's are its `module.yaml`'s `allow-paths`**, for what its stages
+  and functions read, and what a Wrappfile names as `module:<id>:/<path>`:
+  the nancy-drew module's `assets/`, its AutoIt scripts and icon. A file the
+  module's Swift provides (`provided-files`, the installer module's `autoit`)
+  needs none.
+- **A path that leaves the folder is never allowed**: one starting `/`, or
+  with `..` in it. The schemas refuse `allow-paths` that do either.
+- **Planning checks each file** (`HostPaths`, in `BuildPlanner`), and so does
+  the checker for a bundle's own. A file that isn't allowed fails the plan,
+  saying how it could be: allow its folder, give it as an input, pin it with
+  `--checksum=sha256:<hash>`, or allow it for the one build.
+- **`wrapp-builder plan --allow-path=<folder>`** allows a folder of the
+  bundle's beside the manifest's, for one plan, and `--allow-path=*` any
+  path, with a warning that host paths aren't being checked: for someone
+  trying a Wrappfile out.
+
+## Style
+
+`wrapp-builder fmt` writes Wrappfiles, and the modules' stages and
+functions, in one style, in place, and `sc lint` fails on one that isn't
+(`wrapp-builder fmt --check`, over `Bundles/` and `Modules/`):
+
+- instructions in upper case, their keyword alone (`ELSE IF` as two words);
+- two spaces of indent for each block (`FUNCTION`, `IF`, `ELSE`, `LAYER`), a
+  stage's own steps not indented;
+- a line continued with `\` indented four spaces past its instruction;
+- one blank line between stages, before the comments that lead into a
+  `FROM`, and never two blank lines in a row;
+- comments kept where they are, with their text unchanged, and a comment
+  after an instruction kept the distance from it it had.
+
+It reads a file into a syntax tree that loses nothing, comments, blank lines
+and continued lines included, as Swift's keeps trivia
+(`WrappfileSyntaxTree`, in `WrappfileFormatter.swift`), and writes it back
+from that; planning reads the parser's tree instead and ignores all of it.
+`wrapp-builder fmt --migrate` first rewrites syntax that has changed, a word
+at a time and never in a comment (`WrappfileMigration`): `module:<id>/<path>`
+as `module:<id>:/<path>`, `FROM <module>@<v>/<stage>` as `FROM
+--module=<module>@<v> <stage>`, `ICON <icon>` as `APP --icon=<icon>`, and
+`--must-exist` as `--keys-must-exist`. `sc lint`'s check migrates too, so
+old syntax fails it.

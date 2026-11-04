@@ -7,9 +7,9 @@ wrapp does not have:
 
 | Helper | Source | What it does | Armed by | Off switch |
 | --- | --- | --- | --- | --- |
-| Native fullscreen | `WrappTemplate/InProcessHelpers/native_fullscreen.m` | Puts the game window into a real macOS fullscreen Space | `NATIVE_MACOS_FULLSCREEN_EXE` | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
+| Native fullscreen | `WrappTemplate/InProcessHelpers/native_fullscreen.m` | Puts the game window into a real macOS fullscreen Space | `NATIVE_MACOS_FULLSCREEN_EXE`, unless the launch says `--wine.window=windowed` ([below](#when-the-launch-says)) | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Display below the notch | `WrappTemplate/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
-| Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, unless the game draws with Direct3D ([below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
+| Cursor lock | `WrappTemplate/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.cursor-lock`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Mode scaling | `WrappTemplate/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
 | Quit watch | `WrappTemplate/InProcessHelpers/quit_watch.m` | Tells the wrapp when the game first put a frame on screen and whether anything asked it to quit, so a game that quits before it has started reads as a failure | `QUIT_WATCH_EXE`, for every Wine game ([below](#quit-watch)) | — (it only reports) |
 | Cocoa start wait | `WrappTemplate/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
@@ -30,7 +30,7 @@ comment of `native_fullscreen.m` has the details.
 
 Every process that talks to the Mac driver loads `winemac.so` — `explorer.exe`
 as well as the game — so each helper checks whether it is in the game before
-doing anything. `Wine.inProcessHelperVariables(gameExe:)` sets
+doing anything. `Wine.inProcessHelperVariables(gameExe:launch:)` sets
 `NATIVE_MACOS_FULLSCREEN_EXE`, `CURSOR_LOCK_EXE` and
 `EMULATED_MODE_SCALING_EXE` to the game's `.exe` name,
 and a helper only arms in the process running that `.exe`
@@ -151,6 +151,27 @@ A window the player took out of fullscreen themselves is left windowed.
 
 The header comment of `native_fullscreen.m` has the details.
 
+### When the launch says
+
+A Wine launch can override native fullscreen with `--wine.window`
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)), for a program
+the wrapp gets wrong:
+
+- **`--wine.window=windowed`** leaves native fullscreen unarmed
+  (`RecordedLaunch.keepsWindowed`), so the program stays in its window,
+  whatever it asks for.
+- **`--wine.window=fullscreen`** arms it as usual and also sets
+  `NATIVE_MACOS_FULLSCREEN_FORCE=1` (`RecordedLaunch.forcesFullscreen`), to
+  make the window fullscreen whether or not the program asks. The helper
+  doesn't read it yet, so for now it does what leaving the option out does.
+- **Left out**, native fullscreen works as above, as it always has. What's
+  planned is for the helper to see when the program asks for fullscreen
+  itself, with the option kept for a program it misjudges.
+
+ScummVM and DOSBox games are always fullscreen; the option is the wine
+module's. What window WrappPuppeteer expects a game to end up in is its
+bundle's test's to say ([testing.md](testing.md#scenarios)).
+
 ### On a display with a notch
 
 A fullscreen Space on a display with a notch leaves out the strip the notch
@@ -229,10 +250,16 @@ the helper's middle clicks did harm: one arriving while the player has a menu
 open from the menu bar closes it, and with nothing ever locking the cursor the
 helper kept clicking for its full 15 tries — again on every return to the app.
 
-So the wrapp arms it only where cnc-ddraw may be drawing, as the game's
-launch declares (`LAUNCH --wine.graphics=direct-draw`, `direct-3d` or
-`unknown`, recorded in its settings: [wrappfile.md](wrappfile.md#the-launch-volumes-and-icon)).
-A wrapp built before launches were recorded is judged as before:
+So the wrapp arms it only when the game's launch asks for it,
+`LAUNCH --wine.cursor-lock`, recorded in its settings
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)), and every Nancy
+Drew DirectDraw game's launches do. Planning refuses a target that sets
+cnc-ddraw up (`DO wine.cnc-ddraw`) and whose launch doesn't ask, since its
+first click would be swallowed. A launch recorded before the option
+(`RecordedLaunch.format` nil or 1, `choosesItsHelpers` false) keeps the old
+inference: the lock is armed where cnc-ddraw may be drawing, as the launch
+declares (`--wine.graphics=direct-draw`, `direct-3d` or `unknown`). A wrapp
+built before launches were recorded is judged as before:
 `GameGraphicsAPI`
 (`Packages/WrappKit/Sources/WindowsFormats/`) reads the DLLs the game's `.exe` imports, from its PE import
 directory: `ddraw.dll` means DirectDraw; `d3d8.dll` or `d3d9.dll` without it
@@ -248,8 +275,9 @@ missing). Without that, a Big Fish Direct3D game got the cursor lock's 15
 middle clicks in its first minute, and WrappPuppeteer waited for them to end
 before clicking past a splash screen. Only a game the catalog doesn't know,
 whose `.exe` says nothing, arms it as before. The wrapp's log says which it
-found: `[Helpers] Thornton.exe draws with Direct3D, so cursor lock isn't
-needed`.
+found, and why the lock isn't armed: `[Helpers] Thornton.exe draws with
+Direct3D, as its launch says, and cursor lock isn't armed: its launch doesn't
+ask for it` (or, for an older launch, `it doesn't draw through cnc-ddraw`).
 
 ### What it does
 

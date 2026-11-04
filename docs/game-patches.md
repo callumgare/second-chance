@@ -146,7 +146,7 @@ patches. The step its `action` takes:
 | `copy-into-game-dir` | `ADD --checksum=… --unpack=zip --member=<payload> <url> <folder>` | The archive, found in the download cache by its hash, unzipped, and its member copied into the folder |
 | `extract-into-game-dir` | the same, with `--extract` | The member, a self-extracting zip, unzipped into the folder |
 | `run-installer`, no `automation` | `INSTALLER.RUN --patch --into=<folder> --mount=type=fetch,…,target=<folder>/<payload> <folder>/<payload>` | The payload put where its mount says, run silently as its installer type allows, in `--into`, and taken away. It isn't an install: nothing is looked for afterwards |
-| `run-installer` with `automation` | `RUN --mount=type=fetch,… --mount=type=bind,source=assets/<script>.au3,… --mount=type=bind,source=module:installer/autoit,… C:/autoit/AutoIt3.exe /ErrorStdOut C:/patch.au3 <payload>` | Each mount put at its target, AutoIt run with the script, and the mounts taken away |
+| `run-installer` with `automation` | `RUN --mount=type=fetch,… --mount=type=bind,source=assets/<script>.au3,… --mount=type=bind,source=module:installer:/autoit,… C:/autoit/AutoIt3.exe /ErrorStdOut C:/patch.au3 <payload>` | Each mount put at its target, AutoIt run with the script, and the mounts taken away |
 
 - **A patch goes where its `--into` says**: the game's folder the Wrappfile
   names, not one worked out from where the exe was found.

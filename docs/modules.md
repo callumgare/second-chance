@@ -15,26 +15,26 @@ Modules/
   releases.json             each module's releases, as recorded (generated)
   wine/
     module.yaml
-    stages/prefix           the Wrappfile a new prefix is set up by (FROM wine@10/prefix)
+    stages/prefix           the Wrappfile a new prefix is set up by (FROM --module=wine@10 prefix)
     functions/cnc-ddraw     cnc-ddraw, for a DirectDraw game (DO wine.cnc-ddraw)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
   scummvm/  dosbox/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
 
-`installer`, `disc`, `her-download` and `big-fish` are, so far, a `module.yaml` naming their
-Swift: the instructions a Wrappfile gives them ([wrappfile.md](wrappfile.md))
-and today's builders.
+`installer`, `disc`, `her-download` and `big-fish` are, so far, a `module.yaml`
+naming their Swift and declaring the instructions a Wrappfile gives them
+([wrappfile.md](wrappfile.md)), which today's builders carry out.
 
-A module's Swift (`BuildModule`) declares its instructions, the stages it
-provides, and what it adds to the core's instructions in any stage that has
-it: options (`coreOptions`, written `--wine.<option>`) and mount fields
-(`mountFields`, `wine.drive=`). Its path types (`wine:`, `scummvm:`) are in
-`PathTypeRegistry`, in WrappKit, since the app reads them too
-([wrappfile.md](wrappfile.md#what-modules-add)). Only a module with Swift can
-add any of these: a module of data alone has functions, and nothing to carry
-an addition out. `sc module check` and the unit tests refuse two modules
-registering one path type, a type named with one letter, and two module ids
-that differ only in case.
+What a module adds to a build (its instructions, and the options and mount
+fields it adds to the core's) is data, its `module.yaml`'s `build:`
+([below](#what-a-module-declares)). Its path types (`wine:`, `scummvm:`) are
+still Swift, in `PathTypeRegistry` in WrappKit, since the app reads them too
+([wrappfile.md](wrappfile.md#what-modules-add)). A module's Swift
+(`BuildModule`) now only prepares its engine, for a module with one. An
+addition needs something to carry it out, so for now only a module whose
+Swift today's builders know can declare any. `sc module check` and the unit
+tests refuse two modules registering one path type, a type named with one
+letter, and two module ids that differ only in case.
 
 Second Chance ships the folder in its resources (`Contents/Resources/Modules`),
 where a build reads it, and so does WrappPuppeteer, for its needles.
@@ -52,10 +52,14 @@ versions:                      # what this release provides, as a bundle names i
     package: { … }             # an engine's: what it is made from (below)
 data: ["routine-errors.yaml"]
 retired: ["prefix.yaml"]       # data only Second Chance's Swift read, dropped (below)
-stages: ["stages/prefix"]      # Wrappfiles a bundle builds FROM (wine@10/prefix)
+stages: ["stages/prefix"]      # Wrappfiles a bundle builds FROM (FROM --module=wine@10 prefix)
 functions: ["functions/cnc-ddraw"]
+allow-paths: ["assets/"]       # folders of its own its stages and functions may read files from
 updates:                       # its default updates, after a bundle's
   - { id: "wine-prefix", when-changed: ["stages/prefix"] }
+build:                         # what it adds to a build (below)
+  instructions: { … }
+  core-options: { … }
 ```
 
 A module's data tables are YAML, read as YAML 1.2 as bundles are
@@ -71,8 +75,84 @@ when a table leaves it out, so a function needs no fallback
 `none`). A module's `updates` are run after a
 bundle's for a wrapp whose copy of the module is behind, as
 [wrapp-build.md](wrapp-build.md#updating-a-wrapp) describes; one with no
-`build` is done by the module's own Swift. The rest of the format (functions,
-stages, volumes) is the plan's, and comes with what reads it.
+`build` is done by the module's own Swift. Its `when-changed` names data
+files and stages: a data file is compared by a hash of its bytes, and a
+stage by a hash of its steps as planned (`PlannedStage.plannedTextHash`), so
+a comment or a reformat changes nothing, and only a change to what the stage
+does runs the update. `allow-paths` names the folders of
+the module's own that its stages and functions may read files from, as a
+bundle's manifest does ([wrappfile.md](wrappfile.md#what-a-build-may-read)):
+the nancy-drew module's `assets/`, for its AutoIt scripts and icon. A file is
+never readable for being in the module's folder alone.
+
+## What a module declares
+
+`build:` says what the module adds to a build. The checker
+(`WrappfileChecker`) and the planner (`BuildPlanner`) read this and nothing
+else, so they know a module from its folder alone, and a module someone adds
+could declare instructions the way a shipped one does. It is parsed by
+`ModuleDeclarations`
+(`Packages/WrappBuilder/Sources/WrappBuilder/Modules/ModuleDeclarations.swift`)
+and checked against `module.schema.json`.
+
+```yaml
+build:
+  instructions:                # its own, by name in upper case: WINE.KEEP-DISCS is KEEP-DISCS
+    KEEP-DISCS:
+      options:                 # each a kind, or { kind, role }
+        into: { kind: value, role: location }
+        combined: { kind: value, role: location }
+      required: [into]         # options it can't do without
+      arguments: { count: "1...", roles: [input] }
+      layer: suggested         # expensive: a layer after it is worth keeping
+      may-ask: true            # it may ask the person something as it runs
+    REGISTRY: { options: { set: flag, remove: flag }, arguments: { count: "1...2" } }
+  core-options:                # options it adds to core instructions, written --wine.<option>
+    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value }
+    VOLUME: { drive: value }
+```
+
+- **An instruction's `options`** are each a kind: `value` (`--into=…`),
+  `flag` (`--patch`) or `repeated` (`--mount=…`, as many as needed). Written
+  as `{ kind, role }`, the role says what the value is, where it isn't text:
+  a `location` (a place in the app or the engine), a `program`, an `input`,
+  a `copy-source`, a `file` the build reads, or `text`. The checker and
+  planner read the roles to know which words are paths.
+- **`required`** names the options it can't do without; each must be one it
+  declares.
+- **`arguments`** says how many it takes (`count`: `1`, `1...2`, or `1...` for
+  any number from 1; none when left out), and what each is (`roles`, in
+  order, the last going for every argument after it).
+- **`layer: suggested`**, **`may-ask`** and **`reads-data`** (the module's
+  data tables its Swift reads, which would go into its steps' keys) are
+  read and kept with the instruction, for the builder to come. Nothing acts
+  on them yet.
+- **`core-options`** are the options it adds to core instructions, by
+  instruction, in a stage that has the module: the wine module's `LAUNCH
+  --wine.graphics`, the dosbox module's `VOLUME --dosbox.overlay`, the steam
+  and big-fish modules' `LAUNCH --steam.exe` and `--big-fish.exe`. Each is a
+  kind or `{ kind, role }`, as an instruction's options are.
+- **`mount-fields`** are the fields it adds to core mount types, by type,
+  written `<module>.<field>=…` in a `--mount=`. No shipped module declares
+  any yet.
+- **`provided-files`** are files its Swift provides rather than its folder,
+  which a Wrappfile names as `module:<id>:/<path>`: the installer module's
+  `autoit`, AutoIt, which Second Chance carries.
+- **`setup`** lists the instructions `USE` would plan in a tree that doesn't
+  have the module yet, in order, each one of its own instructions. No
+  shipped module has any, and nothing plans them yet.
+
+Today's builders carry the declared instructions out, so a declaration
+could promise what no builder does. `BuilderDeclarations`
+(`SecondChance/Builders/BuilderDeclarations.swift`) lists, by module, the
+instructions the builders carry out and the options each reads, and
+`ModuleDeclarationTests` holds every shipped module's `build:` to it: every
+instruction declared is carried out, none is carried out that isn't
+declared, and every option declared is read, so none is accepted and
+ignored. A change to what a builder carries out changes both. An option the
+builder accepts only in certain forms checks them and refuses the rest:
+`STEAM.INSTALL`'s mounts must be the shared sign-in and the kept client
+(`SteamWrappBuilder.checkMounts`).
 
 ## Engine packages
 
@@ -137,7 +217,7 @@ a module's Swift returns what to sign, and the preparer hashes the tree,
 then signs it.
 
 ```bash
-./sc engine prepare wine                   # prepare it here; check, or print, its hash
+./sc engine prepare wine                   # prepare it here; check, or print, its hash (or wrapp-builder engine prepare)
 ./sc engine prepare scummvm --into /tmp/s  # and keep the tree
 ```
 
@@ -180,8 +260,8 @@ none.
 | --- | --- | --- |
 | `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and `WineSteps`, which carries the steps out; Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
-| `steam` | `stages/client`: Steam's client in the wine module's prefix, ⌘ acting as Ctrl in its windows (`FROM steam@1/client`); `functions/install`, the game installed by Steam with the shared sign-in, then signed out (`DO steam.install`) | `SteamWrappBuilder`, which carries the client stage out before the game is known and the edition's steps after ([steam.md](steam.md#building)) |
-| `big-fish` | `stages/manager`: the Game Manager in the wine module's prefix, from its installer pinned by its hash, ⌘ acting as Ctrl in its window (`FROM big-fish@1/manager`); `functions/install`, the game installed and activated, then the account taken out (`DO big-fish.install`); `functions/cnc-ddraw`, cnc-ddraw hooking the functions themselves, as Armadillo rebuilds a game's imports (`DO big-fish.cnc-ddraw`) | `BigFishWrappBuilder`, which carries the manager stage out before the game is known and the edition's steps after ([big-fish.md](big-fish.md#the-build)) |
+| `steam` | `stages/client`: Steam's client in the wine module's prefix, ⌘ acting as Ctrl in its windows (`FROM --module=steam@1 client`); `functions/install`, the game installed by Steam with the shared sign-in, then signed out (`DO steam.install`) | `SteamWrappBuilder`, which carries the client stage out before the game is known and the edition's steps after ([steam.md](steam.md#building)) |
+| `big-fish` | `stages/manager`: the Game Manager in the wine module's prefix, from its installer pinned by its hash, ⌘ acting as Ctrl in its window (`FROM --module=big-fish@1 manager`); `functions/install`, the game installed and activated, then the account taken out (`DO big-fish.install`); `functions/cnc-ddraw`, cnc-ddraw hooking the functions themselves, as Armadillo rebuilds a game's imports (`DO big-fish.cnc-ddraw`) | `BigFishWrappBuilder`, which carries the manager stage out before the game is known and the edition's steps after ([big-fish.md](big-fish.md#the-build)) |
 | `wine`, `scummvm`, `dosbox` | `module.yaml`'s `runtime: { save-warning }`: whether their programs get the save warning before they start (Wine's do) | the wrapp (`ModuleID.showsSaveWarning`), compiled in by `sc generate` |
 | `steam` | `routine-errors.yaml`: what Steam logs as it starts | the same, for a game launched through Steam |
 | `nancy-drew` | `patches.json`: Her Interactive's patches ([game-patches.md](game-patches.md)) | `GamePatchCatalog`, and `setup-game-patches.sh`, which stages their archives in the app's download cache |
@@ -189,8 +269,7 @@ none.
 | `nancy-drew` | `clean-exit-log.yaml`: the log Her's later engine writes, and its clean-exit line | the wrapp (`HerEngineLog`), compiled in by `sc generate` |
 | `nancy-drew` | `assets/*.au3`: the AutoIt scripts that click through an installer that won't run silently, and patchers with no silent mode | `GameInstallerRunner` |
 | `nancy-drew` | `needles/`: the splash screens many games share and the main menu's Exit, and `scenarios/quit-from-menu.yaml`, the test every game's bundle names ([testing.md](testing.md#scenarios)) | WrappPuppeteer (`TestData`), from the source tree or its bundle's copy |
-
-| `nancy-drew` | `functions/patch`, `functions/configure-ini`, `functions/set-icon`: Wrappfile functions (`DO nancy-drew.patch --id=… --into=…`), the first two written by each stage that installs a Wine game, the last (the games' icon, `COPY` and `ICON`) by every game's; `assets/installshield-custom-dialog-automate.au3`, the script `INSTALLER.RUN --automation` names for an InstallShield installer that won't exit by itself; `assets/nancy-drew.set-icon`, the games' icon, and `assets/nancy-drew.icns` compiled from it by `sc generate` for their `ICON` | the Wrappfile checker, for now |
+| `nancy-drew` | `functions/patch`, `functions/configure-ini`, `functions/set-icon`: Wrappfile functions (`DO nancy-drew.patch --id=… --into=…`), the first two written by each stage that installs a Wine game, the last (the games' icon, `COPY` and `APP --icon`) by every game's; `assets/installshield-custom-dialog-automate.au3`, the script `INSTALLER.RUN --automation` names for an InstallShield installer that won't exit by itself; `assets/nancy-drew.icon`, the games' icon, and `assets/nancy-drew.icns` compiled from it by `sc generate` for their `APP --icon` | the Wrappfile checker and planner, and the builders carrying the plan out |
 
 Second Chance's app finds the nancy-drew module through `NancyDrewModule`.
 The quit scenario itself is still Swift (`NancyDrewQuitScenario`), until
@@ -215,6 +294,11 @@ folder. A release, once recorded, never changes.
 ./sc module check            # every module valid, each at its recorded release
 ./sc module release wine     # record wine's files as its current release
 ```
+
+`sc module` and `sc engine` run the same code as `wrapp-builder module` and
+`wrapp-builder engine` (`WrappBuilderTool`,
+[dev-cli.md](dev-cli.md#wrapp-builder)), which take the modules folder as
+`--modules <dir>`.
 
 So **changing anything in a module's folder means raising its `release:`**
 and recording it with `sc module release`. `sc module check` (and the unit

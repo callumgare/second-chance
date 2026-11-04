@@ -25,7 +25,6 @@ editions:
 
 tests:
   scenario: "wine/starts-and-quits"
-  window: "windowed"
 
 notes:
   about: "Chris Pirih's 1991 skiing game, in the 32-bit build he made in 2005. The first program beyond Nancy Drew, and the first download edition."

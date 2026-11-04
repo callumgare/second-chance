@@ -306,14 +306,17 @@ copies — and asserts on the events the flow publishes:
 - Every automatic patch for the game applied (`patchApplied`), and none failed:
   a failed patch doesn't fail the build, so it has to fail the test
 - The full event sequence in order, ending in `signed` then `completed`
-- If `WrappPuppeteer.app` is present: the game launches, its window goes
-  into a macOS fullscreen Space (native fullscreen for Wine, `-f` for
-  ScummVM; a game left in a window fails, and so does a Direct3D game's
-  borderless window that only covers the screen), it reaches its main menu,
+- If `WrappPuppeteer.app` is present: the game launches, its window ends up
+  as its bundle's test says (`tests.window`, [below](#scenarios)): a game
+  expected fullscreen must go into a macOS fullscreen Space (native
+  fullscreen for Wine, `-f` for ScummVM; a game left in a window fails, and
+  so does a Direct3D game's borderless window that only covers the screen),
+  and one expected windowed must not, it reaches its main menu,
   its first click isn't swallowed by cnc-ddraw, and it quits cleanly
 - For a Wine game, its in-process helpers armed in it: the wrapp's log has
   `[Helpers] Native fullscreen armed`, `[Helpers] Cursor lock armed`
-  unless the game draws with Direct3D, which doesn't get it
+  when its launch asks for it (`--wine.cursor-lock`, or for a launch
+  recorded before that option, unless the game draws with Direct3D)
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#which-games-get-it)),
   `[Helpers] Mode scaling armed` unless it draws through cnc-ddraw
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#mode-scaling)),
@@ -698,6 +701,13 @@ handlers:
   the first-click check and the checks a handler can ask for; a scenario
   only says what to wait for and do in between. `goal` is `program-ends`,
   the only one so far, and `timeout` the seconds it has.
+- **The window the game must end up in** is the bundle's `tests.window`,
+  which WrappPuppeteer holds it to (`ProgramTest.window`): `fullscreen`, it
+  must reach a fullscreen Space, or `windowed`, it must stay out of one,
+  checked for a few seconds once its window is up. Every Nancy Drew bundle
+  says `fullscreen`, as do Lure of the Temptress and Tyrian 2000, and
+  SkiFree `windowed`. A bundle that says neither is expected fullscreen
+  unless its launch keeps it windowed (`--wine.window=windowed`).
 
 A program with no menu to quit from uses its engine module's
 `scenarios/starts-and-quits.yaml` (the wine, scummvm or dosbox module's):

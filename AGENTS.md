@@ -25,7 +25,7 @@ package in `Tools/sc/` — [docs/dev-cli.md](docs/dev-cli.md)). The project uses
 
 ./sc test unit                     # Unit tests (~6s) — fast feedback loop
 ./sc test unit DocsTableTests      # Only the suites named (or Suite/test())
-./sc lint                          # SwiftLint (strict) and markdownlint, as CI runs them
+./sc lint                          # SwiftLint (strict), markdownlint and the Wrappfile format check, as CI runs them
 ./sc test integration <game-slug>  # Integration test for one game
 ./sc test integration              # All games (hours, needs real installers)
 
@@ -81,14 +81,14 @@ touching — the rows say _when_ to read, not what is in them:
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/WrappKit/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the layer cache (`LayerStore`, `LayerKey`) and the Wine prefix it keeps, or updating a wrapp from itself (`UpdateWrappBuilder`, `UpdatePlanner`, `WrappLock`), or the hidden download source (`DownloadWrappBuilder`, `Downloader`) |
-| [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` — its commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, the screen lease that keeps two runs off one Mac's screen (`sc lease`), test sessions that run games in background logins (`sc session`, the keep-alive), driving a program by hand (`sc puppet`), or the progress stream it reads from the app |
+| [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` or `wrapp-builder` (`Packages/WrappBuilderCLI/`) — their commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, the screen lease that keeps two runs off one Mac's screen (`sc lease`), test sessions that run games in background logins (`sc session`, the keep-alive), driving a program by hand (`sc puppet`), or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, needles and scenarios (a bundle's `tests`), how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/WrappKit/Sources/WrappLogging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
 | [docs/program-bundles.md](docs/program-bundles.md) | You are adding or changing a game, or touching `Bundles/` — a program bundle's `manifest.yaml`, its JSON Schema, how bundles are read (YAML 1.2) and checked (ajv in JavaScriptCore), `Packages/WrappBuilder/`, the generated table of games (`GameInfoProvider+Bundles.swift`), or `sc bundle` |
-| [docs/wrappfile.md](docs/wrappfile.md)             | You are writing or changing a bundle's `Wrappfile`, or touching how one is parsed or checked (`WrappfileParser`, `WrappfileChecker`), the instructions a module declares, `WrappfileTodayTests`, or the VS Code highlighting (`Tools/vscode-wrappfile`) |
-| [docs/modules.md](docs/modules.md)                 | You are touching `Modules/` — a module's `module.yaml` or its data (the wine module's prefix set-up, routine Wine errors), its releases and `sc module`, an engine's package and how it is prepared (`EnginePreparer`, `MachOPatch`, `sc engine prepare`), or the Swift generated from modules' data (`sc generate`); or what the nancy-drew module holds: Her patches' list, the AutoIt scripts, the .ini settings, the clean-exit log, WrappPuppeteer's needles |
+| [docs/wrappfile.md](docs/wrappfile.md)             | You are writing or changing a bundle's `Wrappfile`, or touching how one is parsed, checked or formatted (`WrappfileParser`, `WrappfileChecker`, `WrappfileFormatter`), which files a build may read (`allow-paths`, `HostPaths`), the instructions a module declares, `WrappfileTodayTests`, or the VS Code highlighting (`Tools/vscode-wrappfile`) |
+| [docs/modules.md](docs/modules.md)                 | You are touching `Modules/` — a module's `module.yaml` or its data, what it declares for a build (`build:`, `ModuleDeclarations`, `BuilderDeclarations`) (the wine module's prefix set-up, routine Wine errors), its releases and `sc module`, an engine's package and how it is prepared (`EnginePreparer`, `MachOPatch`, `sc engine prepare`), or the Swift generated from modules' data (`sc generate`); or what the nancy-drew module holds: Her patches' list, the AutoIt scripts, the .ini settings, the clean-exit log, WrappPuppeteer's needles |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`Packages/WrappBuilder/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
@@ -217,7 +217,8 @@ running and logging subprocesses), `WindowsFormats` (`WindowsExecutable`,
 library) and `WrappFormat` (`WrappLayout`, `WrappSettings`,
 `WrappSource`). It depends only on swift-log and `GameCatalog`, so the
 builder (`Packages/WrappBuilder/`, [docs/program-bundles.md](docs/program-bundles.md)),
-which may one day be a command-line tool, can use it without fetching
+and its command-line tool, `wrapp-builder` (`Packages/WrappBuilderCLI/`,
+[docs/dev-cli.md](docs/dev-cli.md#wrapp-builder)), can use it without fetching
 Sentry, as anything depending on the `SecondChanceKit` package does. Code
 that names Second Chance, shows a window or knows Nancy Drew stays in
 `SecondChanceKit`.
@@ -295,7 +296,9 @@ The rules that keep it working:
   .steam`, never the engine's raw values. Each module does its own part in
   each process — `RuntimeModule`s in the wrapp (`WrappTemplate/Modules/`),
   `TestModule`s in WrappPuppeteer (`WrappPuppeteer/Modules/`),
-  `BuildModule`s in the build (`Packages/WrappBuilder`) — so the launch code
+  in the build, its `module.yaml`'s `build:` declarations
+  ([docs/modules.md](docs/modules.md#what-a-module-declares)) and a
+  `BuildModule` that prepares its engine (`Packages/WrappBuilder`) — so the launch code
   asks the module that would know rather than branching on an engine.
   Reports and the build's events still carry today's engine name as
   `engine` (`Composition.engineTag`), so dashboards and recorded event
@@ -373,8 +376,10 @@ direct assignment.
   text, sync both with `xcrun xcstringstool sync <catalog> --stringsdata
   <file>…`, from the `.stringsdata` the build left for the app's target and
   for `SecondChanceKit` under `DerivedData/Build/Intermediates.noindex/`.
-- **Lint passes.** `./sc lint` runs SwiftLint (`--strict`, `.swiftlint.yml`)
-  and markdownlint (`.markdownlint.jsonc`), CI fails on either, and
+- **Lint passes.** `./sc lint` runs SwiftLint (`--strict`, `.swiftlint.yml`),
+  markdownlint (`.markdownlint.jsonc`) and `wrapp-builder fmt --check` over
+  `Bundles/` and `Modules/` ([docs/wrappfile.md](docs/wrappfile.md#style)),
+  CI fails on any, and
   `sc release` asks before releasing with failures. Fix what they find
   rather than loosening a rule; where a line genuinely must break one, a
   `swiftlint:disable:next` with the reason. `.swiftlint.yml`'s custom rules
@@ -485,10 +490,14 @@ direct assignment.
   deactivated. A helper running inside the game process posts a middle click
   (which the games ignore, so the publisher logo isn't skipped) until Wine's
   cursor state shows the lock, and again on every return to the app.
-  `Wine.inProcessHelperVariables` arms it alongside native fullscreen — but not for a game
-  whose `.exe` imports Direct3D rather than `ddraw.dll` (`GameGraphicsAPI`, or
-  the catalog's `GameInfo.graphics` when Armadillo hides a Big Fish `.exe`'s imports),
-  since those never use cnc-ddraw and its clicks close their menus; both live in
+  `Wine.inProcessHelperVariables` arms it alongside native fullscreen when the
+  game's launch asks for it, `LAUNCH --wine.cursor-lock`, which every Nancy Drew
+  DirectDraw game's does and planning insists on for a stage that sets cnc-ddraw
+  up; a Direct3D game never uses cnc-ddraw, and the clicks close its menus. A
+  launch recorded before the option keeps the old inference: armed unless the
+  `.exe` imports Direct3D rather than `ddraw.dll` (`GameGraphicsAPI`, or the
+  catalog's `GameInfo.graphics` when Armadillo hides a Big Fish `.exe`'s imports).
+  `--wine.window=windowed` leaves native fullscreen unarmed. Both helpers live in
   `WrappTemplate/InProcessHelpers/`. Read
   [docs/wine-in-process-helpers.md](docs/wine-in-process-helpers.md) before
   touching either, or cnc-ddraw's `ddraw.ini` settings in the wine module's

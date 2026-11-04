@@ -435,8 +435,9 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
 `UpdateWrappBuilder` rather than installed. Nothing on screen offers it yet.
 
 - **What it was built from is its lock** (`WrappLock.json`, `WrappLock`):
-  the bundle's version, each module's version and release and a hash of each
-  of its data files, an engine's prepared hash (`package`), the launcher's
+  the bundle's version, each module's version and release, a hash of each
+  of its data files and of each of its stages' steps as planned
+  (`PlannedStage.plannedTextHash`, `ShippedBundles`), an engine's prepared hash (`package`), the launcher's
   revision, the plan's launch (`launch`: its program and volumes, which an
   update compares, building afresh when the program moved), the saves
   volume the launch's module keeps saves in, and how it was updated, if it
@@ -454,7 +455,9 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   runs its `build.target` stage, or the edition's own when it names none,
   after which nothing else applies. A module's default update applies only
   when the wrapp's copy of the module is behind this build's, and, with
-  `when-changed`, only when one of those data files differs. A bundle entry
+  `when-changed`, only when one of the data files or stages it names
+  differs: a stage by what it does as planned, so a comment or a reformat
+  runs nothing. A bundle entry
   with only an id runs a module's default there instead.
 - **Or the wrapp is built afresh**, and choosing its app says the disc is
   needed (`WrappBuildError.updateNeedsSource`): when an update says
@@ -463,8 +466,8 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   update's `from` names. Wine within a major version is moved
   (`wineboot -u`, `WineManager.movePrefix`).
 - **The shipped defaults**: the wine module's `wine-prefix`, when its
-  `stages/prefix` changed (the lock records a hash of each module stage the
-  wrapp was built from), runs the stage's steps over the old prefix
+  `stages/prefix` changed what it does (the lock records a hash of each
+  module stage's planned steps, not of its file), runs the stage's steps over the old prefix
   (`WineManager.runPrefixStage`), and a DirectDraw game's cnc-ddraw steps,
   with the game left installed. The steam
   module's `steam` builds afresh, from Steam, which needs no disc.
@@ -519,8 +522,12 @@ does, and a builder that would do otherwise fails the build, naming both
 (`buildRecipeProblem`): `WINE.KEEP-DISCS` must say the discs this build keeps,
 in `C:/nancy-drew-installer/disk-<n>`, combined in `disk-combined` for more
 than one; an install's `--creates` must be in its `--into`; a patch runs in
-the folder its `--into` names. So every line of a Wrappfile is true, even
-before a builder runs every step itself.
+the folder its `--into` names; `STEAM.INSTALL`'s mounts must be the shared
+sign-in and the kept client. So every line of a Wrappfile is true, even
+before a builder runs every step itself. Nor can a module declare an option
+no builder reads: `ModuleDeclarationTests` holds each module's declared
+instructions and options to what the builders carry out
+([modules.md](modules.md#what-a-module-declares)).
 
 **An installer may put the game elsewhere.** People have other versions of a
 disc than ours (another language, a reissue), so `INSTALLER.RUN` and
@@ -704,13 +711,18 @@ patched or installed in, into the app (`/SharedSupport/game/`), by its
 target's `COPY`, and the prefix goes.
 
 **The template's icon is a generic one** (`WrappTemplate/Resources/GenericWrappIcon.icon`,
-its asset catalog's app icon), which an app whose Wrappfile names no `ICON`
-keeps, SkiFree and Tyrian among them. A Wrappfile's `ICON` names an `.icns` a
+its asset catalog's app icon), which an app whose Wrappfile gives no `APP --icon`
+keeps, SkiFree and Tyrian among them. A Wrappfile's `APP --icon` names an `.icns` a
 `COPY` put in the app's `Resources/`; `completeBuild` checks it's there, sets
 `CFBundleIconFile` to it and removes `CFBundleIconName`, which names the
 generic icon in the asset catalog and would win over the file. The Nancy Drew
 games' icon is the nancy-drew module's `assets/nancy-drew.icns`, which its
-`set-icon` function copies in and names (`DO nancy-drew.set-icon`). An engine nobody can fetch fails the build as
+`set-icon` function copies in and names (`DO nancy-drew.set-icon`). The
+app's name is `APP --name`'s, else the game's title, and its bundle id the
+one Second Chance gives it (`WrappLock.wrappBundleID`), which always wins
+over the Wrappfile's `APP --default-id` (`RecordedApp.id(given:)`); with
+neither, the build would fail as a `buildRecipeProblem`
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)). An engine nobody can fetch fails the build as
 `engineUnavailable`, which asks the person to check they are online.
 
 The template copy is `cp -ac`: each file is an APFS clone, so it is near

@@ -43,12 +43,12 @@ Chance's own window shows what it is doing.
 ## The build
 
 A game's Big Fish edition has a stage, `big-fish`, built `FROM
-big-fish@1/manager`, the big-fish module's own stage
+--module=big-fish@1 manager`, the big-fish module's own stage
 (`Modules/big-fish/stages/manager`, itself built from the wine module's
 prefix), the same shape as Steam's ([steam.md](steam.md#building)):
 
 ```dockerfile
-FROM big-fish@1/manager AS big-fish
+FROM --module=big-fish@1 manager AS big-fish
 DO pre-install-setup                    # the bundle's: nancy-drew, the icon, the saves volume
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
 DO nancy-drew.configure-ini --into=${const.install-dir}

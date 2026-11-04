@@ -17,7 +17,7 @@ Bundles/
     blue-moon/                 one program
       manifest.yaml
       Wrappfile                how each edition is built (docs/wrappfile.md)
-      assets/                  files the Wrappfile names: disc.iss, her-download.iss
+      assets/                  files the Wrappfile names: disc.iss, her-download.iss (allowed by allow-paths)
 ```
 
 ## The manifest
@@ -35,6 +35,7 @@ title: "Secret of the Old Clock"
 series: "Nancy Drew"
 series-order: 13                # where it comes in lists of the series
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.old-clock"]
+allow-paths: ["assets/"]        # the folders of its own its Wrappfile may read files from
 
 volumes:                        # kept outside the app, in its Application Support folder
   wine-documents:
@@ -73,6 +74,10 @@ editions:                       # what it was sold as, and where each comes from
       inputs:
         game: { type: "big-fish-game", product: 1297 }   # its number in Big Fish's SKUs
 
+tests:                          # what WrappPuppeteer does with it
+  scenario: "nancy-drew/quit-from-menu"
+  window: "fullscreen"          # the window its program must end up in: fullscreen or windowed
+
 notes:                          # for people only; nothing reads these
   installer: "installshield"
 ```
@@ -86,10 +91,21 @@ inputs are of its source's type, or choices. Every input the target reads
 with no default must be given, and every one given must be read: one nothing
 reads is a typo, or something asked for no reason.
 
+`allow-paths` names the folders of the bundle's own its Wrappfile may read
+files from, each relative to its folder and ending in `/`; a file is never
+readable for being beside the Wrappfile, and a path with `..` or starting `/`
+is refused ([wrappfile.md](wrappfile.md#what-a-build-may-read)). A bundle with
+answer files allows `assets/`; one with nothing to read, as most without an
+answer file are, allows nothing.
+
 The schema describes every field. `updates` is read when an old wrapp is updated
 ([wrapp-build.md](wrapp-build.md#updating-a-wrapp)), and `tests` (the
-scenario and its parameters) by WrappPuppeteer, with the needles in the
-bundle's `tests/needles/` ([testing.md](testing.md#needles)). What today's code reads
+scenario, its parameters, and `window`, the window the program is expected to
+end up in) by WrappPuppeteer, with the needles in the
+bundle's `tests/needles/` ([testing.md](testing.md#needles)). `window` is
+`fullscreen`, which every Nancy Drew bundle, Lure of the Temptress and Tyrian
+2000 say, or `windowed`, which SkiFree's does
+([testing.md](testing.md#scenarios)). What today's code reads
 into `GameInfo`, by field:
 
 | Manifest | Today's `GameInfo` |
@@ -154,7 +170,7 @@ matches its folder, no two editions share an id), are in
 `volumes` names what's kept outside the app, the person's: its
 `display-name`, which files in it are theirs (`in-use-when`), and how it's
 brought forward. The Wrappfile's `VOLUME` says where the program sees each
-([wrappfile.md](wrappfile.md#the-launch-volumes-and-icon)); a volume no stage
+([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)); a volume no stage
 mounts is fine, as the ScummVM games' `wine-documents` keeps saves from before
 they ran in ScummVM. There are no variants: how a program runs is its
 edition's target's `LAUNCH`, and `sc generate` reads the catalogue's engine,
@@ -277,7 +293,11 @@ will hold everything that turns a bundle into a wrapp, kept apart from the app.
 ```
 
 Second Chance ships `Bundles/` in its resources, where a build finds a game's
-answer file (`assets/disc.iss`, `assets/her-download.iss`). Each edition names
+answer file (`assets/disc.iss`, `assets/her-download.iss`), in the folders
+its manifest's `allow-paths` allows. `wrapp-builder check <folder>` and
+`wrapp-builder plan <folder>` do what `sc bundle check` and `sc bundle plan`
+do, for a bundle anywhere, with the modules `--modules` names
+([dev-cli.md](dev-cli.md#wrapp-builder)). Each edition names
 the Wrappfile stage it builds (`build: { target: "disc" }`).
 
 `--where` takes a path into the manifest and a value; a list along the path
