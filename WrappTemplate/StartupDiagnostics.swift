@@ -186,8 +186,11 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
         queue.sync { windowAppeared }
     }
 
-    /// Call when the game has exited.
-    func gameExited(exitCode: Int32) {
+    /// Call when the game has exited. A quick quit that was asked for
+    /// (`quitRequested`) is no sign of trouble, and is left uncaptured: the
+    /// capture samples the session's programs, suspending each in turn,
+    /// while they're ending: a Steam wrapp's session didn't end after one.
+    func gameExited(exitCode: Int32, quitRequested: Bool = false) {
         guard enabled else { return }
         queue.async {
             self.timers.forEach { $0.cancel() }
@@ -199,7 +202,7 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             } else if !self.windowAppeared {
                 self.recentLines.append(note)
                 self.capture(.exitedBeforeWindow)
-            } else if let windowTime = self.windowTime, Date().timeIntervalSince(windowTime) < self.quickQuitSeconds {
+            } else if !quitRequested, let windowTime = self.windowTime, Date().timeIntervalSince(windowTime) < self.quickQuitSeconds {
                 self.recentLines.append(note)
                 self.capture(.quitEarly)
             }

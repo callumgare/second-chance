@@ -94,6 +94,12 @@ nonisolated public final class GameQuitCheck: @unchecked Sendable {
         state.withLock { quitRequest = quitRequest ?? reason }
     }
 
+    /// Whether something asked the game to quit: the player, through its
+    /// menu or the wrapp, or the Mac logging out.
+    public var wasQuitRequested: Bool {
+        state.withLock { quitRequest != nil }
+    }
+
     /// Why the game's exit at `exitTime` was a failure, or nil if it may have
     /// been a quit.
     public func failure(exitedAt exitTime: Date = Date()) -> Failure? {

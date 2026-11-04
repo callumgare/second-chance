@@ -310,7 +310,7 @@ threshold stretched by `LoadingStage.heavyLoadFactor` on a heavily loaded Mac)
 (`slow-start`), Wine's unhandled-exception line (`crash`), still no window at
 25 s (`hang`), an exit before any window (`exited-before-window`), Wine's
 launcher exiting before the game's exe appears (`exited-before-game`), or the
-game quitting within 15 s of its window (`quit-early`) — and, at any stage,
+game quitting within 15 s of its window, unless it was asked to (`quit-early`) — and, at any stage,
 Wine's desktop included, when the loading window says the launch may have
 failed (`stalled`), or whenever the wrapp gets SIGUSR1 (`manual`; sent twice a
 minute apart, the same stacks tell stuck from slow). Each holds a `sample` of

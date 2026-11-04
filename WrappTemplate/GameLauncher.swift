@@ -583,7 +583,7 @@ class GameLauncher {
 
         // Get exit code from GameMonitor which captured it safely
         let exitCode = gameMonitor.exitCode ?? 0
-        diagnostics?.gameExited(exitCode: exitCode)
+        diagnostics?.gameExited(exitCode: exitCode, quitRequested: quitCheck?.wasQuitRequested == true)
 
         // Judged and reported now; Steam and the desktop are finished after
         // (`finishSession`), so an error isn't held back while Steam shuts down.

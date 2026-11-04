@@ -110,6 +110,15 @@ struct GameQuitCheckTests {
             check.quitRequested("the Mac is logging out or shutting down")
         }
         #expect(check.failure(exitedAt: start + 2) == nil)
+        #expect(check.wasQuitRequested)
+    }
+
+    @Test("A game nothing asked to quit wasn't asked to")
+    func notRequested() {
+        let check = GameQuitCheck(graphicsAPI: .direct3D, throughSteam: false)
+        check.observe(line: armed, at: start)
+        check.observe(line: "second-chance-helper[QuitWatch] notice: first frame on screen", at: start)
+        #expect(!check.wasQuitRequested)
     }
 
     @Test("An unhandled exception reads as a crash")
