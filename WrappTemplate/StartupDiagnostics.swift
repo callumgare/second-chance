@@ -83,9 +83,13 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
     /// Entered while a bundle's slow part (samples, top, the system log) runs.
     private let capturing = DispatchGroup()
 
-    init(gameSlug: String, gameTitle: String) {
+    /// The game's Wine: the session whose programs are sampled.
+    private let wine: Wine
+
+    init(gameSlug: String, gameTitle: String, wine: Wine) {
         self.gameSlug = gameSlug
         self.gameTitle = gameTitle
+        self.wine = wine
         let env = ProcessInfo.processInfo.environment
         enabled = env["SECOND_CHANCE_DIAGNOSTICS"] != "0"
         slowSeconds = env["SECOND_CHANCE_DIAG_SLOW_SECONDS"].flatMap(Double.init) ?? 8
@@ -262,12 +266,16 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
             let processList = self.runToString("/bin/ps", ["-A", "-o", "pid,ppid,pcpu,pmem,etime,comm"], timeout: 10)
             self.write(processList, to: dir.appendingPathComponent("processes.txt"))
 
-            // Then top and the samples, all at once. Every Wine process is
-            // sampled, not just the game: a stalled game is often waiting on
-            // another one (explorer.exe, a child it launched, wineserver).
+            // Then top and the samples, all at once. Every Wine process of
+            // the game's session is sampled, not just the game: a stalled
+            // game is often waiting on another one (explorer.exe, a child it
+            // launched, wineserver). Only its own session's: sampling stops a
+            // process while it's read, and another wrapp's or a build's
+            // wineserver, stopped like that, has killed that session's
+            // programs (an integration run's build, beside a slow launch).
             var targets: [(pid: Int32, file: String)] = []
             if let pid { targets.append((pid, "sample.txt")) }
-            for process in ProcessList.current()?.wine ?? [] where process.pid != pid {
+            for process in Self.sessionPrograms(of: self.wine) where process.pid != pid {
                 let name = process.name.replacingOccurrences(of: "[^A-Za-z0-9._-]", with: "_", options: .regularExpression)
                 targets.append((process.pid, "sample-\(name)-\(process.pid).txt"))
             }
@@ -290,6 +298,19 @@ nonisolated final class StartupDiagnostics: @unchecked Sendable {
                          timeout: 45, into: dir.appendingPathComponent("log.txt"))
             }
             self.logger.error("[Diagnostics] \(reason.rawValue) bundle complete: \(dir.path)")
+        }
+    }
+
+    /// The Wine processes of `wine`'s session: its prefix's programs, and
+    /// what runs from its own Wine's folder (wineserver, which works in a
+    /// folder of Wine's own).
+    nonisolated static func sessionPrograms(of wine: Wine, in processes: ProcessList? = ProcessList.current()) -> [ProcessList.Entry] {
+        guard let processes else { return [] }
+        let inPrefix = Set(wine.server.programs(in: processes).map(\.pid))
+        // `WINE` is <Wine's folder>/bin/wine.
+        let wineFolder = wine.variables["WINE"].map { URL(fileURLWithPath: $0).deletingLastPathComponent().deletingLastPathComponent().path + "/" }
+        return processes.wine.filter { entry in
+            inPrefix.contains(entry.pid) || wineFolder.map { entry.command.contains($0) } == true
         }
     }
 

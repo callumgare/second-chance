@@ -314,8 +314,11 @@ game quitting within 15 s of its window (`quit-early`) — and, at any stage,
 Wine's desktop included, when the loading window says the launch may have
 failed (`stalled`), or whenever the wrapp gets SIGUSR1 (`manual`; sent twice a
 minute apart, the same stacks tell stuck from slow). Each holds a `sample` of
-the game process's thread stacks and of every other Wine process
-(`explorer.exe`, `wineserver`, …) taken at the same moment, `top`, the process
+the game process's thread stacks and of every other Wine process of its
+session (`explorer.exe`, `wineserver`, …) taken at the same moment (only its
+own: `sample` stops a process while it reads it, and another session's
+`wineserver`, stopped like that beside a slow launch, killed that session's
+programs), `top`, the process
 list (taken first, before a crashing game can exit),
 display/lock/screen-sharing state, the game's system log, the last 300 Wine
 output lines and the wrapp's whole log so far; the newest 10 are kept (none

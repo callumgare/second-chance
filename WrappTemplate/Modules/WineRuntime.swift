@@ -33,7 +33,7 @@ final class WineRuntime: GameStarting {
 
     required init(config: GameConfig) {
         self.config = config
-        diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle)
+        diagnostics = StartupDiagnostics(gameSlug: config.gameSlug, gameTitle: config.gameTitle, wine: config.wine)
     }
 
     var stopsOnQuit: Bool { true }
