@@ -21,6 +21,20 @@
                ReferencedContainer = "container:SecondChance.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "AABB00030000000000000003"
+               BuildableName = "WrappPuppeteer.app"
+               BlueprintName = "WrappPuppeteer"
+               ReferencedContainer = "container:SecondChance.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
