@@ -1053,6 +1053,24 @@ If captures are slow, check it:
 `ps -o etime,time,rss -p $(pgrep -x systemstatusd)`. System Integrity
 Protection stops it being restarted any other way, so reboot the Mac.
 
+### Games and installers die at random on a test Mac after many runs
+
+macOS has room for about a thousand IOSurface connections across the whole
+Mac, and every graphical program takes one. On macOS 26.2 a test Mac gathers
+a `com.apple.SafariPlatformSupport.Helper` (an XPC service launchd starts)
+for each app the runs launch, about one per game window, and none of them
+ever exits; each holds a connection. After a few full runs they hold nearly
+all of them, and then any new graphical program can fail to start: ScummVM
+dies with `_iosConnectInitalize() unable to open IOSurface kernel service:
+e00002c7` and a list of the `existing clients`, and Wine programs, installers
+and the Game Manager fail in ways that look like their own bugs. In one run
+896 helpers held 895 of 1,020, and games failed across every source that
+passed again once they were gone.
+
+Count them with `ps -axo comm= | grep -c SafariPlatformSupport.Helper`. They
+can be ended (by pid, never `pkill` on a pattern), and launchd starts one
+again when it's next wanted; a reboot clears them too.
+
 ## Reports
 
 `sc test` writes `test-results/<timestamp>-unit.xcresult` and
