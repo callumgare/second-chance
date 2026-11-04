@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "big-fish"
-release: 4
+release: 5
 native: "big-fish"                           # its Swift: Big Fish's Game Manager, BigFishRuntime, BigFishBuild
 versions:
   - { version: "1" }                         # the Game Manager updates itself, so the version is the module's own
@@ -23,10 +23,10 @@ build:
       options: { into: { kind: value, role: location }, decline-directx: flag }
       required: [into]
       arguments: { count: 1, roles: [input] }
-      layer: suggested
       may-ask: true
-    # Signs the Game Manager out and takes the account out of the prefix.
-    SIGN-OUT: {}
+    # Signs the Game Manager out and takes the account out of the prefix:
+    # where a layer is worth keeping, as the account is gone.
+    SIGN-OUT: { layer: suggested }
   core-options:
     # A launch's: the program Big Fish's DRM starts (--big-fish.exe=C:/…/Game.exe),
     # which the app finds the game's process by.

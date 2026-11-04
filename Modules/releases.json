@@ -70,6 +70,25 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "45759de30e014534e387a6ee4fbec962b830a9a7521354ae7a7d0ae22efac2a3",
+          "functions/install" : "303ac1285da4764a4a626be2219358abd15dfeac1963de541cf6f6e3cd9b1c51",
+          "module.yaml" : "3972195c46a7f9cc852bf252d0d0ab59ce68a41d1df4a881e5d4885487bfc7ae",
+          "stages/manager" : "464310766553362192c264b8693c6fd04ad34d1ba2a1b675f96c802ef76d1b4b"
+        },
+        "functions" : [
+          "functions/install",
+          "functions/cnc-ddraw"
+        ],
+        "release" : 5,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "disc" : [
@@ -1152,6 +1171,25 @@
           "functions/install"
         ],
         "release" : 4,
+        "versions" : [
+          "1"
+        ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/install" : "a929cc342973a34067a728031db6383a4e677f70413d1347cef885cf1accd276",
+          "module.yaml" : "f03a34523b31c2ff0472552d426acc80488e589a375417bb268ca862bcc71b2e",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "39570faa9291b3d0d0d8e9ba0eb4650fc8520ac8736624093401bca780e5f01c",
+          "stages/client" : "0f4cc0fb4c4a9920004cc863a844dd7122a19686b3c571ad9fb0369207343f9e"
+        },
+        "functions" : [
+          "functions/install"
+        ],
+        "release" : 5,
         "versions" : [
           "1"
         ]

@@ -148,8 +148,29 @@ final class FakeNetworkCounter: WineNetworkCounting, @unchecked Sendable {
 }
 
 struct FakePreparer: SteamWrappPreparing {
-    func prepare(wrappAt path: URL) async throws { try SteamWrappBuilderTests.fakeWrapp(at: path) }
+    func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL {
+        let tree = folder.appendingPathComponent("steam-client.app")
+        try SteamWrappBuilderTests.fakeWrapp(at: tree)
+        return tree
+    }
     func run(_ step: PlannedStep, in path: URL) async throws {}
+    /// The module stages, the wine prefix and Steam's client, made as a
+    /// small fake wrapp, with the ddraw.ini cnc-ddraw's steps edit.
+    func makeStage(_ stage: PlannedStage, in tree: URL) async throws -> Bool {
+        guard stage.isModuleStage else { return false }
+        try SteamWrappBuilderTests.fakePrefix(at: tree)
+        let ini = WrappLayout(app: tree).driveC.appendingPathComponent("windows/syswow64/ddraw.ini")
+        try FileManager.default.createDirectory(at: ini.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "[ddraw]\nmaintas=false\nwindowed=false\nhook=0\n".write(to: ini, atomically: true, encoding: .utf8)
+        return true
+    }
+    /// Wine's steps run nothing.
+    func wineExecutor(_ real: any ModuleExecutor) -> any ModuleExecutor { NoWine() }
+
+    struct NoWine: ModuleExecutor {
+        static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "KEEP-DISCS", "HELPERS", "PREFIX"]
+        func run(_ step: PlannedStep, in context: any StepContext) async throws {}
+    }
 }
 
 @MainActor
@@ -177,10 +198,27 @@ struct SteamWrappBuilderTests {
                                   withDestinationPath: "/tmp")
     }
 
+    /// What the module stages leave a tree with, faked: the prefix and its
+    /// `a:` drive, and none of the template's files, which come last.
+    static func fakePrefix(at path: URL) throws {
+        let prefix = path.appendingPathComponent("Contents/SharedSupport/prefix")
+        let fm = FileManager.default
+        for dir in ["drive_c/users/crossover", "dosdevices"] {
+            try fm.createDirectory(at: prefix.appendingPathComponent(dir), withIntermediateDirectories: true)
+        }
+        let a = prefix.appendingPathComponent("dosdevices/a:")
+        if (try? fm.destinationOfSymbolicLink(atPath: a.path)) == nil {
+            try fm.createSymbolicLink(atPath: a.path, withDestinationPath: "/tmp")
+        }
+    }
+
     struct Run {
         let result: Result<URL, Error>
         let events: [WrappBuildEvent]
         let client: FakeSteamClient?
+        /// Every client the build made (one for identifying the game, one per tree), in order.
+        let clients: [FakeSteamClient]
+        var calls: [String] { clients.flatMap(\.calls) }
     }
 
     final class Events: @unchecked Sendable {
@@ -209,6 +247,7 @@ struct SteamWrappBuilderTests {
         environment["STEAM_LAUNCH_MODE"] = mode
         if picking != nil { environment = Self.appEnvironment(base: base) }
         var client: FakeSteamClient?
+        var clients: [FakeSteamClient] = []
         let builder = SteamWrappBuilder(
             helper: WrappBuildHelper(bus: bus),
             installerRunner: GameInstallerRunner(catalog: GamePatchCatalog(manifestURL: base.appendingPathComponent("none.json")), bus: bus),
@@ -220,6 +259,7 @@ struct SteamWrappBuilderTests {
                 fake.owned = Set(GameInfoProvider.shared.allGames().compactMap(\.steamAppID))
                 configure(fake)
                 client = fake
+                clients.append(fake)
                 return fake
             },
             preparer: FakePreparer(),
@@ -238,7 +278,7 @@ struct SteamWrappBuilderTests {
         } catch {
             result = .failure(error)
         }
-        return Run(result: result, events: events.all, client: client)
+        return Run(result: result, events: events.all, client: client, clients: clients)
     }
 
     /// A build from the app: nothing named, so the game is asked for.
@@ -345,8 +385,9 @@ struct SteamWrappBuilderTests {
         // In the order the games came out, not by title.
         #expect(picking.offered == ["shadow-ranch", "thornton-hall"])
         #expect(try settings(wrapp)["SteamGameId"] as? String == "226820")
-        // Nothing is queued until the game is known, and Steam installs it on its next start.
-        #expect(run.client?.calls == ["restoreLogin", "start", "shutdown", "saveLogin", "queueInstall 226820", "start", "shutdown", "saveLogin"])
+        // Nothing is queued until the game is known, and Steam installs it on
+        // its next start: the build's own tree, given the sign-in again.
+        #expect(run.calls == ["restoreLogin", "start", "shutdown", "saveLogin", "restoreLogin", "queueInstall 226820", "start", "shutdown", "saveLogin"])
         let prefix = wrapp.appendingPathComponent("Contents/SharedSupport/prefix")
         for file in SteamSessionStore.files {
             #expect(!FileManager.default.fileExists(atPath: prefix.appendingPathComponent(file).path), "\(file) shipped in the wrapp")
@@ -534,7 +575,7 @@ struct SteamWrappBuilderTests {
         defer { try? FileManager.default.removeItem(at: base) }
         let run = await build(game: "thornton-hall", network: nil) { $0.downloadingChecks = 3 }
         _ = try run.result.get()
-        #expect(!run.events.contains { if case .stepProgress = $0 { return true }; return false })
+        #expect(!run.events.contains { if case .stepProgress(.some) = $0 { return true }; return false })
     }
 
     @Test("Another wrapp using Steam stops the build before anything is made")

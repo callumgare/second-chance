@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "steam"
-release: 4
+release: 5
 native: "steam"                              # its Swift: the Steam client, SteamRuntime, SteamBuild
 versions:
   - { version: "1" }                         # Steam updates itself, so the version is the module's own
@@ -16,7 +16,7 @@ updates:
 build:
   instructions:
     # Installs Steam's client in the prefix.
-    CLIENT: { layer: suggested, may-ask: true }
+    CLIENT: { layer: suggested }
     # Has Steam install the input's app (STEAM.INSTALL game --into=…), with the
     # shared sign-in (a secret mount) and the cached client (a cache one), and
     # makes --into a link to the folder Steam put it in.
@@ -24,10 +24,10 @@ build:
       options: { into: { kind: value, role: location }, mount: repeated }
       required: [into]
       arguments: { count: 1, roles: [input] }
-      layer: suggested
       may-ask: true
-    # Takes the sign-in out of the prefix, saved to the shared store first.
-    SIGN-OUT: {}
+    # Takes the sign-in out of the prefix, saved to the shared store first:
+    # where a layer is worth keeping, as Steam and its sign-in are gone.
+    SIGN-OUT: { layer: suggested }
     # Takes Steam away: the game moved to where STEAM.INSTALL --into linked it,
     # then Steam's folders and its registry settings removed.
     REMOVE: {}

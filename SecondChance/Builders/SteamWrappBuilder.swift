@@ -19,18 +19,32 @@ import GameCatalog
 import WrappBuilder
 import WrappFormat
 
-/// Makes the wrapp Steam is installed into: the template, a Wine prefix and
-/// the Steam client. Tests stand in a small fake bundle.
+/// Makes the tree Steam signs in in to say which games the account owns:
+/// the wine module's prefix and the steam module's `client` stage, built by
+/// the runner (so the edition's build restores them from their layers).
+/// Tests stand in a small fake bundle, and stand in for the module stages
+/// and Wine's steps in the edition's build too.
 ///
 /// A protocol rather than an injected `async` closure: an optional async
 /// closure given a default with `??` crossed the main actor in as its first
 /// argument under this project's concurrency settings, and the "URL" the
 /// closure got was the `MainActor` object.
-protocol SteamWrappPreparing {
-    func prepare(wrappAt path: URL) async throws
+protocol SteamWrappPreparing: Sendable {
+    /// The client stage's tree, in `folder`.
+    func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL
     /// One of the Wine steps a game's Steam stage has of its own
     /// (cnc-ddraw's), carried out in the wrapp's prefix.
     func run(_ step: PlannedStep, in path: URL) async throws
+    /// Whether it made `stage` in `tree` itself, as a test's fake does the
+    /// module stages; the runner makes the rest.
+    func makeStage(_ stage: PlannedStage, in tree: URL) async throws -> Bool
+    /// What carries out the wine module's steps: the wine executor, or a
+    /// test's stand-in, which runs nothing.
+    func wineExecutor(_ real: any ModuleExecutor) -> any ModuleExecutor
+}
+
+extension SteamWrappPreparing {
+    func wineExecutor(_ real: any ModuleExecutor) -> any ModuleExecutor { real }
 }
 
 struct SteamWrappPreparer: SteamWrappPreparing {
@@ -41,27 +55,101 @@ struct SteamWrappPreparer: SteamWrappPreparing {
         try await ModuleSteps(bus: helper.bus).run(step, wrappPath: path)
     }
 
-    /// The template and the wine module's prefix, then the steam module's
-    /// `client` stage's steps (`FROM steam@1/client`): Steam installed, and
-    /// ⌘ acting as Ctrl in its windows. What a game's Steam stage is built
-    /// from, carried out before the game is known, as Steam must be signed
-    /// in to say which games the account owns.
-    func prepare(wrappAt path: URL) async throws {
-        try await helper.createBaseWrapp(at: path)
-        for step in try await SteamWrappBuilder.clientStage().steps {
-            switch (step.module, step.instruction) {
-            case ("steam", "CLIENT"): try await helper.installSteamClient(in: path)
-            case _ where ModuleSteps.handles(step): try await run(step, in: path)
-            default: throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
-            }
+    func makeStage(_ stage: PlannedStage, in tree: URL) async throws -> Bool { false }
+
+    /// The wine module's prefix, then the steam module's `client` stage
+    /// (`FROM --module=steam@1 client`): Steam installed, and ⌘ acting as
+    /// Ctrl in its windows. Built before the game is known, as Steam must be
+    /// signed in to say which games the account owns, in a tree that's thrown
+    /// away after: the edition's build starts from the same stage's layer.
+    func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL {
+        guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
+        let stages = try await Blocking.run {
+            try BuildPlanner.moduleStages("steam", "client", constraint: nil,
+                                          modules: try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get())
         }
-        // The client STEAM.INSTALL's cache mount keeps, put back before
-        // Steam's first start, which signs in: hundreds of MB, so off the
-        // main thread.
-        let clientCache = self.clientCache
-        let prefix = WrappLayout(app: path).prefix
-        _ = await Blocking.run { clientCache.restore(into: prefix) }
+        let tree = try await PlanRunner(plan: BuildPlan(edition: "steam-client", stages: stages), configuration: configuration)
+            .build(in: folder)
+        return tree
     }
+}
+
+/// The steam module's executor, until its kit moves into its package:
+/// `STEAM.CLIENT`, `INSTALL`, `SIGN-OUT` and `REMOVE`, carried out by the
+/// Steam builder's own code. A Steam started by `INSTALL` runs until
+/// `SIGN-OUT` (or the build's end), which stops it and saves its sign-in.
+nonisolated final class SteamExecutor: ModuleExecutor, @unchecked Sendable {
+    static let handles = ["CLIENT", "INSTALL", "SIGN-OUT", "REMOVE"]
+
+    let builder: SteamWrappBuilder
+    let game: GameInfo
+    let appID: Int
+    let installDir: String
+    let plan: BuildPlan
+    let input: WrappBuildInput
+    /// Lets go of the one-Steam-at-a-time lock, once nothing uses Steam.
+    let releaseLock: @Sendable () -> Void
+    private let lock = NSLock()
+    private var running: (client: SteamClientDriving, run: SteamRun, prefix: URL, quit: UUID)?
+
+    init(builder: SteamWrappBuilder, game: GameInfo, appID: Int, installDir: String, plan: BuildPlan, input: WrappBuildInput,
+         releaseLock: @escaping @Sendable () -> Void) {
+        self.builder = builder
+        self.game = game
+        self.appID = appID
+        self.installDir = installDir
+        self.plan = plan
+        self.input = input
+        self.releaseLock = releaseLock
+    }
+
+    /// The game: Steam installs whatever version it has now, which nothing
+    /// says beforehand, so an install is keyed on the game alone.
+    func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs {
+        step.instruction == "INSTALL" ? KeyInputs([KeyInput("steam app", String(appID))]) : KeyInputs()
+    }
+
+    func run(_ step: PlannedStep, in context: any StepContext) async throws {
+        let tree = context.tree
+        switch step.instruction {
+        case "CLIENT":
+            try await builder.installClient(in: tree)
+        case "INSTALL":
+            try SteamWrappBuilder.checkMounts(of: step)
+            let client = await builder.makeClient(tree)
+            let run = SteamRun(), prefix = WrappLayout(app: tree).prefix
+            let quit = await builder.registerQuitStop(client: client, run: run, prefix: prefix)
+            lock.withLock { running = (client, run, prefix, quit) }
+            try await builder.install(appID: appID, installDir: installDir, step: step, client: client, run: run, tree: tree, input: input)
+        case "SIGN-OUT":
+            await stop()
+            await builder.saveClientCache(from: WrappLayout(app: tree).prefix)
+            // Nothing from here on uses Steam or its sign-in. Holding the lock
+            // through patching and saving had a wrapp opened as the build
+            // finished find Steam taken by the build.
+            releaseLock()
+        case "REMOVE":
+            try await builder.removeSteam(from: tree, keeping: plan)
+        default:
+            throw StepFailure.recipe("\(step.origin): the steam module has no instruction \(step.instruction)")
+        }
+    }
+
+    /// A Steam this build started, stopped, its sign-in saved and taken out.
+    func stop() async {
+        guard let running = lock.withLock({ () -> (client: SteamClientDriving, run: SteamRun, prefix: URL, quit: UUID)? in
+            defer { self.running = nil }
+            return self.running
+        }) else { return }
+        if running.run.claimStop() {
+            await builder.stopSteam(running.client, prefix: running.prefix, signedIn: running.run.signedIn)
+        }
+        await builder.unregisterQuitStop(running.quit)
+    }
+
+    func checkpoint(_ context: any StepContext) async throws { await stop() }
+
+    func finish() async { await stop() }
 }
 
 /// Builds a wrapp from a game in the user's Steam library.
@@ -72,7 +160,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     private let sessionStore: SteamSessionStore
     private let clientCache: SteamClientCache
     private let lockRoot: URL
-    private let makeClient: (URL) -> SteamClientDriving
+    private let clientMaker: (URL) -> SteamClientDriving
     private let preparer: SteamWrappPreparing
     /// How often the sign-in wait looks at Steam.
     private let signInPollInterval: Duration
@@ -137,7 +225,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         self.sessionStore = sessionStore
         self.clientCache = clientCache
         self.lockRoot = lockRoot
-        self.makeClient = makeClient ?? { SteamClient(wrappPath: $0) }
+        self.clientMaker = makeClient ?? { SteamClient(wrappPath: $0) }
         self.preparer = preparer ?? SteamWrappPreparer(helper: helper, clientCache: clientCache)
         self.bus = bus
     }
@@ -180,38 +268,131 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         }
         defer { lock.release() }
 
-        // ── Build ──────────────────────────────────────────────────────
-        let wrappPath = helper.createTemporaryWrappPath()
-        let prefix = WrappLayout(app: wrappPath).prefix
-        logger.notice("Temporary wrapp: \(wrappPath.path)")
-        let client = makeClient(wrappPath)
-        // Quitting the app stops this build's Steam: it would otherwise keep
-        // running, its window open, from a temporary wrapp the quit deletes.
-        let run = SteamRun()
-        let quitStop = RunningSteam.shared.register { [self] in
-            if run.claimStop() {
-                await stopSteam(client, prefix: prefix, signedIn: run.signedIn, timeout: Self.quitShutdownTimeout)
-            }
-        }
-        defer { RunningSteam.shared.unregister(quitStop) }
-
+        // ── Which game: signed in, in a tree of its own ─────────────────
+        // The steam module's client stage, built by the runner, where Steam
+        // signs in and says which games the account owns; then thrown
+        // away. The edition's build starts from the same stage's layer, and
+        // Steam starts again there to install the game.
+        let scratch = helper.createBuildFolder()
+        let identified: (game: GameInfo, launchMode: String?)
         do {
-            try await preparer.prepare(wrappAt: wrappPath)
+            identified = try await identify(in: scratch, preselected: preselected, input: input)
+        } catch {
+            await helper.removeTempWrapp(scratch)
+            await bus.publishWrappBuild(.failed(WrappBuildError(error)))
+            throw error
+        }
+        await helper.removeTempWrapp(scratch)
+        let gameInfo = identified.game, launchMode = identified.launchMode
 
+        // ── Build ──────────────────────────────────────────────────────
+        let folder = helper.createBuildFolder()
+        logger.notice("Working folder: \(folder.path)")
+        await bus.publishWrappBuild(.wrappStarted(path: folder))
+        do {
+            guard let steam = Self.steamData(gameInfo) else {
+                throw WrappBuildError.internalError("\(gameInfo.title) has no Steam app data")
+            }
+            // The game's Steam edition, as the person's answer decides it.
+            let slug = gameInfo.id
+            let plan = try await Blocking.run {
+                try ShippedBundles.plan(forGame: slug, edition: "steam", choices: launchMode.map { ["launch-mode": $0] } ?? [:])
+            }
+            guard let plan, let launch = plan.launch else {
+                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s Steam edition has no stage")
+            }
+            let composition = Composition(launch: launch)
+            await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
+            logger.notice("Building \(gameInfo.title) from Steam (app \(steam.appID)), engine \(composition.engineTag)\(launchMode.map { ", launching \($0)" } ?? "")")
+            let template = try await helper.template()
+
+            let executor = SteamExecutor(builder: self, game: gameInfo, appID: steam.appID, installDir: steam.installDir, plan: plan,
+                                         input: input, releaseLock: { lock.release() })
+            let (configuration, emitter) = runnerConfiguration(game: gameInfo, input: input, executors: ["steam": executor])
+            let wrappPath: URL
+            do {
+                wrappPath = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
+            } catch let error as StepFailure {
+                await emitter.finish()
+                throw WrappBuildError.buildRecipeProblem(error.description)
+            } catch {
+                await emitter.finish()
+                throw error
+            }
+            await emitter.finish()
+            try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
+
+            // What the game is, as the build's events and the legacy settings say it.
+            let runsWithoutSteam = !composition.has(.steam)
+            let gameExePath = composition.launcher == .scummvm ? "/SharedSupport/game"
+                : drivePath(launch.options["steam.exe"] ?? launch.program)
+            await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
+
+            let finalPath = try await helper.completeBuild(
+                wrapp: wrappPath, gameInfo: gameInfo, source: .steam,
+                gameExePath: composition.launcher == .scummvm ? "" : gameExePath,
+                installerDir: composition.launcher == .scummvm ? "" : (gameExePath as NSString).deletingLastPathComponent,
+                steamID: runsWithoutSteam ? nil : String(steam.appID), composition: composition,
+                steamLaunchMode: launchMode, edition: "steam",
+                launch: launch, app: plan.app, input: input
+            )
+            await helper.removeTempWrapp(folder)
+            await helper.launchIfAsked(finalPath, input: input)
+            return finalPath
+        } catch {
+            await helper.removeTempWrapp(folder)
+            let buildError = WrappBuildError(error)
+            await bus.publishWrappBuild(.failed(buildError))
+            throw error
+        }
+    }
+
+    /// What the runner is given: Second Chance's, with the steam executor
+    /// and Wine's steps through the preparer, which a test stands in for.
+    private func runnerConfiguration(game: GameInfo, input: WrappBuildInput, executors: [String: any ModuleExecutor])
+        -> (RunnerConfiguration, OrderedEmitter) {
+        var (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs([:]),
+                                                               downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
+                                                               executors: executors)
+        if let wine = configuration.executors["wine"] { configuration.executors["wine"] = preparer.wineExecutor(wine) }
+        let preparer = preparer
+        configuration.moduleStage = { stage, tree in try await preparer.makeStage(stage, in: tree) }
+        return (configuration, emitter)
+    }
+
+    /// Sign in to Steam in the client stage's tree, list what the account
+    /// owns and ask which to build (or check a game named up front is
+    /// owned), and the launch mode; then stop Steam, its sign-in saved.
+    private func identify(in folder: URL, preselected: GameInfo?, input: WrappBuildInput) async throws -> (game: GameInfo, launchMode: String?) {
+        let (configuration, emitter) = runnerConfiguration(game: GameInfo.unknownGame, input: input,
+                                                           executors: ["steam": SteamExecutor(builder: self, game: .unknownGame, appID: 0,
+                                                                                              installDir: "", plan: BuildPlan(edition: "", stages: []),
+                                                                                              input: input, releaseLock: {})])
+        let tree: URL
+        do {
+            tree = try await preparer.prepare(in: folder, runner: configuration)
+        } catch {
+            await emitter.finish()
+            throw error
+        }
+        await emitter.finish()
+        let prefix = WrappLayout(app: tree).prefix
+        let clientCache = self.clientCache
+        _ = await Blocking.run { clientCache.restore(into: prefix) }
+        let client = makeClient(tree)
+        let run = SteamRun()
+        let quitStop = registerQuitStop(client: client, run: run, prefix: prefix)
+        defer { unregisterQuitStop(quitStop) }
+        do {
             // Sign in with the shared session when there is one.
             await bus.publishWrappBuild(.progress(.installingGame(substep: SteamStartupStage.starting.message)))
             let restored = try await client.restoreLogin(from: sessionStore)
             if !restored && !input.canSignInToSteam { throw WrappBuildError.steamSignInRequired }
-            if let preselected, let steam = Self.steamData(preselected) {
-                try client.queueInstall(appID: steam.appID, installDir: steam.installDir)
-            }
             try await client.start(silent: true)
             run.started()
-
             run.signedIn = try await signIn(client: client, prefix: prefix, input: input)
             await bus.publishWrappBuild(.instructions(nil))
 
-            // ── Pick the game ──────────────────────────────────────────
             await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Checking which games your Steam account owns"))))
             let owned = try await client.ownedAppIDs(timeout: 120)
             let ownedGames = gameInfoProvider.allGames().filter { $0.isOnSteam && $0.steamAppID.map(owned.contains) == true }
@@ -230,92 +411,62 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             await bus.publishWrappBuild(.gameDetected(gameInfo))
             try await input.onGameDetected(gameInfo)
             let launchMode = gameInfo.offersSteamLaunchChoice ? try await input.getSteamLaunchMode(for: gameInfo) : nil
-            guard let steam = Self.steamData(gameInfo) else {
-                throw WrappBuildError.internalError("\(gameInfo.title) has no Steam app data")
+            if run.claimStop() {
+                await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
             }
-            // The game's Steam edition, as the person's answer decides it.
-            let slug = gameInfo.id
-            let plan = try await Blocking.run {
-                try ShippedBundles.plan(forGame: slug, edition: "steam", choices: launchMode.map { ["launch-mode": $0] } ?? [:])
-            }
-            guard let plan, let launch = plan.launch else {
-                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s Steam edition has no stage")
-            }
-            let composition = Composition(launch: launch)
-            await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
-            logger.notice("Building \(gameInfo.title) from Steam (app \(steam.appID)), engine \(composition.engineTag)\(launchMode.map { ", launching \($0)" } ?? "")")
-
-            var queued = preselected != nil
-            for step in plan.bundleSteps {
-                logger.debug("Plan step: \(step) (\(step.origin))")
-                switch (step.module, step.instruction) {
-                case ("steam", "INSTALL"):
-                    try Self.checkMounts(of: step)
-                    if !queued {
-                        // Steam only installs a queued game when it starts.
-                        await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Restarting Steam to install \(gameInfo.title)"))))
-                        if run.claimStop() {
-                            await stopSteam(client, prefix: prefix, signedIn: run.signedIn, keepSignIn: true)
-                        }
-                        try client.queueInstall(appID: steam.appID, installDir: steam.installDir)
-                        try await client.start(silent: true)
-                        run.started()
-                        run.signedIn = try await signIn(client: client, prefix: prefix, input: input)
-                        queued = true
-                    }
-                    try await waitForInstall(client: client, appID: steam.appID)
-                    try linkInstalledGame(step, installDir: steam.installDir, wrappPath: wrappPath)
-                case ("steam", "SIGN-OUT"):
-                    if run.claimStop() {
-                        await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
-                    }
-                    let clientCache = self.clientCache
-                    await Blocking.run { clientCache.save(from: prefix) }
-                    // Nothing from here on uses Steam or its sign-in. Holding the lock
-                    // through patching and saving had a wrapp opened as the build
-                    // finished (or from its done screen) find Steam taken by the build.
-                    lock.release()
-                case ("steam", "REMOVE"):
-                    try await removeSteam(from: wrappPath, keeping: plan)
-                case _ where ModuleSteps.handles(step):
-                    try await preparer.run(step, in: wrappPath)
-                case _ where WrappBuildHelper.isAppStep(step):
-                    continue  // after the steps that put things in the prefix
-                default:
-                    throw WrappBuildError.buildRecipeProblem("\(step.origin): this build can't run \(step)")
-                }
-            }
-            try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
-
-            // What the game is, as the build's events and the legacy settings say it.
-            let runsWithoutSteam = !composition.has(.steam)
-            let gameExePath = composition.launcher == .scummvm ? "/SharedSupport/game"
-                : drivePath(launch.options["steam.exe"] ?? launch.program)
-            if composition.launcher != .scummvm {
-                await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
-            }
-            try await helper.installMissingEngines(at: wrappPath, composition: composition)
-            try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
-
-            let finalPath = try await helper.completeBuild(
-                wrapp: wrappPath, gameInfo: gameInfo, source: .steam,
-                gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent,
-                steamID: runsWithoutSteam ? nil : String(steam.appID), composition: composition,
-                steamLaunchMode: launchMode, edition: "steam",
-                launch: launch, app: plan.app, input: input
-            )
-            await helper.launchIfAsked(finalPath, input: input)
-            return finalPath
+            return (gameInfo, launchMode)
         } catch {
             if run.claimStop() {
                 await stopSteam(client, prefix: prefix, signedIn: run.signedIn)
             }
-            await helper.removeTempWrapp(wrappPath)
-
-            let buildError = WrappBuildError(error)
-            await bus.publishWrappBuild(.failed(buildError))
             throw error
         }
+    }
+
+    // MARK: - For the executor
+
+    /// `STEAM.CLIENT`: Steam's client installed in the tree.
+    func installClient(in tree: URL) async throws {
+        try await helper.installSteamClient(in: tree)
+    }
+
+    func makeClient(_ tree: URL) -> SteamClientDriving { clientMaker(tree) }
+
+    /// Quitting the app stops this build's Steam: it would otherwise keep
+    /// running, its window open, from a working folder the quit deletes.
+    func registerQuitStop(client: SteamClientDriving, run: SteamRun, prefix: URL) -> UUID {
+        RunningSteam.shared.register { [self] in
+            if run.claimStop() {
+                await stopSteam(client, prefix: prefix, signedIn: run.signedIn, timeout: Self.quitShutdownTimeout)
+            }
+        }
+    }
+
+    func unregisterQuitStop(_ token: UUID) { RunningSteam.shared.unregister(token) }
+
+    /// `STEAM.INSTALL`: Steam started with the game queued, signed in with
+    /// the shared session, the install waited for, and `--into` made a link
+    /// to the folder Steam put the game in.
+    func install(appID: Int, installDir: String, step: PlannedStep, client: SteamClientDriving, run: SteamRun, tree: URL,
+                 input: WrappBuildInput) async throws {
+        let prefix = WrappLayout(app: tree).prefix
+        let clientCache = self.clientCache
+        _ = await Blocking.run { clientCache.restore(into: prefix) }
+        await bus.publishWrappBuild(.progress(.installingGame(substep: SteamStartupStage.starting.message)))
+        let restored = try await client.restoreLogin(from: sessionStore)
+        if !restored && !input.canSignInToSteam { throw WrappBuildError.steamSignInRequired }
+        try client.queueInstall(appID: appID, installDir: installDir)
+        try await client.start(silent: true)
+        run.started()
+        run.signedIn = try await signIn(client: client, prefix: prefix, input: input)
+        await bus.publishWrappBuild(.instructions(nil))
+        try await waitForInstall(client: client, appID: appID)
+        try linkInstalledGame(step, installDir: installDir, wrappPath: tree)
+    }
+
+    func saveClientCache(from prefix: URL) async {
+        let clientCache = self.clientCache
+        await Blocking.run { clientCache.save(from: prefix) }
     }
 
     // MARK: - Steps
@@ -599,8 +750,8 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// the sign-in out of the wrapp: it would otherwise ship inside the app,
     /// and anyone given a copy could use the account. `keepSignIn` leaves it
     /// in for Steam to start again with, as the build itself does.
-    private func stopSteam(_ client: SteamClientDriving, prefix: URL, signedIn: Bool, keepSignIn: Bool = false,
-                           timeout: TimeInterval = 90) async {
+    func stopSteam(_ client: SteamClientDriving, prefix: URL, signedIn: Bool, keepSignIn: Bool = false,
+                   timeout: TimeInterval = 90) async {
         await client.shutdown(timeout: timeout)
         do {
             let result = try client.saveLogin(to: sessionStore, signedIn: signedIn)
@@ -614,7 +765,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     /// `STEAM.REMOVE`: each link `STEAM.INSTALL` made replaced by the game
     /// itself, moved out of Steam's library, then the Steam client and the
     /// settings its client stage gave its programs taken out of the wrapp.
-    private func removeSteam(from wrappPath: URL, keeping plan: BuildPlan) async throws {
+    func removeSteam(from wrappPath: URL, keeping plan: BuildPlan) async throws {
         let layout = WrappLayout(app: wrappPath)
         let files = FileManager.default
         for install in plan.bundleSteps where install.module == "steam" && install.instruction == "INSTALL" {
