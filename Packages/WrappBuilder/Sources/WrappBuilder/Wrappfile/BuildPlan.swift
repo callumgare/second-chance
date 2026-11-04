@@ -8,6 +8,8 @@ import CryptoKit
 import Foundation
 import WrappModules
 import WrappFormat
+// A plan's steps are the executors' API's: whoever plans one can run it.
+@_exported import WrappModuleKit
 
 /// What a build of one edition runs, in order: the stages its target needs,
 /// each with its steps, functions expanded, `${…}` substituted and `IF`s
@@ -90,59 +92,10 @@ public nonisolated struct RecordedApp: Sendable, Equatable {
     /// The app's id: the caller's, which wins, else the Wrappfile's
     /// default, else none, which is an error (decision 25 of the builders
     /// plan): an app is never named by accident.
-    public func id(given: String?) throws -> String {
+    public func id(given: String?) throws(BuildPlanner.PlanError) -> String {
         if let given, !given.isEmpty { return given }
         if let defaultID { return defaultID }
         throw BuildPlanner.PlanError(description: "the app needs an id: give one, or the Wrappfile's APP --default-id")
-    }
-}
-
-/// One step, ready to run: every value substituted.
-public nonisolated struct PlannedStep: Sendable, Equatable, CustomStringConvertible {
-    /// `RUN`, `COPY`, … for a core instruction, or `MOUNT` for `WINE.MOUNT`.
-    public let instruction: String
-    /// The module whose instruction it is, by id; nil for the core's.
-    public let module: String?
-    /// Each option's values, in order (`--mount` may be given many times);
-    /// a flag has one empty value.
-    public let options: [String: [String]]
-    public let arguments: [String]
-    /// `--name`, when the step was given one.
-    public let name: String?
-    /// Where it was written: `Wrappfile:12`, or `nancy-drew/functions/patch:20`
-    /// from `Wrappfile:16`.
-    public let origin: String
-
-    public init(instruction: String, module: String?, options: [String: [String]], arguments: [String], name: String?, origin: String) {
-        self.instruction = instruction
-        self.module = module
-        self.options = options
-        self.arguments = arguments
-        self.name = name
-        self.origin = origin
-    }
-
-    public func option(_ name: String) -> String? { options[name]?.first }
-    public func has(_ name: String) -> Bool { options[name] != nil }
-
-    /// As `sc bundle plan` shows it, and as install layers are keyed:
-    /// `WINE.KEEP-DISCS --into=wine:C:/…`.
-    public var description: String {
-        let keyword = module.map { "\($0.uppercased()).\(instruction)" } ?? instruction
-        let rendered = options.keys.sorted().flatMap { key in
-            options[key, default: []].map { $0.isEmpty ? "--\(key)" : "--\(key)=\($0)" }
-        }
-        return ([keyword] + rendered + arguments).joined(separator: " ")
-    }
-
-    /// How a whole input is written in a planned step (`input:disc-1`), so a
-    /// builder tells an input from text that looks like one.
-    public static func inputToken(_ name: String) -> String { "input:\(name)" }
-
-    /// The input a word names, if it's an input's token.
-    public static func input(in word: String?) -> String? {
-        guard let word, word.hasPrefix("input:") else { return nil }
-        return String(word.dropFirst("input:".count))
     }
 }
 

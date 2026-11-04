@@ -87,7 +87,7 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: slug, edition: edition) }) else {
                 throw WrappBuildError.buildRecipeProblem("\(game.programID)'s \(chosen.edition) edition names no stage")
             }
-            try await run(plan, inputs: [chosen.input.id: unpacked], wrappPath: wrappPath)
+            try await run(plan, inputs: [chosen.input.id: unpacked], wrappPath: wrappPath, game: game, input: input)
             // What the wrapp starts, as the plan's launch says: it must be
             // there. The settings' older keys name a program on a C: drive,
             // which a ScummVM game's data in the app isn't.
@@ -178,34 +178,21 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
         logger.notice("Unpacked \(input.id) (\(input.unpack ?? "none"))")
     }
 
-    /// The edition's plan: each `COPY --from=<input>` copies the unpacked
-    /// input into the wrapp's C: drive. Anything else a download edition
-    /// can't run yet, and fails before it copies anything wrongly.
-    private func run(_ plan: BuildPlan, inputs: [String: URL], wrappPath: URL) async throws {
-        let layout = WrappLayout(app: wrappPath)
-        for step in plan.bundleSteps {
-            logger.debug("Plan step: \(step) (\(step.origin))")
-            guard step.module == nil, step.instruction == "COPY", let from = PlannedStep.input(in: step.option("from")),
-                  let source = inputs[from],
-                  step.arguments.count == 2 else {
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): the download flow can't run \(step)")
-            }
-            // In full form, through its type's place in the app (`wine:C:/…`
-            // in the prefix, a bare `/…` in Contents/).
-            let destination = step.arguments[1]
-            guard let target = layout.location(destination) else {
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): \(destination) has no place in the app")
-            }
-            let subpath = step.arguments[0] == "." ? "" : step.arguments[0]
-            try await Blocking.run {
-                let files = FileManager.default
-                try files.createDirectory(at: target, withIntermediateDirectories: true)
-                let root = subpath.isEmpty ? source : source.appendingPathComponent(subpath)
-                for item in try files.contentsOfDirectory(atPath: root.path) {
-                    try files.copyItem(at: root.appendingPathComponent(item), to: target.appendingPathComponent(item))
-                }
-            }
-            logger.notice("Copied \(from) into \(destination)")
+    /// The edition's plan, carried out by the runner (docs/wrapp-build.md#the-runner)
+    /// in the wrapp, whose base already has the wine module's prefix stage
+    /// made: the input is the download, unpacked.
+    private func run(_ plan: BuildPlan, inputs: [String: URL], wrappPath: URL, game: GameInfo, input: WrappBuildInput) async throws {
+        let (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs(inputs),
+                                                               downloader: downloader)
+        do {
+            try await PlanRunner(plan: plan, configuration: configuration).run(in: wrappPath)
+        } catch let error as StepFailure {
+            await emitter.finish()
+            throw WrappBuildError.buildRecipeProblem(error.description)
+        } catch {
+            await emitter.finish()
+            throw error
         }
+        await emitter.finish()
     }
 }

@@ -28,6 +28,7 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams", .upToNextMinor(from: "6.2.2")),
         .package(path: "../GameCatalog"),
         .package(path: "../WrappKit"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
     ],
     targets: [
         .target(
@@ -39,6 +40,8 @@ let package = Package(
                 .product(name: "WindowsFormats", package: "WrappKit"),
                 .product(name: "ProcessKit", package: "WrappKit"),
                 .product(name: "WrappFormat", package: "WrappKit"),
+                .product(name: "WrappModuleKit", package: "WrappKit"),
+                .product(name: "Logging", package: "swift-log"),
             ],
             swiftSettings: swiftSettings,
             linkerSettings: [.linkedFramework("JavaScriptCore")]

@@ -9,7 +9,7 @@ public struct WrappBuilderCommand: AsyncParsableCommand {
     public static let configuration = CommandConfiguration(
         commandName: "wrapp-builder",
         abstract: "Check, plan and format Wrappfiles, and look after modules and engines.",
-        subcommands: [CheckCommand.self, PlanCommand.self, FormatCommand.self, ModuleCommand.self, EngineCommand.self]
+        subcommands: [CheckCommand.self, PlanCommand.self, BuildCommand.self, FormatCommand.self, ModuleCommand.self, EngineCommand.self]
     )
 
     public init() {}
@@ -29,7 +29,7 @@ struct ModulesOption: ParsableArguments {
 }
 
 /// The downloader the tool's commands share: the builder's cache.
-extension Downloader {
+nonisolated extension Downloader {
     static func forTool() -> Downloader {
         Downloader(cache: Downloader.standardCache(), userAgent: "wrapp-builder (+https://github.com/callumgare/second-chance)")
     }
@@ -105,6 +105,67 @@ struct PlanCommand: AsyncParsableCommand {
                                    modules: try ModuleTool.loadAll(root: modules.root, output: output),
                                    edition: edition, target: target, conditions: conditions, allowPaths: allowPaths, output: output)
             if allowPaths.contains("*") { output.line("warning: --allow-path=*: host paths aren't being checked") }
+        }
+    }
+}
+
+struct BuildCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "build",
+        abstract: "Build a bundle's stage into an app, with the executors this tool has.",
+        discussion: """
+        Inputs are given by name as paths (--input game=<folder>). Without --template \
+        the result holds what the steps made and isn't an app that runs. A step \
+        that asks something asks on the terminal, and fails without one.
+        """
+    )
+
+    @OptionGroup var modules: ModulesOption
+
+    @Argument(help: "The bundle's folder.")
+    var bundle: String
+
+    @Option(help: "The stage to build.")
+    var target: String?
+
+    @Option(help: "The edition whose inputs it's given (default: the first whose target it is).")
+    var edition: String?
+
+    @Option(name: .customLong("input"), help: ArgumentHelp("An input, <name>=<path>; repeat it for more.", valueName: "name=path"))
+    var inputs: [String] = []
+
+    @Option(help: "The app's id, over the Wrappfile's APP --default-id.")
+    var appId: String?
+
+    @Option(help: "The app whose files are laid in at the end (the launcher).")
+    var template: String?
+
+    @Option(help: ArgumentHelp("Where to put the app.", valueName: "app"))
+    var out: String
+
+    @Option(name: .customLong("allow-path"), help: ArgumentHelp("A folder of the bundle's its Wrappfile may read; * for any.", valueName: "folder"))
+    var allowPaths: [String] = []
+
+    @Option(help: "How events are printed: plain, or json (one object a line).")
+    var events: String = "plain"
+
+    func run() async throws {
+        try await runReporting {
+            var given: [String: URL] = [:]
+            for value in inputs {
+                guard let equals = value.firstIndex(of: "="), equals != value.startIndex else {
+                    throw ToolError("--input \(value) isn't <name>=<path>.")
+                }
+                given[String(value[..<equals])] = URL(fileURLWithPath: String(value[value.index(after: equals)...])).standardizedFileURL
+            }
+            let output = StandardOutput()
+            if allowPaths.contains("*") { output.line("warning: --allow-path=*: host paths aren't being checked") }
+            try await BuildTool.build(.init(
+                bundle: URL(fileURLWithPath: bundle, isDirectory: true).standardizedFileURL, modules: modules.root,
+                edition: edition, target: target, inputs: given, appID: appId,
+                template: template.map { URL(fileURLWithPath: $0, isDirectory: true) },
+                output: URL(fileURLWithPath: out, isDirectory: true).standardizedFileURL,
+                allowPaths: allowPaths, json: events == "json"), output: output)
         }
     }
 }

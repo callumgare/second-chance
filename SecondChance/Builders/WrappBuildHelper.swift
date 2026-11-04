@@ -269,7 +269,8 @@ class WrappBuildHelper {
         let newBundleID: String
         do {
             newBundleID = try app.id(given: bundleID ?? WrappLock.wrappBundleID(program: gameInfo.programID))
-        } catch let error as BuildPlanner.PlanError {
+        } catch {
+            // `id(given:)` throws only a PlanError.
             throw WrappBuildError.buildRecipeProblem(error.description)
         }
         plist["CFBundleIdentifier"] = newBundleID

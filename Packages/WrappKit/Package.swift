@@ -37,6 +37,7 @@ let package = Package(
         .library(name: "WineKit", targets: ["WineKit"]),
         .library(name: "WrappFormat", targets: ["WrappFormat"]),
         .library(name: "WrappModules", targets: ["WrappModules"]),
+        .library(name: "WrappModuleKit", targets: ["WrappModuleKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
@@ -88,10 +89,18 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
+        // What a module's executor is written against, shipped or not
+        // (docs/module-programs.md): it carries out a plan's steps through
+        // the context the build gives it.
+        .target(
+            name: "WrappModuleKit",
+            dependencies: [.product(name: "Logging", package: "swift-log")],
+            swiftSettings: swiftSettings
+        ),
         .testTarget(
             name: "WrappKitTests",
             dependencies: [
-                "WrappLogging", "ProcessKit", "WindowsFormats", "WineKit", "WrappFormat", "WrappModules",
+                "WrappLogging", "ProcessKit", "WindowsFormats", "WineKit", "WrappFormat", "WrappModules", "WrappModuleKit",
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],

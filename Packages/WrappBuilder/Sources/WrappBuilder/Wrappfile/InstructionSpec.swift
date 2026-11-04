@@ -120,7 +120,7 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
             // module's table of replacements and settings (nancy-drew's `ini`).
             // `--keys-must-exist`: each setting must already be in the file, or
             // the step fails, naming those that aren't; without it one is added.
-            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value, "keys-must-exist": .flag], arguments: 1...1,
+            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value, "keys-must-exist": .flag, "create": .flag], arguments: 1...1,
                             argumentRoles: [.location]),
         ]
         return Dictionary(uniqueKeysWithValues: specs.map { ($0.name, $0) })

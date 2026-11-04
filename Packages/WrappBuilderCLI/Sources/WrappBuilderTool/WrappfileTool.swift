@@ -67,6 +67,19 @@ public nonisolated enum WrappfileTool {
     /// written.
     public static func plan(bundle folder: URL, modules: [ModuleFolder], edition: String?, target: String?,
                             conditions: BuildConditions, allowPaths: [String] = [], output: some ToolOutput) throws {
+        let plan = try planned(bundle: folder, modules: modules, edition: edition, target: target, conditions: conditions,
+                               allowPaths: allowPaths, output: output)
+        for stage in plan.stages {
+            output.result("FROM \(stage.from) AS \(stage.name)   [\(stage.modules.joined(separator: ", "))]")
+            for step in stage.steps {
+                output.result("  \(step)    # \(step.origin)")
+            }
+        }
+    }
+
+    /// The plan for building `target` (or `edition`'s target).
+    static func planned(bundle folder: URL, modules: [ModuleFolder], edition: String?, target: String?,
+                        conditions: BuildConditions, allowPaths: [String], output: some ToolOutput) throws -> BuildPlan {
         let root = folder.deletingLastPathComponent().deletingLastPathComponent()
         let loaded: ProgramBundle
         switch try ProgramBundleLoader(root: root, modules: modules).load(folder) {
@@ -92,15 +105,7 @@ public nonisolated enum WrappfileTool {
         } catch {
             throw ToolError(error.description)
         }
-        guard let plan else {
-            output.result("\(chosen) names no stage.")
-            return
-        }
-        for stage in plan.stages {
-            output.result("FROM \(stage.from) AS \(stage.name)   [\(stage.modules.joined(separator: ", "))]")
-            for step in stage.steps {
-                output.result("  \(step)    # \(step.origin)")
-            }
-        }
+        guard let plan else { throw ToolError("\(chosen) names no stage.") }
+        return plan
     }
 }
