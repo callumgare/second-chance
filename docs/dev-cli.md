@@ -62,7 +62,9 @@ which it otherwise reports as `overloaded` without testing
 once (they still launch one at a time; by default one per four performance
 cores), as far as the disk has room, leaving
 `--disk-margin <GB>` (10) free
-([testing.md](testing.md#building-games-side-by-side)).
+([testing.md](testing.md#building-games-side-by-side)). `--keep-recordings`
+keeps every launch's screen recording, not only a failed or warned one's
+([testing.md](testing.md#wrapppuppeteer)).
 
 `wrapp run` with `--refresh-wrapp skip` and an existing wrapp doesn't build the
 app at all — launching a wrapp as it is doesn't need it.

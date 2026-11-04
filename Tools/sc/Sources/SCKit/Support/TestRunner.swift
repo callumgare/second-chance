@@ -92,6 +92,13 @@ struct TestRunner {
         return ["TEST_RUNNER_\(hideUISetting)": value]
     }
 
+    /// `--keep-recordings`: every launch's screen recording kept, and given
+    /// longer to run (docs/testing.md#wrapppuppeteer).
+    static func recordingEnvironment(keepRecordings: Bool) -> [String: String] {
+        guard keepRecordings else { return [:] }
+        return ["TEST_RUNNER_KEEP_RECORDINGS": "1", "TEST_RUNNER_RECORDING_LIMIT": "\(IntegrationOptions.keptRecordingLimit)"]
+    }
+
     /// The Big Fish test account from `.env`, for the owned Big Fish suite
     /// only: the test host signs in with it (`BIG_FISH_EMAIL`,
     /// `BIG_FISH_PASSWORD`). Nothing when the suite isn't run or the account
@@ -144,7 +151,8 @@ struct TestRunner {
 
     func integration(
         games requested: [CatalogGame], sources: [IntegrationSource] = [.disk], refresh: WrappRefresh, wrappsDir: URL,
-        ignoreLoad: Bool = false, buildConcurrency: Int = 1, diskMargin: Double = 10, vm: TestVM.Prepared? = nil, stamp: String
+        ignoreLoad: Bool = false, buildConcurrency: Int = 1, diskMargin: Double = 10, keepRecordings: Bool = false,
+        vm: TestVM.Prepared? = nil, stamp: String
     ) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
@@ -201,6 +209,10 @@ struct TestRunner {
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
+        env.merge(Self.recordingEnvironment(keepRecordings: keepRecordings)) { _, new in new }
+        if keepRecordings && vm != nil {
+            ui.warning("--keep-recordings keeps nothing from a VM: WrappPuppeteer doesn't record the screen there.")
+        }
         env.merge(Self.hostEnvironment(dotEnv: dotEnv)) { _, new in new }
         env.merge(Self.bigFishEnvironment(dotEnv: dotEnv, sources: sources)) { _, new in new }
         // The test launches each game in the VM instead (VMPuppetRunner).

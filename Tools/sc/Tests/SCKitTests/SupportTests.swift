@@ -444,6 +444,16 @@ struct GameTests {
         #expect(TestRunner.bigFishEnvironment(dotEnv: [:], sources: [.bigFish]).isEmpty)
     }
 
+    @Test("--keep-recordings keeps every launch's recording, for longer")
+    func keepRecordings() throws {
+        #expect(try IntegrationOptions.parse(["--keep-recordings"]).keepRecordings)
+        #expect(try !IntegrationOptions.parse([]).keepRecordings)
+        #expect(TestRunner.recordingEnvironment(keepRecordings: true) == [
+            "TEST_RUNNER_KEEP_RECORDINGS": "1", "TEST_RUNNER_RECORDING_LIMIT": "300",
+        ])
+        #expect(TestRunner.recordingEnvironment(keepRecordings: false).isEmpty)
+    }
+
     @Test("--build-concurrency defaults to one build per four performance cores, never none")
     func defaultBuildConcurrency() throws {
         #expect(IntegrationOptions.defaultBuildConcurrency(fastCores: 8) == 2)

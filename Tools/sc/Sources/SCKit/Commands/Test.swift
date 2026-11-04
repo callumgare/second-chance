@@ -70,6 +70,17 @@ struct IntegrationOptions: ParsableArguments {
     ))
     var vm: String?
 
+    @Flag(help: ArgumentHelp(
+        "Keep the screen recording of every launch, passed or not, as an attachment in the results.",
+        discussion: "Normally a launch's recording is kept only when it fails or WrappPuppeteer warns, as one whose splash screens "
+            + "went unrecognised does. Name the games to test to keep only theirs. Each recording runs for up to \(IntegrationOptions.keptRecordingLimit) s "
+            + "rather than 2 minutes, to take in a slow start (docs/testing.md#wrapppuppeteer)."
+    ))
+    var keepRecordings = false
+
+    /// How long a kept recording may run, in seconds.
+    static let keptRecordingLimit = 300
+
     @OptionGroup var wrapps: WrappsDirOptions
 
     /// The sources `--source` names, in their canonical order.
@@ -176,7 +187,7 @@ struct TestAllCommand: AsyncParsableCommand {
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
                 ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
-                vm: vm, stamp: stamp
+                keepRecordings: integration.keepRecordings, vm: vm, stamp: stamp
             )
         }
         try await TestCommandSupport.finish([unit, integrationRun], stamp: stamp, policy: report.openReport, session: session)
@@ -252,7 +263,7 @@ struct TestIntegrationCommand: AsyncParsableCommand {
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
                 ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
-                vm: vm, stamp: stamp
+                keepRecordings: integration.keepRecordings, vm: vm, stamp: stamp
             )
         }
         try await TestCommandSupport.finish([run], stamp: stamp, policy: report.openReport, session: session)

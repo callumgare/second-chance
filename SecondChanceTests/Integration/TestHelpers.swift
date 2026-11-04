@@ -460,6 +460,16 @@ enum AppPuppetRunner {
         return attempt.exitCode
     }
 
+    /// `sc test integration --keep-recordings`: keep every launch's screen
+    /// recording, not only a failed or warned one's, and let it run longer.
+    /// `sc` sets `TEST_RUNNER_KEEP_RECORDINGS`; xcodebuild drops the prefix.
+    static var keepsRecordings: Bool { ProcessInfo.processInfo.environment["KEEP_RECORDINGS"] == "1" }
+
+    /// `--screen-recording-limit` for WrappPuppeteer, when `sc` set one.
+    static var recordingLimitArguments: [String] {
+        ProcessInfo.processInfo.environment["RECORDING_LIMIT"].map { ["--screen-recording-limit", $0] } ?? []
+    }
+
     private static func launchAndCollect(
         appBundle: URL,
         wrappURL: URL,
@@ -477,10 +487,12 @@ enum AppPuppetRunner {
             .appendingPathComponent("wrapp-puppeteer-exit-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: exitCodeFile) }
         // The whole screen as the game starts, if WrappPuppeteer has Screen
-        // Recording: kept, as an attachment, only when the launch fails.
+        // Recording: kept, as an attachment, when the launch fails or
+        // WrappPuppeteer warns (a splash screen it no longer recognises is
+        // only seen there), or always with `--keep-recordings`.
         let screenRecording = FileManager.default.temporaryDirectory
             .appendingPathComponent("wrapp-puppeteer-screen-\(UUID().uuidString).mp4")
-        // A failed run's, with what happened marked in it.
+        // The same, with what happened marked in it.
         let annotatedRecording = screenRecording.deletingPathExtension().appendingPathExtension("mov")
         defer {
             try? FileManager.default.removeItem(at: screenRecording)
@@ -492,7 +504,8 @@ enum AppPuppetRunner {
                 // So a stopped or crashed test run takes the puppeteer, and the
                 // wrapp it's driving, down with it.
                 arguments: [wrappURL.path, "--max-runtime", String(Int(Self.maxRuntime)), "--exit-code-file", exitCodeFile.path,
-                            "--parent-pid", String(getpid()), "--screen-recording", screenRecording.path] + extraArguments,
+                            "--parent-pid", String(getpid()), "--screen-recording", screenRecording.path]
+                    + recordingLimitArguments + extraArguments,
                 exitCodeFile: exitCodeFile
             )
 
@@ -501,12 +514,18 @@ enum AppPuppetRunner {
             // by the pid-scoped fetch above and needs its own subsystem query.
             let gameLogData = SystemLogReader.fetchGame(since: launchTime)
             attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
+            var warned = false
             try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
-                      attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, requiredLines: requiredLines, onWarning: onWarning)
+                      attemptLabel: attemptLabel, requiredHelpers: requiredHelpers, requiredLines: requiredLines) { warning in
+                warned = true
+                onWarning(warning)
+            }
+            if warned || keepsRecordings {
+                attachScreenRecording(annotatedRecording, else: screenRecording, gameSlug: gameSlug, attemptLabel: attemptLabel)
+            }
             return (exitCode: observedExitCode, pid: pid)
         } catch {
-            attachScreenRecording(FileManager.default.fileExists(atPath: annotatedRecording.path) ? annotatedRecording : screenRecording,
-                                  gameSlug: gameSlug, attemptLabel: attemptLabel)
+            attachScreenRecording(annotatedRecording, else: screenRecording, gameSlug: gameSlug, attemptLabel: attemptLabel)
             throw error
         }
     }
@@ -641,10 +660,11 @@ enum AppPuppetRunner {
         }
     }
 
-    /// Attach the run's screen recording, for a launch that failed: the
-    /// `.mov` with what happened marked when WrappPuppeteer made one. Nothing
-    /// when WrappPuppeteer had no Screen Recording, so made none.
-    private static func attachScreenRecording(_ file: URL, gameSlug: String, attemptLabel: String) {
+    /// Attach the run's screen recording: the `.mov` with what happened
+    /// marked (`annotated`) when WrappPuppeteer made one, else the plain one.
+    /// Nothing when WrappPuppeteer had no Screen Recording, so made none.
+    private static func attachScreenRecording(_ annotated: URL, else plain: URL, gameSlug: String, attemptLabel: String) {
+        let file = FileManager.default.fileExists(atPath: annotated.path) ? annotated : plain
         guard FileManager.default.fileExists(atPath: file.path) else { return }
         do {
             Attachment.record(try Data(contentsOf: file), named: "screen-recording-\(attemptLabel)-\(gameSlug).\(file.pathExtension)")

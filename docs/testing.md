@@ -390,9 +390,10 @@ the start of its run (`ScreenRecorder`, ScreenCaptureKit into an H.264
 video, at up to 30 frames a second so something that only flashes up is
 caught), stopping when the run ends or after `--screen-recording-limit`
 seconds (2 minutes): a launch that's fine takes seconds, and a long capture
-wears a test Mac down, as screenshots do. The test deletes the video when
-the launch passes and attaches it to the results when it fails, as
-`screen-recording-<attempt>-<slug>.mov`. Once the recording has stopped
+wears a test Mac down, as screenshots do. The test attaches it to the
+results when the launch fails, or passes with a warning from WrappPuppeteer
+(a splash screen it no longer recognises is only seen there), as
+`screen-recording-<attempt>-<slug>.mov`, and otherwise deletes it. Once the recording has stopped
 WrappPuppeteer writes it again beside it as a `.mov`, in place of the
 `.mp4` (which stays only if that fails), without encoding it
 again (a second or so), with what happened marked as chapters and captions:
@@ -403,6 +404,19 @@ recording's first frame, whose time it logs (`VideoAnnotator`,
 the limit too, so a run killed later still has one. Without the permission there's no
 video and a log line says so. WrappPuppeteer is signed with the development
 team, so a grant in System Settings survives rebuilds.
+
+**`--keep-recordings` keeps a launch's recording that passed.**
+`sc test integration --keep-recordings` keeps every launch's recording,
+passed or not; name the games to keep only theirs:
+
+```bash
+./sc test integration haunted-mansion deception-island --source big-fish-trial --keep-recordings
+```
+
+Each recording then runs for up to 5 minutes rather than 2, so a slow start
+is still recording when the game's first screens come
+(`TEST_RUNNER_KEEP_RECORDINGS`, `TEST_RUNNER_RECORDING_LIMIT`). A launch in a
+VM has no recording to keep.
 
 **It doesn't touch the player's saves and settings.** A wrapp keeps those in
 `~/Library/Application Support/<bundle id>/`
@@ -726,7 +740,8 @@ it. But a run that reaches the menu without having clicked past any of the
 game's recorded splash screens says so, as a warning
 (`WRAPP_PUPPETEER: warning: No splash screen was clicked past…`): the
 references may no longer match the game. The test attaches each warning
-(`warning-<source>-<slug>.txt`) and `sc` lists them under its table, passed
+(`warning-<source>-<slug>.txt`), and the launch's screen recording, which
+shows what the game showed instead, and `sc` lists them under its table, passed
 or not, so one that starts appearing gets noticed.
 
 **In a DirectDraw game the cursor lock decides how soon that is.** The first
