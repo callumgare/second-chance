@@ -11,8 +11,11 @@
 
 import Darwin
 import Foundation
+import Logging
 import SecondChanceKit
 import Synchronization
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.DiscCopy")
 
 nonisolated enum DiscCopy {
     /// How far a copy has got, in bytes.
@@ -38,19 +41,47 @@ nonisolated enum DiscCopy {
                 // DATA alone: contents, not metadata (no xattrs, no modes).
                 let flags = copyfile_flags_t(COPYFILE_RECURSIVE | COPYFILE_DATA)
                 let result = copyfile(source.path, destination.path, copyState, flags)
+                let copyErrno = errno
                 withExtendedLifetime(state) {}
                 if state.isCancelled { throw CancellationError() }
                 guard result == 0 else {
                     throw CocoaError(.fileWriteUnknown, userInfo: [
                         NSFilePathErrorKey: destination.path,
-                        NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO),
+                        NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: copyErrno) ?? .EIO),
                     ])
                 }
+                try copyAgain(state.failures)
             }
         } onCancel: {
             state.cancel()
         }
         try makeOwnerWritable(destination)
+    }
+
+    /// The files the recursive copy couldn't copy, copied again one at a
+    /// time. copyfile goes on past a file it can't read, leaving it out and
+    /// still succeeding, and a disc image's read now and then fails: Sea of
+    /// Darkness's installer then stopped at the missing file (error 2) as
+    /// though the disc were broken. A file that fails again fails the copy.
+    private static func copyAgain(_ failures: [(source: String, destination: String, errno: Int32)]) throws {
+        for failure in failures {
+            logger.warning("Copying \(failure.source) failed (\(String(cString: strerror(failure.errno)))): copying it again")
+            var lastErrno = failure.errno
+            var copied = false
+            for _ in 0..<3 where !copied {
+                if copyfile(failure.source, failure.destination, nil, copyfile_flags_t(COPYFILE_DATA | COPYFILE_UNLINK)) == 0 {
+                    copied = true
+                } else {
+                    lastErrno = errno
+                }
+            }
+            guard copied else {
+                throw CocoaError(.fileReadUnknown, userInfo: [
+                    NSFilePathErrorKey: failure.source,
+                    NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: lastErrno) ?? .EIO),
+                ])
+            }
+        }
     }
 
     /// Directories copied without their modes can still come out without
@@ -71,6 +102,13 @@ nonisolated enum DiscCopy {
         let total: Int64?
         let progress: @Sendable (Progress) -> Void
         private let state = Mutex((cancelled: false, finishedFiles: Int64(0), current: Int64(0), lastReport: ContinuousClock.Instant.now))
+        private let failed = Mutex<[(source: String, destination: String, errno: Int32)]>([])
+
+        /// The files the copy went past, with why.
+        var failures: [(source: String, destination: String, errno: Int32)] { failed.withLock { $0 } }
+        func fail(source: String, destination: String, errno: Int32) {
+            failed.withLock { $0.append((source, destination, errno)) }
+        }
 
         init(total: Int64?, progress: @escaping @Sendable (Progress) -> Void) {
             self.total = total
@@ -100,10 +138,16 @@ nonisolated enum DiscCopy {
 
     /// copyfile's progress callback: a C function, so it reaches the copy's
     /// state through `context`. Quitting is how a cancelled copy stops.
-    private static let copyCallback: copyfile_callback_t = { what, stage, copyState, _, _, context in
+    private static let copyCallback: copyfile_callback_t = { what, stage, copyState, source, destination, context in
         guard let context else { return COPYFILE_CONTINUE }
         let state = Unmanaged<CopyState>.fromOpaque(context).takeUnretainedValue()
         if state.isCancelled { return COPYFILE_QUIT }
+        // Going on past a file it can't copy leaves it out: noted, to copy
+        // again once the rest is done (`copyAgain`).
+        if stage == COPYFILE_ERR, what == COPYFILE_RECURSE_FILE || what == COPYFILE_COPY_DATA, let source, let destination {
+            state.fail(source: String(cString: source), destination: String(cString: destination), errno: errno)
+            return COPYFILE_SKIP
+        }
         if what == COPYFILE_COPY_DATA && stage == COPYFILE_PROGRESS || what == COPYFILE_RECURSE_FILE && stage == COPYFILE_FINISH {
             var copied: off_t = 0
             copyfile_state_get(copyState, UInt32(COPYFILE_STATE_COPIED), &copied)

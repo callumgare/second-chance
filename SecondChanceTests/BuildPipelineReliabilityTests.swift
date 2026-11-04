@@ -67,6 +67,29 @@ struct BuildPipelineReliabilityTests {
         #expect(FileManager.default.isWritableFile(atPath: copied.path))
     }
 
+    @Test("A file the disc copy can't read fails the copy, naming it, rather than being left out")
+    func discCopyUnreadableFile() async throws {
+        let root = try Self.temporaryDirectory()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644],
+                                                   ofItemAtPath: root.appendingPathComponent("disc/locked.cif").path)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let disc = root.appendingPathComponent("disc")
+        try FileManager.default.createDirectory(at: disc, withIntermediateDirectories: true)
+        try Data(repeating: 1, count: 1_000).write(to: disc.appendingPathComponent("readable.cif"))
+        let locked = disc.appendingPathComponent("locked.cif")
+        try Data(repeating: 2, count: 1_000).write(to: locked)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.path)
+
+        do {
+            try await DiscCopy.copy(from: disc, to: root.appendingPathComponent("copy"), total: nil) { _ in }
+            Issue.record("A copy missing locked.cif succeeded")
+        } catch let error as CocoaError {
+            #expect((error.userInfo[NSFilePathErrorKey] as? String)?.hasSuffix("locked.cif") == true)
+        }
+    }
+
     @Test("A cancelled disc copy stops with CancellationError")
     func discCopyCancelled() async throws {
         let root = try Self.temporaryDirectory()
