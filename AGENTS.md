@@ -80,15 +80,15 @@ touching — the rows say _when_ to read, not what is in them:
 
 | Doc                                                | Read it when                                                                                                                                                               |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/Modules/wine/Sources/WineKit/`: `Wine`, `WineCommand`, the registry, server and winetricks), or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the layer cache (`LayerStore`, `LayerKey`) and the Wine prefix it keeps, or updating a wrapp from itself (`UpdateWrappBuilder`, `UpdatePlanner`, `WrappLock`), or the hidden download source (`DownloadWrappBuilder`, `Downloader`) |
+| [docs/wrapp-build.md](docs/wrapp-build.md)         | You are touching how a wrapp gets built — the builders, the shared helper, `WrappBuildInput`, the bus events, headless mode, or the template and what a wrapp holds (`WrappLayout`, `WrappSettings`, its drive letters) — or how a Wine program is run (`Packages/Modules/wine/`: `Wine`, `WineCommand`, the registry, server and winetricks), or the runner that carries out a plan (`PlanRunner`, its core instructions and mounts, Second Chance's side in `AppRunner` and `BuildEventTranslator`, the steps builders hand over through `ModuleSteps`) and the step events it publishes, or how a game is recognised (`WindowsExecutable`, `MSISummary`), or the layer cache (`LayerStore`, `LayerKey`) and the Wine prefix it keeps, or updating a wrapp from itself (`UpdateWrappBuilder`, `UpdatePlanner`, `WrappLock`), or the hidden download source (`DownloadWrappBuilder`, `Downloader`) |
 | [docs/dev-cli.md](docs/dev-cli.md)                 | You are using or changing `./sc` or `wrapp-builder` (`Packages/WrappBuilderCLI/`) — their commands, picturing the apps' screens for review or the README (`sc screenshot`, `UIStateCatalog`), `--logs` output modes, `--debug` values, the GUI-session re-run over SSH, `--on` for remote Macs, the screen lease that keeps two runs off one Mac's screen (`sc lease`), test sessions that run games in background logins (`sc session`, the keep-alive), driving a program by hand (`sc puppet`), or the progress stream it reads from the app |
 | [docs/testing.md](docs/testing.md)                 | You are writing or running tests — the unit/integration split, the Rosetta requirement, which suites the unit run excludes, how WrappPuppeteer drives a game (and why it needs no permissions), how it clicks past each game's splash screens and how to record new ones, needles and scenarios (a bundle's `tests`), how the cursor and a fullscreen window's title bar affect what it captures, and its exit codes, launching games in a tart VM (`--vm`) and what a VM can't test, or reading a run's output |
 | [docs/logging.md](docs/logging.md)                 | You are adding or changing log lines, reading a log to find why a build or launch failed, or touching `Packages/WrappKit/Sources/WrappLogging/` — levels, where each log lives, the env vars that control them, and how subprocess output is classified |
 | [docs/releasing.md](docs/releasing.md)             | You are cutting a release or changing `sc release` — what it writes, how `CHANGELOG.md` and the release notes are generated (Claude Code's rewrite for players, the pause to edit them) and why not to edit the changelog by hand, its rollback on failure, the commit, tag and publish prompt, and the signing caveat |
 | [docs/updates.md](docs/updates.md)                 | You are touching how the app updates itself — Sparkle, `AppUpdater`, `SecondChance/Info.plist`, the appcast `sc release` publishes, or the key updates are signed with — how it moves itself into Applications when macOS runs it translocated (`AppMover`), or a failed wrapp's suggestion to update Second Chance (`NewerRelease`) |
 | [docs/program-bundles.md](docs/program-bundles.md) | You are adding or changing a game, or touching `Bundles/` — a program bundle's `manifest.yaml`, its JSON Schema, how bundles are read (YAML 1.2) and checked (ajv in JavaScriptCore), `Packages/WrappBuilder/`, the generated table of games (`GameInfoProvider+Bundles.swift`), or `sc bundle` |
-| [docs/wrappfile.md](docs/wrappfile.md)             | You are writing or changing a bundle's `Wrappfile`, or touching how one is parsed, checked or formatted (`WrappfileParser`, `WrappfileChecker`, `WrappfileFormatter`), which files a build may read (`allow-paths`, `HostPaths`), the instructions a module declares, `WrappfileTodayTests`, or the VS Code highlighting (`Tools/vscode-wrappfile`) |
-| [docs/modules.md](docs/modules.md)                 | You are touching `Modules/` — a module's `module.yaml` or its data, what it declares for a build (`build:`, `ModuleDeclarations`, `BuilderDeclarations`) (the wine module's prefix set-up, routine Wine errors), its releases and `sc module`, an engine's package and how it is prepared (`EnginePreparer`, `MachOPatch`, `sc engine prepare`), or the Swift generated from modules' data (`sc generate`); or what the nancy-drew module holds: Her patches' list, the AutoIt scripts, the .ini settings, the clean-exit log, WrappPuppeteer's needles |
+| [docs/wrappfile.md](docs/wrappfile.md)             | You are writing or changing a bundle's `Wrappfile`, or touching how one is parsed, checked or formatted (`WrappfileParser`, `WrappfileChecker`, `WrappfileFormatter`), which files a build may read (`allow-paths`, `HostPaths`), the instructions a module declares, `EMIT` and the strings Second Chance reads (`emit-vocabulary.yaml`, `EmitVocabulary`), `WrappfileTodayTests`, or the VS Code highlighting (`Tools/vscode-wrappfile`) |
+| [docs/modules.md](docs/modules.md)                 | You are touching `Modules/` — a module's `module.yaml` or its data, what it declares for a build (`build:`, `ModuleDeclarations`, `BuilderDeclarations`) (the wine module's prefix set-up, routine Wine errors), a module's executor and its package under `Packages/Modules/` (`ModuleExecutor`, `StepContext`, `WineExecutor`, `NancyDrewExecutor`), its releases and `sc module`, an engine's package and how it is prepared (`EnginePreparer`, `MachOPatch`, the wine engine's `build-tools`, `sc engine prepare`), or the Swift generated from modules' data (`sc generate`); or what the nancy-drew module holds: Her patches' list, the AutoIt scripts, the .ini settings, the clean-exit log, WrappPuppeteer's needles |
 | [docs/game-patches.md](docs/game-patches.md)       | You are touching the official Her Interactive game patches — the manifest, which patches apply to which game and edition, how they are downloaded, or how they are applied during a wrapp build                |
 | [docs/steam.md](docs/steam.md)                     | You are touching anything Steam: `Packages/SecondChanceKit/Sources/SecondChanceKit/Steam/`, the shared sign-in and what it is made of, the one-wrapp-at-a-time lock, installing a game through Steam, Steam's file formats or logs, or the real-Steam smoke test |
 | [docs/big-fish.md](docs/big-fish.md)             | You are touching anything Big Fish Games: `Packages/SecondChanceKit/Sources/SecondChanceKit/BigFish/`, the build (`BigFishWrappBuilder`, its AutoIt scripts), driving the Game Manager, its SKUs, what a Big Fish game installs and how it launches, or the Rosetta fault fix in Wine's 32-bit ntdll (`Packages/WrappBuilder/RosettaFaultFix/`, `RosettaFaultFix.swift`) that lets Armadillo-wrapped programs run, or the Big Fish integration suites and their test account |
@@ -213,15 +213,28 @@ needs, with nothing of Second Chance's own, one module each: `WrappLogging`
 (the swift-log handlers, `LogStore`, `LogContext`, `RunContext`),
 `ProcessKit` (`Blocking`, `ProcessList`, `ChildProcess`, `SystemLoad`,
 running and logging subprocesses), `WindowsFormats` (`WindowsExecutable`,
-`MSISummary`, `CopyProtection`, `GameGraphicsAPI`), `WineKit` (the Wine
-library) and `WrappFormat` (`WrappLayout`, `WrappSettings`,
-`WrappSource`). It depends only on swift-log and `GameCatalog`, so the
+`MSISummary`, `CopyProtection`, `GameGraphicsAPI`, `TextFile`),
+`WrappFormat` (`WrappLayout`, `WrappSettings`, `WrappSource`),
+`WrappModules` (`Composition`, path types) and `WrappModuleKit` (what a
+module's executor is written against: `ModuleExecutor`, `StepContext`,
+`BuildEvent`, `PlannedStep`, which `WrappBuilder` re-exports). It depends
+only on swift-log and `GameCatalog`, so the
 builder (`Packages/WrappBuilder/`, [docs/program-bundles.md](docs/program-bundles.md)),
 and its command-line tool, `wrapp-builder` (`Packages/WrappBuilderCLI/`,
 [docs/dev-cli.md](docs/dev-cli.md#wrapp-builder)), can use it without fetching
 Sentry, as anything depending on the `SecondChanceKit` package does. Code
 that names Second Chance, shows a window or knows Nancy Drew stays in
 `SecondChanceKit`.
+
+A module's Swift is a package of its own, `Packages/Modules/<name>/`, apart
+from its data in `Modules/<name>/` so editing Swift doesn't change the
+module's release: its **executor**, which carries out its instructions in a
+build, and its **kit**, what other processes use of it. The wine module's
+(`WineModule`) has `WineKit`, the Wine library, which `SecondChanceKit`
+depends on and re-exports, and `WineExecutor`, with winetricks, the
+in-process helpers' source and their build script; the nancy-drew module's
+has `NancyDrewExecutor`. An executor needs nothing of Second Chance's: it
+is written against `WrappKit`'s `WrappModuleKit` ([docs/modules.md](docs/modules.md#executors)).
 
 `Packages/GameCatalog/` is a package of its own: `GameInfo`, the engine and
 `GameInfoProvider`, with nothing but Foundation. Every app links it, and
@@ -235,7 +248,7 @@ The rules that keep it working:
   declaration public when the compiler asks, not ahead of time. A `public`
   function's default argument values must be public too. Tests reach the
   rest with `@testable import SecondChanceKit`, and `@testable import` of
-  the `WrappKit` module that declares it (`WineKit`, `ProcessKit`, …).
+  the package module that declares it (`ProcessKit`, `WineKit`, …).
 - **`SecondChanceKit` never depends on reporting.** When it needs to know
   something only reporting knows, reporting tells it (as
   `FailureReporter.start` sets `CrashMarker.sentryHandlesCrashes`).
@@ -288,6 +301,12 @@ The rules that keep it working:
   changed in its bundle, then `sc generate` regenerates the table;
   never edit `GameInfoProvider+Bundles.swift` by hand
   ([docs/program-bundles.md](docs/program-bundles.md)).
+- **`PlanRunner`** (`Packages/WrappBuilder/Sources/WrappBuilder/Runner/`):
+  carries out a plan, each module's step through its module's executor and
+  the core's itself, so any plan that checks can be built by any source. The
+  download source builds through it; the other builders hand it the steps
+  an executor carries out (`ModuleSteps`) until they do too
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)).
 - **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
   wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
   `dosbox`, `steam` or `big-fish`) and the services started before it — read from a wrapp's
@@ -297,8 +316,9 @@ The rules that keep it working:
   each process — `RuntimeModule`s in the wrapp (`WrappTemplate/Modules/`),
   `TestModule`s in WrappPuppeteer (`WrappPuppeteer/Modules/`),
   in the build, its `module.yaml`'s `build:` declarations
-  ([docs/modules.md](docs/modules.md#what-a-module-declares)) and a
-  `BuildModule` that prepares its engine (`Packages/WrappBuilder`) — so the launch code
+  ([docs/modules.md](docs/modules.md#what-a-module-declares)), its executor
+  (`Packages/Modules/<name>/`) and a `BuildModule` that prepares its engine
+  (`Packages/WrappBuilder`) — so the launch code
   asks the module that would know rather than branching on an engine.
   Reports and the build's events still carry today's engine name as
   `engine` (`Composition.engineTag`), so dashboards and recorded event
@@ -443,8 +463,8 @@ direct assignment.
   module's `prefix` stage's steps (`Modules/wine/stages/prefix`), and
   winetricks, so changing the stage makes a fresh prefix by itself. The Swift
   that carries it out isn't a file the key can read: raise
-  `WineBuild.prefixCodeRevision` when `WineManager.makeWinePrefix` or
-  `WineSteps` changes what it makes
+  `WineBuild.prefixCodeRevision` when `WineManager.makeWinePrefix` or the
+  wine module's executor (`WineExecutor`) changes what it makes
   ([docs/wrapp-build.md](docs/wrapp-build.md#the-layer-cache)).
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)
@@ -586,7 +606,7 @@ direct assignment.
   build settings can't express, and Xcode merges it with the generated keys.
   Other keys still go in build settings. The file is excluded from the
   target's synchronized folder, so it isn't copied in as a resource.
-- **Bundled resources**: the `WrappTemplate.app` template (the launcher alone), `winetricks` and AutoIt are bundled. Test
+- **Bundled resources**: the `WrappTemplate.app` template (the launcher alone), `winetricks` (the wine module's package's resource, `WineModule_WineExecutor.bundle`) and AutoIt are bundled. Test
   that features work with bundled paths, not just system-installed equivalents.
 - **Engines aren't bundled.** Wine and ScummVM are fetched from their makers and prepared the first time a build
   on that Mac needs one, then kept in the engine store, and each wrapp holds its own copy
@@ -610,9 +630,10 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
 
 - **Unit tests** live in `SecondChanceTests/`, using Swift Testing, except
   those that need neither app, which live in the package beside the code
-  (`Packages/WrappKit/Tests/WrappKitTests/` and
-  `Packages/SecondChanceKit/Tests/SecondChanceKitTests/`: parsers, process
-  listings, line handling) and run with `swift test`, in seconds and with no
+  (`Packages/WrappKit/Tests/WrappKitTests/`,
+  `Packages/SecondChanceKit/Tests/SecondChanceKitTests/` and each module's
+  package's, `Packages/Modules/<name>/Tests/`: parsers, process listings,
+  line handling) and run with `swift test`, in seconds and with no
   Xcode build; `sc test unit` runs both. Put a new test there when it can.
   `GameDetectorTests` is the model to follow (35+ parameterized tests). A new
   suite runs in `sc test unit` automatically — the unit run excludes a short

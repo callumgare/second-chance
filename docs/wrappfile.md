@@ -80,7 +80,8 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 | `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `cache`, `secret`, `bind`, `fetch`. `--env` is the only way a value reaches a program's environment. |
 | `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files: from another stage or an input, or without `--from`, a bundle's or module's file. |
 | `ADD --checksum=sha256:<hash> [--unpack=zip --member=<file> [--extract]] <url> <dest>` | A download, found in the download cache first. |
-| `MOVE`, `REMOVE`, `EDIT <file> --ini=…` / `--from-data=<table>` `[--keys-must-exist]` | File changes Second Chance makes itself. With `--keys-must-exist`, each setting must already be in the file, or the step fails naming those that aren't; without it, a missing one is added. The older `--must-exist` is refused, with a message saying so. |
+| `MOVE`, `REMOVE`, `EDIT <file> --ini=<section>.<key>=<value>… [--keys-must-exist] [--create]` | File changes the builder makes itself. `EDIT` changes each setting in its section, or adds it; with `--keys-must-exist`, each setting must already be in the file, or the step fails naming those that aren't. The file must exist unless the step says `--create`. The older `--must-exist` is refused, with a message saying so; `--from-data` is gone, replaced by `NANCY-DREW.CONFIGURE-INI`. |
+| `EMIT "<string>"` | A string for whoever runs the build, passed on unread as the build reaches it: not a step ([below](#emit)). |
 | `LAUNCH [--fallback=<program>] [--env NAME=<value>]… <program> [<argument>…]` | How the app starts its program ([below](#the-launch-volumes-and-app)). |
 | `VOLUME [--<module>.<option>]… <volume> <location>`, `VOLUME --remove <volume>` | Where the program sees one of the manifest's volumes. |
 | `APP [--default-id=<id>] [--name=<name>] [--icon=/Resources/<name>.icns]` | What the app is: the id it gets when the build is given none, its name, and its icon ([below](#the-launch-volumes-and-app)). It replaces `ICON`, which is refused. |
@@ -108,8 +109,54 @@ Modules' instructions, as each module's `module.yaml` declares them
 | `BIG-FISH.SIGN-OUT` | Signs the Game Manager out, or keeps a person's sign-in for the next build, then takes the account out of the prefix. |
 | `STEAM.REMOVE` | Takes Steam away: the game moved to where `STEAM.INSTALL --into` linked it, then Steam's folders and the client stage's registry settings removed. |
 | `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--creates=<program>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
+| `WINE.MOUNT <folder> <drive> [--cdrom]` | Gives a folder in the prefix a drive letter, kept for later steps and at launch; `--cdrom` makes it a CD drive. |
+| `WINE.HELPERS`, `WINE.PREFIX` | The wine module's `setup` steps: the in-process helpers laid in, and wineboot's prefix. Declared, and carried out by its executor, but nothing plans them yet ([modules.md](modules.md#what-a-module-declares)). |
+| `NANCY-DREW.CONFIGURE-INI <folder>` | Gives every `.ini` in the game's folder what the nancy-drew module's `ini.yaml` says (LCD mode, saves in Documents), each written back in the encoding it came in. `DO nancy-drew.configure-ini --into=…` is how a stage says it. |
 
 An input is always written `${input.<name>}` where an instruction takes one.
+
+## EMIT
+
+`EMIT "<string>"` hands its caller a string, which the builder never reads.
+It is how a Wrappfile tells whoever runs the build where it has got to,
+without the builder knowing what the words mean.
+
+```text
+EMIT "second-chance.phase.installing-game"
+INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir}
+```
+
+- **It isn't a step.** It is planned with its stage (`PlannedStage.emits`),
+  each kept with the index of the step it comes before, so it is in no
+  step's key and keeps no layer: adding one changes no cached layer.
+- **It is planned as steps are**: `${…}` substituted, expanded where a
+  function is `DO`ne, and dropped with an `IF` branch that isn't taken.
+- **The runner emits it as the build reaches it**, before the step after it,
+  or at the stage's end for one after the last
+  ([wrapp-build.md](wrapp-build.md#the-runner)). `wrapp-builder build`
+  prints each as it is.
+
+**Second Chance's strings** are listed in
+`SecondChance/Resources/emit-vocabulary.yaml`: those starting
+`second-chance.`, each a pattern with its placeholders' values.
+
+| String | Means |
+| --- | --- |
+| `second-chance.phase.<phase>` | The build has reached a phase (`setting-up`, `copying-installer`, `installing-game`, `configuring`): the progress screen's step and headline. A phase never goes back. |
+| `second-chance.substep.<key>` | The next step's substep, in Second Chance's own words for the key (`display`, `graphics`, `disc`). |
+| `second-chance.progress.<done>/<total>` | How far the current step has got, two numbers. |
+
+`sc generate` makes `SecondChance/Models/EmitVocabulary+Generated.swift`
+(`SecondChanceEmits`) from the YAML, as the app reads no YAML, and a test
+fails when it is stale. `EmitVocabulary`, in the builder, checks a plan
+against a vocabulary: a string with its prefix that no pattern matches is
+refused, and so is an ordered value (a phase) that goes back; a string
+without the prefix is someone else's and never checked. `sc bundle check`
+and a unit test (`EmitVocabularyTests`, in `Tools/sc`) hold every shipped
+bundle's editions to Second Chance's.
+
+No shipped bundle uses `EMIT` yet: the wine module's prefix stage still
+names its text with `--progress=<key>` until it does.
 
 ## Values
 
@@ -271,8 +318,9 @@ app keeps no Wine.
 
 A module can add to the core's instructions, in any stage that has it
 (through `USE` or `FROM`), with nothing else written. What it adds, it
-declares in its `module.yaml`; for now only a module whose Swift today's
-builders know can add anything, since nothing else would carry it out.
+declares in its `module.yaml`; for now only a module with an executor
+([modules.md](modules.md#executors)), or whose Swift today's builders know,
+can add anything, since nothing else would carry it out.
 
 | Kind | Written as | Example |
 | --- | --- | --- |
@@ -387,7 +435,7 @@ was written:
 ```text
 FROM prefix AS disc   [installer, nancy-drew, wine]
   INSTALLER.RUN --answer-file=bundle:assets/disc.iss --from=input:disc-1 --into=wine:C:/…    # Wrappfile:15
-  EDIT --from-data=ini wine:C:/…/*.ini    # nancy-drew/functions/configure-ini:9 from Wrappfile:17
+  NANCY-DREW.CONFIGURE-INI wine:C:/…    # nancy-drew/functions/configure-ini:8 from Wrappfile:17
 ```
 
 `wrapp-builder plan <bundle folder>` prints the same, with `--target` for a

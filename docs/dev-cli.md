@@ -100,7 +100,8 @@ privacy prompts (which Steam waits on) aren't addressed to `sc`; see
 [steam.md](steam.md).
 
 `sc generate` writes the Swift made from `Bundles/` and `Modules/`, and
-compiles each module's Icon Composer icons (`assets/<name>.icon`) to the
+from Second Chance's `EMIT` strings (`SecondChance/Resources/emit-vocabulary.yaml`,
+[wrappfile.md](wrappfile.md#emit)), and compiles each module's Icon Composer icons (`assets/<name>.icon`) to the
 `.icns` a Wrappfile's `APP --icon` names (`xcrun actool`, which only Xcode has, so
 the `.icns` is checked in).
 
@@ -121,10 +122,11 @@ builds the game's free trial instead, signed out, with no account needed
 ([big-fish.md](big-fish.md#testing)).
 
 **Bundles.** `sc bundle check [<folder>…]` checks program bundles against the
-manifest schema, `sc bundle list [--where <path>=<value>]` lists them by any
-manifest field, and `sc generate` writes the Swift made from bundles and
-modules' data: GameCatalog's table of games, and the wrapp's routine Wine
-errors ([program-bundles.md](program-bundles.md), [modules.md](modules.md)).
+manifest schema, and holds every edition's `EMIT`s to the strings Second
+Chance reads ([wrappfile.md](wrappfile.md#emit)), `sc bundle list [--where
+<path>=<value>]` lists them by any manifest field, and `sc generate` writes
+the Swift made from bundles and modules' data: GameCatalog's table of games,
+the wrapp's routine Wine errors, and the `EMIT` strings Second Chance reads ([program-bundles.md](program-bundles.md), [modules.md](modules.md)).
 `sc module check [<id>…]` checks modules and their recorded releases, and `sc
 module release <id>` records one ([modules.md](modules.md#releases)). `sc engine prepare <id>
 [--version <v>] [--into <folder>]` prepares an engine from its package's
@@ -324,8 +326,8 @@ it, and shellcheck over `./sc` and the build phases' scripts (`.shellcheckrc`), 
 ## wrapp-builder
 
 `wrapp-builder` is the builder's own command-line tool, in its own package,
-`Packages/WrappBuilderCLI/`: it checks, plans and formats Wrappfiles, and
-looks after modules and engines, knowing nothing of Second Chance's, so it
+`Packages/WrappBuilderCLI/`: it checks, plans, formats and builds
+Wrappfiles, and looks after modules and engines, knowing nothing of Second Chance's, so it
 can move with the builder. Its commands are in the library
 `WrappBuilderTool`, which `sc` links, so `sc module`, `sc engine` and `sc
 lint`'s format check are the same code. Run it from the repo root:
@@ -340,6 +342,7 @@ swift run --package-path Packages/WrappBuilderCLI wrapp-builder fmt --check Bund
 | --- | --- |
 | `check <bundle folder>` | Parses and checks the bundle's manifest and Wrappfile, planning every edition, without building it ([wrappfile.md](wrappfile.md#checking)). |
 | `plan <bundle folder> [--target <stage>] [--edition <id>] [--input <name>=<value>]… [--allow-path <folder>]…` | Prints what building a stage would run, each step with where it was written ([wrappfile.md](wrappfile.md#plans)). `--target` picks a stage other than the edition's; `--edition` whose inputs it's given (by default, the first whose target it is); `--allow-path` a folder of the bundle's it may read beside its manifest's `allow-paths`, or `*` for any path, with a warning ([wrappfile.md](wrappfile.md#what-a-build-may-read)). |
+| `build <bundle folder> --out <app> [--target <stage>] [--edition <id>] [--input <name>=<path>]… [--app-id <id>] [--template <app>] [--allow-path <folder>]… [--events plain\|json]` | Builds a stage into an app with the runner ([wrapp-build.md](wrapp-build.md#the-runner)) and the executors the tool has, which are none yet, so it refuses a plan with any module's instruction. Inputs are paths, by name. `--app-id` is the app's id over the Wrappfile's `APP --default-id`; `--template` an app whose files are laid in first (the launcher), without which the result holds what the steps made and isn't an app that runs. `--events` prints the build's events a line each, or one JSON object a line; `EMIT` strings are printed as they are. A step that asks something asks on the terminal, and fails without one. |
 | `fmt <file or folder>… [--check] [--migrate]` | Writes Wrappfiles in the one style, in place, a folder searched for bundles' `Wrappfile`s and modules' stages and functions ([wrappfile.md](wrappfile.md#style)). `--check` changes nothing, names each file that isn't formatted, and fails if any isn't; `--migrate` rewrites syntax that has changed first. |
 | `module check [<id>…]`, `module release <id>` | Checks modules against the schema and their recorded releases, and records one's files as its release ([modules.md](modules.md#releases)). |
 | `engine prepare <id> [--version <v>] [--into <folder>]`, `engine fetch [<id>…] [--version <v>]`, `engine check` | Prepares an engine and prints its tree's hash, puts engines in this Mac's engine store, and checks each engine's downloads are still there ([modules.md](modules.md#engine-packages)). |

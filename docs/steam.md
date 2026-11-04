@@ -75,8 +75,8 @@ owns, then the edition's, recognising each by its shape. In order:
 2. **Make the wrapp and install the Steam client into it**, as the client
    stage says — the template, the cached prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
    `~/Library/Caches/SecondChance/`). Not `winetricks steam`: it installs
-   Microsoft's core fonts first, which needs `cabextract`, which isn't
-   bundled, and Steam doesn't need them under the bundled Wine. Then lay the
+   Microsoft's core fonts first, which Steam doesn't need under the bundled
+   Wine. Then lay the
    cached updated client
    over it (`SteamClientCache`, `~/Library/Caches/SecondChance/steam-client`),
    so Steam's own update (most of a gigabyte) is downloaded once, not per

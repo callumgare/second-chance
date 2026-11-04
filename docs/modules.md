@@ -5,8 +5,10 @@ A module is what a program needs beyond its own files: an engine to run it
 (Nancy Drew's installers and patches). Each is a folder in `Modules/`, of data,
 and may name Swift compiled into Second Chance (`native:`). The Swift is
 described in [wrapp-launch.md](wrapp-launch.md#modules) (what each module does
-in the wrapp), [testing.md](testing.md) (in WrappPuppeteer) and
-`Packages/WrappBuilder/Sources/WrappBuilder/Modules/` (in a build); this doc
+in the wrapp), [testing.md](testing.md) (in WrappPuppeteer),
+`Packages/WrappBuilder/Sources/WrappBuilder/Modules/` (preparing its engine)
+and [below](#executors) (its executor, which carries out its instructions in a
+build, in a package of its own under `Packages/Modules/<name>/`); this doc
 covers the data.
 
 ```text
@@ -23,16 +25,20 @@ Modules/
 
 `installer`, `disc`, `her-download` and `big-fish` are, so far, a `module.yaml`
 naming their Swift and declaring the instructions a Wrappfile gives them
-([wrappfile.md](wrappfile.md)), which today's builders carry out.
+([wrappfile.md](wrappfile.md)), which today's builders carry out. The wine and
+nancy-drew modules' instructions are carried out by their executors
+([below](#executors)).
 
 What a module adds to a build (its instructions, and the options and mount
 fields it adds to the core's) is data, its `module.yaml`'s `build:`
 ([below](#what-a-module-declares)). Its path types (`wine:`, `scummvm:`) are
 still Swift, in `PathTypeRegistry` in WrappKit, since the app reads them too
-([wrappfile.md](wrappfile.md#what-modules-add)). A module's Swift
-(`BuildModule`) now only prepares its engine, for a module with one. An
-addition needs something to carry it out, so for now only a module whose
-Swift today's builders know can declare any. `sc module check` and the unit
+([wrappfile.md](wrappfile.md#what-modules-add)). A module's `BuildModule`
+only prepares its engine, for a module with one; its instructions are
+carried out by its executor ([below](#executors)) or, until it has one, by
+today's builders. An addition needs something to carry it out, so for now
+only a module with an executor, or whose Swift today's builders know, can
+declare any. `sc module check` and the unit
 tests refuse two modules registering one path type, a type named with one
 letter, and two module ids that differ only in case.
 
@@ -46,7 +52,7 @@ where a build reads it, and so does WrappPuppeteer, for its needles.
 format: 1
 id: "wine"                     # a shipped module's is one name; one someone adds is namespaced
 release: 1                     # our fixes beneath its versions; counts up
-native: "wine"                 # the Swift compiled into Second Chance it is
+native: "wine"                 # its Swift: Packages/Modules/wine, compiled into Second Chance
 versions:                      # what this release provides, as a bundle names it with @
   - version: "10.0_8"
     package: { … }             # an engine's: what it is made from (below)
@@ -124,9 +130,9 @@ build:
   any number from 1; none when left out), and what each is (`roles`, in
   order, the last going for every argument after it).
 - **`layer: suggested`**, **`may-ask`** and **`reads-data`** (the module's
-  data tables its Swift reads, which would go into its steps' keys) are
-  read and kept with the instruction, for the builder to come. Nothing acts
-  on them yet.
+  data tables its Swift reads, which would go into its steps' keys:
+  `NANCY-DREW.CONFIGURE-INI`'s `reads-data: [ini]`) are read and kept with
+  the instruction, for the builder to come. Nothing acts on them yet.
 - **`core-options`** are the options it adds to core instructions, by
   instruction, in a stage that has the module: the wine module's `LAUNCH
   --wine.graphics`, the dosbox module's `VOLUME --dosbox.overlay`, the steam
@@ -139,13 +145,16 @@ build:
   which a Wrappfile names as `module:<id>:/<path>`: the installer module's
   `autoit`, AutoIt, which Second Chance carries.
 - **`setup`** lists the instructions `USE` would plan in a tree that doesn't
-  have the module yet, in order, each one of its own instructions. No
-  shipped module has any, and nothing plans them yet.
+  have the module yet, in order, each one of its own instructions: the wine
+  module's `[HELPERS, PREFIX]`, the in-process helpers laid in and
+  wineboot's prefix. Nothing plans them yet; `WineManager` makes a prefix
+  itself.
 
-Today's builders carry the declared instructions out, so a declaration
-could promise what no builder does. `BuilderDeclarations`
+Today's builders and the executors carry the declared instructions out, so
+a declaration could promise what nothing does. `BuilderDeclarations`
 (`SecondChance/Builders/BuilderDeclarations.swift`) lists, by module, the
-instructions the builders carry out and the options each reads, and
+instructions the builders and executors carry out and the options each
+reads, and
 `ModuleDeclarationTests` holds every shipped module's `build:` to it: every
 instruction declared is carried out, none is carried out that isn't
 declared, and every option declared is read, so none is accepted and
@@ -153,6 +162,63 @@ ignored. A change to what a builder carries out changes both. An option the
 builder accepts only in certain forms checks them and refuses the rest:
 `STEAM.INSTALL`'s mounts must be the shared sign-in and the kept client
 (`SteamWrappBuilder.checkMounts`).
+
+## Executors
+
+A module's part in a build is its **executor**: a `ModuleExecutor`, which
+carries out the instructions its module declares, and only those
+(`handles`). Executors are written against `WrappModuleKit`, a library of
+`Packages/WrappKit` that `WrappBuilder` re-exports, and need nothing of
+Second Chance's, so one compiled into Second Chance and one a module
+someone wrote would be written the same way. The runner hands each step to
+its module's executor ([wrapp-build.md](wrapp-build.md#the-runner)).
+
+- **`run(_:in:)`** carries out a `PlannedStep` (every value substituted,
+  every path in full form) in the step's `StepContext`.
+- **`runProgram(_:in:)`** runs a program of the module's path type for
+  `RUN` (`wine:C:/setup.exe`), given as a `ProgramRun` (the program, its
+  arguments, `--env` and a timeout), returning its exit code.
+- **`keyInputs(for:in:)`** names what a step's key needs beyond its text
+  (`KeyInputs`: a disc's listing, an installer's fingerprint), and
+  **`checkpoint`** makes the tree safe to keep as a layer, nothing running
+  in it. Nothing calls either yet.
+- **`finish`** ends whatever the executor started, and is called at the end
+  of every build, on failure and cancel too.
+- A failure is a `StepFailure`: `.recipe` for what the Wrappfile or module
+  says can't be done, `.failed` for a step that was tried and failed.
+
+An executor is made once per build. It may keep what lasts between steps (a
+running Steam), but a step's only results are its tree and its events, so a
+later step never reads anything it kept. The `StepContext` is all it uses:
+the step's `tree` (laid out as a wrapp, so `WrappLayout(app:)` works on it)
+and another stage's by name, a file the plan reads by its full form, an
+input by name (resolved only when asked for, so disc 2 is asked for when a
+step needs it, through an `InputProvider`), a file of its own module's
+folder (`moduleFile`, for what its `reads-data` says), the emitter (`emit`
+for an `EMIT`-like string, `substep` for what the step is doing), `ask` for
+a `StepQuestion` (`confirmStepFailure`, `choose`, `confirm`) and its
+`StepAnswer`, `runProgram` for running a program as `RUN` would, `fetch`
+for a download by URL and hash, and the build's `log`.
+
+**The Swift is a package under `Packages/Modules/<name>/`**, apart from the
+module's data in `Modules/<name>/`, so editing Swift doesn't change the
+module's release. Its `module.yaml`'s `native:` names it. A package has the
+module's executor and, where other processes need some of the module's
+Swift, its **kit**:
+
+| Package | Products | Has |
+| --- | --- | --- |
+| `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS` and `MOUNT`, runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also declares the `setup` steps `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's), which nothing plans yet. Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
+| `Packages/Modules/nancy-drew` (`NancyDrewModule`) | `NancyDrewExecutor` | Carries out `NANCY-DREW.CONFIGURE-INI <folder>`: every `.ini` in the folder given what the module's `ini.yaml` says, read through `moduleFile`, each file written back in the encoding it came in (`TextFile`, in `WindowsFormats`). |
+
+Second Chance's builders have the shipped executors through `ModuleSteps`
+(`ModuleSteps.executors()`), which gives the wine executor the wine engine's
+`build-tools` ([below](#engine-packages)) and each executor its module's
+folder in the app's resources. `wrapp-builder build` has none yet, so it
+refuses a plan with any module's instruction. Each package's
+`Package.swift` mirrors the app targets' Swift settings, as every package
+does, and its tests run with `swift test --package-path
+Packages/Modules/<name>`, and in `sc test unit`.
 
 ## Engine packages
 
@@ -189,6 +255,13 @@ builds. Wine's:
   padding (`MachOPatch`), as `install_name_tool` would, which only comes
   with Xcode's tools. Every other Wine program finds the frameworks through
   `DYLD_FALLBACK_LIBRARY_PATH` (`Wine`).
+- The wrapper template's `cabextract` is kept in `build-tools/`
+  (`EngineTree.buildTools`), for winetricks, which needs it for any verb
+  that unpacks a Microsoft redistributable (directmusic, d3dx9, vcrun). It
+  is left out of the engine's file list and never installed into a wrapp
+  (`EngineInstall`); a build puts it first on winetricks' `PATH`
+  ([wrapp-build.md](wrapp-build.md#running-wine)). It is in the prepared
+  hash, as the rest of the tree is.
 - Wine's 32-bit `ntdll.dll` gets the Rosetta fault fix (`RosettaFaultFix`),
   which lets programs wrapped in Armadillo, as Big Fish's games are, run
   under Rosetta ([big-fish.md](big-fish.md#armadillo-under-rosetta)).
@@ -258,14 +331,14 @@ none.
 
 | Module | Data | Read by |
 | --- | --- | --- |
-| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and `WineSteps`, which carries the steps out; Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
+| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
 | `steam` | `stages/client`: Steam's client in the wine module's prefix, ⌘ acting as Ctrl in its windows (`FROM --module=steam@1 client`); `functions/install`, the game installed by Steam with the shared sign-in, then signed out (`DO steam.install`) | `SteamWrappBuilder`, which carries the client stage out before the game is known and the edition's steps after ([steam.md](steam.md#building)) |
 | `big-fish` | `stages/manager`: the Game Manager in the wine module's prefix, from its installer pinned by its hash, ⌘ acting as Ctrl in its window (`FROM --module=big-fish@1 manager`); `functions/install`, the game installed and activated, then the account taken out (`DO big-fish.install`); `functions/cnc-ddraw`, cnc-ddraw hooking the functions themselves, as Armadillo rebuilds a game's imports (`DO big-fish.cnc-ddraw`) | `BigFishWrappBuilder`, which carries the manager stage out before the game is known and the edition's steps after ([big-fish.md](big-fish.md#the-build)) |
 | `wine`, `scummvm`, `dosbox` | `module.yaml`'s `runtime: { save-warning }`: whether their programs get the save warning before they start (Wine's do) | the wrapp (`ModuleID.showsSaveWarning`), compiled in by `sc generate` |
 | `steam` | `routine-errors.yaml`: what Steam logs as it starts | the same, for a game launched through Steam |
 | `nancy-drew` | `patches.json`: Her Interactive's patches ([game-patches.md](game-patches.md)) | `GamePatchCatalog`, and `setup-game-patches.sh`, which stages their archives in the app's download cache |
-| `nancy-drew` | `ini.yaml`: what every `.ini` in a game's folder has changed once it's installed (LCD mode, saves in Documents) | `WrappBuildHelper`, configuring the wrapp |
+| `nancy-drew` | `ini.yaml`: what every `.ini` in a game's folder has changed once it's installed (LCD mode, saves in Documents) | the nancy-drew module's executor, for `NANCY-DREW.CONFIGURE-INI` (`DO nancy-drew.configure-ini`) |
 | `nancy-drew` | `clean-exit-log.yaml`: the log Her's later engine writes, and its clean-exit line | the wrapp (`HerEngineLog`), compiled in by `sc generate` |
 | `nancy-drew` | `assets/*.au3`: the AutoIt scripts that click through an installer that won't run silently, and patchers with no silent mode | `GameInstallerRunner` |
 | `nancy-drew` | `needles/`: the splash screens many games share and the main menu's Exit, and `scenarios/quit-from-menu.yaml`, the test every game's bundle names ([testing.md](testing.md#scenarios)) | WrappPuppeteer (`TestData`), from the source tree or its bundle's copy |

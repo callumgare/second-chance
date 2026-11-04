@@ -65,9 +65,9 @@ other builders are the same shape with less in the middle.
 | 4 | `helper.createTemporaryWrappPath()`, `ensureRoomToBuild` (the build fails at once, as `notEnoughSpace`, unless twice each disc plus 3 GB is free), then `createBaseWrapp` clones `WrappTemplate.app` and installs Wine, which runs the installer, and the engine the game runs, from the engine store ([the template](#the-template)) | `.progress(.settingUpWrapp)` |
 | 5 | `copyGameDisks` copies `disk-1` in one pass (`DiscCopy`, through `copyfile`): contents only, so no extended attributes (which would fail codesign) and none of a CD's read-only modes (which left copies nothing could delete). A file `copyfile` can't read it would leave out and carry on, so each is copied again once the rest is done, and one that still fails fails the copy, naming it: Sea of Darkness's installer otherwise stopped at the missing file. Cancelling stops it, and the bytes copied show on the progress bar, full once it's done (the total is how full the disc is, which counts its file system too). Meanwhile, one Wine run marks D: on as CD drives (`DriveMarking`, `WineDrives.setKind(_:of:)` with several letters): each run starts Wine's session afresh, and marking each drive after the copy left the screen still for 8 to 18 s a drive; a wait that's left once the copy is done says "Getting the discs ready". The copies stay in the finished wrapp, mounted as CD drives, because some games check for their disc before they will play | `.progress(.copyingInstaller)`, `.stepProgress` |
 | 6 | Disk 2, only when `gameInfo.diskCount > 1`, and only now: a Mac has one drive, so disc 1 has to be copied before it comes out. Then `disk-2` and `disk-combined` | `.isoMounted`, `.disksResolved` |
-| 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `WINE.KEEP-DISCS` is steps 5–6; `INSTALLER.RUN --from=${input.disc-1}` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (AutoIt with the script `--automation` names), and where the installer put the game somewhere other than its `--creates` says, links the expected folder and program to what it made ([below](#what-a-step-says-is-what-happens)); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each patch's steps are carried out as they say (`runPatchStep`, [game-patches.md](game-patches.md#wrapp-build-time-applying)); the stage's `DO nancy-drew.configure-ini` (`EDIT --from-data=ini`) sets the game's .ini files, and only then. A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
+| 7 | The rest follows the game's bundle: the plan of its disc edition (`ShippedBundles.plan`, [wrappfile.md](wrappfile.md#plans)), each step run as the disc flow always has. `WINE.KEEP-DISCS` is steps 5–6; `INSTALLER.RUN --from=${input.disc-1}` puts the plan's answer file in place as `setup.iss` and runs `installGameWithWine` (AutoIt with the script `--automation` names), and where the installer put the game somewhere other than its `--creates` says, links the expected folder and program to what it made ([below](#what-a-step-says-is-what-happens)); a ScummVM game's data is "installed" (`installGameWithScummVM`) before its first patch or its `EXPORT`; each patch's steps are carried out as they say (`runPatchStep`, [game-patches.md](game-patches.md#wrapp-build-time-applying)); the stage's `DO nancy-drew.configure-ini` (`NANCY-DREW.CONFIGURE-INI`, the nancy-drew module's executor's, through `ModuleSteps`) sets the game's .ini files, and only then; the wine module's steps and the core's `EDIT --ini` go to `ModuleSteps` too ([the runner](#the-runner)). A step the disc flow can't run fails the build (`buildRecipeProblem`) | `.progress(.installingGame)`, `.engineRouted`, `.installerResolved`, `.gameExeDetected`, then `.patchApplied` / `.patchFailed` per patch |
 | 8 | `cleanupUnusedEngine` takes out each engine the composition doesn't run (`EngineInstall.remove`): Wine, for a ScummVM game | — |
-| 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` (and the game INI, when the plan didn't) | `.progress(.configuringWrapp)`, `.wrappConfigured` |
+| 9 | `configureWrapp` rewrites `Info.plist` / `AppSettings.plist` | `.progress(.configuringWrapp)`, `.wrappConfigured` |
 | 10 | `helper.finalize` — take the quarantine off, sign, ask where to save (`getSaveLocation`), move it there (`saveWrapp`) | `.signed`, `.progress(.savingApp)`, `.completed` |
 | 11 | Unmount ISOs; launch if requested | — |
 
@@ -327,6 +327,101 @@ place of the step's fixed share of the build, and its figures ("1.2 GB of
 the step's `.progress`. `ProgressFileWriter` writes it as a `step-progress`
 record, which `sc wrapp build` shows after the stage.
 
+A build carried out by the runner ([below](#the-runner)) also says the
+plan's shape as it goes: `.stepStarted(name:keyword:)` and
+`.stepDone(name:)` around each step, `.stepSkipped(name:message:)` for one
+that failed and was carried on without (`--on-failure=ask`), and
+`.stepRestored(name:keyword:)` for one restored from a layer, which the
+runner doesn't publish yet, as it keeps no layers. A step's name
+is its `--name`, or where it was written (`Wrappfile:12`); its keyword is
+the instruction as planned (`WINE.KEEP-DISCS`, `COPY`). `.emitted(String)`
+is an `EMIT`'s string, as it was ([wrappfile.md](wrappfile.md#emit)).
+`AutomationBridge` writes them as `wrappBuild.stepStarted`, `stepRestored`,
+`stepDone`, `stepSkipped` and `emitted`.
+
+## The runner
+
+`PlanRunner` (`Packages/WrappBuilder/Sources/WrappBuilder/Runner/`) carries
+out a plan, so any plan that checks can be built by any source. The download
+source builds through it whole (`DownloadWrappBuilder`); the other builders
+still carry out their plan's steps themselves, and hand it those a module's
+executor carries out, one at a time (`ModuleSteps`, below).
+
+- **Stages in order, steps in order.** Until each stage has a tree of its
+  own, every stage shares one tree, the wrapp being built, so `COPY
+  --from=<stage>` reads that tree too.
+- **A module's stage the runner can't run itself** (one with a step no
+  executor it was given carries out: the wine module's prefix, which
+  `WineManager` makes) goes to the caller's `moduleStage` hook, with the
+  tree.
+- **Each module step goes through its module's executor**
+  ([modules.md](modules.md#executors)); a step nobody carries out fails,
+  naming it (`nothing carries out WINE.DRIVES in this build`). The core's
+  instructions it carries out itself (`CoreInstructions`): `COPY`, `ADD`
+  (fetched through the download cache, its bytes so far as the step's
+  progress), `EDIT --ini` (with `--create` and `--keys-must-exist`), `MOVE`,
+  `REMOVE`, and `RUN`, whose program goes to the executor of its path
+  type's module.
+- **A step's mounts** (`Mounts`) are `bind`, a file of the bundle's or a
+  module's, and `fetch`, a download by its hash: each cloned into place at
+  its `target` before the step and removed after, whatever happens. A target
+  that already exists is an error, so a mount never hides a file.
+- **`--on-failure=ask`**, on any step, asks the caller
+  (`StepQuestion.confirmStepFailure`) whether to carry on without it; a yes
+  publishes `stepSkipped`, a no fails the build.
+- **Every executor's `finish`** is called at the end, on failure and cancel
+  too, so whatever one started (a running Steam) ends.
+- **Off the main actor**: `run(in:)` is `@concurrent`, whoever calls it.
+
+`RunnerConfiguration` is what the caller gives it: the executors by module
+id, the inputs (`InputProvider`; `GivenInputs` for ones already in place),
+the emitter, who answers questions, how a download is fetched, the files the
+modules' Swift provides, the `moduleStage` hook, and each module's folder.
+Events reach the caller in the order they were emitted, from whichever
+thread, through `OrderedEmitter`, whose `finish` waits for every one to be
+handled.
+
+The runner speaks only the builder's events (`BuildEvent`, in
+`WrappModuleKit`): a step started, restored, done or skipped, an `EMIT`'s
+string, instructions for the person, a step's progress and substep, and a
+module's own. Each is **lasting**, a fact about the build, to be kept with
+a layer and replayed when it is restored once the runner keeps layers (the
+step events and `EMIT`s), or
+**a moment**, true only as it happens (instructions, progress, substeps).
+
+**Second Chance's side** is `SecondChance/Builders/AppRunner.swift`. Its
+configuration asks a step's question through
+`WrappBuildInput.confirmPatchFailure`, as a failed patch always has; fetches
+a download from those Second Chance ships first, then through the download
+cache; and provides AutoIt as `module:installer:/autoit`. Its
+`BuildEventTranslator` turns the runner's events into `WrappBuildEvent`s on
+the build's bus, reading the `EMIT` strings Second Chance knows
+(`emit-vocabulary.yaml`, [wrappfile.md](wrappfile.md#emit)):
+
+- a `second-chance.phase.<phase>` sets the progress screen's phase, and
+  **a phase never goes back**: one before the phase reached is ignored;
+- with none emitted, the phase an instruction reaches is Second Chance's own
+  table's (`phaseByInstruction`): `WINE.KEEP-DISCS` reaches
+  `copying-installer`, and `INSTALLER.RUN`, `HER-DOWNLOAD.INSTALL`,
+  `STEAM.INSTALL` and `BIG-FISH.INSTALL` reach `installing-game`;
+- a `second-chance.substep.<key>` is shown as the **next** step's substep,
+  in Second Chance's own words for the key (`WineManager.progressText`);
+- a `second-chance.progress.<done>/<total>` is the current step's progress.
+
+No shipped bundle emits anything yet: the prefix stage's steps still say
+their text with `--progress=<key>`, which `ModuleSteps` shows, until the
+Wrappfiles `EMIT` it instead.
+
+**`ModuleSteps`** (`SecondChance/Builders/ModuleSteps.swift`) is how a
+builder that carries out its own plan hands over the steps it doesn't: the
+wine module's `DRIVES`, `REGISTRY`, `WINETRICKS` and `MOUNT`, the core's
+`EDIT --ini`, and `NANCY-DREW.CONFIGURE-INI`, each run by `runStep` with the
+shipped modules' executors (`ModuleSteps.executors()`). A `StepFailure`
+from one becomes `WrappBuildError.buildRecipeProblem`.
+
+`wrapp-builder build` runs the same runner from the command line, with the
+executors the tool has ([dev-cli.md](dev-cli.md#wrapp-builder)).
+
 ## Running Wine
 
 Every Wine, `wineserver` and winetricks process — the build's and the wrapp's
@@ -358,13 +453,24 @@ the prefix's session (`shutDown(gracePeriod:)` escalates from waiting to
 early, untold, once only the server and Wine's services and desktop are
 left, rather than wait out their 3 s linger; `kill()` follows
 `-k9` by killing the programs working in the prefix's folder, which `-k9`,
-killing the server alone, leaves running for good), and `Winetricks` (app only, as only Second Chance bundles it)
-installs a verb. Each `wine.server` call does nothing for a ScummVM wrapp,
+killing the server alone, leaves running for good). `Winetricks` installs a
+verb; it is the wine module's executor's (`WineExecutor`), as is the
+winetricks script, a resource of that package, so only a build runs it and
+no wrapp carries it. Winetricks gets the wine engine's `build-tools/` first
+on its `PATH`, for the `cabextract` that a verb unpacking a Microsoft
+redistributable needs ([modules.md](modules.md#engine-packages)): the
+executor's `buildTools`, which `ModuleSteps.wineBuildTools` finds in the
+engine store for the engine the wrapp has. Each `wine.server` call does nothing for a ScummVM wrapp,
 which has no Wine. Everything that waits is `async`; the wrapp's `main()` and
 GCD queues call it through `Blocking.wait` (`Packages/WrappKit/Sources/ProcessKit/Blocking.swift`), the
 build's blocking work goes the other way through `Blocking.run`, and a
 SwiftLint rule (`wine_path_outside_library`) keeps Wine's own folder inside
 `Packages/Modules/wine/Sources/WineKit/`.
+
+`WineKit` is the wine module's kit, in its own package, `Packages/Modules/wine`
+(`WineModule`), beside its executor, the in-process helpers' source
+([wine-in-process-helpers.md](wine-in-process-helpers.md)) and their build
+script ([modules.md](modules.md#executors)).
 
 ## The layer cache
 
@@ -402,9 +508,10 @@ the app's build id, from a signed-in Steam).
   (`WineBuild.prefixLayerKey`) is the engine's version and prepared hash
   (`Contents/Resources/engines/wine.json`), the wine module's `prefix`
   stage's steps as planned (`Modules/wine/stages/prefix`), a hash of
-  winetricks, and `WineBuild.prefixCodeRevision`, raised by hand when the
-  Swift that makes a prefix (`WineManager.makeWinePrefix`, `WineSteps`)
-  changes what it makes. A new Wine, or a changed winetricks verb or registry
+  winetricks (the wine package's copy, `Winetricks.bundledScript(in:)`), and
+  `WineBuild.prefixCodeRevision`, raised by hand when the Swift that makes a
+  prefix (`WineManager.makeWinePrefix`, and the wine module's executor that
+  carries out its steps) changes what it makes. A new Wine, or a changed winetricks verb or registry
   setting, makes a fresh prefix with nothing to clear. cnc-ddraw isn't in it:
   a DirectDraw game's own stage sets it up (`DO wine.cnc-ddraw`).
 - **Every layer keeps its key's inputs**, so a miss is explained: the build
@@ -473,7 +580,8 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   module's `steam` builds afresh, from Steam, which needs no disc.
 - **Every wrapp has a launcher, which an update always brings.** The
   launcher's revision is a hash of the sources the wrapp's own code is built
-  from (`stamp-launcher-revision.sh` writes it into the template's Info.plist
+  from — `WrappTemplate/`, the packages' sources, and the wine module's
+  `WineKit` and in-process helpers (`stamp-launcher-revision.sh` writes it into the template's Info.plist
   as `SecondChanceLauncherRevision`; a Debug build's starts `debug-`, so it
   never matches a release's). With no update to apply, a wrapp that has this
   revision and this build's engines (each `package`) is **up to date**
@@ -843,9 +951,12 @@ otherwise. Headless, it is `INSTALLATION_SOURCE=download` with
   plainly.
 - **Unpacking**: `unpack: none` puts the file itself in a folder named for the
   input, `zip` that folder's contents (`ditto`). The edition's Wrappfile stage
-  then copies it in (`COPY --from=${input.game} . ${const.install-dir}/`), which is the only
-  instruction a download edition can run so far; an `install` program and other
-  archive formats come when an edition needs them.
+  then copies it in (`COPY --from=${input.game} . ${const.install-dir}/`).
+  The runner carries the plan out in the wrapp, whose base already has the
+  wine module's prefix ([the runner](#the-runner)), so any core instruction
+  works; the source gives it no module executors yet, so a module's
+  instruction, or a `RUN` of a `wine:` program, fails naming it. An `install`
+  program and other archive formats come when an edition needs them.
 
 ## Adding a source
 

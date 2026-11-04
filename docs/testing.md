@@ -95,11 +95,14 @@ in `installers/` doesn't skip, and takes hours.
 
 ## Test structure
 
-### Package tests (`Packages/WrappKit/Tests/`, `Packages/SecondChanceKit/Tests/`)
+### Package tests (`Packages/WrappKit/Tests/`, `Packages/SecondChanceKit/Tests/`, `Packages/Modules/<name>/Tests/`)
 
 What needs neither app. `WrappKitTests`: the Windows-program and MSI readers,
-process listings and names, the subprocess line reader and watch, load
-measurement, shell quoting and the wrapp's settings. `SecondChanceKitTests`:
+process listings and names, the subprocess line reader, load measurement and
+shell quoting. The wine module's package's `WineKitTests`
+(`Packages/Modules/wine/Tests/`): the subprocess watch, the registry and the
+wrapp's settings; the nancy-drew module's `NancyDrewExecutorTests`: its
+`.ini` settings ([modules.md](modules.md#executors)). `SecondChanceKitTests`:
 the VDF reader, the quit check, the in-process helpers' variables and loading
 stages. They run with `swift test --package-path Packages/<package>`, which
 needs no Xcode build, in well under a second; `sc test unit` runs them as a
@@ -108,7 +111,9 @@ step of its own, and CI with it.
 `Packages/WrappBuilder/Tests/` are the same kind: every program bundle checked
 against the manifest schema, the YAML 1.2 cases, and a check that GameCatalog's
 generated table is what the bundles make
-([program-bundles.md](program-bundles.md)). `sc test unit` runs them too.
+([program-bundles.md](program-bundles.md)), and the runner carrying out a
+plan with stand-in executors (`PlanRunnerTests`,
+[wrapp-build.md](wrapp-build.md#the-runner)). `sc test unit` runs them too.
 
 ### Unit tests (`SecondChanceTests/*.swift`)
 

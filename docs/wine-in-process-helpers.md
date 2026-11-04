@@ -18,10 +18,13 @@ wrapp does not have:
 
 ## How they get into the game process
 
-All of them are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
+Their source is the wine module's, kept in its package beside `WineKit`
+(`Packages/Modules/wine/`, [modules.md](modules.md#executors)). All of them
+are compiled into one dylib, `Contents/Frameworks/in_process_helpers.dylib`,
 by `Packages/Modules/wine/build-in-process-helpers.sh` (an Xcode build phase of the
 WrappTemplate target — add any new source to that phase's input files too, or
-edits to it won't rebuild). `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
+edits to it won't rebuild), so every wrapp's launcher carries it, and the
+launcher's revision hashes their source. `DYLD_INSERT_LIBRARIES` can't load them: wine-preloader reaches
 its entry point before dyld runs initializers, so an inserted dylib is mapped
 but its constructor never runs. Instead preparing Wine (`WineBuild.prepare`,
 [modules.md](modules.md#engine-packages)) gives Wine's Mac driver,
