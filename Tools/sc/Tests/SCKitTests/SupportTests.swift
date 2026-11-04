@@ -851,3 +851,23 @@ struct TestVMTests {
         #expect(sizes.load() == ["disk/stay-tuned": 300, "disk/blue-moon": 100, "steam/blue-moon": 50])
     }
 }
+
+@Suite("Leaked Safari helpers")
+struct LeakedHelpersTests {
+    static let path = "/System/Library/PrivateFrameworks/SafariPlatformSupport.framework/Versions/A/XPCServices/"
+        + "com.apple.SafariPlatformSupport.Helper.xpc/Contents/MacOS/com.apple.SafariPlatformSupport.Helper"
+
+    @Test("All but the newest few are ended once there are more than a Mac in use has")
+    func endsAllButNewest() {
+        let helpers = (100..<125).map { "  \($0) \(Self.path)" }
+        let listing = (["    1 /sbin/launchd", "  999 /Applications/Safari.app/Contents/MacOS/Safari"] + helpers.reversed()).joined(separator: "\n")
+        let ending = LeakedHelpers.toEnd(listing: listing)
+        #expect(ending == Array(100..<120).map { pid_t($0) })
+    }
+
+    @Test("A few are left alone")
+    func leavesAFew() {
+        let listing = (100..<110).map { "\($0) \(Self.path)" }.joined(separator: "\n")
+        #expect(LeakedHelpers.toEnd(listing: listing).isEmpty)
+    }
+}

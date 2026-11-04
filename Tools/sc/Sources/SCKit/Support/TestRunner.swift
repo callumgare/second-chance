@@ -164,6 +164,7 @@ struct TestRunner {
                                   "Games with Her downloads: \(withHerDownloads.sorted().joined(separator: ", "))",
                                   "Games on Big Fish: \(Catalog.games.filter(\.isOnBigFish).map(\.slug).joined(separator: ", "))"])
         }
+        await LeakedHelpers.clear(ui: ui)
         let dotEnv = DotEnv.load(repo)
         if sources.contains(.bigFish) && BigFishSourceOptions.testAccount(dotEnv: dotEnv) == nil {
             ui.warning("The owned Big Fish suite will skip every game: .env has no Big Fish test account.",
