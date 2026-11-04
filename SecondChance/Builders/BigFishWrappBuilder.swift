@@ -177,6 +177,12 @@ final class BigFishWrappPreparer: BigFishWrappPreparing {
                 "/ErrorStdOut", windows(staging.appendingPathComponent("\(Self.setupScript).au3")),
                 windows(installerCopy), windows(client),
             ]), environment: Wine.hiddenWindowsVariables(exe: "*", showFile: neverShown), timeout: Self.installTimeout)
+        } catch WineError.terminatedBySignal(let signal) where FileManager.default.fileExists(atPath: client.path) {
+            // The script exits once the Game Manager is there, and the Game
+            // Manager the installer starts as it finishes can end the
+            // session's other programs first: a loaded Mac's AutoIt was
+            // killed seconds after it said so, with the Game Manager in place.
+            logger.warning("The Game Manager's set-up was stopped (signal \(signal)) once the Game Manager was installed")
         } catch {
             desktop?.release()
             await endSession(wine)
