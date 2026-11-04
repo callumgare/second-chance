@@ -15,7 +15,8 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Wra
 
 nonisolated enum RecordingEvents {
     /// Write the recording again, beside it as a `.mov`, with what happened
-    /// in this run marked as chapters and captions; nil when it can't be.
+    /// in this run marked as chapters and captions, in place of it; nil,
+    /// leaving the recording as it was, when it can't be.
     @discardableResult
     static func annotate(_ video: URL, firstFrame start: Date, gameSlug: String) -> URL? {
         guard FileManager.default.fileExists(atPath: video.path) else { return nil }
@@ -24,6 +25,12 @@ nonisolated enum RecordingEvents {
         let output = video.deletingPathExtension().appendingPathExtension("mov")
         do {
             try VideoAnnotator.annotate(video, events: events, to: output)
+            // One video, not two: the .mov is the same picture.
+            do {
+                try FileManager.default.removeItem(at: video)
+            } catch {
+                logger.warning("Couldn't remove \(video.path), which the .mov replaces: \(error)")
+            }
             logger.notice("🎥 Screen recording, with \(events.count) events marked: \(output.path)")
             return output
         } catch {

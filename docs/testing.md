@@ -393,7 +393,8 @@ seconds (2 minutes): a launch that's fine takes seconds, and a long capture
 wears a test Mac down, as screenshots do. The test deletes the video when
 the launch passes and attaches it to the results when it fails, as
 `screen-recording-<attempt>-<slug>.mov`. Once the recording has stopped
-WrappPuppeteer writes it again beside it as a `.mov`, without encoding it
+WrappPuppeteer writes it again beside it as a `.mov`, in place of the
+`.mp4` (which stays only if that fails), without encoding it
 again (a second or so), with what happened marked as chapters and captions:
 its own steps (the game's process and window found, each screen matched,
 each click) and the wrapp's launch, from its launch log, each placed by the

@@ -44,8 +44,8 @@ func printUsage() {
                                its window went fullscreen: what a click skips
         --screen-recording <f> Record the whole screen to the video <f> (.mp4) from
                                the start, if WrappPuppeteer has Screen Recording;
-                               then <f> as a .mov with its steps and the wrapp's
-                               marked as chapters and captions
+                               then replace it with a .mov beside it, with its
+                               steps and the wrapp's marked as chapters and captions
         --screen-recording-limit <s>
                                Stop that recording after <s> seconds (default: 120)
         --quit-from-menu       Once at the menu, quit with the game's Quit menu item
