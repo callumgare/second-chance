@@ -290,7 +290,10 @@ final class DiskWrappBuilder: WrappBuildStrategy {
     private func resolveGame(
         disk1 chosen: URL, input: WrappBuildInput
     ) async throws -> (disk1Root: URL, gameSlug: String, gameInfo: GameInfo, installerName: String?) {
-        var disk1 = chosen
+        // A link followed: an installed game's folder is one when Steam or
+        // Big Fish installed it (`--into`), and listing a folder through a
+        // link fails as not a folder.
+        var disk1 = chosen.resolvingSymlinksInPath()
         do {
             while true {
                 logger.notice("Disk 1: \(disk1.path)")
