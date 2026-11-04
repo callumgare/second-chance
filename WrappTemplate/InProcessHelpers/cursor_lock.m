@@ -311,7 +311,20 @@ static void cursorLockInit(void) {
     startLocker();
 
     // cnc-ddraw unlocks when the app is deactivated; lock again on return.
+    // Until then the lock is waiting, not still "locked": a click while it
+    // says so (WrappPuppeteer's first, say) would be swallowed. Entering
+    // native fullscreen can deactivate the app for a moment, just after
+    // the first lock.
     CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+        [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidResignActiveNotification
+                                                        object:nil
+                                                         queue:nil
+                                                    usingBlock:^(NSNotification *notification) {
+            (void)notification;
+            debugLog("app resigned active");
+            __sync_add_and_fetch(&gGeneration, 1);
+            gStatus = "waiting";
+        }];
         [NSNotificationCenter.defaultCenter addObserverForName:NSApplicationDidBecomeActiveNotification
                                                         object:nil
                                                          queue:nil
