@@ -1,4 +1,6 @@
 import Foundation
+import NancyDrewExecutor
+import WineExecutor
 import WrappBuilder
 
 /// `wrapp-builder build`: a bundle's stage built into an app, by the runner,
@@ -18,14 +20,27 @@ public nonisolated enum BuildTool {
         public var json: Bool
     }
 
-    /// The executors this tool runs, by module: none yet, until each
-    /// module's moves into its package.
-    static let executors: [String: any ModuleExecutor] = [:]
+    /// The executors this tool runs, by module: each shipped module's that
+    /// has moved into its package. The wine module's lays in the helpers the
+    /// template carries, when it's given one, and gives winetricks the
+    /// engine's build tools.
+    static func executors(template: URL?) -> [String: any ModuleExecutor] {
+        let helpers = template?.appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib")
+        return [
+            "wine": WineExecutor(helpers: helpers, buildTools: { tree in
+                guard let wine = EngineInstall.installed(in: tree.appendingPathComponent("Contents")).first(where: { $0.module == "wine" })
+                else { return nil }
+                return EngineStore.standardRoot().appendingPathComponent("\(wine.hash)/\(EngineTree.buildTools)")
+            }),
+            "nancy-drew": NancyDrewExecutor(),
+        ]
+    }
 
     public static func build(_ request: Request, output: some ToolOutput) async throws {
         let modules = try ModuleTool.loadAll(root: request.modules, output: output)
         let plan = try WrappfileTool.planned(bundle: request.bundle, modules: modules, edition: request.edition, target: request.target,
                                              conditions: .thisMac, allowPaths: request.allowPaths, output: output)
+        let executors = Self.executors(template: request.template)
         let missing = Set(plan.stages.flatMap(\.steps).compactMap(\.module)).subtracting(executors.keys).sorted()
         guard missing.isEmpty else {
             throw ToolError("this tool can't run the \(missing.joined(separator: ", ")) \(missing.count == 1 ? "module's" : "modules'") instructions yet")
@@ -38,14 +53,10 @@ public nonisolated enum BuildTool {
         }
         let files = FileManager.default
         guard !files.fileExists(atPath: request.output.path) else { throw ToolError("\(request.output.path) already exists.") }
-        let tree = files.temporaryDirectory.appendingPathComponent("wrapp-builder-\(UUID().uuidString)/\(request.output.lastPathComponent)")
-        defer { try? files.removeItem(at: tree.deletingLastPathComponent()) }
-        try files.createDirectory(at: tree.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let template = request.template {
-            try files.copyItem(at: template, to: tree)
-        } else {
-            try files.createDirectory(at: tree.appendingPathComponent("Contents"), withIntermediateDirectories: true)
-        }
+        // Each stage's tree in a working folder of the build's own.
+        let folder = files.temporaryDirectory.appendingPathComponent("wrapp-builder-\(UUID().uuidString)")
+        defer { try? files.removeItem(at: folder) }
+        let store = EngineStore(root: EngineStore.standardRoot(), preparer: EnginePreparer(downloader: .forTool()))
         let printer = EventPrinter(json: request.json)
         let emitter = OrderedEmitter { event in printer.print(event) }
         let downloader = Downloader.forTool()
@@ -55,9 +66,14 @@ public nonisolated enum BuildTool {
             fetch: { url, sha256, progress in
                 try await downloader.fetch(DownloadRequest(urls: [url], sha256: sha256), progress: progress).file
             },
-            moduleStage: { stage, _ in throw ToolError("this tool can't make the \(stage.name) stage yet") })
+            engine: { id, version in
+                guard let module = modules.first(where: { $0.manifest.id == id }) else { throw ToolError("there's no \(id) module") }
+                return try await store.engine(module, version: version) { step in output.line(step) }
+            },
+            moduleFolders: Dictionary(uniqueKeysWithValues: modules.map { ($0.manifest.id, $0.folder) }))
+        let tree: URL
         do {
-            try await PlanRunner(plan: plan, configuration: configuration).run(in: tree)
+            tree = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
         } catch let error as StepFailure {
             await emitter.finish()
             throw ToolError(error.description)
@@ -66,6 +82,13 @@ public nonisolated enum BuildTool {
             throw error
         }
         await emitter.finish()
+        if let template = request.template {
+            do {
+                try WrappAssembler.layIn(template, into: tree)
+            } catch let problem as WrappAssembler.Problem {
+                throw ToolError(problem.description)
+            }
+        }
         try setBundleID(id, in: tree)
         try files.moveItem(at: tree, to: request.output)
         if request.template == nil {

@@ -20,7 +20,7 @@ struct BuildPlanTests {
         #expect(plan.stages.map(\.name) == ["wine/prefix", "prefix", "disc"])
         #expect(plan.stages[1].modules == ["nancy-drew", "wine"])
         // cnc-ddraw, as Blue Moon draws with DirectDraw, and the icon.
-        #expect(plan.stages[1].steps.map { "\($0.module ?? "").\($0.instruction)" } == ["wine.WINETRICKS", ".EDIT", ".COPY"])
+        #expect(plan.stages[1].steps.map { "\($0.module ?? "").\($0.instruction)" } == ["wine.WINETRICKS", ".EDIT", ".COPY", ".APP"])
         #expect(plan.stages[2].modules == ["installer", "nancy-drew", "wine"])
         let steps = plan.stages[2].steps
         let installDir = "C:/Program Files (x86)/Nancy Drew/Last Train to Blue Moon Canyon"
@@ -176,7 +176,8 @@ struct BuildPlanTests {
         let context = BuildPlanner.Context(planner: planner, edition: bundle.manifest.editions[edition], conditions: conditions,
                                            recorder: BuildPlanner.Recorder())
         let stage = try #require(file.stage(named: stage))
-        return try context.plan(stage, globals: try context.globalScope(), inheriting: [:]).stage.steps
+        // A module's setup, which USE plans, has tests of its own (StageTreesTests).
+        return try context.plan(stage, globals: try context.globalScope(), inheriting: [:]).stage.steps.filter { !$0.setup }
     }
 
     @Test func conditionsAreDecidedForTheBuild() throws {

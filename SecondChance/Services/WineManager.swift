@@ -165,7 +165,7 @@ class WineManager {
     /// file is written before the prefix is cached.
     func runPrefixStage(at wrappPath: URL, bus: EventBus<AppEvent>) async throws {
         let steps = ModuleSteps(bus: bus)
-        for step in try Self.prefixStage().steps {
+        for step in try Self.prefixStage().steps where !step.setup {
             try await steps.run(step, wrappPath: wrappPath)
         }
         try await Wine(wrapp: wrappPath).server.waitUntilProgramsExit(timeout: nil)

@@ -16,12 +16,17 @@ nonisolated struct LocalStepContext: StepContext {
     let step: PlannedStep
     let plan: BuildPlan
     let configuration: RunnerConfiguration
+    /// Each stage's tree, by name; empty while every stage shares one.
+    var trees: [String: URL] = [:]
     let log = Logger(label: "au.gare.callum.second-chance.SecondChance.Step")
 
     var emitter: any EventEmitter { configuration.emitter }
 
-    /// Until each stage has a tree of its own, every stage's tree is this one.
-    func tree(ofStage name: String) -> URL? { plan.stages.contains { $0.name == name } ? tree : nil }
+    /// Another stage's tree; while every stage shares one, this one.
+    func tree(ofStage name: String) -> URL? {
+        if !trees.isEmpty { return trees[name] }
+        return plan.stages.contains { $0.name == name } ? tree : nil
+    }
 
     func file(_ fullForm: String) -> URL? { plan.file(fullForm) ?? configuration.providedFile(fullForm) }
 

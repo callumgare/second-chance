@@ -122,7 +122,7 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
             // `--ini=<section>.<key>=<value>`, as many as needed.
             // `--keys-must-exist`: each setting must already be in the file, or
             // the step fails, naming those that aren't; without it one is added.
-            InstructionSpec("EDIT", options: ["ini": .repeated, "keys-must-exist": .flag, "create": .flag], arguments: 1...1,
+            InstructionSpec("EDIT", options: ["ini": .repeated, "plist": .repeated, "keys-must-exist": .flag, "create": .flag], arguments: 1...1,
                             argumentRoles: [.location]),
         ]
         return Dictionary(uniqueKeysWithValues: specs.map { ($0.name, $0) })

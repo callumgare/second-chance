@@ -25,9 +25,14 @@ public nonisolated struct RunnerConfiguration: Sendable {
     /// Files the modules' Swift provides rather than their folders
     /// (`module:installer:/autoit`), by full form.
     public var providedFile: @Sendable (String) -> URL?
-    /// Makes a module stage the runner can't make itself yet (the wine
-    /// module's prefix, until its executor makes it), in the tree.
-    public var moduleStage: @Sendable (PlannedStage, URL) async throws -> Void
+    /// Makes a stage itself, in its tree, when the caller has a better way
+    /// than its steps (the wine prefix from its layer, until the runner keeps
+    /// layers); true when it did. Also a module stage whose steps nothing
+    /// here carries out.
+    public var moduleStage: @Sendable (PlannedStage, URL) async throws -> Bool
+    /// An engine, by module and version, from the engine store: what an
+    /// `ENGINE` step installs.
+    public var engine: @Sendable (String, String) async throws -> EngineStore.Engine
     public var pathTypes: PathTypeRegistry
     /// Each module's folder, by id, for what its executor reads of its own.
     public var moduleFolders: [String: URL]
@@ -37,7 +42,10 @@ public nonisolated struct RunnerConfiguration: Sendable {
                 ask: @escaping @Sendable (StepQuestion) async throws -> StepAnswer = { _ in .no },
                 fetch: @escaping @Sendable (URL, String, @escaping @Sendable (Int64, Int64?) -> Void) async throws -> URL,
                 providedFile: @escaping @Sendable (String) -> URL? = { _ in nil },
-                moduleStage: @escaping @Sendable (PlannedStage, URL) async throws -> Void = { _, _ in },
+                moduleStage: @escaping @Sendable (PlannedStage, URL) async throws -> Bool = { _, _ in false },
+                engine: @escaping @Sendable (String, String) async throws -> EngineStore.Engine = { module, _ in
+                    throw StepFailure.recipe("this build has no engine store to install \(module) from")
+                },
                 pathTypes: PathTypeRegistry = .shipped, moduleFolders: [String: URL] = [:]) {
         self.moduleFolders = moduleFolders
         self.executors = executors
@@ -47,6 +55,7 @@ public nonisolated struct RunnerConfiguration: Sendable {
         self.fetch = fetch
         self.providedFile = providedFile
         self.moduleStage = moduleStage
+        self.engine = engine
         self.pathTypes = pathTypes
     }
 }
@@ -72,24 +81,54 @@ public nonisolated struct PlanRunner: Sendable {
     public func run(in tree: URL) async throws {
         do {
             for stage in plan.stages {
-                try Task.checkCancellation()
-                if stage.isModuleStage, !runsItself(stage) {
-                    logger.notice("[Runner] Making the \(stage.name) stage")
-                    try await configuration.moduleStage(stage, tree)
-                    continue
-                }
-                for (index, step) in stage.steps.enumerated() {
-                    try Task.checkCancellation()
-                    emit(stage.emits(before: index))
-                    try await run(step, at: StepRef(stage: stage.name, index: index, step: step), in: tree)
-                }
-                emit(stage.emits(before: stage.steps.count))
+                try await run(stage, in: tree, trees: [:])
             }
         } catch {
             await finish()
             throw error
         }
         await finish()
+    }
+
+    /// Every stage of the plan, each in its own tree in `folder` (a tree
+    /// shared down a linear chain, cloned where stages branch: `StageTrees`):
+    /// the target's tree, which is the wrapp. The other stages' trees stay in
+    /// the folder, for whoever owns it to remove.
+    @concurrent
+    public func build(in folder: URL) async throws -> URL {
+        let trees = StageTrees(plan: plan, in: folder)
+        guard let target = trees.target else { throw StepFailure.recipe("the plan has no stages") }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for (stage, start) in zip(plan.stages, trees.starts) {
+                try Task.checkCancellation()
+                try StageTrees.prepare(start)
+                guard let tree = trees.trees[stage.name] else { continue }
+                try await run(stage, in: tree, trees: trees.trees)
+            }
+        } catch {
+            await finish()
+            throw error
+        }
+        await finish()
+        return target
+    }
+
+    func run(_ stage: PlannedStage, in tree: URL, trees: [String: URL]) async throws {
+        try Task.checkCancellation()
+        if try await configuration.moduleStage(stage, tree) {
+            logger.notice("[Runner] The \(stage.name) stage was made for the build")
+            return
+        }
+        if stage.isModuleStage, !runsItself(stage) {
+            throw StepFailure.recipe("nothing carries out the \(stage.name) stage's steps in this build")
+        }
+        for (index, step) in stage.steps.enumerated() {
+            try Task.checkCancellation()
+            emit(stage.emits(before: index))
+            try await run(step, at: StepRef(stage: stage.name, index: index, step: step), in: tree, trees: trees)
+        }
+        emit(stage.emits(before: stage.steps.count))
     }
 
     /// Whether every step of a module's stage has someone to carry it out.
@@ -101,11 +140,11 @@ public nonisolated struct PlanRunner: Sendable {
     /// itself and hands this the ones an executor carries out, until every
     /// source builds through `run(in:)`.
     public func runStep(_ step: PlannedStep, stage: String, index: Int, in tree: URL) async throws {
-        try await run(step, at: StepRef(stage: stage, index: index, step: step), in: tree)
+        try await run(step, at: StepRef(stage: stage, index: index, step: step), in: tree, trees: [:])
     }
 
-    func run(_ step: PlannedStep, at ref: StepRef, in tree: URL) async throws {
-        let context = LocalStepContext(tree: tree, step: step, plan: plan, configuration: configuration)
+    func run(_ step: PlannedStep, at ref: StepRef, in tree: URL, trees: [String: URL]) async throws {
+        let context = LocalStepContext(tree: tree, step: step, plan: plan, configuration: configuration, trees: trees)
         configuration.emitter.emit(.stepStarted(ref))
         configuration.emitter.emit(.stepProgress(nil))
         logger.notice("Step: \(step) (\(step.origin))")

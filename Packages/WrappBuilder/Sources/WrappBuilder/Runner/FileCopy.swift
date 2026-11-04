@@ -69,7 +69,7 @@ nonisolated enum FileCopy {
     /// `source` at `target` as a clone (`clonefile`, nothing to copy on the
     /// same volume), or a copy where it can't be cloned.
     static func clone(_ source: URL, to target: URL) throws {
-        if Darwin.clonefile(source.path, target.path, 0) == 0 { return }
+        if Darwin.clonefile(source.path, target.path, UInt32(CLONE_NOFOLLOW)) == 0 { return }
         try FileManager.default.copyItem(at: source, to: target)
     }
 }

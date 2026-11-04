@@ -28,6 +28,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", .upToNextMinor(from: "1.8.2")),
         .package(path: "../WrappBuilder"),
+        // The shipped modules' executors, which it runs as Second Chance does.
+        .package(path: "../Modules/wine"),
+        .package(path: "../Modules/nancy-drew"),
     ],
     targets: [
         .executableTarget(
@@ -40,6 +43,8 @@ let package = Package(
             dependencies: [
                 .product(name: "WrappBuilder", package: "WrappBuilder"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "WineExecutor", package: "wine"),
+                .product(name: "NancyDrewExecutor", package: "nancy-drew"),
             ],
             swiftSettings: swiftSettings
         ),

@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 9
-native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
+release: 10
+native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
   # template, prepared on the Mac that builds (WineBuild.prepare).

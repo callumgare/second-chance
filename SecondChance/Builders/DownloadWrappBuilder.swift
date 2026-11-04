@@ -65,14 +65,13 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
         let notice = DownloadNotice(licence: chosen.licence, game: game.title)
         try await input.confirmDownload(notice)
 
-        let wrappPath = helper.createTemporaryWrappPath()
+        let folder = helper.createBuildFolder()
         let unpacked = FileManager.default.temporaryDirectory.appendingPathComponent("SecondChance-download-\(UUID().uuidString)")
-        logger.notice("Temporary wrapp: \(wrappPath.path)")
+        logger.notice("Working folder: \(folder.path)")
+        await bus.publishWrappBuild(.wrappStarted(path: folder))
         do {
-            // A game Wine doesn't run needs no Wine to build: its files are
-            // only copied in.
-            try await helper.createBaseWrapp(at: wrappPath, composition: game.composition,
-                                             buildsWithWine: game.composition.has(.wine))
+            let template = try await helper.template()
+            await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: nil)))
             let request = try DownloadRequest(chosen.input)
             let big = (request.size ?? 0) > Self.bigDownload
             await bus.publishWrappBuild(.progress(.copyingInstaller(substep: big
@@ -87,7 +86,10 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: slug, edition: edition) }) else {
                 throw WrappBuildError.buildRecipeProblem("\(game.programID)'s \(chosen.edition) edition names no stage")
             }
-            try await run(plan, inputs: [chosen.input.id: unpacked], wrappPath: wrappPath, game: game, input: input)
+            // Each stage in a tree of its own, from empty: a game Wine doesn't
+            // run has no Wine, as nothing puts it there. The template comes last.
+            let wrappPath = try await run(plan, inputs: [chosen.input.id: unpacked], folder: folder, game: game, input: input)
+            try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
             // What the wrapp starts, as the plan's launch says: it must be
             // there. The settings' older keys name a program on a C: drive,
             // which a ScummVM game's data in the app isn't.
@@ -112,17 +114,17 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
                 }
             }
             try licence.write(to: WrappLayout(app: wrappPath).resources.appendingPathComponent("Licence.txt"), atomically: true, encoding: .utf8)
-            try await helper.cleanupUnusedEngine(at: wrappPath, composition: game.composition)
 
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: game, source: .download, gameExePath: exe, installerDir: "",
                 edition: chosen.edition, launch: launch, app: plan.app, input: input
             )
             try? FileManager.default.removeItem(at: unpacked)
+            await helper.removeTempWrapp(folder)
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
-            await helper.removeTempWrapp(wrappPath)
+            await helper.removeTempWrapp(folder)
             do {
                 try FileManager.default.removeItem(at: unpacked)
             } catch CocoaError.fileNoSuchFile {
@@ -178,14 +180,15 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
         logger.notice("Unpacked \(input.id) (\(input.unpack ?? "none"))")
     }
 
-    /// The edition's plan, carried out by the runner (docs/wrapp-build.md#the-runner)
-    /// in the wrapp, whose base already has the wine module's prefix stage
-    /// made: the input is the download, unpacked.
-    private func run(_ plan: BuildPlan, inputs: [String: URL], wrappPath: URL, game: GameInfo, input: WrappBuildInput) async throws {
+    /// The edition's plan, carried out by the runner (docs/wrapp-build.md#the-runner),
+    /// each stage in its own tree in `folder`: the input is the download,
+    /// unpacked. The target's tree, which becomes the wrapp.
+    private func run(_ plan: BuildPlan, inputs: [String: URL], folder: URL, game: GameInfo, input: WrappBuildInput) async throws -> URL {
         let (configuration, emitter) = AppRunner.configuration(bus: bus, input: input, game: game, inputs: GivenInputs(inputs),
-                                                               downloader: downloader)
+                                                               downloader: downloader, helper: helper)
+        let tree: URL
         do {
-            try await PlanRunner(plan: plan, configuration: configuration).run(in: wrappPath)
+            tree = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
         } catch let error as StepFailure {
             await emitter.finish()
             throw WrappBuildError.buildRecipeProblem(error.description)
@@ -194,5 +197,6 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             throw error
         }
         await emitter.finish()
+        return tree
     }
 }

@@ -225,7 +225,7 @@ class WrappBuildHelper {
     // MARK: - Wrapp Configuration
 
     /// Configure the wrapp for its game: rewrite Info.plist, write
-    /// AppSettings.plist, remap the Documents symlink, patch game INIs.
+    /// AppSettings.plist, remap the Documents symlink.
     func configureWrapp(
         at wrappPath: URL,
         gameInfo: GameInfo,
@@ -763,6 +763,53 @@ class WrappBuildHelper {
         try FreeSpace.ensure(needed, at: fileManager.temporaryDirectory)
     }
 
+    /// A build's working folder (`SecondChance-build-<id>` in the per-user
+    /// temporary folder), holding a tree for each of its stages, registered
+    /// for cleanup as a temporary wrapp is: removed when the build ends, its
+    /// Wine ended on quit, and swept if a build that crashed left it
+    /// (docs/wrapp-build.md#stages-as-trees).
+    func createBuildFolder() -> URL {
+        let path = fileManager.temporaryDirectory.appendingPathComponent("SecondChance-build-\(UUID().uuidString)")
+        registerTemporaryWrapp(path)
+        return path
+    }
+
+    /// The trees in a working folder, or the wrapp itself.
+    nonisolated static func trees(in path: URL) -> [URL] {
+        guard path.pathExtension != "app" else { return [path] }
+        return ((try? FileManager.default.contentsOfDirectory(at: path, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "app" }
+    }
+
+    /// An engine, by its module's id and version, from the engine store,
+    /// which fetches and prepares it the first time a build on this Mac
+    /// needs it: what the runner's `ENGINE` steps install.
+    func engine(_ id: String, version: String) async throws -> EngineStore.Engine {
+        guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
+        let modules = try await Blocking.run { try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get() }
+        guard let module = modules.first(where: { $0.manifest.id == id }) else {
+            throw WrappBuildError.buildRecipeProblem("there's no \(id) module to install the engine of")
+        }
+        do {
+            let engine = try await engines.engine(module, version: version) { step in logger.notice("[Engine] \(step)") }
+            logger.notice("[Engine] \(engine.prepared ? "Prepared" : "Using the stored") \(id) \(engine.version) (\(engine.hash.prefix(12))…)")
+            return engine
+        } catch let error as DownloadError {
+            logger.error("[Engine] Couldn't fetch \(id): \(error.description)")
+            for failure in error.failures { logger.error("[Engine]   \(failure)") }
+            throw WrappBuildError.engineUnavailable
+        }
+    }
+
+    /// The template, checked: what the assembler lays into a tree at the end.
+    func template() async throws -> URL {
+        guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
+            throw WrappBuildError.templateDamaged("WrappTemplate.app not found in Second Chance.app bundle")
+        }
+        try await verifyTemplateSignatures(templatePath)
+        return templatePath
+    }
+
     /// Create a fresh temporary wrapp path and register it for cleanup.
     func createTemporaryWrappPath() -> URL {
         let tempDir = fileManager.temporaryDirectory
@@ -802,7 +849,7 @@ class WrappBuildHelper {
         // A build that failed partway can leave its Wine session running,
         // and once the wrapp is gone so is the wineserver that could stop it:
         // the processes then run on, one of them using most of a core.
-        await Wine(wrapp: path).server.stop()
+        for tree in Self.trees(in: path) { await Wine(wrapp: tree).server.stop() }
 
         do {
             try await Blocking.run { try Self.removeWrappDirectory(path) }
@@ -844,7 +891,8 @@ class WrappBuildHelper {
             at: tempDir, includingPropertiesForKeys: [.contentModificationDateKey]
         )) ?? []
         let cutoff = Date().addingTimeInterval(-age)
-        for wrapp in candidates where wrapp.lastPathComponent.hasPrefix("NancyDrew-") && wrapp.pathExtension == "app" {
+        for wrapp in candidates where (wrapp.lastPathComponent.hasPrefix("NancyDrew-") && wrapp.pathExtension == "app")
+            || wrapp.lastPathComponent.hasPrefix("SecondChance-build-") {
             guard let modified = (try? wrapp.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
                   modified < cutoff else { continue }
             // A long build (Steam allows hours) barely touches the folder
@@ -875,7 +923,7 @@ class WrappBuildHelper {
     /// for it. Each session is asked to stop first and forced only if it
     /// won't (`WineServer.shutDown`), all at once.
     static func endWineInTemporaryWrapps() async {
-        let wrapps = tracking.withLock { Array($0.wrapps) }
+        let wrapps = tracking.withLock { Array($0.wrapps) }.flatMap(trees(in:))
         await withTaskGroup(of: Void.self) { group in
             for wrapp in wrapps {
                 group.addTask {

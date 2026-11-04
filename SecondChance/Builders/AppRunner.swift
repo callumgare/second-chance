@@ -19,8 +19,7 @@ enum AppRunner {
     /// every event has reached the bus before the build goes on.
     static func configuration(
         bus: EventBus<AppEvent>, input: WrappBuildInput, game: GameInfo, inputs: any InputProvider,
-        downloader: Downloader, executors: [String: any ModuleExecutor] = [:],
-        moduleStage: @escaping @Sendable (PlannedStage, URL) async throws -> Void = { _, _ in }
+        downloader: Downloader, helper: WrappBuildHelper
     ) -> (RunnerConfiguration, OrderedEmitter) {
         let translator = BuildEventTranslator()
         let emitter = OrderedEmitter { event in
@@ -29,7 +28,11 @@ enum AppRunner {
         let slug = game.id
         // Looked up once, here, as the service is the main actor's.
         let autoIt = AutoItService.shared.isAvailable ? AutoItService.shared.autoitDir : nil
-        let configuration = RunnerConfiguration(
+        // The wine module's in-process helpers, as the template carries them.
+        let helpers = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app")?
+            .appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib")
+        let executors = ModuleSteps.executors(helpers: helpers)
+        var configuration = RunnerConfiguration(
             executors: executors, inputs: inputs, emitter: emitter,
             ask: { question in try await answer(question, input: input, game: slug) },
             fetch: { url, sha256, progress in
@@ -37,7 +40,23 @@ enum AppRunner {
                 return try await downloader.fetch(DownloadRequest(urls: [url], sha256: sha256), progress: progress).file
             },
             providedFile: { fullForm in fullForm == "module:installer:/autoit" ? autoIt : nil },
-            moduleStage: moduleStage)
+            engine: { module, version in try await helper.engine(module, version: version) },
+            moduleFolders: ModuleSteps.moduleFolders())
+        // The wine module's prefix from its layer, as every build has made
+        // it, until the runner keeps layers of its own: its engine and
+        // helpers laid in by its setup steps, then the prefix restored or
+        // made (`WineManager.createWinePrefix`).
+        let steps = configuration
+        let wineManager = WineManager.shared
+        configuration.moduleStage = { stage, tree in
+            guard stage.module == "wine", stage.name == "wine/prefix" else { return false }
+            let runner = PlanRunner(plan: BuildPlan(edition: "", stages: [stage]), configuration: steps)
+            for (index, step) in stage.steps.enumerated() where step.setup && step.instruction != "PREFIX" {
+                try await runner.runStep(step, stage: stage.name, index: index, in: tree)
+            }
+            try await wineManager.createWinePrefix(at: tree, bus: bus)
+            return true
+        }
         return (configuration, emitter)
     }
 

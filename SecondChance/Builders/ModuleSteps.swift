@@ -33,8 +33,8 @@ struct ModuleSteps {
     }
 
     /// The executors the shipped modules have.
-    nonisolated static func executors() -> [String: any ModuleExecutor] {
-        ["wine": WineExecutor(buildTools: wineBuildTools), "nancy-drew": NancyDrewExecutor()]
+    nonisolated static func executors(helpers: URL? = nil) -> [String: any ModuleExecutor] {
+        ["wine": WineExecutor(helpers: helpers, buildTools: wineBuildTools), "nancy-drew": NancyDrewExecutor()]
     }
 
     /// The `build-tools` of the Wine engine the tree has, in the engine store.

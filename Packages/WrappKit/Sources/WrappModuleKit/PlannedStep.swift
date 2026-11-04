@@ -21,8 +21,13 @@ public nonisolated struct PlannedStep: Sendable, Equatable, CustomStringConverti
     /// Where it was written: `Wrappfile:12`, or `nancy-drew/functions/patch:20`
     /// from `Wrappfile:16`.
     public let origin: String
+    /// Planned by `USE` to set a module up in a tree that hasn't it (its
+    /// engine, its `setup:` steps), rather than written.
+    public var setup: Bool = false
 
-    public init(instruction: String, module: String?, options: [String: [String]], arguments: [String], name: String?, origin: String) {
+    public init(instruction: String, module: String?, options: [String: [String]], arguments: [String], name: String?, origin: String,
+                setup: Bool = false) {
+        self.setup = setup
         self.instruction = instruction
         self.module = module
         self.options = options

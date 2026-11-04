@@ -21,6 +21,8 @@ nonisolated enum CoreInstructions {
         case "MOVE": try await move(step, in: context)
         case "REMOVE": try await remove(step, in: context)
         case "RUN": try await runProgram(step, in: context)
+        case "ENGINE": try await engine(step, in: context)
+        case "APP": try await app(step, in: context)
         default: throw StepFailure.recipe("\(step.origin): the core has no instruction \(step.instruction)")
         }
     }
@@ -99,6 +101,10 @@ nonisolated enum CoreInstructions {
     /// step. The file must exist unless the step says `--create`.
     static func edit(_ step: PlannedStep, in context: LocalStepContext) async throws {
         guard let path = step.arguments.first else { throw StepFailure.recipe("\(step.origin): EDIT names its file") }
+        if step.has("plist") {
+            try await editPlist(step, path: path, in: context)
+            return
+        }
         guard step.has("ini") else {
             throw StepFailure.recipe("\(step.origin): this build can't run \(step)")
         }
@@ -121,6 +127,62 @@ nonisolated enum CoreInstructions {
         }
         try edited.text.write(to: file, atomically: true, encoding: .utf8)
         context.log.notice("✓ Set \(settings.map(\.description).joined(separator: ", ")) in \(file.lastPathComponent)")
+    }
+
+    /// `EDIT <file> --plist=<key>=<value>… [--create]`: each key of a
+    /// property list set to its text.
+    static func editPlist(_ step: PlannedStep, path: String, in context: LocalStepContext) async throws {
+        let file = try context.location(path)
+        var values: [String: String] = [:]
+        for setting in step.options["plist"] ?? [] {
+            guard let equals = setting.firstIndex(of: "="), equals != setting.startIndex else {
+                throw StepFailure.recipe("\(step.origin): --plist=\(setting) isn't <key>=<value>")
+            }
+            values[String(setting[..<equals])] = String(setting[setting.index(after: equals)...])
+        }
+        guard FileManager.default.fileExists(atPath: file.path) || step.has("create") else {
+            throw StepFailure.failed("\(step.origin): \(path) doesn't exist (EDIT --create makes it)")
+        }
+        try Plist.update(file) { plist in plist.merge(values) { $1 } }
+    }
+
+    // MARK: - ENGINE and APP
+
+    /// `ENGINE <module>@<version>`, which `USE` plans in a tree that hasn't
+    /// the module yet: the tree's engine made that one, from the engine
+    /// store. A tree with it already is left; one with another of the
+    /// module's is given this one instead.
+    static func engine(_ step: PlannedStep, in context: LocalStepContext) async throws {
+        guard let named = step.arguments.first, let at = named.firstIndex(of: "@") else {
+            throw StepFailure.recipe("\(step.origin): ENGINE names <module>@<version>")
+        }
+        let module = String(named[..<at]), version = String(named[named.index(after: at)...])
+        let contents = context.tree.appendingPathComponent("Contents")
+        let engine = try await context.configuration.engine(module, version)
+        let had = EngineInstall.installed(in: contents).first { $0.module == module }
+        if had?.hash == engine.hash {
+            context.log.notice("[Engine] The tree has \(module) \(version) already")
+            return
+        }
+        try await Blocking.run {
+            if had != nil { try EngineInstall.remove(module: module, from: contents) }
+            try EngineInstall.install(engine, into: contents)
+        }
+        context.log.notice("[Engine] \(had == nil ? "Installed" : "Replaced the tree's with") \(module) \(version) (\(engine.hash.prefix(12))…)")
+    }
+
+    /// `APP [--default-id=…] [--name=…] [--icon=…]`: the tree's `Info.plist`,
+    /// made if it has none, with what the step says.
+    static func app(_ step: PlannedStep, in context: LocalStepContext) async throws {
+        let file = WrappLayout(app: context.tree).infoPlist
+        try Plist.update(file) { plist in
+            if let id = step.option("default-id") { plist["CFBundleIdentifier"] = id }
+            if let name = step.option("name") {
+                plist["CFBundleName"] = name
+                plist["CFBundleDisplayName"] = name
+            }
+            if let icon = step.option("icon") { plist["CFBundleIconFile"] = (icon as NSString).lastPathComponent }
+        }
     }
 
     // MARK: - MOVE and REMOVE

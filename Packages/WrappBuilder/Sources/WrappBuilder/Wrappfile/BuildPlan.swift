@@ -43,8 +43,12 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
 
     /// The steps of the bundle's own stages: what a builder runs, a module's
     /// stage (`wine/prefix`, the prefix Wine's build makes) being the
-    /// module's to make.
-    public var bundleSteps: [PlannedStep] { stages.filter { !$0.isModuleStage }.flatMap(\.steps) }
+    /// module's to make. Not the steps only the runner carries out: a
+    /// module's setup, which the base wrapp has, and `APP`, which a
+    /// builder records.
+    public var bundleSteps: [PlannedStep] {
+        stages.filter { !$0.isModuleStage }.flatMap(\.steps).filter { !$0.setup && !($0.module == nil && $0.instruction == "APP") }
+    }
 
     /// The file a step names in full form, if the plan read one.
     public func file(_ fullForm: String) -> URL? { files[fullForm] }
@@ -393,6 +397,9 @@ public nonisolated struct BuildPlanner {
         var launch: RecordedLaunch?
         var volumes: [RecordedLaunch.Volume] = []
         var app = RecordedApp()
+        /// The modules the stage's tree has been set up with (an engine, a
+        /// module's `setup:` steps): what `USE` plans no second time.
+        var setUp: Set<String> = []
         /// Built from the old wrapp (`FROM previous`), whose launch it keeps.
         var fromPrevious = false
     }
@@ -597,10 +604,21 @@ public nonisolated struct BuildPlanner {
                 let words = instruction.arguments.map(\.raw)
                 let (id, constraint) = WrappfileChecker.splitConstraint(words.first ?? "")
                 try addModule(id, constraint: constraint, as: words.count == 3 ? words[2] : nil, to: &scope, origin: at)
+                planSetup(in: &scope, origin: at, into: &steps)
             case "DO":
                 try expandFunction(instruction, scope: &scope, origin: at, into: &steps)
             case _ where InstructionSpec.recorded.contains(instruction.keyword):
+                let before = scope.modules.app
                 try record(instruction, scope: &scope, origin: at)
+                // APP is a step too, which writes the tree's Info.plist.
+                if instruction.keyword == "APP" {
+                    let app = scope.modules.app
+                    var options: [String: [String]] = [:]
+                    if app.icon != before.icon, let icon = app.icon { options["icon"] = [icon] }
+                    if app.name != before.name, let name = app.name { options["name"] = [name] }
+                    if app.defaultID != before.defaultID, let id = app.defaultID { options["default-id"] = [id] }
+                    steps.append(PlannedStep(instruction: "APP", module: nil, options: options, arguments: [], name: nil, origin: at))
+                }
             default:
                 let module = instruction.moduleAlias.map { scope.modules.aliases[$0] ?? $0 }
                 let spec = spec(of: instruction, module: module)
@@ -644,6 +662,40 @@ public nonisolated struct BuildPlanner {
                 steps.append(PlannedStep(instruction: instruction.name, module: module, options: options,
                                          arguments: arguments, name: options["name"]?.first, origin: at))
             }
+        }
+
+        /// The setup of each module the stage has but its tree hasn't been
+        /// set up with, dependencies first: its engine, as a core `ENGINE`
+        /// step, then the instructions its `build:` lists under `setup:`
+        /// (decision 2 of the builders plan).
+        func setupSteps(in scope: inout Scope, origin: String) -> [PlannedStep] {
+            let ids = Set(scope.modules.aliases.values).subtracting(scope.modules.setUp)
+            var ordered: [String] = []
+            func visit(_ id: String) {
+                guard ids.contains(id), !ordered.contains(id) else { return }
+                for dependency in planner.modules[id]?.manifest.dependsOn ?? [] {
+                    visit(WrappfileChecker.splitConstraint(dependency).0.lowercased())
+                }
+                ordered.append(id)
+            }
+            ids.sorted().forEach(visit)
+            var steps: [PlannedStep] = []
+            for id in ordered {
+                scope.modules.setUp.insert(id)
+                guard let module = planner.modules[id] else { continue }
+                if module.manifest.versions.contains(where: { $0.package != nil }), let version = scope.modules.versions[id] {
+                    steps.append(PlannedStep(instruction: "ENGINE", module: nil, options: [:], arguments: ["\(id)@\(version)"], name: nil,
+                                             origin: origin, setup: true))
+                }
+                for name in planner.declarations(module).setup {
+                    steps.append(PlannedStep(instruction: name, module: id, options: [:], arguments: [], name: nil, origin: origin, setup: true))
+                }
+            }
+            return steps
+        }
+
+        func planSetup(in scope: inout Scope, origin: String, into steps: inout [PlannedStep]) {
+            steps += setupSteps(in: &scope, origin: origin)
         }
 
         /// `INPUT`, `CONST`, `VAR` or `SET`, in `scope`.

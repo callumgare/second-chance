@@ -84,7 +84,7 @@ let package = Package(
             swiftSettings: swiftSettings
         ),
         // What a module's executor is written against, shipped or not
-        // (docs/module-programs.md): it carries out a plan's steps through
+        // (docs/modules.md#executors): it carries out a plan's steps through
         // the context the build gives it.
         .target(
             name: "WrappModuleKit",
