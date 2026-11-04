@@ -782,6 +782,24 @@
         "versions" : [
           "2026.3.0"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "2968a0be4bed2acfd6c0593ed411cc26e026b6db3e1df21808f5f6f5bd419524",
+          "needles/unsupported-warning.yaml" : "330a4f4bb3b3abd3c87888f90ace303337d41dd1de770d55a62d0bdbd040ed26",
+          "scenarios/starts-and-quits.yaml" : "bc6fba5ee95860d8f2f639a8014c75f11a30ca2a8c840ea8cea0673b47fd99ba"
+        },
+        "functions" : [
+
+        ],
+        "release" : 5,
+        "versions" : [
+          "2026.4.0",
+          "2026.3.0"
+        ]
       }
     ],
     "steam" : [
