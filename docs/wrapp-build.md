@@ -130,6 +130,16 @@ with a `DiscImageError` saying why, from the image's own bytes
 report's kind, so even a basic report says which; hdiutil's own words are in
 the log.
 
+**A hybrid Mac and PC disc mounts by its ISO 9660 side.** Its Apple
+partition map leads hdiutil to try only its HFS partition, which macOS can
+no longer mount, and refuse the image ("no mountable file systems"). An
+image that is otherwise whole is then attached without mounting and its
+device mounted as ISO 9660 in a folder of its own (`ISOMounter.mountISOSide`),
+unmounted again before it's detached. That side lists each Mac file's
+resource fork as an AppleDouble `._` file beside it, which a copy into the
+app leaves out (`WrappBuildHelper.copyContents` copies contents alone, as
+`DiscCopy` does).
+
 **An installed game isn't a disc.** Someone may choose the folder of a game
 already installed, from an old PC or a copy found online, rather than its
 disc. Step 3 turns that down first, before detection, with

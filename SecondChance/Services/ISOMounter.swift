@@ -14,17 +14,26 @@ import Logging
 /// Thread-safe tracker for mounted ISOs
 actor MountedISOTracker {
     private var mountedISOs: Set<URL> = []
+    /// A hybrid disc's ISO 9660 side mounted by hand: its mount point, and
+    /// the device hdiutil attached it as, which must be unmounted first.
+    private var devices: [URL: String] = [:]
 
-    func insert(_ url: URL) {
+    func insert(_ url: URL, device: String? = nil) {
         mountedISOs.insert(url)
+        devices[url] = device
     }
 
     func getAll() -> Set<URL> {
         return mountedISOs
     }
 
+    func device(of url: URL) -> String? {
+        devices[url]
+    }
+
     func removeAll() {
         mountedISOs.removeAll()
+        devices.removeAll()
     }
 }
 
@@ -111,6 +120,10 @@ class ISOMounter {
             // hdiutil says "image not recognised" for a truncated ISO and for a
             // file that was never one; the image itself can tell them apart.
             let diagnosis = isDMG ? (.wontOpen, Self.describeSize(of: isoPath)) : Self.diagnoseImage(at: isoPath)
+            if diagnosis.problem == .wontOpen, !isDMG, let hybrid = await mountISOSide(of: isoPath) {
+                logger.notice("hdiutil couldn't mount \(isoPath.lastPathComponent) (\(errorOutput)); mounted its ISO 9660 side instead")
+                return hybrid
+            }
             logger.error("hdiutil couldn't attach \(isoPath.path): \(errorOutput) — \(diagnosis.description)")
             throw diagnosis.problem
         }
@@ -133,6 +146,44 @@ class ISOMounter {
         throw NSError(domain: "ISOMount", code: 3, userInfo: [
             NSLocalizedDescriptionKey: "Failed to find mount point in hdiutil output"
         ])
+    }
+
+    /// A hybrid Mac and PC disc's ISO 9660 side. Its Apple partition map
+    /// leads hdiutil to look only at its HFS partition, which macOS can no
+    /// longer mount, and refuse the image ("no mountable file systems"),
+    /// though the ISO 9660 side, the one Windows reads, is whole. So the
+    /// image is attached without mounting, and its whole device mounted as
+    /// ISO 9660 in a folder of its own. Nil, with everything undone, when
+    /// that fails too.
+    private func mountISOSide(of isoPath: URL) async -> URL? {
+        do {
+            let attach = try await Process.output(
+                of: "/usr/bin/hdiutil", ["attach", "-nomount", "-noverify", "-readonly", isoPath.path])
+            guard attach.succeeded,
+                  let device = attach.output.split(separator: "\n").first?
+                      .split(whereSeparator: \.isWhitespace).first.map(String.init),
+                  device.hasPrefix("/dev/disk") else {
+                logger.error("Couldn't attach \(isoPath.lastPathComponent) without mounting it: \(attach.errorOutput)")
+                return nil
+            }
+            let mountPoint = FileManager.default.temporaryDirectory
+                .appendingPathComponent("disc-\(UUID().uuidString.prefix(8))")
+            try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
+            let mount = try await Process.output(
+                of: "/sbin/mount", ["-t", "cd9660", "-o", "rdonly,nobrowse", device, mountPoint.path])
+            guard mount.succeeded else {
+                logger.error("Couldn't mount \(device) as ISO 9660: \(mount.errorOutput)")
+                _ = try? await Process.output(of: "/usr/bin/hdiutil", ["detach", device, "-quiet"])
+                try? FileManager.default.removeItem(at: mountPoint)
+                return nil
+            }
+            await tracker.insert(mountPoint, device: device)
+            logger.notice("Mounted: \(mountPoint.path) (\(device), ISO 9660)")
+            return mountPoint
+        } catch {
+            logger.error("Couldn't mount \(isoPath.lastPathComponent)'s ISO 9660 side: \(error)")
+            return nil
+        }
     }
 
     /// A DMG has no header to check its size against, so only its size.
@@ -190,7 +241,23 @@ class ISOMounter {
 
         for mountPoint in mountedISOs {
             do {
-                let detach = try await Process.output(of: "/usr/bin/hdiutil", ["detach", mountPoint.path, "-quiet"])
+                // A hybrid disc's ISO side was mounted by hand: its device
+                // stays busy until that mount goes.
+                let device = await tracker.device(of: mountPoint)
+                if device != nil {
+                    let unmount = try await Process.output(of: "/sbin/umount", [mountPoint.path])
+                    if !unmount.succeeded {
+                        logger.error("Failed to unmount \(mountPoint.path): \(unmount.errorOutput)")
+                    }
+                }
+                let detach = try await Process.output(of: "/usr/bin/hdiutil", ["detach", device ?? mountPoint.path, "-quiet"])
+                if device != nil {
+                    do {
+                        try FileManager.default.removeItem(at: mountPoint)
+                    } catch {
+                        logger.warning("Couldn't remove the empty mount point \(mountPoint.path): \(error)")
+                    }
+                }
                 if detach.succeeded {
                     logger.notice("Unmounted: \(mountPoint.path)")
                 } else {

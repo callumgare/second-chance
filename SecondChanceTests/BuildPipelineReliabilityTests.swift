@@ -67,6 +67,35 @@ struct BuildPipelineReliabilityTests {
         #expect(FileManager.default.isWritableFile(atPath: copied.path))
     }
 
+    @Test("A disc's data copied into the app is merged, writable, without attributes or AppleDouble files")
+    func copyContents() async throws {
+        let root = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let disc = root.appendingPathComponent("disc")
+        try FileManager.default.createDirectory(at: disc.appendingPathComponent("INFO"), withIntermediateDirectories: true)
+        let file = disc.appendingPathComponent("INFO/INFOPICS.CXT")
+        try Data(repeating: 7, count: 4096).write(to: file)
+        _ = setxattr(file.path, "com.apple.FinderInfo", [UInt8](repeating: 1, count: 32), 32, 0, 0)
+        // How a hybrid disc's ISO side lists a Mac file's resource fork
+        try Data(repeating: 1, count: 100).write(to: disc.appendingPathComponent("INFO/._ICON_"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: disc.appendingPathComponent("INFO").path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: disc.appendingPathComponent("INFO").path) }
+
+        let game = root.appendingPathComponent("game")
+        try FileManager.default.createDirectory(at: game.appendingPathComponent("INFO"), withIntermediateDirectories: true)
+        try Data([0]).write(to: game.appendingPathComponent("INFO/kept.txt"))
+        try await WrappBuildHelper(bus: EventBus<AppEvent>()).copyContents(of: disc, into: game)
+
+        let copied = game.appendingPathComponent("INFO/INFOPICS.CXT")
+        #expect(try Data(contentsOf: copied).count == 4096)
+        #expect(getxattr(copied.path, "com.apple.FinderInfo", nil, 0, 0, 0) < 0)
+        #expect(FileManager.default.isWritableFile(atPath: copied.path))
+        #expect(FileManager.default.isWritableFile(atPath: game.appendingPathComponent("INFO").path))
+        #expect(!FileManager.default.fileExists(atPath: game.appendingPathComponent("INFO/._ICON_").path))
+        #expect(FileManager.default.fileExists(atPath: game.appendingPathComponent("INFO/kept.txt").path))
+    }
+
     @Test("A file the disc copy can't read fails the copy, naming it, rather than being left out")
     func discCopyUnreadableFile() async throws {
         let root = try Self.temporaryDirectory()

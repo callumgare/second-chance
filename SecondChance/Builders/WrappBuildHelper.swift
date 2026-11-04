@@ -425,26 +425,33 @@ class WrappBuildHelper {
             let files = FileManager.default
             func merge(_ from: URL, _ into: URL) throws {
                 try files.createDirectory(at: into, withIntermediateDirectories: true)
-                for name in try files.contentsOfDirectory(atPath: from.path) {
+                // A disc's folders and files are read-only; the app's copies
+                // needn't be, or a later disc couldn't replace one, nor the
+                // app be removed.
+                _ = chmod(into.path, 0o755)
+                // AppleDouble files (`._name`) are a Mac file's resource fork
+                // and Finder info, as a hybrid disc's ISO side lists them:
+                // metadata, not the program's.
+                for name in try files.contentsOfDirectory(atPath: from.path) where !name.hasPrefix("._") {
                     let source = from.appendingPathComponent(name), target = into.appendingPathComponent(name)
                     var isFolder: ObjCBool = false
                     files.fileExists(atPath: source.path, isDirectory: &isFolder)
                     var targetIsFolder: ObjCBool = false
                     let exists = files.fileExists(atPath: target.path, isDirectory: &targetIsFolder)
-                    if isFolder.boolValue, exists, targetIsFolder.boolValue {
+                    if exists, !(isFolder.boolValue && targetIsFolder.boolValue) { try files.removeItem(at: target) }
+                    if isFolder.boolValue {
                         try merge(source, target)
                         continue
                     }
-                    if exists { try files.removeItem(at: target) }
-                    try files.copyItem(at: source, to: target)
-                    // A disc's files are read-only; the app's copy needn't be,
-                    // or a later disc couldn't replace one, nor the app be removed.
-                    if let enumerator = files.enumerator(atPath: target.path) {
-                        for case let inner as String in enumerator {
-                            _ = chmod(target.appendingPathComponent(inner).path, isFolder.boolValue ? 0o755 : 0o644)
-                        }
+                    // Contents alone, as DiscCopy copies a disc: a resource
+                    // fork or Finder info would fail the app's codesign.
+                    guard copyfile(source.path, target.path, nil, copyfile_flags_t(COPYFILE_DATA)) == 0 else {
+                        throw CocoaError(.fileWriteUnknown, userInfo: [
+                            NSFilePathErrorKey: target.path,
+                            NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO),
+                        ])
                     }
-                    _ = chmod(target.path, isFolder.boolValue ? 0o755 : 0o644)
+                    _ = chmod(target.path, 0o644)
                 }
             }
             try merge(folder.resolvingSymlinksInPath(), destination)
