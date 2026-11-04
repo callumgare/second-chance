@@ -120,13 +120,18 @@ nonisolated enum ShippedBundles {
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let plan = try plan(forGame: slug, edition: edition, in: bundle)
             let used = plan?.target?.modules ?? composition.modules.map(\.rawValue)
-            // Each module's data files and stages by hash, which its default
-            // updates compare (`when-changed`).
+            // Each module's data files by hash, and its stages by what they
+            // do as planned, which its default updates compare (`when-changed`).
             let refs = try used.compactMap { id -> WrappLock.ModuleRef? in
                 guard let module = modules.first(where: { $0.manifest.id == id }) else { return nil }
-                let named = (module.manifest.data ?? []) + (module.manifest.stages ?? [])
-                let files = try named.reduce(into: [String: String]()) { files, name in
+                var files = try (module.manifest.data ?? []).reduce(into: [String: String]()) { files, name in
                     files[name] = try LayerKey.hash(file: module.file(name))
+                }
+                for path in module.manifest.stages ?? [] {
+                    let name = (path as NSString).lastPathComponent
+                    let planned = try plan?.stages.first { $0.module == id && $0.name == "\(id)/\(name)" }
+                        ?? BuildPlanner.moduleStage(id, name, constraint: nil, modules: modules)
+                    files[path] = planned?.plannedTextHash
                 }
                 return WrappLock.ModuleRef(id: id, release: module.manifest.release, version: module.manifest.versions.first?.version,
                                            files: files.isEmpty ? nil : files, package: module.manifest.package()?.package.prepared)

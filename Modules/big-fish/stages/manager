@@ -1,4 +1,4 @@
-# FROM big-fish@<version>/manager
+# FROM --module=big-fish@<version> manager
 #
 # Big Fish's Game Manager in the wine module's prefix, installed from its
 # installer, pinned by its hash: Big Fish replaces the file at that address
@@ -6,7 +6,7 @@
 # rather than installing something nobody has tried. ⌘ acts as Ctrl in its
 # window, so ⌘C and ⌘V work in its sign-in form. A bundle's Big Fish stage
 # is built from it and installs its game with DO big-fish.install.
-FROM wine@10/prefix AS manager
+FROM --module=wine@10 prefix AS manager
 USE big-fish
 BIG-FISH.MANAGER \
     --mount=type=fetch,url=https://cdn-games.bigfishsites.com/gm_35/gm_installers/currentInstallers/Windows/bfginstaller35.exe,sha256=2fd87093fc1116dd1a6f36f0746f8f8a889b04b59dd8e7d69723e5af6dbd4175,target=C:/second-chance-big-fish/bfginstaller35.exe

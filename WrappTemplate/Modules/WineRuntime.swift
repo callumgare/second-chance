@@ -78,9 +78,11 @@ final class WineRuntime: GameStarting {
         let declared = GameGraphicsAPI(declared: config.launch.options["wine.graphics"])
         let graphics = declared ?? GameGraphicsAPI(exeAt: gameExe, game: game)
         let said = declared == nil ? "" : ", as its launch says"
-        logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(said)\(graphics.mayUseCncDdraw ? "" : ", so cursor lock isn't needed")")
+        let lock = config.launch.cursorLock(inferred: graphics.mayUseCncDdraw)
+        let why = config.launch.choosesItsHelpers ? "its launch doesn't ask for it" : "it doesn't draw through cnc-ddraw"
+        logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(said)\(lock ? "" : ", and cursor lock isn't armed: \(why)")")
         watchers.helperReport = InProcessHelperReport(
-            armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe, declared: graphics), logger: logger)
+            armingVariables: Wine.inProcessHelperVariables(gameExe: gameExe, declared: graphics, launch: config.launch), logger: logger)
         // Steam's launches are judged differently: Steam stays running.
         watchers.quitCheck = GameQuitCheck(graphicsAPI: graphics, throughSteam: config.composition.has(.steam))
         watchers.copyProtection = CopyProtection(exeAt: gameExe)
@@ -169,7 +171,8 @@ final class WineRuntime: GameStarting {
         do {
             game = try wine.start(command,
                                   environment: Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExeUnixPath),
-                                                                             game: GameInfoProvider.shared.gameInfo(for: config.gameSlug)),
+                                                                             game: GameInfoProvider.shared.gameInfo(for: config.gameSlug),
+                                                                             launch: config.launch),
                                   output: .log(outputLogger, onLine: { line in
                                       diagnostics.observe(line: line)
                                       watchers.observe(line: line)

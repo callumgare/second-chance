@@ -20,6 +20,9 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public let seriesOrder: Int?
     public let displayName: String?
     public let formerBundleIds: [String]?
+    /// Folders of the bundle's own its Wrappfile may read files from
+    /// (`assets/`), which Second Chance gives the builder as allowed paths.
+    public let allowPaths: [String]?
     /// A Wrappfile function the default stages run first.
     public let setup: String?
     public let editions: [Edition]
@@ -33,6 +36,9 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public struct Tests: Decodable, Hashable, Sendable {
         /// `<module>/<scenario>`.
         public let scenario: String?
+        /// The window its program is expected to end up in, `fullscreen` or
+        /// `windowed`: what WrappPuppeteer holds it to.
+        public let window: String?
         public let parameters: [String: TestValue]?
     }
 
@@ -77,12 +83,11 @@ public nonisolated struct Manifest: Decodable, Hashable, Sendable {
     public var name: String { String(id.split(separator: "/").last ?? "") }
     public var namespace: String { String(id.split(separator: "/").first ?? "") }
 
-    /// The Wrappfile stage built (`target`), the stage it starts from on a
-    /// fresh build (`base`), and what the Wrappfile's `INPUT`s are given, by
-    /// name. An edition with no stage yet has inputs and no target.
+    /// The Wrappfile stage built (`target`), and what the Wrappfile's
+    /// `INPUT`s are given, by name. An edition with no stage yet has inputs
+    /// and no target.
     public struct Build: Decodable, Hashable, Sendable {
         public let target: String?
-        public let base: String?
         /// Keyed by name in the manifest; each with its name as its `id`
         /// here, sorted, as a key's case and hyphens wouldn't survive
         /// decoding (`Manifest.decode`).

@@ -33,6 +33,7 @@ editions:
 
 tests:
   scenario: "scummvm/starts-and-quits"
+  window: "fullscreen"
 
 notes:
   about: "Revolution Software's 1992 adventure, the English DOS release ScummVM hosts with Revolution's permission. The first ScummVM program beyond Nancy Drew."

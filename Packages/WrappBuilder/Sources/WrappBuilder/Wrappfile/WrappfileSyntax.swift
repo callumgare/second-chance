@@ -76,16 +76,16 @@ public nonisolated enum StageSource: Sendable, Equatable, CustomStringConvertibl
         switch self {
         case .scratch: "scratch"
         case .stage(let name): name
-        case .module(let id, let constraint, let stage): "\(id)\(constraint.map { "@\($0)" } ?? "")/\(stage)"
+        case .module(let id, let constraint, let stage): "--module=\(id)\(constraint.map { "@\($0)" } ?? "") \(stage)"
         }
     }
 
     /// The bare wrapp template.
     case scratch
-    /// A stage of this Wrappfile, or one Second Chance supplies (`base`,
-    /// `previous`).
+    /// A stage of this Wrappfile, or the old wrapp an update is built from
+    /// (`previous`).
     case stage(String)
-    /// A module's stage: `FROM steam@2/client`.
+    /// A module's stage: `FROM --module=steam@2 client`.
     case module(id: String, constraint: String?, stage: String)
 }
 
@@ -94,7 +94,7 @@ public nonisolated indirect enum Step: Sendable, Equatable {
     /// `IF` … `ELSE IF` … `ELSE` … `END`: each branch's condition (nil for
     /// `ELSE`) and steps; the first that holds runs.
     case conditional([Branch])
-    /// `LAYER` … `END`.
+    /// `LAYER-HINT` … `END`.
     case layer([Step], line: Int)
 
     public struct Branch: Sendable, Equatable {

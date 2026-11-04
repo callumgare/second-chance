@@ -250,6 +250,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 logger.debug("Plan step: \(step) (\(step.origin))")
                 switch (step.module, step.instruction) {
                 case ("steam", "INSTALL"):
+                    try Self.checkMounts(of: step)
                     if !queued {
                         // Steam only installs a queued game when it starts.
                         await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Restarting Steam to install \(gameInfo.title)"))))
@@ -306,7 +307,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                 gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent,
                 steamID: runsWithoutSteam ? nil : String(steam.appID), composition: composition,
                 steamLaunchMode: launchMode, configureINI: false, edition: "steam",
-                launch: launch, icon: plan.icon, input: input
+                launch: launch, app: plan.app, input: input
             )
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath
@@ -642,5 +643,20 @@ final class SteamWrappBuilder: WrappBuildStrategy {
                                                name: nil, origin: "STEAM.REMOVE, undoing \(step.origin)"), in: wrappPath)
         }
         logger.notice("Removed the Steam client from the wrapp")
+    }
+}
+
+extension SteamWrappBuilder {
+    /// The mounts `STEAM.INSTALL` is given are the ones this build gives
+    /// it, the shared sign-in and the cached client: another would be
+    /// accepted and ignored.
+    nonisolated static func checkMounts(of step: PlannedStep) throws {
+        let given = Set(step.options["mount"] ?? [])
+        let carried: Set = ["type=secret,id=steam-sign-in", "type=cache,id=steam-client"]
+        guard given.isSubset(of: carried) else {
+            let extra = given.subtracting(carried).sorted().joined(separator: ", ")
+            throw WrappBuildError.buildRecipeProblem(
+                "\(step.origin): STEAM.INSTALL is given the sign-in and the client as \(carried.sorted().joined(separator: " and ")), not \(extra)")
+        }
     }
 }

@@ -6,6 +6,7 @@ title: "The Phantom of Venice"
 series: "Nancy Drew"
 series-order: 19
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.phantom-of-venice"]
+allow-paths: ["assets/"]                     # its answer files
 
 volumes:
   wine-documents:
@@ -41,6 +42,7 @@ editions:
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
+  window: "fullscreen"
 
 notes:
   installer: "installshield"

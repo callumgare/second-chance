@@ -25,14 +25,14 @@ struct WrappfileCheckerTests {
     USE installer
     USE nancy-drew AS nd
     WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
-    INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss --automation=module:nancy-drew/assets/installshield-custom-dialog-automate.au3
+    INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --answer-file=assets/disc.iss --automation=module:nancy-drew:/assets/installshield-custom-dialog-automate.au3
     DO nd.patch --id=x --into=${const.install-dir}
     FROM prefix AS her-download
     USE her-download
     HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir}
-    FROM steam@1/client AS steam
+    FROM --module=steam@1 client AS steam
     DO steam.install --game=${input.game} --into=${const.install-dir}
-    FROM big-fish@1/manager AS big-fish
+    FROM --module=big-fish@1 manager AS big-fish
     DO big-fish.install --game=${input.game} --into=${const.install-dir}
     """
 
@@ -64,9 +64,9 @@ struct WrappfileCheckerTests {
         // A module's options and mount fields.
         ("USE installer", "USE installer\nRUN --wine.nothing=1 C:/x.exe",
          "line 9: RUN --wine.nothing: the wine module adds no option nothing to RUN"),
-        ("USE installer", "USE installer\nRUN --mount=type=source,from=disc-1,wine.letter=D: C:/x.exe",
-         "line 9: RUN --mount=…,wine.letter=…: the wine module adds no field letter to a source mount"),
-        ("USE installer", "USE installer\nRUN --mount=type=source,from=disc-1,steam.drive=D: C:/x.exe",
+        ("USE installer", "USE installer\nRUN --mount=type=cache,id=x,wine.letter=D: C:/x.exe",
+         "line 9: RUN --mount=…,wine.letter=…: the wine module adds no field letter to a cache mount"),
+        ("USE installer", "USE installer\nRUN --mount=type=cache,id=x,steam.drive=D: C:/x.exe",
          "line 9: RUN --mount=…,steam.drive=…: the stage doesn't USE a module called steam"),
         // Names.
         ("FROM prefix AS disc", "FROM prefix AS 1disc", "line 7: stage name 1disc must start with a letter"),
@@ -161,7 +161,7 @@ struct WrappfileCheckerTests {
         let manifest = try loader.load(folder).get().manifest
         let types = PathTypeRegistry([PathType(name: "stub", module: "wine", roles: [.program], shortForm: .driveLetter)])
         let checker = WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: try shippedModules(), pathTypes: types,
-                                       native: { $0 == "wine" ? StubBuild.self : BuildModules.native($0) })
+                                       declarations: { $0.manifest.id == "wine" ? Self.stub : $0.declarations })
         let file = try WrappfileParser.parse("""
         FROM scratch AS x
         USE wine
@@ -175,6 +175,14 @@ struct WrappfileCheckerTests {
         ])
     }
 
+    /// A module whose additions a test declares.
+    nonisolated static let stub: ModuleDeclarations = {
+        var stub = ModuleDeclarations()
+        stub.coreOptions = ["RUN": ["desktop": .value]]
+        stub.mountFields = ["cache": ["size"]]
+        return stub
+    }()
+
     @Test func modulesFunctionsParseAndCheck() throws {
         let module = try #require(try shippedModules().first { $0.manifest.id == "nancy-drew" })
         for path in module.manifest.functions ?? [] {
@@ -182,11 +190,4 @@ struct WrappfileCheckerTests {
             #expect(file.function(named: (path as NSString).lastPathComponent) != nil, "\(path)")
         }
     }
-}
-
-/// A module whose additions a test declares.
-private enum StubBuild: BuildModule {
-    static let id: ModuleID = "wine"
-    static let coreOptions: [String: [String: InstructionSpec.OptionKind]] = ["RUN": ["desktop": .value]]
-    static let mountFields: [String: Set<String>] = ["cache": ["size"]]
 }

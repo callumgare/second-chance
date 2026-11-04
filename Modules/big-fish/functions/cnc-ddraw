@@ -8,5 +8,5 @@
 # the unscaled mouse: on a fullscreen display the cursor sat at the picture's
 # edge and no click reached the menu.
 FUNCTION cnc-ddraw
-  EDIT C:/windows/syswow64/ddraw.ini --must-exist --ini=ddraw.hook=2
+  EDIT C:/windows/syswow64/ddraw.ini --keys-must-exist --ini=ddraw.hook=2
 END

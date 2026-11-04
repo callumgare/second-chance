@@ -31,7 +31,7 @@ struct WrappfileParserTests {
       # nothing
     END
 
-    FROM steam@2/client AS steam
+    FROM --module=steam@2 client AS steam
     VAR mode
     IF ${input.disc-1.id} = "disc-1"
       LAYER

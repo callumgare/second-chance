@@ -6,6 +6,7 @@ title: "Secret of the Old Clock"
 series: "Nancy Drew"
 series-order: 13
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.old-clock"]
+allow-paths: ["assets/"]                     # its answer files
 
 volumes:
   wine-documents:
@@ -46,6 +47,7 @@ editions:
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
+  window: "fullscreen"
 
 notes:
   installer: "installshield"

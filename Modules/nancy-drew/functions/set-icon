@@ -1,8 +1,8 @@
 # DO nancy-drew.set-icon
 #
 # The Nancy Drew games' icon as the app's: copied into its Resources and
-# named by ICON. Made from assets/nancy-drew.icon by sc generate.
+# named by APP --icon. Made from assets/nancy-drew.icon by sc generate.
 FUNCTION set-icon
   COPY assets/nancy-drew.icns /Resources/nancy-drew.icns
-  ICON /Resources/nancy-drew.icns
+  APP --icon=/Resources/nancy-drew.icns
 END

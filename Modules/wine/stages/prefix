@@ -1,4 +1,4 @@
-# FROM wine@<version>/prefix
+# FROM --module=wine@<version> prefix
 #
 # The prefix every Wine program starts from: wineboot's, made by USE wine,
 # set up as each of these steps says. A bundle names the Wine it wants in

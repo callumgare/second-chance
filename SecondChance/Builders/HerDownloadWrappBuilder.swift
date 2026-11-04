@@ -374,7 +374,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         let finalPath = try await helper.completeBuild(
             wrapp: wrappPath, gameInfo: gameInfo, source: .herDownload,
             gameExePath: inPrefix ? gameExePath : "", installerDir: inPrefix ? gameDir : "", configureINI: configureINI,
-            edition: edition, launch: plan.launch, icon: plan.icon, input: input
+            edition: edition, launch: plan.launch, app: plan.app, input: input
         )
         await helper.launchIfAsked(finalPath, input: input)
         return finalPath

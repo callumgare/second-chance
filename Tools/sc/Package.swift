@@ -22,6 +22,9 @@ let package = Package(
         .package(path: "../../Packages/WrappBuilder"),
         // Ending a puppet session's Wine, for `sc puppet`.
         .package(path: "../../Packages/WrappKit"),
+        // The builder's own tool, whose module, engine and fmt commands sc
+        // runs as its own.
+        .package(path: "../../Packages/WrappBuilderCLI"),
     ],
     targets: [
         .executableTarget(
@@ -34,6 +37,7 @@ let package = Package(
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "WrappBuilder", package: "WrappBuilder"),
                 .product(name: "WineKit", package: "WrappKit"),
+                .product(name: "WrappBuilderTool", package: "WrappBuilderCLI"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Subprocess", package: "swift-subprocess"),
                 .product(name: "Noora", package: "Noora"),

@@ -34,7 +34,7 @@ FUNCTION patch
     RUN --name=${input.id} --on-failure=ask \
         --mount=type=fetch,url=${var.patch.url},sha256=${var.patch.sha256},unpack=zip,member=${var.patch.payload},target=${input.into}/${var.patch.payload} \
         --mount=type=bind,source=assets/${var.patch.automation}.au3,target=C:/patch.au3 \
-        --mount=type=bind,source=module:installer/autoit,target=C:/autoit \
+        --mount=type=bind,source=module:installer:/autoit,target=C:/autoit \
         C:/autoit/AutoIt3.exe /ErrorStdOut C:/patch.au3 ${input.into}/${var.patch.payload}
   END
 END

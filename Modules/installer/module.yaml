@@ -1,10 +1,30 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "installer"
-release: 1
+release: 2
 native: "installer"                          # its Swift: InstallerPlan, GameInstallerRunner, InstallerBuild
 versions:
   - { version: "1" }
 depends-on: ["wine@10"]                      # installers run in Wine
 notes:
   about: "Runs a Windows installer: silently with an answer file, watched and closed when it won't exit, or under AutoIt."
+build:
+  instructions:
+    # INSTALLER.RUN --from=${input.disc-1} [program]: the installer on the input
+    # (found as GameDetector finds it when no program is named), into --into;
+    # with --patch, a patcher run in that folder.
+    RUN:
+      options:
+        from: { kind: value, role: input }
+        into: { kind: value, role: location }
+        answer-file: { kind: value, role: file }
+        automation: { kind: value, role: file }
+        creates: { kind: value, role: location }
+        patch: flag
+        mount: repeated
+      required: [into]
+      arguments: { count: "0...", roles: [program, text] }
+      layer: suggested
+      may-ask: true                             # which new program is the game, carrying on after a failed patch
+  # AutoIt, which Second Chance carries: module:installer:/autoit.
+  provided-files: [autoit]

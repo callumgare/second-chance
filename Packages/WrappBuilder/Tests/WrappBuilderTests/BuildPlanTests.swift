@@ -32,7 +32,7 @@ struct BuildPlanTests {
         #expect(install.option("from") == "input:disc-1")
         #expect(install.option("answer-file") == "bundle:assets/disc.iss")
         #expect(plan.file("bundle:assets/disc.iss")?.path.hasSuffix("Bundles/nancy-drew/blue-moon/assets/disc.iss") == true)
-        #expect(plan.file("module:nancy-drew/assets/her-update-wizard.au3") != nil)
+        #expect(plan.file("module:nancy-drew:/assets/her-update-wizard.au3") != nil)
         // blue-moon-taffy-sort is a wizard: run under AutoIt, from the module's assets.
         let patch = steps[2]
         #expect(patch.name == "blue-moon-taffy-sort")
@@ -40,8 +40,8 @@ struct BuildPlanTests {
         #expect(patch.description.hasPrefix("RUN --mount=type=fetch,url=https://"))
         let mounts = try #require(patch.options["mount"])
         #expect(mounts.first?.hasPrefix("type=fetch,url=https://") == true)
-        #expect(mounts.contains { $0.contains("source=module:nancy-drew/assets/her-update-wizard.au3") })
-        #expect(mounts.contains { $0.contains("source=module:installer/autoit") })
+        #expect(mounts.contains { $0.contains("source=module:nancy-drew:/assets/her-update-wizard.au3") })
+        #expect(mounts.contains { $0.contains("source=module:installer:/autoit") })
         #expect(patch.origin.hasPrefix("nancy-drew/functions/patch:"))
         // The game's .ini settings, which the stage writes after its patches.
         #expect(steps[3].arguments == ["wine:\(installDir)/*.ini"])
@@ -71,7 +71,7 @@ struct BuildPlanTests {
         #expect(scarlet.target?.steps.map(\.description) == ["COPY --from=input:disc-1 . /SharedSupport/game/"])
         #expect(scarlet.launch == RecordedLaunch(program: "scummvm:/SharedSupport/game/", arguments: ["nancy:nancy6"], volumes: [
             .init(name: "scummvm-saves", location: "scummvm:saves/"), .init(name: "scummvm-settings", location: "scummvm:settings/"),
-        ]))
+        ], format: RecordedLaunch.currentFormat))
         #expect(scarlet.icon == "/Resources/nancy-drew.icns")
     }
 
@@ -89,7 +89,7 @@ struct BuildPlanTests {
                 == ["wine.WINETRICKS", ".EDIT", ".COPY", "steam.INSTALL", "steam.SIGN-OUT", ".EDIT"])
         let exe = "wine:C:/Nancy Drew/Secret of the Old Clock/Game.exe"
         #expect(steam.launch?.program == "steam://rungameid/31880")
-        #expect(steam.launch?.options == ["wine.graphics": "direct-draw", "steam.exe": exe])
+        #expect(steam.launch?.options == ["wine.graphics": "direct-draw", "wine.cursor-lock": "", "steam.exe": exe])
         #expect(steam.launch?.fallback == exe)
         let direct = try plan("direct")
         #expect(direct.bundleSteps.last?.instruction == "REMOVE")
@@ -103,7 +103,7 @@ struct BuildPlanTests {
         FUNCTION shared
           USE nancy-drew
         END
-        FROM wine@10/prefix AS only
+        FROM --module=wine@10 prefix AS only
         DO shared
         DO nancy-drew.configure-ini --into=C:/Game
         LAUNCH --wine.graphics=direct-3d C:/Game/Game.exe
@@ -122,7 +122,7 @@ struct BuildPlanTests {
           USE nancy-drew
           DO nancy-drew.configure-ini --into=${const.install-dir}
         END
-        FROM wine@10/prefix AS only
+        FROM --module=wine@10 prefix AS only
         DO installed
         LAUNCH --wine.graphics=direct-3d ${const.install-dir}/Game.exe
         """)
@@ -136,7 +136,7 @@ struct BuildPlanTests {
         let (planner, _, bundle) = try planner("""
         CONST folder = "C:/Game"
         CONST program = "${const.folder}/Game.exe"
-        FROM wine@10/prefix AS only
+        FROM --module=wine@10 prefix AS only
         LAUNCH --wine.graphics=direct-3d ${const.program}
         """)
         let plan = try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
@@ -148,7 +148,7 @@ struct BuildPlanTests {
     func createsIsTheLaunch() throws {
         func plan(creates: String) throws -> BuildPlan {
             let (planner, _, bundle) = try planner("""
-            FROM wine@10/prefix AS only
+            FROM --module=wine@10 prefix AS only
             USE installer
             INSTALLER.RUN --from=/disc --into=C:/Game --creates=\(creates)
             LAUNCH --wine.graphics=direct-3d C:/Game/Game.exe
@@ -319,7 +319,7 @@ struct BuildPlanTests {
         FROM scratch AS only
         USE wine AS w
         USE dosbox
-        RUN --mount=type=source,from=disc-1,w.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path
+        RUN --mount=type=cache,id=disc,w.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path
         COPY --from=x . dosbox:C:/GAME/
         REMOVE /SharedSupport/x
         FROM scratch AS lonely
@@ -327,7 +327,7 @@ struct BuildPlanTests {
         DO drop --into=C:/y
         """
         #expect(try steps(text).map(\.description) == [
-            "RUN --mount=type=source,from=disc-1,wine.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path",
+            "RUN --mount=type=cache,id=disc,wine.drive=D:,target=wine:C:/d wine:C:/a.exe /c C:/not-a-path",
             "COPY --from=x . dosbox:C:/GAME/",
             "REMOVE /SharedSupport/x",
         ])

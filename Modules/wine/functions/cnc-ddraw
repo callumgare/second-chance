@@ -5,9 +5,9 @@
 # it also makes cnc-ddraw swallow the first click; the wrapp's cursor-lock
 # helper works around that. See docs/wine-in-process-helpers.md before
 # changing these settings. Each must already be in cnc-ddraw's ddraw.ini
-# (--must-exist): one that's gone means another cnc-ddraw, whose settings
+# (--keys-must-exist): one that's gone means another cnc-ddraw, whose settings
 # would leave the game wrongly windowed.
 FUNCTION cnc-ddraw
   WINE.WINETRICKS --progress=graphics cnc_ddraw
-  EDIT C:/windows/syswow64/ddraw.ini --must-exist --ini=ddraw.maintas=true --ini=ddraw.windowed=true
+  EDIT C:/windows/syswow64/ddraw.ini --keys-must-exist --ini=ddraw.maintas=true --ini=ddraw.windowed=true
 END

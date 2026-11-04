@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "dosbox"
-release: 1
+release: 2
 native: "dosbox"                             # its Swift: DOSBoxRuntime, DOSBoxBuild
 versions:
   # DOSBox Staging's own Mac build, prepared on the Mac that builds
@@ -17,3 +17,8 @@ versions:
           urls: ["https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-macOS-v0.83.0.dmg"]
 runtime: { save-warning: false }             # DOSBox is as steady as ScummVM
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a game with no menu to quit from, started and quit
+build:
+  core-options:
+    # A volume laid over a drive the game sees (mount c … -t overlay), holding
+    # what the game writes.
+    VOLUME: { overlay: flag }

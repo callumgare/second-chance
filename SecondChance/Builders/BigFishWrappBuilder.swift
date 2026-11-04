@@ -529,7 +529,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                 gameExePath: gameExePath, installerDir: (gameExePath as NSString).deletingLastPathComponent, composition: composition,
                 bigFishLaunchFile: runsInScummVM ? nil : drivePath(launch.program), bigFishSKU: choice.sku.description,
                 bigFishTrial: trial ? true : nil, configureINI: false, edition: "big-fish",
-                launch: launch, icon: plan.icon, input: input
+                launch: launch, app: plan.app, input: input
             )
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath

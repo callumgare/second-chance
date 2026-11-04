@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 6
+release: 7
 native: "wine"                               # its Swift: WineKit, WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -22,7 +22,7 @@ versions:
 runtime: { save-warning: true }              # Wine games are less stable than ScummVM's
 data: ["routine-errors.yaml"]
 retired: ["prefix.yaml"]                     # The app's own; the prefix stage replaced it
-stages: ["stages/prefix"]                   # FROM wine@<version>/prefix
+stages: ["stages/prefix"]                   # FROM --module=wine@<version> prefix
 functions: ["functions/cnc-ddraw"]          # DO wine.cnc-ddraw
 assets: ["scenarios/starts-and-quits.yaml"]   # WrappPuppeteer's: a program with no menu, started and quit
 updates:
@@ -31,3 +31,31 @@ updates:
   # keeping the game installed. Not on every release: most only change what
   # happens at launch, which a new wrapp brings anyway.
   - { id: "wine-prefix", when-changed: ["stages/prefix"] }
+build:
+  instructions:
+    # Installs a winetricks verb.
+    WINETRICKS: { arguments: { count: 1 }, layer: suggested }
+    # The prefix's drives: --only=C: removes every other, C: at drive_c, the
+    # rest blocked (Z:, the whole Mac, included).
+    DRIVES: { options: { only: value }, required: [only] }
+    # Sets (--set <key>:<name> <value>) or removes (--remove <key>:<name>) a
+    # registry value.
+    REGISTRY: { options: { set: flag, remove: flag }, arguments: { count: "1...2" } }
+    # Copies the discs it's given into --into (<into>/disk-<n>), and for more
+    # than one merges them into --combined as well, giving each a drive from
+    # D: in order: for a game that checks for its disc.
+    KEEP-DISCS:
+      options: { into: { kind: value, role: location }, combined: { kind: value, role: location } }
+      required: [into]
+      arguments: { count: "1...", roles: [input] }
+      layer: suggested
+      may-ask: true                             # disc 2 is asked for when it's needed
+  core-options:
+    # A launch's: what the program draws with (direct-draw, direct-3d or
+    # unknown), the log and line that say a non-zero exit was a clean quit,
+    # cursor-lock, for a game cnc-ddraw draws, which would swallow its first
+    # click, and window (fullscreen or windowed), overriding what the program
+    # asks for when the wrapp gets it wrong.
+    LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value }
+    # A volume's: the drive it's given.
+    VOLUME: { drive: value }

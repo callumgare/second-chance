@@ -22,16 +22,17 @@
             "name": "comment.line.number-sign.wrappfile"
         },
         "from": {
-            "match": "(?i)^\\s*(FROM)\\s+([^\\s@/]+)(?:(@)([^\\s/]+))?(?:(/)(\\S+))?(?:\\s+(AS)\\s+(\\S+))?",
+            "match": "(?i)^\\s*(FROM)\\s+(?:(--module)(=)([^\\s@]+)(?:(@)(\\S+))?\\s+)?(\\S+)(?:\\s+(AS)\\s+(\\S+))?",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" },
-                "2": { "name": "entity.name.type.stage.wrappfile" },
-                "3": { "name": "punctuation.separator.version.wrappfile" },
-                "4": { "name": "constant.numeric.version.wrappfile" },
-                "5": { "name": "punctuation.separator.stage.wrappfile" },
-                "6": { "name": "entity.name.type.stage.wrappfile" },
-                "7": { "name": "keyword.other.as.wrappfile" },
-                "8": { "name": "entity.name.type.stage.wrappfile" }
+                "2": { "name": "variable.parameter.option.wrappfile" },
+                "3": { "name": "keyword.operator.assignment.wrappfile" },
+                "4": { "name": "entity.name.namespace.module.wrappfile" },
+                "5": { "name": "punctuation.separator.version.wrappfile" },
+                "6": { "name": "constant.numeric.version.wrappfile" },
+                "7": { "name": "entity.name.type.stage.wrappfile" },
+                "8": { "name": "keyword.other.as.wrappfile" },
+                "9": { "name": "entity.name.type.stage.wrappfile" }
             }
         },
         "use": {
@@ -92,7 +93,7 @@
             }
         },
         "instruction": {
-            "match": "(?i)^\\s*(RUN|COPY|ADD|MOVE|REMOVE|EDIT|LAUNCH|VOLUME|ICON)(?=\\s|$)",
+            "match": "(?i)^\\s*(RUN|COPY|ADD|MOVE|REMOVE|EDIT|LAUNCH|VOLUME|APP)(?=\\s|$)",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" }
             }

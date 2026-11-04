@@ -290,7 +290,7 @@ enum TestCommandSupport {
     /// sc's own Swift tests (Tools/sc).
     /// The local packages that have tests of their own: what needs neither
     /// app, run by SwiftPM with no Xcode build.
-    static let testedPackages = ["WrappKit", "SecondChanceKit", "PuppeteerCore", "WrappBuilder"]
+    static let testedPackages = ["WrappKit", "SecondChanceKit", "PuppeteerCore", "WrappBuilder", "WrappBuilderCLI"]
 
     /// Each of `testedPackages`' tests, or only the suites `only` names in
     /// each package it has any for; the first failure's status, or 0.

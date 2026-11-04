@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "scummvm"
-release: 5
+release: 6
 native: "scummvm"                            # its Swift: ScummVMRuntime, ScummVMBuild
 versions:
   # ScummVM's own Mac build, prepared on the Mac that builds

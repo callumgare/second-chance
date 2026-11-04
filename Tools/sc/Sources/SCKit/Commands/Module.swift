@@ -1,6 +1,7 @@
 import ArgumentParser
 import Foundation
 import WrappBuilder
+import WrappBuilderTool
 
 struct ModuleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -30,28 +31,9 @@ struct ModuleCheckCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let loader = try ModuleLoader(root: session.repo.modules)
-        let releases = try ModuleReleases.read(from: session.repo.moduleReleases)
-        let folders = ids.isEmpty ? try loader.moduleFolders() : ids.map { session.repo.modules.appendingPathComponent($0) }
-        var failed = 0
-        for folder in folders {
-            switch loader.load(folder) {
-            case .failure(let problems):
-                failed += 1
-                for problem in problems.all { session.ui.line(problem.description) }
-            case .success(let module):
-                let problems = try releases.problems(with: module)
-                if !problems.isEmpty { failed += 1 }
-                for problem in problems { session.ui.line("\(module.manifest.id): \(problem)") }
-            }
+        try await runTool {
+            try ModuleTool.check(root: session.repo.modules, releases: session.repo.moduleReleases, ids: ids, output: session.toolOutput)
         }
-        let loaded = folders.compactMap { try? loader.load($0).get() }
-        let across = BuildModules.problems(across: loaded)
-        for problem in across { session.ui.line(problem) }
-        guard failed == 0, across.isEmpty else {
-            throw SCError("\(failed) of \(folders.count) modules have problems\(across.isEmpty ? "" : ", and \(across.count) across them").")
-        }
-        session.ui.success("\(folders.count) modules are valid, each at its recorded release.")
     }
 }
 
@@ -73,26 +55,8 @@ struct ModuleReleaseCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let loader = try ModuleLoader(root: session.repo.modules)
-        let module: ModuleFolder
-        switch loader.load(session.repo.modules.appendingPathComponent(id)) {
-        case .success(let loaded): module = loaded
-        case .failure(let problems):
-            for problem in problems.all { session.ui.line(problem.description) }
-            throw SCError("\(id) has problems; fix them first.")
+        try await runTool {
+            try ModuleTool.release(root: session.repo.modules, releases: session.repo.moduleReleases, id: id, output: session.toolOutput)
         }
-        var releases = try ModuleReleases.read(from: session.repo.moduleReleases)
-        let blocking = try releases.problems(with: module).filter { !$0.contains("isn't recorded") }
-        guard blocking.isEmpty else {
-            for problem in blocking { session.ui.line("\(id): \(problem)") }
-            throw SCError("Release \(module.manifest.release) of \(id) can't be recorded.")
-        }
-        do {
-            try releases.record(module)
-        } catch let error as ModuleReleases.RecordError {
-            throw SCError(error.description)
-        }
-        try releases.write(to: session.repo.moduleReleases)
-        session.ui.success("Recorded release \(module.manifest.release) of \(id).")
     }
 }

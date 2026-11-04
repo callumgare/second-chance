@@ -5,13 +5,13 @@ INPUT disc-2
 INPUT installer
 CONST install-dir = "C:/Program Files (x86)/Her Interactive/Secrets Can Kill"
 
-FROM wine@10/prefix AS prefix
+FROM --module=wine@10 prefix AS prefix
 
 # How the game runs, whichever edition it came from
 FROM scratch AS scummvm
 USE scummvm
-COPY module:nancy-drew/assets/nancy-drew.icns /Resources/nancy-drew.icns
-ICON /Resources/nancy-drew.icns
+COPY module:nancy-drew:/assets/nancy-drew.icns /Resources/nancy-drew.icns
+APP --icon=/Resources/nancy-drew.icns
 VOLUME scummvm-saves scummvm:saves/
 VOLUME scummvm-settings scummvm:settings/
 LAUNCH /SharedSupport/game/ nancy:nancy1

@@ -30,6 +30,13 @@ struct Wrapp {
     /// What a Wine game draws with, from its .exe; only a DirectDraw game
     /// goes through cnc-ddraw, which can swallow its first click.
     let graphics: GameGraphicsAPI
+    /// Whether its launch keeps the game in its window, whatever it asks
+    /// for (`--wine.window=windowed`).
+    let keepsWindowed: Bool
+    /// Whether the wrapp arms cursor lock in its game: its launch's
+    /// `--wine.cursor-lock`, or for an older wrapp, a game that may draw
+    /// through cnc-ddraw.
+    let cursorLock: Bool
 
     /// The shape of the picture every game draws, width over height: they
     /// all run at 640x480, 800x600 or 1024x768. On a display of another
@@ -94,6 +101,8 @@ struct Wrapp {
             ? GameGraphicsAPI(declared: launch?.options["wine.graphics"])
                 ?? GameGraphicsAPI(exeAt: layout.onDriveC(exePath), game: GameInfoProvider.shared.gameInfo(for: gameSlug))
             : .unknown
+        keepsWindowed = launch?.keepsWindowed ?? false
+        cursorLock = composition?.has(.wine) == true && (launch?.cursorLock(inferred: graphics.mayUseCncDdraw) ?? graphics.mayUseCncDdraw)
     }
 }
 

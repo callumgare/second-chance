@@ -9,7 +9,7 @@ import Foundation
 /// What an instruction may be given: its options and how many arguments,
 /// and what each is (a place in the app, a program, an input…), which the
 /// checker and planner read to know which words are paths.
-public nonisolated struct InstructionSpec: Sendable {
+public nonisolated struct InstructionSpec: Sendable, Equatable {
     /// In upper case: `RUN`, or `KEEP-DISCS` for `WINE.KEEP-DISCS`.
     public let name: String
     /// Every option it takes, by name, and whether it needs a value.
@@ -22,8 +22,17 @@ public nonisolated struct InstructionSpec: Sendable {
     public let argumentRoles: [Role]
     /// What each option's value is; plain text for one not named.
     public let optionRoles: [String: Role]
+    /// Whether its module says a layer after it is worth keeping
+    /// (`layer: suggested`).
+    public let layer: Bool
+    /// Whether it may ask the person something (`may-ask: true`), so no
+    /// lock is held while it runs.
+    public let mayAsk: Bool
+    /// Its module's data tables its Swift reads (`reads-data: [ini]`),
+    /// which are part of its key.
+    public let readsData: [String]
 
-    public enum OptionKind: Sendable {
+    public enum OptionKind: Sendable, Equatable {
         /// `--name`
         case flag
         /// `--name=value`
@@ -44,15 +53,19 @@ public nonisolated struct InstructionSpec: Sendable {
         /// A path in what `COPY --from` copies from: a stage, or an input.
         case copySource
         /// A file the build reads: the bundle's, written as a relative path,
-        /// or a module's (`module:<id>/<path>`).
+        /// or a module's (`module:<id>:/<path>`).
         case file
         /// Text, used as it is: a program's own arguments, a URL.
         case text
     }
 
     public init(_ name: String, options: [String: OptionKind] = [:], required: Set<String> = [],
-                arguments: ClosedRange<Int> = 0...0, argumentRoles: [Role] = [], optionRoles: [String: Role] = [:]) {
+                arguments: ClosedRange<Int> = 0...0, argumentRoles: [Role] = [], optionRoles: [String: Role] = [:],
+                layer: Bool = false, mayAsk: Bool = false, readsData: [String] = []) {
         self.name = name
+        self.layer = layer
+        self.mayAsk = mayAsk
+        self.readsData = readsData
         self.options = options
         self.required = required
         self.arguments = arguments
@@ -84,9 +97,8 @@ public nonisolated struct InstructionSpec: Sendable {
             InstructionSpec("USE", arguments: 1...3),
             // `--env NAME=<value>`, as many as needed: the only way a value
             // reaches a program's environment.
-            InstructionSpec("RUN", options: ["mount": .repeated, "env": .repeated, "creates": .value,
-                                             "describe": .value, "if-skipped": .value, "ask": .value],
-                            arguments: 1...Int.max, argumentRoles: [.program, .text], optionRoles: ["creates": .location]),
+            InstructionSpec("RUN", options: ["mount": .repeated, "env": .repeated],
+                            arguments: 1...Int.max, argumentRoles: [.program, .text]),
             InstructionSpec("COPY", options: ["from": .value], arguments: 2...2, argumentRoles: [.copySource, .location]),
             // `--unpack=zip --member=<file>` takes one file out of a zip; `--extract`
             // unpacks that file too (a self-extracting zip).
@@ -98,22 +110,24 @@ public nonisolated struct InstructionSpec: Sendable {
             // A volume of the manifest's, where the program sees it; or with
             // --remove, one taken off. Recorded with the launch.
             InstructionSpec("VOLUME", options: ["remove": .flag], arguments: 1...2, argumentRoles: [.text, .location]),
-            // The app's icon: an .icns in its Resources/. Recorded with the plan.
-            InstructionSpec("ICON", arguments: 1...1, argumentRoles: [.location]),
+            // What the app is: its id when the caller gives none, its name, and
+            // its icon, an .icns in its Resources/. Recorded with the plan.
+            InstructionSpec("APP", options: ["default-id": .value, "name": .value, "icon": .value],
+                            optionRoles: ["icon": .location]),
             InstructionSpec("MOVE", arguments: 2...2, argumentRoles: [.location]),
             InstructionSpec("REMOVE", arguments: 1...1, argumentRoles: [.location]),
             // `--ini=<section>.<key>=<value>`, or `--from-data=<table>`: the calling
             // module's table of replacements and settings (nancy-drew's `ini`).
-            // `--must-exist`: each setting must already be in the file, or the
-            // step fails, naming those that aren't; without it one is added.
-            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value, "must-exist": .flag], arguments: 1...1,
+            // `--keys-must-exist`: each setting must already be in the file, or
+            // the step fails, naming those that aren't; without it one is added.
+            InstructionSpec("EDIT", options: ["ini": .repeated, "from-data": .value, "keys-must-exist": .flag], arguments: 1...1,
                             argumentRoles: [.location]),
         ]
         return Dictionary(uniqueKeysWithValues: specs.map { ($0.name, $0) })
     }()
 
     /// The mount types `RUN --mount=type=…` takes.
-    public static let mountTypes: Set<String> = ["source", "cache", "secret", "bind", "fetch"]
+    public static let mountTypes: Set<String> = ["cache", "secret", "bind", "fetch"]
 
     /// What each core mount field is; plain text for the rest.
     public static let mountFieldRoles: [String: Role] = ["target": .location, "source": .file]
@@ -123,8 +137,8 @@ public nonisolated struct InstructionSpec: Sendable {
     public static let declarations: Set<String> = ["INPUT", "CONST", "VAR", "SET"]
 
     /// What's recorded with the plan rather than run as a step: the launch,
-    /// its volumes, and the app's icon.
-    public static let recorded: Set<String> = ["LAUNCH", "VOLUME", "ICON"]
+    /// its volumes, and what the app is.
+    public static let recorded: Set<String> = ["LAUNCH", "VOLUME", "APP"]
 
     /// The words that start or end a block, or a stage: compared in upper
     /// case, as every keyword is.

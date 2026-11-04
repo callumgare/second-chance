@@ -6,6 +6,7 @@ title: "Last Train to Blue Moon Canyon"
 series: "Nancy Drew"
 series-order: 14
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.blue-moon"]
+allow-paths: ["assets/"]                     # its answer files
 
 volumes:
   wine-documents:
@@ -42,6 +43,7 @@ editions:
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
+  window: "fullscreen"
 
 notes:
   installer: "installshield"

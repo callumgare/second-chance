@@ -6,6 +6,7 @@ title: "The Haunted Carousel"
 series: "Nancy Drew"
 series-order: 9
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.haunted-carousel"]
+allow-paths: ["assets/"]                     # its answer files
 
 volumes:
   wine-documents:
@@ -40,6 +41,7 @@ editions:
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
+  window: "fullscreen"
 
 notes:
   installer: "installshield"

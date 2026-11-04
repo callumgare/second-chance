@@ -222,7 +222,7 @@ extension GameInstallerRunner {
                 case "bind":
                     let source = fields["source"] ?? ""
                     let file: URL
-                    if source == "module:installer/autoit" {
+                    if source == "module:installer:/autoit" {
                         guard AutoItService.shared.isAvailable else { throw WrappBuildError.autoItNotAvailable }
                         file = AutoItService.shared.autoitDir
                     } else if let found = plan?.file(source) {

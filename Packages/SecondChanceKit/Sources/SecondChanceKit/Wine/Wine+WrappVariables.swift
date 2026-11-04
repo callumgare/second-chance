@@ -8,6 +8,7 @@
 
 import Foundation
 import GameCatalog
+import WrappFormat
 
 nonisolated extension Wine {
     /// The directory WrappPuppeteer gave the wrapp for its control sockets,
@@ -49,36 +50,46 @@ nonisolated extension Wine {
     /// program passes its environment on to the programs it starts — so these
     /// work set on Steam as well as on the game.
     /// See docs/wine-in-process-helpers.md.
+    ///
+    /// Cursor lock is the launch's to ask for (`--wine.cursor-lock`); a launch
+    /// recorded before it could gets it when the game may draw through
+    /// cnc-ddraw, as every wrapp did then, as does no launch. `--wine.window`
+    /// overrides native fullscreen.
     public static func inProcessHelperVariables(
-        gameExe exeURL: URL, game: GameInfo? = nil, environment: [String: String] = ProcessInfo.processInfo.environment
+        gameExe exeURL: URL, game: GameInfo? = nil, launch: RecordedLaunch? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
-        inProcessHelperVariables(
-            gameExe: exeURL.lastPathComponent, graphicsAPI: GameGraphicsAPI(exeAt: exeURL, game: game), environment: environment)
+        inProcessHelperVariables(gameExe: exeURL.lastPathComponent, graphicsAPI: GameGraphicsAPI(exeAt: exeURL, game: game),
+                                 launch: launch, environment: environment)
     }
 
     /// The same, for a game whose launch declares what it draws with.
     public static func inProcessHelperVariables(
-        gameExe exeURL: URL, declared graphicsAPI: GameGraphicsAPI,
+        gameExe exeURL: URL, declared graphicsAPI: GameGraphicsAPI, launch: RecordedLaunch? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
-        inProcessHelperVariables(gameExe: exeURL.lastPathComponent, graphicsAPI: graphicsAPI, environment: environment)
+        inProcessHelperVariables(gameExe: exeURL.lastPathComponent, graphicsAPI: graphicsAPI, launch: launch, environment: environment)
     }
 
     /// The same, for the .exe called `gameExe` that draws with `graphicsAPI`.
     static func inProcessHelperVariables(
-        gameExe: String, graphicsAPI: GameGraphicsAPI, environment: [String: String]
+        gameExe: String, graphicsAPI: GameGraphicsAPI, launch: RecordedLaunch? = nil, environment: [String: String]
     ) -> [String: String] {
         var env: [String: String] = [:]
         // SECOND_CHANCE_NATIVE_FULLSCREEN=0 leaves native fullscreen unarmed — a
         // debug switch for telling its main-thread polling apart from other causes.
-        if environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0" {
+        // A launch that says --wine.window=windowed keeps the game in its
+        // window; --wine.window=fullscreen makes it fullscreen whatever it asks.
+        if environment["SECOND_CHANCE_NATIVE_FULLSCREEN"] != "0", !(launch?.keepsWindowed ?? false) {
             env["NATIVE_MACOS_FULLSCREEN_EXE"] = gameExe
+            if launch?.forcesFullscreen == true { env["NATIVE_MACOS_FULLSCREEN_FORCE"] = "1" }
         }
         // SECOND_CHANCE_CURSOR_LOCK=0 leaves cursor lock unarmed, bringing back
         // cnc-ddraw's swallowed first click — for comparison. A Direct3D game
         // never goes through cnc-ddraw, and the lock's middle clicks would
         // only close the menus a player opens from the menu bar.
-        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", graphicsAPI.mayUseCncDdraw {
+        let cursorLock = launch.map { $0.cursorLock(inferred: graphicsAPI.mayUseCncDdraw) } ?? graphicsAPI.mayUseCncDdraw
+        if environment["SECOND_CHANCE_CURSOR_LOCK"] != "0", cursorLock {
             env["CURSOR_LOCK_EXE"] = gameExe
         }
         // SECOND_CHANCE_MODE_SCALING=0 leaves mode scaling unarmed, so a game

@@ -50,4 +50,34 @@ struct InProcessHelperVariablesTests {
         let crystalSkull = GameInfoProvider.shared.gameInfo(for: "crystal-skull")
         #expect(Wine.inProcessHelperVariables(gameExe: wrapped, game: crystalSkull, environment: [:])["CURSOR_LOCK_EXE"] == nil)
     }
+
+    @Test("A launch that says what it wants gets cursor lock only when it asks, whatever the game draws with")
+    func theLaunchChoosesCursorLock() {
+        let asks = RecordedLaunch(program: "wine:C:/Game.exe", options: ["wine.cursor-lock": ""], format: RecordedLaunch.currentFormat)
+        let doesnt = RecordedLaunch(program: "wine:C:/Iji.exe", format: RecordedLaunch.currentFormat)
+        let older = RecordedLaunch(program: "wine:C:/Game.exe")
+        func lock(_ launch: RecordedLaunch, _ api: GameGraphicsAPI) -> String? {
+            Wine.inProcessHelperVariables(gameExe: "Game.exe", graphicsAPI: api, launch: launch, environment: [:])["CURSOR_LOCK_EXE"]
+        }
+        #expect(lock(asks, .direct3D) == "Game.exe")
+        // Iji imports ddraw.dll and d3d8.dll: inferred, it would have had the lock.
+        #expect(lock(doesnt, .unknown) == nil)
+        #expect(lock(doesnt, .directDraw) == nil)
+        // One recorded before the option is inferred, as it was.
+        #expect(lock(older, .directDraw) == "Game.exe")
+        #expect(lock(older, .direct3D) == nil)
+    }
+
+    @Test("--wine.window overrides native fullscreen: windowed leaves it unarmed, fullscreen forces it")
+    func theLaunchOverridesFullscreen() {
+        func variables(_ window: String?) -> [String: String] {
+            let launch = RecordedLaunch(program: "wine:C:/Game.exe", options: window.map { ["wine.window": $0] } ?? [:],
+                                        format: RecordedLaunch.currentFormat)
+            return Wine.inProcessHelperVariables(gameExe: "Game.exe", graphicsAPI: .unknown, launch: launch, environment: [:])
+        }
+        #expect(variables(nil)["NATIVE_MACOS_FULLSCREEN_EXE"] == "Game.exe")
+        #expect(variables(nil)["NATIVE_MACOS_FULLSCREEN_FORCE"] == nil)
+        #expect(variables("windowed")["NATIVE_MACOS_FULLSCREEN_EXE"] == nil)
+        #expect(variables("fullscreen")["NATIVE_MACOS_FULLSCREEN_FORCE"] == "1")
+    }
 }

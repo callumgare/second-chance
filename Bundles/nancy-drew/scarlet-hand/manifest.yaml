@@ -6,6 +6,7 @@ title: "Secret of the Scarlet Hand"
 series: "Nancy Drew"
 series-order: 7
 former-bundle-ids: ["au.gare.callum.SecondChance.nancy-drew.scarlet-hand"]
+allow-paths: ["assets/"]                     # its answer files
 
 volumes:
   scummvm-saves:
@@ -46,6 +47,7 @@ editions:
 
 tests:
   scenario: "nancy-drew/quit-from-menu"
+  window: "fullscreen"
 
 notes:
   installer: "installshield"

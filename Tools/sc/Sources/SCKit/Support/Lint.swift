@@ -1,9 +1,11 @@
 import Foundation
 import Noora
+import WrappBuilderTool
 
-/// The repo's linters: SwiftLint over the Swift code (`.swiftlint.yml`) and
-/// markdownlint-cli2 over the docs (`.markdownlint.jsonc`). `sc lint` runs
-/// them, and so do CI and `sc release`.
+/// The repo's linters: SwiftLint over the Swift code (`.swiftlint.yml`),
+/// markdownlint-cli2 over the docs (`.markdownlint.jsonc`), and
+/// `wrapp-builder fmt --check` over every bundle's and module's
+/// Wrappfiles. `sc lint` runs them, and so do CI and `sc release`.
 struct Lint {
     /// One linter, and how to run it from the repo root.
     struct Linter: Sendable {
@@ -49,6 +51,18 @@ struct Lint {
             } catch {
                 failed.append(linter.name)
             }
+        }
+        let wrappfiles = (try? WrappfileTool.wrappfiles(in: [session.repo.root.appendingPathComponent("Bundles"), session.repo.modules])) ?? []
+        do {
+            let unformatted = try WrappfileTool.format(wrappfiles, check: true, migrate: true, output: session.toolOutput)
+            if unformatted.isEmpty {
+                session.ui.success("Wrappfiles are formatted")
+            } else {
+                failed.append("Wrappfile format")
+            }
+        } catch {
+            session.ui.line("Wrappfiles couldn't be checked: \(error)")
+            failed.append("Wrappfile format")
         }
         return failed
     }

@@ -1,10 +1,10 @@
-# FROM steam@<version>/client
+# FROM --module=steam@<version> client
 #
 # Steam's client in the wine module's prefix, with ⌘ acting as Ctrl in its
 # windows, so ⌘C and ⌘V work in its sign-in window, for a build and the app
 # alike. A bundle's Steam stage is built from it and installs its game with
 # DO steam.install. STEAM.REMOVE takes all of this away again.
-FROM wine@10/prefix AS client
+FROM --module=wine@10 prefix AS client
 USE steam
 STEAM.CLIENT
 WINE.REGISTRY --set "HKEY_CURRENT_USER\Software\Wine\AppDefaults\steam.exe\Mac Driver:LeftCommandIsCtrl" y

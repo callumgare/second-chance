@@ -116,7 +116,7 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
 
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: game, source: .download, gameExePath: exe, installerDir: "",
-                configureINI: false, edition: chosen.edition, launch: launch, icon: plan.icon, input: input
+                configureINI: false, edition: chosen.edition, launch: launch, app: plan.app, input: input
             )
             try? FileManager.default.removeItem(at: unpacked)
             await helper.launchIfAsked(finalPath, input: input)

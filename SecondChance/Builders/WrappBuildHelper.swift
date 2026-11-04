@@ -241,7 +241,7 @@ class WrappBuildHelper {
         configureINI: Bool = true,
         bundleID: String? = nil,
         launch: RecordedLaunch? = nil,
-        icon: String? = nil
+        app: RecordedApp = RecordedApp()
     ) async throws {
         await bus.publishWrappBuild(.progress(.configuringWrapp(substep: String(localized: "Adjusting the game's settings"))))
 
@@ -264,19 +264,26 @@ class WrappBuildHelper {
 
         // The program's bundle's id (`au.gare.callum.second-chance.program.nancy-drew.<slug>`),
         // which names where the wrapp keeps the person's files.
-        let newBundleID = bundleID ?? WrappLock.wrappBundleID(program: gameInfo.programID)
+        // Second Chance always gives the id, so the Wrappfile's
+        // `APP --default-id` never wins here (decision 25 of the builders plan).
+        let newBundleID: String
+        do {
+            newBundleID = try app.id(given: bundleID ?? WrappLock.wrappBundleID(program: gameInfo.programID))
+        } catch let error as BuildPlanner.PlanError {
+            throw WrappBuildError.buildRecipeProblem(error.description)
+        }
         plist["CFBundleIdentifier"] = newBundleID
-        plist["CFBundleName"] = gameInfo.appName
-        plist["CFBundleDisplayName"] = gameInfo.appName
+        plist["CFBundleName"] = app.name ?? gameInfo.appName
+        plist["CFBundleDisplayName"] = app.name ?? gameInfo.appName
         plist["GameExePath"] = gameExePath
         plist["Program Name and Path"] = gameExePath
-        // The icon the Wrappfile names (`ICON`), in place of the template's
+        // The icon the Wrappfile names (`APP --icon`), in place of the template's
         // generic one, which `CFBundleIconName` names in its asset catalog
         // and would win over the file.
-        if let icon {
+        if let icon = app.icon {
             guard let file = WrappLayout(app: wrappPath).location(icon), fileManager.fileExists(atPath: file.path),
                   file.deletingLastPathComponent().lastPathComponent == "Resources" else {
-                throw WrappBuildError.buildRecipeProblem("ICON \(icon) isn't a file in the app's Resources/")
+                throw WrappBuildError.buildRecipeProblem("APP --icon=\(icon) isn't a file in the app's Resources/")
             }
             plist["CFBundleIconFile"] = file.lastPathComponent
             plist.removeValue(forKey: "CFBundleIconName")
@@ -671,7 +678,7 @@ class WrappBuildHelper {
         edition: String? = nil,
         updated: WrappLock.UpdateRecord? = nil,
         launch: RecordedLaunch? = nil,
-        icon: String? = nil,
+        app: RecordedApp = RecordedApp(),
         input: WrappBuildInput
     ) async throws -> URL {
         // What it was built from, for updating it and for reports; its
@@ -688,7 +695,7 @@ class WrappBuildHelper {
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,
             bigFishLaunchFile: bigFishLaunchFile, bigFishSKU: bigFishSKU, bigFishTrial: bigFishTrial,
-            configureINI: configureINI, bundleID: lock.wrappBundleID, launch: launch, icon: icon
+            configureINI: configureINI, bundleID: lock.wrappBundleID, launch: launch, app: app
         )
         // A program whose launch has no Wine (a ScummVM game whose data is in
         // the app) keeps no prefix: what was built in one isn't the app's.

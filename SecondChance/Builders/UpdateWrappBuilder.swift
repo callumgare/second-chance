@@ -151,7 +151,7 @@ final class UpdateWrappBuilder {
                 gameExePath: gameExePath, installerDir: installerDir,
                 steamID: settings.steamAppID, composition: composition, steamLaunchMode: settings.steamLaunchMode,
                 edition: target.edition, updated: record, launch: editionPlan?.launch ?? settings.recordedLaunch,
-                icon: editionPlan?.icon, input: input
+                app: editionPlan?.app ?? RecordedApp(), input: input
             )
             await helper.launchIfAsked(finalPath, input: input)
             return .updated(finalPath)

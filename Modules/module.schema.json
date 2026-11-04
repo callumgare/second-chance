@@ -3,6 +3,41 @@
   "$id": "https://second-chance.invalid/schemas/module.json",
   "title": "Second Chance module",
   "description": "A module's module.yaml: its id, its release and the versions that release provides, what it depends on, and the data it carries. docs/modules.md describes every field.",
+  "$defs": {
+    "role": { "enum": ["location", "program", "input", "copy-source", "file", "text"] },
+    "kind": { "enum": ["value", "flag", "repeated"] },
+    "option": {
+      "description": "Whether it takes a value (value), none (flag) or may be given many times (repeated); and what its value is, where it isn't text.",
+      "oneOf": [
+        { "$ref": "#/$defs/kind" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "$ref": "#/$defs/kind" }, "role": { "$ref": "#/$defs/role" } }
+        }
+      ]
+    },
+    "instruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "options": { "type": "object", "propertyNames": { "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }, "additionalProperties": { "$ref": "#/$defs/option" } },
+        "required": { "description": "Options it can't do without.", "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "count": { "description": "How many: 1, 1...2, or 1... for any number from 1.", "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "string", "pattern": "^[0-9]+(\\.\\.\\.([0-9]+)?)?$" }] },
+            "roles": { "description": "What each is, in order; the last goes for every argument after it.", "type": "array", "items": { "$ref": "#/$defs/role" } }
+          }
+        },
+        "layer": { "description": "suggested: it's expensive, so a layer after it is worth keeping.", "const": "suggested" },
+        "may-ask": { "description": "It may ask the person something as it runs, so no layer lock is held for it.", "type": "boolean" },
+        "reads-data": { "description": "The module's data tables its Swift reads, which go into its steps' keys.", "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+      }
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "id", "release", "versions"],
@@ -70,12 +105,12 @@
       "items": { "type": "string", "pattern": "^([a-z0-9-]+/)?[a-z0-9-]+(@.+)?$" },
       "uniqueItems": true
     },
-    "installs-after": {
+    "allow-paths": {
+      "description": "Folders of its own its Wrappfile's stages and functions may read files from (assets/), each relative to its folder and ending in /: nothing is read for being beside it (docs/wrappfile.md#what-a-build-may-read).",
       "type": "array",
-      "items": { "type": "string" },
+      "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^*]+/$" },
       "uniqueItems": true
     },
-    "options-schema": { "type": "string" },
     "stages": { "type": "array", "items": { "type": "string" } },
     "functions": { "type": "array", "items": { "type": "string" } },
     "data": {
@@ -104,7 +139,6 @@
         "save-warning": { "description": "Whether the save warning is shown before the program starts.", "type": "boolean" }
       }
     },
-    "volumes": { "type": "object" },
     "updates": {
       "description": "The module's default updates, run after a bundle's for a wrapp whose copy of this module is behind this release. One with no build is done by the module's own Swift.",
       "type": "array",
@@ -120,7 +154,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": ["target"],
-            "properties": { "target": { "type": "string" }, "base": { "type": "string" } }
+            "properties": { "target": { "type": "string" } }
           },
           "fresh-build": { "type": "boolean" },
           "when-changed": {
@@ -132,7 +166,42 @@
         }
       }
     },
-    "invalidates": { "type": "object" },
+    "build": {
+      "description": "What the module adds to a build: its instructions, the options it adds to the core's, its mount fields (docs/modules.md#what-a-module-declares). The checker and planner read these alone.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instructions": {
+          "description": "Its instructions, by name in upper case (KEEP-DISCS for WINE.KEEP-DISCS).",
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*$" },
+          "additionalProperties": { "$ref": "#/$defs/instruction" }
+        },
+        "core-options": {
+          "description": "Options it adds to core instructions, by instruction, each written --<alias>.<option>.",
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Z]+$" },
+          "additionalProperties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/option" } }
+        },
+        "mount-fields": {
+          "description": "Fields it adds to core mount types, by type, each written <alias>.<field>=….",
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }, "uniqueItems": true }
+        },
+        "provided-files": {
+          "description": "Files its Swift provides rather than its folder, named module:<id>:/<path>.",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "setup": {
+          "description": "The instructions USE plans in a tree that doesn't have the module yet, in order: each one of its instructions.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*$" },
+          "uniqueItems": true
+        }
+      }
+    },
     "notes": { "description": "For people only; never read." }
   }
 }

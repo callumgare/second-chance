@@ -3,7 +3,7 @@
 INPUT game
 CONST install-dir = "C:/SkiFree"
 
-FROM wine@10/prefix AS download
+FROM --module=wine@10 prefix AS download
 COPY --from=${input.game} . ${const.install-dir}/ # the edition's download input, unpacked as its manifest says
 # A Windows program that draws with GDI, neither DirectDraw nor Direct3D
 LAUNCH --wine.graphics=unknown "${const.install-dir}/ski32.exe"

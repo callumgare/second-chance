@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import WrappBuilderTool
 import Noora
 
 struct ReleaseCommand: AsyncParsableCommand {

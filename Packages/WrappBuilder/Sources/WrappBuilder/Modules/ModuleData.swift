@@ -23,6 +23,8 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     public let retired: [String]?
     public let assets: [String]?
     public let functions: [String]?
+    /// Folders of its own its stages and functions may read files from.
+    public let allowPaths: [String]?
     /// Its stages that are Wrappfiles (`stages/prefix`), as a bundle builds
     /// `FROM <module>/<stage>`.
     public let stages: [String]?
@@ -51,6 +53,14 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
 public nonisolated struct ModuleFolder: Sendable {
     public let folder: URL
     public let manifest: ModuleManifest
+    /// What it adds to a build: its `module.yaml`'s `build:`.
+    public let declarations: ModuleDeclarations
+
+    public init(folder: URL, manifest: ModuleManifest, declarations: ModuleDeclarations = .none) {
+        self.folder = folder
+        self.manifest = manifest
+        self.declarations = declarations
+    }
 
     /// A file the module carries, by its path in the module's folder.
     public func file(_ path: String) -> URL { folder.appendingPathComponent(path) }
@@ -114,6 +124,12 @@ public nonisolated final class ModuleLoader {
             return problems(["module.yaml couldn't be read: \(error)"])
         }
         var messages: [String] = []
+        var declarations = ModuleDeclarations.none
+        do {
+            declarations = try ModuleDeclarations((document as? [String: Any])?["build"])
+        } catch {
+            messages.append("module.yaml's build: \(error.description)")
+        }
         if manifest.id != name {
             messages.append("its id is \(manifest.id), but its folder says \(name)")
         }
@@ -133,7 +149,7 @@ public nonisolated final class ModuleLoader {
                 messages.append("\(table) \(error)")
             }
         }
-        return messages.isEmpty ? .success(ModuleFolder(folder: folder, manifest: manifest)) : problems(messages)
+        return messages.isEmpty ? .success(ModuleFolder(folder: folder, manifest: manifest, declarations: declarations)) : problems(messages)
     }
 
     /// The `$id` of the schema in `file`, added to the validator the first

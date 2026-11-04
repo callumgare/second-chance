@@ -20,18 +20,19 @@ public nonisolated struct WrappfileChecker {
     let bundleFolder: URL
     let modules: [String: ModuleFolder]
     let pathTypes: PathTypeRegistry
-    let native: @Sendable (String) -> (any BuildModule.Type)?
+    /// What each module declares: its `module.yaml`'s `build:`, unless a
+    /// test gives its own.
+    let declarations: @Sendable (ModuleFolder) -> ModuleDeclarations
 
-    /// `pathTypes` and `native` are the shipped modules' unless a test gives
-    /// its own.
+    /// `pathTypes` are the shipped modules' unless a test gives its own.
     public init(manifest: Manifest, bundleFolder: URL, modules: [ModuleFolder],
                 pathTypes: PathTypeRegistry = .shipped,
-                native: @escaping @Sendable (String) -> (any BuildModule.Type)? = BuildModules.native) {
+                declarations: @escaping @Sendable (ModuleFolder) -> ModuleDeclarations = { $0.declarations }) {
         self.manifest = manifest
         self.bundleFolder = bundleFolder
         self.modules = Dictionary(modules.map { ($0.manifest.id.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
         self.pathTypes = pathTypes
-        self.native = native
+        self.declarations = declarations
     }
 
     /// What a stage knows at a point: its modules, by the name it knows
@@ -116,8 +117,8 @@ public nonisolated struct WrappfileChecker {
             switch stage.from {
             case .scratch:
                 break
-            case .stage(let name) where name == "base" || name == "previous":
-                // Supplied by Second Chance: the edition's base stage, or the old wrapp.
+            case .stage(let name) where name == "previous":
+                // Supplied by Second Chance: the old wrapp.
                 break
             case .stage(let name):
                 if let inherited = scopes[name] {
@@ -128,7 +129,7 @@ public nonisolated struct WrappfileChecker {
             case .module(let id, let constraint, let stageName):
                 if let module = modules[id] {
                     let wrappfiles = (module.manifest.stages ?? []).map { ($0 as NSString).lastPathComponent }
-                    if !(native(module.manifest.native ?? "")?.stages ?? []).contains(stageName), !wrappfiles.contains(stageName) {
+                    if !wrappfiles.contains(stageName) {
                         found.errors.append("line \(stage.line): the \(id) module has no stage called \(stageName)")
                     }
                     if let constraint, !Self.satisfies(module, constraint) {
@@ -136,7 +137,7 @@ public nonisolated struct WrappfileChecker {
                     }
                     addModule(id, as: nil, to: &scope)
                 } else {
-                    found.errors.append("line \(stage.line): FROM \(id)/\(stageName), but there's no \(id) module")
+                    found.errors.append("line \(stage.line): FROM --module=\(id) \(stageName), but there's no \(id) module")
                 }
             }
             check(stage.body, in: &scope, file: file, scopes: scopes, found: &found, all: &all)
@@ -253,14 +254,16 @@ public nonisolated struct WrappfileChecker {
                     found.errors.append("\(at): the stage doesn't USE a module called \(alias)")
                     return
                 }
-                guard let declared = native(modules[id]?.manifest.native ?? "")?.instructions
-                    .first(where: { $0.name == instruction.name }) else {
+                guard let declared = modules[id].map(declarations)?.instruction(instruction.name) else {
                     found.errors.append("\(at): the \(id) module has no instruction called \(instruction.name)")
                     return
                 }
                 spec = declared
             } else if let core = InstructionSpec.core[instruction.keyword] {
                 spec = core
+            } else if instruction.keyword == "ICON" {
+                found.errors.append("\(at) is gone: the app's icon is APP --icon=/Resources/<name>.icns")
+                return
             } else {
                 found.errors.append("\(at) isn't an instruction")
                 return
@@ -269,7 +272,7 @@ public nonisolated struct WrappfileChecker {
         checkOptions(instruction, spec: spec, scope: scope, found: &found)
         checkReferences(instruction.arguments + instruction.options.compactMap(\.value), at: at, scope: scope, found: &found)
         checkPaths(instruction, spec: spec, scope: scope, scopes: scopes, file: file, found: &found)
-        if instruction.keyword == "ICON", let icon = instruction.arguments.first?.raw, !icon.contains("${"),
+        if instruction.keyword == "APP", let icon = instruction.option("icon")?.value?.raw, !icon.contains("${"),
            !(icon.hasPrefix("/Resources/") && icon.hasSuffix(".icns")) {
             found.errors.append("\(at) \(icon): an app's icon is an .icns in its Resources/: /Resources/<name>.icns")
         }
@@ -288,7 +291,7 @@ public nonisolated struct WrappfileChecker {
             found.errors.append("\(at) \(word.raw): an input is written ${input.<name>}, naming an INPUT")
         }
         if instruction.keyword == "COPY", let from = instruction.option("from")?.value,
-           !Self.isWholeInput(from, scope: scope), file.stage(named: from.raw) == nil, from.raw != "previous", from.raw != "base" {
+           !Self.isWholeInput(from, scope: scope), file.stage(named: from.raw) == nil, from.raw != "previous" {
             found.errors.append("\(at) --from=\(from.raw), but there's no stage called that (an input is written ${input.<name>})")
         }
     }
@@ -353,13 +356,16 @@ public nonisolated struct WrappfileChecker {
                     continue
                 }
                 guard instruction.moduleAlias == nil,
-                      let declared = native(modules[id]?.manifest.native ?? "")?.coreOptions[instruction.keyword]?[name] else {
+                      let declared = modules[id].map(declarations)?.coreOptions[instruction.keyword]?[name] else {
                     found.errors.append("\(at) --\(option.name): the \(id) module adds no option \(name) to \(instruction.keyword)")
                     continue
                 }
                 kind = declared
             } else if let declared = allowed[option.name] {
                 kind = declared
+            } else if instruction.keyword == "EDIT", option.name == "must-exist" {
+                found.errors.append("\(at) --must-exist is --keys-must-exist now: it's each setting that must already be in the file")
+                continue
             } else {
                 found.errors.append("\(at) takes no --\(option.name)")
                 continue
@@ -403,7 +409,7 @@ public nonisolated struct WrappfileChecker {
                 found.errors.append("\(at) --mount=…,\(key)=…: the stage doesn't USE a module called \(alias)")
                 continue
             }
-            if !(native(modules[id]?.manifest.native ?? "")?.mountFields[type]?.contains(field) ?? false) {
+            if !(modules[id].map(declarations)?.mountFields[type]?.contains(field) ?? false) {
                 found.errors.append("\(at) --mount=…,\(key)=…: the \(id) module adds no field \(field) to a \(type) mount")
             }
         }
@@ -436,12 +442,19 @@ public nonisolated struct WrappfileChecker {
                 guard let copyFrom else { return }
                 (modules, pathRole) = (copyFrom.moduleIDs, .location)
             case .file:
+                if word.raw.hasPrefix("module:"), !word.raw.contains(":/") {
+                    found.errors.append("\(at) \(word.raw): a module's file is written module:<id>:/<path> now")
+                    return
+                }
                 // A bundle's file, as a relative path, is there; a module's
                 // function's are checked when it's planned.
                 if !scope.inFunction, !word.raw.contains("${"), !word.raw.hasPrefix("module:"), !word.raw.hasPrefix("/") {
                     let relative = word.raw.hasPrefix("bundle:") ? String(word.raw.dropFirst("bundle:".count)) : word.raw
                     if !FileManager.default.fileExists(atPath: bundleFolder.appendingPathComponent(relative).path) {
                         found.errors.append("\(at) \(word.raw): the bundle has no \(relative)")
+                    } else if !HostPaths(allowed: manifest.allowPaths ?? []).allows(relative) {
+                        found.errors.append("\(at) \(word.raw): the build may not read it. "
+                            + HostPaths.howToAllow(relative, of: "the bundle's manifest"))
                     }
                 }
                 return
@@ -627,7 +640,7 @@ public nonisolated struct WrappfileChecker {
         var problems: [String] = []
         let builds = manifest.editions.compactMap { edition in edition.build.map { ("edition \(edition.id)", $0) } }
         for (owner, build) in builds {
-            for stage in [build.target, build.base].compactMap({ $0 }) where file.stage(named: stage) == nil {
+            for stage in [build.target].compactMap({ $0 }) where file.stage(named: stage) == nil {
                 problems.append("manifest.yaml's \(owner) builds \(stage), which the Wrappfile has no stage called")
             }
         }

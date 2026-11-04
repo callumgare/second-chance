@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "disc"
-release: 1
+release: 2
 native: "disc"                               # its Swift: DiscBuild, DiskWrappBuilder, ISOMounter
 versions:
   - { version: "1" }

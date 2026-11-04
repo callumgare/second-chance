@@ -14,7 +14,7 @@ struct PrefixSetupTests {
         #expect(steps.compactMap { $0.option("progress") }.allSatisfy { WineManager.progressText($0) != nil })
     }
 
-    @Test(".ini settings are set line by line, added where missing, and with --must-exist named instead")
+    @Test(".ini settings are set line by line, added where missing, and with --keys-must-exist named instead")
     func editsIni() {
         let text = "[ddraw]\nwindowed=false\nmaintas=false\nfullscreen=true\n"
         let edited = WineSteps.edit(text, settings: [("ddraw", "windowed", "true"), ("ddraw", "maintas", "true")], mustExist: true)

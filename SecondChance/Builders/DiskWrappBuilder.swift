@@ -134,7 +134,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             let finalPath = try await helper.completeBuild(
                 wrapp: wrappPath, gameInfo: gameInfo, source: .disk,
                 gameExePath: installed.gameExePath, installerDir: installed.installerDir,
-                configureINI: false, launch: plan.launch, icon: plan.icon, input: input
+                configureINI: false, launch: plan.launch, app: plan.app, input: input
             )
 
             // Builder-owned resources: unmount now the build is complete.

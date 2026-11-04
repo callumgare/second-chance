@@ -8,6 +8,7 @@
 
 import Foundation
 import Logging
+import WrappFormat
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Shared.Steam")
 /// What Steam and Wine print while it runs, apart from Second Chance's lines about it.
@@ -77,6 +78,8 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
     /// (native fullscreen, cursor lock) are armed through Steam's environment:
     /// a game Steam starts gets Steam's, not the `-applaunch` call's.
     private let gameExe: URL?
+    /// The game's launch, which says which of its helpers to arm.
+    private let launch: RecordedLaunch?
     /// Sees each line Steam's processes print — the game's among them, when
     /// Steam launches it.
     private let onOutputLine: (@Sendable (String) -> Void)?
@@ -85,9 +88,10 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
     /// (a read-only wrapp's copy; see the wrapp's `getWinePrefix`). `gameExe`,
     /// the game's .exe, when Steam will launch a game — not while a build
     /// installs one.
-    public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
+    public init(wrappPath: URL, prefixDir: URL? = nil, gameExe: URL? = nil, launch: RecordedLaunch? = nil, onOutputLine: (@Sendable (String) -> Void)? = nil) {
         wine = Wine(wrapp: wrappPath, prefix: prefixDir)
         self.gameExe = gameExe
+        self.launch = launch
         self.onOutputLine = onOutputLine
     }
 
@@ -260,7 +264,7 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
     /// until it is told to stop.
     private func run(_ arguments: [String]) throws {
         _ = try wine.start(.program(Self.windowsExecutable, arguments),
-                           environment: gameExe.map { Wine.inProcessHelperVariables(gameExe: $0) } ?? [:],
+                           environment: gameExe.map { Wine.inProcessHelperVariables(gameExe: $0, launch: launch) } ?? [:],
                            output: .log(outputLogger, onLine: onOutputLine))
     }
 

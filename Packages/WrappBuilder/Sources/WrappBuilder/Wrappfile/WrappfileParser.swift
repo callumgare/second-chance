@@ -227,23 +227,32 @@ public nonisolated enum WrappfileParser {
             return file
         }
 
+        /// `FROM <stage> [AS <name>]`, or a module's stage, named with a flag
+        /// as Docker's `FROM --platform=` is: `FROM --module=wine@10 prefix`.
         func fromLine(_ line: Line) throws(WrappfileError) -> (StageSource, String?) {
-            let words = line.words.map(\.text)
-            guard words.count == 2 || (words.count == 4 && words[2].uppercased() == "AS") else {
-                throw WrappfileError(line: line.number, message: "FROM is FROM <stage> [AS <name>]")
+            var words = line.words.dropFirst().map(\.text)
+            var module: String?
+            if let first = words.first, first.lowercased().hasPrefix("--module=") {
+                module = String(first.dropFirst("--module=".count)).lowercased()
+                words.removeFirst()
             }
-            let name = words.count == 4 ? words[3] : nil
+            guard words.count == 1 || (words.count == 3 && words[1].uppercased() == "AS") else {
+                throw WrappfileError(line: line.number, message: "FROM is FROM [--module=<module>[@<version>]] <stage> [AS <name>]")
+            }
+            let name = words.count == 3 ? words[2] : nil
             // Stage and module names, as Docker's stage names, whatever their case.
-            let from = words[1].lowercased()
-            if from == "scratch" { return (.scratch, name) }
-            if let slash = from.lastIndex(of: "/") {
-                let module = String(from[..<slash])
-                let stage = String(from[from.index(after: slash)...])
+            let from = words[0].lowercased()
+            if let module {
+                guard !module.isEmpty else { throw WrappfileError(line: line.number, message: "FROM --module= names a module") }
                 let at = module.firstIndex(of: "@")
                 return (.module(id: at.map { String(module[..<$0]) } ?? module,
                                 constraint: at.map { String(module[module.index(after: $0)...]) },
-                                stage: stage), name)
+                                stage: from), name)
             }
+            if from.contains("/") {
+                throw WrappfileError(line: line.number, message: "FROM \(words[0]): a module's stage is written FROM --module=<module>[@<version>] <stage> now")
+            }
+            if from == "scratch" { return (.scratch, name) }
             return (.stage(from), name)
         }
 

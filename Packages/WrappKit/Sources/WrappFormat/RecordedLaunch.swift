@@ -28,6 +28,13 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     public var fallback: String?
     /// The volumes the program sees, in order.
     public var volumes: [Volume]
+    /// What the launch says for itself: nil (1) for one recorded before
+    /// `--wine.cursor-lock`, whose wrapp works it out as it did then;
+    /// `currentFormat` for one that says it.
+    public var format: Int?
+
+    /// The format a build records now.
+    public static let currentFormat = 2
 
     /// One of the bundle's volumes, where the program sees it.
     public struct Volume: Codable, Sendable, Equatable {
@@ -45,7 +52,9 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     }
 
     public init(program: String, arguments: [String] = [], environment: [String: String] = [:],
-                options: [String: String] = [:], fallback: String? = nil, volumes: [Volume] = []) {
+                options: [String: String] = [:], fallback: String? = nil, volumes: [Volume] = [],
+                format: Int? = nil) {
+        self.format = format
         self.program = program
         self.arguments = arguments
         self.environment = environment
@@ -81,6 +90,27 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
             volume.location.hasPrefix("wine:C:/users/") || volume.location == "scummvm:saves/"
                 || volume.options["dosbox.overlay"] != nil
         }?.name
+    }
+
+    /// Whether it says whether it wants the cursor lock: one recorded
+    /// before it could has its lock worked out from the program, as every
+    /// wrapp did then.
+    public var choosesItsHelpers: Bool { (format ?? 1) >= 2 }
+
+    /// `--wine.window=windowed`: a Wine program stays in its window,
+    /// whatever it asks for; an override for one the wrapp gets wrong
+    /// (decision 27 of the builders plan).
+    public var keepsWindowed: Bool { options["wine.window"] == "windowed" }
+
+    /// `--wine.window=fullscreen`: a Wine program's window is made
+    /// fullscreen whether or not it asks to be.
+    public var forcesFullscreen: Bool { options["wine.window"] == "fullscreen" }
+
+    /// Whether the wrapp arms cursor lock: when its launch says
+    /// `--wine.cursor-lock`, or, recorded before it could, when the program
+    /// may draw through cnc-ddraw (`inferred`).
+    public func cursorLock(inferred: Bool) -> Bool {
+        choosesItsHelpers ? options["wine.cursor-lock"] != nil : inferred
     }
 
     /// The volume ScummVM keeps its settings in, `scummvm:settings/`.

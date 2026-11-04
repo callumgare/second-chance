@@ -4,21 +4,21 @@ import WrappBuilder
 /// Whether the downloads engines are made from are still where their
 /// modules say: a release whose engine can't be fetched builds nothing for
 /// anyone who hasn't prepared it already (docs/modules.md#engine-packages).
-enum EngineSources {
+public nonisolated enum EngineSources {
     /// One source that didn't answer as its module says it should.
-    struct Problem: CustomStringConvertible {
+    public struct Problem: CustomStringConvertible, Sendable {
         let module: String
         let version: String
         let source: String
         let url: String
         let reason: String
 
-        var description: String { "\(module) \(version)'s \(source) at \(url): \(reason)" }
+        public var description: String { "\(module) \(version)'s \(source) at \(url): \(reason)" }
     }
 
     /// Ask each listed version's sources' first URL for its headers: it must
     /// answer 200 with the size the module names.
-    static func check(modules root: URL, session: URLSession = .shared) async throws -> [Problem] {
+    public static func check(modules root: URL, session: URLSession = .shared) async throws -> [Problem] {
         let modules = try ModuleLoader(root: root).loadAll().get()
         var problems: [Problem] = []
         for module in modules {

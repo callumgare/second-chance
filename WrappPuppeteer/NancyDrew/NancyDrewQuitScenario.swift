@@ -175,10 +175,19 @@ struct NancyDrewQuitScenario {
             return .failed("Game window couldn't become active: \(reason)")
         }
 
-        // Every wrapp opens its game fullscreen: native fullscreen for Wine,
-        // `-f` for ScummVM. A game left in a window still plays, so nothing
-        // else here would notice.
-        guard waitForFullScreen(context: context) else {
+        // What window the bundle's test expects (`tests.window`): a game
+        // meant to be fullscreen must reach a fullscreen Space (native
+        // fullscreen for Wine, `-f` for ScummVM), since a game left in a
+        // window still plays and nothing else here would notice; one meant
+        // to stay windowed must not. With no expectation, a game whose launch
+        // doesn't keep it windowed is expected fullscreen, as every one was.
+        let expectsFullscreen = test.window.map { $0 == "fullscreen" } ?? !wrapp.keepsWindowed
+        if !expectsFullscreen {
+            if !expectsWindowed(context: context) {
+                forceQuit(app)
+                return .failed("Game window went into a fullscreen Space, but its test expects it windowed")
+            }
+        } else if !waitForFullScreen(context: context) {
             forceQuit(app)
             return .failed("Game window did not go into a fullscreen Space within \(Int(options.fullScreenTimeout))s")
         }
@@ -524,6 +533,22 @@ struct NancyDrewQuitScenario {
             break
         }
         return result
+    }
+
+    /// Whether the game's window stays out of a fullscreen Space, as a game
+    /// whose test expects it windowed must: asked a few times over a few
+    /// seconds, as native fullscreen takes a window once it's up.
+    private func expectsWindowed(context: Context) -> Bool {
+        logger.notice("[Step 4] The game's test expects it windowed: checking it stays in its window...")
+        for _ in 0..<10 {
+            if let state = context.game.state(), state.native {
+                logger.error("❌ The game's window went into a fullscreen Space")
+                return false
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        logger.notice("✅ Game window stays in its window")
+        return true
     }
 
     /// Wait for the game to report its window in a macOS fullscreen Space.

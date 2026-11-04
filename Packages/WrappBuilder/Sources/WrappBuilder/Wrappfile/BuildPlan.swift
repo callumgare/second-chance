@@ -4,6 +4,7 @@
 //
 //  An edition's build, worked out from its Wrappfile before anything runs.
 
+import CryptoKit
 import Foundation
 import WrappModules
 import WrappFormat
@@ -18,15 +19,18 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
     /// Dependencies first; the last is the target.
     public let stages: [PlannedStage]
     /// The bundle's and modules' files its steps read, by their full form
-    /// (`bundle:assets/disc.iss`, `module:nancy-drew/assets/x.au3`), with
+    /// (`bundle:assets/disc.iss`, `module:nancy-drew:/assets/x.au3`), with
     /// where each is: what install layers hash and builders read.
     public var files: [String: URL] = [:]
     /// How the wrapp starts its program: the target's `LAUNCH`, with the
     /// `VOLUME`s it has. Nil only for an update's plan built `FROM previous`,
     /// which keeps the old wrapp's.
     public var launch: RecordedLaunch?
-    /// The app's icon, `/Resources/<name>.icns`; nil for the template's own.
-    public var icon: String?
+    /// What `APP` says the app is, the target's: its icon
+    /// (`/Resources/<name>.icns`, nil for the template's own), its name, and
+    /// the id to give it when the caller gives none.
+    public var app = RecordedApp()
+    public var icon: String? { app.icon }
 
     public var target: PlannedStage? { stages.last }
 
@@ -45,9 +49,52 @@ public nonisolated struct PlannedStage: Sendable, Equatable {
     /// The modules it has, by id, its dependencies' and `FROM`'s included.
     public let modules: [String]
     public let steps: [PlannedStep]
+    /// The module whose stage it is, by id; nil for the bundle's own.
+    public let module: String?
 
-    /// A module's stage (`wine/prefix`), named `<module>/<stage>`.
-    public var isModuleStage: Bool { name.contains("/") }
+    public init(name: String, from: StageSource, modules: [String], steps: [PlannedStep], module: String? = nil) {
+        self.name = name
+        self.from = from
+        self.modules = modules
+        self.steps = steps
+        self.module = module
+    }
+
+    /// A module's stage (`wine/prefix`, named `<module>/<stage>`).
+    public var isModuleStage: Bool { module != nil }
+
+    /// What its steps say, one a line, as planned: what a wrapp's lock
+    /// records of a module's stage, so its `when-changed` update runs when
+    /// what the stage does changes, never for a comment or a reformat.
+    public var plannedText: String { steps.map(\.description).joined(separator: "\n") }
+
+    /// `plannedText`'s sha256.
+    public var plannedTextHash: String {
+        SHA256.hash(data: Data(plannedText.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+/// What `APP` records: `--icon`, `--name` and `--default-id`, the last of
+/// each a stage reaches winning, inherited through `FROM`.
+public nonisolated struct RecordedApp: Sendable, Equatable {
+    public var icon: String?
+    public var name: String?
+    public var defaultID: String?
+
+    public init(icon: String? = nil, name: String? = nil, defaultID: String? = nil) {
+        self.icon = icon
+        self.name = name
+        self.defaultID = defaultID
+    }
+
+    /// The app's id: the caller's, which wins, else the Wrappfile's
+    /// default, else none, which is an error (decision 25 of the builders
+    /// plan): an app is never named by accident.
+    public func id(given: String?) throws -> String {
+        if let given, !given.isEmpty { return given }
+        if let defaultID { return defaultID }
+        throw BuildPlanner.PlanError(description: "the app needs an id: give one, or the Wrappfile's APP --default-id")
+    }
 }
 
 /// One step, ready to run: every value substituted.
@@ -138,22 +185,28 @@ public nonisolated struct BuildPlanner {
     let wrappfile: Wrappfile
     let modules: [String: ModuleFolder]
     let pathTypes: PathTypeRegistry
-    let native: @Sendable (String) -> (any BuildModule.Type)?
+    /// What each module declares: its `module.yaml`'s `build:`, unless a
+    /// test gives its own.
+    let declarations: @Sendable (ModuleFolder) -> ModuleDeclarations
+    /// Where on the Mac the build may read the bundle's files from: the
+    /// caller's grant (decision 24 of the builders plan).
+    let hostPaths: HostPaths
 
     public struct PlanError: Error, CustomStringConvertible, Equatable {
         public let description: String
     }
 
-    /// `pathTypes` and `native` are the shipped modules' unless a test gives
-    /// its own.
+    /// `pathTypes` are the shipped modules' unless a test gives its own.
     public init(bundle: ProgramBundle, wrappfile: Wrappfile, modules: [ModuleFolder],
                 pathTypes: PathTypeRegistry = .shipped,
-                native: @escaping @Sendable (String) -> (any BuildModule.Type)? = BuildModules.native) {
+                declarations: @escaping @Sendable (ModuleFolder) -> ModuleDeclarations = { $0.declarations },
+                hostPaths: HostPaths? = nil) {
+        self.hostPaths = hostPaths ?? HostPaths(allowed: bundle.manifest.allowPaths ?? [])
         self.bundle = bundle
         self.wrappfile = wrappfile
         self.modules = Dictionary(modules.map { ($0.manifest.id.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
         self.pathTypes = pathTypes
-        self.native = native
+        self.declarations = declarations
     }
 
     /// The problems planning finds in any edition's target, for either kind
@@ -202,6 +255,11 @@ public nonisolated struct BuildPlanner {
                 throw PlanError(description: cncDdraw
                     ? "\(target) sets cnc-ddraw up, but its launch doesn't draw with DirectDraw (--wine.graphics=direct-draw)"
                     : "\(target)'s launch draws with DirectDraw, but nothing sets cnc-ddraw up (DO wine.cnc-ddraw)")
+            }
+            // cnc-ddraw swallows a game's first click unless the cursor is
+            // locked, which only the launch asks for.
+            if cncDdraw, launch.options["wine.cursor-lock"] == nil {
+                throw PlanError(description: "\(target) sets cnc-ddraw up, so its launch needs --wine.cursor-lock, or the game's first click is swallowed")
             }
         }
         let unused = (edition.build?.inputs ?? []).map(\.id).filter { !recorder.usedInputs.contains($0) }
@@ -258,7 +316,7 @@ public nonisolated struct BuildPlanner {
         } else if !recorded.fromPrevious {
             throw PlanError(description: "manifest.yaml's edition \(edition.id) builds \(target), which reaches no LAUNCH")
         }
-        plan.icon = recorded.icon
+        plan.app = recorded.app
         return plan
     }
 
@@ -340,13 +398,13 @@ public nonisolated struct BuildPlanner {
 
     /// A stage's modules, by the name it knows each by, and the version of
     /// each it has; and what's recorded rather than run, inherited through
-    /// `FROM` as the modules are: its launch, volumes and icon.
+    /// `FROM` as the modules are: its launch, volumes and `APP`.
     struct StageModules {
         var aliases: [String: String] = [:]
         var versions: [String: String] = [:]
         var launch: RecordedLaunch?
         var volumes: [RecordedLaunch.Volume] = []
-        var icon: String?
+        var app = RecordedApp()
         /// Built from the old wrapp (`FROM previous`), whose launch it keeps.
         var fromPrevious = false
     }
@@ -425,7 +483,7 @@ public nonisolated struct BuildPlanner {
             guard let stage = planner.wrappfile.stage(named: name) else {
                 throw PlanError(description: "the Wrappfile has no stage called \(name)")
             }
-            if case .stage(let parent) = stage.from, parent != "base", parent != "previous" {
+            if case .stage(let parent) = stage.from, parent != "previous" {
                 try collect(parent, into: &order)
             }
             for instruction in stage.body.flatMap(\.instructions) where instruction.keyword == "COPY" {
@@ -487,7 +545,8 @@ public nonisolated struct BuildPlanner {
             var steps: [PlannedStep] = []
             let path = module.manifest.stages?.first { ($0 as NSString).lastPathComponent == stage.name } ?? "stages/\(stage.name ?? "")"
             try expand(stage.body, scope: &scope, origin: "\(module.manifest.id)/\(path)", into: &steps)
-            let planned = PlannedStage(name: name, from: stage.from, modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps)
+            let planned = PlannedStage(name: name, from: stage.from, modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps,
+                                       module: module.manifest.id)
             return (planned, scope.modules)
         }
 
@@ -698,12 +757,12 @@ public nonisolated struct BuildPlanner {
                 throw PlanError(description: "\(origin): DO \(name) takes no --\(option.name)")
             }
             try expand(function.body, scope: &inner, origin: "\(source) from \(origin)", into: &steps)
-            // What a function records (its LAUNCH, VOLUMEs, ICON) and the
+            // What a function records (its LAUNCH, VOLUMEs, APP) and the
             // modules it USEs are the calling stage's, as if written there.
             scope.modules = inner.modules
         }
 
-        /// `LAUNCH`, `VOLUME` or `ICON`: recorded with the stage, in full
+        /// `LAUNCH`, `VOLUME` or `APP`: recorded with the stage, in full
         /// form, rather than run. The last `LAUNCH` a stage reaches wins,
         /// fallback and all; volumes build up, and `--remove` takes one off.
         func record(_ instruction: Instruction, scope: inout Scope, origin: String) throws(PlanError) {
@@ -735,8 +794,11 @@ public nonisolated struct BuildPlanner {
             case "LAUNCH":
                 guard let program = arguments.first else { return }
                 let fallback = options.removeValue(forKey: "fallback")
+                if let window = options["wine.window"], !["fullscreen", "windowed"].contains(window) {
+                    throw PlanError(description: "\(origin): --wine.window=\(window): it's fullscreen or windowed, or left out for what the program asks for")
+                }
                 let launch = RecordedLaunch(program: program, arguments: Array(arguments.dropFirst()), environment: environment,
-                                            options: options, fallback: fallback)
+                                            options: options, fallback: fallback, format: RecordedLaunch.currentFormat)
                 try checkLaunch(launch, origin: origin)
                 scope.modules.launch = launch
             case "VOLUME":
@@ -751,7 +813,9 @@ public nonisolated struct BuildPlanner {
                     scope.modules.volumes.append(RecordedLaunch.Volume(name: name, location: arguments[1], options: options))
                 }
             default:
-                scope.modules.icon = arguments.first
+                if let icon = options["icon"] { scope.modules.app.icon = icon }
+                if let name = options["name"] { scope.modules.app.name = name }
+                if let id = options["default-id"] { scope.modules.app.defaultID = id }
             }
         }
 
@@ -800,7 +864,7 @@ public nonisolated struct BuildPlanner {
         /// The spec of `instruction`, a core one or `module`'s.
         func spec(of instruction: Instruction, module: String?) -> InstructionSpec? {
             guard let module else { return InstructionSpec.core[instruction.keyword] }
-            return planner.native(planner.modules[module]?.manifest.native ?? "")?.instructions.first { $0.name == instruction.name }
+            return planner.modules[module].map(planner.declarations)?.instruction(instruction.name)
         }
 
         /// What a module's option on a core instruction is (`steam.exe`, a
@@ -808,7 +872,7 @@ public nonisolated struct BuildPlanner {
         func moduleOptionRole(_ key: String, of keyword: String) -> InstructionSpec.Role? {
             guard let dot = key.firstIndex(of: ".") else { return nil }
             let module = planner.modules[String(key[..<dot])]
-            return planner.native(module?.manifest.native ?? "")?.coreOptionRoles[keyword]?[String(key[key.index(after: dot)...])]
+            return module.map(planner.declarations)?.coreOptionRoles[keyword]?[String(key[key.index(after: dot)...])]
         }
 
         /// `--<alias>.<option>` keyed by the module's id: `--w.drive` after
@@ -884,7 +948,7 @@ public nonisolated struct BuildPlanner {
         }
 
         /// A file the build reads, in full form: a relative path is the
-        /// bundle's, or in a module's function the module's; `module:<id>/…`
+        /// bundle's, or in a module's function the module's; `module:<id>:/…`
         /// is another module's. Recorded with where it is, and refused when
         /// it isn't there (but for one a module's Swift provides).
         func fileFullForm(_ path: String, scope: Scope, origin: String) throws(PlanError) -> String {
@@ -893,20 +957,34 @@ public nonisolated struct BuildPlanner {
             if path.hasPrefix("bundle:") || path.hasPrefix("module:") || path.hasPrefix("/") {
                 fullForm = path
             } else if let module = scope.module {
-                fullForm = "module:\(module.manifest.id)/\(path)"
+                fullForm = "module:\(module.manifest.id):/\(path)"
             } else {
                 fullForm = "bundle:\(path)"
             }
             if fullForm.hasPrefix("bundle:") {
-                location = planner.bundle.folder.appendingPathComponent(String(fullForm.dropFirst("bundle:".count)))
+                let relative = String(fullForm.dropFirst("bundle:".count))
+                guard planner.hostPaths.allows(relative) else {
+                    throw PlanError(description: "\(origin): \(fullForm): the build may not read it. "
+                        + HostPaths.howToAllow(relative, of: "the bundle's manifest"))
+                }
+                location = planner.bundle.folder.appendingPathComponent(relative)
             } else if fullForm.hasPrefix("module:") {
+                // `module:<id>:/<path>`: a namespaced id's `/` can't be
+                // mistaken for the path's.
                 let rest = fullForm.dropFirst("module:".count)
-                let id = String(rest.prefix { $0 != "/" })
-                let file = String(rest.dropFirst(id.count + 1))
+                guard let separator = rest.range(of: ":/") else {
+                    throw PlanError(description: "\(origin): \(fullForm): a module's file is written module:<id>:/<path> now")
+                }
+                let id = String(rest[..<separator.lowerBound]).lowercased()
+                let file = String(rest[separator.upperBound...])
                 guard let module = planner.modules[id] else {
                     throw PlanError(description: "\(origin): \(fullForm): there's no \(id) module")
                 }
-                if planner.native(module.manifest.native ?? "")?.providedFiles.contains(file) == true { return fullForm }
+                if planner.declarations(module).providedFiles.contains(file) { return fullForm }
+                guard HostPaths(allowed: module.manifest.allowPaths ?? []).allows(file) else {
+                    throw PlanError(description: "\(origin): \(fullForm): the build may not read it. "
+                        + HostPaths.howToAllow(file, of: "the \(id) module's module.yaml"))
+                }
                 location = module.file(file)
             } else {
                 return path

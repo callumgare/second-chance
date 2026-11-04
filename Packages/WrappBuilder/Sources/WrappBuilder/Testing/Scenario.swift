@@ -160,6 +160,9 @@ public nonisolated struct ScenarioError: Error, CustomStringConvertible, Equatab
 public nonisolated struct ProgramTest: Sendable {
     public let scenario: Scenario
     public let needles: NeedleLibrary
+    /// The window the program is expected to end up in (`tests.window`):
+    /// `fullscreen`, `windowed`, or nil for whatever its wrapp gives it.
+    public var window: String?
 
     /// The test of the bundle at `bundleFolder`, with modules in `modulesRoot`:
     /// the manifest's `tests.scenario` (`<module>/<name>`) and parameters.
@@ -177,6 +180,6 @@ public nonisolated struct ProgramTest: Sendable {
             bundleFolder.appendingPathComponent("tests/needles"),
             module.appendingPathComponent("needles"),
         ])
-        return ProgramTest(scenario: scenario, needles: needles)
+        return ProgramTest(scenario: scenario, needles: needles, window: tests.window)
     }
 }

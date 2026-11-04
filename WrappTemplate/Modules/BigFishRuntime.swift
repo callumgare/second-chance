@@ -64,7 +64,8 @@ final class BigFishRuntime: GameStarting {
               let gameExe = WineRuntime.launchInfo(config).gameExePath else { return [:] }
         // The catalog says what the game draws with: Armadillo hides its .exe's imports.
         var variables = Wine.inProcessHelperVariables(gameExe: URL(fileURLWithPath: gameExe),
-                                                      game: GameInfoProvider.shared.gameInfo(for: config.gameSlug))
+                                                      game: GameInfoProvider.shared.gameInfo(for: config.gameSlug),
+                                                      launch: config.launch)
         let neverShown = FileManager.default.temporaryDirectory.appendingPathComponent("second-chance-never-shown")
         variables.merge(Wine.hiddenWindowsVariables(exe: "bfgclient.exe", showFile: neverShown)) { game, _ in game }
         // The service starts the game with no output of the wrapp's, so its
@@ -121,6 +122,7 @@ final class BigFishRuntime: GameStarting {
         let manager = BigFishGameManager(wrappPath: config.appPath, prefixDir: config.winePrefix,
                                          gameExe: launchInfo.gameExePath.map(URL.init(fileURLWithPath:)),
                                          game: GameInfoProvider.shared.gameInfo(for: config.gameSlug),
+                                         launch: config.launch,
                                          onOutputLine: { line in
                                              diagnostics?.observe(line: line)
                                              watchers.observe(line: line)

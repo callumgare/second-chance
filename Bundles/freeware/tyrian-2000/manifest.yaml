@@ -29,6 +29,7 @@ editions:
 
 tests:
   scenario: "dosbox/starts-and-quits"
+  window: "fullscreen"
 
 notes:
   about: "Eclipse Software's 1995 shoot-'em-up, in its 1999 Tyrian 2000 edition, freeware since 2004. The first DOSBox program."

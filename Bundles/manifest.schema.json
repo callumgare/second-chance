@@ -36,6 +36,12 @@
       "type": "string",
       "minLength": 1
     },
+    "allow-paths": {
+      "description": "Folders of its own its Wrappfile may read files from (assets/), each relative to its folder and ending in /: nothing is read for being beside it (docs/wrappfile.md#what-a-build-may-read).",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[^*]+/$" },
+      "uniqueItems": true
+    },
     "former-bundle-ids": {
       "description": "Bundle ids wrapps of this program had before; their files are moved in and linked.",
       "type": "array",
@@ -102,12 +108,11 @@
       }
     },
     "build": {
-      "description": "The Wrappfile stage to build (target), the stage it starts from on a fresh build (base), and what the Wrappfile's INPUTs are given, by name. An edition with no stage yet (Steam's, Big Fish's) has inputs and no target.",
+      "description": "The Wrappfile stage to build (target), and what the Wrappfile's INPUTs are given, by name. An edition with no stage yet (Steam's, Big Fish's) has inputs and no target.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "target": { "$ref": "#/$defs/name" },
-        "base": { "$ref": "#/$defs/name" },
         "inputs": {
           "type": "object",
           "propertyNames": { "$ref": "#/$defs/name" },
@@ -375,7 +380,8 @@
       "additionalProperties": false,
       "properties": {
         "scenario": { "type": "string", "minLength": 1 },
-        "parameters": { "type": "object" }
+        "parameters": { "type": "object" },
+        "window": { "description": "The window its program is expected to end up in, which WrappPuppeteer holds it to.", "enum": ["fullscreen", "windowed"] }
       }
     }
   }

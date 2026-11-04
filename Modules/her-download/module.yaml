@@ -1,10 +1,23 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "her-download"
-release: 1
+release: 2
 native: "her-download"                       # its Swift: HerDownloadBuild, HerDownloadWrappBuilder, CiderPackage
 versions:
   - { version: "1" }
 depends-on: ["wine@10"]
 notes:
   about: "A source: a download from Her Interactive's store, a Windows installer or a Mac app."
+build:
+  instructions:
+    # HER-DOWNLOAD.INSTALL installer [--into=…] [--answer-file=…]: where the
+    # download's installer puts the game when --into is left out.
+    INSTALL:
+      options:
+        into: { kind: value, role: location }
+        answer-file: { kind: value, role: file }
+        automation: { kind: value, role: file }
+        creates: { kind: value, role: location }
+      arguments: { count: 1, roles: [input] }
+      layer: suggested
+      may-ask: true

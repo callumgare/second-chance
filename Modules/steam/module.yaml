@@ -1,15 +1,37 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "steam"
-release: 3
+release: 4
 native: "steam"                              # its Swift: the Steam client, SteamRuntime, SteamBuild
 versions:
   - { version: "1" }                         # Steam updates itself, so the version is the module's own
 depends-on: ["wine@10"]                      # Steam runs in the wrapp's Wine
 data: ["routine-errors.yaml"]
-stages: ["stages/client"]                   # FROM steam@1/client
+stages: ["stages/client"]                   # FROM --module=steam@1 client
 functions: ["functions/install"]            # DO steam.install
 updates:
   # A Steam game comes back from Steam with the shared sign-in, needing no
   # disc, so a wrapp with another Steam is built afresh rather than moved.
   - { id: "steam", fresh-build: true }
+build:
+  instructions:
+    # Installs Steam's client in the prefix.
+    CLIENT: { layer: suggested, may-ask: true }
+    # Has Steam install the input's app (STEAM.INSTALL game --into=…), with the
+    # shared sign-in (a secret mount) and the cached client (a cache one), and
+    # makes --into a link to the folder Steam put it in.
+    INSTALL:
+      options: { into: { kind: value, role: location }, mount: repeated }
+      required: [into]
+      arguments: { count: 1, roles: [input] }
+      layer: suggested
+      may-ask: true
+    # Takes the sign-in out of the prefix, saved to the shared store first.
+    SIGN-OUT: {}
+    # Takes Steam away: the game moved to where STEAM.INSTALL --into linked it,
+    # then Steam's folders and its registry settings removed.
+    REMOVE: {}
+  core-options:
+    # A launch's: the program Steam starts (--steam.exe=C:/…/Game.exe), which
+    # the app finds the game's process by.
+    LAUNCH: { exe: { kind: value, role: location } }
