@@ -169,8 +169,9 @@ matches its folder, no two editions share an id), are in
 
 `volumes` names what's kept outside the app, the person's: its
 `display-name`, which files in it are theirs (`in-use-when`), and how it's
-brought forward. The Wrappfile's `VOLUME` says where the program sees each
-([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)); a volume no stage
+brought forward, each by the name of a store the Wrappfile declares
+(`STORE wine-documents`), whose `LAUNCH --mount=type=store,…` says where the
+program sees it ([wrappfile.md](wrappfile.md#stores)); a volume no stage
 mounts is fine, as the ScummVM games' `wine-documents` keeps saves from before
 they ran in ScummVM. There are no variants: how a program runs is its
 edition's target's `LAUNCH`, and `sc generate` reads the catalogue's engine,

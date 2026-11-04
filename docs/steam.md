@@ -56,29 +56,36 @@ LAUNCH --wine.cursor-lock --wine.graphics=direct-draw --steam.exe=${const.progra
 
 The client stage installs Steam (`STEAM.CLIENT`) and has ⌘ act as Ctrl in its
 windows (`WINE.REGISTRY`). The `install` function (`Modules/steam/functions/install`)
-has Steam install the game with the shared sign-in, a `secret` mount, and the
-kept client, a `cache` one (`STEAM.INSTALL`), making `--into` a link to the
-folder Steam put the game in, then takes the sign-in out of the prefix
+has Steam install the game with the shared sign-in and the kept client, the
+steam module's stores (`STEAM.INSTALL --sign-in-store=sign-in
+--client-store=client`, [below](#where-the-sign-in-lives)), making `--into` a
+link to the folder Steam put the game in, then takes the sign-in out of the prefix
 (`STEAM.SIGN-OUT`). `STEAM.REMOVE` takes Steam away again: the game moved to
 where the link was, Steam's folders deleted and the client stage's
 registry settings removed. A ScummVM game's Steam stage installs it the same
 way in a stage of its own and copies its data out (`COPY --from=steam-files
 ${const.install-dir} /SharedSupport/game/`), so the app keeps no Wine.
 
-`SteamWrappBuilder` follows the plan: the client stage's steps before the
-game is known, since Steam must be signed in to say which games the account
-owns, then the edition's, recognising each by its shape. In order:
+`SteamWrappBuilder` builds through the runner
+([wrapp-build.md](wrapp-build.md#the-runner)), its steps carried out by the
+steam module's executor (`SteamExecutor`: `CLIENT`, `INSTALL`, `SIGN-OUT`,
+`REMOVE`). Steam must be signed in to say which games the account owns, so
+the game is identified first, in a tree of the client stage's own that's
+thrown away after, then the edition is built. In order:
 
 1. **Take the Steam lock.** While a game has it, ask what to do about it
    (`WrappBuildInput.askAboutSteamInUse`, below); a headless build fails
    with `steamInUse`, naming the game.
-2. **Make the wrapp and install the Steam client into it**, as the client
-   stage says — the template, the cached prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
+2. **Build the client stage in a tree to identify the game in**: the runner
+   builds the wine module's prefix and the steam module's client stage
+   (`SteamWrappPreparer`), restoring each from its layer when it can — the
+   prefix, then Valve's `SteamSetup.exe /S` (downloaded once to
    `~/Library/Caches/SecondChance/`). Not `winetricks steam`: it installs
    Microsoft's core fonts first, which Steam doesn't need under the bundled
    Wine. Then lay the
    cached updated client
-   over it (`SteamClientCache`, `~/Library/Caches/SecondChance/steam-client`),
+   over it (`SteamClientCache`, in the steam module's `client` store,
+   `~/Library/Caches/SecondChance/stores/global/steam/client`),
    so Steam's own update (most of a gigabyte) is downloaded once, not per
    build. The cache leaves out the account's sign-in, licences, settings and
    games.
@@ -145,15 +152,17 @@ owns, then the edition's, recognising each by its shape. In order:
    Steam's window (`WrappBuildViewModel.ask`); for one whose Steam edition has a
    `launch-mode` input it then asks how it launches (`getSteamLaunchMode`,
    `STEAM_LAUNCH_MODE`), the answer is the input's value, and the edition is
-   planned with it: the engine follows its launch (`engineRouted`). At
+   planned with it: the engine follows its launch (`engineRouted`). A game
+   named up front (`STEAM_GAME_SLUG`: headless builds and the integration
+   tests) is read before anything else and checked against the licences here
+   (`steamGameNotOwned`). Then Steam is stopped, its session saved, and the
+   tree thrown away.
+5. **Build the edition**, in a build folder of its own: the client stage
+   again (restored from the same layer), then the edition's steps. At
    `STEAM.INSTALL`, Steam only installs a queued game when it starts, so the
-   build then stops Steam — saving the session but leaving it in the prefix —
-   queues the install and starts Steam again, which signs straight back in.
-   A game named up front (`STEAM_GAME_SLUG`: headless builds and the
-   integration tests) is read before anything else, queued before Steam's
-   first start, and checked against the licences here instead
-   (`steamGameNotOwned`), so it needs no restart.
-5. **Wait for the install**, showing Steam's phase — "Downloading 397 MB
+   executor restores the session, queues the install and starts Steam, which
+   signs straight back in.
+6. **Wait for the install**, showing Steam's phase — "Downloading 397 MB
    through Steam", "Checking the download", "Finishing the install" — and,
    while it downloads, how far it has got: the progress bar fills, with
    "1.2 GB of 2.4 GB, about 3 minutes left" under it (`SteamDownloadMeter`,
@@ -164,7 +173,7 @@ owns, then the edition's, recognising each by its shape. In order:
    checks in a row as during the sign-in, fails the build with
    `steamExitedWhileInstalling` rather than leaving it to wait out the
    four-hour limit.
-6. **Stop Steam, save the session, and take the sign-in out of the wrapp**
+7. **Stop Steam, save the session, and take the sign-in out of the wrapp**
    (`STEAM.SIGN-OUT`).
    The build runs Steam inside the wrapp's own prefix, so without this the
    finished `.app` would carry the account's token, and anyone given a copy
@@ -172,7 +181,7 @@ owns, then the edition's, recognising each by its shape. In order:
    it runs, and on a Mac without one asks for it once. Then release the
    Steam lock: nothing after this uses Steam, and a wrapp opened while the
    build saves itself would otherwise find Steam taken by the build.
-7. **Configure.** The rest of the edition's steps: a game that runs without
+8. **Configure.** The rest of the edition's steps: a game that runs without
    Steam is moved out of `steamapps/common/` to where `--into` linked it, and
    Steam taken away (`STEAM.REMOVE`); otherwise it stays in Steam's library,
    reached through the link, and `AppSettings.plist` gets `SteamGameId`. The
@@ -185,7 +194,7 @@ Steam is stopped on the failure path too, and the session saved if it signed
 in, so a failed build neither leaves Steam running nor loses a refreshed
 sign-in. Quitting Second Chance mid-build stops it as well: each build
 registers its running Steam with `RunningSteam`, and the app waits for it to
-shut down (10 s, then by force) before deleting the temporary wrapp it runs
+shut down (10 s, then by force) before deleting the build folder it runs
 from. Otherwise quitting with Steam's sign-in window open left that window,
 and Steam's whole Wine session, running. `./sc wrapp build <slug> --from
 steam` runs the whole thing headless.
@@ -335,8 +344,10 @@ harness timing out) can't stop Steam; the next launch cleans it up (step 2).
 ## One sign-in for every wrapp
 
 Each wrapp has its own Steam install, so wrapps stay self-contained. The
-*sign-in* is shared: `SteamSessionStore` keeps it in
-`~/Library/Application Support/SecondChance/Steam/session/` (mode 0700),
+*sign-in* is shared: `SteamSessionStore` keeps it in the steam module's
+`sign-in` store, `session/` in
+`~/Library/Application Support/SecondChance/stores/steam/sign-in/` (mode 0700,
+[below](#where-the-sign-in-lives)),
 copies it into a wrapp's prefix before its Steam starts, and copies it back
 after Steam quits.
 
@@ -377,11 +388,46 @@ sign-in once. The menu item is there only while the store holds a sign-in
 (`StoreSignIns`, which looks again each time a menu opens or Second Chance
 comes to the front, since builds and wrapps save and drop it). `sc clean steam-client` drops the cached Steam client.
 
+## Where the sign-in lives
+
+The sign-in, the client and the lock are the steam module's stores and lock
+(`Modules/steam/stores`, [wrappfile.md](wrappfile.md#stores)):
+
+```dockerfile
+LOCK steam --scope=global
+LOCK client --scope=global
+STORE client --retention=cache --scope=global --exclusive=client
+STORE sign-in --scope=global --exclusive=steam
+```
+
+- **`sign-in`** is kept, and shared by every Steam app and build:
+  `SteamSessionStore`'s folder. Only the steam module's own instructions use
+  it at build time (`STEAM.INSTALL --sign-in-store=sign-in`), which takes it
+  through the step's context, so the runner holds the `steam` lock while
+  the install runs.
+- **`client`** is a cache: `SteamClientCache`'s folder, under the `client`
+  lock while `STEAM.CLIENT` or `STEAM.INSTALL` runs.
+- **The `steam` lock is the one-wrapp-on-Steam lock** (below). A build takes
+  it first (`SteamActiveLock`) for a token its runner holds the store's lock
+  by too (`ProcessLocks`), so the build's own steps never wait on it.
+
+**1.1.0 kept these elsewhere**, and its apps still look there:
+`…/SecondChance/Steam/session/`, `…/Steam/session.lock` and
+`…/Steam/active-wrapp.lock`. When Second Chance starts (`AppMigrations`), it
+moves each into its store, if it hasn't already, and leaves a link at the
+old path: a 1.1.0 app follows the link to the same session and saves the
+same session back, and its `flock` through the link locks the same file, so
+old and new apps and builds still exclude each other. The lock's file keeps
+its format, the holder's pid then its bundle id, which 1.1.0 reads to name
+the holder. The cached client (`~/Library/Caches/SecondChance/steam-client`)
+is moved, with no link.
+
 ## One wrapp on Steam at a time
 
 Two wrapps signed in to the same account would knock each other off, and race
-to save the session. `SteamActiveLock` is an `flock` on `active-wrapp.lock` in
-the same directory, recording the holder's pid and bundle ID (a build
+to save the session. `SteamActiveLock` is an `flock` on the steam module's
+`steam` lock's file (`…/SecondChance/stores/locks/steam.steam.lock`),
+recording the holder's pid and bundle ID (a build
 records `SteamLockHolder.buildBundleID` instead). Being an `flock`,
 it is released when the holding process exits, however it exits. The file is
 opened close-on-exec, so Wine and Steam, started from the holder, never

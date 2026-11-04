@@ -84,19 +84,25 @@ Windows service starts it
 in a stage of its own and copies its data into the app, which keeps no Wine
 and so no Game Manager.
 
-`BigFishWrappBuilder` (`SecondChance/Builders/`) follows the plan: the
-manager stage's steps first, then, once the game is picked, the edition's,
-recognising each by its shape. Step by step:
+`BigFishWrappBuilder` (`SecondChance/Builders/`) builds through the runner
+([wrapp-build.md](wrapp-build.md#the-runner)), its steps carried out by the
+big-fish module's executor (`BigFishExecutor`: `MANAGER`, `INSTALL`,
+`SIGN-OUT`). A game picked from the app is picked first, in a tree of the
+manager stage's own (`BigFishWrappPreparer.prepare`) where the Game Manager
+signs in and lists what the account owns, which is thrown away after, the
+sign-in kept for the build; a game named up front is found among what the
+account owns as `INSTALL` runs. Step by step:
 
 1. **The game named up front**, if any: `BIG_FISH_GAME_SLUG`, which a headless
    run must set. `BIG_FISH_TRIAL=1` builds that game's free trial instead (its
    English edition), with no sign-in and no library: it is for the
    integration tests, which can then try every game Big Fish sells. A trial
    wrapp records `BigFishTrial` in its settings.
-2. **The Game Manager is installed** in a fresh wrapp's prefix
-   (`BigFishWrappPreparer`, the manager stage). `bfginstaller35.exe` is
-   downloaded once into `~/Library/Caches/SecondChance/` over https, and used
-   only when its sha256 is the one the stage pins. Big Fish replaces the file
+2. **The Game Manager is installed** in the manager stage's tree
+   (`BIG-FISH.MANAGER`, through `BigFishWrappPreparer.installGameManager`),
+   restored from its layer when there is one. `bfginstaller35.exe` is the
+   stage's `fetch` mount, which the runner puts in place through the
+   download cache, and used only when its sha256 is the one the stage pins. Big Fish replaces the file
    at that address whenever it updates the Game Manager, so a build then
    fails at the hash, rather than installing something nobody has tried,
    until the stage is updated with the new one. Its `/S` isn't silent: it
@@ -119,7 +125,8 @@ recognising each by its shape. Step by step:
    looking stuck on "Execute: …\bfgclient\epoch.exe"; a prefix has no such
    drive ([wrapp-build.md](wrapp-build.md#what-a-wrapp-holds)), so it
    searches only C:.
-3. **It starts** with its DevTools port (`BigFishGameManager.start`).
+3. **It starts** with its DevTools port (`BigFishGameManager.start`), in the
+   picking tree and again in the edition's, for `BIG-FISH.INSTALL`.
 4. **Sign-in.** A sign-in kept from an earlier build is put back first
    ([below](#the-kept-sign-in)), so the Game Manager usually starts signed
    in, and already signed in is fine. Otherwise, from the app, the
@@ -183,8 +190,8 @@ recognising each by its shape. Step by step:
    copied into the app, as from Steam. No official Her Interactive patch is
    applied to a Big Fish copy: its stage has none.
 
-A failure anywhere shuts the Game Manager down and removes the half-made
-wrapp. `BigFishWrappBuilderTests` drives all of this with a fake Game Manager
+A failure anywhere shuts the Game Manager down (the executor's `finish`),
+keeps a person's sign-in, and removes the build folder. `BigFishWrappBuilderTests` drives all of this with a fake Game Manager
 and a fake preparer.
 
 ## The kept sign-in
@@ -197,7 +204,9 @@ It starts signed in from those alone, without its browser profile, which is
 226 MB of mostly cache. So after a build the person signed in to, once the
 Game Manager has stopped and Wine has written its registry, those lines of
 the prefix's `user.reg` are kept as a `.reg` fragment in
-`~/Library/Application Support/SecondChance/BigFish/sign-in.reg` (readable by
+`~/Library/Application Support/SecondChance/stores/big-fish/sign-in/sign-in.reg`,
+the big-fish module's `sign-in` store (`Modules/big-fish/stores`; Second Chance
+moves one from the old `…/SecondChance/BigFish/` as it starts) (readable by
 the person alone), and the next build `reg import`s it before starting the
 Game Manager. A build that fails after the sign-in keeps it too, so trying
 again doesn't ask again. The build isn't signed out with the Game Manager's

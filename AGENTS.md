@@ -303,10 +303,11 @@ The rules that keep it working:
   ([docs/program-bundles.md](docs/program-bundles.md)).
 - **`PlanRunner`** (`Packages/WrappBuilder/Sources/WrappBuilder/Runner/`):
   carries out a plan, each module's step through its module's executor and
-  the core's itself, so any plan that checks can be built by any source. The
-  download source builds through it; the other builders hand it the steps
-  an executor carries out (`ModuleSteps`) until they do too
-  ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)).
+  the core's itself, each stage in a tree of its own, keyed and kept as
+  layers at expensive steps, with stores mounted where steps say, so any
+  plan that checks can be built by any source. Every source builds through
+  it but the update source, which still makes its wrapp from the template
+  itself ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)).
 - **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
   wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
   `dosbox`, `steam` or `big-fish`) and the services started before it — read from a wrapp's
@@ -459,12 +460,13 @@ direct assignment.
   must be logged in at that Mac's console. That run is a LaunchAgent, so it
   outlives a dropped connection; `./sc attach` (or `./sc --on <host> attach`)
   picks it up again.
-- - **The Wine prefix is a cached layer**, keyed on the engine, the wine
-  module's `prefix` stage's steps (`Modules/wine/stages/prefix`), and
-  winetricks, so changing the stage makes a fresh prefix by itself. The Swift
-  that carries it out isn't a file the key can read: raise
-  `WineBuild.prefixCodeRevision` when `WineManager.makeWinePrefix` or the
-  wine module's executor (`WineExecutor`) changes what it makes
+- - **Every step is a cached layer's key**, chained from the step before,
+  with its text, the files it reads, its inputs and its executor's revision,
+  so changing a stage makes what follows fresh by itself. The Swift that
+  carries a step out isn't a file the key can read: raise its executor's
+  `revision` (`ModuleExecutor.revision`, `CoreInstructions.revision`) when it
+  changes what it makes, and `WineBuild.prefixCodeRevision` for the update
+  source's own prefix
   ([docs/wrapp-build.md](docs/wrapp-build.md#the-layer-cache)).
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)

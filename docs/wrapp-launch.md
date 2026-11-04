@@ -51,7 +51,7 @@ with no `explorer.exe` left to finish the job.
 ## Modules
 
 A wrapp starts its program as its build recorded it (`WrappSettings.launch`,
-from the Wrappfile's `LAUNCH` and `VOLUME`s: [wrappfile.md](wrappfile.md#the-launch-volumes-and-app)):
+from the Wrappfile's `LAUNCH`es and the stores they mount: [wrappfile.md](wrappfile.md#the-launch-volumes-and-app)):
 a Wine program at its C: path, ScummVM on the game's data folder in the app
 with the game's id (`nancy:nancy7`), DOSBox on its own C:. A wrapp built
 before launches were recorded has one made from its older settings, in one
@@ -360,14 +360,17 @@ as a Mac app does (`UserFilesLayout`):
 
 ```text
 ~/Library/Application Support/<bundle id>/
-  volumes/<volume>/    the game's saves, and the settings it keeps beside them
+  stores/app/<store>/  the game's saves, and the settings it keeps beside them
   wrapp-settings/      Second Chance's settings for the wrapp
 ```
 
-The volumes are the bundle's (`wine-documents`, a Wine game's Documents and
-A: drive; `scummvm-saves` and `scummvm-settings` for ScummVM), recorded in the
-wrapp's `WrappLock.json` with the patterns that say which files belong to
-each. Wrapps built before bundles had another id
+These are the app's own stores, which its launch mounts
+([wrappfile.md](wrappfile.md#stores)): `wine-documents`, a Wine game's
+Documents and A: drive; `scummvm-saves` and `scummvm-settings` for ScummVM.
+The manifest's `volumes:` say what each holds, recorded in the wrapp's
+`WrappLock.json` with the patterns that say which files belong to each. A
+wrapp built before stores kept them in `volumes/`, which its next launch
+renames `stores/app/` (`UserFilesLayout.moveVolumesIntoStores`). Wrapps built before bundles had another id
 (`au.gare.callum.SecondChance.nancy-drew.<slug>`) and kept their saves loose in
 its folder, so every launch, and every build, moves that folder in
 (`UserFilesMove`) from each id the manifest lists in `former-bundle-ids`:

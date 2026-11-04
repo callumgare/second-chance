@@ -261,8 +261,8 @@ The Steam suite:
   launches it with WrappPuppeteer, like the disk suite (a DRM-free game is
   built to launch directly);
 - needs a saved Steam sign-in on the Mac it runs on (build a Steam game from
-  the app once, or copy `~/Library/Application Support/SecondChance/Steam/`
-  over) — without one the suite disables itself and says why;
+  the app once, or copy the steam module's sign-in store,
+  `~/Library/Application Support/SecondChance/stores/steam/sign-in/`, over) — without one the suite disables itself and says why;
 - reports a game the account doesn't own as `skipped`, not failed. Each
   build signs in to Steam on its own, so the first one to sign in tells the
   suite (a `steamGamesOwned` bus event) which games the account owns, and the
@@ -1059,7 +1059,7 @@ Renderer (legacy GL 2.1). So:
 
 **Steam.** A Steam wrapp that launches through Steam needs the shared sign-in
 (docs/steam.md), which lives on this Mac. The test copies the store into the
-VM's `~/Library/Application Support/SecondChance/Steam/` for the run and
+VM's `~/Library/Application Support/SecondChance/stores/steam/sign-in/` for the run and
 deletes it after, pass or fail. Steam has been seen to sign in from a VM with
 it and leave the token as it was; if it ever replaces the token, the test
 brings the VM's session back through `SteamSessionStore.capture`, with its

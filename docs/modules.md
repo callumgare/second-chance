@@ -115,40 +115,46 @@ build:
     REGISTRY: { options: { set: flag, remove: flag }, arguments: { count: "1...2" } }
   core-options:                # options it adds to core instructions, written --wine.<option>
     LAUNCH: { graphics: value, clean-exit-log: value, clean-exit-line: value, cursor-lock: flag, window: value }
-    VOLUME: { drive: value }
 ```
 
 - **An instruction's `options`** are each a kind: `value` (`--into=…`),
   `flag` (`--patch`) or `repeated` (`--mount=…`, as many as needed). Written
   as `{ kind, role }`, the role says what the value is, where it isn't text:
   a `location` (a place in the app or the engine), a `program`, an `input`,
-  a `copy-source`, a `file` the build reads, or `text`. The checker and
-  planner read the roles to know which words are paths.
+  a `copy-source`, a `file` the build reads, `text`, or a `store`, named by
+  its short name in the module's own files
+  ([wrappfile.md](wrappfile.md#stores)). The checker and planner read the
+  roles to know which words are paths, and which stores.
 - **`required`** names the options it can't do without; each must be one it
   declares.
 - **`arguments`** says how many it takes (`count`: `1`, `1...2`, or `1...` for
   any number from 1; none when left out), and what each is (`roles`, in
   order, the last going for every argument after it).
-- **`layer: suggested`**, **`may-ask`** and **`reads-data`** (the module's
-  data tables its Swift reads, which would go into its steps' keys:
-  `NANCY-DREW.CONFIGURE-INI`'s `reads-data: [ini]`) are read and kept with
-  the instruction, for the builder to come. Nothing acts on them yet.
+- **`layer: suggested`** says a layer after it is worth keeping, and
+  **`reads-data`** names the module's data tables its Swift reads, which go
+  into its steps' keys (`NANCY-DREW.CONFIGURE-INI`'s `reads-data: [ini]`)
+  ([wrapp-build.md](wrapp-build.md#the-layer-cache)). **`may-ask`** is kept
+  with the instruction; nothing acts on it yet.
 - **`core-options`** are the options it adds to core instructions, by
   instruction, in a stage that has the module: the wine module's `LAUNCH
-  --wine.graphics`, the dosbox module's `VOLUME --dosbox.overlay`, the steam
+  --wine.graphics`, the steam
   and big-fish modules' `LAUNCH --steam.exe` and `--big-fish.exe`. Each is a
   kind or `{ kind, role }`, as an instruction's options are.
 - **`mount-fields`** are the fields it adds to core mount types, by type,
-  written `<module>.<field>=…` in a `--mount=`. No shipped module declares
-  any yet.
+  written `<module>.<field>=…` in a `--mount=`: the dosbox module's
+  `store: ["overlay"]`, a launch's store laid over a DOSBox drive.
+- **`stores`** (beside `build:`, at the top of `module.yaml`) names files of
+  `STORE` and `LOCK` lines, the module's stores, which every stage and
+  function of the module sees ([wrappfile.md](wrappfile.md#stores)): the
+  steam module's sign-in and client, Big Fish's sign-in.
 - **`provided-files`** are files its Swift provides rather than its folder,
   which a Wrappfile names as `module:<id>:/<path>`: the installer module's
   `autoit`, AutoIt, which Second Chance carries.
 - **`setup`** lists the instructions `USE` would plan in a tree that doesn't
   have the module yet, in order, each one of its own instructions: the wine
   module's `[HELPERS, PREFIX]`, the in-process helpers laid in and
-  wineboot's prefix. Nothing plans them yet; `WineManager` makes a prefix
-  itself.
+  wineboot's prefix. `USE` plans them, after the core's `ENGINE` step, once
+  per tree ([wrapp-build.md](wrapp-build.md#the-runner)).
 
 Today's builders and the executors carry the declared instructions out, so
 a declaration could promise what nothing does. `BuilderDeclarations`

@@ -65,7 +65,9 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
   it's there and is in a folder the build may read
   ([below](#what-a-build-may-read)).
 - **Blocks**: `IF <condition>` … `ELSE IF <condition>` … `ELSE` … `END`,
-  `LAYER` … `END` and `FUNCTION <name>` … `END`. A condition compares two
+  `LAYER-HINT` … `END` (where a layer is worth keeping: once, after its last
+  step, and none inside it, [wrapp-build.md](wrapp-build.md#the-layer-cache);
+  a bare `LAYER` is refused) and `FUNCTION <name>` … `END`. A condition compares two
   expressions, each a `${…}` or a quoted string, with `=` or `!=`, spaced or
   not: `IF ${platform.arch} = "arm64"`.
 
@@ -75,15 +77,15 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
 | --- | --- |
 | `FROM scratch` / `FROM <stage>` / `FROM --module=<module>[@<constraint>] <stage>` `[AS <name>]` | Starts a stage from the bare template, another stage (`previous`, the old wrapp an update is built from, is supplied), or a module's (`FROM --module=steam@1 client`), named with a flag as Docker's `FROM --platform=` is. The older `FROM steam@1/client` is refused. A stage built from another keeps its modules. |
 | `INPUT <name> [--default=<value>] [--secret]` | Declares a value from outside, before the first `FROM` or at a function's top ([Values](#values)). |
+| `STORE <name> [--retention=keep\|cache\|session] [--scope=app\|global] [--exclusive[=<lock>]]`, `LOCK <name> [--scope=app\|global]` | Declares a store, data kept outside the app, and a lock stores are used under, before the first `FROM` ([Stores](#stores)). |
 | `CONST <name> = <value>`, `VAR <name> [= <value>]`, `SET <name> = <value>` | A fixed value; a value worked out in the Wrappfile; and a new value for a `VAR`. |
 | `USE <module>[@<constraint>] [AS <name>]` | Adds a module, and what it depends on: its instructions are then `<NAME>.INSTRUCTION`, its functions `DO <name>.<function>`, and its path types, options and mount fields are the stage's ([below](#what-modules-add)). |
-| `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `cache`, `secret`, `bind`, `fetch`. `--env` is the only way a value reaches a program's environment. |
+| `RUN [--mount=…]… [--env NAME=<value>]… <program> <args>` | Runs a program inside an engine: its path type says which. Mounts: `store` ([Stores](#stores)), `bind` (a file of the bundle's or a module's) and `fetch` (a download, by its hash). `--env` is the only way a value reaches a program's environment. |
 | `COPY [--from=<stage or ${input.<name>}>] <src> <dest>` | Copies files: from another stage or an input, or without `--from`, a bundle's or module's file. |
 | `ADD --checksum=sha256:<hash> [--unpack=zip --member=<file> [--extract]] <url> <dest>` | A download, found in the download cache first. |
 | `MOVE`, `REMOVE`, `EDIT <file> --ini=<section>.<key>=<value>… [--keys-must-exist] [--create]` | File changes the builder makes itself. `EDIT` changes each setting in its section, or adds it; with `--keys-must-exist`, each setting must already be in the file, or the step fails naming those that aren't. The file must exist unless the step says `--create`. The older `--must-exist` is refused, with a message saying so; `--from-data` is gone, replaced by `NANCY-DREW.CONFIGURE-INI`. |
 | `EMIT "<string>"` | A string for whoever runs the build, passed on unread as the build reaches it: not a step ([below](#emit)). |
-| `LAUNCH [--fallback=<program>] [--env NAME=<value>]… <program> [<argument>…]` | How the app starts its program ([below](#the-launch-volumes-and-app)). |
-| `VOLUME [--<module>.<option>]… <volume> <location>`, `VOLUME --remove <volume>` | Where the program sees one of the manifest's volumes. |
+| `LAUNCH [--fallback=<program>] [--env NAME=<value>]… [--mount=type=store,…]… [<program> [<argument>…]]` | How the app starts its program, and the stores it sees ([below](#the-launch-volumes-and-app)). One with mounts alone adds them and leaves the program as it is. `VOLUME`, which this replaces, is refused. |
 | `APP [--default-id=<id>] [--name=<name>] [--icon=/Resources/<name>.icns]` | What the app is: the id it gets when the build is given none, its name, and its icon ([below](#the-launch-volumes-and-app)). It replaces `ICON`, which is refused. |
 | `FUNCTION <name>` … `END`, `DO <name>` / `DO <alias>.<name>` | Named steps, with `INPUT`s as parameters (`--id=…`): a bundle's own, or a module's (in its `functions/`). |
 
@@ -101,11 +103,11 @@ Modules' instructions, as each module's `module.yaml` declares them
 | `WINE.DRIVES --only=C:` | The prefix's drives: every other is removed, C: is `drive_c`, and the rest (Z:, the whole Mac, included) blocked. |
 | `WINE.KEEP-DISCS <disc input>… --into=<folder> [--combined=<folder>]` | Copies the discs it's given into `<folder>/disk-<n>` (and merged into `--combined` for more than one), each given a drive from D:: for a game that checks for its disc. |
 | `INSTALLER.RUN [--from=<input>] --into=<folder> [--creates=<program>] [--answer-file=…] [--automation=<script>] [--patch] [program]` | Runs a Windows installer: silently with an answer file. `--creates` is the program it should leave, linked to what it made if that's elsewhere, and must be the target's `LAUNCH` program when that is under `--into`; `--patch` runs a patcher in `--into`, looking for nothing afterwards. With `--automation`, AutoIt runs the script, given the installer's command (the same as without it) to start, for an installer that installs and never exits; the script clicks where it stops. Without a program, the installer on the input, found as today. |
-| `STEAM.CLIENT` | Installs Steam's client in the prefix (the steam module's `client` stage). |
-| `STEAM.INSTALL <input> --into=<folder> [--mount=…]` | Has Steam install the input's app, signed in with the shared sign-in (`--mount=type=secret,id=steam-sign-in`) and with the kept client (`--mount=type=cache,id=steam-client`), and makes `--into` a link to the folder Steam put it in. |
+| `STEAM.CLIENT --client-store=client` | Installs Steam's client in the prefix (the steam module's `client` stage), from the client store when it has one. |
+| `STEAM.INSTALL <input> --into=<folder> --sign-in-store=sign-in --client-store=client` | Has Steam install the input's app, signed in with the shared sign-in and with the kept client, the steam module's stores, and makes `--into` a link to the folder Steam put it in. |
 | `STEAM.SIGN-OUT` | Takes the sign-in out of the prefix, saved for the next build first, so the app carries none. |
 | `BIG-FISH.MANAGER --mount=type=fetch,url=…,sha256=…,target=…` | Installs Big Fish's Game Manager from its installer, pinned by its hash (the big-fish module's `manager` stage). |
-| `BIG-FISH.INSTALL <input> --into=<folder> [--decline-directx]` | Has the Game Manager download, install and activate the input's game, declining DirectX's setup, and makes `--into` a link to the folder it installed it in. |
+| `BIG-FISH.INSTALL <input> --into=<folder> --sign-in-store=sign-in [--decline-directx]` | Has the Game Manager download, install and activate the input's game, declining DirectX's setup, and makes `--into` a link to the folder it installed it in. |
 | `BIG-FISH.SIGN-OUT` | Signs the Game Manager out, or keeps a person's sign-in for the next build, then takes the account out of the prefix. |
 | `STEAM.REMOVE` | Takes Steam away: the game moved to where `STEAM.INSTALL --into` linked it, then Steam's folders and the client stage's registry settings removed. |
 | `HER-DOWNLOAD.INSTALL <input> [--into=<folder>] [--creates=<program>] [--answer-file=…] [--automation=<script>]` | Installs Her Interactive's download: a Windows installer as `INSTALLER.RUN` runs one, or a Mac download's game taken out. |
@@ -155,8 +157,75 @@ without the prefix is someone else's and never checked. `sc bundle check`
 and a unit test (`EmitVocabularyTests`, in `Tools/sc`) hold every shipped
 bundle's editions to Second Chance's.
 
-No shipped bundle uses `EMIT` yet: the wine module's prefix stage still
-names its text with `--progress=<key>` until it does.
+The wine module's prefix stage and its `cnc-ddraw` function `EMIT` the
+progress screen's substep before the steps that take a while
+(`second-chance.substep.display`, `disc`, `graphics`); the `--progress`
+option they had is gone.
+
+## Stores
+
+A **store** is a named folder kept outside any app, which build steps and a
+launch mount: a game's saves, a cache a build keeps, Steam's one sign-in.
+The builder never looks inside one. A Wrappfile declares its own before its
+first `FROM`; a module declares its own in files its `module.yaml` names
+(`stores: ["stores"]`), which every stage and function of the module sees.
+
+```dockerfile
+# Modules/steam/stores
+LOCK steam --scope=global
+LOCK client --scope=global
+STORE client --retention=cache --scope=global --exclusive=client
+STORE sign-in --scope=global --exclusive=steam
+```
+
+- **`--retention` says how long it lasts, and so where it is**: `keep` (the
+  default) until someone removes it, in Application Support; `cache` until
+  space is needed, in the caches folder; `session` for the build or launch
+  that made it, in the temporary folder, removed when it ends. A session
+  store can't be `global`.
+- **`--scope` says which apps share it**: `app` (the default), one for each
+  app id, so every build and copy of an app has the same one; `global`, one
+  for every app.
+- **A store's full name is its owner's and its own**: a module's by the
+  module's id (`steam:sign-in`), a Wrappfile's own by `app` or `global`
+  (`app:wine-documents`). Its owner's files name it by its short name; any
+  other names it in full.
+- **`--exclusive` says one user at a time.** On its own, the store has a
+  lock of its own, with its scope; `--exclusive=<lock>` names a `LOCK` the
+  file declares, which every store naming it shares. A build holds the lock
+  while a step uses the store; one that finds it taken says so
+  (`lockWaiting`, the progress screen telling the person something else is
+  using it), waits, and fails after `SECOND_CHANCE_LOCK_WAIT` seconds (30
+  minutes), naming who held it. Steam's one-at-a-time lock is the steam
+  module's `steam` lock, which every Steam app takes while Steam runs.
+- **A step mounts one with `--mount=type=store,source=<store>,target=<path>`**:
+  the target is a link to the store's folder while the step runs, so what the
+  step changes there it changes in the store, then the link goes. With
+  `snapshot`, a clone of what the store holds is left at the target instead.
+  A target the tree has already is an error.
+- **A kept store is never mounted by a build step**: it lasts beyond the
+  build, so a build mustn't change it. A module's own instruction may be
+  given one of its own module's, as an option whose role is `store`
+  (`STEAM.INSTALL --sign-in-store=sign-in`), which its executor takes
+  through `context.store` and knows how to change safely.
+- **A store's declaration is recorded beside it** (`<name>.store.json`). One
+  declared otherwise later (another retention, scope or lock) is refused,
+  naming both: a store that changes gets a new name.
+- **A launch mounts stores too**, which is where a game's saves are
+  ([The launch, volumes and app](#the-launch-volumes-and-app)).
+
+Where each lives is `StoreLocations`, in `WrappFormat`, so the builder and
+the wrapp agree: an app's kept stores in
+`~/Library/Application Support/<app id>/stores/<owner>/<name>/`, global ones
+in `…/SecondChance/stores/<owner>/<name>/`, caches under
+`~/Library/Caches/SecondChance/stores/`. Under test,
+`SECOND_CHANCE_APP_SUPPORT_DIR` moves an app's own stores, so a test launch
+starts with none; the global ones stay where they are, as the integration
+tests' Steam builds sign in with the saved session. A unit test's builds
+keep the runner's stores in a temporary folder of their own.
+
+Not built yet: a store declared inside a function, a launch mount of files
+beside a program (`files=`), and `sc` commands to list and remove stores.
 
 ## Values
 
@@ -228,7 +297,8 @@ FUNCTION pre-install-setup
   USE nancy-drew
   DO wine.cnc-ddraw
   DO nancy-drew.set-icon      # COPY assets/nancy-drew.icns /Resources/…, APP --icon it
-  VOLUME --wine.drive=A: wine-documents C:/users/crossover/Documents
+  LAUNCH --mount=type=store,source=wine-documents,target=A: \
+      --mount=type=store,source=wine-documents,target=C:/users/crossover/Documents
 END
 
 FROM --module=wine@10 prefix AS prefix
@@ -243,7 +313,7 @@ Steam's and Big Fish's, which are built from module stages instead;
 `post-install-setup`, the `.ini` settings every install ends with; `patch`, Her's
 patches where two editions share them), and a
 module's function for what every program of a series does (the Nancy Drew
-games' icon). What a function records (its `APP`, `VOLUME`s) and the modules it `USE`s
+games' icon). What a function records (its `APP`, its `LAUNCH`'s mounts) and the modules it `USE`s
 are the calling stage's, as if written there, and it can use the caller's. A module used in a base stage
 (`prefix`) needn't be used again in the stages built from it. A ScummVM
 game's `scummvm` stage writes the icon's `COPY` and `APP --icon` itself
@@ -291,10 +361,16 @@ app keeps no Wine.
   parent's. Every edition's target must reach one, which planning checks,
   and a build fails when what it runs, a file or a ScummVM game's folder,
   isn't in the app once it's built (`WrappBuildHelper.checkLaunchProgram`).
-- **`VOLUME`s build up**, inherited through `FROM`; `--remove` takes one
-  off. The location is a path type's: `wine:C:/users/crossover/Documents`
-  with `--wine.drive=A:`, `scummvm:saves/` and `scummvm:settings/`, or
-  `--dosbox.overlay` laid over a DOSBox drive.
+- **A launch's store mounts build up**, inherited through `FROM`: each
+  `LAUNCH --mount=type=store,source=<store>,target=<path>` adds one, a
+  `LAUNCH` with mounts alone leaves the program as it is, and
+  `--mount=type=store,source=<store>,remove` takes the store's off. The
+  target is a path type's: a Wine drive (`A:`) and
+  `C:/users/crossover/Documents` for a Wine game's saves, which the wrapp
+  points at the store's folder each time it starts, `scummvm:saves/` and
+  `scummvm:settings/`, or a DOSBox drive with the dosbox module's
+  `dosbox.overlay` field, laid over it. A store the app keeps of its own
+  must be one of the manifest's `volumes:`, which say what it holds.
 - **`APP --icon` names an `.icns` in the app's `/Resources/`**, which a
   `COPY` put there; the build sets it as the app's icon. An app with no icon
   has the template's own, a generic one. An `.icns`, not an Icon Composer
@@ -326,9 +402,10 @@ can add anything, since nothing else would carry it out.
 | --- | --- | --- |
 | **Path types** | a path in full form, `<type>:<path>`, or a short form the type claims | `wine:C:/Game.exe`, or just `C:/Game.exe` |
 | **Options** on a core instruction | `--<module>.<option>=…` | `RUN --wine.desktop=… …` |
-| **Fields** on a core mount type | `<module>.<field>=…` in `--mount=` | `--mount=type=cache,id=…,wine.size=1`, were the wine module to declare a `size` field |
+| **Fields** on a core mount type | `<module>.<field>=…` in `--mount=` | `--mount=type=store,source=dosbox-saves,target=C:/,dosbox.overlay` |
 
-No shipped module declares mount fields yet; what each module adds is in
+The dosbox module's `overlay` on a store mount is the one field a shipped
+module declares; what each module adds is in
 its `module.yaml`'s `build:` ([modules.md](modules.md#what-a-module-declares)).
 Options and fields keep their module's name (the stage's name for it, in
 lower case), as a bare `--desktop` wouldn't say whose it is. Planning
@@ -387,9 +464,9 @@ check every Wrappfile against its manifest and the modules' declarations
 - every stage, function, module (at a version its constraint allows) and
   input named exists, and every function is given its parameters;
 - every edition's `build` names a stage, and the manifest's `setup` a
-  function; a `VOLUME` names one of the manifest's volumes, and an `APP
+  function; a launch's store of the app's own is one of the manifest's volumes, every store a mount or a `store` option names is declared, a build step mounts no kept store, and an `APP
   --icon` an `.icns` in the app's `/Resources/`;
-- no syntax that has gone is used: `ICON`, `EDIT --must-exist`, `FROM
+- no syntax that has gone is used: `ICON`, `VOLUME`, `EDIT --must-exist`, `FROM
   <module>/<stage>` and `module:<id>/<path>` are each refused with what's
   written now, which `wrapp-builder fmt --migrate` rewrites them as
   ([Style](#style));
@@ -408,7 +485,7 @@ no code, no build and never published. `sc setup` links it into
 `~/.vscode/extensions/`, so it follows the clone and an edit to it shows on
 the next **Developer: Reload Window**. It highlights `Wrappfile`s and the
 modules' functions (`Modules/*/functions/*`), and folds `FUNCTION`, `IF` and
-`LAYER` blocks.
+`LAYER-HINT` blocks.
 
 It names the core's instructions itself, so an instruction added to
 `InstructionSpec.core` is added to its `instruction` rule too
@@ -489,7 +566,7 @@ functions, in one style, in place, and `sc lint` fails on one that isn't
 (`wrapp-builder fmt --check`, over `Bundles/` and `Modules/`):
 
 - instructions in upper case, their keyword alone (`ELSE IF` as two words);
-- two spaces of indent for each block (`FUNCTION`, `IF`, `ELSE`, `LAYER`), a
+- two spaces of indent for each block (`FUNCTION`, `IF`, `ELSE`, `LAYER-HINT`), a
   stage's own steps not indented;
 - a line continued with `\` indented four spaces past its instruction;
 - one blank line between stages, before the comments that lead into a

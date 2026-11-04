@@ -137,9 +137,13 @@ which `sc release` builds) must ship every patch, so there the script exits 1.
 ## Wrapp build time: applying
 
 A patch is applied by the steps `DO nancy-drew.patch` expands to
-(`Modules/nancy-drew/functions/patch`), which the builders carry out as they
-say (`GameInstallerRunner.runPatchStep`), in the order the Wrappfile names the
-patches. The step its `action` takes:
+(`Modules/nancy-drew/functions/patch`), ordinary steps the runner carries out
+as it does any other ([wrapp-build.md](wrapp-build.md#the-runner)), in the
+order the Wrappfile names the patches; each is named after its patch
+(`--name=<id>`), which is how Second Chance publishes `patchApplied` and
+`patchFailed` for it. The update source, which doesn't build through the
+runner yet, carries them out with `GameInstallerRunner.runPatchStep`. The
+step its `action` takes:
 
 | Patch | Step | Carried out |
 | --- | --- | --- |
@@ -208,9 +212,10 @@ ends a Windows process — and the patch is reported as failed.
 A patch that fails is reported (`FailureReporter.sendWithoutAsking`, tagged
 with the patch's id, when the reporting setting sends without asking) and then
 routes through the build's `WrappBuildInput.confirmPatchFailure`, the seam
-described in [wrapp-build.md](wrapp-build.md), which each builder passes to
-`runPatchStep` (it isn't state on the shared runner, since builds run side
-by side). `PATCH_FAILURE_POLICY=continue|cancel` answers it; otherwise the GUI
+described in [wrapp-build.md](wrapp-build.md), which the step's
+`--on-failure=ask` reaches through the runner's question
+(`StepQuestion.confirmStepFailure`, answered by `AppRunner`; it isn't state
+on anything shared, since builds run side by side). `PATCH_FAILURE_POLICY=continue|cancel` answers it; otherwise the GUI
 asks whether to carry on without the fix, naming what it fixes rather than why
 it failed (a page of the main window, `BuildQuestion`), and headless runs
 continue without prompting, as nobody is there to answer.
@@ -259,9 +264,11 @@ succeeds without them.
   Lake all use the ScummVM engine, yet Her Interactive only ever shipped
   Windows patchers, which rewrite the game's data files. Those data files are
   what ScummVM reads, so patching them is meaningful — and Wine is still in the
-  wrapp at that moment, because `cleanupUnusedEngine` takes it out one step later.
-  This is why `installGameWithScummVM` applies patches at all, and it is the
-  only window in which it can. These patchers were written to target a normal
+  stage that patches them: an edition whose game needs a patch copies the
+  disc (or installs the download) and patches it in a Wine stage
+  (`disc-files` in Stay Tuned's, Haunted Mansion's, Ghost Dogs'), then
+  copies the patched data into a `scummvm` stage `FROM scratch`, which has
+  no Wine. One with no patch copies the disc's data into the app as it is. These patchers were written to target a normal
   Windows install rather than the disk layout a ScummVM wrapp uses, so treat
   them as best-effort: the timeout and the failure path exist precisely because
   one may not find what it expects. A patcher that adds a file there puts it
