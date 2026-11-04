@@ -110,73 +110,65 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         }
 
         // ── Build ──────────────────────────────────────────────────────
-        let wrappPath = helper.createTemporaryWrappPath()
-        logger.notice("Temporary wrapp: \(wrappPath.path)")
-
         do {
             // Unpacked, then installed: the installer's own size each time,
             // and as much again for what it was compressed from.
             try await helper.ensureRoomToBuild(from: installer, copies: 3)
-            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
-            // The game's bundle says what building Her's Windows download
-            // runs (its Wrappfile's her-download stage).
-            guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "her-windows") }) else {
-                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-windows edition names no stage")
-            }
-            // The same download, plan and modules install the same game: a
-            // build after the first clones its install (docs/wrapp-build.md#the-layer-cache).
-            let key: LayerKey? = DebugSettings.shared.skipInstaller ? nil : try await Blocking.run {
-                try InstallLayer.key(slot: "\(gameInfo.id) \(plan.edition): install", plan: plan, wrappPath: wrappPath, inputs: [
-                    .init("download", try LayerKey.hash(file: installer)),
-                ])
-            }
-            let installed = try await InstallLayer(store: wineManager.layers, bus: bus).run(
-                key: key, wrappPath: wrappPath, gameInfo: gameInfo, disk1: nil
-            ) { () async throws -> InstallLayer.Installed in
-                var gameExePath: String?
-                var configuredINI = false
-                for step in plan.bundleSteps where !WrappBuildHelper.isAppStep(step) {
-                    logger.debug("Plan step: \(step) (\(step.origin))")
-                    switch (step.module, step.instruction) {
-                    case _ where ModuleSteps.handles(step):
-                        try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
-                        if step.module == "nancy-drew" { configuredINI = true }
-                    case ("her-download", "INSTALL"):
-                        gameExePath = try await installWindowsDownload(installer, wrappPath: wrappPath, gameInfo: gameInfo,
-                                                                       answerFile: step.option("answer-file").flatMap(plan.file),
-                                                                       automation: step.option("automation").flatMap(plan.file),
-                                                                       creates: try GameInstallerRunner.expectedProgram(of: step),
-                                                                       input: input)
-                    case _ where GameInstallerRunner.isPatchStep(step):
-                        try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
-                                                               source: .herDownload, confirmFailure: input.confirmPatchFailure)
-                    default:
-                        throw WrappBuildError.buildRecipeProblem("\(step.origin): the Her download flow can't run \(step)")
-                    }
-                }
-                guard let gameExePath else {
-                    throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-windows plan installs nothing")
-                }
-                return InstallLayer.Installed(gameExePath: gameExePath, installerDir: "", configuredINI: configuredINI)
-            }
-            let gameExePath = installed.gameExePath
-            try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
-
-            if !DebugSettings.shared.skipInstaller {
-                try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
-            }
-
-            return try await finish(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameExePath: gameExePath,
-
-                edition: "her-windows",
-                plan: plan,
-                input: input
-            )
         } catch {
-            await helper.removeTempWrapp(wrappPath)
+            await publishFailure(error)
+            throw error
+        }
+        return try await buildThroughRunner(gameInfo: gameInfo, edition: "her-windows", installer: installer, package: nil, input: input)
+    }
+
+    /// The edition's plan carried out by the runner, each stage in a tree of
+    /// its own in a working folder this builder owns, the template laid in
+    /// at the end; then configure, sign, save, launch. `installer` is the
+    /// edition's input: the Windows installer, or the Mac download's volume.
+    private func buildThroughRunner(gameInfo: GameInfo, edition: String, installer: URL, package: CiderPackage?,
+                                    input: WrappBuildInput) async throws -> URL {
+        let folder = helper.createBuildFolder()
+        logger.notice("Working folder: \(folder.path)")
+        await bus.publishWrappBuild(.wrappStarted(path: folder))
+        do {
+            guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: edition) }),
+                  let launch = plan.launch else {
+                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s \(edition) edition names no stage")
+            }
+            let template = try await helper.template()
+            await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: nil)))
+            try await publishEngineRoute(for: gameInfo)
+            let executor = HerDownloadExecutor(builder: self, gameInfo: gameInfo, package: package, input: input)
+            let installers = InstallerExecutor(runner: installerRunner, gameInfo: gameInfo, source: .herDownload,
+                                               installerName: nil, input: input)
+            let (configuration, emitter) = AppRunner.configuration(
+                bus: bus, input: input, game: gameInfo, inputs: GivenInputs(["installer": installer]),
+                downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
+                executors: ["her-download": executor, "installer": installers])
+            let wrappPath: URL
+            do {
+                wrappPath = try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
+            } catch let error as StepFailure {
+                await emitter.finish()
+                throw WrappBuildError.buildRecipeProblem(error.description)
+            } catch {
+                await emitter.finish()
+                throw error
+            }
+            await emitter.finish()
+            await isoMounter.unmountAll()
+            try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
+            if launch.launcher() == .scummvm {
+                await bus.publishWrappBuild(.gameExeDetected(path: "/SharedSupport/game", gameInfo: gameInfo))
+            }
+            let finalPath = try await finish(wrappPath: wrappPath, gameInfo: gameInfo,
+                                             gameExePath: launch.launcher() == .scummvm ? "" : String(launch.path.dropFirst(2)),
+                                             edition: edition, plan: plan, input: input)
+            await helper.removeTempWrapp(folder)
+            return finalPath
+        } catch {
+            await helper.removeTempWrapp(folder)
+            await isoMounter.unmountAll()
             await publishFailure(error)
             throw error
         }
@@ -187,7 +179,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
     /// silently with the answer file, as a disc is; anything else runs as it
     /// is and asks its questions itself. Patches are steps of their own.
     /// The game's program, from the root of drive C.
-    private func installWindowsDownload(
+    func installWindowsDownload(
         _ installer: URL, wrappPath: URL, gameInfo: GameInfo, answerFile: URL?, automation: URL?, creates: String?,
         input: WrappBuildInput
     ) async throws -> String {
@@ -266,79 +258,43 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         }
 
         // ── Build ──────────────────────────────────────────────────────
-        let wrappPath = helper.createTemporaryWrappPath()
-        logger.notice("Temporary wrapp: \(wrappPath.path)")
-
         do {
             try await helper.ensureRoomToBuild(from: image, copies: 3)
-            try await helper.createBaseWrapp(at: wrappPath, composition: gameInfo.composition)
-            let driveCPath = WrappLayout(app: wrappPath).driveC
-            // The game's bundle says what building Her's Mac download runs
-            // (its Wrappfile's her-mac stage): taking the game out of the
-            // Cider app, and the games' .ini settings.
-            guard let plan = try await Blocking.run({ try ShippedBundles.plan(forGame: gameInfo.id, edition: "her-mac") }) else {
-                throw WrappBuildError.buildRecipeProblem("\(gameInfo.id)'s her-mac edition names no stage")
-            }
-            let steps = plan.bundleSteps
-            for step in steps where !(step.module == "her-download" && step.instruction == "INSTALL")
-                && !WrappBuildHelper.isAppStep(step) && !ModuleSteps.handles(step) {
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): the Mac download flow can't run \(step)")
-            }
-            // The game's .ini settings once it's out of the Cider app, below.
-            for step in steps where ModuleSteps.handles(step) && step.module != "nancy-drew" {
-                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
-            }
-
-            await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Unpacking the game"))))
-            try await publishEngineRoute(for: gameInfo)
-
-            // Staged inside the wrapp, so moving the game out of it into
-            // drive_c is a rename rather than a copy.
-            let staging = wrappPath.appendingPathComponent("Contents/SharedSupport/cider-staging")
-            let bus = self.bus
-            let wineDLLs = WrappLayout(app: wrappPath).wine.appendingPathComponent("lib/wine/i386-windows")
-            let gameExe = try await package.extractGame(into: driveCPath, staging: staging, wineDLLs: wineDLLs) { percent in
-                // On the progress bar: a substep changing every percent
-                // would start the step's clock again each time.
-                await bus.publishWrappBuild(.stepProgress(StepProgress(fraction: Double(percent) / 100, text: "\(percent)% unpacked")))
-            }
-            await removeQuietly(staging, what: "the rest of the Cider app")
-            await isoMounter.unmountAll()
-
-            // The game goes where the step's --into says, which the Cider app
-            // may have put it elsewhere than.
-            let into = steps.first { $0.module == "her-download" && $0.instruction == "INSTALL" }?.option("into")
-            let movedExe = try moveExtractedGame(gameExe, to: into, driveC: driveCPath)
-            let gameExePath = "/" + movedExe.path(relativeTo: driveCPath)
-            await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
-            for step in steps where step.module == "nancy-drew" && ModuleSteps.handles(step) {
-                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
-            }
-            try await helper.runAppSteps(plan, wrappPath: wrappPath, gameInfo: gameInfo) { _ in nil }
-
-            // Her Interactive's patches are Windows updaters that look for
-            // the game their own installer registered; a Cider build never
-            // ran one, and it is a later build than they patch anyway, so the
-            // her-mac stage has none.
-            logger.notice("Not applying game patches: a Mac download is a later build than Her Interactive's patches update")
-
-            try await helper.cleanupUnusedEngine(at: wrappPath, composition: gameInfo.composition)
-
-            return try await finish(
-                wrappPath: wrappPath,
-                gameInfo: gameInfo,
-                gameExePath: gameExePath,
-
-                edition: "her-mac",
-                plan: plan,
-                input: input
-            )
         } catch {
-            await helper.removeTempWrapp(wrappPath)
             await isoMounter.unmountAll()
             await publishFailure(error)
             throw error
         }
+        // Her Interactive's patches are Windows updaters that look for the
+        // game their own installer registered; a Cider build never ran one,
+        // and it is a later build than they patch anyway, so the her-mac
+        // stage has none.
+        return try await buildThroughRunner(gameInfo: gameInfo, edition: "her-mac", installer: package.volume, package: package, input: input)
+    }
+
+    /// `HER-DOWNLOAD.INSTALL` for a Mac download: the Windows game taken out
+    /// of the Cider app into drive C, moved where `--into` says. The game's
+    /// program, from the root of drive C.
+    func extractMacDownload(_ package: CiderPackage, wrappPath: URL, into: String?, gameInfo: GameInfo) async throws -> String {
+        let driveCPath = WrappLayout(app: wrappPath).driveC
+        await bus.publishWrappBuild(.progress(.installingGame(substep: String(localized: "Unpacking the game"))))
+        // Staged inside the tree, so moving the game out of it into drive_c
+        // is a rename rather than a copy.
+        let staging = wrappPath.appendingPathComponent("Contents/SharedSupport/cider-staging")
+        let bus = self.bus
+        let wineDLLs = WrappLayout(app: wrappPath).wine.appendingPathComponent("lib/wine/i386-windows")
+        let gameExe = try await package.extractGame(into: driveCPath, staging: staging, wineDLLs: wineDLLs) { percent in
+            // On the progress bar: a substep changing every percent would
+            // start the step's clock again each time.
+            await bus.publishWrappBuild(.stepProgress(StepProgress(fraction: Double(percent) / 100, text: "\(percent)% unpacked")))
+        }
+        await removeQuietly(staging, what: "the rest of the Cider app")
+        // The game goes where the step's --into says, which the Cider app
+        // may have put it elsewhere than.
+        let movedExe = try moveExtractedGame(gameExe, to: into, driveC: driveCPath)
+        let gameExePath = "/" + movedExe.path(relativeTo: driveCPath)
+        await bus.publishWrappBuild(.gameExeDetected(path: gameExePath, gameInfo: gameInfo))
+        return gameExePath
     }
 
     // MARK: - Shared steps
@@ -409,5 +365,41 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
         } catch {
             logger.warning("Couldn't remove \(what) at \(url.path): \(error)")
         }
+    }
+}
+
+/// The her-download module's executor, until its kit moves into its
+/// package: `HER-DOWNLOAD.INSTALL`, a Windows download installed as a disc
+/// is, or a Mac download's Windows game taken out of its Cider app.
+nonisolated final class HerDownloadExecutor: ModuleExecutor, @unchecked Sendable {
+    static let handles = ["INSTALL"]
+
+    let builder: HerDownloadWrappBuilder
+    let gameInfo: GameInfo
+    /// The Mac download being built from; nil for a Windows one.
+    let package: CiderPackage?
+    let input: WrappBuildInput
+
+    init(builder: HerDownloadWrappBuilder, gameInfo: GameInfo, package: CiderPackage?, input: WrappBuildInput) {
+        self.builder = builder
+        self.gameInfo = gameInfo
+        self.package = package
+        self.input = input
+    }
+
+    func run(_ step: PlannedStep, in context: any StepContext) async throws {
+        if let package {
+            _ = try await builder.extractMacDownload(package, wrappPath: context.tree, into: step.option("into"), gameInfo: gameInfo)
+            return
+        }
+        guard let name = step.arguments.first.flatMap(PlannedStep.input(in:)) else {
+            throw StepFailure.recipe("\(step.origin): HER-DOWNLOAD.INSTALL installs an input")
+        }
+        let installer = try await context.input(name)
+        _ = try await builder.installWindowsDownload(
+            installer, wrappPath: context.tree, gameInfo: gameInfo,
+            answerFile: step.option("answer-file").flatMap(context.file),
+            automation: step.option("automation").flatMap(context.file),
+            creates: try GameInstallerRunner.expectedProgram(of: step), input: input)
     }
 }

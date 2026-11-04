@@ -138,6 +138,20 @@ extension GameInstallerRunner {
         }
     }
 
+    /// `INSTALLER.RUN --patch`, its patcher put in place already by the
+    /// runner's mounts: run as `runPatcher` runs it.
+    func runPlacedPatcher(_ step: PlannedStep, wrappPath: URL) async throws {
+        let id = step.name ?? step.instruction
+        guard let program = step.arguments.first, let hostPath = hostLocation(program, in: wrappPath) else {
+            throw WrappBuildError.buildRecipeProblem("\(step.origin): INSTALLER.RUN --patch needs the patcher to run")
+        }
+        let winePath = Self.windowsPath(of: hostPath, driveC: WrappLayout(app: wrappPath).driveC)
+        logger.notice("📦 Patch: \(id)")
+        try await retryingIfNoDisplay(at: wrappPath, "\(id)'s patcher") {
+            try await self.runSilentPatcher(id: id, hostPath: hostPath, winePath: winePath, at: wrappPath)
+        }
+    }
+
     /// `INSTALLER.RUN --patch --into=<folder> --mount=type=fetch,… <patcher>`:
     /// the patcher put where its mount says, run as an installer is (its
     /// type's silent switches) in `--into`, and taken away again. It looks

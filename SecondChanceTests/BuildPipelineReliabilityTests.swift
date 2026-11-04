@@ -3,6 +3,7 @@ import Synchronization
 import Testing
 @testable import SecondChance
 import WindowsFormats
+@testable import WineExecutor
 
 @Suite("Build pipeline reliability")
 struct BuildPipelineReliabilityTests {

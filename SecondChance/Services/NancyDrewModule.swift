@@ -53,6 +53,28 @@ nonisolated enum ShippedBundles {
         GameInfoProvider.shared.gameInfo(for: slug).programID
     }
 
+    /// The edition of `slug`'s bundle a build from `source` makes: the one
+    /// edition for that source (decision 20 of the builders plan takes it
+    /// from detection's rule where a bundle has more than one), else the
+    /// name Second Chance has always given it.
+    static func edition(ofGame slug: String, source: WrappSource, in bundle: Bundle = .main) throws -> String {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
+        let kind: Manifest.Source = switch source {
+        case .disk: .disc
+        case .herDownload: .herDownload
+        case .steam: .steam
+        case .bigFish: .bigFish
+        case .download: .download
+        }
+        let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
+        guard let loader = try? ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: nil),
+              let manifest = try? loader.load(folder).get().manifest else {
+            return WrappBuildHelper.edition(of: source)
+        }
+        let editions = manifest.editions.filter { $0.source == kind }
+        return editions.count == 1 ? editions[0].id : WrappBuildHelper.edition(of: source)
+    }
+
     /// What building `edition` of the Nancy Drew game `slug` runs, from its
     /// shipped bundle, Wrappfile and the shipped modules; nil for an edition
     /// with no stage of its own. Throws `buildRecipeProblem` when the bundle

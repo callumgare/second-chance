@@ -1,6 +1,6 @@
 //
 //  DiscCopy.swift
-//  SecondChance
+//  WineExecutor
 //
 //  Copies a game disc into the wrapp in one pass that can be cancelled and
 //  says how far it has got. Only the files' contents are copied: not their
@@ -12,24 +12,24 @@
 import Darwin
 import Foundation
 import Logging
-import SecondChanceKit
+import ProcessKit
 import Synchronization
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.DiscCopy")
 
-nonisolated enum DiscCopy {
+public nonisolated enum DiscCopy {
     /// How far a copy has got, in bytes.
-    struct Progress: Sendable {
-        let copied: Int64
-        let total: Int64?
+    public struct Progress: Sendable {
+        public let copied: Int64
+        public let total: Int64?
     }
 
     /// Copy the folder `source` to `destination`, which mustn't exist yet.
     /// `progress` is called as the copy goes, from the copying thread, at
     /// most a few times a second. Throws `CancellationError` once the task is
     /// cancelled, leaving what was copied for the caller to remove.
-    static func copy(from source: URL, to destination: URL, total: Int64?,
-                     progress: @escaping @Sendable (Progress) -> Void) async throws {
+    public static func copy(from source: URL, to destination: URL, total: Int64?,
+                            progress: @escaping @Sendable (Progress) -> Void) async throws {
         let state = CopyState(total: total, progress: progress)
         try await withTaskCancellationHandler {
             try await Blocking.run {
@@ -99,7 +99,7 @@ nonisolated enum DiscCopy {
 
     /// What the copy's C callback reaches through its context pointer.
     private final class CopyState: Sendable {
-        let total: Int64?
+        public let total: Int64?
         let progress: @Sendable (Progress) -> Void
         private let state = Mutex((cancelled: false, finishedFiles: Int64(0), current: Int64(0), lastReport: ContinuousClock.Instant.now))
         private let failed = Mutex<[(source: String, destination: String, errno: Int32)]>([])

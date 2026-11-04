@@ -20,6 +20,7 @@ let swiftSettings: [SwiftSetting] = [
 
 let package = Package(
     name: "WineModule",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "WineKit", targets: ["WineKit"]),
@@ -49,6 +50,7 @@ let package = Package(
             dependencies: [
                 "WineKit",
                 .product(name: "WrappModuleKit", package: "WrappKit"),
+                .product(name: "ProcessKit", package: "WrappKit"),
                 .product(name: "WrappFormat", package: "WrappKit"),
                 .product(name: "Logging", package: "swift-log"),
             ],

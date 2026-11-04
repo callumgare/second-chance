@@ -221,9 +221,10 @@ nonisolated enum CoreInstructions {
             let parts = pair.split(separator: "=", maxSplits: 1)
             environment[String(parts[0])] = parts.count > 1 ? String(parts[1]) : ""
         }
+        // Its mounts are in place already: the runner puts every step's there.
         let code = try await context.runProgram(ProgramRun(program: program, arguments: Array(step.arguments.dropFirst()),
                                                            environment: environment, step: step),
-                                                mounts: step.options["mount"] ?? [])
+                                                mounts: [])
         guard code == 0 else { throw StepFailure.failed("\(step.origin): \(program) exited with \(code)") }
     }
 }

@@ -367,7 +367,7 @@ class GameInstallerRunner {
 
     /// The installer directory as a Windows-style path relative to drive_c
     /// (e.g. "/nancy-drew-installer/disk-1").
-    private func installerDirectoryPath(in driveCPath: URL) -> String {
+    func installerDirectoryPath(in driveCPath: URL) -> String {
         guard let directory = installerDirectory(in: driveCPath) else { return "/" + WrappLayout.installersFolder }
         return "/\(WrappLayout.installersFolder)/\(directory.lastPathComponent)"
     }

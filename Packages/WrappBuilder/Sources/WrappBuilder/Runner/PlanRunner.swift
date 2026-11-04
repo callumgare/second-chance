@@ -150,14 +150,24 @@ public nonisolated struct PlanRunner: Sendable {
         logger.notice("Step: \(step) (\(step.origin))")
         let started = ContinuousClock.now
         do {
-            if let module = step.module {
-                guard let executor = configuration.executors[module] else {
-                    throw StepFailure.recipe("\(step.origin): nothing carries out \(step.keyword) in this build")
+            // Its bind and fetch mounts, put in place for it and taken away
+            // after, whoever carries it out.
+            let mounts = (step.options["mount"] ?? []).filter { ["bind", "fetch"].contains(PlannedStep.fields(ofMount: $0)["type"]) }
+            let placed = try await Mounts.place(mounts, for: step, in: context)
+            do {
+                if let module = step.module {
+                    guard let executor = configuration.executors[module] else {
+                        throw StepFailure.recipe("\(step.origin): nothing carries out \(step.keyword) in this build")
+                    }
+                    try await executor.run(step, in: context)
+                } else {
+                    try await CoreInstructions.run(step, in: context)
                 }
-                try await executor.run(step, in: context)
-            } else {
-                try await CoreInstructions.run(step, in: context)
+            } catch {
+                await Mounts.remove(placed, log: context.log)
+                throw error
             }
+            await Mounts.remove(placed, log: context.log)
         } catch let error as CancellationError {
             throw error
         } catch {

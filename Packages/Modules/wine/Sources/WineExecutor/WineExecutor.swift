@@ -7,6 +7,7 @@
 
 import Foundation
 import Logging
+import ProcessKit
 import WineKit
 import WrappFormat
 import WrappModuleKit
@@ -18,7 +19,7 @@ private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.Sec
 /// `wine:` program for `RUN` (docs/modules.md#executors). Portable: it needs
 /// nothing of Second Chance's.
 public nonisolated struct WineExecutor: ModuleExecutor {
-    public static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "HELPERS", "PREFIX"]
+    public static let handles = ["DRIVES", "REGISTRY", "WINETRICKS", "MOUNT", "KEEP-DISCS", "HELPERS", "PREFIX"]
 
     /// The winetricks it runs; nil for the module's own.
     let winetricks: URL?
@@ -73,6 +74,8 @@ public nonisolated struct WineExecutor: ModuleExecutor {
             }
             try wine.drives.mount(folder, as: letter)
             if step.has("cdrom") { try await wine.drives.setKind(.cdrom, of: letter) }
+        case "KEEP-DISCS":
+            try await keepDiscs(step, in: context)
         case "HELPERS":
             try layInHelpers(in: context.tree, step: step)
         case "PREFIX":
@@ -86,18 +89,130 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     }
 
     /// A `wine:` program, its arguments in Windows's style, run in the
-    /// tree's Wine with its environment, its exit code returned.
+    /// tree's Wine with its environment, on a desktop of its own, its exit
+    /// code returned once every program it started has finished too. A
+    /// program that found no display is run once more in a fresh session:
+    /// on a loaded Mac a desktop reported ready has failed a program, and the
+    /// session stays that way.
     public func runProgram(_ program: ProgramRun, in context: any StepContext) async throws -> Int32 {
+        do {
+            return try await runOnce(program, in: context)
+        } catch WineError.noDisplay {
+            logger.warning("\(program.program) found no display to open its windows on — restarting the Wine session and trying once more")
+            await Wine(wrapp: context.tree).server.stop()
+            return try await runOnce(program, in: context)
+        }
+    }
+
+    func runOnce(_ program: ProgramRun, in context: any StepContext) async throws -> Int32 {
         let path = program.program.hasPrefix("wine:") ? String(program.program.dropFirst("wine:".count)) : program.program
         let arguments = program.arguments.map(Self.windowsStyle)
         let wine = Wine(wrapp: context.tree)
+        let timeout = program.timeout.map { TimeInterval($0.components.seconds) } ?? programTimeout
+        let desktop = await WineDesktop.start(wine, logger: logger, outputLogger: logger)
+        defer { desktop?.release() }
+        let code: Int32
         do {
-            try await wine.run(.program(Self.windowsStyle(path), arguments), environment: program.environment,
-                               timeout: program.timeout.map { TimeInterval($0.components.seconds) } ?? programTimeout)
-            return 0
-        } catch WineError.executionFailed(let code) {
-            return code
+            try await wine.run(.program(Self.windowsStyle(path), arguments), environment: program.environment, timeout: timeout)
+            code = 0
+        } catch WineError.executionFailed(let exit) {
+            code = exit
         }
+        // A program failing still waits for what it started.
+        desktop?.release()
+        try await wine.server.waitUntilProgramsExit(timeout: timeout)
+        return code
+    }
+
+    // MARK: - Discs
+
+    /// `WINE.KEEP-DISCS <disc>… --into=<folder> [--combined=<folder>]`: each
+    /// disc copied into `<into>/disk-<n>`, writable, with how much is done
+    /// as the step's progress; for more than one, merged into `--combined`
+    /// as links, the first disc's files winning. Each gets a CD-ROM drive
+    /// from D: in order, kept for the game, which may check for its disc.
+    func keepDiscs(_ step: PlannedStep, in context: any StepContext) async throws {
+        let layout = WrappLayout(app: context.tree)
+        guard let intoPath = step.option("into"), let into = layout.location(intoPath) else {
+            throw StepFailure.recipe("\(step.origin): WINE.KEEP-DISCS keeps the discs in a folder of the prefix (--into)")
+        }
+        let wine = Wine(wrapp: context.tree)
+        let names = step.arguments.compactMap(PlannedStep.input(in:))
+        try FileManager.default.createDirectory(at: into, withIntermediateDirectories: true)
+        // Wine is told the drives are CD drives while the discs copy: each run
+        // of Wine starts its session afresh, which took 8 to 18 s per drive
+        // once the copying was done.
+        let letters = names.indices.map(Self.driveLetter(forDisc:))
+        let marking = Task { try await wine.drives.setKind(.cdrom, of: letters) }
+        var kept: [URL] = []
+        do {
+            for (index, name) in names.enumerated() {
+                guard let disc = try await context.inputIfGiven(name) else { continue }
+                if index > 0 { context.substep(String(localized: "Copying disc \(index + 1)")) }
+                let destination = into.appendingPathComponent("disk-\(index + 1)")
+                if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
+                try await copy(disc, to: destination, emitter: context.emitter)
+                kept.append(destination)
+            }
+        } catch {
+            marking.cancel()
+            _ = try? await marking.value
+            throw error
+        }
+        context.substep(String(localized: "Getting the discs ready"))
+        try await marking.value
+        if kept.count > 1, let combinedPath = step.option("combined"), let combined = layout.location(combinedPath) {
+            try Self.combine(kept, into: combined)
+        }
+        // The copies stay, still mounted, for the game as well as its
+        // installer: some games check their disc is in the drive.
+        for (index, disc) in kept.enumerated() {
+            let relative = "../drive_c/" + disc.path.dropFirst(layout.driveC.path.count + 1)
+            try wine.drives.mount(relative, as: Self.driveLetter(forDisc: index))
+            logger.notice("Mounted disk-\(index + 1) as \(Self.driveLetter(forDisc: index)): (cdrom)")
+        }
+    }
+
+    /// The drive letter disc `index` (from 0) is at: D: on.
+    public static func driveLetter(forDisc index: Int) -> Character {
+        Character(UnicodeScalar(UInt8(100 + index)))
+    }
+
+    /// Links in `combined` to each disc's files, the first disc's winning.
+    static func combine(_ discs: [URL], into combined: URL) throws {
+        let files = FileManager.default
+        try files.createDirectory(at: combined, withIntermediateDirectories: true)
+        for disc in discs {
+            for item in try files.contentsOfDirectory(at: disc, includingPropertiesForKeys: nil) where item.lastPathComponent != ".DS_Store" {
+                // .DS_Store left out: codesign fails on a link to one.
+                let link = combined.appendingPathComponent(item.lastPathComponent)
+                if !files.fileExists(atPath: link.path) {
+                    try files.createSymbolicLink(atPath: link.path, withDestinationPath: "../\(disc.lastPathComponent)/\(item.lastPathComponent)")
+                }
+            }
+        }
+    }
+
+    /// A disc copied with its size as the step's progress.
+    func copy(_ disc: URL, to destination: URL, emitter: any EventEmitter) async throws {
+        let total = Self.size(of: disc)
+        logger.notice("Copying \(disc.path) (\(total.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) } ?? "size unknown"))")
+        @Sendable func text(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+        try await DiscCopy.copy(from: disc, to: destination, total: total) { progress in
+            let fraction = progress.total.map { min(1, Double(progress.copied) / Double(max($0, 1))) }
+            emitter.emit(.stepProgress(.init(fraction: fraction,
+                                             text: progress.total.map { "\(text(progress.copied)) of \(text($0))" } ?? "\(text(progress.copied)) copied")))
+        }
+        if let total { emitter.emit(.stepProgress(.init(fraction: 1, text: "\(text(total)) of \(text(total))"))) }
+    }
+
+    /// How full a disc is, or a folder's files' size; nil when it can't be told.
+    static func size(of folder: URL) -> Int64? {
+        if let values = try? folder.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey, .isVolumeKey]),
+           values.isVolume == true, let total = values.volumeTotalCapacity, let available = values.volumeAvailableCapacity {
+            return Int64(total - available)
+        }
+        return DirectorySize.measure(folder).bytes
     }
 
     /// Wine's server let finish, so the registry is written to its files

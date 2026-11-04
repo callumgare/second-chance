@@ -13,6 +13,14 @@ import Foundation
 public nonisolated protocol InputProvider: Sendable {
     /// The input's folder or file.
     func input(_ name: String) async throws -> URL
+
+    /// The input, or nil when the build has none of that name to give: a
+    /// one-disc game's disc 2.
+    func inputIfGiven(_ name: String) async throws -> URL?
+}
+
+nonisolated extension InputProvider {
+    public func inputIfGiven(_ name: String) async throws -> URL? { try await input(name) }
 }
 
 /// Inputs already where they are, by name.
@@ -25,4 +33,6 @@ public nonisolated struct GivenInputs: InputProvider {
         guard let url = inputs[name] else { throw StepFailure.recipe("the build was given no input called \(name)") }
         return url
     }
+
+    public func inputIfGiven(_ name: String) async throws -> URL? { inputs[name] }
 }

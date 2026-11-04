@@ -8,6 +8,7 @@
 import Foundation
 import GameCatalog
 import SecondChanceKit
+import SecondChanceReporting
 import WrappBuilder
 
 /// What the runner is given by Second Chance (docs/wrapp-build.md#the-runner):
@@ -19,9 +20,9 @@ enum AppRunner {
     /// every event has reached the bus before the build goes on.
     static func configuration(
         bus: EventBus<AppEvent>, input: WrappBuildInput, game: GameInfo, inputs: any InputProvider,
-        downloader: Downloader, helper: WrappBuildHelper
+        downloader: Downloader, helper: WrappBuildHelper, executors more: [String: any ModuleExecutor] = [:]
     ) -> (RunnerConfiguration, OrderedEmitter) {
-        let translator = BuildEventTranslator()
+        let translator = BuildEventTranslator(game: game)
         let emitter = OrderedEmitter { event in
             for translated in translator.translate(event) { await bus.publishWrappBuild(translated) }
         }
@@ -31,7 +32,7 @@ enum AppRunner {
         // The wine module's in-process helpers, as the template carries them.
         let helpers = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app")?
             .appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib")
-        let executors = ModuleSteps.executors(helpers: helpers)
+        let executors = ModuleSteps.executors(helpers: helpers).merging(more) { $1 }
         var configuration = RunnerConfiguration(
             executors: executors, inputs: inputs, emitter: emitter,
             ask: { question in try await answer(question, input: input, game: slug) },
@@ -66,7 +67,9 @@ enum AppRunner {
         case .confirmStepFailure(let name, let message):
             let patch = GamePatchCatalog.shared.allPatches(forGame: game).first { $0.id == name }
                 ?? GamePatch.unlisted(id: name, game: game)
-            return await input.confirmPatchFailure(patch, error: StepFailure.failed(message)) ? .yes : .no
+            // Not carrying on is the person's choice, not the step's failure.
+            guard await input.confirmPatchFailure(patch, error: StepFailure.failed(message)) else { throw WrappBuildError.userCancelled }
+            return .yes
         case .choose, .confirm:
             throw WrappBuildError.buildRecipeProblem("this build can't ask an added module's questions yet")
         }
@@ -80,6 +83,13 @@ enum AppRunner {
 /// instruction reaches is Second Chance's own table's. Used from one task
 /// only, the emitter's, so it keeps its state unguarded.
 nonisolated final class BuildEventTranslator: @unchecked Sendable {
+    /// The game being built, for a failed patch's report.
+    let game: GameInfo?
+
+    init(game: GameInfo? = nil) {
+        self.game = game
+    }
+
     /// The phase reached, by its place in `SecondChanceEmits.phases`.
     private var phase: Int?
     /// The substep an `EMIT` gave the next step.
@@ -108,9 +118,16 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
             nextSubstep = nil
             return events
         case .stepDone(let ref):
-            return [.stepDone(name: ref.name)]
+            // A patch's steps say so as the builders always have.
+            return [.stepDone(name: ref.name)] + (Self.isPatch(ref) ? [.patchApplied(id: ref.name)] : [])
         case .stepSkipped(let ref, let message):
-            return [.stepSkipped(name: ref.name, message: message)]
+            guard Self.isPatch(ref) else { return [.stepSkipped(name: ref.name, message: message)] }
+            if let game {
+                _ = FailureReporter.sendWithoutAsking(FailureReport(
+                    what: "Applying a game patch", kind: "step-failed", game: game.id, source: nil,
+                    engine: game.composition.engineTag, tags: ["patch": ref.name]))
+            }
+            return [.stepSkipped(name: ref.name, message: message), .patchFailed(id: ref.name, message: message)]
         case .emitted(let string):
             return [.emitted(string)] + read(string)
         case .instructions(let text):
@@ -122,6 +139,12 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
         case .module:
             return []
         }
+    }
+
+    /// Whether `ref` is one of Her Interactive's patches: a step of the
+    /// nancy-drew module's `patch` function, named after the patch.
+    static func isPatch(_ ref: StepRef) -> Bool {
+        ref.step.name != nil && ref.step.origin.hasPrefix("nancy-drew/functions/patch")
     }
 
     /// What one of Second Chance's strings says.

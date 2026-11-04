@@ -32,6 +32,8 @@ nonisolated struct LocalStepContext: StepContext {
 
     func input(_ name: String) async throws -> URL { try await configuration.inputs.input(name) }
 
+    func inputIfGiven(_ name: String) async throws -> URL? { try await configuration.inputs.inputIfGiven(name) }
+
     func moduleFile(_ module: String, _ path: String) -> URL? {
         configuration.moduleFolders[module.lowercased()].map { $0.appendingPathComponent(path) }
     }
