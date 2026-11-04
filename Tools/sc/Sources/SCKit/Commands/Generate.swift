@@ -30,6 +30,8 @@ struct GenerateCommand: AsyncParsableCommand {
         let games = try GameCatalogSource.games(from: bundles, modules: try loadModules(session))
         let files = [(GameCatalogSource.path, GameCatalogSource.source(for: games))]
             + (try ModuleDataSource.generatedFiles(modules: modules)).map { ($0.path, $0.source) }
+            + [(EmitVocabularySource.path, EmitVocabularySource.source(
+                for: try EmitVocabulary.load(session.repo.root.appendingPathComponent(EmitVocabularySource.vocabularyPath))))]
         for (path, source) in files {
             let file = session.repo.root.appendingPathComponent(path)
             if (try? String(contentsOf: file, encoding: .utf8)) == source {

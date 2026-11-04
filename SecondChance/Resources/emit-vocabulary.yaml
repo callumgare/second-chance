@@ -1,0 +1,22 @@
+# The strings Second Chance reads from a Wrappfile's EMITs, and from an
+# executor's (docs/wrappfile.md#emit): the builder passes every one on
+# unread, so this is the one list of what they mean here. `sc generate`
+# makes EmitVocabulary+Generated.swift from it, and `sc bundle check` and a
+# unit test hold every shipped bundle's EMITs to it.
+prefix: "second-chance."
+strings:
+  # The build has reached a phase: the progress screen's sidebar step and
+  # its headline. A phase never goes back.
+  - pattern: "second-chance.phase.<phase>"
+    values:
+      phase: ["setting-up", "copying-installer", "installing-game", "configuring"]
+    ordered: "phase"
+  # The next step's substep, from Second Chance's own text for each key.
+  - pattern: "second-chance.substep.<key>"
+    values:
+      key: ["display", "graphics", "disc"]
+  # How far the current step has got, from a signal (EMIT --on).
+  - pattern: "second-chance.progress.<done>/<total>"
+    values:
+      done: "number"
+      total: "number"

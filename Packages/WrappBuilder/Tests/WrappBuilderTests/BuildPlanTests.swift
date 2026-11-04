@@ -356,4 +356,28 @@ struct BuildPlanTests {
             }
         }
     }
+
+    @Test("EMIT is kept with its stage before the step after it: through a function, dropped with an untaken branch, never a step")
+    func emits() throws {
+        let text = """
+        FUNCTION patch
+          EMIT "patching"
+          REMOVE /a
+        END
+        FROM scratch AS only
+        EMIT "first"
+        REMOVE /b
+        IF ${platform.arch} = "nothing"
+          EMIT "never"
+        END
+        DO patch
+        EMIT "last ${platform.arch}"
+        """
+        let (planner, file, bundle) = try planner(text)
+        let context = BuildPlanner.Context(planner: planner, edition: bundle.manifest.editions[0],
+                                           conditions: BuildConditions(arch: "arm64", macos: 15), recorder: BuildPlanner.Recorder())
+        let stage = try context.plan(try #require(file.stage(named: "only")), globals: try context.globalScope(), inheriting: [:]).stage
+        #expect(stage.steps.map(\.description) == ["REMOVE /b", "REMOVE /a"])
+        #expect(stage.emits.map { "\($0.before) \($0.text)" } == ["0 first", "1 patching", "2 last arm64"])
+    }
 }

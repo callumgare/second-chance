@@ -93,7 +93,7 @@
             }
         },
         "instruction": {
-            "match": "(?i)^\\s*(RUN|COPY|ADD|MOVE|REMOVE|EDIT|LAUNCH|VOLUME|APP)(?=\\s|$)",
+            "match": "(?i)^\\s*(RUN|COPY|ADD|MOVE|REMOVE|EDIT|LAUNCH|VOLUME|APP|EMIT)(?=\\s|$)",
             "captures": {
                 "1": { "name": "keyword.other.instruction.wrappfile" }
             }

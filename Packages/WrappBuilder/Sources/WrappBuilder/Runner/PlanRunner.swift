@@ -77,8 +77,10 @@ public nonisolated struct PlanRunner: Sendable {
                 }
                 for (index, step) in stage.steps.enumerated() {
                     try Task.checkCancellation()
+                    emit(stage.emits(before: index))
                     try await run(step, at: StepRef(stage: stage.name, index: index, step: step), in: tree)
                 }
+                emit(stage.emits(before: stage.steps.count))
             }
         } catch {
             await finish()
@@ -121,6 +123,11 @@ public nonisolated struct PlanRunner: Sendable {
         }
         logger.debug("[Runner] \(ref.name) took \(ContinuousClock.now - started)")
         configuration.emitter.emit(.stepDone(ref))
+    }
+
+    /// A stage's `EMIT`s, as the build reaches them.
+    func emit(_ emits: [PlannedEmit]) {
+        for emitted in emits { configuration.emitter.emit(.emitted(emitted.text)) }
     }
 
     func finish() async {

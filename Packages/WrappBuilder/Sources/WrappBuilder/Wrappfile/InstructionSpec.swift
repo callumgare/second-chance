@@ -115,6 +115,9 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
             InstructionSpec("APP", options: ["default-id": .value, "name": .value, "icon": .value],
                             optionRoles: ["icon": .location]),
             InstructionSpec("MOVE", arguments: 2...2, argumentRoles: [.location]),
+            // A string for whoever runs the build, passed on unread as it gets
+            // here: not a step, so in no key and keeping no layer.
+            InstructionSpec("EMIT", arguments: 1...1, argumentRoles: [.text]),
             InstructionSpec("REMOVE", arguments: 1...1, argumentRoles: [.location]),
             // `--ini=<section>.<key>=<value>`, or `--from-data=<table>`: the calling
             // module's table of replacements and settings (nancy-drew's `ini`).

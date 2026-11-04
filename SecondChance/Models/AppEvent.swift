@@ -80,6 +80,17 @@ enum WrappBuildEvent {
     // runs continue past it), so this is the only record of it beyond the log.
     case patchApplied(id: String)
     case patchFailed(id: String, message: String)
+
+    // The plan's shape, as the runner carries it out (docs/wrapp-build.md#events-are-the-contract):
+    // each step by its --name, or where it was written, and its keyword.
+    case stepStarted(name: String, keyword: String)
+    /// A step's result restored from a layer rather than run.
+    case stepRestored(name: String, keyword: String)
+    case stepDone(name: String)
+    /// A step that failed, which the build carries on without.
+    case stepSkipped(name: String, message: String)
+    /// A string an `EMIT` or an executor emitted, as it was.
+    case emitted(String)
 }
 
 /// How far a step has got, measured rather than guessed.

@@ -218,6 +218,16 @@ nonisolated final class AutomationBridge: @unchecked Sendable {
         case .progress(let state):
             d["type"] = "wrappBuild.progress"; d["state"] = "\(state)"
             if let sub = state.substep { d["substep"] = sub }
+        case .stepStarted(let name, let keyword):
+            d["type"] = "wrappBuild.stepStarted"; d["name"] = name; d["keyword"] = keyword
+        case .stepRestored(let name, let keyword):
+            d["type"] = "wrappBuild.stepRestored"; d["name"] = name; d["keyword"] = keyword
+        case .stepDone(let name):
+            d["type"] = "wrappBuild.stepDone"; d["name"] = name
+        case .stepSkipped(let name, let message):
+            d["type"] = "wrappBuild.stepSkipped"; d["name"] = name; d["message"] = message
+        case .emitted(let string):
+            d["type"] = "wrappBuild.emitted"; d["string"] = string
         }
         return d
     }

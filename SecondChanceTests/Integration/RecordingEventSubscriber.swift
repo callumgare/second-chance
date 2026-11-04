@@ -98,7 +98,7 @@ final class RecordingEventSubscriber: @unchecked Sendable {
             steamGamesOwned = games
         case .bigFishGamesOwned(let games):
             bigFishGamesOwned = games
-        case .started, .instructions, .stepProgress, .steamSignInNotice:
+        case .started, .instructions, .stepProgress, .steamSignInNotice, .stepStarted, .stepRestored, .stepDone, .stepSkipped, .emitted:
             break
         }
     }

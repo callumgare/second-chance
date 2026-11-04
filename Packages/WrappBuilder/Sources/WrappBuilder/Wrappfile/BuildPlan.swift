@@ -53,14 +53,37 @@ public nonisolated struct PlannedStage: Sendable, Equatable {
     public let steps: [PlannedStep]
     /// The module whose stage it is, by id; nil for the bundle's own.
     public let module: String?
+    /// Its `EMIT`s, each with the step it comes before: not steps, so in no
+    /// key, and passed to the caller unread as the build reaches them.
+    public let emits: [PlannedEmit]
 
-    public init(name: String, from: StageSource, modules: [String], steps: [PlannedStep], module: String? = nil) {
+    public init(name: String, from: StageSource, modules: [String], steps: [PlannedStep], module: String? = nil,
+                emits: [PlannedEmit] = []) {
         self.name = name
         self.from = from
         self.modules = modules
         self.steps = steps
         self.module = module
+        self.emits = emits
     }
+
+    /// The `EMIT`s expanded among `steps` taken out, each kept with the
+    /// index of the step it came before.
+    static func separatingEmits(_ steps: [PlannedStep]) -> (steps: [PlannedStep], emits: [PlannedEmit]) {
+        var run: [PlannedStep] = []
+        var emits: [PlannedEmit] = []
+        for step in steps {
+            if step.module == nil, step.instruction == "EMIT" {
+                emits.append(PlannedEmit(before: run.count, text: step.arguments.first ?? "", origin: step.origin))
+            } else {
+                run.append(step)
+            }
+        }
+        return (run, emits)
+    }
+
+    /// The strings emitted before step `index` (`steps.count` for after the last).
+    public func emits(before index: Int) -> [PlannedEmit] { emits.filter { $0.before == index } }
 
     /// A module's stage (`wine/prefix`, named `<module>/<stage>`).
     public var isModuleStage: Bool { module != nil }
@@ -74,6 +97,13 @@ public nonisolated struct PlannedStage: Sendable, Equatable {
     public var plannedTextHash: String {
         SHA256.hash(data: Data(plannedText.utf8)).map { String(format: "%02x", $0) }.joined()
     }
+}
+
+/// An `EMIT`: its string, where it was written, and the step it comes before.
+public nonisolated struct PlannedEmit: Sendable, Equatable {
+    public let before: Int
+    public let text: String
+    public let origin: String
 }
 
 /// What `APP` records: `--icon`, `--name` and `--default-id`, the last of
@@ -464,8 +494,9 @@ public nonisolated struct BuildPlanner {
             }
             var steps: [PlannedStep] = []
             try expand(stage.body, scope: &scope, origin: "Wrappfile", into: &steps)
+            let (run, emits) = PlannedStage.separatingEmits(steps)
             let planned = PlannedStage(name: stage.name ?? "", from: stage.from,
-                                       modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps)
+                                       modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: run, emits: emits)
             return (planned, scope.modules)
         }
 
@@ -498,8 +529,9 @@ public nonisolated struct BuildPlanner {
             var steps: [PlannedStep] = []
             let path = module.manifest.stages?.first { ($0 as NSString).lastPathComponent == stage.name } ?? "stages/\(stage.name ?? "")"
             try expand(stage.body, scope: &scope, origin: "\(module.manifest.id)/\(path)", into: &steps)
-            let planned = PlannedStage(name: name, from: stage.from, modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: steps,
-                                       module: module.manifest.id)
+            let (run, emits) = PlannedStage.separatingEmits(steps)
+            let planned = PlannedStage(name: name, from: stage.from, modules: Array(Set(scope.modules.aliases.values)).sorted(), steps: run,
+                                       module: module.manifest.id, emits: emits)
             return (planned, scope.modules)
         }
 

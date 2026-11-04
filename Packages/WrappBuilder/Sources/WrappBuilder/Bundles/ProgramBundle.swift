@@ -20,6 +20,11 @@ public nonisolated struct ProgramBundle: Sendable {
         public let message: String
 
         public var description: String { "\(bundle): \(message)" }
+
+        public init(bundle: String, message: String) {
+            self.bundle = bundle
+            self.message = message
+        }
     }
 
     /// The `$id` of the manifest schema.

@@ -96,6 +96,19 @@ struct BundleCheckCommand: AsyncParsableCommand {
                 session.ui.line("\(session.repo.display(folder)): warning: \(warning)")
             }
         }
+        // Second Chance's EMIT strings, which the builder never reads.
+        let vocabulary = try EmitVocabulary.load(session.repo.root.appendingPathComponent(EmitVocabularySource.vocabularyPath))
+        let modules = try loadModules(session)
+        for folder in folders {
+            guard case .success(let bundle) = loader.load(folder),
+                  let text = try? String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8),
+                  let wrappfile = try? WrappfileParser.parse(text) else { continue }
+            let planner = BuildPlanner(bundle: bundle, wrappfile: wrappfile, modules: modules)
+            for edition in bundle.manifest.editions {
+                guard let plan = try? planner.plan(edition: edition.id, conditions: .thisMac) else { continue }
+                problems += vocabulary.problems(in: plan).map { ProgramBundle.Problem(bundle: bundle.manifest.id, message: $0) }
+            }
+        }
         guard problems.isEmpty else {
             for problem in problems { session.ui.line(problem.description) }
             throw SCError("\(Set(problems.map(\.bundle)).count) of \(folders.count) bundles have problems.")
