@@ -51,7 +51,8 @@ struct VideoAnnotatorTests {
             group.items.first { $0.commonKey == .commonKeyTitle }?.stringValue
         }
         #expect(titles == ["Recording started", "Game window appeared", "Clicked Exit"])
-        #expect(asset.tracks(withMediaType: .text).count == 2)
+        #expect(asset.tracks(withMediaType: .text).count == 1)  // the chapters
+        #expect(asset.tracks(withMediaType: .subtitle).count == 1)
         #expect(asset.tracks(withMediaType: .video).count == 1)
         #expect(abs(asset.duration.seconds - 3) < 0.2)
     }

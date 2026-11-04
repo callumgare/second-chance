@@ -29,8 +29,6 @@ public nonisolated enum VideoAnnotator {
 
     /// How long a caption stays up, at most: the next event's replaces it.
     static let captionSeconds: TimeInterval = 3
-    /// The caption track's height, at the foot of the picture.
-    static let captionHeight: CGFloat = 120
 
     /// Copy `video` to `output` (a QuickTime movie, which keeps chapters),
     /// with `events` as chapters and captions.
@@ -43,7 +41,7 @@ public nonisolated enum VideoAnnotator {
             return Loaded(track: track, duration: try await asset.load(.duration),
                           size: try await track.load(.naturalSize), format: try await track.load(.formatDescriptions).first)
         }
-        let (track, duration, size) = (loaded.track, loaded.duration, loaded.size)
+        let (track, duration) = (loaded.track, loaded.duration)
 
         let reader = try AVAssetReader(asset: asset)
         let source = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
@@ -52,12 +50,13 @@ public nonisolated enum VideoAnnotator {
         try? FileManager.default.removeItem(at: output)
         let writer = try AVAssetWriter(outputURL: output, fileType: .mov)
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: nil, sourceFormatHint: loaded.format)
-        let textFormat = try Self.textFormat()
+        let textFormat = try Self.textFormat(mediaType: kCMMediaType_Text)
+        let subtitleFormat = try Self.textFormat(mediaType: kCMMediaType_Subtitle)
         let chapterInput = AVAssetWriterInput(mediaType: .text, outputSettings: nil, sourceFormatHint: textFormat)
         chapterInput.marksOutputTrackAsEnabled = false
-        let captionInput = AVAssetWriterInput(mediaType: .text, outputSettings: nil, sourceFormatHint: textFormat)
-        captionInput.naturalSize = CGSize(width: size.width, height: captionHeight)
-        captionInput.transform = CGAffineTransform(translationX: 0, y: size.height - captionHeight)
+        // A subtitle track, which players list under their subtitles to turn
+        // on; a plain text track QuickTime Player doesn't offer at all.
+        let captionInput = AVAssetWriterInput(mediaType: .subtitle, outputSettings: nil, sourceFormatHint: subtitleFormat)
         // A player picks chapters and captions by language: the events are in English.
         for input in [chapterInput, captionInput] {
             input.languageCode = "eng"
@@ -75,7 +74,7 @@ public nonisolated enum VideoAnnotator {
 
         let end = duration.seconds
         let chapters = try samples(chapters(events, end: end), format: textFormat)
-        let captions = try samples(captions(events, end: end), format: textFormat)
+        let captions = try samples(captions(events, end: end), format: subtitleFormat)
 
         // Each track fed on its own queue as the writer asks, so it can
         // interleave them however it likes.
@@ -130,8 +129,10 @@ public nonisolated enum VideoAnnotator {
         return cues
     }
 
-    /// 3GPP timed text: white on translucent black, centred, sans serif.
-    static func textFormat() throws -> CMFormatDescription {
+    /// 3GPP timed text: white on translucent black, centred, sans serif; a
+    /// text track's (`kCMMediaType_Text`, the chapters) or a subtitle
+    /// track's (`kCMMediaType_Subtitle`, the captions).
+    static func textFormat(mediaType: CMMediaType) throws -> CMFormatDescription {
         func color(_ red: Int, _ green: Int, _ blue: Int, _ alpha: Int) -> [CFString: Int] {
             [kCMTextFormatDescriptionColor_Red: red, kCMTextFormatDescriptionColor_Green: green,
              kCMTextFormatDescriptionColor_Blue: blue, kCMTextFormatDescriptionColor_Alpha: alpha]
@@ -154,7 +155,7 @@ public nonisolated enum VideoAnnotator {
             kCMTextFormatDescriptionExtension_FontTable: ["1": "Sans-Serif"],
         ]
         var format: CMFormatDescription?
-        let status = CMFormatDescriptionCreate(allocator: kCFAllocatorDefault, mediaType: kCMMediaType_Text,
+        let status = CMFormatDescriptionCreate(allocator: kCFAllocatorDefault, mediaType: mediaType,
                                                mediaSubType: kCMTextFormatType_3GText,
                                                extensions: extensions as CFDictionary, formatDescriptionOut: &format)
         guard status == noErr, let format else { throw Failure(description: "can't describe the text track (\(status))") }
