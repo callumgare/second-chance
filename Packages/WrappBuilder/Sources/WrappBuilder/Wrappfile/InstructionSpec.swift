@@ -93,7 +93,7 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
     /// Options every step takes: its name, for reports; and what a failure
     /// does, `--on-failure=ask` asking whether to carry on without it, where
     /// otherwise a failed step fails the build.
-    static let everyStep: [String: OptionKind] = ["name": .value, "on-failure": .value, "progress": .value]
+    static let everyStep: [String: OptionKind] = ["name": .value, "on-failure": .value]
 
     /// The core's instructions, which every stage has.
     public static let core: [String: InstructionSpec] = {

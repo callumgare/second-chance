@@ -127,8 +127,6 @@ nonisolated final class BuildEventTranslator: @unchecked Sendable {
             var events: [WrappBuildEvent] = [event.isRestored
                 ? .stepRestored(name: ref.name, keyword: ref.step.keyword)
                 : .stepStarted(name: ref.name, keyword: ref.step.keyword)]
-            // A step's `--progress`, until the Wrappfiles EMIT it instead.
-            if let key = ref.step.option("progress"), let text = WineManager.progressText(key) { nextSubstep = text }
             let reached = Self.phaseByInstruction[ref.step.keyword].flatMap(SecondChanceEmits.phases.firstIndex(of:))
             if let reached, reached > (phase ?? -1) {
                 phase = reached

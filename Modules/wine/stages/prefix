@@ -15,6 +15,8 @@ WINE.DRIVES --only=C:
 # MacBook's built-in one has no 4:3 modes). Wine 10 reads this from the X11
 # Driver key whatever the driver; the wrapp's mode scaling helper scales
 # what Direct3D draws to match (docs/wine-in-process-helpers.md#mode-scaling).
-WINE.REGISTRY --progress=display --set x11-driver:EmulateModeset Y
+EMIT "second-chance.substep.display"
+WINE.REGISTRY --set x11-driver:EmulateModeset Y
 # The prefix's user folders unlinked from the Mac's home folder
-WINE.WINETRICKS --progress=disc isolate_home
+EMIT "second-chance.substep.disc"
+WINE.WINETRICKS isolate_home

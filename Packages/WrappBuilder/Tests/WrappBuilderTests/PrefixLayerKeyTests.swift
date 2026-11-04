@@ -20,7 +20,9 @@ struct PrefixLayerKeyTests {
     @Test func theStageIsTodaysInOrder() throws {
         let stage = try WineBuild.prefixStage(modules: modulesRoot)
         #expect(stage.steps.map(\.instruction) == ["ENGINE", "HELPERS", "PREFIX", "DRIVES", "REGISTRY", "WINETRICKS"])
-        #expect(stage.steps.filter { !$0.setup }.map { $0.option("progress") } == [nil, "display", "disc"])
+        // What the progress screen says for each, before the step it's for.
+        #expect(stage.emits.map(\.text) == ["second-chance.substep.display", "second-chance.substep.disc"])
+        #expect(stage.emits.map { stage.steps[$0.before].instruction } == ["REGISTRY", "WINETRICKS"])
     }
 
     @Test func theKeyFollowsTheEngineTheStageAndWinetricks() throws {

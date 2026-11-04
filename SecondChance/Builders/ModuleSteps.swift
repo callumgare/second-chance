@@ -61,9 +61,6 @@ struct ModuleSteps {
     }
 
     func run(_ step: PlannedStep, wrappPath: URL) async throws {
-        if let progress = step.option("progress").flatMap(WineManager.progressText) {
-            await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: progress)))
-        }
         let bus = bus
         let emitter = OrderedEmitter { event in
             if case .stepProgress(let progress) = event {

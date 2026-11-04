@@ -8,6 +8,7 @@
 # (--keys-must-exist): one that's gone means another cnc-ddraw, whose settings
 # would leave the game wrongly windowed.
 FUNCTION cnc-ddraw
-  WINE.WINETRICKS --progress=graphics cnc_ddraw
+  EMIT "second-chance.substep.graphics"
+  WINE.WINETRICKS cnc_ddraw
   EDIT C:/windows/syswow64/ddraw.ini --keys-must-exist --ini=ddraw.maintas=true --ini=ddraw.windowed=true
 END

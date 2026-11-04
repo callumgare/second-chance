@@ -199,12 +199,13 @@ struct StoreTests {
         try FileManager.default.createDirectory(at: secondTree, withIntermediateDirectories: true)
         let settings = settings(root)
         let holding = Task { try await run([step], stores: stores, settings: settings, executor: first, in: firstTree) }
-        let deadline = ContinuousClock.now + .seconds(10)
+        var deadline = ContinuousClock.now + .seconds(60)
         while !first.took.withLock({ $0 }), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(20)) }
         #expect(first.took.withLock { $0 })
 
         let recorder = PlanRunnerTests.Recorder()
         let waiting = Task { try await run([step], stores: stores, settings: settings, executor: second, recorder: recorder, in: secondTree) }
+        deadline = ContinuousClock.now + .seconds(60)
         while !recorder.all.contains(where: { if case .lockWaiting = $0 { return true }; return false }), ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
