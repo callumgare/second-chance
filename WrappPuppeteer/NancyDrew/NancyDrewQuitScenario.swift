@@ -322,8 +322,14 @@ struct NancyDrewQuitScenario {
         logger.notice("   Switched away; opening the game's app...")
         ProcessControl.reopen(appPath: wrapp.appPath)
         // Back means active and on screen: an app made active needn't take
-        // the screen to the Space its window is in.
-        let isBack = { (state: ControlledWindowState?) in state?.active == true && state?.onActiveSpace != false }
+        // the screen to the Space its window is in. And focused as the rest
+        // of the run judges it: a fullscreen window is briefly not, as it
+        // moves back into its Space, and the run would take that for
+        // something else having taken over the screen.
+        let strategy = focusStrategy(context)
+        let isBack = { (state: ControlledWindowState?) in
+            state?.active == true && state?.onActiveSpace != false && FocusDetector.isFocused(pid: gamePid, strategy: strategy)
+        }
         let back = Date().addingTimeInterval(Self.switchBackSeconds)
         while !isBack(context.game.state()), Date() < back {
             ProcessControl.handleEvents(for: 0.2)
