@@ -185,6 +185,13 @@ nonisolated public final class BigFishGameManager: BigFishGameManaging, @uncheck
     }
 
     public func play(_ sku: BigFishSKU) async throws {
+        // Play reads the game's record from the installed games, which the
+        // page fills in after it has loaded: asked at once, a relaunch's
+        // trial failed with "Cannot read property 'extraUrls' of undefined".
+        let deadline = Date().addingTimeInterval(60)
+        while try await status(of: sku) == nil, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(500))
+        }
         try await currentPage().run(Script.play(sku: sku.description))
         logger.notice("Asked the Game Manager to start \(sku)")
     }
