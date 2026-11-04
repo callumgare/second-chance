@@ -182,8 +182,10 @@ LAUNCH --wine.graphics=direct-draw ${const.program}
 
 What a bundle repeats in several stages it writes once: a `CONST` for a
 path (the program, which `--creates` and each `LAUNCH` name), a `FUNCTION`
-of its own for steps (`app`, above, called by the `prefix` stage and by
-Steam's and Big Fish's, which are built from module stages instead), and a
+of its own for steps (`shared`, above, called by the `prefix` stage and by
+Steam's and Big Fish's, which are built from module stages instead;
+`installed`, the `.ini` settings every install ends with; `patch`, Her's
+patches where two editions share them), and a
 module's function for what every program of a series does (the Nancy Drew
 games' icon). What a function records (its `ICON`, `VOLUME`s) and the modules it `USE`s
 are the calling stage's, as if written there, and it can use the caller's. A module used in a base stage

@@ -23,20 +23,20 @@ USE installer
 WINE.KEEP-DISCS ${input.disc-1} --into=C:/nancy-drew-installer
 INSTALLER.RUN --from=${input.disc-1} --into=${const.install-dir} --creates=${const.program} --answer-file=assets/disc.iss \
     --automation=module:nancy-drew/assets/installshield-custom-dialog-automate.au3
-DO nancy-drew.configure-ini --into=${const.install-dir}
+DO installed
 
 # Her Interactive's download: a Windows installer, or a Mac app whose
 # Windows game is taken out
 FROM prefix AS her-download
 USE her-download
 HER-DOWNLOAD.INSTALL ${input.installer} --into=${const.install-dir} --creates=${const.program}
-DO nancy-drew.configure-ini --into=${const.install-dir}
+DO installed
 
 # Steam's: the game installed by Steam, and started by it unless the person chose otherwise
 FROM steam@1/client AS steam
 DO shared
 DO steam.install --game=${input.game} --into=${const.install-dir}
-DO nancy-drew.configure-ini --into=${const.install-dir}
+DO installed
 IF ${input.launch-mode} = "direct"
   # Steam taken away, and the game started by Wine
   STEAM.REMOVE
@@ -48,10 +48,16 @@ ELSE
       --fallback=${const.program} steam://rungameid/${input.game.app-id}
 END
 
+# What every install of the game ends with: its .ini settings
+FUNCTION installed
+  INPUT install-dir
+  DO nancy-drew.configure-ini --into=${input.install-dir}
+END
+
 # Big Fish's: the game installed by its Game Manager, whose DRM starts it
 FROM big-fish@1/manager AS big-fish
 DO shared
 DO big-fish.install --game=${input.game} --into=${const.install-dir}
-DO nancy-drew.configure-ini --into=${const.install-dir}
+DO installed
 LAUNCH --wine.graphics=direct-draw \
     --big-fish.exe=${const.program} "big-fish:${const.install-dir}/LaunchGame.bfg"
