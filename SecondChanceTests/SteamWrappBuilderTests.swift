@@ -394,6 +394,15 @@ struct SteamWrappBuilderTests {
         }
     }
 
+    @Test("The client stage Steam signs in in has the stores its steps take")
+    func clientPlanHasStores() async throws {
+        let modules = try #require(Bundle.main.resourceURL).appendingPathComponent("Modules")
+        let plan = try await SteamWrappPreparer.clientPlan(modules: modules)
+        let named = plan.stages.flatMap(\.steps).flatMap { step in step.options.filter { $0.key.hasSuffix("-store") }.flatMap(\.value) }
+        #expect(!named.isEmpty)
+        for store in named { #expect(plan.stores.stores[store] != nil, "\(store) isn't in the plan") }
+    }
+
     @Test("A game named up front is queued before Steam's first start, with no restart")
     func preselectedNoRestart() async throws {
         defer { try? FileManager.default.removeItem(at: base) }

@@ -167,6 +167,12 @@ public nonisolated struct StoreDeclarations: Sendable, Equatable {
         return shortNames[name]
     }
 
+    /// Every module's stores and locks: what a plan of modules' stages alone
+    /// may use.
+    public init(of modules: [ModuleFolder]) {
+        for module in modules { merge(module.stores) }
+    }
+
     /// `other`'s added to these: a module's beside the Wrappfile's.
     public mutating func merge(_ other: StoreDeclarations) {
         stores.merge(other.stores) { mine, _ in mine }

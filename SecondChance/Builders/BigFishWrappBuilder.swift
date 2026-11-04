@@ -128,9 +128,10 @@ final class BigFishWrappPreparer: BigFishWrappPreparing, @unchecked Sendable {
     /// owns, in a tree that's thrown away after: the edition's build starts
     /// from the same stage's layer.
     func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL {
-        let stages = try await BigFishWrappBuilder.managerStages()
-        return try await PlanRunner(plan: BuildPlan(edition: "big-fish-manager", stages: stages), configuration: configuration)
-            .build(in: folder)
+        let (stages, stores) = try await BigFishWrappBuilder.managerStages()
+        var plan = BuildPlan(edition: "big-fish-manager", stages: stages)
+        plan.stores = stores
+        return try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
     }
 
     func installGameManager(_ step: PlannedStep, in tree: URL) async throws {
@@ -937,11 +938,12 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
     }
 
     /// The big-fish module's `manager` stage and the stages it's built from.
-    nonisolated static func managerStages(in bundle: Bundle = .main) async throws -> [PlannedStage] {
+    /// With the modules' stores, which its plan's steps may use.
+    nonisolated static func managerStages(in bundle: Bundle = .main) async throws -> (stages: [PlannedStage], stores: StoreDeclarations) {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
         return try await Blocking.run {
-            try BuildPlanner.moduleStages("big-fish", "manager", constraint: nil,
-                                          modules: try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get())
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            return (try BuildPlanner.moduleStages("big-fish", "manager", constraint: nil, modules: modules), StoreDeclarations(of: modules))
         }
     }
 

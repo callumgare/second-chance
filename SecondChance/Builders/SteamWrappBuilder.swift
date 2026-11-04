@@ -51,6 +51,17 @@ struct SteamWrappPreparer: SteamWrappPreparing {
     let helper: WrappBuildHelper
     let clientCache: SteamClientCache
 
+    /// The wine module's prefix and the steam module's client stage, with
+    /// the modules' stores their steps use.
+    nonisolated static func clientPlan(modules root: URL) async throws -> BuildPlan {
+        try await Blocking.run {
+            let modules = try ModuleLoader(root: root).loadAll().get()
+            var plan = BuildPlan(edition: "steam-client", stages: try BuildPlanner.moduleStages("steam", "client", constraint: nil, modules: modules))
+            plan.stores = StoreDeclarations(of: modules)
+            return plan
+        }
+    }
+
     func run(_ step: PlannedStep, in path: URL) async throws {
         try await ModuleSteps(bus: helper.bus).run(step, wrappPath: path)
     }
@@ -64,13 +75,8 @@ struct SteamWrappPreparer: SteamWrappPreparing {
     /// away after: the edition's build starts from the same stage's layer.
     func prepare(in folder: URL, runner configuration: RunnerConfiguration) async throws -> URL {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
-        let stages = try await Blocking.run {
-            try BuildPlanner.moduleStages("steam", "client", constraint: nil,
-                                          modules: try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get())
-        }
-        let tree = try await PlanRunner(plan: BuildPlan(edition: "steam-client", stages: stages), configuration: configuration)
-            .build(in: folder)
-        return tree
+        let plan = try await Self.clientPlan(modules: resources.appendingPathComponent("Modules"))
+        return try await PlanRunner(plan: plan, configuration: configuration).build(in: folder)
     }
 }
 
