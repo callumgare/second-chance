@@ -1060,11 +1060,13 @@ Protection stops it being restarted any other way, so reboot the Mac.
 macOS has room for about a thousand IOSurface connections across the whole
 Mac, and every graphical program takes one. On macOS 26.2 a test Mac gathers
 a `com.apple.SafariPlatformSupport.Helper` (an XPC service launchd starts)
-for each launch of a wrapp, as the game's Wine window appears, with the wrapp
-as its responsible process (`launchctl procinfo`), and none of them ever
-exits, even once the wrapp has quit; each holds a connection and about
-25 MB. A player's Mac gathers them too, one a game launch, until it
-restarts; what in Wine's window asks for one isn't known yet. After a few full runs they hold nearly
+for each launch of a wrapp macOS hasn't seen before, as the game's Wine
+window appears, with the wrapp as its responsible process (`launchctl
+procinfo`), and none of them ever exits, even once the wrapp has quit; each
+holds a connection and about 25 MB. A test run builds every wrapp afresh, at
+a new path, so each of its launches leaves one. Launching a wrapp that's
+been launched before leaves none (two launches of one in `built-apps/`
+left the count where it was), so a player's Mac doesn't gather them. After a few full runs they hold nearly
 all of them, and then any new graphical program can fail to start: ScummVM
 dies with `_iosConnectInitalize() unable to open IOSurface kernel service:
 e00002c7` and a list of the `existing clients`, and Wine programs, installers
