@@ -1,0 +1,19 @@
+# DO wine.prefix-settings
+#
+# The prefix's settings, which the prefix stage makes every prefix with and
+# the update stage runs again over an old app's (decision 21 of the builders
+# plan). Its drives aren't among them: an old app's discs and saves have
+# drives of their own, which only a fresh prefix starts without.
+FUNCTION prefix-settings
+  # Wine says yes to a game's display mode switch without making it, and
+  # scales the game up to the real display: old games quit when the switch
+  # fails, as it does on a display with no mode of the size they ask for (a
+  # MacBook's built-in one has no 4:3 modes). Wine 10 reads this from the X11
+  # Driver key whatever the driver; the wrapp's mode scaling helper scales
+  # what Direct3D draws to match (docs/wine-in-process-helpers.md#mode-scaling).
+  EMIT "second-chance.substep.display"
+  WINE.REGISTRY --set x11-driver:EmulateModeset Y
+  # The prefix's user folders unlinked from the Mac's home folder
+  EMIT "second-chance.substep.disc"
+  WINE.WINETRICKS isolate_home
+END

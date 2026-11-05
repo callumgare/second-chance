@@ -56,7 +56,7 @@ nonisolated struct StepKeys: Sendable {
         for stage in plan.stages {
             var parent: LayerKey
             switch stage.from {
-            case .scratch: parent = base()
+            case .scratch, .input: parent = base()
             case .stage(let name): parent = made.last(of: name) ?? base()
             case .module(let id, _, let moduleStage): parent = made.last(of: "\(id.lowercased())/\(moduleStage)") ?? base()
             }

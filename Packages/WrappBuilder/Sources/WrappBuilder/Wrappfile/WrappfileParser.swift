@@ -281,9 +281,19 @@ public nonisolated enum WrappfileParser {
                 words.removeFirst()
             }
             guard words.count == 1 || (words.count == 3 && words[1].uppercased() == "AS") else {
-                throw WrappfileError(line: line.number, message: "FROM is FROM [--module=<module>[@<version>]] <stage> [AS <name>]")
+                throw WrappfileError(line: line.number, message: "FROM is FROM [--module=<module>[@<version>]] <stage> [AS <name>], or FROM ${input.<name>} [AS <name>]")
             }
             let name = words.count == 3 ? words[2] : nil
+            if module == nil, words[0].hasPrefix("${input."), words[0].hasSuffix("}") {
+                let input = String(words[0].dropFirst("${input.".count).dropLast())
+                guard !input.isEmpty, !input.contains(".") else {
+                    throw WrappfileError(line: line.number, message: "FROM ${input.<name>} names a whole input, the tree it is")
+                }
+                return (.input(input), name)
+            }
+            if words[0].lowercased() == "previous" {
+                throw WrappfileError(line: line.number, message: "FROM previous is FROM ${input.previous} now, with INPUT previous declared")
+            }
             // Stage and module names, as Docker's stage names, whatever their case.
             let from = words[0].lowercased()
             if let module {
@@ -370,7 +380,7 @@ public nonisolated enum WrappfileParser {
         /// `<a> = <b>` or `<a> != <b>`, spaced or not, each side a `${…}` or
         /// a quoted string.
         func parseCondition(_ words: [RawWord], line: Int) throws(WrappfileError) -> Condition {
-            let usage = "a condition is <a> = <b> or <a> != <b>, each a ${…} or a quoted string: IF ${platform.arch} = \"arm64\""
+            let usage = "a condition is <a> = <b>, <a> != <b> or <list> has <b>, each a ${…} or a quoted string: IF ${platform.arch} = \"arm64\""
             // Split unquoted words at the operator, outside any ${…}.
             var tokens: [RawWord] = []
             for raw in words {

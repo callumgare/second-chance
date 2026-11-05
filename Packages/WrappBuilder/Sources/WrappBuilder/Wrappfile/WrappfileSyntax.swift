@@ -91,15 +91,18 @@ public nonisolated enum StageSource: Sendable, Equatable, CustomStringConvertibl
         switch self {
         case .scratch: "scratch"
         case .stage(let name): name
+        case .input(let name): "${input.\(name)}"
         case .module(let id, let constraint, let stage): "--module=\(id)\(constraint.map { "@\($0)" } ?? "") \(stage)"
         }
     }
 
     /// The bare wrapp template.
     case scratch
-    /// A stage of this Wrappfile, or the old wrapp an update is built from
-    /// (`previous`).
+    /// A stage of this Wrappfile.
     case stage(String)
+    /// The tree an input names: `FROM ${input.previous}`, the old app an
+    /// update is built from (decision 21 of the builders plan).
+    case input(String)
     /// A module's stage: `FROM --module=steam@2 client`.
     case module(id: String, constraint: String?, stage: String)
 }
@@ -207,14 +210,15 @@ public nonisolated struct Word: Sendable, Equatable, CustomStringConvertible {
 }
 
 /// An `IF` condition: two expressions, each a `${…}` or a quoted string,
-/// compared (`${input.launch-mode} = "direct"`).
+/// compared (`${input.launch-mode} = "direct"`), or a list and the text it
+/// holds (`${input.updates} has "blue-moon-taffy-sort"`).
 public nonisolated struct Condition: Sendable, Equatable {
     public let left: Word
     public let comparison: Comparison
     public let right: Word
 
     public enum Comparison: String, Sendable {
-        case equals = "=", notEquals = "!="
+        case equals = "=", notEquals = "!=", has
     }
 }
 

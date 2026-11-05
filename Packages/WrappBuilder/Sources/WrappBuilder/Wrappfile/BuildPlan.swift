@@ -25,8 +25,8 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
     /// where each is: what install layers hash and builders read.
     public var files: [String: URL] = [:]
     /// How the wrapp starts its program: the target's `LAUNCH`, with the
-    /// `VOLUME`s it has. Nil only for an update's plan built `FROM previous`,
-    /// which keeps the old wrapp's.
+    /// store mounts it has. Nil only for an update's plan built from its old
+    /// app (`FROM ${input.previous}`), which keeps the old app's.
     public var launch: RecordedLaunch?
     /// What `APP` says the app is, the target's: its icon
     /// (`/Resources/<name>.icns`, nil for the template's own), its name, and
@@ -174,10 +174,23 @@ public nonisolated struct BuildConditions: Sendable {
     /// Values given to the edition's inputs (a choice's answer), by name,
     /// over their defaults.
     public var choices: [String: String]
-    /// The updates this build applies (empty on a fresh build).
+    /// The updates this build applies (empty on a fresh build): the value
+    /// of an `INPUT updates`, a list of their names.
     public var updates: [String]
-    /// What the old wrapp recorded (`previous.bundle`, `previous.wine`).
+    /// What the old app recorded, for an update (empty otherwise): the
+    /// fields of an `INPUT previous` (`${input.previous.bundle}`,
+    /// `${input.previous.wine}`), whose tree `FROM ${input.previous}` is.
     public var previous: [String: String]
+
+    /// What the caller gives an INPUT the edition doesn't: `updates` and,
+    /// on an update, `previous` (decision 21 of the builders plan).
+    func given(_ input: String) -> WrappValue? {
+        switch input {
+        case "updates": .list(updates.map(WrappValue.text))
+        case "previous" where !previous.isEmpty: .object(previous.mapValues(WrappValue.text))
+        default: nil
+        }
+    }
 
     public init(arch: String, macos: Int, choices: [String: String] = [:], updates: [String] = [], previous: [String: String] = [:]) {
         self.arch = arch
@@ -350,7 +363,7 @@ public nonisolated struct BuildPlanner {
                       launch.program.hasPrefix(into + "/"), creates != launch.program else { continue }
                 throw PlanError(description: "\(step.origin): --creates=\(creates), but \(target) launches \(launch.program)")
             }
-        } else if !recorded.fromPrevious {
+        } else if !recorded.fromInput {
             throw PlanError(description: "manifest.yaml's edition \(edition.id) builds \(target), which reaches no LAUNCH")
         }
         plan.app = recorded.app
@@ -360,6 +373,10 @@ public nonisolated struct BuildPlanner {
     /// A module's stage that is a Wrappfile (`stages/prefix`), parsed; nil
     /// for one its Swift provides (`steam/client`) or none.
     func moduleStageFile(_ name: String, of module: ModuleFolder) throws(PlanError) -> Stage? {
+        try Self.moduleStageFile(name, of: module)
+    }
+
+    static func moduleStageFile(_ name: String, of module: ModuleFolder) throws(PlanError) -> Stage? {
         guard let path = module.manifest.stages?.first(where: { ($0 as NSString).lastPathComponent.lowercased() == name.lowercased() })
         else { return nil }
         guard let text = try? String(contentsOf: module.file(path), encoding: .utf8) else {
@@ -375,6 +392,44 @@ public nonisolated struct BuildPlanner {
         } catch {
             throw PlanError(description: "the \(module.manifest.id) module's \(path): \(error)")
         }
+    }
+
+    /// Whether a module's stage is built from an input (`FROM
+    /// ${input.previous}`, an update's), and so plans only for an update.
+    public static func isBuiltFromInput(_ id: String, _ name: String, modules: [ModuleFolder]) -> Bool {
+        guard let module = modules.first(where: { $0.manifest.id == id }),
+              let stage = try? Self.moduleStageFile(name, of: module) else { return false }
+        if case .input = stage.from { return true }
+        return false
+    }
+
+    /// What an update runs over an old app of `edition` before the bundle's
+    /// own update stages (decision 21 of the builders plan), as a plan of
+    /// its own: a module's update stage (`FROM --module=wine update`) when
+    /// one applies, else the old app's tree as it is (`FROM
+    /// ${input.previous}`); then `USE` of each of `engines`, giving the tree
+    /// this Second Chance's; then `then`'s lines (`DO wine.cnc-ddraw`).
+    /// `conditions` give `previous`, whose tree is in the runner's inputs,
+    /// and `updates`.
+    public func updatePlan(moduleStage: (module: String, stage: String)?, engines: [String], then: [String] = [],
+                           edition: String, conditions: BuildConditions) throws(PlanError) -> BuildPlan {
+        let from = moduleStage.map { "FROM --module=\($0.module) \($0.stage) AS update" } ?? "FROM ${input.previous} AS update"
+        let text = ([from] + engines.map { "USE \($0)" } + then).joined(separator: "\n")
+        let wrappfile: Wrappfile
+        do {
+            wrappfile = try WrappfileParser.parse(text)
+        } catch {
+            throw PlanError(description: "the update as a plan: \(error)")
+        }
+        return try BuildPlanner(bundle: bundle, wrappfile: wrappfile, modules: Array(modules.values), pathTypes: pathTypes,
+                                declarations: declarations, hostPaths: hostPaths)
+            .plan(edition: edition, target: "update", conditions: conditions)
+    }
+
+    /// The modules of `ids` whose versions are engines a tree is given
+    /// (`ENGINE`): Wine, ScummVM, DOSBox.
+    public func engineModules(_ ids: [String]) -> [String] {
+        ids.filter { modules[$0.lowercased()]?.manifest.versions.contains { $0.package != nil } == true }
     }
 
     /// A module's stage planned on its own (`wine/prefix`, as Wine's every
@@ -449,8 +504,9 @@ public nonisolated struct BuildPlanner {
         /// The modules the stage's tree has been set up with (an engine, a
         /// module's `setup:` steps): what `USE` plans no second time.
         var setUp: Set<String> = []
-        /// Built from the old wrapp (`FROM previous`), whose launch it keeps.
-        var fromPrevious = false
+        /// Built from an input's tree (`FROM ${input.previous}`, an update's
+        /// old app), whose launch it keeps.
+        var fromInput = false
     }
 
     // MARK: - Working it out
@@ -527,7 +583,7 @@ public nonisolated struct BuildPlanner {
             guard let stage = planner.wrappfile.stage(named: name) else {
                 throw PlanError(description: "the Wrappfile has no stage called \(name)")
             }
-            if case .stage(let parent) = stage.from, parent != "previous" {
+            if case .stage(let parent) = stage.from {
                 try collect(parent, into: &order)
             }
             for instruction in stage.body.flatMap(\.instructions) where instruction.keyword == "COPY" {
@@ -543,7 +599,17 @@ public nonisolated struct BuildPlanner {
             scope.frames.append([:])
             scope.otherStages = inheriting
             switch stage.from {
-            case .stage("previous"): scope.modules.fromPrevious = true
+            case .input(let name):
+                // The tree an input names, whose launch it keeps (an
+                // update's old app): its modules are whichever it `USE`s.
+                // A module's stage reads its caller's: its file's INPUTs
+                // aren't planned with it.
+                if case .input(_, let editionInput, _)? = scope.binding(name) {
+                    if let editionInput { recorder.usedInputs.insert(editionInput) }
+                } else if conditions.given(name) == nil {
+                    throw PlanError(description: "Wrappfile:\(stage.line): FROM ${input.\(name)}, but there's no INPUT \(name)")
+                }
+                scope.modules.fromInput = true
             case .stage(let parent): scope.modules = inheriting[parent] ?? StageModules()
             case .module(let id, let constraint, let moduleStage):
                 if let inherited = inheriting["\(id.lowercased())/\(moduleStage)"] {
@@ -584,6 +650,14 @@ public nonisolated struct BuildPlanner {
             var scope = Scope()
             if case .module(let parent, _, let parentStage) = stage.from, let inherited = inheriting["\(parent.lowercased())/\(parentStage)"] {
                 scope.modules = inherited
+            }
+            // An update stage, from the old app its caller gives
+            // (`FROM ${input.previous}`): there's none on a fresh build.
+            if case .input(let input) = stage.from {
+                guard conditions.given(input) != nil else {
+                    throw PlanError(description: "\(name) is built from ${input.\(input)}, which this build isn't given")
+                }
+                scope.modules.fromInput = true
             }
             scope.module = module
             try addModule(module.manifest.id, constraint: constraint, as: nil, to: &scope, origin: name)
@@ -802,6 +876,8 @@ public nonisolated struct BuildPlanner {
                     scope.declare(name, .input(value, editionInput: name, secret: secret))
                 } else if let given = conditions.choices[name] {
                     scope.declare(name, .input(.text(given), editionInput: nil, secret: secret))
+                } else if let given = conditions.given(name) {
+                    scope.declare(name, .input(given, editionInput: nil, secret: secret))
                 } else {
                     scope.declare(name, .input(fallback, editionInput: nil, secret: secret))
                 }
@@ -1285,19 +1361,32 @@ public nonisolated struct BuildPlanner {
         // MARK: - Values
 
         func holds(_ condition: Condition, scope: Scope, origin: String) throws(PlanError) -> Bool {
+            if condition.comparison == .has {
+                let right = try substitute(condition.right, in: scope, origin: origin, as: .text)
+                guard case .list(let items) = try evaluate(condition.left, in: scope, origin: origin) else {
+                    throw PlanError(description: "\(origin): has is true of a list holding the text on its right; \(condition.left.raw) isn't a list")
+                }
+                return items.contains(.text(right))
+            }
             let left = try substitute(condition.left, in: scope, origin: origin, as: .text)
             let right = try substitute(condition.right, in: scope, origin: origin, as: .text)
             switch condition.comparison {
             case .equals: return left == right
             case .notEquals: return left != right
+            case .has: return false  // Answered above, from the list.
             }
         }
 
         /// A declaration's right-hand side: a lone `${…}` keeps its value as
-        /// it is (an object stays one); anything else is text.
+        /// it is (an object stays one), an unquoted JSON list is a list
+        /// (`INPUT updates --default=[]`); anything else is text.
         func evaluate(_ word: Word, in scope: Scope, origin: String) throws(PlanError) -> WrappValue {
             if !word.quoted, let reference = word.lone {
                 return try value(of: reference, in: scope, origin: origin, whole: true)
+            }
+            if !word.quoted, word.substitutions.isEmpty, word.raw.hasPrefix("["),
+               let list = try? JSONSerialization.jsonObject(with: Data(word.raw.utf8)) as? [Any] {
+                return WrappValue(list)
             }
             return .text(try substitute(word, in: scope, origin: origin, as: .text))
         }

@@ -53,8 +53,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
         self.isoMounter = isoMounter
         self.wineManager = wineManager
         self.bus = bus
-        updater = UpdateWrappBuilder(helper: helper, installerRunner: installerRunner, gameInfoProvider: gameInfoProvider,
-                                     wineManager: wineManager, bus: bus)
+        updater = UpdateWrappBuilder(helper: helper, installerRunner: installerRunner, gameInfoProvider: gameInfoProvider, bus: bus)
     }
 
     // MARK: - Build Flow

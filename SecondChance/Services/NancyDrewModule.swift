@@ -124,8 +124,10 @@ nonisolated enum ShippedBundles {
                 var files = try (module.manifest.data ?? []).reduce(into: [String: String]()) { files, name in
                     files[name] = try LayerKey.hash(file: module.file(name))
                 }
+                // An update stage plans only for an update, and isn't compared.
                 for path in module.manifest.stages ?? [] {
                     let name = (path as NSString).lastPathComponent
+                    if BuildPlanner.isBuiltFromInput(id, name, modules: modules) { continue }
                     let planned = try plan?.stages.first { $0.module == id && $0.name == "\(id)/\(name)" }
                         ?? BuildPlanner.moduleStage(id, name, constraint: nil, modules: modules)
                     files[path] = planned?.plannedTextHash
@@ -209,6 +211,34 @@ nonisolated enum ShippedBundles {
             return try BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules).plan(edition: edition, target: stage, conditions: conditions)
         } catch {
             throw WrappBuildError.buildRecipeProblem("\(slug) \(edition) \(stage): \(error)")
+        }
+    }
+
+    /// What an update of the Nancy Drew game `slug`'s `edition` runs before
+    /// its bundle's own update stages: the wine module's update stage when
+    /// `wineUpdate` (and the game's cnc-ddraw settings when its build has
+    /// them), else the old app's tree, given this Second Chance's engines
+    /// for `modules` (`BuildPlanner.updatePlan`).
+    static func updatePlan(forGame slug: String, edition: String, wineUpdate: Bool, modules ids: [String],
+                           updates: [String], previous: [String: String], in bundle: Bundle = .main) throws -> BuildPlan {
+        guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
+        do {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
+            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+            let planner = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules)
+            // A DirectDraw game's cnc-ddraw settings, which old apps' shared
+            // prefix had and the game's own build has now.
+            let built = try planner.plan(edition: edition, conditions: .thisMac)
+            let cncDdraw = wineUpdate && (built?.stages.flatMap(\.steps) ?? []).contains { $0.origin.hasPrefix("wine/functions/cnc-ddraw") }
+            var conditions = BuildConditions.thisMac
+            conditions.updates = updates
+            conditions.previous = previous
+            return try planner.updatePlan(moduleStage: wineUpdate ? ("wine", "update") : nil, engines: planner.engineModules(ids),
+                                          then: cncDdraw ? ["DO wine.cnc-ddraw"] : [], edition: edition, conditions: conditions)
+        } catch {
+            throw WrappBuildError.buildRecipeProblem("\(slug) \(edition) update: \(error)")
         }
     }
 

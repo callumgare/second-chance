@@ -18,7 +18,9 @@ Modules/
   wine/
     module.yaml
     stages/prefix           the Wrappfile a new prefix is set up by (FROM --module=wine@10 prefix)
+    stages/update           the wine-prefix update, over an old app's prefix (FROM ${input.previous})
     functions/cnc-ddraw     cnc-ddraw, for a DirectDraw game (DO wine.cnc-ddraw)
+    functions/prefix-settings  the prefix's settings, which both stages give it (DO wine.prefix-settings)
     routine-errors.yaml     Wine's err: lines that say nothing is wrong
   scummvm/  dosbox/  steam/  big-fish/  nancy-drew/  installer/  disc/  her-download/
 ```
@@ -58,8 +60,8 @@ versions:                      # what this release provides, as a bundle names i
     package: { … }             # an engine's: what it is made from (below)
 data: ["routine-errors.yaml"]
 retired: ["prefix.yaml"]       # data only Second Chance's Swift read, dropped (below)
-stages: ["stages/prefix"]      # Wrappfiles a bundle builds FROM (FROM --module=wine@10 prefix)
-functions: ["functions/cnc-ddraw"]
+stages: ["stages/prefix", "stages/update"]  # Wrappfiles a bundle builds FROM (FROM --module=wine@10 prefix)
+functions: ["functions/cnc-ddraw", "functions/prefix-settings"]
 allow-paths: ["assets/"]       # folders of its own its stages and functions may read files from
 updates:                       # its default updates, after a bundle's
   - { id: "wine-prefix", when-changed: ["stages/prefix"] }
@@ -344,7 +346,7 @@ none.
 
 | Module | Data | Read by |
 | --- | --- | --- |
-| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
+| `wine` | `stages/prefix`: the Wrappfile stage a new prefix is made by — its drives (`WINE.DRIVES`), then `functions/prefix-settings`: `EmulateModeset` (`WINE.REGISTRY`) and `isolate_home` (`WINE.WINETRICKS`), in order; `stages/update`, the `wine-prefix` update, which gives an old app's prefix this Wine and those settings again ([wrappfile.md](wrappfile.md#updates)); `functions/cnc-ddraw`, cnc-ddraw and its `ddraw.ini` settings, which a DirectDraw game's stage runs (`DO wine.cnc-ddraw`) | `WineManager`, as it makes a prefix, and the wine module's executor, which carries the steps out (through `ModuleSteps`); Steam's and Big Fish's builders run `cnc-ddraw` themselves for a DirectDraw game until their editions have stages |
 | `wine` | `routine-errors.yaml`: Wine's routine `err:` lines | the wrapp's quit check (`GameQuitCheck`), compiled in by `sc generate` |
 | `steam` | `stages/client`: Steam's client in the wine module's prefix, ⌘ acting as Ctrl in its windows (`FROM --module=steam@1 client`); `functions/install`, the game installed by Steam with the shared sign-in, then signed out (`DO steam.install`) | `SteamWrappBuilder`, which carries the client stage out before the game is known and the edition's steps after ([steam.md](steam.md#building)) |
 | `big-fish` | `stages/manager`: the Game Manager in the wine module's prefix, from its installer pinned by its hash, ⌘ acting as Ctrl in its window (`FROM --module=big-fish@1 manager`); `functions/install`, the game installed and activated, then the account taken out (`DO big-fish.install`); `functions/cnc-ddraw`, cnc-ddraw hooking the functions themselves, as Armadillo rebuilds a game's imports (`DO big-fish.cnc-ddraw`) | `BigFishWrappBuilder`, which carries the manager stage out before the game is known and the edition's steps after ([big-fish.md](big-fish.md#the-build)) |

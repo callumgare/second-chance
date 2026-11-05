@@ -126,9 +126,11 @@ public nonisolated struct WrappfileChecker {
             switch stage.from {
             case .scratch:
                 break
-            case .stage(let name) where name == "previous":
-                // Supplied by Second Chance: the old wrapp.
-                break
+            case .input(let name):
+                // A tree the caller gives: an update's old app.
+                if !Self.isDeclaredInput(name, scope: scope) {
+                    found.errors.append("line \(stage.line): FROM ${input.\(name)}, but there's no INPUT \(name)")
+                }
             case .stage(let name):
                 if let inherited = scopes[name] {
                     scope.aliases = inherited.aliases
@@ -301,7 +303,7 @@ public nonisolated struct WrappfileChecker {
             found.errors.append("\(at) \(word.raw): an input is written ${input.<name>}, naming an INPUT")
         }
         if instruction.keyword == "COPY", let from = instruction.option("from")?.value,
-           !Self.isWholeInput(from, scope: scope), file.stage(named: from.raw) == nil, from.raw != "previous" {
+           !Self.isWholeInput(from, scope: scope), file.stage(named: from.raw) == nil {
             found.errors.append("\(at) --from=\(from.raw), but there's no stage called that (an input is written ${input.<name>})")
         }
     }
@@ -311,6 +313,11 @@ public nonisolated struct WrappfileChecker {
         guard let reference = word.lone, reference.root == "input", reference.segments.count == 2,
               let name = reference.plainPath.first else { return false }
         return scope.declared(name)?.kind == .input
+    }
+
+    /// Whether `name` is an INPUT in scope.
+    static func isDeclaredInput(_ name: String, scope: Scope) -> Bool {
+        scope.declared(name)?.kind == .input
     }
 
     /// `INPUT`, `CONST`, `VAR` or `SET`: where it may be, and what it names.

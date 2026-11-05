@@ -175,7 +175,7 @@ struct WrappfileParserTests {
         ("FROM scratch\nRUN ${x:-y}", "line 2: ${x:-y}: modifiers such as :- are gone"),
         ("FROM scratch\nRUN ${data.${id}.url}", "line 2: ${data.${id}.url}: a ${…} can't hold another"),
         ("FROM scratch\nIF arch=arm64\nEND", "line 2: arch in a condition is neither a ${…} nor a quoted string"),
-        ("FROM scratch\nIF ${a.b} >= \"1\"\nEND", "line 2: a condition is <a> = <b> or <a> != <b>"),
+        ("FROM scratch\nIF ${a.b} >= \"1\"\nEND", "line 2: a condition is <a> = <b>, <a> != <b> or <list> has <b>"),
         ("FROM scratch\nCONST x", "line 2: CONST is CONST <name> = <value>"),
     ])
     func errors(_ text: String, _ message: String) {

@@ -27,7 +27,10 @@ nonisolated final class Layering: Sendable {
     init(plan: BuildPlan, configuration: RunnerConfiguration, trees: [String: URL]) async throws {
         self.plan = plan
         self.configuration = configuration
-        guard let store = configuration.layers, configuration.layerPolicy != .off else {
+        // Nothing carried over from an input's tree (an update's old app) is
+        // cached: it's one person's, and no key could say what it holds.
+        let fromInput = plan.stages.contains { if case .input = $0.from { true } else { false } }
+        guard let store = configuration.layers, configuration.layerPolicy != .off, !fromInput else {
             keys = StepKeys()
             restorable = [:]
             return
@@ -73,7 +76,7 @@ nonisolated final class Layering: Sendable {
 
     static func parent(of stage: PlannedStage) -> String? {
         switch stage.from {
-        case .scratch: nil
+        case .scratch, .input: nil
         case .stage(let name): name
         case .module(let id, _, let moduleStage): "\(id.lowercased())/\(moduleStage)"
         }

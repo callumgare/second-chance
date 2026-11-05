@@ -69,13 +69,14 @@ DO nd.patch --id=blue-moon-taffy-sort --into=${const.install-dir}
   step, and none inside it, [wrapp-build.md](wrapp-build.md#the-layer-cache);
   a bare `LAYER` is refused) and `FUNCTION <name>` … `END`. A condition compares two
   expressions, each a `${…}` or a quoted string, with `=` or `!=`, spaced or
-  not: `IF ${platform.arch} = "arm64"`.
+  not: `IF ${platform.arch} = "arm64"`; or asks whether a list holds a text,
+  with `has`: `IF ${input.updates} has "blue-moon-taffy-sort"`.
 
 ## Instructions
 
 | Instruction | Does |
 | --- | --- |
-| `FROM scratch` / `FROM <stage>` / `FROM --module=<module>[@<constraint>] <stage>` `[AS <name>]` | Starts a stage from the bare template, another stage (`previous`, the old wrapp an update is built from, is supplied), or a module's (`FROM --module=steam@1 client`), named with a flag as Docker's `FROM --platform=` is. The older `FROM steam@1/client` is refused. A stage built from another keeps its modules. |
+| `FROM scratch` / `FROM <stage>` / `FROM --module=<module>[@<constraint>] <stage>` / `FROM ${input.<name>}` `[AS <name>]` | Starts a stage from the bare template, another stage, a module's (`FROM --module=steam@1 client`), named with a flag as Docker's `FROM --platform=` is, or the tree an input names: `FROM ${input.previous}`, the old app an update is built from ([Updates](#updates)). The older `FROM steam@1/client` and `FROM previous` are refused. A stage built from another keeps its modules. |
 | `INPUT <name> [--default=<value>] [--secret]` | Declares a value from outside, before the first `FROM` or at a function's top ([Values](#values)). |
 | `STORE <name> [--retention=keep\|cache\|session] [--scope=app\|global] [--exclusive[=<lock>]]`, `LOCK <name> [--scope=app\|global]` | Declares a store, data kept outside the app, and a lock stores are used under, before the first `FROM` ([Stores](#stores)). |
 | `CONST <name> = <value>`, `VAR <name> [= <value>]`, `SET <name> = <value>` | A fixed value; a value worked out in the Wrappfile; and a new value for a `VAR`. |
@@ -234,6 +235,42 @@ A store whose lock is held is left alone (`StoreInventory`, in
 doesn't sign anyone out of Steam.
 
 Not built yet: a store declared inside a function.
+
+## Updates
+
+An update brings an app an older Second Chance built up to this one, from
+the app itself ([wrapp-build.md](wrapp-build.md#updating-a-wrapp)). Second
+Chance decides which updates apply (`UpdatePlanner`); a Wrappfile sees two
+inputs:
+
+```dockerfile
+INPUT updates --default=[]
+INPUT previous
+
+FROM ${input.previous} AS update
+IF ${input.updates} has "blue-moon-taffy-sort"
+  DO patch
+END
+DO post-install-setup
+```
+
+- **`updates`** is a list of the names of the updates applied, `[]` on a
+  fresh build. An unquoted JSON list is a list value (`--default=[]`).
+- **`previous`** is the old app's tree: its prefix, game and all, with
+  Documents and A: pointed at an empty stand-in, so nothing an update runs
+  touches the person's saves. Its fields are what the old app recorded:
+  `${input.previous.bundle}` (the bundle's version), `${input.previous.edition}`,
+  and each module's version (`${input.previous.wine}`).
+- **A stage built `FROM ${input.<name>}`** starts as a clone of that
+  input's tree, and keeps its launch, so it reaches none of its own. Nothing
+  built from one is kept as a layer: it's one person's app.
+- **A module's update is its update stage**: the wine module's
+  `stages/update` is `FROM ${input.previous}`, `USE wine` (this Wine, the
+  prefix moved with `wineboot -u`) and `DO wine.prefix-settings`, the
+  settings its `prefix` stage gives every prefix. A module stage reads the
+  caller's `previous`; its file's `INPUT previous` is for the checker.
+- **An update that reads the edition's source** (a disc, a download) is a
+  fresh build, and Second Chance says the source is needed.
 
 ## Signals
 

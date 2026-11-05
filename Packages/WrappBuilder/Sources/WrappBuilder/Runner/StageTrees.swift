@@ -5,6 +5,7 @@
 //  Which tree each of a plan's stages is built in.
 
 import Foundation
+import ProcessKit
 
 /// Each stage's tree (decision 2 of the builders plan): a folder laid out
 /// as a wrapp, `<stage>.app` in the build's working folder. A stage starts
@@ -22,6 +23,8 @@ nonisolated struct StageTrees: Sendable {
         case parentsTree(URL)
         /// A clone of its parent's tree, made as it starts.
         case clone(of: URL, into: URL)
+        /// A clone of the tree an input names (`FROM ${input.previous}`).
+        case input(String, into: URL)
     }
 
     let starts: [Start]
@@ -34,7 +37,7 @@ nonisolated struct StageTrees: Sendable {
         func parent(of stage: PlannedStage) -> Int? {
             let name: String
             switch stage.from {
-            case .scratch: return nil
+            case .scratch, .input: return nil
             case .stage(let parent): name = parent
             case .module(let id, _, let moduleStage): name = "\(id.lowercased())/\(moduleStage)"
             }
@@ -64,6 +67,9 @@ nonisolated struct StageTrees: Sendable {
                     starts.append(.clone(of: parentTree, into: own))
                     treeOf.append(own)
                 }
+            } else if case .input(let name) = stage.from {
+                starts.append(.input(name, into: own))
+                treeOf.append(own)
             } else {
                 starts.append(.empty(own))
                 treeOf.append(own)
@@ -78,14 +84,24 @@ nonisolated struct StageTrees: Sendable {
     var target: URL? {
         switch starts.last {
         case .empty(let tree)?, .parentsTree(let tree)?: tree
-        case .clone(_, let tree)?: tree
+        case .clone(_, let tree)?, .input(_, let tree)?: tree
         case nil: nil
         }
     }
 
-    /// Make a stage's tree, as it starts.
-    static func prepare(_ start: Start) throws {
+    /// Make a stage's tree, as it starts: an input's tree from wherever
+    /// `inputs` has it.
+    static func prepare(_ start: Start, inputs: any InputProvider) async throws {
         let files = FileManager.default
+        if case .input(let name, let tree) = start {
+            let source = try await inputs.input(name)
+            try await Blocking.run {
+                let files = FileManager.default
+                if files.fileExists(atPath: tree.path) { try files.removeItem(at: tree) }
+                try FileCopy.clone(source, to: tree)
+            }
+            return
+        }
         switch start {
         case .empty(let tree):
             try files.createDirectory(at: tree.appendingPathComponent("Contents"), withIntermediateDirectories: true)
@@ -94,6 +110,8 @@ nonisolated struct StageTrees: Sendable {
         case .clone(let parent, let tree):
             if files.fileExists(atPath: tree.path) { try files.removeItem(at: tree) }
             try FileCopy.clone(parent, to: tree)
+        case .input:
+            break
         }
     }
 }

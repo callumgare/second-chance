@@ -159,6 +159,56 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan(creates: "C:/Game/Other.exe") }
     }
 
+    @Test("The wine update: an old app's tree, given this Wine and the prefix's settings, its drives left alone")
+    func wineUpdate() throws {
+        let modules = try shippedModules()
+        let loader = try ProgramBundleLoader(root: bundlesRoot, modules: modules)
+        let bundle = try loader.load(bundlesRoot.appendingPathComponent("nancy-drew/blue-moon")).get()
+        let wrappfile = try WrappfileParser.parse(String(contentsOf: bundle.folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
+        var conditions = BuildConditions(arch: "arm64", macos: 15)
+        conditions.updates = ["wine-prefix"]
+        conditions.previous = ["bundle": "1", "wine": "10"]
+        let planner = BuildPlanner(bundle: bundle, wrappfile: wrappfile, modules: modules)
+        #expect(planner.engineModules(["wine", "nancy-drew"]) == ["wine"])
+        let plan = try planner.updatePlan(moduleStage: ("wine", "update"), engines: ["wine"], then: ["DO wine.cnc-ddraw"],
+                                          edition: "cd", conditions: conditions)
+        #expect(plan.stages.map(\.name) == ["wine/update", "update"])
+        #expect(plan.stages[0].from == .input("previous"))
+        let steps = plan.stages.flatMap(\.steps).map { "\($0.module ?? "").\($0.instruction)" }
+        #expect(steps == [".ENGINE", "wine.HELPERS", "wine.PREFIX", "wine.REGISTRY", "wine.WINETRICKS", "wine.WINETRICKS", ".EDIT"])
+        #expect(plan.launch == nil)
+        // A build without an old app has no tree to start the stage from.
+        #expect(throws: BuildPlanner.PlanError.self) {
+            try planner.updatePlan(moduleStage: ("wine", "update"), engines: ["wine"], edition: "cd",
+                                   conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        // With no module's update: the old app's tree, given this engine.
+        let engines = try planner.updatePlan(moduleStage: nil, engines: ["wine"], edition: "cd", conditions: conditions)
+        #expect(engines.stages.map(\.from) == [.input("previous")])
+        #expect(engines.stages.flatMap(\.steps).map(\.instruction) == ["ENGINE", "HELPERS", "PREFIX"])
+    }
+
+    @Test("has is true of a list holding the text; INPUT updates is the updates applied, [] by default")
+    func hasUpdate() throws {
+        func steps(_ updates: [String]) throws -> [String] {
+            let (planner, _, bundle) = try planner("""
+            INPUT updates --default=[]
+            FROM --module=wine@10 prefix AS only
+            IF ${input.updates} has "taffy-sort"
+              RUN C:/patch.exe
+            END
+            LAUNCH --wine.graphics=direct-3d C:/Game/Game.exe
+            """)
+            var conditions = BuildConditions(arch: "arm64", macos: 15)
+            conditions.updates = updates
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only", conditions: conditions)
+                .target?.steps.map(\.instruction) ?? []
+        }
+        #expect(try steps(["taffy-sort"]).contains("RUN"))
+        #expect(try !steps([]).contains("RUN"))
+        #expect(try !steps(["other"]).contains("RUN"))
+    }
+
     @Test("A files= mount records its patterns, from a kept store of the app's own, on a folder")
     func filesMount() throws {
         func plan(_ store: String, target: String = "C:/Game/") throws -> BuildPlan {

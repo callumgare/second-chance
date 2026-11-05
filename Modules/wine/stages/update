@@ -1,0 +1,11 @@
+# FROM --module=wine@<version> update
+#
+# The wine-prefix update: an old app's prefix, game and all, given the
+# prefix's settings again (docs/updates.md). USE wine brings this Wine,
+# moving a prefix made by another of the same major version with wineboot,
+# as a fresh prefix is made.
+INPUT previous
+
+FROM ${input.previous} AS update
+USE wine
+DO wine.prefix-settings

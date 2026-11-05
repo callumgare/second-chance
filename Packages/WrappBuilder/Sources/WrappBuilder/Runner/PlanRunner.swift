@@ -143,12 +143,12 @@ public nonisolated struct PlanRunner: Sendable {
                 // step the tree holds, its parents' included.
                 switch start {
                 case .clone(let parent, _): logs[tree] = logs[parent] ?? []
-                case .empty: logs[tree] = []
+                case .empty, .input: logs[tree] = []
                 case .parentsTree: break
                 }
                 let restoredThrough = try await layering.restore(stage, into: tree, start: start, emitter: configuration.emitter,
                                                                  log: &logs[tree, default: []])
-                if restoredThrough == nil { try StageTrees.prepare(start) }
+                if restoredThrough == nil { try await StageTrees.prepare(start, inputs: configuration.inputs) }
                 try await run(stage, in: tree, trees: trees.trees, from: (restoredThrough ?? -1) + 1, layering: layering,
                               log: &logs[tree, default: []])
             }

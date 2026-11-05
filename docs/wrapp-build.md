@@ -343,10 +343,9 @@ is an `EMIT`'s string, as it was ([wrappfile.md](wrappfile.md#emit)).
 
 `PlanRunner` (`Packages/WrappBuilder/Sources/WrappBuilder/Runner/`) carries
 out a plan, so any plan that checks can be built by any source. Every source
-builds through it but the update source, which still makes its wrapp from
-the template itself ([Updating a wrapp](#updating-a-wrapp)): the download
-source, discs and Her's downloads, and Steam's and Big Fish's, each after
-identifying the game ([steam.md](steam.md#the-build), [big-fish.md](big-fish.md#the-build)).
+builds through it: the download source, discs and Her's downloads, Steam's
+and Big Fish's, each after identifying the game, and updates, from the old
+app's tree ([Updating a wrapp](#updating-a-wrapp)) ([steam.md](steam.md#the-build), [big-fish.md](big-fish.md#the-build)).
 
 - **Each stage is built in a tree of its own**, an app bundle in the
   build's working folder (`SecondChance-build-<uuid>` in the temporary
@@ -443,7 +442,7 @@ on the build's bus, reading the `EMIT` strings Second Chance knows
 
 **`ModuleSteps`** (`SecondChance/Builders/ModuleSteps.swift`) carries out a
 lone wine step for code outside a plan (Steam's `REMOVE` undoing its client
-stage's registry settings, the update source), with the shipped modules'
+stage's registry settings), with the shipped modules'
 executors (`ModuleSteps.executors()`). A `StepFailure` from one becomes
 `WrappBuildError.buildRecipeProblem`.
 
@@ -554,10 +553,6 @@ step and keeps a layer after the expensive ones (`StepKeys`, `Layering`).
   beyond 40 GB. A layer's size is what it took when made; one that shares its
   blocks with a wrapp frees less when it goes.
 
-The update source still makes its prefix with `WineManager.createWinePrefix`,
-whose layer is keyed by `WineBuild.prefixLayerKey` (the engine, the wine
-module's `prefix` stage and winetricks, and `WineBuild.prefixCodeRevision`).
-
 `./sc clean layers` (or the app's `--clear-wine-cache`) removes every layer.
 The cache that came before, `wine-prefix-cache/`, is removed by the next
 build.
@@ -599,13 +594,25 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   needed (`WrappBuildError.updateNeedsSource`): when an update says
   `fresh-build: true`, when the wrapp is another edition or its game is in
   another folder, or when Wine would cross a major version that no applied
-  update's `from` names. Wine within a major version is moved
-  (`wineboot -u`, `WineManager.movePrefix`).
+  update's `from` names. Wine within a major version is moved: the update
+  `USE`s this Wine, whose setup runs `wineboot -u` over the old prefix.
+- **It's carried out by the runner** (decision 21 of the builders plan;
+  [wrappfile.md](wrappfile.md#updates)): the old app's prefix is the
+  `previous` input, a tree of its own with its saves pointed at a stand-in.
+  The first plan gives it this Second Chance's engines (`USE` of each the
+  app runs, `BuildPlanner.updatePlan`), through the wine module's update
+  stage when `wine-prefix` applies or Wine moves; then each of the bundle's
+  update stages, each built `FROM ${input.previous}` from the one before,
+  with `updates` and `previous` given. The template is laid in, and the
+  build finished as every build is. A plan whose steps read the edition's
+  source is refused before anything runs, saying the disc is needed.
 - **The shipped defaults**: the wine module's `wine-prefix`, when its
   `stages/prefix` changed what it does (the lock records a hash of each
-  module stage's planned steps, not of its file), runs the stage's steps over the old prefix
-  (`WineManager.runPrefixStage`), and a DirectDraw game's cnc-ddraw steps,
-  with the game left installed. The steam
+  module stage's planned steps, its functions' included, not of its file),
+  runs its `update` stage over the old prefix: `DO wine.prefix-settings`,
+  the settings every prefix is made with, and a DirectDraw game's
+  `DO wine.cnc-ddraw`, with the game left installed. The prefix's drives
+  aren't among the settings, so an old app keeps its disc drives. The steam
   module's `steam` builds afresh, from Steam, which needs no disc.
 - **Every wrapp has a launcher, which an update always brings.** The
   launcher's revision is a hash of the sources the wrapp's own code is built
@@ -703,8 +710,7 @@ module's `installer.alive` unless it names another
 ([wrappfile.md](wrappfile.md#signals)): the tree's Wine programs using the
 CPU or a new one starting (`WATCH --wine.busy`), a line of the installer's
 own log, and a change in the size of `drive_c`'s `Program Files (x86)` or
-`users` (where Temp is). An install run outside a step (the update source's)
-looks for the same itself, with Wine's output too (`LaunchActivityMonitor`). The
+`users` (where Temp is). The
 folders and the log matter: under load an Inno Setup install copied the game
 for over two minutes at 0.02 cores, too little to count as Wine working, and
 said nothing on its output. If no sign appears for the window
@@ -844,9 +850,8 @@ from the stage it was installed in.
 An engine is cloned in beside the launcher's files (`EngineInstall`), with its
 list of files and a record of which engine it is in `Resources/engines/`, and
 a file that is already the launcher's stops the build rather than being
-replaced. The update source, which still makes its wrapp from the template
-first (`createBaseWrapp`), takes out what the game doesn't run by that list
-(`cleanupUnusedEngine`).
+replaced. An update of an old ScummVM app, which kept its game in a prefix,
+takes out the Wine it no longer runs (`cleanupUnusedEngine`).
 
 **The template's icon is a generic one** (`WrappTemplate/Resources/GenericWrappIcon.icon`,
 its asset catalog's app icon), which an app whose Wrappfile gives no `APP --icon`

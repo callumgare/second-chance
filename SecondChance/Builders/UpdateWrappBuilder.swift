@@ -6,9 +6,10 @@
 //  wrapp itself rather than the disc: reached through the disc source for
 //  now, by choosing the game's app where its disc would go.
 //
-//  Resource ownership: this builder creates the temp wrapp, so it removes
-//  it on the success AND error paths. The old wrapp is only read; saving
-//  the new one may replace it, as saving any rebuild does.
+//  Resource ownership: this builder creates the working folder its plans'
+//  trees are in, so it removes it on the success AND error paths. The old
+//  wrapp is only read; saving the new one may replace it, as saving any
+//  rebuild does.
 //
 
 import Foundation
@@ -21,15 +22,16 @@ import WrappBuilder
 /// old wrapp's lock, or one made up for a wrapp from before locks, says
 /// what it was built from; the bundle's and modules' updates say how to
 /// bring it here (`UpdatePlanner`), worked out before anything runs. The
-/// game installed in the old wrapp is carried into a wrapp made from this
-/// Second Chance's template, the updates run over it, and it is finished
-/// as every build is. One that can only be built afresh is turned down,
+/// old app's prefix, game and all, is the `previous` input of plans the
+/// runner carries out (decision 21 of the builders plan): this Second
+/// Chance's engines and the wine module's update stage, then each of the
+/// bundle's update stages. The template is laid in, and it is finished as
+/// every build is. One that can only be built afresh is turned down,
 /// saying the disc is needed.
 final class UpdateWrappBuilder {
     private let helper: WrappBuildHelper
     private let installerRunner: GameInstallerRunner
     private let gameInfoProvider: GameInfoProvider
-    private let wineManager: WineManager
     let bus: EventBus<AppEvent>
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.UpdateWrappBuilder")
 
@@ -37,13 +39,11 @@ final class UpdateWrappBuilder {
         helper: WrappBuildHelper = .shared,
         installerRunner: GameInstallerRunner = .shared,
         gameInfoProvider: GameInfoProvider = .shared,
-        wineManager: WineManager = .shared,
         bus: EventBus<AppEvent> = .app
     ) {
         self.helper = helper
         self.installerRunner = installerRunner
         self.gameInfoProvider = gameInfoProvider
-        self.wineManager = wineManager
         self.bus = bus
     }
 
@@ -110,24 +110,42 @@ final class UpdateWrappBuilder {
         let moves = chain.moves.map { ", moving \($0.module) from \($0.from) to \($0.to)" }.joined()
         logger.notice("Updating it with \(applied)\(moves)")
 
-        let wrappPath = helper.createTemporaryWrappPath()
-        logger.notice("Temporary wrapp: \(wrappPath.path)")
+        // Each plan in a tree of its own in a working folder the builder
+        // owns, built from the last one's (`FROM ${input.previous}`), the
+        // first from the old app's prefix: removed on both paths.
+        let folder = helper.createBuildFolder()
+        logger.notice("Working folder: \(folder.path)")
+        await bus.publishWrappBuild(.wrappStarted(path: folder))
         do {
-            try await helper.ensureRoomToBuild(from: WrappLayout(app: old).prefix, copies: 1)
-            try await helper.createBaseWrapp(at: wrappPath, composition: composition, buildsWithWine: composition.has(.wine))
+            try await helper.ensureRoomToBuild(from: WrappLayout(app: old).prefix, copies: 2)
+            let template = try await helper.template()
             await bus.publishWrappBuild(.progress(.installingGame(substep: nil)))
             await bus.publishWrappBuild(.engineRouted(composition: composition, gameInfo: gameInfo))
-            try await carryOver(from: old, into: wrappPath, composition: composition)
+            var previous = folder.appendingPathComponent("previous.app")
+            try await carryOver(from: old, into: previous, composition: composition)
 
-            for move in chain.moves where move.module == "wine" {
-                logger.notice("Moving the prefix from Wine \(move.from) to \(move.to)")
-                await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Updating the game's Windows files"))))
-                try await wineManager.movePrefix(at: wrappPath)
+            let plans = try await updatePlans(chain, edition: lock.edition, gameInfo: gameInfo, composition: composition)
+            for (index, plan) in plans.enumerated() {
+                try Self.checkNeedsNoSource(plan, source: source)
+                let installer = InstallerExecutor(runner: installerRunner, gameInfo: gameInfo, source: source, installerName: nil, input: input)
+                let (configuration, emitter) = AppRunner.configuration(
+                    bus: bus, input: input, game: gameInfo, inputs: GivenInputs(["previous": previous]),
+                    downloader: DownloadWrappBuilder.standardDownloader(), helper: helper, executors: ["installer": installer])
+                do {
+                    previous = try await PlanRunner(plan: plan, configuration: configuration)
+                        .build(in: folder.appendingPathComponent("update-\(index + 1)"))
+                } catch let error as StepFailure {
+                    await emitter.finish()
+                    throw WrappBuildError.buildRecipeProblem(error.description)
+                } catch {
+                    await emitter.finish()
+                    throw error
+                }
+                await emitter.finish()
             }
-            for step in chain.steps {
-                try await run(step, chain: chain, edition: lock.edition, wrappPath: wrappPath, gameInfo: gameInfo,
-                              settings: settings, source: source, input: input)
-            }
+            let wrappPath = previous
+            try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
+
             // What this bundle's edition records: its launch and its icon. A
             // ScummVM game's data, which old apps kept in their prefix, moves
             // into the app where the launch reads it.
@@ -142,6 +160,7 @@ final class UpdateWrappBuilder {
             if let editionPlan {
                 try await runFileCopies(editionPlan, wrappPath: wrappPath)
             }
+            // A ScummVM game's old prefix, which nothing runs now.
             try await helper.cleanupUnusedEngine(at: wrappPath, composition: composition)
 
             let record = WrappLock.UpdateRecord(fromBundle: lock.bundle.version, fromModules: lock.modules,
@@ -153,16 +172,67 @@ final class UpdateWrappBuilder {
                 edition: target.edition, updated: record, launch: editionPlan?.launch ?? settings.recordedLaunch,
                 app: editionPlan?.app ?? RecordedApp(), input: input
             )
+            await helper.removeTempWrapp(folder)
             await helper.launchIfAsked(finalPath, input: input)
             return .updated(finalPath)
         } catch {
-            await helper.removeFailedBuild(wrappPath)
+            await helper.removeFailedBuild(folder)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }
     }
 
-    // MARK: - Steps
+    // MARK: - Plans
+
+    /// What the chain runs, as plans, in order (decision 21 of the builders
+    /// plan): first the engines and the modules' own updates (the wine
+    /// module's update stage, which a Wine move needs too), then each of the
+    /// bundle's update stages, every one with the updates applied and what
+    /// the old app recorded.
+    private func updatePlans(_ chain: UpdatePlanner.Chain, edition: String, gameInfo: GameInfo,
+                             composition: Composition) async throws -> [BuildPlan] {
+        let slug = gameInfo.id
+        var wineUpdate = chain.moves.contains { $0.module == "wine" }
+        var stages: [(stage: String, updates: [String])] = []
+        for step in chain.steps {
+            switch step {
+            case .module("wine", "wine-prefix"):
+                wineUpdate = true
+            case .module(let module, let update):
+                throw WrappBuildError.buildRecipeProblem("the \(module) module's \(update) update has no stage to run it")
+            case .stage(let stage, let updates):
+                stages.append((stage, updates))
+            }
+        }
+        let modules = composition.modules.map(\.rawValue)
+        let applied = chain.applied, previous = chain.previous
+        let wine = wineUpdate, stageUpdates = stages
+        return try await Blocking.run {
+            var plans = [try ShippedBundles.updatePlan(forGame: slug, edition: edition, wineUpdate: wine && modules.contains("wine"),
+                                                       modules: modules, updates: applied, previous: previous)]
+            for (stage, updates) in stageUpdates {
+                let plan = try ShippedBundles.plan(forGame: slug, edition: edition, stage: stage, updates: applied, previous: previous)
+                guard plan.stages.contains(where: { $0.from == .input("previous") }) else {
+                    throw WrappBuildError.buildRecipeProblem("\(stage), the \(updates.joined(separator: ", ")) update, isn't built FROM ${input.previous}")
+                }
+                plans.append(plan)
+            }
+            return plans
+        }
+    }
+
+    /// An update whose steps read the edition's source (a disc, a download)
+    /// installs the game again, which only a fresh build from it can.
+    nonisolated static func checkNeedsNoSource(_ plan: BuildPlan, source: WrappSource) throws {
+        for step in plan.stages.flatMap(\.steps) {
+            let words = step.arguments + step.options.values.flatMap { $0 }
+            if let input = words.lazy.compactMap(PlannedStep.input(in:)).first {
+                throw WrappBuildError.updateNeedsSource(reason: "\(step.origin) reads \(input)", source: source)
+            }
+        }
+    }
+
+    // MARK: - Old apps
 
     /// An old ScummVM app's data, which it kept in its prefix (its
     /// settings' `GameInstallerDir`), moved to where the launch reads it
@@ -196,84 +266,28 @@ final class UpdateWrappBuilder {
         }
     }
 
-    /// The old wrapp's prefix, game and all, in place of the new one's, with
-    /// the person's files left behind: its Documents and A: drive lead to
-    /// their saves, which nothing an update runs may touch, so both are
-    /// pointed at an empty stand-in until the wrapp's first launch points
-    /// them back. Z: comes back for the update's own Wine programs, and is
-    /// taken away again as the wrapp is finished.
-    private func carryOver(from old: URL, into wrappPath: URL, composition: Composition) async throws {
-        let from = WrappLayout(app: old).prefix, to = WrappLayout(app: wrappPath).prefix
+    /// The old app made into a tree: its prefix, game and all, with the
+    /// person's files left behind. Its Documents and A: drive lead to their
+    /// saves, which nothing an update runs may touch, so both are pointed
+    /// at an empty stand-in until the app's first launch points them back.
+    /// The rest of the old app (its launcher, its engines) is this Second
+    /// Chance's once the plans and the template are laid in.
+    private func carryOver(from old: URL, into tree: URL, composition: Composition) async throws {
+        let from = WrappLayout(app: old).prefix, to = WrappLayout(app: tree).prefix
         try await Blocking.run {
             let files = FileManager.default
-            if files.fileExists(atPath: to.path) { try files.removeItem(at: to) }
+            if files.fileExists(atPath: tree.path) { try files.removeItem(at: tree) }
+            try files.createDirectory(at: to.deletingLastPathComponent(), withIntermediateDirectories: true)
             // A clone on the same volume, so even a big game takes moments.
             try files.copyItem(at: from, to: to)
         }
         guard composition.has(.wine) else { return }
-        let wine = Wine(wrapp: wrappPath)
+        let wine = Wine(wrapp: tree)
         let standIn = URL(fileURLWithPath: "/tmp/second-chance-update-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: standIn, withIntermediateDirectories: true)
         try wine.drives.mount(standIn, as: "a")
         try? FileManager.default.removeItem(at: wine.documents)
         try FileManager.default.createSymbolicLink(at: wine.documents, withDestinationURL: standIn)
-        try wine.drives.mount("/", as: "z")
         logger.notice("[Update] Carried the game over from the old app, with its saves left where they are")
-    }
-
-    private func run(_ step: UpdatePlanner.Step, chain: UpdatePlanner.Chain, edition: String, wrappPath: URL,
-                     gameInfo: GameInfo, settings: WrappSettings, source: WrappSource, input: WrappBuildInput) async throws {
-        switch step {
-        case .module("wine", let update) where update == "wine-prefix":
-            // The prefix stage's steps over the old prefix, with the game left
-            // installed; and for a DirectDraw game, its cnc-ddraw steps too,
-            // which the shared prefix no longer has.
-            logger.notice("[Update] \(update): running the wine module's prefix stage over the game's prefix")
-            try await wineManager.runPrefixStage(at: wrappPath, bus: bus)
-            let slug = gameInfo.id
-            let cncDdraw = try await Blocking.run {
-                (try ShippedBundles.plan(forGame: slug, edition: edition)?.bundleSteps ?? []).filter { step in
-                    step.origin.hasPrefix("wine/functions/cnc-ddraw")
-                }
-            }
-            for step in cncDdraw {
-                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
-            }
-        case .module(let module, let update):
-            throw WrappBuildError.buildRecipeProblem("the \(module) module's \(update) update has no Swift to run it")
-        case .stage(let stage, let updates):
-            let slug = gameInfo.id
-            let plan = try await Blocking.run {
-                try ShippedBundles.plan(forGame: slug, edition: edition, stage: stage, updates: chain.applied, previous: chain.previous)
-            }
-            logger.notice("[Update] \(updates.joined(separator: ", ")): running the \(stage) stage")
-            try await run(plan, wrappPath: wrappPath, gameInfo: gameInfo, settings: settings, source: source, input: input)
-        }
-    }
-
-    /// An update stage's steps, as the disc flow runs the same steps: the
-    /// game's patches and its .ini settings, over the installed game. A step
-    /// that needs the disc, or that this can't run yet, fails before it
-    /// changes anything wrongly.
-    private func run(_ plan: BuildPlan, wrappPath: URL, gameInfo: GameInfo, settings: WrappSettings,
-                     source: WrappSource, input: WrappBuildInput) async throws {
-        let layout = WrappLayout(app: wrappPath)
-        let gameDir = gameInfo.composition.launcher == .scummvm
-            ? layout.onDriveC(settings.installerDir)
-            : layout.onDriveC(settings.gameExePath).deletingLastPathComponent()
-        for step in plan.bundleSteps {
-            logger.debug("Update step: \(step) (\(step.origin))")
-            switch (step.module, step.instruction) {
-            case _ where ModuleSteps.handles(step):
-                try await ModuleSteps(bus: bus).run(step, wrappPath: wrappPath)
-            case _ where GameInstallerRunner.isPatchStep(step):
-                try await installerRunner.runPatchStep(step, plan: plan, wrappPath: wrappPath, gameInfo: gameInfo,
-                                                       source: source, confirmFailure: input.confirmPatchFailure)
-            case ("wine", "KEEP-DISCS"), ("installer", "RUN"), ("her-download", "INSTALL"):
-                throw WrappBuildError.updateNeedsSource(reason: "\(step.origin) installs the game again", source: source)
-            default:
-                throw WrappBuildError.buildRecipeProblem("\(step.origin): an update can't run \(step) yet")
-            }
-        }
     }
 }
