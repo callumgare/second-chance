@@ -12,7 +12,7 @@ enum Games {
     /// The game's disc images in the installers store: its disc edition's
     /// `disc-1`, `disc-2`…, in order; nil unless every one is there.
     static func discs(for game: CatalogGame, repo: Repo) -> InstallersStore.Found? {
-        repo.manifest(of: game).flatMap { repo.installers.found($0, source: .disc).first }
+        repo.manifest(of: game).flatMap { repo.installers.discs(of: $0) }
     }
 
     /// Games whose disc images are all in the installers store.
@@ -24,7 +24,7 @@ enum Games {
     /// for each of its Her editions there: the Windows installer (.exe) and
     /// the Mac download (.dmg), in the manifest's order.
     static func herDownloads(for game: CatalogGame, repo: Repo) -> [InstallersStore.Found] {
-        repo.manifest(of: game).map { repo.installers.found($0, source: .herDownload) } ?? []
+        repo.manifest(of: game).map { repo.installers.herDownloads(of: $0) } ?? []
     }
 
     /// Games with a Her Interactive download in the installers store.

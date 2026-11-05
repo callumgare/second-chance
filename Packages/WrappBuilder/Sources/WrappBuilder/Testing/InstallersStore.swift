@@ -20,7 +20,7 @@ import Foundation
 /// holds what no build reads: guides, manuals, anything else.
 public nonisolated struct InstallersStore: Sendable, Hashable {
     public static let environmentVariable = "SECOND_CHANCE_INSTALLERS"
-    public static let defaultRoot = URL(fileURLWithPath: "/Users/Shared/second-chance/installers", isDirectory: true)
+    public static let defaultRoot = SharedFolders.installers
     /// The folder of each program's files no build reads.
     public static let extrasFolder = "extras"
 
@@ -94,6 +94,25 @@ public nonisolated struct InstallersStore: Sendable, Hashable {
     }
 
     /// An edition's inputs that are files, in order.
+    /// The program's disc images: its disc edition's `disc-1`, `disc-2`…,
+    /// in order; nil unless every one is there.
+    public func discs(of manifest: Manifest) -> Found? {
+        found(manifest, source: .disc).first
+    }
+
+    /// Where the program's disc images go: its disc edition's folder, for a
+    /// message saying they aren't there.
+    public func discFolder(of manifest: Manifest) -> URL {
+        folder(program: manifest.id, edition: manifest.editions.first { $0.source == .disc }?.id ?? "cd")
+    }
+
+    /// The program's Her Interactive downloads, one for each of its Her
+    /// editions in the store (the Windows installer, the Mac download), in
+    /// the manifest's order.
+    public func herDownloads(of manifest: Manifest) -> [Found] {
+        found(manifest, source: .herDownload)
+    }
+
     public static func fileInputs(of edition: Manifest.Edition) -> [Manifest.Input] {
         (edition.inputs ?? []).filter { fileInputTypes.contains($0.type) }
     }

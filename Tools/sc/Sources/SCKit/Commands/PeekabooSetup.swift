@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import WrappBuilder
 
 /// Peekaboo in a Mac's test sessions: installed if it isn't, its bridge
 /// started in each, and the person walked through the two grants macOS won't
@@ -106,7 +107,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     }
 
     /// Where the CLI goes when Homebrew's isn't there: readable by every user.
-    static let sharedCLI = "/Users/Shared/second-chance/bin/peekaboo"
+    static let sharedCLI = SharedFolders.root.appendingPathComponent("bin/peekaboo").path
 
     // MARK: One user
 

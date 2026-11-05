@@ -187,20 +187,20 @@ enum InstallerPaths {
     /// The game's disc images, its disc edition's `disc-1`, `disc-2`… in
     /// order, or `nil` unless every one is there.
     static func discs(for game: GameInfo) -> [URL]? {
-        manifest(of: game).flatMap { TestPaths.installers.found($0, source: .disc).first?.files }
+        manifest(of: game).flatMap { TestPaths.installers.discs(of: $0)?.files }
     }
 
     /// Where the game's disc images go, for a message saying they aren't there.
     static func discFolder(for game: GameInfo) -> String {
-        let edition = manifest(of: game)?.editions.first { $0.source == .disc }?.id ?? "cd"
-        return TestPaths.installers.folder(program: game.programID, edition: edition).path
+        guard let manifest = manifest(of: game) else { return TestPaths.installers.folder(program: game.programID).path }
+        return TestPaths.installers.discFolder(of: manifest).path
     }
 
     /// The game's Her Interactive downloads, one for each of its Her
     /// editions in the store: the Windows installer and the Mac download,
     /// in the manifest's order.
     static func herDownloads(for game: GameInfo) -> [InstallersStore.Found] {
-        manifest(of: game).map { TestPaths.installers.found($0, source: .herDownload) } ?? []
+        manifest(of: game).map { TestPaths.installers.herDownloads(of: $0) } ?? []
     }
 }
 
@@ -221,7 +221,7 @@ enum InstallersPresent {
     }
 
     static func check() -> Bool {
-        TestPaths.manifests.contains { !TestPaths.installers.found($0, source: .disc).isEmpty }
+        TestPaths.manifests.contains { TestPaths.installers.discs(of: $0) != nil }
     }
 }
 

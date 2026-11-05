@@ -788,7 +788,8 @@ struct DotEnvTests {
     @Test("Before sending installers, the other Mac's store is made if it has none")
     func prepareInstallers() {
         let command = Remote.prepareInstallersCommand(path: "~/tmp/second chance")
-        #expect(command.hasPrefix("mkdir -p ~/'tmp/second chance' && { [ -d '/Users/Shared/second-chance/installers' ] ||"))
+        #expect(command.hasPrefix("mkdir -p ~/'tmp/second chance' && \(SharedFolders.makeCommand(InstallersStore.defaultRoot))"))
+        #expect(command.contains("[ -d '/Users/Shared/second-chance/installers' ] ||"))
         #expect(command.contains("chmod +a 'everyone allow"))
     }
 

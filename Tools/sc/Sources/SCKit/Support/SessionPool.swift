@@ -1,12 +1,13 @@
 import Foundation
+import WrappBuilder
 
 /// The test users on a Mac whose logins run games in the background, each in
 /// a GUI session of its own, so several runs (and the person at the Mac) don't
 /// fight over one screen. See docs/dev-cli.md#test-sessions.
 enum SessionPool {
-    static let folder = URL(fileURLWithPath: "/Users/Shared/second-chance")
+    static let folder = SharedFolders.root
     /// One user name a line; `#` starts a comment.
-    static let file = folder.appendingPathComponent("pool")
+    static let file = SharedFolders.pool
     /// Where the console user's keychain keeps each test user's password, as
     /// a generic password with the user's name as its account.
     static let keychainService = "second-chance-session"
@@ -58,11 +59,6 @@ enum SessionPool {
 
     // MARK: The Mac's installers
 
-    /// What every user may do in the installers store, inherited by what's
-    /// made inside: each user's sync replaces files another user's left.
-    static let everyoneACL = "everyone allow list,add_file,search,delete,add_subdirectory,delete_child,readattr,writeattr,"
-        + "readextattr,writeextattr,readsecurity,read,write,append,execute,file_inherit,directory_inherit"
-
     /// Make the Mac's installers store (`InstallersStore`), which every
     /// user's checkout reads, if it isn't there, writable by every user.
     /// Returns what it did, for the person.
@@ -72,12 +68,7 @@ enum SessionPool {
         if fm.fileExists(atPath: store.path) {
             said = "Installers are kept in \(store.path), which every user on this Mac shares."
         } else {
-            try ScreenLease.makeFolder(folder)
-            try fm.createDirectory(at: store, withIntermediateDirectories: true)
-            let result = try await Proc.collect("/bin/chmod", ["+a", everyoneACL, store.path])
-            guard result.succeeded else {
-                throw SCError("Couldn't let every user write to \(store.path): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))")
-            }
+            try await SharedFolders.make(store)
             said = "Made \(store.path), where every user on this Mac finds installers."
         }
         return said

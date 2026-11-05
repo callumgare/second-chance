@@ -157,8 +157,7 @@ enum Remote {
     /// every user (as `sc session add` makes it).
     static func prepareInstallersCommand(path: String) -> String {
         let dir = shellPath(path)
-        let store = quote(InstallersStore.defaultRoot.path)
-        return "mkdir -p \(dir) && { [ -d \(store) ] || { mkdir -p \(store) && chmod +a \(quote(SessionPool.everyoneACL)) \(store); }; } "
+        return "mkdir -p \(dir) && \(SharedFolders.makeCommand(InstallersStore.defaultRoot)) "
     }
 
     /// Of `DerivedData`, only what was built, `Build/Products`, is synced.

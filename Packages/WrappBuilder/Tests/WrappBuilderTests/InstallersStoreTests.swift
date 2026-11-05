@@ -71,4 +71,31 @@ struct InstallersStoreTests {
         ], manifests: Self.manifests)
         #expect(found == ["nancy-drew/trail-of-the-twister/her-windows", "nancy-drew/old-clock/cd"])
     }
+
+    @Test func aProgramsDiscsHerDownloadsAndDiscFolderComeFromItsManifest() throws {
+        let twister = try manifest("nancy-drew/trail-of-the-twister")
+        let disc = try #require(twister.editions.first { $0.source == .disc })
+        let store = try store(["nancy-drew/trail-of-the-twister/\(disc.id)/disc-1.iso", "nancy-drew/trail-of-the-twister/\(disc.id)/disc-2.iso"])
+        #expect(store.discFolder(of: twister) == store.folder(program: twister.id, edition: disc.id))
+        let found = try #require(store.discs(of: twister))
+        #expect(found.files.map(\.lastPathComponent) == ["disc-1.iso", "disc-2.iso"])
+        #expect(store.herDownloads(of: twister).isEmpty)
+    }
+}
+
+struct SharedFoldersTests {
+    @Test func everySharedFolderIsUnderOneRoot() {
+        for folder in [SharedFolders.pool, SharedFolders.installers, SharedFolders.engines, SharedFolders.leases] {
+            #expect(folder.deletingLastPathComponent().path == SharedFolders.root.path)
+        }
+        #expect(InstallersStore.defaultRoot == SharedFolders.installers)
+        #expect(EngineStore.sharedRoot == SharedFolders.engines)
+    }
+
+    @Test func theShellCommandMakesAndSharesTheRootAndTheFolderUnlessTheyreThere() {
+        let command = SharedFolders.makeCommand(SharedFolders.installers)
+        #expect(command.contains("[ -d '/Users/Shared/second-chance' ] || { mkdir -p '/Users/Shared/second-chance' && chmod +a "))
+        #expect(command.contains("[ -d '/Users/Shared/second-chance/installers' ]"))
+        #expect(command.contains("file_inherit,directory_inherit"))
+    }
 }

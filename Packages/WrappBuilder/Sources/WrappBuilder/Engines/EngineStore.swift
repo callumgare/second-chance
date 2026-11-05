@@ -60,8 +60,8 @@ public nonisolated final class EngineStore: Sendable {
     /// file (`sc session`) says it has them. Every user can write it, through
     /// an inheriting ACL set when it's made, so an engine another user
     /// prepared is used only once its hash checks out (`engine`).
-    public static let sharedRoot = URL(fileURLWithPath: "/Users/Shared/second-chance/engines", isDirectory: true)
-    static let poolFile = URL(fileURLWithPath: "/Users/Shared/second-chance/pool")
+    public static let sharedRoot = SharedFolders.engines
+    static let poolFile = SharedFolders.pool
 
     /// The shared store, when this Mac has test users and this user can
     /// write it (or make it); nil means this user's own.
@@ -71,11 +71,6 @@ public nonisolated final class EngineStore: Sendable {
         if files.fileExists(atPath: shared.path) { return files.isWritableFile(atPath: shared.path) ? shared : nil }
         return files.isWritableFile(atPath: shared.deletingLastPathComponent().path) ? shared : nil
     }
-
-    /// ACL entry that lets every user use and add to the shared store, and
-    /// that everything made in it inherits.
-    static let everyoneACL = "everyone allow list,add_file,search,delete,add_subdirectory,delete_child,readattr,writeattr,"
-        + "readextattr,writeextattr,readsecurity,read,write,append,execute,file_inherit,directory_inherit"
 
     /// An engine in the store.
     public struct Engine: Sendable, Equatable {
@@ -128,12 +123,10 @@ public nonisolated final class EngineStore: Sendable {
 
     /// The store's folder, made shareable if it's the shared one.
     func makeRoot() async throws {
-        let files = FileManager.default
-        guard !files.fileExists(atPath: root.path) else { return }
-        try files.createDirectory(at: root, withIntermediateDirectories: true)
         if root.standardizedFileURL.path == Self.sharedRoot.path {
-            let result = try await Process.output(of: "/bin/chmod", ["+a", Self.everyoneACL, root.path])
-            if result.status != 0 { throw EngineError("Couldn't share \(root.path) with every user: \(result.output)") }
+            try await SharedFolders.make(root)
+        } else {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         }
     }
 

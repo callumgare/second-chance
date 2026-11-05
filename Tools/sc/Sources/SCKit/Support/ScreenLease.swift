@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import SystemConfiguration
+import WrappBuilder
 
 /// Who has a Mac's screen: one lease per Mac, taken by every command that
 /// opens windows (`GUISession.ensure`), so two runs never fight over it.
@@ -78,7 +79,7 @@ struct ScreenLease: Codable, Equatable, Sendable {
     /// read and write them: each logged-in user has a screen of their own (a
     /// test session in the background has one too), and `sc session claim`
     /// leases a test session's screen on its behalf.
-    static let sharedDirectory = URL(fileURLWithPath: "/Users/Shared/second-chance/leases")
+    static let sharedDirectory = SharedFolders.leases
 
     /// The lease on `user`'s screen (this user's unless said), outside any
     /// checkout, so every checkout on the Mac sees it.
