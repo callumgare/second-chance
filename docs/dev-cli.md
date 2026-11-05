@@ -609,6 +609,15 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   loginwindow's log-out event, sent from inside the session, needs an
   Automation grant nobody is there to give. What runs in a session is quit
   without saving, so a leased session is left alone unless `--force`.
+- `sc session remove [--delete-account] [--force] <user>…` is `add`'s
+  counterpart. It takes each user out of the pool, clears its lease and
+  restarts the keep-alive so it lets the session go, then asks whether to
+  delete the account too, with all its files (default no; no terminal means
+  no, unless `--delete-account`). Deleting logs the user out, runs
+  `sudo sysadminctl -deleteUser`, which removes the home, and removes the
+  password from the keychain. Kept, the account and its password stay, so
+  `session add` can take it back. A leased session is left alone unless
+  `--force`.
 - **Installers are kept once per Mac**, in the
   [installers store](testing.md#the-installers-store),
   `/Users/Shared/second-chance/installers`, writable by every user through an

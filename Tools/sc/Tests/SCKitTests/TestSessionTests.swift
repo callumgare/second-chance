@@ -151,6 +151,8 @@ struct PeekabooSetupTests {
         #expect(Remote.runsHere(["session", "setup-peekaboo", "sctest"]))
         #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(Remote.runsHere(["session", "view", "sctest"]))
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "remove"]) }
+        #expect((try? SC.parseAsRoot(["session", "remove", "sctest2", "--delete-account"])) is SessionRemoveCommand)
         let port = try? Network.freePort()
         #expect(port.map { $0 > 1024 } == true)
         #expect(!Remote.runsHere(["session", "list"]))

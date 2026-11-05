@@ -20,6 +20,13 @@ enum SessionPool {
         }
     }
 
+    /// Write the pool, which every user may change.
+    static func write(_ users: [String]) throws {
+        try ScreenLease.makeFolder(folder)
+        try (users.joined(separator: "\n") + (users.isEmpty ? "" : "\n")).write(to: file, atomically: true, encoding: .utf8)
+        chmod(file.path, 0o666)
+    }
+
     static func users() -> [String] {
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
         return users(fromPool: text)
