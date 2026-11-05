@@ -159,6 +159,25 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan(creates: "C:/Game/Other.exe") }
     }
 
+    @Test("A files= mount records its patterns, from a kept store of the app's own, on a folder")
+    func filesMount() throws {
+        func plan(_ store: String, target: String = "C:/Game/") throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            \(store)
+            FROM --module=wine@10 prefix AS only
+            LAUNCH --wine.graphics=direct-3d --mount=type=store,source=saves,target=\(target),files="Game.ini;*.hs" C:/Game/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        let mount = try #require(try plan("STORE saves").launch?.mounts.first)
+        #expect(mount.store == "app:saves" && mount.target == "wine:C:/Game/")
+        #expect(mount.filePatterns == ["Game.ini", "*.hs"])
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("STORE saves --retention=cache") }
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("STORE saves --scope=global") }
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("STORE saves", target: "C:/Game") }
+    }
+
     /// A planner over Old Clock's bundle and the shipped modules, for a
     /// Wrappfile of a test's own.
     private func planner(_ text: String, slug: String = "old-clock") throws -> (BuildPlanner, Wrappfile, ProgramBundle) {

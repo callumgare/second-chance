@@ -346,6 +346,21 @@ class WrappBuildHelper {
         logger.notice("✓ LAUNCH's program is there: \(program)")
     }
 
+    /// Each `files=` mount's target is a folder in the app once it's built:
+    /// the files the store holds are linked in beside what's there, so the
+    /// folder must be (docs/wrappfile.md#the-launch-volumes-and-app).
+    nonisolated static func checkLaunchMounts(_ launch: RecordedLaunch, in wrappPath: URL) throws {
+        for mount in launch.mounts where mount.filePatterns != nil {
+            guard let folder = WrappLayout(app: wrappPath).location(mount.target) else {
+                throw WrappBuildError.buildRecipeProblem("LAUNCH's files= mount of \(mount.store) at \(mount.target) isn't in the app")
+            }
+            var isFolder: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: folder.path, isDirectory: &isFolder), isFolder.boolValue else {
+                throw WrappBuildError.buildRecipeProblem("LAUNCH's files= mount of \(mount.store) is at \(mount.target), which the build didn't make")
+            }
+        }
+    }
+
     /// Whether a step copies into the app itself, outside the prefix: a
     /// `COPY` to a bare `/…` path. Builders run these after the cached
     /// install layer, which holds the prefix alone.
@@ -536,7 +551,10 @@ class WrappBuildHelper {
             try ShippedBundles.lock(forGame: slug, edition: edition, source: source, composition: lockComposition)
         }
         lock.updated = updated
-        if let launch { try Self.checkLaunchProgram(launch, in: wrappPath) }
+        if let launch {
+            try Self.checkLaunchProgram(launch, in: wrappPath)
+            try Self.checkLaunchMounts(launch, in: wrappPath)
+        }
         try await configureWrapp(
             at: wrappPath, gameInfo: gameInfo, source: source, gameExePath: gameExePath, installerDir: installerDir,
             steamID: steamID, composition: composition, steamLaunchMode: steamLaunchMode,

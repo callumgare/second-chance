@@ -61,6 +61,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// has finished, a fresh copy starts.
     var openAgainWhenClosed: Bool { closingState.withLock { $0.openAgain } }
 
+    /// The launch's `files=` mounts, connected before the game started:
+    /// what the game made beside its program is kept in their stores once
+    /// it has ended.
+    var filesMounts: [FilesMount] = []
+
+    /// The files the game made beside its program moved into their stores
+    /// (`FilesMount.collect`), each exit's last step before the wrapp goes.
+    func collectLaunchFiles() {
+        for mount in filesMounts {
+            do {
+                for line in try mount.collect() { mainLogger.notice("[User files] \(mount.folder.lastPathComponent): \(line)") }
+            } catch {
+                mainLogger.error("[User files] Couldn't keep the files the game made in \(mount.folder.lastPathComponent): \(error)")
+            }
+        }
+    }
+
     /// Told to quit (a SIGTERM, SIGINT or SIGHUP): an opening queued while
     /// the game closed is dropped, as the sender meant it to stop. A test
     /// that relaunched a game while its Steam was closing, then ended it,
@@ -150,6 +167,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 mainLogger.debug("[Cleanup/AppDelegate] On main queue, about to call NSApp.reply")
                 mainLogger.notice("[Cleanup] All cleanup complete, terminating application")
+                self.collectLaunchFiles()
                 // Drain pending entries so the disk mirror / stderr keep the last lines.
                 if self.relaunchWithoutSteam {
                     self.openAgain(arguments: [WrappLaunchOptions.withoutSteamArgument], why: "to start without Steam")

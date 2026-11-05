@@ -233,8 +233,7 @@ A store whose lock is held is left alone (`StoreInventory`, in
 `WrappFormat`). `sc clean layers` leaves stores alone, so clearing layers
 doesn't sign anyone out of Steam.
 
-Not built yet: a store declared inside a function, and a launch mount of
-files beside a program (`files=`).
+Not built yet: a store declared inside a function.
 
 ## Signals
 
@@ -447,6 +446,27 @@ app keeps no Wine.
   `scummvm:settings/`, or a DOSBox drive with the dosbox module's
   `dosbox.overlay` field, laid over it. A store the app keeps of its own
   must be one of the manifest's `volumes:`, which say what it holds.
+- **A `files=` mount keeps the files beside a program**, for a game that
+  writes its settings or high scores loose into its own folder, where a
+  store mounted over the folder would hide the program:
+
+  ```dockerfile
+  STORE saves
+  LAUNCH --mount=type=store,source=saves,target=C:/LaserTank/,files="LaserTank.ini;*.hs;*.lpb" \
+         C:/LaserTank/lasertank.exe
+  ```
+
+  `files=` lists the names that are the store's, `;`-separated shell
+  patterns matched in the target folder alone (not its subfolders). The
+  target is a folder ending in `/` that the build made, which it checks
+  (`WrappBuildHelper.checkLaunchMounts`), and the store is a kept one of
+  the app's own. Before the game starts, a matching file the build left
+  there moves into the store when the store has none of that name (so the
+  person's copy starts from the default), and each of the store's files is
+  linked in; once the game has ended, each matching file that isn't a link
+  (one the game made, or wrote afresh) moves into the store and is linked
+  back (`FilesMount`, in `WrappFormat`). A game that crashes leaves its new
+  files in the app until the next clean exit.
 - **`APP --icon` names an `.icns` in the app's `/Resources/`**, which a
   `COPY` put there; the build sets it as the app's icon. An app with no icon
   has the template's own, a generic one. An `.icns`, not an Icon Composer

@@ -56,6 +56,10 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
         /// store's folder, and the manifest's `volumes:`, call it.
         public var name: String { store.split(separator: ":", maxSplits: 1).last.map(String.init) ?? store }
 
+        /// A `files=` mount's patterns: the names in the target folder that
+        /// are the store's (`FilesMount`). Nil for a mount of the whole store.
+        public var filePatterns: [String]? { options["files"].map(FilesMount.patterns) }
+
         /// The Wine drive it's mounted as (`wine:A:`), in lower case.
         public var wineDrive: Character? {
             guard target.count == 7, target.hasPrefix("wine:"), target.hasSuffix(":") else { return nil }

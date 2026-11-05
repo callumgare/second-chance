@@ -61,6 +61,23 @@ struct InstallStepTests {
         try WrappBuildHelper.checkLaunchProgram(RecordedLaunch(program: "steam://rungameid/1"), in: app)
     }
 
+    @Test("A files= mount's target must be a folder in the app once it's built")
+    func launchFilesMountChecked() throws {
+        let driveC = try driveC()
+        let app = driveC.deletingLastPathComponent().appendingPathComponent("Game.app")
+        defer { try? FileManager.default.removeItem(at: driveC.deletingLastPathComponent()) }
+        let prefix = app.appendingPathComponent("Contents/SharedSupport/prefix")
+        try FileManager.default.createDirectory(at: prefix, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: driveC, to: prefix.appendingPathComponent("drive_c"))
+        func launch(_ target: String) -> RecordedLaunch {
+            RecordedLaunch(program: "wine:C:/Game/Game.exe",
+                           mounts: [RecordedLaunch.Mount(store: "app:saves", target: target, options: ["files": "*.hs"])])
+        }
+        #expect(throws: WrappBuildError.self) { try WrappBuildHelper.checkLaunchMounts(launch("wine:C:/Elsewhere/"), in: app) }
+        try FileManager.default.createDirectory(at: prefix.appendingPathComponent("drive_c/Game"), withIntermediateDirectories: true)
+        try WrappBuildHelper.checkLaunchMounts(launch("wine:C:/Game/"), in: app)
+    }
+
     @Test("A patch step is told by its shape")
     func patchSteps() {
         func step(_ module: String?, _ instruction: String, _ options: [String: [String]] = [:]) -> PlannedStep {

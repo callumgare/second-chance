@@ -1062,15 +1062,27 @@ public nonisolated struct BuildPlanner {
             guard let target = fields["target"] else {
                 throw PlanError(description: "\(origin): a launch's mount names its target: --mount=type=store,source=\(store),target=<path>")
             }
-            if fields["files"] != nil {
-                throw PlanError(description: "\(origin): a launch's mount can't take files= yet")
+            if let files = fields["files"] {
+                // The files beside a program: the app's own kept store, as
+                // the app finds it with no Wrappfile, in a folder of the tree.
+                guard !FilesMount.patterns(files).isEmpty else {
+                    throw PlanError(description: "\(origin): files= lists the names that are the store's: files=\"LaserTank.ini;*.hs\"")
+                }
+                let declared = try planner.storeDeclarations().stores[store]
+                guard let declared, declared.scope == .app, declared.retention == .keep, declared.owner == "app" else {
+                    throw PlanError(description: "\(origin): a files= mount's store is one of the app's own, kept: STORE <name> in the Wrappfile")
+                }
+                guard target.hasSuffix("/") else {
+                    throw PlanError(description: "\(origin): a files= mount's target is the folder the files are in, ending in /: target=\(target)/")
+                }
             }
             var options = fields
-            for key in ["type", "source", "target"] { options.removeValue(forKey: key) }
+            for key in ["type", "source", "target", "files"] { options.removeValue(forKey: key) }
             // Its modules' fields (dosbox.overlay) alone.
             for key in options.keys.sorted() where !key.contains(".") {
                 throw PlanError(description: "\(origin): a launch's store mount takes no \(key)")
             }
+            if let files = fields["files"] { options["files"] = files }
             let mount = RecordedLaunch.Mount(store: store, target: target, options: options)
             scope.modules.mounts.removeAll { $0.store == store && $0.target == target }
             scope.modules.mounts.append(mount)

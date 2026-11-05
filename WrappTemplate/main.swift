@@ -293,6 +293,17 @@ func main() {
             exit(1)
         }
     }
+    // The files beside the program its launch keeps in a store (`files=`).
+    let filesMounts = FilesMount.mounts(of: config.launch, app: WrappLayout(app: config.appPath),
+                                        userFiles: UserFilesLayout(appSupport: UserFilesLayout.appSupport(), bundleID: config.bundleId))
+    for mount in filesMounts {
+        do {
+            for line in try mount.connect() { mainLogger.notice("[User files] \(mount.folder.lastPathComponent): \(line)") }
+        } catch {
+            mainLogger.error("[User files] Couldn't link the store's files into \(mount.folder.lastPathComponent): \(error)")
+        }
+    }
+    appDelegate.filesMounts = filesMounts
 
     // The save warning holds back only the game itself: Wine, and Steam for
     // a game that needs it, get going behind it, so the game starts sooner
@@ -366,6 +377,7 @@ func main() {
                 await Blocking.run { FailureReporter.wait(for: reportTask, timeout: 120) }
                 // The game has gone, but Wine may not have yet.
                 await gameLauncher.waitForSessionToEnd()
+                appDelegate.collectLaunchFiles()
                 if appDelegate.openAgainWhenClosed {
                     appDelegate.openAgain(arguments: [], why: "as it was opened while closing")
                 }
