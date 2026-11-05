@@ -217,6 +217,9 @@ its window, ends its log with one critical entry between fixed markers:
 What failed: Building the wrapp, during "Game installing"
 Error: Wine execution failed with exit code 1 [SecondChance.WineError.executionFailed(exitCode: 1)]
 First error in this stage: 17:28:07.695  error  Wine  00d8:err:winediag:nodrv_CreateWindow Application tried to create a window, but no driver could be loaded.
+Programs this stage started and ended:
+  17:28:06.102  notice  WineProcess  ▶ wine started (pid 4211): C:\nancy-drew-installer\disk-1\setup.exe /s …
+  17:28:08.010  error  WineProcess  ■ wine (pid 4211) exited 1 after 1.9s, 4 lines of output
 Last Wine/ScummVM output:
   …the last ten lines…
 Load now: other programs are keeping 0.8 cores busy, and this Mac has 8 performance cores
@@ -228,7 +231,12 @@ Run: 3f9a2c1e
 
 The cause of a failure is usually logged well before the failure: the "first
 error in this stage" line is there because the last errors are usually
-consequences. Stages are what the build's progress shows (`LogContext.enterStage`,
+consequences. The stage's programs, each Wine program's `▶` start and `■`
+end (the last eight), are there for a cause that is something running
+beside the step rather than the step itself: a disc's copy failed with
+"Operation not permitted" once because a Wine program had started in the
+prefix during it, which its own error never mentioned. A Wine step that
+fails also logs which Wine programs were running in its prefix as it did. Stages are what the build's progress shows (`LogContext.enterStage`,
 called next to each `━━━ Stage ━━━` divider); a wrapp has "Starting the game"
 and "Playing". In a build, both the stage and the entries searched are that
 build's own ([below](#which-build-an-entry-is-from)). The error line keeps the error's type and case and its chain of

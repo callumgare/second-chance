@@ -45,6 +45,22 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     }
 
     public func run(_ step: PlannedStep, in context: any StepContext) async throws {
+        do {
+            try await carryOut(step, in: context)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // What else was at work in the tree as it failed: Wine's programs
+            // starting there during a disc's copy was what broke it once, and
+            // the failure itself didn't say so.
+            let running = await Blocking.run { Wine(wrapp: context.tree).server.programs() }
+            let names = running.map { "\($0.name) (pid \($0.pid))" }.joined(separator: ", ")
+            logger.error("\(step.keyword) failed with \(running.isEmpty ? "no Wine program running in its prefix" : "Wine running in its prefix: \(names)")")
+            throw error
+        }
+    }
+
+    func carryOut(_ step: PlannedStep, in context: any StepContext) async throws {
         let wine = Wine(wrapp: context.tree)
         switch step.instruction {
         case "DRIVES":
@@ -144,28 +160,24 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         let wine = Wine(wrapp: context.tree)
         let names = step.arguments.compactMap(PlannedStep.input(in:))
         try FileManager.default.createDirectory(at: into, withIntermediateDirectories: true)
-        // Wine is told the drives are CD drives while the discs copy: each run
-        // of Wine starts its session afresh, which took 8 to 18 s per drive
-        // once the copying was done.
+        // The drives are marked as CD drives once the discs have copied, not
+        // while they do. Wine starting in a prefix restored from a layer
+        // while a disc copied into it made the copy fail, its folders refused
+        // with "Operation not permitted" (Thornton Hall's, White Wolf's): the
+        // copy is the step's, so nothing else of Wine's runs in the tree
+        // meanwhile. It costs a run of Wine after the copy, 8 to 18 s.
         let letters = names.indices.map(Self.driveLetter(forDisc:))
-        let marking = Task { try await wine.drives.setKind(.cdrom, of: letters) }
         var kept: [URL] = []
-        do {
-            for (index, name) in names.enumerated() {
-                guard let disc = try await context.inputIfGiven(name) else { continue }
-                if index > 0 { context.substep(String(localized: "Copying disc \(index + 1)")) }
-                let destination = into.appendingPathComponent("disk-\(index + 1)")
-                if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
-                try await copy(disc, to: destination, emitter: context.emitter)
-                kept.append(destination)
-            }
-        } catch {
-            marking.cancel()
-            _ = try? await marking.value
-            throw error
+        for (index, name) in names.enumerated() {
+            guard let disc = try await context.inputIfGiven(name) else { continue }
+            if index > 0 { context.substep(String(localized: "Copying disc \(index + 1)")) }
+            let destination = into.appendingPathComponent("disk-\(index + 1)")
+            if FileManager.default.fileExists(atPath: destination.path) { try FileManager.default.removeItem(at: destination) }
+            try await copy(disc, to: destination, emitter: context.emitter)
+            kept.append(destination)
         }
         context.substep(String(localized: "Getting the discs ready"))
-        try await marking.value
+        try await wine.drives.setKind(.cdrom, of: letters)
         if kept.count > 1, let combinedPath = step.option("combined"), let combined = layout.location(combinedPath) {
             try Self.combine(kept, into: combined)
         }

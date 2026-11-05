@@ -131,6 +131,15 @@ nonisolated public enum FailureSummary {
             lines.append("First error in this stage: \(oneLine(first))")
         }
 
+        // What the stage had running beside the step that failed: a Wine
+        // program started alongside a disc's copy was what broke it once,
+        // and the failure itself said nothing of it.
+        let programs = stageEntries.filter { $0.label.hasSuffix(".WineProcess") && ($0.message.hasPrefix("▶ ") || $0.message.hasPrefix("■ ")) }
+        if !programs.isEmpty {
+            lines.append("Programs this stage started and ended:")
+            lines += programs.suffix(8).map { "  \(oneLine($0))" }
+        }
+
         // Debug lines are chatter by definition (msync start-up, fixme:).
         let engine = entries.filter { isEngineOutput($0) && $0.level != "debug" && $0.level != "trace" }.suffix(10)
         if !engine.isEmpty {

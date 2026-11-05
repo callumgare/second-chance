@@ -44,6 +44,20 @@ struct FailureSummaryTests {
         #expect(text.contains("Run: \(RunContext.runID)"))
     }
 
+    @Test("The summary names the programs the stage started and how each ended")
+    func programs() {
+        let marker = UUID().uuidString
+        LogContext.enterStage("Stage \(marker)")
+        LogStore.shared.append(level: "notice", label: "au.gare.callum.second-chance.SecondChance.WineProcess",
+                               message: "▶ wine reg started (pid 1): reg import \(marker)")
+        LogStore.shared.append(level: "error", label: "au.gare.callum.second-chance.SecondChance.WineProcess",
+                               message: "■ wine reg (pid 1) was killed by SIGTERM (15) — cancelled \(marker)")
+        let text = FailureSummary.render(what: "Testing", error: nil)
+        #expect(text.contains("Programs this stage started and ended:"))
+        #expect(text.contains("reg import \(marker)"))
+        #expect(text.contains("cancelled \(marker)"))
+    }
+
     @Test("Cancelling isn't a failure worth summarising")
     func cancellation() {
         #expect(WrappBuildViewModel.isCancellation(WrappBuildError.userCancelled))
