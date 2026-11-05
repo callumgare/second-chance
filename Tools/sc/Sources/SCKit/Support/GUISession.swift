@@ -23,20 +23,15 @@ enum GUISession {
     }
 
     static func isScreenLocked() async -> Bool {
-        guard let result = try? await Proc.collect("/usr/sbin/ioreg", ["-n", "Root", "-d1", "-a"]) else { return false }
-        return isScreenLocked(ioregPlist: Data(result.output.utf8), uid: getuid())
+        await SessionPool.logins().contains { $0.uid == getuid() && $0.locked }
     }
 
-    /// Whether `uid`'s session is locked, from `ioreg -n Root -d1 -a`: its
-    /// entry in `IOConsoleUsers`, not any of them. Another user's session in
-    /// the background (one logged in through Screen Sharing, then left) is
-    /// locked while this one is in use at the Mac.
+    /// Whether `uid`'s session is locked: its entry among the console users,
+    /// not any of them. Another user's session in the background (a test
+    /// session, or one logged in through Screen Sharing and left) is locked
+    /// while this one is in use at the Mac.
     static func isScreenLocked(ioregPlist data: Data, uid: uid_t) -> Bool {
-        guard let root = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let sessions = root["IOConsoleUsers"] as? [[String: Any]] else { return false }
-        return sessions.contains { session in
-            (session["kCGSSessionUserIDKey"] as? Int).map { uid_t($0) } == uid && session["CGSSessionScreenIsLocked"] as? Bool == true
-        }
+        SessionPool.logins(fromIORegPlist: data).contains { $0.uid == uid && $0.locked }
     }
 
     /// Return when this process can open windows; otherwise re-run the

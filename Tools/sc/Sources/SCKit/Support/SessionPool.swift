@@ -144,7 +144,8 @@ enum SessionPool {
 
     /// Every GUI login on this Mac, from `ioreg -a`'s console users: unlike
     /// launchd's per-user domains, it's readable by any user, and says whether
-    /// each is locked.
+    /// each is locked. The one reader of them: `GUISession.isScreenLocked`
+    /// asks it too.
     static func logins() async -> [Login] {
         guard let result = try? await Proc.collect("/usr/sbin/ioreg", ["-a", "-d1", "-k", "IOConsoleUsers"]),
               result.succeeded else { return [] }
@@ -155,9 +156,8 @@ enum SessionPool {
         guard let root = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let users = root["IOConsoleUsers"] as? [[String: Any]] else { return [] }
         return users.compactMap { entry in
-            guard let name = entry["kCGSSessionUserNameKey"] as? String,
-                  let uid = (entry["kCGSSessionUserIDKey"] as? NSNumber)?.uint32Value else { return nil }
-            return Login(user: name, uid: uid,
+            guard let uid = (entry["kCGSSessionUserIDKey"] as? NSNumber)?.uint32Value else { return nil }
+            return Login(user: (entry["kCGSSessionUserNameKey"] as? String) ?? "", uid: uid,
                          onConsole: (entry["kCGSSessionOnConsoleKey"] as? Bool) ?? false,
                          locked: (entry["CGSSessionScreenIsLocked"] as? Bool) ?? false)
         }
