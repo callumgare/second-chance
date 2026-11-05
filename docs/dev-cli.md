@@ -749,6 +749,53 @@ The other verbs are clients, and `--on` doesn't sync for them:
 Run it in a [test session](#test-sessions), `sc --on <user>@<mac> puppet …`,
 to leave the Mac's screen free.
 
+### Wine dialogs and installers
+
+`sc puppet start <name> --wine <wrapp> -- <program> [arguments]` runs a
+Windows program, an installer most often, in Wine: the wrapp's Wine (any
+Wine wrapp will do), in a clone of its prefix in the session's folder, so
+the wrapp is left as it was. `--prefix <dir>` runs in a prefix of your own
+(cloned from the wrapp's when it isn't there yet), and `--wine` naming a
+wrapp's `Contents/SharedSupport/prefix` runs in that one in place.
+`--disc <iso>` mounts a disc image read-only and shows it as D:, a CD-ROM
+drive, so the program can be `'D:\Setup.exe'`. A Mac path on the disc is
+named by its D: path, and any other Mac path has its folder lent as Y:
+(`WineDrives.lend`). The program starts through WineKit (`start /wait` from
+its own folder), after Wine's desktop is up (`WineDesktop`), with the helper
+armed in every process (`PUPPET_CONTROL_EXE=*`), so whichever of the
+installer's processes has the window answers `shot`, `text` and `do`. The
+session lasts while any program of its own is left in the prefix, as an
+installer's bootstrap often hands over to another program and exits.
+Stopping it ends the prefix's Wine (`wineserver -k`, then `WineServer.kill`),
+takes the drives back and detaches the disc.
+
+Its dialogs can also be read and driven by their controls, as AutoIt sees
+them. AutoIt is copied into the prefix from this checkout's build of the app
+(`--autoit <dir>` for another):
+
+- `controls <name> [--all]` lists every visible window in the prefix and
+  its controls: class, text, ClassNameNN, rectangle (in the window's client
+  area), state and handle, each as a ref, `c1`, `c2` and so on.
+- `do <name> click c2` presses that control by its handle (`ControlClick`),
+  whatever the screen shows. `do <name> type c3 "<text>"` sets a control's
+  text (`ControlSetText`), and `check` or `uncheck` sets a check box. A ref
+  whose window has closed, or whose handle is now another control's, is
+  refused: list the controls again.
+- Each of those actions prints the AutoIt lines that repeat it, which name
+  the window by its title and the control by its text (or ClassNameNN), not
+  by its handle. Each first waits for the control on the page that shows
+  the page's own text (its shortest static text): a wizard keeps one title
+  from page to page, and its Next button with it. `autoit <name>` prints the
+  script so far (`--out <file>`, `--clear`). It starts the program it's
+  given, as `INSTALLER.RUN --automation` gives a script the installer's
+  command ([wrappfile.md](wrappfile.md#instructions)). So doing an install
+  once by hand drafts its script. Check each page's text is its own, and add
+  whatever tells you the install has finished.
+
+Wine programs need the GUI session, which an SSH shell isn't in, so the
+session's server runs AutoIt for these commands: they hand it the script
+through files in the session's folder.
+
 ### Named screens, needles and locators
 
 A session names what's on the screen with the same

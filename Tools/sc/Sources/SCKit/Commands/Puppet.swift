@@ -19,6 +19,7 @@ struct PuppetCommand: AsyncParsableCommand {
             PuppetStartCommand.self, PuppetStopCommand.self, PuppetListCommand.self, PuppetStatusCommand.self,
             PuppetActionCommand.self, PuppetShotCommand.self, PuppetTextCommand.self, PuppetWindowsCommand.self,
             PuppetWaitCommand.self, PuppetLogCommand.self, PuppetSavesCommand.self, PuppetServeCommand.self,
+            PuppetControlsCommand.self, PuppetAutoItCommand.self,
             PuppetScreenCommand.self, PuppetNameCommand.self, PuppetExpectCommand.self,
         ]
     )
@@ -46,6 +47,18 @@ struct PuppetStartCommand: AsyncParsableCommand {
     @Argument(parsing: .postTerminator, help: "Or a program to run by hand (an engine), after --: its path and arguments.")
     var command: [String] = []
 
+    @Option(help: ArgumentHelp("Run the command in Wine: this wrapp's Wine, in a clone of its prefix (or a wrapp's prefix, in place).", valueName: "wrapp"))
+    var wine: String?
+
+    @Option(help: ArgumentHelp("With --wine: run in this prefix, cloned from the wrapp's if it isn't there.", valueName: "dir"))
+    var prefix: String?
+
+    @Option(help: ArgumentHelp("With --wine: a disc image (mounted read-only) or folder shown as D:, a CD-ROM drive.", valueName: "iso"))
+    var disc: String?
+
+    @Option(help: ArgumentHelp("With --wine: AutoIt's folder (default: this checkout's build's).", valueName: "dir"))
+    var autoit: String?
+
     @Option(help: ArgumentHelp("Stop it after this long with no command: 10m, 30m, 1h.", valueName: "time"))
     var idle: String = "10m"
 
@@ -55,6 +68,7 @@ struct PuppetStartCommand: AsyncParsableCommand {
     func validate() throws {
         guard PuppetSession.validName(name) else { throw ValidationError("A session's name is lower-case letters, digits and dashes.") }
         guard (wrapp == nil) != command.isEmpty else { throw ValidationError("Give --wrapp <app>, or a command after --, not both.") }
+        guard wine != nil || (prefix == nil && disc == nil && autoit == nil) else { throw ValidationError("--prefix, --disc and --autoit go with --wine.") }
         guard ScreenLease.parseDuration(idle) != nil, ScreenLease.parseDuration(max) != nil else {
             throw ValidationError("--idle and --max take a time such as 10m or 2h, of at most 8 hours.")
         }
@@ -69,7 +83,12 @@ struct PuppetStartCommand: AsyncParsableCommand {
         let app: URL
         var program: [String]?
         var helperPath: String?
-        if let wrapp {
+        if let wine {
+            let setup = try PuppetWineSetup.make(wine: wine, prefix: prefix, disc: disc, autoIt: autoit, command: command,
+                                                 folder: PuppetSession.folder(name), repo: session.repo.root)
+            app = URL(fileURLWithPath: setup.wrapp)
+            program = command
+        } else if let wrapp {
             app = URL(fileURLWithPath: (wrapp as NSString).expandingTildeInPath).standardizedFileURL
             guard FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/MacOS/WrappTemplate").path) else {
                 throw SCError("\(app.path) isn't a wrapp (no Contents/MacOS/WrappTemplate).")
@@ -184,6 +203,17 @@ struct PuppetServeCommand: AsyncParsableCommand {
         try FileManager.default.createDirectory(at: puppet.sockets, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try FileManager.default.createDirectory(at: puppet.appSupport, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: puppet.wrappLog.path, contents: nil)
+        if let setup = PuppetWineSetup.load(puppet) {
+            do {
+                let reason = try await PuppetWineServer.run(&puppet, setup: setup) { log($0) }
+                finish(reason)
+            } catch {
+                log("\(error)")
+                finish("Wine failed: \(error)")
+                throw error
+            }
+            return
+        }
         let process = Process()
         var environment = ProcessInfo.processInfo.environment
         environment["SECOND_CHANCE_PUPPET_DIR"] = puppet.sockets.path
@@ -367,6 +397,10 @@ struct PuppetActionCommand: AsyncParsableCommand {
         let located = try await locator.locate(verb, arguments, puppet: puppet)
         if let located { arguments = located.arguments }
         let described = located.map { "\(verb) \($0.description) (\($0.arguments.joined(separator: ",")))" } ?? action.joined(separator: " ")
+        if let reply = try await PuppetControlAction.perform(verb: verb, arguments: arguments, puppet: puppet, wait: wait) {
+            session.ui.line(reply)
+            return
+        }
         var request: String
         switch (verb, arguments.count) {
         case ("click", 2), ("move", 2), ("down", 2), ("up", 2), ("drag", 4):
