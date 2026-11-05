@@ -33,44 +33,62 @@ private func keventCall(
 /// Reads log entries from Apple's unified logging system via `log show`.
 enum SystemLogReader {
 
-    /// Fetch all log lines for `pid` since `start` (padded back 5 s to avoid clipping).
-    static func fetch(pid: Int32, since start: Date) -> Data {
-        fetch(
-            predicate: "processIdentifier == \(pid) AND subsystem BEGINSWITH 'au.gare.callum.second-chance'",
-            since: start
-        )
+    /// WrappPuppeteer's log, from the file it was told to keep
+    /// (`SECOND_CHANCE_LOG_FILE`), as compact lines. A file, not `log show`:
+    /// a standard user (a test session's) may not read the system log, and a
+    /// file is this user's alone.
+    static func puppeteerLog(file: URL) -> Data {
+        let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        return Data(compactLines(fromLogFile: text, process: "WrappPuppeteer").utf8)
     }
 
-    /// Fetch log lines emitted by the wrapp itself (the game container) since
-    /// `start`: its own, and the shared package's that it logged (the Steam
-    /// sign-in, Wine's desktop), whose subsystem is `…Shared`. Unlike
-    /// `fetch(pid:since:)` this is not pid-scoped: the wrapp is launched by
-    /// WrappPuppeteer, so its pid is not known here; its executable is
-    /// always WrappTemplate. Only this user's: a wrapp another user on the
-    /// Mac runs meanwhile logs to the same system log, and its failure would
-    /// be judged as this game's. Not by the wrapp's path either, which the
-    /// log gets wrong: every wrapp's executable is the same build, and it
-    /// names each by the first path it saw for that build.
-    static func fetchGame(since start: Date) -> Data {
-        let raw = fetchRaw(
-            predicate: "subsystem == 'au.gare.callum.second-chance.WrappTemplate'"
-                + " OR (subsystem == 'au.gare.callum.second-chance.Shared' AND process == 'WrappTemplate')",
-            since: start
-        )
-        return Data(compactLines(fromNDJSON: raw, user: getuid()).utf8)
+    /// The wrapp's own log since `start`: every launch keeps one in
+    /// `~/Library/Logs/SecondChance/<slug>/launch-<time>.log`, with its lines,
+    /// the shared package's it logged, and its engine's (the in-process
+    /// helpers' among them). Those begun since `start`, oldest first, not
+    /// simply the newest, which may be a later run's.
+    static func gameLog(slug: String, since start: Date,
+                        logs: URL = FileManager.default.homeDirectoryForCurrentUser
+                            .appendingPathComponent("Library/Logs/SecondChance")) -> Data {
+        let folder = logs.appendingPathComponent(slug, isDirectory: true)
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        let files = names.filter { $0.hasPrefix("launch-") && $0.hasSuffix(".log") }.sorted().map { folder.appendingPathComponent($0) }
+            .filter { file in
+                let created = (try? file.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
+                return created >= start.addingTimeInterval(-5)
+            }
+        let text = files.compactMap { try? String(contentsOf: $0, encoding: .utf8) }.joined(separator: "\n")
+        return Data(compactLines(fromLogFile: text, process: "WrappTemplate").utf8)
     }
 
-    /// Run `log show` with `predicate` and return its entries as lines in
-    /// Second Chance's own compact format, with the process that logged each
-    /// one in front of the category (`WrappPuppeteer/main`), so they read
-    /// like the rest of the test output instead of in a third format.
-    static func fetch(predicate: String, since start: Date) -> Data {
-        Data(compactLines(fromNDJSON: fetchRaw(predicate: predicate, since: start)).utf8)
+    /// A log file in Second Chance's full format (`<ISO time>  <level>
+    /// <label>  <message>`) as compact lines, `<time>  <level>
+    /// <process>/<category>  <message>`, as `log show`'s were, so they read
+    /// like the rest of the test output. A line that doesn't start with a
+    /// time (a message's continuation) is kept as it is.
+    static func compactLines(fromLogFile text: String, process: String) -> String {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let time = DateFormatter()
+        time.locale = Locale(identifier: "en_US_POSIX")
+        time.dateFormat = "HH:mm:ss.SSS"
+        var lines: [String] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            let fields = line.components(separatedBy: "  ")
+            guard fields.count >= 4, let date = parser.date(from: fields[0]) else {
+                lines.append(String(line))
+                continue
+            }
+            let category = fields[2].split(separator: ".").last.map(String.init) ?? fields[2]
+            let message = fields[3...].joined(separator: "  ")
+            lines.append("\(time.string(from: date))  \(fields[1])  \(process)/\(category)  \(message)")
+        }
+        return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
     }
 
-    /// `log show --style ndjson` output as compact lines; only `user`'s
-    /// processes', when given.
-    static func compactLines(fromNDJSON data: Data, user: uid_t? = nil) -> String {
+    /// `log show --style ndjson` output as compact lines (a VM run's, which
+    /// `VMPuppetRunner` fetches there).
+    static func compactLines(fromNDJSON data: Data) -> String {
         let parser = DateFormatter()
         parser.locale = Locale(identifier: "en_US_POSIX")
         parser.dateFormat = "yyyy-MM-dd HH:mm:ss.SSSSSSZ"
@@ -81,7 +99,6 @@ enum SystemLogReader {
         for raw in String(decoding: data, as: UTF8.self).split(separator: "\n") {
             guard let object = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
                   let message = object["eventMessage"] as? String else { continue }
-            if let user, (object["userID"] as? Int).map({ uid_t($0) }) != user { continue }
             let stamp = (object["timestamp"] as? String).flatMap(parser.date(from:)).map(time.string(from:)) ?? "??:??:??.???"
             // OSLogHandler maps warning and error both to OSLog's error type.
             let level: String
@@ -96,48 +113,6 @@ enum SystemLogReader {
             lines.append("\(stamp)  \(level)  \(process)/\(category)  \(message)")
         }
         return lines.isEmpty ? "" : lines.joined(separator: "\n") + "\n"
-    }
-
-    /// Run `log show` with `predicate` and return its stdout, as ndjson.
-    private static func fetchRaw(predicate: String, since start: Date) -> Data {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        let paddedStart = start.addingTimeInterval(-5)
-        let startStr = formatter.string(from: paddedStart)
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
-        process.arguments = [
-            "show",
-            "--start", startStr,
-            "--predicate", predicate,
-            "--style", "ndjson",
-            // Debug entries too: the attachments keep the detail, the
-            // console echo leaves it out.
-            "--info", "--debug",
-        ]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        // `log show` writes progress and warnings to stderr and nothing here
-        // reads them. A Pipe would fill and block the child forever, so discard.
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            // Drain BEFORE waiting, never after. A pipe buffers roughly 64 KB;
-            // once `log show` fills it the child blocks waiting for a reader
-            // while waitUntilExit() blocks waiting for the child to exit, and
-            // the test run hangs forever with no output. A long game session
-            // easily clears 64 KB, which is why this only bit sometimes.
-            // readDataToEndOfFile() returns at EOF, which the child's exit gives.
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return data
-        } catch {
-            return Data()
-        }
     }
 }
 
@@ -479,6 +454,11 @@ enum AppPuppetRunner {
         ProcessInfo.processInfo.environment["RECORDING_LIMIT"].map { ["--screen-recording-limit", $0] } ?? []
     }
 
+        // WrappPuppeteer's whole log, as a file: the system log isn't
+        // readable by a standard user, as a test session's is.
+        let puppeteerLogFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrapp-puppeteer-log-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: puppeteerLogFile) }
     private static func launchAndCollect(
         appBundle: URL,
         wrappURL: URL,
@@ -495,6 +475,7 @@ enum AppPuppetRunner {
         let exitCodeFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("wrapp-puppeteer-exit-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: exitCodeFile) }
+                environment: ["SECOND_CHANCE_LOG_FILE": puppeteerLogFile.path],
         // The whole screen as the game starts, if WrappPuppeteer has Screen
         // Recording: kept, as an attachment, when the launch fails or
         // WrappPuppeteer warns (a splash screen it no longer recognises is
@@ -518,10 +499,10 @@ enum AppPuppetRunner {
                 exitCodeFile: exitCodeFile
             )
 
-            let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
-            // The game runs in its own process inside the wrapp, so it is not covered
-            // by the pid-scoped fetch above and needs its own subsystem query.
-            let gameLogData = SystemLogReader.fetchGame(since: launchTime)
+            let logData = SystemLogReader.puppeteerLog(file: puppeteerLogFile)
+            // The game runs in its own process inside the wrapp, which keeps
+            // a log of its own for each launch.
+            let gameLogData = SystemLogReader.gameLog(slug: gameSlug, since: launchTime)
             attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
             var warned = false
             try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
@@ -738,6 +719,9 @@ enum AppPuppetRunner {
         var exitEvent = kevent()
         while true {
             let remaining = max(0, deadline.timeIntervalSinceNow)
+        // An app opened this way gets these and not the opener's, and passes
+        // none on to the apps it opens: the wrapp keeps its own launch log.
+        config.environment = environment
             var wait = timespec(tv_sec: Int(remaining), tv_nsec: 0)
             let waitResult = withUnsafeMutablePointer(to: &exitEvent) { event in
                 withUnsafePointer(to: &wait) { keventCall(kqueueDescriptor, nil, 0, event, 1, $0) }
@@ -753,7 +737,7 @@ enum AppPuppetRunner {
     /// needs no permissions (the wrapp and the game capture and click their
     /// own windows), so this is only how it has always run: its own process,
     /// found by pid for its log, and stopped with the test by `--parent-pid`.
-    private static func launchViaLaunchServices(appBundle: URL, arguments: [String],
+    private static func launchViaLaunchServices(appBundle: URL, arguments: [String], environment: [String: String] = [:],
                                                 exitCodeFile: URL) async throws -> (exitCode: Int32, pid: Int32) {
         let launchRequestTime = Date()
         let config = NSWorkspace.OpenConfiguration()

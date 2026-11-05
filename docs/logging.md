@@ -46,8 +46,8 @@ and the variable is unset at bootstrap, so the wrapp and WrappPuppeteer started
 from a test still write to OSLog. Terminal stderr, the floating log window
 (`LogWindow`, instant history + live batches), and Save Log… (`LogExporter`,
 lossless where `log show` dropped `.debug` entries) all read from `LogStore`;
-no process shells out to `/usr/bin/log` except
-`SystemLogReader.fetch(pid:since:)` in integration tests. A wrapp build's
+no process shells out to `/usr/bin/log` except the integration tests'
+VM runs (`VMPuppetRunner`, inside the VM). A wrapp build's
 entries carry its id through the task-local `LogContext.$build`; code that logs
 for a build from a detached task, a dispatch queue or a pipe's reader re-binds
 it, as `Blocking.run` and `ProcessLineLogger` do
@@ -56,19 +56,25 @@ output (Wine, ScummVM, winetricks) is captured line-by-line via
 `ProcessLineLogger`/`TaggedProcess` in
 `Packages/WrappKit/Sources/ProcessKit/`, each line at the
 level `SubprocessLineClassifier` picks from its content rather than from the
-pipe it came down. Integration tests still read WrappPuppeteer's and the
-wrapp's OSLog via `log show` (rendered in the compact format, with the process
-in front of the category) — that's why OSLog stays in the multiplex; the test
-host's own build log is attached straight from `LogStore`.
+pipe it came down. Integration tests read WrappPuppeteer's and the wrapp's
+logs from files (`SystemLogReader`): WrappPuppeteer's from the one the test
+names in its `SECOND_CHANCE_LOG_FILE`, and the game's from the wrapp's launch
+logs (`~/Library/Logs/SecondChance/<slug>/launch-*.log`) begun since the run
+started. Not `log show`: a standard user, as a test session's is, may not read
+the system log ("Could not open local log store: Operation not permitted"),
+and a file holds this user's lines alone. Both are rendered in the compact
+format, with the process in front of the category. A run in a VM still reads
+OSLog with `log show` there. The test host's own build log is attached
+straight from `LogStore`.
 
 ## Levels
 
-| Level       | Use it for | Shown on the terminal |
-| ----------- | ---------- | --------------------- |
-| `.debug`    | Detail that only matters when digging: file attribute checks, full process lists, environment dumps, per-file installer progress, Wine's `fixme:` lines. | No (see `SECOND_CHANCE_LOG_LEVEL`) |
-| `.notice`   | The normal story of a run: each stage, each subprocess started and how it ended, what was detected and decided. | Yes |
-| `.warning`  | Something unusual that the run survives: a retry, a fallback, a missing optional file, a subprocess that wrote to stderr. | Yes |
-| `.error`    | Something failed: a subprocess exited non-zero, a patch didn't apply, Wine printed an `err:` line. | Yes |
+| Level | Use it for | Shown on the terminal |
+| --- | --- | --- |
+| `.debug` | Detail that only matters when digging: file attribute checks, full process lists, environment dumps, per-file installer progress, Wine's `fixme:` lines. | No (see `SECOND_CHANCE_LOG_LEVEL`) |
+| `.notice` | The normal story of a run: each stage, each subprocess started and how it ended, what was detected and decided. | Yes |
+| `.warning` | Something unusual that the run survives: a retry, a fallback, a missing optional file, a subprocess that wrote to stderr. | Yes |
+| `.error` | Something failed: a subprocess exited non-zero, a patch didn't apply, Wine printed an `err:` line. | Yes |
 | `.critical` | A failure that ends the build or the game, or a crash. | Yes |
 
 `.trace` and `.info` aren't used. A warning is not an error: if the run carries
@@ -121,16 +127,16 @@ line itself. The pipe only supplies the fallback: `.notice` for stdout and
 `.warning` for stderr. Wine, MoltenVK and ScummVM write routine chatter to
 stderr and real failures to stdout, so a pipe-based level can't be trusted.
 
-| Line                                                     | Level |
-| -------------------------------------------------------- | ----- |
-| Wine `err:` (`0124:err:module:import_dll …`)             | error, except the `experimental wow64 mode` notice every launch prints (debug) |
-| Wine `warn:`, `fixme:`, `trace:`                         | debug |
+| Line | Level |
+| --- | --- |
+| Wine `err:` (`0124:err:module:import_dll …`) | error, except the `experimental wow64 mode` notice every launch prints (debug) |
+| Wine `warn:`, `fixme:`, `trace:` | debug |
 | `wine: Unhandled page fault …` and other unhandled exceptions | critical |
 | `ShellExecuteEx failed`, `Application could not be started` | error |
-| `msync:`/`esync:` start-up lines                          | debug |
-| `[mvk-info]` and its tab-indented detail lines            | debug |
-| `[mvk-warn]` / `[mvk-error]`                              | warning / error |
-| ScummVM `WARNING:` / `ERROR:`                             | warning / error, except "Game data not found" and "could not find any game" (error) |
+| `msync:`/`esync:` start-up lines | debug |
+| `[mvk-info]` and its tab-indented detail lines | debug |
+| `[mvk-warn]` / `[mvk-error]` | warning / error |
+| ScummVM `WARNING:` / `ERROR:` | warning / error, except "Game data not found" and "could not find any game" (error) |
 
 Pass `classify: false` to log every line at exactly the given level.
 
@@ -308,11 +314,11 @@ it attaches what was logged untagged meanwhile separately
 ## Environment variables
 
 | Variable | Effect |
-| -------- | ------ |
+| --- | --- |
 | `SECOND_CHANCE_LOG_STDERR` | `1` copies log lines to stderr even when it isn't a terminal, `0` never does. Unset, stderr gets them only when it is a terminal. |
-| `SECOND_CHANCE_LOG_LEVEL`  | The quietest level copied to stderr (`trace` … `critical`). Default `notice`. |
-| `SECOND_CHANCE_LOG_JSONL`  | Also write every entry, at every level, to this file as JSON lines. |
-| `SECOND_CHANCE_LOG_FILE`   | Mirror every entry, at every level, to this file in the full format. `--mirror-logs` does the same with a file in `~/Downloads`. |
-| `SECOND_CHANCE_RUN_ID`     | The run ID in the header. Inherited by child processes; set it to tie several processes' logs together. |
+| `SECOND_CHANCE_LOG_LEVEL` | The quietest level copied to stderr (`trace` … `critical`). Default `notice`. |
+| `SECOND_CHANCE_LOG_JSONL` | Also write every entry, at every level, to this file as JSON lines. |
+| `SECOND_CHANCE_LOG_FILE` | Mirror every entry, at every level, to this file in the full format. `--mirror-logs` does the same with a file in `~/Downloads`. |
+| `SECOND_CHANCE_RUN_ID` | The run ID in the header. Inherited by child processes; set it to tie several processes' logs together. |
 | `SECOND_CHANCE_INSTALL_TIMEOUT` | Seconds an unattended game install may run before it is stopped. Default 1800. |
-| `SECOND_CHANCE_WINEDEBUG`  | Wine's `WINEDEBUG` for every Wine process Second Chance or a wrapp starts. Unset, it is `-all,err+all`: every channel off except the `err` class. |
+| `SECOND_CHANCE_WINEDEBUG` | Wine's `WINEDEBUG` for every Wine process Second Chance or a wrapp starts. Unset, it is `-all,err+all`: every channel off except the `err` class. |
