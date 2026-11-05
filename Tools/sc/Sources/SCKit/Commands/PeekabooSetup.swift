@@ -253,7 +253,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         }
         var server = mac ?? "localhost"
         if mac == nil {
-            let port = 5901
+            let port = try freePort()
             let tunnel = Process()
             tunnel.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
             tunnel.arguments = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", "\(port):localhost:5900", "\(user)@localhost"]
@@ -261,7 +261,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
             try tunnel.run()
             // Ended once this user is done (`setUp`); a second or two to listen.
             try await Task.sleep(for: .seconds(2))
-            guard tunnel.isRunning else { throw SCError("Couldn't make the SSH tunnel to this Mac's Screen Sharing (is port \(port) in use?).") }
+            guard tunnel.isRunning else { throw SCError("Couldn't make the SSH tunnel to this Mac's Screen Sharing (on port \(port)).") }
             server = "localhost:\(port)"
             Self.tunnels.append(tunnel)
         }
@@ -270,6 +270,27 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
             + "\(password.addingPercentEncoding(withAllowedCharacters: allowed) ?? password)@\(server)"
         let opened = try await Proc.collect("/usr/bin/osascript", ["-"], input: "open location \"\(address)\"\n")
         guard opened.succeeded else { throw SCError("Couldn't open Screen Sharing: \(opened.error)") }
+    }
+
+    /// A local port nothing is listening on, for a tunnel: the one the
+    /// system gives a socket bound to port 0. Another tunnel or a leftover
+    /// one may hold any fixed port.
+    static func freePort() throws -> Int {
+        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard socket >= 0 else { throw SCError("Couldn't open a socket to find a free port: \(String(cString: strerror(errno))).") }
+        defer { close(socket) }
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        address.sin_port = 0
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(socket, $0, length) == 0 && getsockname(socket, $0, &length) == 0
+            }
+        }
+        guard bound else { throw SCError("Couldn't find a free port for the tunnel: \(String(cString: strerror(errno))).") }
+        return Int(UInt16(bigEndian: address.sin_port))
     }
 
     /// Tunnels this run opened, ended when it's done.

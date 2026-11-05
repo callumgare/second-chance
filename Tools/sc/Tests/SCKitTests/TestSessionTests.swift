@@ -151,6 +151,8 @@ struct PeekabooSetupTests {
         #expect(Remote.runsHere(["session", "setup-peekaboo", "sctest"]))
         #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(Remote.runsHere(["session", "view", "sctest"]))
+        let port = try? SessionSetupPeekabooCommand.freePort()
+        #expect(port.map { $0 > 1024 } == true)
         #expect(!Remote.runsHere(["session", "list"]))
         #expect(!Remote.runsHere(["puppet", "start"]))
     }
