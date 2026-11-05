@@ -192,7 +192,8 @@ final class UpdateWrappBuilder {
     private func updatePlans(_ chain: UpdatePlanner.Chain, edition: String, gameInfo: GameInfo,
                              composition: Composition) async throws -> [BuildPlan] {
         let slug = gameInfo.id
-        var wineUpdate = chain.moves.contains { $0.module == "wine" }
+        let wineMoved = chain.moves.contains { $0.module == "wine" } && composition.has(.wine)
+        var wineUpdate = wineMoved
         var stages: [(stage: String, updates: [String])] = []
         for step in chain.steps {
             switch step {
@@ -209,7 +210,7 @@ final class UpdateWrappBuilder {
         let wine = wineUpdate, stageUpdates = stages
         return try await Blocking.run {
             var plans = [try ShippedBundles.updatePlan(forGame: slug, edition: edition, wineUpdate: wine && modules.contains("wine"),
-                                                       modules: modules, updates: applied, previous: previous)]
+                                                       wineMoved: wineMoved, modules: modules, updates: applied, previous: previous)]
             for (stage, updates) in stageUpdates {
                 let plan = try ShippedBundles.plan(forGame: slug, edition: edition, stage: stage, updates: applied, previous: previous)
                 guard plan.stages.contains(where: { $0.from == .input("previous") }) else {

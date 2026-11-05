@@ -225,6 +225,12 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*$" },
           "uniqueItems": true
+        },
+        "update-setup": {
+          "description": "What USE plans instead in an old app's tree (FROM ${input.previous}), which an earlier build set the module up in: setup unless given.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*(-[A-Z0-9]+)*$" },
+          "uniqueItems": true
         }
       }
     },

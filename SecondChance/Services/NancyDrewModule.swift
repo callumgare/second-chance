@@ -218,8 +218,9 @@ nonisolated enum ShippedBundles {
     /// its bundle's own update stages: the wine module's update stage when
     /// `wineUpdate` (and the game's cnc-ddraw settings when its build has
     /// them), else the old app's tree, given this Second Chance's engines
-    /// for `modules` (`BuildPlanner.updatePlan`).
-    static func updatePlan(forGame slug: String, edition: String, wineUpdate: Bool, modules ids: [String],
+    /// for `modules` (`BuildPlanner.updatePlan`); with `wineMoved`, its
+    /// prefix moved to this Wine (`WINE.PREFIX`, `wineboot -u`).
+    static func updatePlan(forGame slug: String, edition: String, wineUpdate: Bool, wineMoved: Bool, modules ids: [String],
                            updates: [String], previous: [String: String], in bundle: Bundle = .main) throws -> BuildPlan {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
@@ -236,7 +237,8 @@ nonisolated enum ShippedBundles {
             conditions.updates = updates
             conditions.previous = previous
             return try planner.updatePlan(moduleStage: wineUpdate ? ("wine", "update") : nil, engines: planner.engineModules(ids),
-                                          then: cncDdraw ? ["DO wine.cnc-ddraw"] : [], edition: edition, conditions: conditions)
+                                          then: (wineMoved ? ["WINE.PREFIX"] : []) + (cncDdraw ? ["DO wine.cnc-ddraw"] : []),
+                                          edition: edition, conditions: conditions)
         } catch {
             throw WrappBuildError.buildRecipeProblem("\(slug) \(edition) update: \(error)")
         }

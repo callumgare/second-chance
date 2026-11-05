@@ -466,8 +466,7 @@ direct assignment.
   so changing a stage makes what follows fresh by itself. The Swift that
   carries a step out isn't a file the key can read: raise its executor's
   `revision` (`ModuleExecutor.revision`, `CoreInstructions.revision`) when it
-  changes what it makes, and `WineBuild.prefixCodeRevision` for the update
-  source's own prefix
+  changes what it makes
   ([docs/wrapp-build.md](docs/wrapp-build.md#the-layer-cache)).
 - **`STRICT_INSTALL=true`** env var disables the silent→interactive installer
   retry fallback in `GameInstallerRunner`; headless builds (`NON_INTERACTIVE`)

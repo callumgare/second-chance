@@ -175,7 +175,9 @@ struct BuildPlanTests {
         #expect(plan.stages.map(\.name) == ["wine/update", "update"])
         #expect(plan.stages[0].from == .input("previous"))
         let steps = plan.stages.flatMap(\.steps).map { "\($0.module ?? "").\($0.instruction)" }
-        #expect(steps == [".ENGINE", "wine.HELPERS", "wine.PREFIX", "wine.REGISTRY", "wine.WINETRICKS", "wine.WINETRICKS", ".EDIT"])
+        // No PREFIX: the old prefix is made, and wineboot -u over it can
+        // wait on Wine's Mono installer (the module's update-setup).
+        #expect(steps == [".ENGINE", "wine.HELPERS", "wine.REGISTRY", "wine.WINETRICKS", "wine.WINETRICKS", ".EDIT"])
         #expect(plan.launch == nil)
         // A build without an old app has no tree to start the stage from.
         #expect(throws: BuildPlanner.PlanError.self) {
@@ -185,7 +187,7 @@ struct BuildPlanTests {
         // With no module's update: the old app's tree, given this engine.
         let engines = try planner.updatePlan(moduleStage: nil, engines: ["wine"], edition: "cd", conditions: conditions)
         #expect(engines.stages.map(\.from) == [.input("previous")])
-        #expect(engines.stages.flatMap(\.steps).map(\.instruction) == ["ENGINE", "HELPERS", "PREFIX"])
+        #expect(engines.stages.flatMap(\.steps).map(\.instruction) == ["ENGINE", "HELPERS"])
     }
 
     @Test("has is true of a list holding the text; INPUT updates is the updates applied, [] by default")

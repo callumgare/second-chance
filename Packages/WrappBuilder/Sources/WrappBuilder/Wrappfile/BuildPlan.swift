@@ -839,7 +839,8 @@ public nonisolated struct BuildPlanner {
                     steps.append(PlannedStep(instruction: "ENGINE", module: nil, options: [:], arguments: ["\(id)@\(version)"], name: nil,
                                              origin: origin, setup: true))
                 }
-                for name in planner.declarations(module).setup {
+                let declared = planner.declarations(module)
+                for name in scope.modules.fromInput ? declared.updateSetup : declared.setup {
                     steps.append(PlannedStep(instruction: name, module: id, options: [:], arguments: [], name: nil, origin: origin, setup: true))
                 }
             }

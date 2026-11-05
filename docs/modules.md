@@ -163,7 +163,12 @@ build:
   have the module yet, in order, each one of its own instructions: the wine
   module's `[HELPERS, PREFIX]`, the in-process helpers laid in and
   wineboot's prefix. `USE` plans them, after the core's `ENGINE` step, once
-  per tree ([wrapp-build.md](wrapp-build.md#the-runner)).
+  per tree ([wrapp-build.md](wrapp-build.md#the-runner)). **`update-setup`**
+  is what it plans instead in an old app's tree (`FROM ${input.previous}`,
+  [wrappfile.md](wrappfile.md#updates)), `setup` unless given: the wine
+  module's `[HELPERS]`, as its prefix is made already and `wineboot -u` over
+  an old one can wait for ever on Wine's Mono installer. An update that
+  moves Wine runs `WINE.PREFIX` itself.
 
 Today's builders and the executors carry the declared instructions out, so
 a declaration could promise what nothing does. `BuilderDeclarations`
@@ -223,7 +228,7 @@ Swift, its **kit**:
 
 | Package | Products | Has |
 | --- | --- | --- |
-| `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS` and `MOUNT`, runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also declares the `setup` steps `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's), which nothing plans yet. Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
+| `Packages/Modules/wine` (`WineModule`) | `WineKit`, `WineExecutor` | The kit is the Wine library every process that runs a Windows program uses — `Wine`, `WineCommand`, the registry, server, desktop and drives ([wrapp-build.md](wrapp-build.md#running-wine)) — which `SecondChanceKit` links. The executor carries out `WINE.DRIVES`, `REGISTRY`, `WINETRICKS` and `MOUNT`, runs `wine:` programs for `RUN`, and has `Winetricks` and the winetricks script as a package resource. It also carries out the `setup` steps `USE wine` plans, `HELPERS` (the in-process helpers laid in the tree's `Frameworks/`) and `PREFIX` (wineboot's). Beside them, `InProcessHelpers/` and `build-in-process-helpers.sh` ([wine-in-process-helpers.md](wine-in-process-helpers.md)). |
 | `Packages/Modules/nancy-drew` (`NancyDrewModule`) | `NancyDrewExecutor` | Carries out `NANCY-DREW.CONFIGURE-INI <folder>`: every `.ini` in the folder given what the module's `ini.yaml` says, read through `moduleFile`, each file written back in the encoding it came in (`TextFile`, in `WindowsFormats`). |
 
 Second Chance's builders have the shipped executors through `ModuleSteps`

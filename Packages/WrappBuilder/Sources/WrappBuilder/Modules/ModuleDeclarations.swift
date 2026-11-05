@@ -30,6 +30,11 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
     /// The instructions `USE` plans in a tree that doesn't have the module
     /// yet, in order (decision 2 of the builders plan).
     public var setup: [String] = []
+    /// What `USE` plans instead in an old app's tree (`FROM
+    /// ${input.previous}`), which an earlier build set the module up in:
+    /// `setup` unless it says otherwise. Wine's leaves out `PREFIX`, whose
+    /// `wineboot -u` over an old prefix can wait on Wine's Mono installer.
+    public var updateSetup: [String] = []
 
     public static let none = ModuleDeclarations()
 
@@ -65,6 +70,10 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
         setup = build["setup"] as? [String] ?? []
         for name in setup where instructions[name] == nil {
             throw Problem(description: "setup names \(name), which isn't one of its instructions")
+        }
+        updateSetup = build["update-setup"] as? [String] ?? setup
+        for name in updateSetup where instructions[name] == nil {
+            throw Problem(description: "update-setup names \(name), which isn't one of its instructions")
         }
     }
 

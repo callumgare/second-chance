@@ -37,24 +37,6 @@ public nonisolated enum WineBuild: BuildModule {
         }
         return stage
     }
-
-    /// Raised whenever the Swift that makes a prefix (`WineManager`'s
-    /// `makeWinePrefix`, and how it carries out the stage's steps) changes
-    /// what it makes: the one input of the prefix layer's key that can't be
-    /// read from a file.
-    public static let prefixCodeRevision = 2
-
-    /// The key of the layer a new prefix is: the engine, the `prefix`
-    /// stage's steps as planned, and winetricks. A change to any of them
-    /// makes a fresh prefix, with nothing to clear.
-    public static func prefixLayerKey(engineVersion: String, stage: PlannedStage, winetricks: URL?) throws -> LayerKey {
-        LayerKey(slot: "wine prefix", inputs: [
-            .init("wine engine", engineVersion.trimmingCharacters(in: .whitespacesAndNewlines)),
-            .init("wine prefix stage", stage.steps.map(\.description).joined(separator: "\n")),
-            .init("winetricks", try winetricks.map(LayerKey.hash(file:)) ?? "none"),
-            .init("prefix code revision", String(prefixCodeRevision)),
-        ])
-    }
 }
 
 public nonisolated enum ScummVMBuild: BuildModule {

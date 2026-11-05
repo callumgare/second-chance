@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 14
+release: 15
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -59,6 +59,10 @@ build:
       may-ask: true                             # disc 2 is asked for when it's needed
   # What USE plans in a tree that doesn't have the module yet.
   setup: [HELPERS, PREFIX]
+  # In an old app's tree: its prefix is made already, and wineboot -u over
+  # it can wait for ever on Wine's Mono installer. A Wine move runs PREFIX
+  # itself (stages/update's caller).
+  update-setup: [HELPERS]
   # WATCH --wine.busy: fires when the step's Wine programs use the CPU, or a
   # new one starts.
   watches: [busy]

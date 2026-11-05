@@ -56,106 +56,7 @@ class WrappBuildHelper {
         preparer: EnginePreparer(downloader: DownloadWrappBuilder.standardDownloader())
     )
 
-    // MARK: - Base Wrapp Construction
-
-    /// Copy the template to `destination` with `cp`, which keeps its
-    /// symlinks as links (FileManager's copy works around a VirtualBuddy
-    /// shared-folder symlink problem less well) and its extended attributes,
-    /// where the template's files keep their code signatures.
-    ///
-    /// `-c` clones each file (APFS `clonefile`) rather than copying its
-    /// bytes, which makes the copy near instant and takes no space until a
-    /// file changes. On a volume that can't clone, the copy is made in full.
-    private func copyTemplate(at source: URL, to destination: URL) async throws {
-        let executable = "/bin/cp"
-        let clone = try await Process.output(of: executable, ["-ac", source.path, destination.path])
-        if clone.succeeded { return }
-        logger.notice("Couldn't clone the template (\(clone.errorOutput.trimmingCharacters(in: .whitespacesAndNewlines))); copying it in full")
-        await Blocking.run { try? FileManager.default.removeItem(at: destination) }
-
-        let arguments = ["-a", source.path, destination.path]
-        let copy = try await Process.output(of: executable, arguments)
-        if !copy.succeeded {
-            let command = formatShellCommand(executable: executable, arguments: arguments)
-            logger.notice("   Command: \(command)")
-            logger.notice("   Output: \(copy.errorOutput)")
-            if copy.errorOutput.contains("No space left on device") {
-                throw WrappBuildError.notEnoughSpace(needed: nil, available: nil)
-            }
-            throw WrappBuildError.copyFailed("\(command): \(copy.errorOutput)")
-        }
-    }
-
-    /// A wrapp of the launcher alone (the template), with the engines the
-    /// build needs from the engine store: Wine whenever the build runs a
-    /// Windows program (`buildsWithWine`) or the game runs in it, and each
-    /// engine `composition` runs. Wine's prefix is made, or a bare C: drive
-    /// for a build without Wine. An engine the build used but the game
-    /// doesn't is removed again by `cleanupUnusedEngine`.
-    func createBaseWrapp(at path: URL, composition: Composition? = nil, buildsWithWine: Bool = true) async throws {
-        guard let templatePath = Bundle.main.url(forResource: "WrappTemplate", withExtension: "app") else {
-            throw WrappBuildError.templateDamaged("WrappTemplate.app not found in Second Chance.app bundle")
-        }
-        // Before the cache too: a cached base wrapp came from this template.
-        try await verifyTemplateSignatures(templatePath)
-        await bus.publishWrappBuild(.wrappStarted(path: path))
-        let engines = try engineModules(composition: composition, buildsWithWine: buildsWithWine)
-
-        // The development cache's base is only good for a build that wants
-        // the same engines.
-        if try cacheManager.restoreCache(stage: .base, to: path) != nil {
-            let restored = EngineInstall.installed(in: path.appendingPathComponent("Contents")).map(\.module)
-            if restored == engines.map(\.manifest.id).sorted() { return }
-            logger.notice("The cached base wrapp has \(restored), not the engines this build wants: building it afresh")
-            await Blocking.run { try? FileManager.default.removeItem(at: path) }
-        }
-
-        logger.notice("Creating the wrapp from the template, with \(engines.map(\.manifest.id).joined(separator: " and "))")
-        await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: nil)))
-        do {
-            try await copyTemplate(at: templatePath, to: path)
-        } catch {
-            logger.critical("❌ Failed to copy wrapp template: \(error.localizedDescription)")
-            throw error
-        }
-        for module in engines {
-            try await installEngine(module, into: path)
-        }
-
-        if engines.contains(where: { $0.manifest.id == ModuleID.wine.rawValue }) {
-            try await wineManager.createWinePrefix(at: path, bus: bus)
-        } else {
-            try fileManager.createDirectory(at: WrappLayout(app: path).driveC, withIntermediateDirectories: true)
-        }
-
-        try cacheManager.saveCache(wrappPath: path, stage: .base)
-    }
-
-    /// The engine modules a build needs, Wine first: it is what the prefix
-    /// is made with.
-    private func engineModules(composition: Composition?, buildsWithWine: Bool) throws -> [ModuleFolder] {
-        guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
-        let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
-        var wanted: [ModuleID] = buildsWithWine ? [.wine] : []
-        for module in composition?.modules ?? [] where !wanted.contains(module) { wanted.append(module) }
-        return wanted.compactMap { id in modules.first { $0.manifest.id == id.rawValue && $0.manifest.package() != nil } }
-    }
-
-    /// Put `module`'s engine into the wrapp at `path`, from the store, which
-    /// fetches and prepares it the first time a build on this Mac needs it.
-    private func installEngine(_ module: ModuleFolder, into path: URL) async throws {
-        let id = module.manifest.id
-        let engine: EngineStore.Engine
-        do {
-            engine = try await engines.engine(module) { step in logger.notice("[Engine] \(step)") }
-        } catch let error as DownloadError {
-            logger.error("[Engine] Couldn't fetch \(id): \(error.description)")
-            for failure in error.failures { logger.error("[Engine]   \(failure)") }
-            throw WrappBuildError.engineUnavailable
-        }
-        logger.notice("[Engine] \(engine.prepared ? "Prepared" : "Using the stored") \(id) \(engine.version) (\(engine.hash.prefix(12))…)")
-        try await Blocking.run { try EngineInstall.install(engine, into: path.appendingPathComponent("Contents")) }
-    }
+    // MARK: - The template
 
     /// Fail now, rather than at signing minutes later, if the template's
     /// files have lost their code signatures. A file that isn't Mach-O (the
@@ -772,15 +673,6 @@ class WrappBuildHelper {
         }
         try await verifyTemplateSignatures(templatePath)
         return templatePath
-    }
-
-    /// Create a fresh temporary wrapp path and register it for cleanup.
-    func createTemporaryWrappPath() -> URL {
-        let tempDir = fileManager.temporaryDirectory
-        let wrappName = "NancyDrew-\(UUID().uuidString).app"
-        let path = tempDir.appendingPathComponent(wrappName)
-        registerTemporaryWrapp(path)
-        return path
     }
 
     /// Register a temporary wrapp for tracking
