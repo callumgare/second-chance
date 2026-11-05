@@ -125,4 +125,19 @@ struct TestSessionTests {
         #expect(named.users == ["sctest", "second-chance-testing-7"])
         #expect(throws: (any Error).self) { try SC.parseAsRoot(["session", "add", "Bad Name"]) }
     }
+
+    @Test("sc session add run again checks the pool rather than making another, unless a count says so")
+    func addAgain() {
+        let pool = ["second-chance-testing-1", "second-chance-testing-2"]
+        let taken = Set(pool)
+        #expect(SessionAddCommand.names(given: [], count: nil, pool: pool, taken: taken) == pool)
+        #expect(SessionAddCommand.names(given: [], count: nil, pool: [], taken: []) == ["second-chance-testing-1"])
+        #expect(SessionAddCommand.names(given: [], count: 1, pool: pool, taken: taken) == ["second-chance-testing-3"])
+        #expect(SessionAddCommand.names(given: ["sctest"], count: nil, pool: pool, taken: taken) == ["sctest"])
+    }
+
+    @Test("An SCError shown with localizedDescription says its message")
+    func errorMessage() {
+        #expect(SCError("No password for x").localizedDescription == "No password for x")
+    }
 }

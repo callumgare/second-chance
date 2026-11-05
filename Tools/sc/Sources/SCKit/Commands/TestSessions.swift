@@ -83,7 +83,7 @@ struct SessionClaimCommand: AsyncParsableCommand {
             }
             chosen = status
         } else {
-            let renewable = statuses.first { $0.lease.map { $0.isTakenByHand && $0.holder.isSame(as: holder) } ?? false }
+            let renewable = new ? nil : statuses.first { $0.lease.map { $0.isTakenByHand && $0.holder.isSame(as: holder) } ?? false }
             guard let free = renewable ?? statuses.first(where: \.isFree) else {
                 let lines = statuses.map { "\(SessionPool.screenName(of: $0.user)): \($0.summary)" }
                 throw SCError("No test session on \(ScreenLease.shortHostName()) is free.\n" + lines.joined(separator: "\n"),
@@ -303,8 +303,8 @@ struct SessionAddCommand: AsyncParsableCommand {
     @Argument(help: "Test users' short names. Default: the next free second-chance-testing-<n>.")
     var users: [String] = []
 
-    @Option(help: "How many to make when no names are given.")
-    var count: Int = 1
+    @Option(help: "How many new ones to make. Default: one when the pool is empty, else none (the pool's are checked).")
+    var count: Int?
 
     @Flag(help: "Give existing test users this user's authorized SSH keys too (new ones always get them).")
     var installKeys = false
@@ -316,15 +316,13 @@ struct SessionAddCommand: AsyncParsableCommand {
         for user in users where user.range(of: #"^[a-z][a-z0-9_-]{1,30}$"#, options: .regularExpression) == nil {
             throw ValidationError("\(user): a user's short name is lower-case letters, digits and hyphens, starting with a letter.")
         }
-        if !(1...9).contains(count) { throw ValidationError("--count is 1 to 9.") }
+        if let count, !(1...9).contains(count) { throw ValidationError("--count is 1 to 9.") }
     }
 
     func run() async throws {
         let session = try Session.start(global)
         var pool = SessionPool.users()
-        let names = users.isEmpty
-            ? SessionPool.nextNames(count, taken: await SessionPool.existingUsers())
-            : users
+        let names = Self.names(given: users, count: count, pool: pool, taken: await SessionPool.existingUsers())
         try await Self.unlockKeychain(session)
         for user in names {
             try await add(user, session: session)
@@ -364,6 +362,15 @@ struct SessionAddCommand: AsyncParsableCommand {
             let stored = try await Proc.collect("/usr/bin/security", ["add-generic-password", "-U", "-s", SessionPool.keychainService,
                                                                            "-a", user, "-w", password])
             guard stored.succeeded else {
+    /// Who to make or check: the names given; else `count` new ones; else,
+    /// run again on a Mac that has a pool, the pool's own (so it fixes what's
+    /// missing rather than making another); else one new one.
+    static func names(given: [String], count: Int?, pool: [String], taken: Set<String>) -> [String] {
+        if !given.isEmpty { return given }
+        if let count { return SessionPool.nextNames(count, taken: taken) }
+        return pool.isEmpty ? SessionPool.nextNames(1, taken: taken) : pool
+    }
+
                 throw SCError("Created \(user), but couldn't keep its password in the keychain.",
                               hints: ["Set a new one and store it: sudo passwd \(user), then "
                                       + "security add-generic-password -s \(SessionPool.keychainService) -a \(user) -w"])

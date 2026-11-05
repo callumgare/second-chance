@@ -2,7 +2,7 @@ import Foundation
 
 /// An error meant for the person at the terminal: a plain sentence saying what
 /// went wrong, and hints saying what to do about it.
-struct SCError: Error, CustomStringConvertible {
+struct SCError: LocalizedError, CustomStringConvertible {
     var message: String
     var hints: [String]
     var exitCode: Int32
@@ -24,4 +24,8 @@ struct SCError: Error, CustomStringConvertible {
     var description: String {
         ([message] + hints).joined(separator: "\n")
     }
+
+    /// The message, where an error is shown with `localizedDescription` (the
+    /// keep-alive's log), which otherwise says only "SCError error 1".
+    var errorDescription: String? { message }
 }
