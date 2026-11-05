@@ -1,0 +1,4 @@
+# LaserTank's window as it starts: the level panel's headings and buttons.
+kind: "text"
+tags: ["running"]
+text: { strings: ["Level Number", "Load Level"] }

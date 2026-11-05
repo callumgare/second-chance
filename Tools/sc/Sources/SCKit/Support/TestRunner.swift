@@ -7,6 +7,8 @@ struct TestRun: Sendable {
     let status: Int32
     let bundle: URL
     let summary: TestReports.Summary?
+    /// An integration run's games, as its table shows them.
+    var games: [GameBoard.Row] = []
 }
 
 /// What `sc test integration --source` picks: a build source's suite. Big
@@ -282,13 +284,16 @@ struct TestRunner {
                        next: "Keep the Mac awake and unlocked for the run (caffeinate -d), and run those games again.")
         }
         await LeakedHelpers.endStarted(since: helpersBefore, ui: ui)
-        return TestRun(name: "Integration", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle))
+        return TestRun(name: "Integration", status: status, bundle: bundle, summary: await TestReports.summary(of: bundle), games: board.rows)
     }
 
     /// Build and launch times are the game's own: the time it spent waiting
     /// for others is in Waited, shown once any game waited.
     static func gameTable(_ board: GameBoard, showSource: Bool) -> (headers: [String], rows: [StyledTableRow]) {
-        let gameRows = board.rows
+        gameTable(board.rows, showSource: showSource)
+    }
+
+    static func gameTable(_ gameRows: [GameBoard.Row], showSource: Bool) -> (headers: [String], rows: [StyledTableRow]) {
         let showWaited = gameRows.contains { ($0.queuedSeconds ?? 0) >= 1 }
         let showDisk = gameRows.contains { $0.peakBytes != nil }
         let seconds: (Double?) -> TableCellStyle = { .muted($0.map { String(format: "%.0fs", $0) } ?? "") }
@@ -306,7 +311,7 @@ struct TestRunner {
     private static func statusCell(_ status: String) -> TableCellStyle {
         switch status {
         case "passed": .success(status)
-        case "failed": .danger(status)
+        case "failed", ShardReport.infrastructureStatus, ShardReport.unrunnableStatus: .danger(status)
         case "overloaded", "locked": .warning(status)
         case "running": .accent(status)
         default: .muted(status)
@@ -397,7 +402,8 @@ final class DoneFlag: @unchecked Sendable {
 
 /// The state of an integration run, game by game, from the progress stream.
 final class GameBoard: @unchecked Sendable {
-    struct Row: Sendable {
+    /// Codable: a shard writes its rows for the coordinator (`ShardResult`).
+    struct Row: Sendable, Codable, Equatable {
         let source: String
         let slug: String
         let engine: String

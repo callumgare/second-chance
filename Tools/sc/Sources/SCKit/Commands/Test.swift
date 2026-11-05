@@ -258,9 +258,37 @@ struct TestIntegrationCommand: AsyncParsableCommand {
     @Argument(help: "The games to test (slugs). Default: all of them.")
     var games: [String] = []
 
+    @Option(help: ArgumentHelp(
+        "Split the run into shards, one per Mac, each run in a test session claimed there: <host>[:<path>], comma-separated.",
+        discussion: "Each Mac gets the games whose installers it has, the biggest builds first; the results come back as one table "
+            + "naming each row's Mac and session, and the sessions are released at the end (docs/testing.md#sharding-a-run-across-macs).",
+        valueName: "hosts"
+    ))
+    var shardOn: String?
+
+    /// A shard's results, for the coordinator to read back: written here,
+    /// relative to the repo, whatever the run's outcome.
+    @Option(help: .hidden)
+    var resultsJSON: String?
+
+    func validate() throws {
+        guard let shardOn else { return }
+        if ShardCoordinator.parseMacs(shardOn).isEmpty { throw ValidationError("--shard-on needs at least one Mac.") }
+        if integration.vm != nil { throw ValidationError("--shard-on and --vm can't be combined.") }
+        if resultsJSON != nil { throw ValidationError("--shard-on and --results-json can't be combined: a shard doesn't shard again.") }
+    }
+
     func run() async throws {
         let session = try Session.start(global)
         let games = try TestCommandSupport.resolve(self.games, ui: session.ui)
+        if let shardOn {
+            // Nothing runs here, so it needs neither this Mac's screen nor a test build.
+            let coordinator = ShardCoordinator(session: session, sources: integration.sources,
+                                               forwarded: ShardCoordinator.forwardedOptions(integration, appBuild),
+                                               macs: ShardCoordinator.parseMacs(shardOn))
+            try await coordinator.run(games: games, stamp: UI.timestamp())
+            return
+        }
         try await GUISession.ensure(session, need: integration.screenNeed)
         try TestCommandSupport.requireTools()
         let stamp = UI.timestamp()
@@ -274,6 +302,7 @@ struct TestIntegrationCommand: AsyncParsableCommand {
                 keepRecordings: integration.keepRecordings, vm: vm, stamp: stamp
             )
         }
+        if let resultsJSON { try TestCommandSupport.writeShardResult(run, to: resultsJSON, repo: session.repo) }
         try await TestCommandSupport.finish([run], stamp: stamp, policy: report.openReport, session: session)
     }
 }
@@ -288,6 +317,15 @@ enum TestCommandSupport {
             }
             return game
         }
+    }
+
+    /// What a shard reports to the coordinator (`--results-json`).
+    static func writeShardResult(_ run: TestRun, to path: String, repo: Repo) throws {
+        let url = URL(fileURLWithPath: path, relativeTo: repo.root).standardizedFileURL
+        let failures = (run.summary?.testFailures ?? []).map { "\($0.testName)\($0.failureText.map { ": \($0)" } ?? "")" }
+        let result = ShardResult(status: run.status, rows: run.games, failures: failures, bundle: run.bundle.path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try JSONEncoder().encode(result).write(to: url, options: .atomic)
     }
 
     static func requireTools() throws {

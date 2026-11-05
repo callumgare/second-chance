@@ -72,6 +72,12 @@ enum Remote {
         return "cd \(dir) && \(env)./sc " + arguments.map(quote).joined(separator: " ")
     }
 
+    /// A checkout's path for a remote command line: quoted, but with `~/`
+    /// left bare so the shell there expands it.
+    static func shellPath(_ path: String) -> String {
+        path.hasPrefix("~/") ? "~/" + quote(String(path.dropFirst(2))) : quote(path)
+    }
+
     static func quote(_ word: String) -> String {
         "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }

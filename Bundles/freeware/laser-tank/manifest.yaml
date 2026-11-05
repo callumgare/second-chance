@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "freeware/laser-tank"
+version: 1
+title: "LaserTank"
+display-name: "LaserTank"
+
+volumes:
+  saves:
+    display-name: "settings and high scores"
+
+editions:
+  - id: "download"
+    source: "download"
+    build:
+      target: "download"
+      inputs:
+        game:
+          type: "download"
+          urls: # the author's portable zip; then the 2023 Wayback copy of that URL
+            - "https://laser-tank.com/game/LaserTank.zip"
+            - "https://web.archive.org/web/20230213172513id_/https://laser-tank.com/game/LaserTank.zip"
+          sha256: "4c1361a82600ab40390d8c09bd43756b59e9c1d61d2e0e6c47a012cee785a6b3"
+          size: 506057
+          unpack: "zip"
+          install: "none"
+    licence: "free-release" # "HelpWare": free to use, given away by its author
+    licence-from: "the author's website"
+
+tests:
+  scenario: "wine/starts-and-quits"
+  window: "windowed"
+
+notes:
+  about: "Jim Kindley's puzzle game (JEK Software), version 4.1.2, given away as HelpWare. The author also offers an installer (LT4_Setup.exe, a Gentee installer) and the C source."
+  checked: "2026-11-04: the author's URL gives the file with this sha256; the 2023 Wayback capture is the same file (CDX digest = its SHA-1)."

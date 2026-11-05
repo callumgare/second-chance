@@ -80,6 +80,9 @@ build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 
 # Build here, launch in a tart VM (another macOS version, say)
 ./sc test integration ghost-dogs --vm sc-sequoia
+
+# Split the run between other Macs' test sessions, one shard each
+./sc test integration --shard-on <host>:<path>,<host2>:<path>
 ```
 
 Other options: `--logs collapsed|full|raw` for how output is shown,
@@ -339,6 +342,55 @@ copies — and asserts on the events the flow publishes:
 **The bus events are the integration contract** — when moving orchestration
 code between types, every `bus.publish` has to move with it, or the flow still
 succeeds while the test sees nothing.
+
+#### Sharding a run across Macs
+
+`--shard-on <host>[:<path>][,…]` splits a run into shards, one per Mac, each
+run in a [test session](dev-cli.md#test-sessions) there, and gathers their
+results into one table (`ShardCoordinator`, in `Tools/sc`). Nothing runs on
+the Mac it's typed on, which only coordinates:
+
+1. **It claims a free test session on each Mac**
+   (`sc --on <host>:<path> session claim --new --json`), never one you already
+   hold for other work, and lists the installers
+   there: the Mac's shared store, or else the checkout's `installers/`. A Mac
+   with no free session is left out, with a warning.
+2. **It hands out the games** (`ShardPlan.assign`): the biggest builds first
+   (the sizes this Mac has recorded in `test-results/integration-sizes.json`,
+   else a disc's worth per disc), each to the least loaded Mac that can run
+   it, which with sizes alike goes round-robin. A disc game, or a Her
+   download, goes to a Mac that has its installers, or else to one this Mac's
+   own will be copied to, as every `--on` sync sends them. A game no Mac can
+   run is a `no Mac` row, never dropped silently. Steam, Big Fish and download
+   games need no installers.
+3. **Each shard is today's run**,
+   `sc --on <user>@<host>:<path> test integration <its games>`, with the
+   options given here (`--source`, `--refresh-wrapp`, `--build-concurrency`,
+   `--skip-app-build`, …), so the session's checkout syncs and builds as any
+   `--on` run would. Shards on different Macs run side by side; within one,
+   games build side by side and launch one at a time, as ever. The terminal
+   shows each shard's `▸` lines, prefixed with its Mac and session; each
+   shard's full output is kept in `DerivedData/sc-logs/`.
+4. **Each shard writes its rows** (`--results-json`, a `ShardResult`) into
+   its checkout's `test-results/`, and the coordinator reads them back over
+   SSH into one table with Mac and Session columns (`ShardReport.merge`).
+   The run fails if any game failed, any shard failed, or any game couldn't
+   be run.
+5. **It releases every session it claimed**, whether the run passed, failed
+   or was stopped. After Ctrl-C it first stops each shard's run there
+   (`attach --stop`), which would otherwise carry on, as any GUI-session run
+   does when its connection goes.
+
+A shard that ends without writing its results (ssh failed, the session was
+lost, the app wouldn't build there) is an infrastructure failure: its games
+show as `infra failed`, with the reason and the end of its output. Nothing is
+retried, whether it failed that way or a test failed. The `.xcresult` and
+HTML report stay on the Mac that ran the shard, at the path the hints give.
+
+**One shard per Mac** for now: launches on one Mac never overlap, since how
+many games a Mac can launch at once before Wine slows sharply hasn't been
+measured. A `ShardPlan.Slot` is one session, so more sessions per Mac would
+be more slots with the Mac's name.
 
 ## Filtering games
 
@@ -1130,7 +1182,9 @@ launchd starts one again when it's next wanted; a reboot clears them too.
 `test-results/<timestamp>/index.html`, and opens that when something failed
 (`--open-report always|never` to change that). The terminal ends with a table
 of suites or games and the totals. Per-run logs and WrappPuppeteer output are
-attached to the test case inside the `.xcresult`.
+attached to the test case inside the `.xcresult`. A sharded run's results and
+reports stay on the Macs that ran each shard
+([Sharding a run across Macs](#sharding-a-run-across-macs)).
 
 ## Test fixtures (`TestFixtures/`)
 

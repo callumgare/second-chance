@@ -306,6 +306,11 @@ needs to allow windows, for the builds, and may be locked.
 [testing.md](testing.md#testing-in-a-vm) has the setup and what a VM can't
 test.
 
+`--shard-on <host>[:<path>][,…]` runs the integration suite in a claimed
+[test session](#test-sessions) on each Mac instead, one shard each, and
+gathers one table naming each row's Mac and session
+([testing.md](testing.md#sharding-a-run-across-macs)).
+
 [testing.md](testing.md) covers the suites themselves.
 
 ## Lint
@@ -582,7 +587,11 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
 - `sc session` (or `list`) shows each: logged in or not, locked, and leased or
   free. Logins come from `ioreg`'s console users, which any user can read.
 - `sc session claim --purpose "<text>" [--for 2h] [<user>]` leases a free test
-  session's screen to you, as `sc lease take` would, and says how to reach it.
+  session's screen to you, as `sc lease take` would, and says how to reach it;
+  `--json` adds the claim as one line of JSON (`host`, `user`, `expires`), for
+  scripts such as a sharded run. Claiming again renews a session you already
+  hold, unless `--new` asks for another: a sharded run claims with it, so its
+  release at the end never ends a session you're using for something else.
   `sc session release [<user>]` gives it back.
 
 **Running in one** is `--on` with the test user: `sc --on <user>@<mac>:<path>

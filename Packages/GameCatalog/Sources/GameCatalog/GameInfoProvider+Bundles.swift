@@ -10,6 +10,14 @@ nonisolated extension GameInfoProvider {
     /// Every game a bundle describes, in the order lists show them.
     static let bundledGames: [GameInfo] = [
         GameInfo(
+            id: "laser-tank",
+            title: "LaserTank",
+            diskCount: 1,
+            internalGameExePath: "/LaserTank/lasertank.exe",
+            program: "freeware/laser-tank",
+            displayName: "LaserTank"
+        ),
+        GameInfo(
             id: "lure-of-the-temptress",
             title: "Lure of the Temptress",
             diskCount: 1,

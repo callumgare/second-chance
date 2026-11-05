@@ -59,6 +59,12 @@ struct SessionClaimCommand: AsyncParsableCommand {
     @Argument(help: "A test user to claim. Default: the first free one.")
     var user: String?
 
+    @Flag(help: "Also print the claim as one line of JSON (host, user, expires), for scripts such as a sharded run.")
+    var json = false
+
+    @Flag(help: "Claim a session you don't hold already, rather than renew one you do: for a run of its own beside your other work.")
+    var new = false
+
     func validate() throws {
         if ScreenLease.parseDuration(duration) == nil {
             throw ValidationError("--for takes a time such as 30m, 2h or 90s, of at most 8 hours.")
@@ -99,6 +105,13 @@ struct SessionClaimCommand: AsyncParsableCommand {
         session.ui.line("Claimed \(host)/\(chosen.user) until \(lease.expires.map(ScreenLease.clock) ?? "?").")
         session.ui.detail("Run in it: sc --on \(chosen.user)@\(host):\(checkout) <command>")
         session.ui.detail("Give it back: sc --on \(host) session release \(chosen.user)")
+        if json {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = .sortedKeys
+            let claim = ShardCoordinator.Claim(host: host, user: chosen.user, expires: lease.expires)
+            FileHandle.standardOutput.write(try encoder.encode(claim) + Data("\n".utf8))
+        }
     }
 
     static func homeRelative(_ path: String) -> String {
@@ -349,6 +362,15 @@ struct SessionAddCommand: AsyncParsableCommand {
                                        "Run in it: sc --on <user>@\(host):<path> test integration <game>"])
     }
 
+    /// Who to make or check: the names given; else `count` new ones; else,
+    /// run again on a Mac that has a pool, the pool's own (so it fixes what's
+    /// missing rather than making another); else one new one.
+    static func names(given: [String], count: Int?, pool: [String], taken: Set<String>) -> [String] {
+        if !given.isEmpty { return given }
+        if let count { return SessionPool.nextNames(count, taken: taken) }
+        return pool.isEmpty ? SessionPool.nextNames(1, taken: taken) : pool
+    }
+
     private func add(_ user: String, session: Session) async throws {
         let created = getpwnam(user) == nil
         if !created {
@@ -362,15 +384,6 @@ struct SessionAddCommand: AsyncParsableCommand {
             let stored = try await Proc.collect("/usr/bin/security", ["add-generic-password", "-U", "-s", SessionPool.keychainService,
                                                                            "-a", user, "-w", password])
             guard stored.succeeded else {
-    /// Who to make or check: the names given; else `count` new ones; else,
-    /// run again on a Mac that has a pool, the pool's own (so it fixes what's
-    /// missing rather than making another); else one new one.
-    static func names(given: [String], count: Int?, pool: [String], taken: Set<String>) -> [String] {
-        if !given.isEmpty { return given }
-        if let count { return SessionPool.nextNames(count, taken: taken) }
-        return pool.isEmpty ? SessionPool.nextNames(1, taken: taken) : pool
-    }
-
                 throw SCError("Created \(user), but couldn't keep its password in the keychain.",
                               hints: ["Set a new one and store it: sudo passwd \(user), then "
                                       + "security add-generic-password -s \(SessionPool.keychainService) -a \(user) -w"])
