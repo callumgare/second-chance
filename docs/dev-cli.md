@@ -745,33 +745,32 @@ Its code is in `Tools/sc/`:
 - `Tests/SCKitTests/` — Swift Testing; `swift test --package-path Tools/sc`,
   also run by `sc test unit` and CI.
 
-`./sc` rebuilds the tool when anything in `Tools/sc` or a local package it
-depends on changes (a hash of their files' contents, leaving out `.build` and
-`.swiftpm`). It finds those packages by following each `Package.swift`'s
-`.package(path:)`s from `Tools/sc`, so a package it comes to depend on needs
-no list kept up, and a change to one it doesn't use (`SecondChanceKit`,
-`PuppeteerCore`) costs no rebuild. A file added or removed means
-a clean build, as SwiftPM's incremental build of a local package can miss a
-new file and fail as though it weren't there, and a build that fails anyway
-is tried once more from clean. `.run`, below, is left out of the hash too.
-It's a release build optimised file by file
+`./sc` runs `swift build` every time and lets SwiftPM's incremental build
+decide what to rebuild: about 0.6 s when nothing has changed, and nothing is
+printed unless it takes over 1.5 s (a spinner in a terminal, one line when
+piped). There's no hash or list of its own to keep up: SwiftPM notices a file
+synced from another Mac with that Mac's older time (it doesn't go by times
+alone) and files added or removed, all checked when this replaced a hash of the
+sources. It's a release build optimised file by file
 (`-Xswiftc -no-whole-module-optimization`), not as one whole module, so a
 change to one file rebuilds little: about 25 s on a loaded Mac, where a
 whole-module build took about two minutes for any change.
 
-**One build at a time.** Agents and people often run `./sc` in one checkout at
-once, and rebuilds used to clear each other's build folder. So `./sc` takes a
-lock (`Tools/sc/.run/build.lock`) to build, says "Waiting for another build of
-sc to finish" while another holds it, and runs a copy, `Tools/sc/.run/sc`,
-swapped in by a rename once a build is done, so a rebuild never deletes the
-file a running sc started from (or copies, as the keep-alive's install does).
-Anything in `./sc`'s own set-up that fails says so ("getting sc ready failed")
-and exits non-zero, so it can't pass for the command having run. To build or
-test sc yourself without holding up everyone's `./sc`, give SwiftPM a folder of
-your own: `swift test --package-path Tools/sc --scratch-path <tmp>/sc-build`.
-`.build` is SwiftPM's lock as well as `./sc`'s output. Change `./sc` itself by
-writing a new file and renaming it over the old one: bash reads a script as it
-runs, so editing it in place breaks every run already going.
+**Several at once.** Agents and people often run `./sc` in one checkout at
+once. Their builds queue on SwiftPM's own lock on `Tools/sc/.build`, and the
+spinner says "Waiting for <program> (pid …) to finish with Tools/sc/.build"
+while something else holds it. sc runs from a copy, `Tools/sc/.run/sc`,
+replaced by a rename only when SwiftPM made a new binary, so a rebuild never
+changes the file a running sc started from (or copies, as the keep-alive's
+install does). A failed build prints SwiftPM's output; it isn't retried from
+clean, which would wipe everyone's build state for what is usually an error in
+the code. Anything in `./sc`'s own set-up that fails says so ("getting sc ready
+failed") and exits non-zero, so it can't pass for the command having run. To
+build or test sc yourself without holding up everyone's `./sc`, give SwiftPM a
+folder of your own: `swift test --package-path Tools/sc --scratch-path
+<tmp>/sc-build`. Change `./sc` itself by writing a new file and renaming it over
+the old one: bash reads a script as it runs, so editing it in place breaks every
+run already going.
 
 **Show anything slow.** A step that can take more than about half a second
 (an SSH round trip, a build, a wait for something to appear) runs inside

@@ -1,8 +1,8 @@
 #!/bin/bash
 # sc — the Second Chance developer CLI. `./sc --help`, or see docs/dev-cli.md.
 #
-# This only builds Tools/sc (when its sources have changed, quietly unless the
-# build fails) and runs it; everything else lives in the Swift package.
+# This only builds Tools/sc (quietly unless it takes a while or fails) and
+# runs it; everything else lives in the Swift package.
 set -euo pipefail
 # Anything here that fails ends the script (set -e): say that it was sc's own
 # set-up, not the command, so a failure never passes for a run that worked.
@@ -12,162 +12,91 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$root/Tools/sc"
 built="$package/.build/release/sc"
 # sc runs from a copy, replaced by a rename once a build is done, so a rebuild
-# (which may clear the build folder) never deletes the file a run still in
-# progress was started from, or that it copies or re-runs (the keep-alive,
-# a GUI-session re-run, a puppet session).
-# Outside .build, which a failed build clears.
+# never changes the file a run still in progress was started from, or that it
+# copies or re-runs (the keep-alive, a GUI-session re-run, a puppet session).
 run="$package/.run"
 binary="$run/sc"
-# What the binary was built from, as a hash of the sources' contents:
-# Tools/sc and the local packages it depends on, directly or through one
-# another, read from each Package.swift's `.package(path:)`s, so a package sc
-# comes to depend on is covered without a list to keep up, and a change to
-# one it doesn't use (SecondChanceKit, PuppeteerCore) costs no rebuild. Not
-# their modification times: `sc --on` syncs with rsync, which keeps the
-# sending Mac's times, so a checkout synced over another's (another branch,
-# or an older commit) kept the binary built from that one (~50 ms).
-stamp="$binary.sources"
-files_stamp="$binary.files"
-local_packages() {
-    # Breadth first from Tools/sc; bash 3.2 (macOS's) has no sets, so a list.
-    local queue="Tools/sc" seen=" Tools/sc " dir rel dep
-    while [[ -n "$queue" ]]; do
-        dir="${queue%% *}"
-        [[ "$queue" == *" "* ]] && queue="${queue#* }" || queue=""
-        echo "$dir"
-        for rel in $(tr '\n' ' ' < "$root/$dir/Package.swift" \
-                     | grep -oE '\.package\([[:space:]]*path:[[:space:]]*"[^"]+"' | sed -E 's/.*"([^"]+)"/\1/'); do
-            dep="$(cd "$root/$dir/$rel" 2>/dev/null && pwd)" || continue
-            dep="${dep#"$root"/}"
-            [[ "$seen" == *" $dep "* ]] && continue
-            seen="$seen$dep "
-            queue="${queue:+$queue }$dep"
-        done
-    done
+
+# Every run asks SwiftPM, whose incremental build knows what changed: about
+# half a second when nothing has. It sees a file synced from another Mac with
+# that Mac's older time (it doesn't go by times alone), and files added or
+# removed. Concurrent runs queue on SwiftPM's own lock on .build.
+#
+# The build's output is kept for a failure. Once it's taken 1.5 s (one with
+# nothing to do takes ~0.6 s), a spinner says so in a terminal, or a line piped.
+message="Building sc"
+progress=""
+stop_progress() {
+    if [[ -n "$progress" ]]; then
+        kill "$progress" 2>/dev/null || true
+        wait "$progress" 2>/dev/null || true
+        progress=""
+        [[ -t 2 ]] && printf '\r\033[K' >&2
+    fi
+    return 0
 }
-files="$(cd "$root" && find -L $(local_packages) \( -name .build -o -name .swiftpm -o -name .run \) -prune -o -type f -not -name .DS_Store \
-    -print 2>/dev/null | LC_ALL=C sort)"
-sources_hash="$(cd "$root" && printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 shasum | shasum)"
-# Which files there are, apart from what's in them: SwiftPM's incremental
-# build of a local package can miss a file added to it, and fail as though
-# it weren't there, so a file added or removed means a clean build.
-files_hash="$(printf '%s\n' "$files" | shasum)"
-
-needs_build() { [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]]; }
-
-# One build at a time in a checkout: two at once (agents and a person all
-# running ./sc) deleted each other's build folders, so each took minutes, and
-# failed builds wiped .build for everyone. A lock folder, taken over when the
-# build holding it has gone; whoever waited checks again, as the other build
-# was most likely the one it needed.
-lock="$run/build.lock"
-locked=""
-release_lock() { if [[ -n "$locked" ]]; then rm -rf "$lock"; locked=""; fi; }
-if needs_build; then
-    mkdir -p "$run"
-    said=""
-    until mkdir "$lock" 2>/dev/null; do
-        holder="$(cat "$lock/pid" 2>/dev/null || true)"
-        if [[ -n "$holder" ]] && ! kill -0 "$holder" 2>/dev/null; then
-            rm -rf "$lock"
-            continue
-        fi
-        if [[ -z "$said" ]]; then
-            echo "Waiting for another build of sc to finish (pid ${holder:-?})…" >&2
-            said=1
-        fi
-        sleep 0.5
-    done
-    echo $$ > "$lock/pid"
-    locked=1
-    trap release_lock EXIT
-fi
-
-if needs_build; then
-    # Rebuilding takes ~10 s (longer the first time), so say so. In a
-    # terminal: a spinner with the elapsed time, cleared once it's done.
-    message="Building sc (Tools/sc has changed)"
-    spinner=""
-    stop_spinner() {
-        if [[ -n "$spinner" ]]; then
-            kill "$spinner" 2>/dev/null || true
-            wait "$spinner" 2>/dev/null || true
-            spinner=""
-            printf '\r\033[K' >&2
-        fi
-    }
-    # ^C, or a kill, stops the spinner along with the build. A background
-    # job in a script ignores SIGINT, so on its own it outlived the build and
-    # the script, drawing over the shell's prompt.
-    trap 'stop_spinner; release_lock; exit 130' INT
-    trap 'stop_spinner; release_lock; exit 143' TERM
-    if [[ -t 2 ]]; then
-        (
-            frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-            start=$SECONDS
-            i=0
-            # Until it's stopped, or the script has gone however it went
-            # ($$ is the script's PID, here too).
-            shown="$message"
-            while kill -0 $$ 2>/dev/null; do
-                # Once a second: is SwiftPM waiting for its own lock on
-                # .build, held by something other than this build (an agent's
-                # swift test, an editor)? Then say that, not "Building".
-                if (( i % 10 == 0 )); then
-                    shown="$message"
-                    holder="$(cat "$package/.build/.lock" 2>/dev/null || true)"
-                    if [[ "$holder" =~ ^[0-9]+$ ]] && kill -0 "$holder" 2>/dev/null; then
-                        ours="" pid="$holder"
-                        for _ in 1 2 3 4 5; do
-                            pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
-                            [[ -z "$pid" || "$pid" == 1 ]] && break
-                            [[ "$pid" == $$ ]] && { ours=1; break; }
-                        done
-                        if [[ -z "$ours" ]]; then
-                            name="$(basename "$(ps -o comm= -p "$holder" 2>/dev/null)")"
-                            shown="Waiting for ${name:-another program} (pid $holder) to finish with Tools/sc/.build"
-                        fi
-                    fi
-                fi
-                printf '\r\033[K  %s \033[2m%s · %ss\033[0m' "${frames:i++%10:1}" "$shown" "$((SECONDS - start))" >&2
-                sleep 0.1
-            done
-        ) &
-        spinner=$!
-    else
+# ^C, or a kill, stops the spinner along with the build. A background job in
+# a script ignores SIGINT, so on its own it outlived the build and the
+# script, drawing over the shell's prompt.
+trap 'stop_progress; exit 130' INT
+trap 'stop_progress; exit 143' TERM
+(
+    sleep 1.5
+    if [[ ! -t 2 ]]; then
         echo "${message}…" >&2
+        exit 0
     fi
-    if [[ "$(cat "$files_stamp" 2>/dev/null)" != "$files_hash" ]]; then
-        # Best effort: something outside the lock (an editor's SwiftPM) may be
-        # writing there, and swift build copes with what's left.
-        rm -rf "$package/.build/release" "$package/.build/arm64-apple-macosx/release" "$package/.build/x86_64-apple-macosx/release" \
-            2>/dev/null || true
-    fi
-    # Optimised file by file rather than as a whole module, so a change to
-    # one file rebuilds that file: ~25 s after a one-line change against ~2 min,
-    # under load, and sc runs as fast.
-    flags="-Xswiftc -no-whole-module-optimization"
-    status=0
-    output="$(swift build -c release $flags --package-path "$package" 2>&1)" || status=$?
-    if [[ $status -ne 0 ]]; then
-        # Once more from clean, in case the build's own state was what failed.
-        rm -rf "$package/.build" 2>/dev/null || true
-        status=0
-        output="$(swift build -c release $flags --package-path "$package" 2>&1)" || status=$?
-    fi
-    stop_spinner
-    trap - INT TERM
-    if [[ $status -ne 0 ]]; then
-        printf '%s\n' "$output" >&2
-        echo "sc: building Tools/sc failed (output above)" >&2
-        exit 1
-    fi
-    cp "$built" "$binary.new"
-    mv -f "$binary.new" "$binary"
-    printf '%s\n' "$sources_hash" > "$stamp"
-    printf '%s\n' "$files_hash" > "$files_stamp"
+    frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    start=$SECONDS
+    i=0
+    shown="$message"
+    # Until it's stopped, or the script has gone however it went ($$ is the
+    # script's PID, here too).
+    while kill -0 $$ 2>/dev/null; do
+        # Once a second: is SwiftPM waiting for its lock on .build, held by
+        # something other than this build (an agent's swift test, an
+        # editor)? Then say that, not "Building".
+        if (( i % 10 == 0 )); then
+            shown="$message"
+            holder="$(cat "$package/.build/.lock" 2>/dev/null || true)"
+            if [[ "$holder" =~ ^[0-9]+$ ]] && kill -0 "$holder" 2>/dev/null; then
+                ours="" pid="$holder"
+                for _ in 1 2 3 4 5; do
+                    pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+                    [[ -z "$pid" || "$pid" == 1 ]] && break
+                    [[ "$pid" == $$ ]] && { ours=1; break; }
+                done
+                if [[ -z "$ours" ]]; then
+                    name="$(basename "$(ps -o comm= -p "$holder" 2>/dev/null)")"
+                    shown="Waiting for ${name:-another program} (pid $holder) to finish with Tools/sc/.build"
+                fi
+            fi
+        fi
+        printf '\r\033[K  %s \033[2m%s · %ss\033[0m' "${frames:i++%10:1}" "$shown" "$((SECONDS - start))" >&2
+        sleep 0.1
+    done
+) &
+progress=$!
+
+# Optimised file by file rather than as a whole module, so a change to one
+# file rebuilds that file: ~25 s after a one-line change against ~2 min,
+# under load, and sc runs as fast.
+status=0
+output="$(swift build -c release -Xswiftc -no-whole-module-optimization --package-path "$package" 2>&1)" || status=$?
+stop_progress
+trap - INT TERM
+if [[ $status -ne 0 ]]; then
+    printf '%s\n' "$output" >&2
+    echo "sc: building Tools/sc failed (output above). If it's the build's own state that's broken, not the code: rm -rf Tools/sc/.build" >&2
+    exit 1
 fi
-release_lock
-trap - EXIT
+
+# A new copy only when SwiftPM made a new binary. Each run copies to a name of
+# its own, so two at once can't trip over each other.
+if [[ ! -x "$binary" || "$built" -nt "$binary" ]]; then
+    mkdir -p "$run"
+    cp "$built" "$binary.new.$$"
+    mv -f "$binary.new.$$" "$binary"
+fi
 
 SC_REPO_ROOT="$root" exec "$binary" "$@"
