@@ -3213,10 +3213,20 @@ Where the code differs from the plan, or a phase left something out:
   bundle's one edition for the source, as no shipped bundle has two.
 - **Executor revisions are a `static var revision`** on each executor (and
   `CoreInstructions.revision`), not `executor-revisions.json` with source
-  hashes and `sc module revise`. A skipped step taints the rest of the
-  build (nothing more is kept) rather than naming itself in later keys.
-  Layer locks hold only while a layer is cloned in. There's no room-to-build
-  estimate or `sc bundle plan --layers`.
+  hashes and `sc module revise`. What a step lays in that its text doesn't
+  say is in its key instead: `ENGINE`'s prepared hash, `WINE.HELPERS`' and
+  `WINE.WINETRICKS`' files. A skipped step taints the rest of the build
+  (nothing more is kept) rather than naming itself in later keys. Layer
+  locks hold only while a layer is put in place, so two builds side by side
+  may each make one. There's no room-to-build estimate, no `sc bundle plan
+  --layers`, no log of what a checkpoint cost under load (decision 15), and
+  the layers an earlier Second Chance kept aren't cleared, only pruned.
+- **A key reads an input only when it's to hand** (`inputIfReady`): keys
+  are made before anything runs, and working out disc 2 then would eject
+  disc 1 before it's copied. A disc 2 is keyed as given when needed.
+- **A restored install still says what it installed**: Big Fish's edition
+  through a replayed module event, the game's program from the launch for
+  the disc and Her sources. A Big Fish trial is never restored.
 - **Stores** (decision 23): under test (`SECOND_CHANCE_APP_SUPPORT_DIR`) a
   wrapp's own stores move and global ones stay real, as the integration
   tests sign in with the saved Steam session; but in the test host the
@@ -3234,16 +3244,20 @@ Where the code differs from the plan, or a phase left something out:
   and `LaunchActivityMonitor` didn't move. `--done` and `--asks` are planned
   and watched, but nothing acts on them yet. A step's key names its signal,
   not its expanded watches.
-- **Module programs** (decisions 7 to 10): not built are the importer's
+- **Module programs** (decisions 7 to 10): a cancel unanswered for 10 s ends
+  the program (SIGTERM, then SIGKILL), but not its Wine (`wine.server.kill()`).
+  Not built are the importer's
   signed copy, cdhash and quarantine; `runProgram`'s mounts held to the
   host path rule; the protocol's generated schema and its methods test;
   shipped executors run out of process in a test; `--answer` and
   `SECOND_CHANCE_ANSWERS`; and the SkiFree integration through the fixture
   module.
 - **The sandbox spike** (phase 9) chose to sandbox every module program:
-  `sandbox-exec` with no network and writes only to the temporary folder
-  and the cache stores, tried on macOS 15 and 26 (docs/module-programs.md).
-  The profile has to name real paths (`/private/var/…`).
+  `sandbox-exec` with no network and writes only to the temporary folder,
+  the cache stores and its module's own global stores, tried on macOS 15
+  and 26 (docs/module-programs.md). The profile has to name real paths
+  (`/private/var/…`). It doesn't contain `fetch` or `runProgram`, which the
+  build carries out outside it.
 - **Updates** (decision 21): `previous` is the old app's prefix alone in a
   tree, as an old app without engine records has its engine's files where
   `ENGINE` would refuse to install over them. The first plan of an update
@@ -3267,6 +3281,9 @@ Where the code differs from the plan, or a phase left something out:
   `WrappBuildHelper` isn't in `WrappAssembler`, `completeBuild` still takes
   the legacy values, and `patchApplied`/`patchFailed` keep their names until
   a release after phase 4.
+- **1.1.0's Steam folder becomes a link to the sign-in store**, not each of
+  its items: a 1.1.0 app's save swaps its session in with `replaceItemAt`,
+  which fails on a link to a folder.
 - **Found on the way**: `sc` rebuilds itself when anything in `Packages/`
   changes; the disc drives are marked after the discs copy, not while they
   do (a Wine run in a restored prefix during the copy made it fail with
