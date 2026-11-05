@@ -162,4 +162,16 @@ struct PeekabooSetupTests {
         #expect(script.contains("<string>x?a&amp;b</string>"))
         #expect(script.contains("launchctl bootstrap gui/$(id -u)"))
     }
+
+    @Test("Test users let in the keys this user lets in and this user's own, each once")
+    func authorizedKeys() throws {
+        let ssh = FileManager.default.temporaryDirectory.appendingPathComponent("sc-keys-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: ssh, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: ssh) }
+        try "ssh-ed25519 AAA other@mac\n# a comment\nssh-ed25519 BBB mine@here\n".write(to: ssh.appendingPathComponent("authorized_keys"), atomically: true, encoding: .utf8)
+        try "ssh-ed25519 BBB mine@here\n".write(to: ssh.appendingPathComponent("id_ed25519.pub"), atomically: true, encoding: .utf8)
+        try "ssh-rsa CCC mine@here\n".write(to: ssh.appendingPathComponent("id_rsa.pub"), atomically: true, encoding: .utf8)
+        try "private".write(to: ssh.appendingPathComponent("id_rsa"), atomically: true, encoding: .utf8)
+        #expect(SessionAddCommand.authorizedKeys(ssh: ssh) == ["ssh-ed25519 AAA other@mac", "ssh-ed25519 BBB mine@here", "ssh-rsa CCC mine@here"])
+    }
 }

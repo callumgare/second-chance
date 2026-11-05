@@ -103,8 +103,11 @@ struct SessionClaimCommand: AsyncParsableCommand {
         let host = ScreenLease.shortHostName()
         let checkout = Self.homeRelative(session.repo.root.path)
         session.ui.line("Claimed \(host)/\(chosen.user) until \(lease.expires.map(ScreenLease.clock) ?? "?").")
-        session.ui.detail("Run in it: sc --on \(chosen.user)@\(host):\(checkout) <command>")
-        session.ui.detail("Give it back: sc --on \(host) session release \(chosen.user)")
+        // Asked from this Mac (not through --on from another), it's reached
+        // as localhost, and released here.
+        let local = holder.host == host
+        session.ui.detail("Run in it: sc --on \(chosen.user)@\(local ? "localhost" : host):\(checkout) <command>")
+        session.ui.detail("Give it back: sc \(local ? "" : "--on \(host) ")session release \(chosen.user)")
         if json {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
@@ -401,12 +404,30 @@ struct SessionAddCommand: AsyncParsableCommand {
         }
         // A user made just now gets this user's keys; one adopted keeps its
         // own unless asked, as reading them needs sudo.
-        let keys = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ssh/authorized_keys")
-        if created || installKeys, FileManager.default.fileExists(atPath: keys.path),
-           let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) {
+        let keys = Self.authorizedKeys()
+        if created || installKeys, !keys.isEmpty, let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) {
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("sc-authorized-keys-\(getpid())")
+            try (keys.joined(separator: "\n") + "\n").write(to: file, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: file) }
             try await sudo(["/usr/bin/install", "-d", "-o", user, "-g", "staff", "-m", "700", "\(home)/.ssh"])
-            try await sudo(["/usr/bin/install", "-o", user, "-g", "staff", "-m", "600", keys.path, "\(home)/.ssh/authorized_keys"])
+            try await sudo(["/usr/bin/install", "-o", user, "-g", "staff", "-m", "600", file.path, "\(home)/.ssh/authorized_keys"])
         }
+    }
+
+    /// The keys a test user lets in: those this user lets in (so whoever
+    /// reaches this account from another Mac reaches the test users too) and
+    /// this user's own (so sc reaches them from this Mac, as
+    /// `<user>@localhost`), each once.
+    static func authorizedKeys(ssh: URL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ssh")) -> [String] {
+        let files = [ssh.appendingPathComponent("authorized_keys")]
+            + ((try? FileManager.default.contentsOfDirectory(at: ssh, includingPropertiesForKeys: nil)) ?? [])
+                .filter { $0.pathExtension == "pub" }.sorted { $0.path < $1.path }
+        var seen: Set<String> = []
+        return files.flatMap { file in
+            ((try? String(contentsOf: file, encoding: .utf8)) ?? "").split(whereSeparator: \.isNewline).map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
+        }.filter { !$0.isEmpty && !$0.hasPrefix("#") && seen.insert($0).inserted }
     }
 
     /// Over SSH the login keychain is locked: ask for the password once, as
