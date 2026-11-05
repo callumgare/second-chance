@@ -143,6 +143,13 @@ build:
 - **`mount-fields`** are the fields it adds to core mount types, by type,
   written `<module>.<field>=…` in a `--mount=`: the dosbox module's
   `store: ["overlay"]`, a launch's store laid over a DOSBox drive.
+- **`watches`** are the watches it adds to `WATCH`, written
+  `--<module>.<watch>`, which its executor makes (`ModuleExecutor.watch`): the
+  wine module's `busy`. An instruction's **`signals`** are its defaults, by
+  option (`INSTALLER.RUN`'s `{ alive: alive }`)
+  ([wrappfile.md](wrappfile.md#signals)).
+- **`signals`** (beside `build:`, at the top of `module.yaml`) names files of
+  `SIGNAL` blocks, named `<module>.<signal>`: the installer module's `alive`.
 - **`stores`** (beside `build:`, at the top of `module.yaml`) names files of
   `STORE` and `LOCK` lines, the module's stores, which every stage and
   function of the module sees ([wrappfile.md](wrappfile.md#stores)): the

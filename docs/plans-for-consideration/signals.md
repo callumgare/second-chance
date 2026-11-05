@@ -1,5 +1,13 @@
 # Signals
 
+> **Post-implementation note (2026-11-05, Claude for Callum):** the first
+> phase's syntax and watcher are built, for builds, by the builders-into-modules
+> plan: `SIGNAL`/`WATCH`, planned to data, a step's `--alive`/`--done`/`--asks`,
+> `WATCH --grows` and `--wine.busy`, `EMIT --on`, and `${program.…}` known
+> only as a step runs (not when planning, as below: `INSTALLER.RUN` chooses its
+> installer as it runs). Still to build here: `SERVICE --ready`, `LAUNCH`'s
+> events, and the wrapp's watcher ([wrappfile.md](../wrappfile.md#signals)).
+
 Proposed 2026-11-03. **Not planned yet: build it when a program needs it.**
 That will be when a game needs a program running beside it that no module
 provides as a service (a helper, a licence server, a patched launcher), or

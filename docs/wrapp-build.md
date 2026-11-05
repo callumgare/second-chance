@@ -697,10 +697,14 @@ An unattended install (silent, or driven by AutoIt) gets a timeout,
 is watching it. But an install that has stopped getting anywhere gives up long
 before that. `InstallStallWatch` watches the installer, and then the wait for
 the Wine processes it leaves running (an InstallShield `setup.exe` can exit in
-seconds and leave the whole install to them), for signs of progress:
-Wine's programs using the CPU or a new one starting (`LaunchActivityMonitor`),
-a line of Wine's output or of the installer's own log, and a change in the
-size of `drive_c`'s `Program Files (x86)` or `users` (where Temp is). The
+seconds and leave the whole install to them), for signs of progress. A step
+of `INSTALLER.RUN` gets them from its `--alive` signal, the installer
+module's `installer.alive` unless it names another
+([wrappfile.md](wrappfile.md#signals)): the tree's Wine programs using the
+CPU or a new one starting (`WATCH --wine.busy`), a line of the installer's
+own log, and a change in the size of `drive_c`'s `Program Files (x86)` or
+`users` (where Temp is). An install run outside a step (the update source's)
+looks for the same itself, with Wine's output too (`LaunchActivityMonitor`). The
 folders and the log matter: under load an Inno Setup install copied the game
 for over two minutes at 0.02 cores, too little to count as Wine working, and
 said nothing on its output. If no sign appears for the window

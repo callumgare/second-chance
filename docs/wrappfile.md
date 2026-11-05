@@ -227,6 +227,73 @@ keep the runner's stores in a temporary folder of their own.
 Not built yet: a store declared inside a function, a launch mount of files
 beside a program (`files=`), and `sc` commands to list and remove stores.
 
+## Signals
+
+A **signal** is what to watch for while a step runs: a named block of
+`WATCH` lines, outside every stage and function, or in a module's files its
+`module.yaml` names (`signals: ["signals"]`), named `<module>.<signal>`
+(`self.<signal>`, or its name alone, in the module's own files).
+
+```dockerfile
+# Modules/installer/signals
+SIGNAL alive --any
+  WATCH --wine.busy
+  WATCH --log="${program.log}" --matches="."
+  WATCH --grows="C:/Program Files (x86)"
+  WATCH --grows="C:/users"
+END
+```
+
+| Watch | Fires when | Gives |
+| --- | --- | --- |
+| `--log=<path>` with `--contains="…"` or `--matches="…"` | a line written after the step began has the text, or matches the regex | a `--matches`'s named groups |
+| `--output` with `--contains` or `--matches` | the program writes such a line | the same |
+| `--file=<path>` | the file appears | `path` |
+| `--grows=<path>` | the folder's size changes | `size` |
+| `--process=<name>` | a process of that name starts | — |
+| `--process-has-window[=<name>]` | a Wine program (or one of that name) puts a window on screen | — |
+| `--exits[=<code>]` | the program ends (with that code) | `code` |
+| `--<module>.<watch>` | a module's own watch fires: the wine module's `--wine.busy`, its programs in the tree using the CPU or a new one starting | what it declares |
+
+- **More than one `WATCH` says how they combine**: `--any` fires each time
+  one does, `--all` once each has since it last fired (with their fields
+  together, so no two may give one).
+- **A step names the signals it's watched for**, on any step: `--alive`,
+  each firing a sign of progress (the installer's stall watch counts them);
+  `--done`, the step finished when it fires; `--asks`, its program asking
+  the person something. A module's instruction can have a default
+  (`signals: { alive: alive }` in its `module.yaml`), as `INSTALLER.RUN`
+  has `installer.alive`. Nothing acts on `--done` or `--asks` yet.
+- **`${program.…}` is the program the step runs**, known only as it runs:
+  `path`, `dir`, `name` and its own `log` (an installer's, which
+  `INSTALLER.RUN` writes), each a path on this Mac. A watch reading one
+  starts once the executor says which program it ran; a path of one is the
+  Mac's, any other a place in the tree.
+- **`EMIT --on=<signal> "<string>"`** emits the string each time the signal
+  fires while a step runs, from its line to the end of the build, its
+  `${signal.<field>}` and `${program.…}` filled in then, at most once a
+  second (the last value winning):
+
+  ```dockerfile
+  SIGNAL copying
+    WATCH --log="${program.log}" --matches="Copying file (?<done>\d+) of (?<total>\d+)"
+  END
+
+  EMIT --on=copying "second-chance.progress.${signal.done}/${signal.total}"
+  INSTALLER.RUN --from=${input.disc-1} …
+  EMIT --off=copying
+  ```
+
+  A listener's name is its `--name`, else its signal's; `EMIT --off=<name>`
+  stops it. Two listening under one name, or an `--off` naming none, fails.
+  What a listener emits is a moment, never kept with a layer: a step
+  restored from one runs nothing, so nothing fires.
+
+The watcher (`SignalWatcher`, in the runner) looks at each watch once a
+second while the step runs; an executor tells it the program
+(`context.watch(program:)`), its output (`programWrote`) and its end
+(`programExited`), and hears a signal through `context.onSignal`.
+
 ## Values
 
 Every value is read through a namespace in `${…}`, which says where it
