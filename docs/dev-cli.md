@@ -615,8 +615,8 @@ behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
 grants a minute each: with `--on`, for that Mac's test sessions, and without, this
 Mac's. Unlike other commands it doesn't run on the other Mac (`Remote.runsHere`): it
 reaches the test sessions over SSH itself, since the Screen Sharing window has to open
-where you are. This Mac's own test users let in only other Macs' keys, so the first run
-here adds this Mac's default public keys to them, with `sudo`; and as Screen Sharing
+where you are. Here it needs this Mac's own keys in each test user's authorized keys, which
+`session add` gives them (`--install-keys` for older users); and as Screen Sharing
 won't connect a Mac to itself, it goes through an SSH tunnel into the test user. For
 each test user (default: the pool) it:
 

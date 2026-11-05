@@ -274,32 +274,17 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     /// Tunnels this run opened, ended when it's done.
     nonisolated(unsafe) static var tunnels: [Process] = []
 
-    /// This Mac's test sessions are reached over SSH too, and a test user lets
-    /// in only the keys `session add` gave it, from the console user's
-    /// authorized keys: other Macs' keys, not this Mac's own. So this Mac's
-    /// default public keys are added, with sudo, the first time.
+    /// This Mac's test sessions are reached over SSH too, which needs this
+    /// Mac's own keys in each test user's authorized keys: `session add`
+    /// puts them there (`--install-keys` for users made before it did).
     private func letThisMacIn(_ user: String, ui: UI) async throws {
         let reachable = try await ui.progressStep("Checking this Mac can reach \(user) over SSH") { _ in
             try await ssh("\(user)@localhost", "true").succeeded
         }
-        if reachable { return }
-        let keys = ["id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub"].map { URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ssh/\($0)") }
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
-        guard !keys.isEmpty, let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) else {
-            throw SCError("\(user) doesn't let this Mac in over SSH, and this Mac has no default SSH key to give it.",
-                          hints: ["Make one: ssh-keygen -t ed25519"])
-        }
-        ui.line("\(user) doesn't yet let this Mac in over SSH: adding your public key to it. sudo may ask for your password.")
-        let authorized = "\(home)/.ssh/authorized_keys"
-        let add = keys.map { key in
-            let file = Remote.quote(key.path)
-            return "grep -qxF \"$(cat \(file))\" \(authorized) 2>/dev/null || cat \(file) >> \(authorized)"
-        }.joined(separator: "; ")
-        let script = "install -d -o \(user) -g staff -m 700 \(home)/.ssh && { \(add); } "
-            + "&& chown \(user):staff \(authorized) && chmod 600 \(authorized)"
-        let status = try await Proc.inheritingTerminal("/usr/bin/sudo", ["/bin/sh", "-c", script])
-        guard status == 0, try await ssh("\(user)@localhost", "true").succeeded else {
-            throw SCError("Couldn't let this Mac in to \(user) over SSH.", hints: ["Is Remote Login on? System Settings → General → Sharing."])
+        guard reachable else {
+            throw SCError("\(user) doesn't let this Mac in over SSH, so Peekaboo can't be set up in it from here.",
+                          hints: ["Give this Mac's test users its keys (sudo asks for your password): ./sc session add --install-keys",
+                                  "Is Remote Login on? System Settings → General → Sharing."])
         }
     }
 
