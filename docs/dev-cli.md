@@ -36,6 +36,7 @@ nearest command's help.
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
 ./sc --on <host> attach                # Pick up a remote run after the connection dropped
 ./sc --on <host> lease                 # Who has that Mac's screen (--break to stop their run)
+./sc --on <host> lease take --for 30m --purpose "…"   # Lease it by hand for work sc doesn't run; `release` after
 ```
 
 ## Shape of the API
@@ -433,6 +434,21 @@ the rest.
 - `sc lease`: show the lease (`--json` for scripts); `sc lease --break` stops
   the holder and leaves the screen free. Like `attach`, `--on … lease`
   doesn't sync.
+
+**Work that takes the screen without sc takes the lease by hand.**
+`sc lease take --for 30m --purpose "<text>"` leases the screen for an engine run by
+hand, a Peekaboo session, or someone at the Mac, and `sc lease release` gives it
+back. A lease taken by hand has no process: it lasts until it's released or it
+expires (`--for`, at most 8 hours; taking it again renews it). Commands from the
+same agent session (or, without one, the same user on the same Mac) go ahead under
+it, and anyone else's stop as for any lease. Breaking one only clears it, as there's
+no run to stop.
+
+**Looking needs no lease.** Only what opens windows, takes the focus or sends
+input does. A screenshot, a window list, reading logs and `sc lease` itself never
+take one, so they can run during another's run. Anything that observes during
+someone else's run must leave the screen alone: no window activated, no overlay
+drawn.
 
 **A lease lasts as long as the process that took it.** sc releases it on
 exit. If the process is killed or the Mac restarts, the next command finds

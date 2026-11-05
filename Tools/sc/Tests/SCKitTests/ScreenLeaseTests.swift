@@ -122,9 +122,52 @@ struct ScreenLeaseTests {
         #expect(ScreenLease.commandLine(["wrapp", "run", "x", "--purpose", "a check"]) == "sc wrapp run x --purpose 'a check'")
     }
 
+    @Test("A lease taken by hand lives until it expires, with no process")
+    func takenByHand() {
+        var taken = lease()
+        taken.pid = 0
+        taken.pidStarted = 0
+        taken.expires = Date().addingTimeInterval(600)
+        #expect(taken.isTakenByHand)
+        #expect(taken.isAlive)
+        taken.expires = Date().addingTimeInterval(-1)
+        #expect(!taken.isAlive)
+        taken.expires = nil
+        #expect(!taken.isAlive)
+    }
+
+    @Test("A lease taken by hand says until when, and offers no attach")
+    func takenMessage() {
+        var taken = lease(started: Date().addingTimeInterval(-300))
+        taken.pid = 0
+        taken.expires = Date().addingTimeInterval(1500)
+        #expect(taken.heldMessage(onHost: "meeka").contains("took it by hand 5 minutes ago, until"))
+        let hints = taken.hints(onHost: "meeka", askingSession: "other")
+        #expect(!hints.contains { $0.contains("attach") })
+        #expect(hints.contains { $0.contains("Clear their lease") })
+    }
+
+    @Test("The same asker is the same agent session, or the same person on the same Mac")
+    func sameHolder() {
+        let agent = holder(session: "abc")
+        #expect(agent.isSame(as: holder(socket: "/tmp/other.sock", session: "abc")))
+        #expect(!agent.isSame(as: holder(session: "xyz")))
+        let person = holder(socket: nil, session: nil)
+        #expect(person.isSame(as: holder(socket: nil, session: nil)))
+        #expect(!person.isSame(as: agent))
+    }
+
+    @Test("Durations for lease take", arguments: [
+        ("30m", 1800.0), ("2h", 7200.0), ("90s", 90.0), ("45", 2700.0), ("9h", nil), ("0", nil), ("soon", nil),
+    ] as [(String, Double?)])
+    func takeDurations(text: String, seconds: Double?) {
+        #expect(ScreenLease.parseDuration(text) == seconds)
+    }
+
     @Test("lease, like attach, doesn't sync")
     func leaseDoesNotSync() {
         #expect(!Remote.syncs(["lease"]))
+        #expect(!Remote.syncs(["lease", "take", "--for", "30m"]))
     }
 
     @Test("The flags pick the policy, break winning")

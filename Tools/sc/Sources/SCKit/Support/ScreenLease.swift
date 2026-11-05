@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import SystemConfiguration
 
 /// Who has a Mac's screen: one lease per Mac, taken by every command that
 /// opens windows (`GUISession.ensure`), so two runs never fight over it.
@@ -17,7 +18,10 @@ import Foundation
 /// passes no environment. The session's messaging token is never recorded.
 ///
 /// The lease lives as long as the process that took it: one whose process has
-/// gone (it crashed, or the Mac restarted) is stale and is taken over.
+/// gone (it crashed, or the Mac restarted) is stale and is taken over. Work
+/// that takes the screen without sc (an engine run by hand, a Peekaboo
+/// session, a person at the Mac) takes one by hand with `sc lease take`:
+/// that one has no process, and lasts until it's released or expires.
 struct ScreenLease: Codable, Equatable, Sendable {
     /// Who asked for the screen, wherever they typed the command.
     struct Holder: Codable, Equatable, Sendable {
@@ -32,6 +36,13 @@ struct ScreenLease: Codable, Equatable, Sendable {
         var user: String
         var checkout: String
         var branch: String?
+
+        /// The same asker: the same agent session, or, for a person, the same
+        /// user on the same Mac.
+        func isSame(as other: Holder) -> Bool {
+            if let sessionID, let otherID = other.sessionID { return sessionID == otherID }
+            return sessionID == nil && other.sessionID == nil && user == other.user && host == other.host
+        }
     }
 
     var holder: Holder
@@ -41,9 +52,12 @@ struct ScreenLease: Codable, Equatable, Sendable {
     var runCheckout: String
     /// The process holding the lease, and when it started, so a reused pid
     /// isn't mistaken for it.
+    /// 0 for a lease taken by hand (`sc lease take`), which has no process.
     var pid: Int32
     var pidStarted: Double
     var started: Date
+    /// When a lease taken by hand runs out.
+    var expires: Date?
 
     /// What to do about a lease someone else holds.
     enum Policy: Sendable {
@@ -100,9 +114,16 @@ struct ScreenLease: Codable, Equatable, Sendable {
         return try? JSONDecoder().decode(Holder.self, from: data)
     }
 
-    /// The Mac's name as it's used to reach it: `meeka`, not `meeka.local`
-    /// or `meeka.<network>.internal`.
-    static func shortHostName(_ name: String = ProcessInfo.processInfo.hostName) -> String {
+    /// The Mac's name as it's used to reach it: its local host name (`meeka`),
+    /// which, unlike `ProcessInfo.hostName`, doesn't change with the network
+    /// (that gave a different reverse-DNS name on every call on a Mac with IPv6).
+    static func shortHostName() -> String {
+        if let local = SCDynamicStoreCopyLocalHostName(nil) as String?, !local.isEmpty { return local.lowercased() }
+        return shortHostName(ProcessInfo.processInfo.hostName)
+    }
+
+    /// The first label of a host name: `meeka`, not `meeka.local`.
+    static func shortHostName(_ name: String) -> String {
         String(name.split(separator: ".").first ?? Substring(name))
     }
 
@@ -151,6 +172,9 @@ struct ScreenLease: Codable, Equatable, Sendable {
             if existing.pid == getpid() || ProcessFacts.isAncestor(existing.pid, of: getpid()) {
                 return  // Ours already: a re-run or a command sc started.
             }
+            if existing.isTakenByHand, existing.holder.isSame(as: holder) {
+                return  // Taken by hand by whoever is asking now: their own work.
+            }
             switch policy {
             case .respect:
                 throw SCError(existing.heldMessage(onHost: shortHostName()), hints: existing.hints(onHost: shortHostName(), askingSession: holder.sessionID),
@@ -165,6 +189,53 @@ struct ScreenLease: Codable, Equatable, Sendable {
             }
         }
         throw SCError("Couldn't take the screen lease at \(file.path): it kept changing under sc.")
+    }
+
+    /// Take the screen by hand for `duration`, for work sc doesn't run. Taking
+    /// it again renews it.
+    static func take(_ session: Session, policy: Policy, purpose: String?, duration: TimeInterval) async throws -> ScreenLease {
+        let file = file()
+        let holder = currentHolder(repoRoot: session.repo.root, branch: await branch(of: session.repo.root))
+        let now = Date()
+        let lease = ScreenLease(
+            holder: holder, purpose: purpose, command: commandLine(Invocation.arguments),
+            runCheckout: session.repo.root.path, pid: 0, pidStarted: 0, started: now, expires: now.addingTimeInterval(duration)
+        )
+        for _ in 0..<3 {
+            if try create(lease, at: file) { return lease }
+            guard let existing = read(file) else {
+                removeIfOld(file)
+                continue
+            }
+            let ours = existing.isTakenByHand && existing.holder.isSame(as: holder)
+            if !existing.isAlive || ours || policy == .breakIt {
+                if existing.isAlive, !ours {
+                    session.ui.warning("Breaking the screen lease: stopping \(existing.summary).")
+                    try await stopHolder(existing)
+                }
+                try? FileManager.default.removeItem(at: file)
+                continue
+            }
+            throw SCError(existing.heldMessage(onHost: shortHostName()), hints: existing.hints(onHost: shortHostName(), askingSession: holder.sessionID),
+                          exitCode: heldExitCode)
+        }
+        throw SCError("Couldn't take the screen lease at \(file.path): it kept changing under sc.")
+    }
+
+    /// Give back a lease taken by hand, if it's the asker's.
+    static func releaseTaken(_ session: Session) async throws -> Bool {
+        let file = file()
+        guard let existing = read(file), existing.isAlive else {
+            try? FileManager.default.removeItem(at: file)
+            return false
+        }
+        let holder = currentHolder(repoRoot: session.repo.root, branch: await branch(of: session.repo.root))
+        guard existing.isTakenByHand, existing.holder.isSame(as: holder) else {
+            throw SCError("The screen lease isn't yours to release: \(existing.who) holds it.",
+                          hints: ["See it: sc lease", "Stop it and clear it: sc lease --break"])
+        }
+        try FileManager.default.removeItem(at: file)
+        return true
     }
 
     /// Give the screen back, if this process has it and it's still ours.
@@ -211,6 +282,9 @@ struct ScreenLease: Codable, Equatable, Sendable {
     /// Stop the holder as Ctrl-C would, so it cleans up after itself, and
     /// wait for it to go.
     static func stopHolder(_ lease: ScreenLease) async throws {
+        // A lease taken by hand has no process to stop: breaking it just
+        // clears it, and its holder learns from `sc lease`.
+        guard !lease.isTakenByHand else { return }
         kill(lease.pid, SIGINT)
         let deadline = Date().addingTimeInterval(120)
         while lease.isAlive, Date() < deadline {
@@ -224,8 +298,11 @@ struct ScreenLease: Codable, Equatable, Sendable {
 
     // MARK: Describing it
 
-    /// The process that took it is still the one running under that pid.
+    /// The process that took it is still the one running under that pid; or,
+    /// taken by hand, it hasn't expired.
     var isAlive: Bool {
+        if let expires, Date() >= expires { return false }
+        if isTakenByHand { return expires != nil }
         guard kill(pid, 0) == 0 || errno == EPERM else { return false }
         guard let start = ProcessFacts.startTime(of: pid) else { return false }
         return abs(start - pidStarted) < 1
@@ -236,12 +313,20 @@ struct ScreenLease: Codable, Equatable, Sendable {
         return "\(holder.user) on \(holder.host)"
     }
 
+    var isTakenByHand: Bool { pid == 0 }
+
     var summary: String {
         "\(who)'s `\(command)`"
     }
 
     func heldMessage(onHost host: String, now: Date = Date()) -> String {
-        var lines = ["\(host)'s screen is in use: \(who) is running `\(command)`, for \(Self.duration(now.timeIntervalSince(started))) so far."]
+        var lines: [String]
+        if isTakenByHand, let expires {
+            lines = ["\(host)'s screen is in use: \(who) took it by hand \(Self.duration(now.timeIntervalSince(started))) ago, "
+                + "until \(Self.clock(expires)) (`\(command)`)."]
+        } else {
+            lines = ["\(host)'s screen is in use: \(who) is running `\(command)`, for \(Self.duration(now.timeIntervalSince(started))) so far."]
+        }
         if let purpose { lines.append("Purpose: \(purpose)") }
         var from = "From \(holder.host), \(holder.checkout)"
         if let branch = holder.branch { from += " (branch \(branch))" }
@@ -257,10 +342,32 @@ struct ScreenLease: Codable, Equatable, Sendable {
         } else if let socket = holder.agentSocket {
             hints.append("Ask that session when it'll be done: SendMessage to uds:\(socket) (ListAgents shows its name).")
         }
-        hints.append("Watch it: sc --on \(host):\(runCheckout) attach")
+        if !isTakenByHand { hints.append("Watch it: sc --on \(host):\(runCheckout) attach") }
         hints.append("Go ahead anyway, leaving the lease (windows may clash): add --ignore-screen-lease")
-        hints.append("Stop that run and take the screen: add --break-screen-lease")
+        hints.append(isTakenByHand ? "Clear their lease and take the screen: add --break-screen-lease"
+                                   : "Stop that run and take the screen: add --break-screen-lease")
         return hints
+    }
+
+    static func clock(_ date: Date) -> String {
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.dateFormat = "HH:mm"
+        return format.string(from: date)
+    }
+
+    /// `30m`, `2h`, `90s`, or a bare number of minutes; at most 8 hours.
+    static func parseDuration(_ text: String) -> TimeInterval? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces).lowercased()
+        let units: [(String, Double)] = [("h", 3600), ("m", 60), ("s", 1)]
+        var seconds: Double?
+        for (suffix, scale) in units where trimmed.hasSuffix(suffix) {
+            seconds = Double(trimmed.dropLast()).map { $0 * scale }
+            break
+        }
+        if seconds == nil { seconds = Double(trimmed).map { $0 * 60 } }
+        guard let seconds, seconds > 0, seconds <= 8 * 3600 else { return nil }
+        return seconds
     }
 
     static func duration(_ seconds: TimeInterval) -> String {
