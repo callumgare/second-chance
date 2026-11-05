@@ -15,6 +15,8 @@ public nonisolated struct Wrappfile: Sendable, Equatable {
     /// `STORE` and `LOCK` before the first `FROM`, in order.
     public var storeDeclarations: [Instruction] = []
     public var functions: [WrappfileFunction] = []
+    /// `SIGNAL` blocks, outside every stage and function.
+    public var signals: [WrappfileSignal] = []
     public var stages: [Stage] = []
 
     /// Stage and function names are case-insensitive, as Docker's stage names are.
@@ -41,6 +43,17 @@ public nonisolated struct Declaration: Sendable, Equatable {
         self.value = kind == .input ? instruction.option("default")?.value : instruction.arguments.dropFirst().first
         self.line = instruction.line
     }
+}
+
+/// `SIGNAL <name> [--all|--any]` … `END`: what to watch for, as `WATCH`
+/// lines (docs/wrappfile.md#signals).
+public nonisolated struct WrappfileSignal: Sendable, Equatable {
+    public enum Combine: String, Sendable, Codable { case all, any }
+    /// In lower case.
+    public let name: String
+    public let combine: Combine
+    public let watches: [Instruction]
+    public let line: Int
 }
 
 public nonisolated struct WrappfileFunction: Sendable, Equatable {

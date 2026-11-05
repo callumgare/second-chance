@@ -31,6 +31,11 @@ public nonisolated struct WineExecutor: ModuleExecutor {
     /// finds cabextract in.
     let buildTools: @Sendable (URL) -> URL?
 
+    /// `WATCH --wine.busy`, for a step in `context`'s tree.
+    public func watch(_ name: String, value: String?, in context: any StepContext) -> (any WatchProbe)? {
+        name == "busy" ? WineBusyWatch(tree: context.tree) : nil
+    }
+
     public init(winetricks: URL? = nil, helpers: URL? = nil, programTimeout: TimeInterval = 1800,
                 buildTools: @escaping @Sendable (URL) -> URL? = { _ in nil }) {
         self.buildTools = buildTools

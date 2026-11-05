@@ -21,6 +21,8 @@ nonisolated struct LocalStepContext: StepContext {
     let log = Logger(label: "au.gare.callum.second-chance.SecondChance.Step")
     /// The stores' locks the step holds, let go when it ends.
     var holds = StoreHolds()
+    /// Its signals, while it runs; none for a step run on its own.
+    var signals: StepSignals?
 
     var emitter: any EventEmitter { configuration.emitter }
 
@@ -41,6 +43,14 @@ nonisolated struct LocalStepContext: StepContext {
     }
 
     func ask(_ question: StepQuestion) async throws -> StepAnswer { try await configuration.ask(question) }
+
+    func watch(program: WatchedProgram) { signals?.watch(program: program) }
+    func programWrote(_ line: String) { signals?.programWrote(line) }
+    func programExited(_ code: Int32) { signals?.programExited(code) }
+    func onSignal(_ option: String, _ handler: @escaping @Sendable ([String: String]) -> Void) {
+        signals?.onSignal(option, handler)
+    }
+    func hasSignal(_ option: String) -> Bool { step.option(option).map { plan.signals[$0] != nil } ?? false }
 
     /// A store the step is given, by full name: its folder, held under its
     /// lock until the step ends.

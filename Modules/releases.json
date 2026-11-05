@@ -255,6 +255,22 @@
         "versions" : [
           "1"
         ]
+      },
+      {
+        "data" : [
+
+        ],
+        "files" : {
+          "module.yaml" : "caa14465d3e23d07f5132b6578212fadf33d83448385295e38e03607381943de",
+          "signals" : "de6ec69f8bde83ba62994ffa5e68e7b61c849ac4213d27ac23ba8df8b2485268"
+        },
+        "functions" : [
+
+        ],
+        "release" : 3,
+        "versions" : [
+          "1"
+        ]
       }
     ],
     "nancy-drew" : [
@@ -1491,6 +1507,26 @@
           "functions/cnc-ddraw"
         ],
         "release" : 12,
+        "versions" : [
+          "10.0_8"
+        ]
+      },
+      {
+        "data" : [
+          "routine-errors.yaml"
+        ],
+        "files" : {
+          "functions/cnc-ddraw" : "cc1b51ae6556596486645c9ef85751ebd9486afcf6455849f8e41d2045bea4f7",
+          "module.yaml" : "39cfcf6bca1aa61cbd589888e849fe648c000bbc646f746241afdfd744c9c97d",
+          "routine-errors.schema.json" : "c2e6388125fcef9f21c7a78e331490fe661f9a44e59344e2e6a3f1826f35ad8c",
+          "routine-errors.yaml" : "00c90907ce7e9e1298be2dfcef8ae80a68e668ae5c56c57d1c85ca3a5ce8623b",
+          "scenarios/starts-and-quits.yaml" : "e9315d8978315476450a102bdf4041163f8c93e4d6818c01924bd4e1c29f8030",
+          "stages/prefix" : "afc660603173bc2983c8d8ad570e205e4245fa735eafc796b24eb333a963b095"
+        },
+        "functions" : [
+          "functions/cnc-ddraw"
+        ],
+        "release" : 13,
         "versions" : [
           "10.0_8"
         ]

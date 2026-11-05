@@ -280,7 +280,11 @@ public nonisolated struct WrappfileChecker {
             }
         }
         checkOptions(instruction, spec: spec, scope: scope, found: &found)
-        checkReferences(instruction.arguments + instruction.options.compactMap(\.value), at: at, scope: scope, found: &found)
+        // An EMIT --on's string reads its signal's fields and its program,
+        // filled in as the signal fires.
+        let runTime = instruction.keyword == "EMIT" && instruction.option("on") != nil
+        checkReferences(instruction.arguments + instruction.options.compactMap(\.value), at: at, scope: scope, found: &found,
+                        runTime: runTime)
         checkPaths(instruction, spec: spec, scope: scope, scopes: scopes, file: file, found: &found)
         if instruction.keyword == "APP", let icon = instruction.option("icon")?.value?.raw, !icon.contains("${"),
            !(icon.hasPrefix("/Resources/") && icon.hasSuffix(".icns")) {
@@ -617,11 +621,11 @@ public nonisolated struct WrappfileChecker {
     /// `INPUT`, `CONST` or `VAR` (in any branch, reached or not), a field of
     /// the platform, or a module of the stage, its data checked against
     /// the table's schema.
-    func checkReferences(_ words: [Word], at: String, scope: Scope, found: inout Findings) {
+    func checkReferences(_ words: [Word], at: String, scope: Scope, found: inout Findings, runTime: Bool = false) {
         for word in words {
             for expression in word.substitutions {
                 guard let reference = try? Reference.parse(expression) else { continue }
-                for each in reference.all {
+                for each in reference.all where !(runTime && ["program", "signal"].contains(each.root)) {
                     if let problem = referenceProblem(each, scope: scope) {
                         found.errors.append("\(at) ${\(expression)}: \(problem)")
                     }
@@ -649,8 +653,8 @@ public nonisolated struct WrappfileChecker {
             return nil
         case "platform":
             return ["arch", "macos"].contains(path.first ?? "") && path.count == 1 ? nil : "the platform has arch and macos"
-        case "program":
-            return "program is only read by a signal, which nothing has yet"
+        case "program", "signal":
+            return "\(reference.root) is only read in a SIGNAL's watches and an EMIT --on's string"
         case "self":
             return "self is only in a module's own files"
         case "module":

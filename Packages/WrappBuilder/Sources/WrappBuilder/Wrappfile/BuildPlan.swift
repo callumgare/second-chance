@@ -35,6 +35,8 @@ public nonisolated struct BuildPlan: Sendable, Equatable {
     public var icon: String? { app.icon }
     /// The stores and locks its steps and launch may use, by full name.
     public var stores = StoreDeclarations()
+    /// The signals its steps and `EMIT --on`s name, by full name.
+    public var signals: [String: PlannedSignal] = [:]
 
     public init(edition: String, stages: [PlannedStage]) {
         self.edition = edition
@@ -85,7 +87,8 @@ public nonisolated struct PlannedStage: Sendable, Equatable {
         var emits: [PlannedEmit] = []
         for step in steps {
             if step.module == nil, step.instruction == "EMIT" {
-                emits.append(PlannedEmit(before: run.count, text: step.arguments.first ?? "", origin: step.origin))
+                emits.append(PlannedEmit(before: run.count, text: step.arguments.first ?? "", origin: step.origin,
+                                         on: step.option("on"), off: step.option("off"), name: step.name))
             } else {
                 run.append(step)
             }
@@ -110,11 +113,33 @@ public nonisolated struct PlannedStage: Sendable, Equatable {
     }
 }
 
-/// An `EMIT`: its string, where it was written, and the step it comes before.
+/// An `EMIT`: its string, where it was written, and the step it comes
+/// before. With `on`, a listener: the string is emitted each time that
+/// signal fires, from here to the end of the build or an `EMIT --off` of
+/// its name (its `--name`, else its signal's), with its `${signal.…}` and
+/// `${program.…}` filled in then.
 public nonisolated struct PlannedEmit: Sendable, Equatable {
     public let before: Int
     public let text: String
     public let origin: String
+    /// The signal it listens for, in full.
+    public var on: String?
+    /// The listener it stops.
+    public var off: String?
+    /// Its listener's name, given.
+    public var name: String?
+
+    public init(before: Int, text: String, origin: String, on: String? = nil, off: String? = nil, name: String? = nil) {
+        self.before = before
+        self.text = text
+        self.origin = origin
+        self.on = on
+        self.off = off
+        self.name = name
+    }
+
+    /// The listener's name: its `--name`, else its signal's.
+    public var listener: String? { on.map { name ?? $0 } }
 }
 
 /// What `APP` records: `--icon`, `--name` and `--default-id`, the last of
@@ -312,6 +337,7 @@ public nonisolated struct BuildPlanner {
         var plan = BuildPlan(edition: edition.id, stages: stages)
         plan.files = recorder.files
         plan.stores = try storeDeclarations()
+        plan.signals = recorder.signals
         let recorded = modulesByStage[target.lowercased()] ?? StageModules()
         if var launch = recorded.launch {
             launch.mounts = recorded.mounts
@@ -407,6 +433,8 @@ public nonisolated struct BuildPlanner {
         var files: [String: URL] = [:]
         /// The tables read since the last step was planned, which it's given.
         var tablesRead: [String] = []
+        /// The signals the plan's steps name, planned, by full name.
+        var signals: [String: PlannedSignal] = [:]
     }
 
     /// A stage's modules, by the name it knows each by, and the version of
@@ -654,6 +682,11 @@ public nonisolated struct BuildPlanner {
                 let stageModules = scope.moduleIDs
                 var options: [String: [String]] = [:]
                 for option in instruction.options {
+                    if InstructionSpec.signalOptions.contains(option.name) || (module == nil && instruction.keyword == "EMIT" && option.name == "on") {
+                        let written = try option.value.map { word throws(PlanError) in try substitute(word, in: scope, origin: at, as: .text) } ?? ""
+                        options[option.name, default: []].append(try plannedSignal(written, scope: scope, origin: at).name)
+                        continue
+                    }
                     var role = spec?.role(ofOption: option.name) ?? .text
                     if instruction.keyword == "COPY", option.name == "from" { role = .input }
                     var value = try option.value.map { word throws(PlanError) in
@@ -666,10 +699,23 @@ public nonisolated struct BuildPlanner {
                     }
                     options[moduleOptionName(option.name, scope: scope), default: []].append(value)
                 }
+                // Its module's default signals, for those it names none of.
+                if let module, let spec {
+                    for (option, signal) in spec.defaultSignals.sorted(by: { $0.key < $1.key }) where options[option] == nil {
+                        var ownScope = scope
+                        ownScope.module = planner.modules[module]
+                        options[option] = [try plannedSignal(signal, scope: ownScope, origin: at).name]
+                    }
+                }
                 var arguments: [String] = []
+                // An EMIT --on's string is filled in as its signal fires.
+                let listening = module == nil && instruction.keyword == "EMIT" ? options["on"]?.first : nil
                 for (index, word) in instruction.arguments.enumerated() {
                     let role = spec?.role(ofArgument: index) ?? .text
-                    let value = try substitute(word, in: scope, origin: at, as: role)
+                    let value = try substitute(word, in: scope, origin: at, as: role, runTime: listening != nil)
+                    if let listening, let signal = recorder.signals[listening] {
+                        try checkSignalFields(value, of: signal, origin: at)
+                    }
                     if role == .copySource, instruction.option("from") == nil {
                         // Without --from, a file of the bundle's or a module's.
                         arguments.append(try fileFullForm(value, scope: scope, origin: at))
@@ -889,6 +935,113 @@ public nonisolated struct BuildPlanner {
                 if let icon = options["icon"] { scope.modules.app.icon = icon }
                 if let name = options["name"] { scope.modules.app.name = name }
                 if let id = options["default-id"] { scope.modules.app.defaultID = id }
+            }
+        }
+
+        /// The signal `written` names, planned for the stage `scope` is in: a
+        /// Wrappfile's by its name, a module's as `<module>.<signal>`, and in a
+        /// module's own files `self.<signal>` or its name alone.
+        func plannedSignal(_ written: String, scope: Scope, origin: String) throws(PlanError) -> PlannedSignal {
+            let name = written.lowercased()
+            let found: (signal: WrappfileSignal, module: ModuleFolder?)?
+            var full = name
+            if let dot = name.firstIndex(of: ".") {
+                let prefix = String(name[..<dot]), rest = String(name[name.index(after: dot)...])
+                let module = prefix == "self" ? scope.module : planner.modules[scope.modules.aliases[prefix] ?? prefix]
+                full = module.map { "\($0.manifest.id).\(rest)" } ?? name
+                found = module.flatMap { module in module.signals.first { $0.name == rest }.map { ($0, module) } }
+            } else if let module = scope.module {
+                full = "\(module.manifest.id).\(name)"
+                found = module.signals.first { $0.name == name }.map { ($0, module) }
+            } else {
+                found = planner.wrappfile.signals.first { $0.name == name }.map { ($0, nil) }
+            }
+            guard let found else {
+                throw PlanError(description: "\(origin): there's no signal called \(written) (SIGNAL <name> … END)")
+            }
+            if let planned = recorder.signals[full] { return planned }
+            var watchScope = scope
+            watchScope.module = found.module ?? scope.module
+            var watches: [PlannedWatch] = []
+            for watch in found.signal.watches {
+                watches.append(try plannedWatch(watch, scope: watchScope,
+                                                origin: Self.locate(found.module.map { "\($0.manifest.id)/signals" } ?? "Wrappfile", line: watch.line)))
+            }
+            let planned = PlannedSignal(name: full, combine: found.signal.combine == .any ? .any : .all, watches: watches)
+            // `--all` fires with every watch's fields together, so no two may
+            // give one; `--any`, with the one that fired's.
+            var seen: Set<String> = []
+            for field in watches.flatMap(\.fields) where planned.combine == .all && !seen.insert(field).inserted {
+                throw PlanError(description: "\(origin): SIGNAL \(written)'s watches give \(field) twice")
+            }
+            recorder.signals[full] = planned
+            return planned
+        }
+
+        /// One `WATCH`: one kind, with a line's text or pattern where it reads
+        /// lines; its paths in full form for the stage, `${program.…}` left.
+        func plannedWatch(_ watch: Instruction, scope: Scope, origin: String) throws(PlanError) -> PlannedWatch {
+            func text(_ name: String) throws(PlanError) -> String? {
+                try watch.option(name)?.value.map { word throws(PlanError) in try substitute(word, in: scope, origin: origin, as: .text, runTime: true) }
+            }
+            func path(_ name: String) throws(PlanError) -> String {
+                guard let value = try text(name), !value.isEmpty else { throw PlanError(description: "\(origin): WATCH --\(name) names a path") }
+                return value.hasPrefix("${") ? value : try fullForm(value, role: .location, scope: scope, modules: scope.moduleIDs, origin: origin)
+            }
+            func pattern() throws(PlanError) -> LinePattern {
+                if let contains = try text("contains") { return .contains(contains) }
+                if let matches = try text("matches") {
+                    do { _ = try NSRegularExpression(pattern: matches) } catch {
+                        throw PlanError(description: "\(origin): WATCH --matches=\(matches) isn't a regex")
+                    }
+                    return .matches(matches)
+                }
+                throw PlanError(description: "\(origin): WATCH says what a line has: --contains=\"…\" or --matches=\"…\"")
+            }
+            let kinds = watch.options.map(\.name).filter { !["contains", "matches"].contains($0) }
+            guard kinds.count == 1, let kind = kinds.first, watch.arguments.isEmpty else {
+                throw PlanError(description: "\(origin): a WATCH is one kind: --log, --file, --process, --process-has-window, --output, --exits, "
+                    + "--grows or a module's")
+            }
+            switch kind {
+            case "log": return .log(path: try path("log"), pattern: try pattern())
+            case "output": return .output(pattern: try pattern())
+            case "file": return .file(path: try path("file"))
+            case "grows": return .grows(path: try path("grows"))
+            case "process":
+                guard let name = try text("process"), !name.isEmpty else { throw PlanError(description: "\(origin): WATCH --process names one") }
+                return .process(name: name)
+            case "process-has-window": return .processHasWindow(name: try text("process-has-window").flatMap { $0.isEmpty ? nil : $0 })
+            case "exits":
+                let code = try text("exits")
+                guard code.map({ $0.isEmpty || Int32($0) != nil }) ?? true else {
+                    throw PlanError(description: "\(origin): WATCH --exits takes a code, a number")
+                }
+                return .exits(code: code.flatMap { Int32($0) })
+            default:
+                guard let dot = kind.firstIndex(of: ".") else {
+                    throw PlanError(description: "\(origin): WATCH --\(kind) isn't a watch")
+                }
+                let alias = String(kind[..<dot]), name = String(kind[kind.index(after: dot)...])
+                let id = alias == "self" ? scope.module?.manifest.id ?? alias : scope.modules.aliases[alias] ?? alias
+                guard let module = planner.modules[id], planner.declarations(module).watches.contains(name) else {
+                    throw PlanError(description: "\(origin): WATCH --\(kind): the \(id) module has no watch \(name)")
+                }
+                return .module(id: id, watch: name, value: try text(kind).flatMap { $0.isEmpty ? nil : $0 })
+            }
+        }
+
+        /// Each `${signal.<field>}` in an `EMIT --on`'s string is a field its
+        /// signal gives.
+        func checkSignalFields(_ text: String, of signal: PlannedSignal, origin: String) throws(PlanError) {
+            guard let regex = try? NSRegularExpression(pattern: #"\$\{signal\.([A-Za-z0-9_-]+)\}"#) else { return }
+            for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                guard let range = Range(match.range(at: 1), in: text) else { continue }
+                let field = String(text[range])
+                guard signal.fields.contains(field) else {
+                    throw PlanError(description: "\(origin): ${signal.\(field)}, but \(signal.name) gives no \(field)"
+                        + (signal.fields.isEmpty ? "" : " (it gives \(signal.fields.sorted().joined(separator: ", ")))"))
+                }
             }
         }
 
@@ -1140,7 +1293,8 @@ public nonisolated struct BuildPlanner {
         /// A word as text. A whole input where an input is taken is its
         /// token (`input:disc-1`); a secret input's reference is left as it
         /// is, for the builder to fill in, so it never reaches a step's text.
-        func substitute(_ word: Word, in scope: Scope, origin: String, as role: InstructionSpec.Role) throws(PlanError) -> String {
+        func substitute(_ word: Word, in scope: Scope, origin: String, as role: InstructionSpec.Role,
+                        runTime: Bool = false) throws(PlanError) -> String {
             if role == .input, let reference = word.lone, reference.root == "input", reference.segments.count == 2,
                let name = reference.plainPath.first, case .input(_, let editionInput?, _) = scope.binding(name) {
                 recorder.usedInputs.insert(editionInput)
@@ -1163,6 +1317,12 @@ public nonisolated struct BuildPlanner {
                     }
                     if reference.root == "input", let name = reference.plainPath.first,
                        case .input(_, _, true)? = scope.binding(name) {
+                        result += "${\(expression)}"
+                        continue
+                    }
+                    // Known only as the step runs: a signal's watches and an
+                    // EMIT --on's string, which the builder fills in then.
+                    if runTime, ["program", "signal"].contains(reference.root) {
                         result += "${\(expression)}"
                         continue
                     }
@@ -1216,8 +1376,8 @@ public nonisolated struct BuildPlanner {
                 case "macos": current = .text(String(conditions.macos))
                 case let other: throw PlanError(description: "\(at): platform has no \(other) (arch, macos)")
                 }
-            case "program":
-                throw PlanError(description: "\(at): program is only read by a signal")
+            case "program", "signal":
+                throw PlanError(description: "\(at): \(reference.root) is only read in a SIGNAL's watches and an EMIT --on's string")
             case "self":
                 guard let module = scope.module else { throw PlanError(description: "\(at): self is only in a module's files") }
                 current = try moduleValue(module, remaining: &remaining, scope: scope, at: at)

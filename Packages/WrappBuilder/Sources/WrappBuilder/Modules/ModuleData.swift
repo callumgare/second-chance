@@ -31,6 +31,9 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     /// Its files of `STORE` and `LOCK` lines (`stores`), which every stage
     /// and function of the module sees.
     public let stores: [String]?
+    /// Its files of `SIGNAL` blocks, which its stages and functions, and a
+    /// bundle's Wrappfile, name as `<id>.<signal>`.
+    public let signals: [String]?
     /// Its default updates, run after a bundle's for a wrapp whose copy of
     /// the module is behind this one (`UpdatePlanner`).
     public let updates: [Update]?
@@ -60,13 +63,16 @@ public nonisolated struct ModuleFolder: Sendable {
     public let declarations: ModuleDeclarations
     /// The stores and locks its `stores` files declare.
     public let stores: StoreDeclarations
+    /// The signals its `signals` files define.
+    public let signals: [WrappfileSignal]
 
     public init(folder: URL, manifest: ModuleManifest, declarations: ModuleDeclarations = .none,
-                stores: StoreDeclarations = StoreDeclarations()) {
+                stores: StoreDeclarations = StoreDeclarations(), signals: [WrappfileSignal] = []) {
         self.folder = folder
         self.manifest = manifest
         self.declarations = declarations
         self.stores = stores
+        self.signals = signals
     }
 
     /// A file the module carries, by its path in the module's folder.
@@ -140,7 +146,8 @@ public nonisolated final class ModuleLoader {
         if manifest.id != name {
             messages.append("its id is \(manifest.id), but its folder says \(name)")
         }
-        for path in (manifest.data ?? []) + (manifest.assets ?? []) + (manifest.functions ?? []) + (manifest.stores ?? [])
+        let named: [[String]?] = [manifest.data, manifest.assets, manifest.functions, manifest.stores, manifest.signals]
+        for path in named.flatMap({ $0 ?? [] })
             where !FileManager.default.fileExists(atPath: folder.appendingPathComponent(path).path) {
             messages.append("names \(path), which isn't in its folder")
         }
@@ -170,8 +177,21 @@ public nonisolated final class ModuleLoader {
                 messages.append("\(path) \(error)")
             }
         }
+        var signals: [WrappfileSignal] = []
+        for path in manifest.signals ?? [] {
+            do {
+                let parsed = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent(path), encoding: .utf8))
+                if !parsed.stages.isEmpty || !parsed.functions.isEmpty || !parsed.globals.isEmpty || !parsed.storeDeclarations.isEmpty {
+                    messages.append("\(path) holds only SIGNAL blocks")
+                }
+                signals += parsed.signals
+            } catch {
+                messages.append("\(path) \(error)")
+            }
+        }
         return messages.isEmpty
-            ? .success(ModuleFolder(folder: folder, manifest: manifest, declarations: declarations, stores: stores)) : problems(messages)
+            ? .success(ModuleFolder(folder: folder, manifest: manifest, declarations: declarations, stores: stores, signals: signals))
+            : problems(messages)
     }
 
     /// The `$id` of the schema in `file`, added to the validator the first

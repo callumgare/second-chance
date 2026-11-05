@@ -73,21 +73,26 @@ nonisolated final class InstallStallWatch: WineWatchdog, @unchecked Sendable {
     private var lastSize: [DirectorySize] = []
     /// Told when the installer starts or stops waiting on the person.
     private let onWaitingOnPerson: @Sendable (Bool) -> Void
+    /// Whether it looks for signs itself; false when the step's signal
+    /// (`installer.alive`) brings them (`sawSign`).
+    private let looksForSigns: Bool
 
     /// `driveC`, the prefix's `drive_c`: the watch looks at its
     /// `Program Files (x86)` and `users` (where Temp is).
-    init(rule: InstallStallRule, driveC: URL, onWaitingOnPerson: @escaping @Sendable (Bool) -> Void) {
+    init(rule: InstallStallRule, driveC: URL, looksForSigns: Bool = true, onWaitingOnPerson: @escaping @Sendable (Bool) -> Void) {
+        self.looksForSigns = looksForSigns
         self.rule = rule
         self.folders = ["Program Files (x86)", "users"].map { driveC.appendingPathComponent($0, isDirectory: true) }
         self.onWaitingOnPerson = onWaitingOnPerson
     }
 
     func start() {
-        let sizes = measureFolders()
+        let sizes = looksForSigns ? measureFolders() : []
         lock.withLock {
             lastProgress = Date()
             lastSize = sizes
         }
+        guard looksForSigns else { return }
         monitor.start { [weak self] sign in
             guard InstallStallRule.isProgress(sign) else { return }
             self?.sawProgress()
@@ -107,10 +112,15 @@ nonisolated final class InstallStallWatch: WineWatchdog, @unchecked Sendable {
         monitor.noteOutput()
     }
 
+    /// A sign of progress the step's signal gave.
+    func sawSign() { sawProgress() }
+
     func check() -> WineWatchdogVerdict {
-        let sizes = measureFolders()
-        if lock.withLock({ defer { lastSize = sizes }; return sizes != lastSize }) {
-            sawProgress()
+        if looksForSigns {
+            let sizes = measureFolders()
+            if lock.withLock({ defer { lastSize = sizes }; return sizes != lastSize }) {
+                sawProgress()
+            }
         }
         let quietFor = lock.withLock { Date().timeIntervalSince(lastProgress) }
         guard quietFor >= rule.window else { return .carryOn }

@@ -36,6 +36,10 @@ public nonisolated protocol ModuleExecutor: Sendable {
     /// and `context.runProgram` do, returning its exit code.
     func runProgram(_ program: ProgramRun, in context: any StepContext) async throws -> Int32
 
+    /// One of its module's watches (`WATCH --wine.busy`), for a step in
+    /// `context`: nil for one it doesn't have.
+    func watch(_ name: String, value: String?, in context: any StepContext) -> (any WatchProbe)?
+
     /// Make the tree safe to keep as a layer: nothing running in it, and
     /// everything it holds written to disk.
     func checkpoint(_ context: any StepContext) async throws
@@ -52,6 +56,8 @@ nonisolated extension ModuleExecutor {
     public func runProgram(_ program: ProgramRun, in context: any StepContext) async throws -> Int32 {
         throw StepFailure.recipe("\(program.step.origin): this module runs no programs (\(program.program))")
     }
+
+    public func watch(_ name: String, value: String?, in context: any StepContext) -> (any WatchProbe)? { nil }
 
     public func checkpoint(_ context: any StepContext) async throws {}
 

@@ -89,6 +89,8 @@ public nonisolated struct RunnerConfiguration: Sendable {
 public nonisolated struct PlanRunner: Sendable {
     public let plan: BuildPlan
     public let configuration: RunnerConfiguration
+    /// The build's `EMIT --on` listeners.
+    let listeners = Listeners()
     private let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.PlanRunner")
 
     public init(plan: BuildPlan, configuration: RunnerConfiguration) {
@@ -176,14 +178,14 @@ public nonisolated struct PlanRunner: Sendable {
         let recorder = LogRecorder(inner: configuration.emitter)
         for (index, step) in stage.steps.enumerated() where index >= first {
             try Task.checkCancellation()
-            emit(stage.emits(before: index), to: recorder)
+            try emit(stage.emits(before: index), to: recorder)
             let skipped = try await run(step, at: StepRef(stage: stage.name, index: index, step: step), in: tree, trees: trees,
                                         emitter: recorder)
             if skipped { layering?.taint() }
             log += recorder.take()
             try await layering?.keepIfSuggested(stage, index: index, tree: tree, log: log, executors: Array(configuration.executors.values))
         }
-        emit(stage.emits(before: stage.steps.count), to: recorder)
+        try emit(stage.emits(before: stage.steps.count), to: recorder)
         log += recorder.take()
     }
 
@@ -204,7 +206,16 @@ public nonisolated struct PlanRunner: Sendable {
     func run(_ step: PlannedStep, at ref: StepRef, in tree: URL, trees: [String: URL], emitter: any EventEmitter) async throws -> Bool {
         var configuration = configuration
         configuration.emitter = emitter
-        let context = LocalStepContext(tree: tree, step: step, plan: plan, configuration: configuration, trees: trees)
+        var context = LocalStepContext(tree: tree, step: step, plan: plan, configuration: configuration, trees: trees)
+        // Its signals and the build's listeners, watched while it runs.
+        let executors = configuration.executors
+        let watchContext = context
+        let signals = StepSignals(step: step, plan: plan, listeners: listeners.all, emitter: emitter,
+                                  resolve: { WrappLayout(app: tree).location($0) },
+                                  moduleWatch: { id, name, value in executors[id]?.watch(name, value: value, in: watchContext) })
+        context.signals = signals
+        signals.start()
+        defer { signals.finish() }
         emitter.emit(.stepStarted(ref))
         emitter.emit(.stepProgress(nil))
         logger.notice("Step: \(step) (\(step.origin))")
@@ -246,9 +257,12 @@ public nonisolated struct PlanRunner: Sendable {
         return false
     }
 
-    /// A stage's `EMIT`s, as the build reaches them.
-    func emit(_ emits: [PlannedEmit], to emitter: (any EventEmitter)? = nil) {
-        for emitted in emits { (emitter ?? configuration.emitter).emit(.emitted(emitted.text)) }
+    /// A stage's `EMIT`s, as the build reaches them: a string passed on, or
+    /// a listener started or stopped.
+    func emit(_ emits: [PlannedEmit], to emitter: (any EventEmitter)? = nil) throws {
+        for emitted in emits where try !listeners.reach(emitted) {
+            (emitter ?? configuration.emitter).emit(.emitted(emitted.text))
+        }
     }
 
     func finish() async {

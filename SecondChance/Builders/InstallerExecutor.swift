@@ -52,7 +52,7 @@ nonisolated final class InstallerExecutor: ModuleExecutor, @unchecked Sendable {
         _ = try await runner.installGameWithWine(
             wrappPath: tree, gameInfo: gameInfo, source: source, installerName: installerName,
             unattended: await input.isUnattended, chooseGameProgram: { try await input.chooseGameProgram(among: $0) },
-            automation: automation, creates: creates)
+            automation: automation, creates: creates, stepContext: context)
     }
 
     /// Put the plan's answer file (`bundle:assets/disc.iss`) where the

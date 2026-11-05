@@ -1,0 +1,13 @@
+# The installer module's signals (docs/wrappfile.md#signals), named
+# installer.<signal>.
+#
+# installer.alive: a sign an install is still getting somewhere, which the
+# stall watch counts (docs/wrapp-build.md#a-stalled-install): Wine's
+# programs working, a line in the installer's own log, or the folders an
+# install writes to growing.
+SIGNAL alive --any
+  WATCH --wine.busy
+  WATCH --log="${program.log}" --matches="."
+  WATCH --grows="C:/Program Files (x86)"
+  WATCH --grows="C:/users"
+END

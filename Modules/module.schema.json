@@ -34,6 +34,12 @@
         },
         "layer": { "description": "suggested: it's expensive, so a layer after it is worth keeping.", "const": "suggested" },
         "may-ask": { "description": "It may ask the person something as it runs, so no layer lock is held for it.", "type": "boolean" },
+        "signals": {
+          "description": "The module's signals a step of it watches for when it names none, by option: { alive: alive }.",
+          "type": "object",
+          "propertyNames": { "enum": ["alive", "done", "asks"] },
+          "additionalProperties": { "type": "string" }
+        },
         "reads-data": { "description": "The module's data tables its Swift reads, which go into its steps' keys.", "type": "array", "items": { "type": "string" }, "uniqueItems": true }
       }
     }
@@ -113,6 +119,11 @@
     },
     "stages": { "type": "array", "items": { "type": "string" } },
     "functions": { "type": "array", "items": { "type": "string" } },
+    "signals": {
+      "description": "Files of SIGNAL blocks: what a step watches for while it runs, named <id>.<signal> (docs/wrappfile.md#signals).",
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "stores": {
       "description": "Files of STORE and LOCK lines, every stage and function of the module seeing the stores they declare (docs/wrappfile.md#stores).",
       "type": "array",
@@ -192,6 +203,12 @@
           "description": "Fields it adds to core mount types, by type, each written <alias>.<field>=….",
           "type": "object",
           "additionalProperties": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }, "uniqueItems": true }
+        },
+        "watches": {
+          "description": "Watches it adds to WATCH, each written --<alias>.<watch> (--wine.busy).",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "uniqueItems": true
         },
         "provided-files": {
           "description": "Files its Swift provides rather than its folder, named module:<id>:/<path>.",

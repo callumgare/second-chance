@@ -57,7 +57,8 @@ class GameInstallerRunner {
         unattended: Bool,
         chooseGameProgram: ([String]) async throws -> String,
         automation: URL? = nil,
-        creates: String? = nil
+        creates: String? = nil,
+        stepContext: (any StepContext)? = nil
     ) async throws -> (gameExePath: String, installerDir: String) {
         let driveCPath = WrappLayout(app: wrappPath).driveC
 
@@ -136,7 +137,8 @@ class GameInstallerRunner {
                         installerPath: installerExe,
                         gameInfo: gameInfo,
                         automation: automation,
-                        attemptNumber: attempt
+                        attemptNumber: attempt,
+                        stepContext: stepContext
                     )
                 }
                 await bus.publishWrappBuild(.instructions(nil))
@@ -521,7 +523,8 @@ class GameInstallerRunner {
         installerPath: String,
         gameInfo: GameInfo,
         automation: URL?,
-        attemptNumber: Int
+        attemptNumber: Int,
+        stepContext: (any StepContext)? = nil
     ) async throws -> InstallerType {
         let installerType = await detectInstallerType(installerPath)
         let installerTypeDesc = String(describing: installerType)
@@ -558,16 +561,25 @@ class GameInstallerRunner {
 
         // An unattended attempt is watched for going quiet, which ends it long
         // before its timeout would (docs/wrapp-build.md#a-stalled-install).
+        // Its signs are the step's signal's (`installer.alive`) when it has
+        // one, which watches the installer's log and the folders it writes.
+        let signsFromSignal = stepContext?.hasSignal("alive") == true
         let stallWatch = attemptNumber == 0 ? InstallStallRule.fromEnvironment().map { rule in
-            InstallStallWatch(rule: rule, driveC: driveCPath) { [bus] waiting in
+            InstallStallWatch(rule: rule, driveC: driveCPath, looksForSigns: !signsFromSignal) { [bus] waiting in
                 Task { await bus.publishWrappBuild(.instructions(waiting ? Self.installerQuestionInstructions : nil)) }
             }
         } : nil
+        if signsFromSignal, let stallWatch { stepContext?.onSignal("alive") { _ in stallWatch.sawSign() } }
+        stepContext?.watch(program: WatchedProgram(path: installerPath, log: installerLog?.hostPath.path))
 
         // Stream the installer's own log independently from Wine stdout/stderr.
         var logStreamer: InstallerLogStreamer?
         if let installerLog {
-            logStreamer = try startInstallerLogStreaming(installerLog, onLine: stallWatch.map { watch in { @Sendable _ in watch.sawOutput() } })
+            let onLine: (@Sendable (String) -> Void)? = stallWatch.map { watch in { @Sendable line in
+                watch.sawOutput()
+                stepContext?.programWrote(line)
+            } }
+            logStreamer = try startInstallerLogStreaming(installerLog, onLine: onLine)
         }
         defer {
             if let logStreamer {

@@ -222,10 +222,13 @@ public nonisolated enum WrappfileParser {
                     index += 1  // END
                     file.functions.append(WrappfileFunction(name: line.words[1].text.lowercased(), body: body, line: line.number,
                                                             nameAsWritten: line.words[1].text))
+                case "SIGNAL":
+                    index += 1
+                    file.signals.append(try signal(line))
                 case "FROM":
                     index += 1
                     let (source, name) = try fromLine(line)
-                    let body = try steps(until: ["FROM", "FUNCTION"], in: nil, topLevel: true).steps
+                    let body = try steps(until: ["FROM", "FUNCTION", "SIGNAL"], in: nil, topLevel: true).steps
                     file.stages.append(Stage(name: name?.lowercased(), from: source, body: body, line: line.number, nameAsWritten: name))
                 default:
                     throw WrappfileError(line: line.number,
@@ -233,6 +236,39 @@ public nonisolated enum WrappfileParser {
                 }
             }
             return file
+        }
+
+        /// `SIGNAL <name> [--all|--any]`, its `WATCH` lines, `END`.
+        mutating func signal(_ line: Line) throws(WrappfileError) -> WrappfileSignal {
+            guard line.words.count >= 2, !line.words[1].text.hasPrefix("--") else {
+                throw WrappfileError(line: line.number, message: "SIGNAL is SIGNAL <name> [--all|--any]")
+            }
+            var combine: WrappfileSignal.Combine?
+            for word in line.words.dropFirst(2) {
+                switch word.text.lowercased() {
+                case "--all" where combine == nil: combine = .all
+                case "--any" where combine == nil: combine = .any
+                default: throw WrappfileError(line: line.number, message: "SIGNAL takes --all or --any, not \(word.text)")
+                }
+            }
+            var watches: [Instruction] = []
+            while index < lines.count {
+                let inner = lines[index]
+                index += 1
+                switch inner.words[0].text.uppercased() {
+                case "END":
+                    guard !watches.isEmpty else { throw WrappfileError(line: line.number, message: "SIGNAL \(line.words[1].text) has no WATCH") }
+                    if watches.count > 1, combine == nil {
+                        throw WrappfileError(line: line.number, message: "SIGNAL \(line.words[1].text) has more than one WATCH, so says --all or --any")
+                    }
+                    return WrappfileSignal(name: line.words[1].text.lowercased(), combine: combine ?? .all, watches: watches, line: line.number)
+                case "WATCH":
+                    watches.append(try instruction(inner))
+                default:
+                    throw WrappfileError(line: inner.number, message: "a SIGNAL holds WATCH lines alone, then END")
+                }
+            }
+            throw WrappfileError(line: line.number, message: "SIGNAL has no END")
         }
 
         /// `FROM <stage> [AS <name>]`, or a module's stage, named with a flag
@@ -290,8 +326,10 @@ public nonisolated enum WrappfileParser {
                     throw WrappfileError(line: line.number, message: "ARG is gone: INPUT declares a value from outside, CONST a fixed one")
                 case "END", "ELSE":
                     throw WrappfileError(line: line.number, message: "\(keyword) without an IF\(keyword == "END" ? ", LAYER-HINT or FUNCTION" : "") to close")
-                case "FROM", "FUNCTION":
+                case "FROM", "FUNCTION", "SIGNAL":
                     throw WrappfileError(line: line.number, message: "\(keyword) can't be inside \(block ?? "a stage")")
+                case "WATCH":
+                    throw WrappfileError(line: line.number, message: "WATCH is only inside a SIGNAL")
                 case "STORE", "LOCK":
                     throw WrappfileError(line: line.number, message: "\(keyword) comes before the first FROM, or in a module's stores file")
                 case "VOLUME":

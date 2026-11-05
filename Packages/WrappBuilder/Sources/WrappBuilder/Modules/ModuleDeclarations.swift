@@ -21,6 +21,9 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
     /// Fields it adds to core mount types, by type, each written
     /// `<alias>.<field>=…` in a `--mount=`.
     public var mountFields: [String: Set<String>] = [:]
+    /// The watches it adds to `WATCH`, written `--<module>.<watch>`
+    /// (`--wine.busy`), which its executor or the builder carries out.
+    public var watches: Set<String> = []
     /// Files its Swift provides rather than its folder, which a Wrappfile
     /// names as `module:<id>:/<path>` (the installer module's `autoit`).
     public var providedFiles: Set<String> = []
@@ -54,6 +57,7 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
                 if let role { coreOptionRoles[instruction, default: [:]][option] = role }
             }
         }
+        watches = Set(build["watches"] as? [String] ?? [])
         for (type, fields) in build["mount-fields"] as? [String: Any] ?? [:] {
             mountFields[type] = Set(fields as? [String] ?? [])
         }
@@ -84,9 +88,16 @@ public nonisolated struct ModuleDeclarations: Sendable, Equatable {
                 try Self.role(word, at: "instructions.\(name).arguments.roles")
             }
         }
-        return InstructionSpec(name, options: options, required: required, arguments: count, argumentRoles: argumentRoles,
-                               optionRoles: roles, layer: (fields["layer"] as? String) == "suggested",
-                               mayAsk: fields["may-ask"] as? Bool ?? false, readsData: fields["reads-data"] as? [String] ?? [])
+        var spec = InstructionSpec(name, options: options, required: required, arguments: count, argumentRoles: argumentRoles,
+                                   optionRoles: roles, layer: (fields["layer"] as? String) == "suggested",
+                                   mayAsk: fields["may-ask"] as? Bool ?? false, readsData: fields["reads-data"] as? [String] ?? [])
+        for (option, signal) in fields["signals"] as? [String: String] ?? [:] {
+            guard InstructionSpec.signalOptions.contains(option) else {
+                throw Problem(description: "instructions.\(name).signals.\(option) isn't one of \(InstructionSpec.signalOptions.sorted().joined(separator: ", "))")
+            }
+            spec.defaultSignals[option] = signal
+        }
+        return spec
     }
 
     /// `value`, `flag` or `repeated`, alone or as `{ kind: …, role: … }`.

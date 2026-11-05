@@ -58,6 +58,24 @@ public nonisolated protocol StepContext: Sendable {
     /// its lock until the step ends. A kept store only for its own module's
     /// executor.
     func store(_ name: String) async throws -> URL
+
+    /// The program the step's signals are about (`${program.…}`), once
+    /// it's chosen: the step's watches about it start then.
+    func watch(program: WatchedProgram)
+
+    /// A line the step's program wrote, for `WATCH --output`.
+    func programWrote(_ line: String)
+
+    /// The step's program ended with `code`, for `WATCH --exits`.
+    func programExited(_ code: Int32)
+
+    /// Call `handler` each time the signal the step's `option` names
+    /// (`alive`, `done` or `asks`) fires, with its fields, while the step
+    /// runs; nothing when it names none.
+    func onSignal(_ option: String, _ handler: @escaping @Sendable ([String: String]) -> Void)
+
+    /// Whether the step names a signal for `option`.
+    func hasSignal(_ option: String) -> Bool
 }
 
 nonisolated extension StepContext {

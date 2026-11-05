@@ -31,6 +31,10 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
     /// Its module's data tables its Swift reads (`reads-data: [ini]`),
     /// which are part of its key.
     public let readsData: [String]
+    /// The module's signals a step of it watches for when it names none
+    /// (`signals: { alive: alive }`): by option (`alive`), the signal's name
+    /// in the module.
+    public var defaultSignals: [String: String] = [:]
 
     public enum OptionKind: Sendable, Equatable {
         /// `--name`
@@ -93,7 +97,16 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
     /// Options every step takes: its name, for reports; and what a failure
     /// does, `--on-failure=ask` asking whether to carry on without it, where
     /// otherwise a failed step fails the build.
-    static let everyStep: [String: OptionKind] = ["name": .value, "on-failure": .value]
+    ///
+    /// And the signals a step's program is watched for
+    /// (docs/wrappfile.md#signals): `--alive`, each firing a sign of
+    /// progress; `--done`, the step finished when it fires; `--asks`, the
+    /// program asking the person something.
+    static let everyStep: [String: OptionKind] = ["name": .value, "on-failure": .value, "alive": .value, "done": .value,
+                                                  "asks": .value]
+
+    /// The options naming a signal.
+    public static let signalOptions: Set<String> = ["alive", "done", "asks"]
 
     /// The core's instructions, which every stage has.
     public static let core: [String: InstructionSpec] = {
@@ -121,7 +134,9 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
             InstructionSpec("MOVE", arguments: 2...2, argumentRoles: [.location]),
             // A string for whoever runs the build, passed on unread as it gets
             // here: not a step, so in no key and keeping no layer.
-            InstructionSpec("EMIT", arguments: 1...1, argumentRoles: [.text]),
+            // With --on=<signal>, each time the signal fires, until an
+            // `EMIT --off=<name>` (its --name, else the signal's).
+            InstructionSpec("EMIT", options: ["on": .value, "off": .value], arguments: 0...1, argumentRoles: [.text]),
             InstructionSpec("REMOVE", arguments: 1...1, argumentRoles: [.location]),
             // `--ini=<section>.<key>=<value>`, as many as needed.
             // `--keys-must-exist`: each setting must already be in the file, or
@@ -149,5 +164,5 @@ public nonisolated struct InstructionSpec: Sendable, Equatable {
 
     /// The words that start or end a block, or a stage: compared in upper
     /// case, as every keyword is.
-    static let blockWords: Set<String> = ["IF", "ELSE", "END", "FROM", "AS", "FUNCTION", "LAYER-HINT"]
+    static let blockWords: Set<String> = ["IF", "ELSE", "END", "FROM", "AS", "FUNCTION", "LAYER-HINT", "SIGNAL"]
 }
