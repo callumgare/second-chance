@@ -53,7 +53,11 @@ nonisolated public struct FilesMount: Sendable, Equatable {
     /// is moved into the store when the store has none of that name (the
     /// build's default, so the person's copy starts from it), or when it
     /// was written after the store's (the game wrote it afresh and ended
-    /// before `collect` could keep it); otherwise the store's wins. Then
+    /// before `collect` could keep it); otherwise the store's wins. A link
+    /// into another store (the app run with another, which a test's own
+    /// store, since removed, leaves behind) is replaced, its file copied in
+    /// first when it is still there and the store has none of that name, as
+    /// a link to nothing leaves the program unable to write its file. Then
     /// each of the store's files is linked into the folder. Returns what it
     /// did, for the log.
     @discardableResult
@@ -71,6 +75,17 @@ nonisolated public struct FilesMount: Sendable, Equatable {
                 try files.moveItem(at: inFolder, to: inStore)
                 done.append("moved the app's \(name) into the store")
             }
+        }
+        for name in try names(in: folder) where matches(name) && isLink(folder.appendingPathComponent(name)) {
+            let link = folder.appendingPathComponent(name), inStore = store.appendingPathComponent(name)
+            guard let destination = try? files.destinationOfSymbolicLink(atPath: link.path), destination != inStore.path else { continue }
+            if !files.fileExists(atPath: inStore.path), files.fileExists(atPath: destination) {
+                try files.copyItem(at: URL(fileURLWithPath: destination), to: inStore)
+                done.append("copied \(name) from the store its link led to")
+            } else {
+                done.append("removed \(name)'s link to another store")
+            }
+            try files.removeItem(at: link)
         }
         for name in try names(in: store) where matches(name) {
             let link = folder.appendingPathComponent(name)

@@ -502,8 +502,10 @@ app keeps no Wine.
   (`WrappBuildHelper.checkLaunchMounts`), and the store is a kept one of
   the app's own. Before the game starts, a matching file the build left
   there moves into the store when the store has none of that name (so the
-  person's copy starts from the default), and each of the store's files is
-  linked in; once the game has ended, each matching file that isn't a link
+  person's copy starts from the default), a link left into another store
+  (a test's, since removed) is replaced, its file copied in if it's still
+  there, as a link to nothing leaves the game unable to write the file, and
+  each of the store's files is linked in; once the game has ended, each matching file that isn't a link
   (one the game made, or wrote afresh) moves into the store and is linked
   back (`FilesMount`, in `WrappFormat`). A game that crashes leaves its new
   files in the app until the next clean exit.

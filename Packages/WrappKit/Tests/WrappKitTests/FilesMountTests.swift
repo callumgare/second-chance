@@ -43,6 +43,30 @@ struct FilesMountTests {
         #expect(!FileManager.default.fileExists(atPath: mount.store.appendingPathComponent("lasertank.exe").path))
     }
 
+    @Test("A link into another store is replaced: its file copied in while it's there, dropped once it's gone")
+    func linkIntoAnotherStore() throws {
+        let (mount, root) = try make()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // A run with its own store, as a test's, kept Level1.hs and Level2.hs there.
+        let other = FilesMount(folder: mount.folder, store: root.appendingPathComponent("other"), patterns: mount.patterns)
+        try other.connect()
+        try Data("one".utf8).write(to: mount.folder.appendingPathComponent("Level1.hs"))
+        try Data("two".utf8).write(to: mount.folder.appendingPathComponent("Level2.hs"))
+        try other.collect()
+        // Level2.hs's store copy is gone, as a removed test store's are.
+        try FileManager.default.removeItem(at: other.store.appendingPathComponent("Level2.hs"))
+
+        try mount.connect()
+        let level1 = mount.folder.appendingPathComponent("Level1.hs")
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: level1.path) == mount.store.appendingPathComponent("Level1.hs").path)
+        #expect(try text(level1) == "one")
+        // No link to nothing, which the program couldn't write through.
+        let level2 = mount.folder.appendingPathComponent("Level2.hs")
+        #expect((try? FileManager.default.attributesOfItem(atPath: level2.path)) == nil)
+        try Data("two again".utf8).write(to: level2)
+        #expect(try mount.collect() == ["kept Level2.hs"])
+    }
+
     @Test("A file the program made is kept in the store when it ends, and linked next time in a rebuilt app")
     func newFileKept() throws {
         let (mount, root) = try make()
