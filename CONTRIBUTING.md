@@ -138,6 +138,13 @@ where it keeps the account's password. It also:
   the Mac shares one copy;
 - starts the **keep-alive**.
 
+**Then finish each new account's first login.** A new account's first login stops in macOS's Setup Assistant, and
+nothing `sc` starts there runs until it's done, though `./sc session` already lists it as logged in. Connect to the
+account once with Screen Sharing (Finder → Go → Connect to Server → `vnc://<mac>`, then log in as the test user) and
+click through it: skip signing in to an Apple Account, and set up later anything else it offers. If an account
+finishes Setup Assistant but its screen stays black, with no menu bar, log it out (`sudo launchctl bootout
+gui/$(id -u <user>)`) and the keep-alive logs it in again.
+
 **Why the keep-alive.** macOS only keeps drawing a background account's screen while someone is watching it through
 Screen Sharing; with nobody watching, it locks the account within moments and games there stop drawing. So your own
 account, the one at the display, runs `sc session keep-alive`: a small background job that connects to each test
@@ -151,14 +158,16 @@ in your account, a test account only stays usable while you're logged in at that
 ```bash
 ./sc session                                                     # each account: logged in, locked, free or claimed
 ./sc session claim --purpose "scarlet-hand integration"          # gives you a free one, say second-chance-testing-1
-./sc --on second-chance-testing-1@localhost:~/second-chance test integration scarlet-hand
+./sc test unit                                                   # build the app here, in your account
+./sc --on second-chance-testing-1@localhost:~/second-chance test integration scarlet-hand --skip-app-build
 ./sc session release
 ```
 
 For another Mac, put its name in place of `localhost` and add `--on <host>` to `claim` and `release`. `--on` copies
-your checkout into the account and runs the command there, building whatever it needs. The first run in an account
-takes a few minutes longer, while it builds `sc` and the app there and fetches the game engines into the account's
-cache. A run carries on if your connection drops; `./sc --on second-chance-testing-1@localhost:~/second-chance attach` picks it up.
+your checkout into the account and runs the command there. **Build the app in your own account and pass
+`--skip-app-build`**, which sends that build: a test account can't build the app itself, as the certificate it's
+signed with is in your keychain alone. The first run in an account takes a few minutes longer, while it builds `sc`
+there and fetches the game engines into the account's cache. A run carries on if your connection drops; `./sc --on second-chance-testing-1@localhost:~/second-chance attach` picks it up.
 
 Each account is a separate user, so it has its own build, its own copies of game apps, and its own `.env`: copy yours
 in (`scp .env second-chance-testing-1@localhost:second-chance/`) if the tests need its settings, such as the Big Fish test account.
