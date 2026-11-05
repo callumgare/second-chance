@@ -83,7 +83,7 @@ enum Remote {
     /// intermediates, record this checkout's absolute path; `build/` is
     /// release artifacts.
     static let excludes = [
-        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build", "Tools/sc/.swiftpm", ".claude/worktrees",
+        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build", "Tools/sc/.swiftpm", "Tools/sc/.run", ".claude/worktrees",
         "Packages/*/.build", "Packages/*/.swiftpm", "/build", ".DS_Store",
     ]
 

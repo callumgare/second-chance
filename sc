@@ -7,7 +7,14 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$root/Tools/sc"
-binary="$package/.build/release/sc"
+built="$package/.build/release/sc"
+# sc runs from a copy, replaced by a rename once a build is done, so a rebuild
+# (which may clear the build folder) never deletes the file a run still in
+# progress was started from, or that it copies or re-runs (the keep-alive,
+# a GUI-session re-run, a puppet session).
+# Outside .build, which a failed build clears.
+run="$package/.run"
+binary="$run/sc"
 # What the binary was built from, as a hash of the sources' contents:
 # everything in Packages/ and Tools/sc but what builds leave, so a package
 # sc comes to depend on is covered without a list to keep up (one sc
@@ -17,7 +24,7 @@ binary="$package/.build/release/sc"
 # older commit) kept the binary built from that one (~50 ms).
 stamp="$binary.sources"
 files_stamp="$binary.files"
-files="$(cd "$root" && find -L Packages Tools/sc \( -name .build -o -name .swiftpm \) -prune -o -type f -not -name .DS_Store \
+files="$(cd "$root" && find -L Packages Tools/sc \( -name .build -o -name .swiftpm -o -name .run \) -prune -o -type f -not -name .DS_Store \
     -print 2>/dev/null | LC_ALL=C sort)"
 sources_hash="$(cd "$root" && printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 shasum | shasum)"
 # Which files there are, apart from what's in them: SwiftPM's incremental
@@ -25,7 +32,37 @@ sources_hash="$(cd "$root" && printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 s
 # it weren't there, so a file added or removed means a clean build.
 files_hash="$(printf '%s\n' "$files" | shasum)"
 
-if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]]; then
+needs_build() { [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]]; }
+
+# One build at a time in a checkout: two at once (agents and a person all
+# running ./sc) deleted each other's build folders, so each took minutes, and
+# failed builds wiped .build for everyone. A lock folder, taken over when the
+# build holding it has gone; whoever waited checks again, as the other build
+# was most likely the one it needed.
+lock="$run/build.lock"
+locked=""
+release_lock() { if [[ -n "$locked" ]]; then rm -rf "$lock"; locked=""; fi; }
+if needs_build; then
+    mkdir -p "$run"
+    said=""
+    until mkdir "$lock" 2>/dev/null; do
+        holder="$(cat "$lock/pid" 2>/dev/null || true)"
+        if [[ -n "$holder" ]] && ! kill -0 "$holder" 2>/dev/null; then
+            rm -rf "$lock"
+            continue
+        fi
+        if [[ -z "$said" ]]; then
+            echo "Waiting for another build of sc to finish (pid ${holder:-?})…" >&2
+            said=1
+        fi
+        sleep 0.5
+    done
+    echo $$ > "$lock/pid"
+    locked=1
+    trap release_lock EXIT
+fi
+
+if needs_build; then
     # Rebuilding takes ~10 s (longer the first time), so say so. In a
     # terminal: a spinner with the elapsed time, cleared once it's done.
     message="Building sc (Tools/sc has changed)"
@@ -41,8 +78,8 @@ if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]
     # ^C, or a kill, stops the spinner along with the build. A background
     # job in a script ignores SIGINT, so on its own it outlived the build and
     # the script, drawing over the shell's prompt.
-    trap 'stop_spinner; exit 130' INT
-    trap 'stop_spinner; exit 143' TERM
+    trap 'stop_spinner; release_lock; exit 130' INT
+    trap 'stop_spinner; release_lock; exit 143' TERM
     if [[ -t 2 ]]; then
         (
             frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
@@ -60,13 +97,16 @@ if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]
         echo "${message}…" >&2
     fi
     if [[ "$(cat "$files_stamp" 2>/dev/null)" != "$files_hash" ]]; then
-        rm -rf "$package/.build/release" "$package/.build/arm64-apple-macosx/release" "$package/.build/x86_64-apple-macosx/release"
+        # Best effort: something outside the lock (an editor's SwiftPM) may be
+        # writing there, and swift build copes with what's left.
+        rm -rf "$package/.build/release" "$package/.build/arm64-apple-macosx/release" "$package/.build/x86_64-apple-macosx/release" \
+            2>/dev/null || true
     fi
     status=0
     output="$(swift build -c release --package-path "$package" 2>&1)" || status=$?
     if [[ $status -ne 0 ]]; then
         # Once more from clean, in case the build's own state was what failed.
-        rm -rf "$package/.build"
+        rm -rf "$package/.build" 2>/dev/null || true
         status=0
         output="$(swift build -c release --package-path "$package" 2>&1)" || status=$?
     fi
@@ -77,8 +117,12 @@ if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]
         echo "sc: building Tools/sc failed (output above)" >&2
         exit 1
     fi
+    cp "$built" "$binary.new"
+    mv -f "$binary.new" "$binary"
     printf '%s\n' "$sources_hash" > "$stamp"
     printf '%s\n' "$files_hash" > "$files_stamp"
 fi
+release_lock
+trap - EXIT
 
 SC_REPO_ROOT="$root" exec "$binary" "$@"

@@ -20,6 +20,7 @@ xcuserdata/
 # sc (Tools/sc) build output
 /Tools/sc/.build
 /Tools/sc/.swiftpm
+/Tools/sc/.run
 
 # Local settings: the Sentry DSN and slugs (.env.example)
 /.env
