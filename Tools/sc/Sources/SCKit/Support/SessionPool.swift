@@ -147,9 +147,26 @@ enum SessionPool {
     /// each is locked. The one reader of them: `GUISession.isScreenLocked`
     /// asks it too.
     static func logins() async -> [Login] {
-        guard let result = try? await Proc.collect("/usr/sbin/ioreg", ["-a", "-d1", "-k", "IOConsoleUsers"]),
-              result.succeeded else { return [] }
-        return logins(fromIORegPlist: Data(result.output.utf8))
+        guard let result = quickly("/usr/sbin/ioreg", ["-a", "-d1", "-k", "IOConsoleUsers"]), result.status == 0 else { return [] }
+        return logins(fromIORegPlist: result.output)
+    }
+
+    /// A small program's exit status and output, by Foundation's `Process`.
+    /// The keep-alive asks these every few seconds from several tasks at once
+    /// for hours, and through `Proc` (swift-subprocess) that left a lookup's
+    /// continuation unresumed, its task waiting for ever with nothing logged.
+    static func quickly(_ path: String, _ arguments: [String]) -> (status: Int32, output: Data)? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let output = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, output)
     }
 
     static func logins(fromIORegPlist data: Data) -> [Login] {
@@ -188,11 +205,10 @@ enum SessionPool {
     /// A test user's password, from the console user's keychain. Over SSH
     /// that keychain is locked, so this works only in the GUI session.
     static func password(for user: String) async throws -> String {
-        let result = try await Proc.collect("/usr/bin/security",
-                                                 ["find-generic-password", "-s", keychainService, "-a", user, "-w"])
-        let password = result.output.trimmingCharacters(in: .newlines)
-        guard result.succeeded, !password.isEmpty else {
-            throw SCError("No password for \(user) in this user's keychain (security exit \(result.status)).",
+        let result = quickly("/usr/bin/security", ["find-generic-password", "-s", keychainService, "-a", user, "-w"])
+        let password = String(decoding: result?.output ?? Data(), as: UTF8.self).trimmingCharacters(in: .newlines)
+        guard result?.status == 0, !password.isEmpty else {
+            throw SCError("No password for \(user) in this user's keychain (security exit \(result?.status ?? -1)).",
                           hints: ["Store it, in the GUI session: security add-generic-password -s \(keychainService) -a \(user) -w",
                                   "Over SSH the keychain is locked: run this in the GUI session (a LaunchAgent, or sc in-gui-session)."])
         }
