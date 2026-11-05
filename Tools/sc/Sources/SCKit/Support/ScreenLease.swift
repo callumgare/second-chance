@@ -3,10 +3,11 @@ import Foundation
 import SystemConfiguration
 import WrappBuilder
 
-/// Who has a Mac's screen: one lease per Mac, taken by every command that
-/// opens windows (`GUISession.ensure`), so two runs never fight over it.
+/// Who has a screen: one lease per logged-in user, as each has a screen of
+/// their own (a test session's, or the console's), taken by every command
+/// that opens windows (`GUISession.ensure`), so two runs never fight over it.
 ///
-/// Several agents, each in its own checkout, share a test Mac. A game launched
+/// Several agents, each in its own checkout, share a test Mac's screens. A game launched
 /// during another's integration run takes the focus and fails that run's
 /// tests, so a command that finds the screen leased stops at once and says who
 /// has it, for what, since when, and how to reach them — rather than waiting,

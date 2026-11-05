@@ -467,11 +467,13 @@ below. On the remote Mac, the GUI-session re-run applies as usual.
 
 ## The screen lease
 
-**One run at a time has a Mac's screen.** Every command that opens windows
+**One run at a time has a screen.** Each logged-in user has a screen of
+their own, so a Mac with test sessions has several, each with its own lease
+(more below). Every command that opens windows
 (`app run`, `wrapp build`, `wrapp run`, `wrapp wine`, `screenshot` and
 `test integration`) leases the screen before it does, in the process that
-opens them: here, or the GUI-session re-run. A second such command on that Mac,
-from any checkout, stops at once with exit 75. It doesn't wait, because an
+opens them: here, or the GUI-session re-run. A second such command for that
+screen, from any checkout, stops at once with exit 75. It doesn't wait, because an
 integration run can hold the screen for hours. Instead it says:
 
 - who has the screen, what they're running and for how long;
