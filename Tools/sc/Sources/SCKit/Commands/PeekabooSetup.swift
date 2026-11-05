@@ -40,7 +40,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
         let host = mac ?? ScreenLease.shortHostName()
         let present = try await session.ui.progressStep("Checking whether Peekaboo is installed on \(host)") { _ in
-            try await Self.asConsoleUser(mac, "bash -s", input: Self.presentScript).output
+            try await TestSessionAccess.asConsoleUser(mac, "bash -s", input: Self.presentScript).output
         }
         for part in Self.parts where !present.contains(part.marker) {
             try await session.ui.progressStep("Downloading and installing \(part.name) (\(part.megabytes) MB) on \(host)",
@@ -49,7 +49,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
             }
         }
         let pool = try await session.ui.progressStep("Reading the list of test accounts on \(host)") { _ in
-            try await Self.asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output
+            try await TestSessionAccess.asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output
         }
         let users = user.map { [$0] } ?? SessionPool.users(fromPool: pool)
         guard !users.isEmpty else { throw SCError("\(host) has no test sessions.", hints: ["Add some there: sc session add"]) }
@@ -98,7 +98,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     /// One part from the release, checked against the release's checksums.
     private func install(_ part: Part, on mac: String?) async throws {
         let script = "set -eu\nwork=$(mktemp -d); trap 'rm -rf \"$work\"' EXIT; cd \"$work\"\n" + part.script
-        let result = try await Self.asConsoleUser(mac, "bash -s", input: script)
+        let result = try await TestSessionAccess.asConsoleUser(mac, "bash -s", input: script)
         guard result.succeeded else {
             throw SCError("Couldn't install \(part.name) \(Self.version) on \(mac ?? "this Mac"): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
                           hints: ["A 5xx from GitHub passes: run it again in a minute.",
@@ -115,12 +115,12 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         let host = mac ?? ScreenLease.shortHostName()
         let destination = "\(user)@\(mac ?? "localhost")"
         defer {
-            Self.tunnels.forEach { $0.terminate() }
-            Self.tunnels.removeAll()
+            TestSessionAccess.tunnels.forEach { $0.terminate() }
+            TestSessionAccess.tunnels.removeAll()
         }
         if mac == nil { try await letThisMacIn(user, ui: ui) }
         var missing = try await ui.progressStep("Starting Peekaboo's background helper in \(host)/\(user) and checking its permissions") { _ in
-            let started = try await Self.ssh(destination, "bash -s", input: Self.bridgeScript)
+            let started = try await TestSessionAccess.ssh(destination, "bash -s", input: Self.bridgeScript)
             guard started.succeeded else {
                 throw SCError("Couldn't start Peekaboo's bridge for \(user) on \(host): \(started.error.trimmingCharacters(in: .whitespacesAndNewlines))",
                               hints: ["Is \(user) logged in? sc" + (mac.map { " --on \($0)" } ?? "") + " session list"])
@@ -133,7 +133,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         }
         try await ui.progressStep("Opening \(missing[0]) in \(host)/\(user)'s System Settings, and Screen Sharing here") { _ in
             try await openPane(for: missing[0], destination)
-            try await Self.openScreenSharing(user, on: mac)
+            try await TestSessionAccess.openScreenSharing(user, on: mac)
         }
         ui.line("In the Screen Sharing window (choose \"Log in as yourself\" if asked), turn Peekaboo on in \(missing[0]). "
                 + "macOS asks for an admin's name and password.")
@@ -147,7 +147,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
                 let now = try await missingGrants(destination)
                 if now.count < missing.count {
                     // A new grant takes effect when the app restarts, as System Settings says.
-                    _ = try? await Self.ssh(destination, "launchctl kickstart -k gui/$(id -u)/\(Self.bridgeLabel)")
+                    _ = try? await TestSessionAccess.ssh(destination, "launchctl kickstart -k gui/$(id -u)/\(Self.bridgeLabel)")
                 }
                 missing = now
                 if now.isEmpty { return now }
@@ -193,7 +193,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     private func missingGrants(_ destination: String) async throws -> [String] {
         let command = "cli=; for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(Self.sharedCLI); do [ -x $c ] && cli=$c && break; done; "
             + "PEEKABOO_BRIDGE_SOCKET=\"$HOME/Library/Application Support/Peekaboo/bridge.sock\" $cli permissions --json"
-        let result = try await Self.ssh(destination, "bash -c \(Remote.quote(command))")
+        let result = try await TestSessionAccess.ssh(destination, "bash -c \(Remote.quote(command))")
         return Self.missing(fromPermissionsJSON: Data(result.output.utf8))
     }
 
@@ -210,98 +210,15 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     private func openPane(for grant: String, _ destination: String) async throws {
         let anchor = grant == "Accessibility" ? "Privacy_Accessibility" : "Privacy_ScreenCapture"
         let url = "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
-        _ = try await Self.ssh(destination, "bash -s", input: Self.inGUISession(["/usr/bin/open", url]))
+        _ = try await TestSessionAccess.ssh(destination, "bash -s", input: TestSessionAccess.inGUISession(["/usr/bin/open", url]))
     }
-
-    /// A script that runs `arguments` once in the SSH user's GUI session, as
-    /// a LaunchAgent (`open` or the keychain from SSH reach no GUI session),
-    /// and streams its output back through a named pipe, so nothing it prints
-    /// is written to disk.
-    static func inGUISession(_ arguments: [String]) -> String {
-        let program = arguments.map { "<string>\($0.replacingOccurrences(of: "&", with: "&amp;"))</string>" }.joined()
-        return """
-        set -eu
-        label=au.gare.callum.second-chance.once-$$
-        dir=$(mktemp -d); chmod 700 "$dir"; trap 'launchctl bootout gui/$(id -u)/$label 2>/dev/null; rm -rf "$dir"' EXIT
-        mkfifo -m 600 "$dir/out"
-        cat > "$dir/job.plist" <<P
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0"><dict><key>Label</key><string>$label</string>
-        <key>ProgramArguments</key><array>\(program)</array>
-        <key>StandardOutPath</key><string>$dir/out</string><key>RunAtLoad</key><true/></dict></plist>
-        P
-        launchctl bootstrap gui/$(id -u) "$dir/job.plist"
-        perl -e 'alarm 30; exec "cat", @ARGV' "$dir/out"
-        """
-    }
-
-    /// A Screen Sharing window here into the user's session, logged in with
-    /// the password from the test Mac's keychain. That keychain is locked
-    /// over SSH, so it's read in the GUI session, comes back through a pipe,
-    /// and goes to Screen Sharing by AppleScript, not a command line any
-    /// process here could read. It's never written anywhere. Screen Sharing
-    /// won't connect a Mac to itself, so this Mac's sessions are reached
-    /// through an SSH tunnel to its own Screen Sharing.
-    static func openScreenSharing(_ user: String, on mac: String?) async throws {
-        let script = Self.inGUISession(["/usr/bin/security", "find-generic-password", "-s", SessionPool.keychainService, "-a", user, "-w"])
-        let result = try await Self.asConsoleUser(mac, "bash -s", input: script)
-        let password = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard result.succeeded, !password.isEmpty, !password.contains("\n") else {
-            throw SCError("Couldn't read \(user)'s password from \(mac ?? "this Mac")'s keychain.",
-                          hints: ["sc session add stores it there; someone must be logged in at its console."])
-        }
-        var server = mac ?? "localhost"
-        if mac == nil {
-            let port = try freePort()
-            let tunnel = Process()
-            tunnel.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            tunnel.arguments = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", "\(port):localhost:5900", "\(user)@localhost"]
-            tunnel.standardInput = FileHandle.nullDevice
-            try tunnel.run()
-            // Ended once this user is done (`setUp`); a second or two to listen.
-            try await Task.sleep(for: .seconds(2))
-            guard tunnel.isRunning else { throw SCError("Couldn't make the SSH tunnel to this Mac's Screen Sharing (on port \(port)).") }
-            server = "localhost:\(port)"
-            Self.tunnels.append(tunnel)
-        }
-        let allowed = CharacterSet.alphanumerics
-        let address = "vnc://\(user.addingPercentEncoding(withAllowedCharacters: allowed) ?? user):"
-            + "\(password.addingPercentEncoding(withAllowedCharacters: allowed) ?? password)@\(server)"
-        let opened = try await Proc.collect("/usr/bin/osascript", ["-"], input: "open location \"\(address)\"\n")
-        guard opened.succeeded else { throw SCError("Couldn't open Screen Sharing: \(opened.error)") }
-    }
-
-    /// A local port nothing is listening on, for a tunnel: the one the
-    /// system gives a socket bound to port 0. Another tunnel or a leftover
-    /// one may hold any fixed port.
-    static func freePort() throws -> Int {
-        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-        guard socket >= 0 else { throw SCError("Couldn't open a socket to find a free port: \(String(cString: strerror(errno))).") }
-        defer { close(socket) }
-        var address = sockaddr_in()
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        address.sin_port = 0
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let bound = withUnsafeMutablePointer(to: &address) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                bind(socket, $0, length) == 0 && getsockname(socket, $0, &length) == 0
-            }
-        }
-        guard bound else { throw SCError("Couldn't find a free port for the tunnel: \(String(cString: strerror(errno))).") }
-        return Int(UInt16(bigEndian: address.sin_port))
-    }
-
-    /// Tunnels this run opened, ended when it's done.
-    nonisolated(unsafe) static var tunnels: [Process] = []
 
     /// This Mac's test sessions are reached over SSH too, which needs this
     /// Mac's own keys in each test user's authorized keys: `session add`
     /// puts them there (`--install-keys` for users made before it did).
     private func letThisMacIn(_ user: String, ui: UI) async throws {
         let reachable = try await ui.progressStep("Checking this Mac can reach \(user) over SSH") { _ in
-            try await Self.ssh("\(user)@localhost", "true").succeeded
+            try await TestSessionAccess.ssh("\(user)@localhost", "true").succeeded
         }
         guard reachable else {
             throw SCError("\(user) doesn't let this Mac in over SSH, so Peekaboo can't be set up in it from here.",
@@ -310,79 +227,4 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         }
     }
 
-    /// A command as the user sc runs as: here, or over SSH on `mac`.
-    static func asConsoleUser(_ mac: String?, _ command: String, input: String? = nil) async throws -> Proc.Collected {
-        if let mac { return try await Self.ssh(mac, command, input: input) }
-        return try await Proc.collect("/bin/bash", ["-c", command], input: input)
-    }
-
-    static func ssh(_ destination: String, _ command: String, input: String? = nil) async throws -> Proc.Collected {
-        try await Proc.collect("/usr/bin/ssh", ["-o", "BatchMode=yes", destination, command], input: input)
-    }
-}
-
-extension Remote {
-    /// Commands that take `--on` but run here and reach the other Mac
-    /// themselves: `session setup-peekaboo` opens Screen Sharing on this Mac,
-    /// `session screenshot` brings its picture back here, and `session view`
-    /// opens its Screen Sharing window here.
-    static func runsHere(_ arguments: [String]) -> Bool {
-        arguments.first == "session" && ["setup-peekaboo", "screenshot", "view"].contains(arguments.dropFirst().first)
-    }
-}
-
-/// A Mac's whole screen, or a test session's, through Peekaboo there: what
-/// no game window shows (a system prompt, an installer, the Finder).
-struct SessionScreenshotCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "screenshot",
-        abstract: "Picture a Mac's whole screen, or a test session's, through Peekaboo, and bring it back here.",
-        discussion: """
-        Takes it with that user's Peekaboo (`session setup-peekaboo` gives a test \
-        session its grants), shrinks it to --max pixels across, and saves it here. \
-        With --on, of that Mac; without, of this one. No user: the Mac's own \
-        logged-in user's screen.
-        """
-    )
-
-    @OptionGroup var global: GlobalOptions
-
-    @Argument(help: "A test user whose session to picture. Default: the user sc logs in as.")
-    var user: String?
-
-    @Option(help: ArgumentHelp("Where to save it here.", valueName: "png")) var out: String?
-    @Option(help: "Its longest side, in pixels (cheap to look at).") var max: Int = 1600
-
-    func run() async throws {
-        let session = try Session.start(global)
-        let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
-        let host = mac ?? ScreenLease.shortHostName()
-        let name = user.map { "\(host)/\($0)" } ?? host
-        let destination = user.map { "\($0)@\(mac ?? "localhost")" } ?? mac
-        let remote = "/tmp/sc-screen-\(UUID().uuidString).png"
-        let output = URL(fileURLWithPath: out ?? "screen-\(name.replacingOccurrences(of: "/", with: "-")).png")
-        let command = "cli=; for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(SessionSetupPeekabooCommand.sharedCLI); "
-            + "do [ -x $c ] && cli=$c && break; done; [ -n \"$cli\" ] || { echo 'Peekaboo is not installed' >&2; exit 3; }; "
-            + "PEEKABOO_BRIDGE_SOCKET=\"$HOME/Library/Application Support/Peekaboo/bridge.sock\" $cli see --mode screen --no-elements "
-            + "--path \(remote) >/dev/null && sips -Z \(max) \(remote) >/dev/null"
-        try await session.ui.progressStep("Picturing \(name)'s screen with Peekaboo", success: "Saved \(name)'s screen to \(output.path)") { _ in
-            let shell = destination.map { ["/usr/bin/ssh", "-o", "BatchMode=yes", $0, "bash -c \(Remote.quote(command))"] }
-                ?? ["/bin/bash", "-c", command]
-            let taken = try await Proc.collect(shell[0], Array(shell.dropFirst()))
-            guard taken.succeeded else {
-                throw SCError("Peekaboo couldn't picture \(name)'s screen: \(taken.error.trimmingCharacters(in: .whitespacesAndNewlines))",
-                              hints: ["Give it Peekaboo and its grants: sc session setup-peekaboo" + (user.map { " \($0)" } ?? "")
-                                      + (mac.map { " --on \($0)" } ?? ""),
-                                      "Is someone logged in there, and is the screen unlocked? sc" + (mac.map { " --on \($0)" } ?? "") + " session list"])
-            }
-            if let destination {
-                let copied = try await Proc.collect("/usr/bin/scp", ["-q", "-o", "BatchMode=yes", "\(destination):\(remote)", output.path])
-                _ = try? await Proc.collect("/usr/bin/ssh", ["-o", "BatchMode=yes", destination, "rm -f \(remote)"])
-                guard copied.succeeded else { throw SCError("Couldn't copy the picture back: \(copied.error)") }
-            } else {
-                try? FileManager.default.removeItem(at: output)
-                try FileManager.default.moveItem(at: URL(fileURLWithPath: remote), to: output)
-            }
-        }
-    }
 }

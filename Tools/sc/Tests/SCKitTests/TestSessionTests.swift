@@ -151,7 +151,7 @@ struct PeekabooSetupTests {
         #expect(Remote.runsHere(["session", "setup-peekaboo", "sctest"]))
         #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(Remote.runsHere(["session", "view", "sctest"]))
-        let port = try? SessionSetupPeekabooCommand.freePort()
+        let port = try? Network.freePort()
         #expect(port.map { $0 > 1024 } == true)
         #expect(!Remote.runsHere(["session", "list"]))
         #expect(!Remote.runsHere(["puppet", "start"]))
@@ -170,7 +170,7 @@ struct PeekabooSetupTests {
 
     @Test("A program run in the GUI session hands its output back through a pipe, not a file")
     func guiSessionScript() {
-        let script = SessionSetupPeekabooCommand.inGUISession(["/usr/bin/open", "x?a&b"])
+        let script = TestSessionAccess.inGUISession(["/usr/bin/open", "x?a&b"])
         #expect(script.contains("mkfifo -m 600"))
         #expect(script.contains("<string>x?a&amp;b</string>"))
         #expect(script.contains("launchctl bootstrap gui/$(id -u)"))

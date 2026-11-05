@@ -30,7 +30,7 @@ struct SessionViewCommand: AsyncParsableCommand {
             chosen = user
         } else {
             let pool = try await session.ui.progressStep("Reading the list of test accounts on \(host)") { _ in
-                SessionPool.users(fromPool: try await SessionSetupPeekabooCommand.asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output)
+                SessionPool.users(fromPool: try await TestSessionAccess.asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output)
             }
             guard pool.count == 1, let only = pool.first else {
                 throw SCError(pool.isEmpty ? "\(host) has no test sessions." : "Which test session? \(host) has \(pool.joined(separator: ", ")).",
@@ -40,11 +40,11 @@ struct SessionViewCommand: AsyncParsableCommand {
             chosen = only
         }
         defer {
-            SessionSetupPeekabooCommand.tunnels.forEach { $0.terminate() }
-            SessionSetupPeekabooCommand.tunnels.removeAll()
+            TestSessionAccess.tunnels.forEach { $0.terminate() }
+            TestSessionAccess.tunnels.removeAll()
         }
         try await session.ui.progressStep("Opening Screen Sharing into \(host)/\(chosen)", success: "Screen Sharing is open into \(host)/\(chosen)") { _ in
-            try await SessionSetupPeekabooCommand.openScreenSharing(chosen, on: mac)
+            try await TestSessionAccess.openScreenSharing(chosen, on: mac)
         }
         guard mac == nil else { return }
         session.ui.line("The window goes through a tunnel this command keeps open: press Return here when you've finished with it.")
