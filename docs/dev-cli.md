@@ -635,6 +635,14 @@ each test user (default: the pool) it:
    users are standard users), restarts the bridge so the grant takes, opens the next
    pane, and moves on once `peekaboo permissions` shows both.
 
+**Picturing a whole screen:** `sc session screenshot [<user>] [--on <host>] [--out <png>]`
+takes a Mac's screen (its logged-in user's, or a test user's session) with that user's
+Peekaboo, shrinks it to `--max` pixels across (1600) and saves it here, so prompts,
+installers and the Finder, which no game window shows, can be seen. Like
+`setup-peekaboo` it keeps `--on` for itself. `screencapture` over SSH can't do this
+("could not create image from display"): the process macOS checks for Screen Recording
+is the one in the GUI session, Peekaboo's bridge.
+
 ## Puppet sessions
 
 **`sc puppet` drives a program by hand,** for porting and debugging, where a

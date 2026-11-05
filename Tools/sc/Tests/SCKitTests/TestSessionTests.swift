@@ -158,6 +158,7 @@ struct PeekabooSetupTests {
     @Test("setup-peekaboo keeps --on for itself; other commands run there")
     func runsHere() {
         #expect(Remote.runsHere(["session", "setup-peekaboo", "sctest"]))
+        #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(!Remote.runsHere(["session", "list"]))
         #expect(!Remote.runsHere(["puppet", "start"]))
     }
