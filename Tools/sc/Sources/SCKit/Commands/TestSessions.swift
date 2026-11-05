@@ -207,7 +207,10 @@ struct SessionKeepAliveCommand: AsyncParsableCommand {
             "RunAtLoad": true,
             "KeepAlive": true,
             "ThrottleInterval": 30,
-            "ProcessType": "Background",
+            // Not Background: logging test sessions in and unlocking them is
+            // what every run there waits on, and on a loaded Mac a Background
+            // job was starved for minutes in the login's key exchange.
+            "ProcessType": "Standard",
             "StandardOutPath": log.path,
             "StandardErrorPath": log.path,
         ]
@@ -451,12 +454,22 @@ struct SessionAddCommand: AsyncParsableCommand {
     static func setupAssistantDoneScript(build: String, version: String) -> String {
         let domain = "com.apple.SetupAssistant"
         let seen = setupAssistantSeen.map { "/usr/bin/defaults write \(domain) \($0) -bool true" }
+        // Everything a finished Setup Assistant leaves on macOS 26, the age
+        // range, initial-setup and mini-buddy keys too. Whether they stop it
+        // before a new user's first login isn't known yet; for a session
+        // already stuck in it they didn't (it came back at the next login),
+        // and clicking through it over Screen Sharing did.
         let versions = ["LastSeenBuddyBuildVersion": build, "LastSeenCloudProductVersion": version,
                         "LastSeenDiagnosticsProductVersion": version, "LastSeenSiriProductVersion": version,
-                        "LastSeenIntelligenceProductVersion": version, "LastPrivacyBundleVersion": "2"]
+                        "LastSeenIntelligenceProductVersion": version, "LastSeenAgeRangeSelectionProductVersion": version,
+                        "InitialSetupBuildVersion": build, "InitialSetupProductVersion": version,
+                        "LastPreLoginTasksPerformedBuild": build, "LastPreLoginTasksPerformedVersion": version,
+                        "LastPrivacyBundleVersion": "2"]
             .sorted { $0.key < $1.key }
             .map { "/usr/bin/defaults write \(domain) \($0.key) -string \(Remote.quote($0.value))" }
-        return (seen + versions).joined(separator: " && ")
+        let miniBuddy = ["/usr/bin/defaults write \(domain) MiniBuddyLaunchReason -int 0",
+                         "/usr/bin/defaults write \(domain) MiniBuddyShouldLaunchToResumeSetup -bool false"]
+        return (seen + versions + miniBuddy).joined(separator: " && ")
     }
 
     static func osVersion(_ flag: String) async throws -> String {
