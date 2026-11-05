@@ -215,7 +215,16 @@ struct SessionKeepAliveCommand: AsyncParsableCommand {
             "StandardErrorPath": log.path,
         ]
         try PropertyListSerialization.data(fromPropertyList: agent, format: .xml, options: 0).write(to: plist)
-        let result = try await Proc.collect("/bin/launchctl", ["bootstrap", domain, plist.path])
+        // bootout returns before the old job has gone, and a bootstrap then is
+        // refused: wait for it (a few seconds at most), and try twice.
+        for _ in 0..<40 where (try? await Proc.collect("/bin/launchctl", ["print", "\(domain)/\(label)"]))?.succeeded == true {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        var result = try await Proc.collect("/bin/launchctl", ["bootstrap", domain, plist.path])
+        if !result.succeeded {
+            try await Task.sleep(for: .seconds(2))
+            result = try await Proc.collect("/bin/launchctl", ["bootstrap", domain, plist.path])
+        }
         guard result.succeeded else {
             throw SCError("launchctl couldn't start the keep-alive: \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
                           hints: ["It must be installed by the user logged in at the Mac's display."])
