@@ -30,9 +30,14 @@ enum GUISession {
     /// Return when this process can open windows; otherwise re-run the
     /// command in the GUI session and finish with its exit status (by
     /// throwing `ExitCode`).
+    /// The process that opens the windows (here, or the re-run) leases the
+    /// screen first; one sc forwarding to the GUI session doesn't.
     static func ensure(_ session: Session, need: Need) async throws {
         try await checkLock(session, need: need)
-        guard await managerName() != "Aqua" else { return }
+        guard await managerName() != "Aqua" else {
+            try await ScreenLease.acquire(session, policy: session.leasePolicy, purpose: session.purpose)
+            return
+        }
         guard let executable = Bundle.main.executablePath else {
             throw SCError("Couldn't find sc's own executable to re-run it in the GUI session.")
         }

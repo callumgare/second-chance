@@ -26,6 +26,7 @@ public struct SC: AsyncParsableCommand {
             CleanCommand.self,
             InGUISessionCommand.self,
             AttachCommand.self,
+            LeaseCommand.self,
         ]
     )
 

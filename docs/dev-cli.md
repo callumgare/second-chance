@@ -35,6 +35,7 @@ nearest command's help.
 ./sc clean downloads                   # Fetch (and check) AutoIt, the patches, engines' files and Big Fish's installer afresh
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
 ./sc --on <host> attach                # Pick up a remote run after the connection dropped
+./sc --on <host> lease                 # Who has that Mac's screen (--break to stop their run)
 ```
 
 ## Shape of the API
@@ -392,6 +393,55 @@ usual.
 - **While a run is still going there, `--on` refuses to sync.** rsync would
   replace the build and the sc it is using. Attach to it, or stop it with
   `attach --stop`, first.
+
+## The screen lease
+
+**One run at a time has a Mac's screen.** Every command that opens windows
+(`app run`, `wrapp build`, `wrapp run`, `wrapp wine`, `screenshot` and
+`test integration`) leases the screen before it does, in the process that
+opens them: here, or the GUI-session re-run. A second such command on that Mac,
+from any checkout, stops at once with exit 75. It doesn't wait, because an
+integration run can hold the screen for hours. Instead it says:
+
+- who has the screen, what they're running and for how long;
+- their purpose, from `--purpose "<text>"`, which every command takes;
+- where they ran it from: the Mac, the checkout and the branch.
+
+Before this, a game launched during another agent's integration run took the
+focus and failed that run's tests.
+
+**The holder is named so it can be asked.** A Claude Code session passes its
+details to everything it runs, and `sc` records three of them:
+
+- `CLAUDE_CODE_MESSAGING_SOCKET`, the address other sessions message it at
+  (`uds:<socket>`, which their agent list maps to its name);
+- `CLAUDE_CODE_SESSION_ID`;
+- `CLAUDE_PID`.
+
+A person's run records the user and the Mac instead. The session's
+messaging token is never recorded. `--on` carries the holder to the other Mac
+in `SC_LEASE_HOLDER` (base64 JSON, put on the remote command line with `env`),
+since ssh passes no environment; a GUI-session re-run inherits it as it does
+the rest.
+
+**A blocked command offers three ways on:**
+
+- `--ignore-screen-lease`: go ahead regardless, leaving the lease in place.
+- `--break-screen-lease`: stop the run holding the lease, sending it SIGINT so
+  it cleans up as for Ctrl-C, wait up to 2 minutes for it to go, then take the
+  screen.
+- `sc lease`: show the lease (`--json` for scripts); `sc lease --break` stops
+  the holder and leaves the screen free. Like `attach`, `--on … lease`
+  doesn't sync.
+
+**A lease lasts as long as the process that took it.** sc releases it on
+exit. If the process is killed or the Mac restarts, the next command finds
+that process gone and takes the stale lease over. The holder is checked by its
+pid and its start time, so a reused pid doesn't count as the holder. A command
+that sc itself starts inside a leased run (a descendant of the holder) runs
+under the same lease. The lease is
+`~/Library/Application Support/au.gare.callum.second-chance.sc/screen-lease.json`,
+or the file `SC_SCREEN_LEASE_FILE` names (`ScreenLease`).
 
 ## Changing sc
 

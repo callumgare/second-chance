@@ -63,10 +63,13 @@ enum Remote {
 
     /// The remote command line, written to read the same in bash, zsh and
     /// fish (whichever is the remote login shell): single-quoted words, `~/`
-    /// left unquoted so it expands.
-    static func remoteCommand(path: String, arguments: [String]) -> String {
+    /// left unquoted so it expands. The holder of any screen lease the
+    /// command takes there goes with it through `env` (ssh passes no
+    /// environment), as one base64 word.
+    static func remoteCommand(path: String, arguments: [String], leaseHolder: ScreenLease.Holder? = nil) -> String {
         let dir = path.hasPrefix("~/") ? "~/" + quote(String(path.dropFirst(2))) : quote(path)
-        return "cd \(dir) && ./sc " + arguments.map(quote).joined(separator: " ")
+        let env = leaseHolder.map { "env \(ScreenLease.holderVariable)=\(ScreenLease.encodeHolder($0)) " } ?? ""
+        return "cd \(dir) && \(env)./sc " + arguments.map(quote).joined(separator: " ")
     }
 
     static func quote(_ word: String) -> String {
@@ -124,9 +127,10 @@ enum Remote {
     }
 
     /// Whether the command needs this repo synced there first. `attach`
-    /// follows a run already going, so it must not touch the checkout.
+    /// follows a run already going, so it must not touch the checkout, and
+    /// `lease` only reads (or breaks) the screen lease.
     static func syncs(_ arguments: [String]) -> Bool {
-        arguments.first != "attach"
+        !["attach", "lease"].contains(arguments.first)
     }
 
     /// Lists, one per line, the ids of the GUI-session jobs still running in
@@ -184,7 +188,9 @@ enum Remote {
         }
 
         ui.line(ui.format("\(.primary("▸ On \(target.host): sc \(arguments.joined(separator: " "))"))"))
-        let sshArgs = (terminal.isInteractive ? ["-t"] : ["-T"]) + [target.host, remoteCommand(path: target.path, arguments: forwarded)]
+        let holder = ScreenLease.currentHolder(repoRoot: repo.root, branch: await ScreenLease.branch(of: repo.root))
+        let command = remoteCommand(path: target.path, arguments: forwarded, leaseHolder: holder)
+        let sshArgs = (terminal.isInteractive ? ["-t"] : ["-T"]) + [target.host, command]
         let status = try await Proc.inheritingTerminal("ssh", sshArgs)
         if status == 255 {
             // ssh's own failure, not the command's: most often the connection dropped.

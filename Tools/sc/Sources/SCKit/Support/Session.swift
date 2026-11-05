@@ -19,6 +19,24 @@ struct GlobalOptions: ParsableArguments {
         valueName: "host[:path]"
     ))
     var remote: String?
+
+    @Option(help: ArgumentHelp(
+        "What this run is for, shown to anyone its screen lease stops.",
+        discussion: "Commands that open windows lease the Mac's screen while they run (docs/dev-cli.md#the-screen-lease).",
+        valueName: "text"
+    ))
+    var purpose: String?
+
+    @Flag(help: "Open windows even though another run has leased the screen, leaving its lease in place.")
+    var ignoreScreenLease = false
+
+    @Flag(help: "Stop the run that has leased the screen (as Ctrl-C would), then take it.")
+    var breakScreenLease = false
+
+    var leasePolicy: ScreenLease.Policy {
+        if breakScreenLease { return .breakIt }
+        return ignoreScreenLease ? .ignore : .respect
+    }
 }
 
 /// `--skip-app-build`, on every command that would otherwise build the app first.
@@ -44,6 +62,8 @@ struct Session: Sendable {
     let ui: UI
     let terminal: TerminalEnvironment
     let mode: LogMode
+    var leasePolicy: ScreenLease.Policy = .respect
+    var purpose: String?
 
     /// The session the running command started, for the entry point's error reporting.
     nonisolated(unsafe) static var active: Session?
@@ -56,7 +76,9 @@ struct Session: Sendable {
             repo: repo,
             ui: UI(environment: terminal, mode: mode, logsDir: repo.scLogs),
             terminal: terminal,
-            mode: mode
+            mode: mode,
+            leasePolicy: global.leasePolicy,
+            purpose: global.purpose
         )
         active = session
         return session
