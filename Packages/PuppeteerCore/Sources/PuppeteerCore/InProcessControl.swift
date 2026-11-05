@@ -145,6 +145,13 @@ nonisolated public struct WindowControl: Sendable {
         report(socket.request("click \(point.x) \(point.y)"), for: "click")
     }
 
+    /// Press a key, by the helper's name for it (`escape`, `return`, `cmd+q`).
+    /// A helper from before keys (protocol 1) answers with an error.
+    @discardableResult
+    public func press(_ key: String) -> Bool {
+        report(socket.request("key \(key)"), for: "key")
+    }
+
     @discardableResult
     public func move(to point: CGPoint) -> Bool {
         report(socket.request("move \(point.x) \(point.y)"), for: "move")

@@ -63,7 +63,8 @@ struct ProgramTestTests {
     func skifree() throws {
         let test = try ProgramTest.load(bundleFolder: bundlesRoot.appendingPathComponent("freeware/skifree"), modulesRoot: modulesRoot)
         #expect(test.scenario.id == "wine/starts-and-quits")
-        #expect(test.scenario.handlers.first?.actions == [.quit])
+        // Its bundle sets no first key, so the handler that acts is the plain quit.
+        #expect(test.scenario.handlers.first { $0.applies(with: test.scenario.parameters) }?.actions == [.quit])
         #expect(test.needles.tagged("running").first?.spec.text?.strings.contains("Start") == true)
     }
 
@@ -91,5 +92,33 @@ struct ProgramTestTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         try Data().write(to: folder.appendingPathComponent("lonely.png"))
         #expect(throws: NeedleError.self) { try NeedleLibrary.load([folder]) }
+    }
+}
+
+@Suite("Scenario key actions")
+struct ScenarioKeyActionTests {
+    @Test("A key action reads its key from a parameter, and its handler is on only when the parameter is set")
+    func firstKey() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("scenario-\(UUID().uuidString).yaml")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try """
+        goal: "program-ends"
+        timeout: 120
+        parameters:
+          first-key: ""
+        handlers:
+          - id: "running-after-key"
+            when: "running"
+            if: "first-key"
+            do: [{ key: "${first-key}" }, "quit"]
+          - id: "running"
+            when: "running"
+            do: ["quit"]
+        """.write(to: file, atomically: true, encoding: .utf8)
+        let plain = try Scenario.load(id: "test", file: file)
+        #expect(!plain.handlers[0].applies(with: plain.parameters))
+        let iji = try Scenario.load(id: "test", file: file, overrides: ["first-key": "escape"])
+        #expect(iji.handlers[0].applies(with: iji.parameters))
+        #expect(iji.handlers[0].actions == [.key("escape"), .quit])
     }
 }

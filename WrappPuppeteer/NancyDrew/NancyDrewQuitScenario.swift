@@ -895,6 +895,17 @@ struct NancyDrewQuitScenario {
                         }
                         remembered.acted = true
                         remembered.actedAt = Date()
+                    case .key(let name):
+                        logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(name)...")
+                        guard context.game.press(name) else {
+                            forceQuit(app)
+                            return "Couldn't press \(name) in the program (its helper may predate keys)"
+                        }
+                        remembered.acted = true
+                        remembered.actedAt = Date()
+                        // A frame or two for the program to take it before
+                        // anything after it in the handler.
+                        Thread.sleep(forTimeInterval: 1.5)
                     case .quit:
                         logger.notice("  ✓ \(handler.id): found its \(handler.when), quitting the program as its app's Quit does...")
                         guard context.game.quitApp() else {

@@ -3,7 +3,13 @@
 # For a program with no menu to quit from (docs/testing.md#scenarios).
 goal: "program-ends"
 timeout: 120
+parameters:
+  first-key: ""   # a key its first screen waits for before it takes a quit (escape, return); none by default
 handlers:
+  - id: "running-after-key"
+    when: "running"
+    if: "first-key"
+    do: [{ key: "${first-key}" }, "quit"]
   - id: "running"
     when: "running"
     do: ["quit"]

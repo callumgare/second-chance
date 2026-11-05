@@ -39,9 +39,12 @@ public nonisolated struct Scenario: Sendable, Equatable {
         public let actions: [Action]
 
         /// Whether its condition holds with `parameters`.
+        /// On when its condition's parameter is set: `true`, or any other
+        /// value but `false` or nothing (a key to press, say).
         public func applies(with parameters: [String: String]) -> Bool {
             guard let condition else { return true }
-            return parameters[condition] == "true"
+            guard let value = parameters[condition] else { return false }
+            return !value.isEmpty && value != "false"
         }
     }
 
@@ -58,6 +61,9 @@ public nonisolated struct Scenario: Sendable, Equatable {
         /// Ask the program to quit, as its app's Quit (⌘Q) does, and expect
         /// it to end: for a program with nothing to click to quit.
         case quit
+        /// Press a key (the helper's names: `escape`, `return`, `f5`,
+        /// `cmd+q`…), as a program waiting at a keyboard prompt needs.
+        case key(String)
     }
 
     /// The scenario at `file`, with `overrides` (the bundle's parameters)
@@ -90,7 +96,10 @@ public nonisolated struct Scenario: Sendable, Equatable {
             }
             return Handler(id: handler.id, when: handler.when, condition: handler.if, once: handler.once ?? false,
                            retryAfter: try number(handler.retryAfter), repeatWhereLastSeen: try number(handler.repeatWhereLastSeen),
-                           actions: handler.do.map(\.action))
+                           actions: try handler.do.map { raw throws(ScenarioError) -> Action in
+                               guard case .key(let name) = raw.action else { return raw.action }
+                               return .key(try substitute(name, parameters: parameters, in: "\(id) \(handler.id)"))
+                           })
         }
         return Scenario(id: id, goal: raw.goal, timeout: raw.timeout, parameters: parameters, handlers: handlers)
     }
@@ -120,7 +129,7 @@ public nonisolated struct Scenario: Sendable, Equatable {
             let `do`: [RawAction]
         }
 
-        /// `click`, `expect-end`, `quit`, `{ click: { x, y } }` or `{ check: menu }`.
+        /// `click`, `expect-end`, `quit`, `{ click: { x, y } }`, `{ check: menu }` or `{ key: escape }`.
         struct RawAction: Decodable {
             let action: Action
 
@@ -140,8 +149,11 @@ public nonisolated struct Scenario: Sendable, Equatable {
                     action = .clickAt(try keyed.decode(Needle.Point.self, forKey: key))
                 } else if let key = Update.AnyKey(stringValue: "check"), keyed.contains(key) {
                     action = .check(try keyed.decode(String.self, forKey: key))
+                } else if let key = Update.AnyKey(stringValue: "key"), keyed.contains(key) {
+                    action = .key(try keyed.decode(String.self, forKey: key))
                 } else {
-                    throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "an action is click, expect-end, { click: … } or { check: … }"))
+                    throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                                                            debugDescription: "an action is click, expect-end, quit, { click: … }, { check: … } or { key: … }"))
                 }
             }
         }
