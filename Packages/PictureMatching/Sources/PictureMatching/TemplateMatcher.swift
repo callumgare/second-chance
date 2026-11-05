@@ -488,13 +488,21 @@ nonisolated public enum TemplateMatcher {
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("template-matches-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: scratch) }
         while found.count < limit, let match = best(templatePath, in: current, options: options), match.isMatch {
-            // The same place again: painting over didn't take.
-            if found.contains(where: { $0.rect == match.rect }) { break }
+            // The same place again, or mostly: what's left of the first
+            // around the paint isn't a second copy.
+            if found.contains(where: { Self.overlap($0.rect, match.rect) > 0.25 }) { break }
             found.append(match)
             guard found.count < limit, let next = paintedOver(current, match.rect, into: scratch, number: found.count) else { break }
             current = next
         }
         return found
+    }
+
+    /// The share of `b` that `a` covers, 0…1.
+    static func overlap(_ a: CGRect, _ b: CGRect) -> Double {
+        let shared = a.intersection(b)
+        guard !shared.isNull, b.width > 0, b.height > 0 else { return 0 }
+        return Double(shared.width * shared.height / (b.width * b.height))
     }
 
     /// A copy of the image at `path` with `rect` filled grey, saved in

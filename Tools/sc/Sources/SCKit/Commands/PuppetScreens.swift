@@ -490,7 +490,7 @@ enum PuppetScreens {
     /// The screen's name for an action's reply: nil when there are no
     /// needles to name it by, "?" when none matched.
     static func replyName(_ puppet: PuppetSession, repo: URL) -> String? {
-        guard let library = try? PuppetNeedles.library(puppet, options: PuppetNeedleOptions(), repo: repo), !library.needles.isEmpty,
+        guard let library = try? PuppetNeedles.library(puppet, bundle: nil, needles: nil, repo: repo), !library.needles.isEmpty,
               let frame = try? PuppetFrame.capture(puppet) else { return nil }
         return identify(frame, needles: library.needles).name ?? "?"
     }
@@ -533,15 +533,19 @@ enum PuppetNeedles {
     /// same id, as a test's do. A bundle given is remembered for the
     /// session.
     static func library(_ puppet: PuppetSession, options: PuppetNeedleOptions, repo: URL) throws -> Library {
-        if let given = options.bundle {
+        try library(puppet, bundle: options.bundle, needles: options.needles, repo: repo)
+    }
+
+    static func library(_ puppet: PuppetSession, bundle given: String?, needles extra: String?, repo: URL) throws -> Library {
+        if let given {
             guard FileManager.default.fileExists(atPath: bundleFolder(given, repo: repo).appendingPathComponent("manifest.yaml").path) else {
                 throw SCError("No program bundle \(given) in \(repo.appendingPathComponent("Bundles").path).")
             }
             try given.write(to: puppet.bundleFile, atomically: true, encoding: .utf8)
         }
-        let bundle = options.bundle ?? bundleID(of: puppet)
+        let bundle = given ?? bundleID(of: puppet)
         var folders: [URL] = []
-        if let extra = options.needles { folders.append(URL(fileURLWithPath: (extra as NSString).expandingTildeInPath)) }
+        if let extra { folders.append(URL(fileURLWithPath: (extra as NSString).expandingTildeInPath)) }
         folders.append(puppet.needlesFolder)
         if let bundle {
             let folder = bundleFolder(bundle, repo: repo)
