@@ -769,6 +769,9 @@ struct DotEnvTests {
         let sync = Remote.installersSync(host: "mac", path: "~/sc")
         #expect(sync.suffix(2) == ["installers/", "mac:~/sc/installers/"])
         #expect(!sync.contains("--delete"))
+        // Another user's files in the shared store: no times or attributes to set, and no Finder litter.
+        #expect(!sync.contains("-aE") && sync.contains("--size-only"))
+        #expect(sync.contains(".DS_Store"))
     }
 
     @Test("Before sending installers, the checkout there links to the Mac's shared ones, if it has none of its own")

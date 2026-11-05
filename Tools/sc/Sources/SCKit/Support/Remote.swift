@@ -113,8 +113,13 @@ enum Remote {
     /// The installers' own sync, for commands that read them: the folder's
     /// contents into the folder there, whether either is a link. Never
     /// `--delete`: the other Mac may hold installers this one doesn't have.
+    /// No `-t` or `-E`, and files are compared by size: the shared store's
+    /// files belong to whoever put them there, and another user is let write
+    /// them but not set their times or extended attributes, which made the
+    /// receiver quit (`utimensat: Permission denied`) and the sync fail.
+    /// Finder's `.DS_Store` stays behind, as in the main sync.
     static func installersSync(host: String, path: String) -> [String] {
-        ["-aE", "--rsync-path=/usr/bin/rsync", "installers/", "\(host):\(path)/installers/"]
+        ["-rl", "--size-only", "--exclude", ".DS_Store", "--rsync-path=/usr/bin/rsync", "installers/", "\(host):\(path)/installers/"]
     }
 
     /// Before a sync that sends installers: make the checkout there, and,
