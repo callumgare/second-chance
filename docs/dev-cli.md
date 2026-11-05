@@ -504,6 +504,11 @@ viewer would:
 - **It reconnects** when the connection drops, waiting longer each time (up to
   10 minutes, so a wrong password can't lock the account).
 
+`--install` copies the `sc` it's run with to
+`~/Library/Application Support/SecondChance/session-keep-alive/` and runs that copy, so a
+sync that breaks the checkout's build doesn't stop the keep-alive coming back; install it
+again to update it.
+
 It speaks just enough of RFB for this (`ScreenSharing.swift`): Apple's login,
 security type 30, is a Diffie-Hellman exchange whose key (MD5 of the shared
 secret) encrypts the user name and password with AES-128. The server announces

@@ -171,15 +171,21 @@ struct SessionKeepAliveCommand: AsyncParsableCommand {
         try? FileManager.default.removeItem(at: plist)
     }
 
-    /// Install the LaunchAgent, run by `repo`'s sc, and start it. Returns its log.
+    /// Install the LaunchAgent and start it. Returns its log. It runs a copy
+    /// of this sc, not the checkout's: every `--on` sync rebuilds that, and a
+    /// sync that broke the build would stop the keep-alive coming back.
     static func install(repo: URL) async throws -> URL {
         _ = try await Proc.collect("/bin/launchctl", ["bootout", "\(domain)/\(label)"])
+        let copy = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/SecondChance/session-keep-alive/sc")
+        try FileManager.default.createDirectory(at: copy.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: copy)
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: Bundle.main.executablePath ?? CommandLine.arguments[0]), to: copy)
         let log = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/SecondChance/session-keep-alive.log")
         try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
         let agent: [String: Any] = [
             "Label": label,
-            "ProgramArguments": [repo.appendingPathComponent("sc").path, "session", "keep-alive"],
+            "ProgramArguments": [copy.path, "session", "keep-alive"],
             "WorkingDirectory": repo.path,
             "RunAtLoad": true,
             "KeepAlive": true,
