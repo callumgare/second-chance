@@ -300,6 +300,9 @@ struct SessionAddCommand: AsyncParsableCommand {
     @Option(help: "How many to make when no names are given.")
     var count: Int = 1
 
+    @Flag(help: "Give existing test users this user's authorized SSH keys too (new ones always get them).")
+    var installKeys = false
+
     @Flag(help: "Leave this checkout's installers where they are.")
     var keepInstallers = false
 
@@ -343,7 +346,8 @@ struct SessionAddCommand: AsyncParsableCommand {
     }
 
     private func add(_ user: String, session: Session) async throws {
-        if getpwnam(user) != nil {
+        let created = getpwnam(user) == nil
+        if !created {
             _ = try await SessionPool.password(for: user)
             session.ui.detail("\(user) exists and its password is in the keychain: adopting it.")
         } else {
@@ -369,10 +373,10 @@ struct SessionAddCommand: AsyncParsableCommand {
                 try await sudo(["/usr/sbin/dseditgroup", "-o", "edit", "-a", user, "-t", "user", group])
             }
         }
+        // A user made just now gets this user's keys; one adopted keeps its
+        // own unless asked, as reading them needs sudo.
         let keys = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ssh/authorized_keys")
-        let reachable = try await Proc.collect("/usr/bin/ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
-                                                                "-o", "ConnectTimeout=5", "\(user)@localhost", "true"])
-        if !reachable.succeeded, FileManager.default.fileExists(atPath: keys.path),
+        if created || installKeys, FileManager.default.fileExists(atPath: keys.path),
            let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) {
             try await sudo(["/usr/bin/install", "-d", "-o", user, "-g", "staff", "-m", "700", "\(home)/.ssh"])
             try await sudo(["/usr/bin/install", "-o", user, "-g", "staff", "-m", "600", keys.path, "\(home)/.ssh/authorized_keys"])
@@ -390,6 +394,12 @@ struct SessionAddCommand: AsyncParsableCommand {
     }
 
     private func sudo(_ arguments: [String]) async throws {
+        // With nobody at a terminal to type the password, sudo would wait for ever.
+        let cached = try await Proc.collect("/usr/bin/sudo", ["-n", "true"]).succeeded
+        guard isatty(STDIN_FILENO) != 0 || cached else {
+            throw SCError("This step needs an admin's password (sudo \(arguments.first ?? "")), and there's no terminal to type it in.",
+                          hints: ["Run it from a terminal: sc session add, or sc --on <host> session add from one."])
+        }
         let status = try await Proc.inheritingTerminal("/usr/bin/sudo", arguments)
         guard status == 0 else { throw SCError("`sudo \(arguments.first ?? "")` failed (exit \(status)).") }
     }
