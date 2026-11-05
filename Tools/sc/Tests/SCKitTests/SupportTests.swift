@@ -844,9 +844,9 @@ struct TestVMTests {
     func gameWarnings() throws {
         let board = GameBoard(games: ["stay-tuned"].compactMap { Catalog.game(slug: $0) })
         board.apply(try #require(ProgressRecord.decode(
-            #"{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":20,"warnings":["No splash screen was clicked past"]}"#
+            #"{"event":"game","slug":"stay-tuned","phase":"finished","result":"passed","seconds":20,"warnings":["No splash screen was recognised"]}"#
         )))
-        #expect(board.rows[0].warnings == ["No splash screen was clicked past"])
+        #expect(board.rows[0].warnings == ["No splash screen was recognised"])
         #expect(board.rows[0].status == "passed")
     }
 

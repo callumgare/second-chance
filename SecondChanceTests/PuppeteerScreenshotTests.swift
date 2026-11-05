@@ -32,11 +32,11 @@ struct PuppeteerScreenshotTests {
     @Test("Each WRAPP_PUPPETEER warning is read, in order, and nothing else")
     func warnings() {
         let log = """
-        10:52:01.100  warning  WrappPuppeteer/NancyDrewQuitScenario  WRAPP_PUPPETEER: warning: No splash screen was clicked past
+        10:52:01.100  warning  WrappPuppeteer/NancyDrewQuitScenario  WRAPP_PUPPETEER: warning: No splash screen was recognised
         10:52:03.200  notice  WrappPuppeteer/NancyDrewQuitScenario  ⚠️  Not a marker line
         10:52:04.300  warning  WrappPuppeteer/NancyDrewQuitScenario  WRAPP_PUPPETEER: warning: Couldn't switch away from the game
         10:52:09.000  notice  WrappPuppeteer/main  WRAPP_PUPPETEER: run_succeeded
         """
-        #expect(AppPuppetRunner.warnings(in: log) == ["No splash screen was clicked past", "Couldn't switch away from the game"])
+        #expect(AppPuppetRunner.warnings(in: log) == ["No splash screen was recognised", "Couldn't switch away from the game"])
     }
 }

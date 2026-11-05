@@ -703,9 +703,11 @@ struct NancyDrewQuitScenario {
             var lastSeen: CGPoint?
         }
         var memory: [String: Memory] = [:]
-        /// The screens clicked past by a whole-screen handler, by name: none
-        /// at all, when some are known, is warned about once the menu is up.
-        var screensClicked: Set<String> = []
+        /// The screens a whole-screen handler recognised, by name, whether
+        /// it clicked them or another handler did while it waited on the
+        /// cursor lock: none at all, when some are known, is warned about once
+        /// the menu is up.
+        var screensRecognised: Set<String> = []
         var loggedLockWait: String?
         var ended = false
         var reachedMenu = false
@@ -763,6 +765,7 @@ struct NancyDrewQuitScenario {
                     logger.notice("  ✓ [\(elapsed)s] Blank screen, which \(handler.id) clicks: clicking...")
                 } else {
                     guard let fingerprint, let match = SplashScreen.match(fingerprint, among: screens[handler.when] ?? []) else { continue }
+                    screensRecognised.insert(match.screen.name)
                     if lockPending {
                         if loggedLockWait != match.screen.name {
                             logger.notice("  ⏳ [\(elapsed)s] Screen '\(match.screen.name)' — waiting for the wrapp's cursor lock before clicking")
@@ -786,7 +789,7 @@ struct NancyDrewQuitScenario {
                     forceQuit(app)
                     return failure
                 }
-                screensClicked.insert(name)
+                screensRecognised.insert(name)
                 remembered.actedAt = Date()
                 remembered.acted = true
                 memory[handler.id] = remembered
@@ -810,8 +813,8 @@ struct NancyDrewQuitScenario {
                 if target != nil, ends, !ended, !reachedMenu {
                     reachedMenu = true
                     let known = screens.values.reduce(0) { $0 + $1.count }
-                    if known > 0, screensClicked.isEmpty {
-                        warnForTest("No splash screen was clicked past: none of the \(known) recorded for \(wrapp.gameSlug) "
+                    if known > 0, screensRecognised.isEmpty {
+                        warnForTest("No splash screen was recognised: none of the \(known) recorded for \(wrapp.gameSlug) "
                             + "was recognised, so the recordings may no longer match the game (docs/testing.md#splash-screens)")
                     }
                 }

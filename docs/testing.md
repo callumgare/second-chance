@@ -736,9 +736,11 @@ references.
 
 Clicking past them only saves time: a game whose splash screens go
 unrecognised still reaches its menu once they've played, so that doesn't fail
-it. But a run that reaches the menu without having clicked past any of the
+it. But a run that reaches the menu without having recognised any of the
 game's recorded splash screens says so, as a warning
-(`WRAPP_PUPPETEER: warning: No splash screen was clicked past…`): the
+(`WRAPP_PUPPETEER: warning: No splash screen was recognised…`). One
+recognised while the click waited on the cursor lock counts, though another
+handler, such as the Her logo's text, clicked it in the end. The
 references may no longer match the game. The test attaches each warning
 (`warning-<source>-<slug>.txt`), and the launch's screen recording, which
 shows what the game showed instead, and `sc` lists them under its table, passed
@@ -780,8 +782,9 @@ screen recognised within its first six seconds.
 The references are `screen` needles tagged `splash`: the nancy-drew
 module's `needles/splash/splash-any-<what it shows>.png` for the screens
 many games share — the Her Interactive logos and intro, the glowing "Nancy
-Drew", and Big Fish's logo, on its own or above Her Interactive's, which Big
-Fish's editions open with — and a game's bundle's
+Drew", and Big Fish's logos ("A New Game Every Day!" on blue, "Where the
+world goes to play!" on white), on their own or above Her Interactive's,
+which Big Fish's editions open with — and a game's bundle's
 `tests/needles/splash/splash-<game slug>-<what it shows>.png` for its own,
 mostly title cards. A game is matched against its own and every `any` one.
 A new `any` one changes the module, so raise its release
