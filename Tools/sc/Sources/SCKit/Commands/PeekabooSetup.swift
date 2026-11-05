@@ -38,7 +38,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         // nil: this Mac, whose own steps run here without SSH.
         let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
         let host = mac ?? ScreenLease.shortHostName()
-        let present = try await session.ui.progressStep("Checking for Peekaboo on \(host)") { _ in
+        let present = try await session.ui.progressStep("Checking whether Peekaboo is installed on \(host)") { _ in
             try await asConsoleUser(mac, "bash -s", input: Self.presentScript).output
         }
         for part in Self.parts where !present.contains(part.marker) {
@@ -47,7 +47,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
                 try await install(part, on: mac)
             }
         }
-        let pool = try await session.ui.progressStep("Reading \(host)'s test sessions") { _ in
+        let pool = try await session.ui.progressStep("Reading the list of test accounts on \(host)") { _ in
             try await asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output
         }
         let users = user.map { [$0] } ?? SessionPool.users(fromPool: pool)
@@ -118,7 +118,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
             Self.tunnels.removeAll()
         }
         if mac == nil { try await letThisMacIn(user, ui: ui) }
-        var missing = try await ui.progressStep("Starting Peekaboo's bridge for \(host)/\(user)") { _ in
+        var missing = try await ui.progressStep("Starting Peekaboo's background helper in \(host)/\(user) and checking its permissions") { _ in
             let started = try await ssh(destination, "bash -s", input: Self.bridgeScript)
             guard started.succeeded else {
                 throw SCError("Couldn't start Peekaboo's bridge for \(user) on \(host): \(started.error.trimmingCharacters(in: .whitespacesAndNewlines))",
@@ -279,7 +279,10 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     /// authorized keys: other Macs' keys, not this Mac's own. So this Mac's
     /// default public keys are added, with sudo, the first time.
     private func letThisMacIn(_ user: String, ui: UI) async throws {
-        if try await ssh("\(user)@localhost", "true").succeeded { return }
+        let reachable = try await ui.progressStep("Checking this Mac can reach \(user) over SSH") { _ in
+            try await ssh("\(user)@localhost", "true").succeeded
+        }
+        if reachable { return }
         let keys = ["id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub"].map { URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ssh/\($0)") }
             .filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !keys.isEmpty, let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) else {
