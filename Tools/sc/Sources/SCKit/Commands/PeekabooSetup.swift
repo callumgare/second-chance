@@ -64,7 +64,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     /// Prints `app` and `cli` for the parts that are there.
     static let presentScript = """
     [ -d /Applications/Peekaboo.app ] && echo app
-    for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(sharedCLI); do [ -x "$c" ] && echo cli && break; done
+    for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(sharedCLI); do [ -x "$c" ] && "$c" --version >/dev/null 2>&1 && echo cli && break; done
     true
     """
 
@@ -90,7 +90,9 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
             echo "\(cliSHA256)  cli.tgz" | shasum -a 256 -c - >/dev/null
             mkdir cli && tar -xzf cli.tgz -C cli
             found=$(find cli -type f -name peekaboo -perm -u+x | head -1)
-            mkdir -p "$(dirname \(sharedCLI))" && cp "$found" \(sharedCLI) && chmod 755 \(sharedCLI)
+            # The whole folder: the tool loads a Swift library beside it.
+            mkdir -p "$(dirname \(sharedCLI))" && cp "$(dirname "$found")"/* "$(dirname \(sharedCLI))"/ && chmod 755 \(sharedCLI)
+            \(sharedCLI) --version >/dev/null
             """),
         ]
     }
@@ -143,12 +145,11 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
             var shown = missing[0]
             let deadline = Date().addingTimeInterval(900)
             while Date() < deadline {
-                try await Task.sleep(for: .seconds(3))
+                try await Task.sleep(for: .seconds(5))
+                // A grant takes effect only when the app starts again, as
+                // System Settings says, so the bridge restarts before each look.
+                _ = try? await TestSessionAccess.ssh(destination, "launchctl kickstart -k gui/$(id -u)/\(Self.bridgeLabel); sleep 2")
                 let now = try await missingGrants(destination)
-                if now.count < missing.count {
-                    // A new grant takes effect when the app restarts, as System Settings says.
-                    _ = try? await TestSessionAccess.ssh(destination, "launchctl kickstart -k gui/$(id -u)/\(Self.bridgeLabel)")
-                }
                 missing = now
                 if now.isEmpty { return now }
                 if now[0] != shown {
