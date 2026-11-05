@@ -394,6 +394,20 @@ struct SessionAddCommand: AsyncParsableCommand {
             }
             try await sudo(["/usr/sbin/createhomedir", "-c", "-u", user])
         }
+        // A new user's first login otherwise stops in Setup Assistant, where
+        // nothing of sc's can start (a LaunchAgent for the Aqua session never
+        // runs), though the session counts as logged in. Seen-before settings
+        // skip it; a session already stuck there is closed too, and the
+        // keep-alive logs it in again.
+        let stuck = try await Self.inSetupAssistant(user)
+        if created || stuck {
+            try await sudo(["-u", user, "/bin/bash", "-c", Self.setupAssistantDoneScript(build: Self.osVersion("-buildVersion"),
+                                                                                         version: Self.osVersion("-productVersion"))])
+            if stuck {
+                session.ui.detail("\(user) was stuck in Setup Assistant: marked it done and logged the session out for the keep-alive to log in again.")
+                try await sudo(["/usr/bin/pkill", "-u", user, "-x", "Setup Assistant"])
+            }
+        }
         // Each step only if it's missing, so running it again (or adopting a
         // user) asks for no password when nothing needs changing.
         for group in ["com.apple.access_ssh", "com.apple.access_screensharing"] {
@@ -413,6 +427,37 @@ struct SessionAddCommand: AsyncParsableCommand {
             try await sudo(["/usr/bin/install", "-d", "-o", user, "-g", "staff", "-m", "700", "\(home)/.ssh"])
             try await sudo(["/usr/bin/install", "-o", user, "-g", "staff", "-m", "600", file.path, "\(home)/.ssh/authorized_keys"])
         }
+    }
+
+    /// What macOS's Setup Assistant asks a new user, marked as seen: the
+    /// screens of macOS 15 and 26, and the build and version it last ran for.
+    static let setupAssistantSeen = [
+        "DidSeeAccessibility", "DidSeeActivationLock", "DidSeeAppStore", "DidSeeAppearanceSetup", "DidSeeApplePaySetup",
+        "DidSeeAvatarSetup", "DidSeeCloudDiagnostics", "DidSeeCloudSetup", "DidSeeIntelligence", "DidSeeLockdownMode",
+        "DidSeePrivacy", "DidSeeScreenTime", "DidSeeSiriSetup", "DidSeeSyncSetup", "DidSeeSyncSetup2", "DidSeeTermsOfAddress",
+        "DidSeeTouchIDSetup", "DidSeeTrueTonePrivacy", "DidSeeWallpaperSetup", "DidSeeiCloudLoginForStorageServices",
+        "SkipFirstLoginOptimization",
+    ]
+
+    static func setupAssistantDoneScript(build: String, version: String) -> String {
+        let domain = "com.apple.SetupAssistant"
+        let seen = setupAssistantSeen.map { "/usr/bin/defaults write \(domain) \($0) -bool true" }
+        let versions = ["LastSeenBuddyBuildVersion": build, "LastSeenCloudProductVersion": version,
+                        "LastSeenDiagnosticsProductVersion": version, "LastSeenSiriProductVersion": version,
+                        "LastSeenIntelligenceProductVersion": version, "LastPrivacyBundleVersion": "2"]
+            .sorted { $0.key < $1.key }
+            .map { "/usr/bin/defaults write \(domain) \($0.key) -string \(Remote.quote($0.value))" }
+        return (seen + versions).joined(separator: " && ")
+    }
+
+    static func osVersion(_ flag: String) async throws -> String {
+        try await Proc.collect("/usr/bin/sw_vers", [flag]).output.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Whether the user's session is in Setup Assistant: its process list is
+    /// any user's to read.
+    static func inSetupAssistant(_ user: String) async throws -> Bool {
+        try await Proc.collect("/usr/bin/pgrep", ["-u", user, "-x", "Setup Assistant"]).succeeded
     }
 
     /// The keys a test user lets in: those this user lets in (so whoever

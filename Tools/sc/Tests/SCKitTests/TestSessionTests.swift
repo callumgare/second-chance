@@ -171,6 +171,15 @@ struct PeekabooSetupTests {
         #expect(script.contains("launchctl bootstrap gui/$(id -u)"))
     }
 
+    @Test("A new test user's Setup Assistant is marked done for this macOS")
+    func setupAssistant() {
+        let script = SessionAddCommand.setupAssistantDoneScript(build: "25G332", version: "26.4")
+        #expect(script.contains("/usr/bin/defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true"))
+        #expect(script.contains("LastSeenBuddyBuildVersion -string '25G332'"))
+        #expect(script.contains("LastSeenCloudProductVersion -string '26.4'"))
+        #expect(!script.contains("; "))
+    }
+
     @Test("Test users let in the keys this user lets in and this user's own, each once")
     func authorizedKeys() throws {
         let ssh = FileManager.default.temporaryDirectory.appendingPathComponent("sc-keys-\(UUID().uuidString)")
