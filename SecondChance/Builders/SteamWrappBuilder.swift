@@ -55,7 +55,7 @@ struct SteamWrappPreparer: SteamWrappPreparing {
     /// the modules' stores their steps use.
     nonisolated static func clientPlan(modules root: URL) async throws -> BuildPlan {
         try await Blocking.run {
-            let modules = try ModuleLoader(root: root).loadAll().get()
+            let modules = try ModuleLoader(root: root, added: AddedModules.folder()).loadAll().get()
             var plan = BuildPlan(edition: "steam-client", stages: try BuildPlanner.moduleStages("steam", "client", constraint: nil, modules: modules))
             plan.stores = StoreDeclarations(of: modules)
             return plan
@@ -300,7 +300,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
         do {
             identified = try await identify(in: scratch, preselected: preselected, input: input, lockToken: lockToken)
         } catch {
-            await helper.removeTempWrapp(scratch)
+            await helper.removeFailedBuild(scratch)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }
@@ -363,7 +363,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
-            await helper.removeTempWrapp(folder)
+            await helper.removeFailedBuild(folder)
             let buildError = WrappBuildError(error)
             await bus.publishWrappBuild(.failed(buildError))
             throw error
@@ -507,7 +507,7 @@ final class SteamWrappBuilder: WrappBuildStrategy {
     nonisolated static func clientStage(in bundle: Bundle = .main) async throws -> PlannedStage {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
         return try await Blocking.run {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
             guard let stage = try BuildPlanner.moduleStage("steam", "client", constraint: nil, modules: modules) else {
                 throw WrappBuildError.buildRecipeProblem("the steam module has no client stage")
             }

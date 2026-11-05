@@ -6,9 +6,9 @@ import WrappBuilderTool
 struct ModuleCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "module",
-        abstract: "Check the modules in Modules/, and record their releases.",
-        discussion: "docs/modules.md describes a module, its releases and these commands.",
-        subcommands: [ModuleCheckCommand.self, ModuleReleaseCommand.self]
+        abstract: "Check the modules in Modules/, record their releases, and import one someone wrote.",
+        discussion: "docs/modules.md describes a module, its releases and these commands; docs/module-programs.md, importing one.",
+        subcommands: [ModuleCheckCommand.self, ModuleReleaseCommand.self, ModuleImportCommand.self]
     )
 }
 
@@ -57,6 +57,33 @@ struct ModuleReleaseCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         try await runTool {
             try ModuleTool.release(root: session.repo.modules, releases: session.repo.moduleReleases, id: id, output: session.toolOutput)
+        }
+    }
+}
+
+struct ModuleImportCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "import",
+        abstract: "Import a module someone wrote, for this Mac's builds.",
+        discussion: """
+        Checks the module's module.yaml against the schema, that its id is \
+        namespaced (<namespace>/<name>) and no shipped module's, and that its \
+        program, if it has one, is built for arm64 and x86_64 and speaks a \
+        module protocol this Second Chance does; then copies it into \
+        ~/Library/Application Support/SecondChance/modules/, replacing one of \
+        its id (docs/module-programs.md).
+        """
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    @Argument(help: "The module's folder.")
+    var folder: String
+
+    func run() async throws {
+        let session = try Session.start(global)
+        try await runTool {
+            try await ModuleTool.importModule(URL(fileURLWithPath: folder), shipped: session.repo.modules, output: session.toolOutput)
         }
     }
 }

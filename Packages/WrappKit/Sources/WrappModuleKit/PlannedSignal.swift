@@ -87,7 +87,7 @@ public nonisolated protocol WatchProbe: Sendable {
 
 /// The program a step's signals are about: what `${program.…}` reads, each a
 /// path on this Mac.
-public nonisolated struct WatchedProgram: Sendable, Equatable {
+public nonisolated struct WatchedProgram: Sendable, Equatable, Codable {
     public var path: String
     public var log: String?
 

@@ -36,6 +36,11 @@ struct IntegrationOptions: ParsableArguments {
     ))
     var ignoreLoad = false
 
+    @Flag(name: .customLong("keep-failed-builds"),
+          help: ArgumentHelp("Keep the folder of each build that fails, for a look, logging where it is.",
+                             discussion: "Each is the build's working folder in the temporary folder, gigabytes for a Wine game, left until removed by hand."))
+    var keepFailedBuilds = false
+
     @Option(help: ArgumentHelp(
         "How many games to build at once. Games still launch one at a time. Defaults to one per four performance cores.",
         discussion: "Builds also wait for disk: each reserves what its game's build took last time (or an estimate), "
@@ -186,7 +191,8 @@ struct TestAllCommand: AsyncParsableCommand {
         let integrationRun = try await integration.withVM(session) { vm in
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
+                ignoreLoad: integration.ignoreLoad, keepFailedBuilds: integration.keepFailedBuilds,
+                buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
                 keepRecordings: integration.keepRecordings, vm: vm, stamp: stamp
             )
         }
@@ -262,7 +268,8 @@ struct TestIntegrationCommand: AsyncParsableCommand {
         let run = try await integration.withVM(session) { vm in
             try await runner.integration(
                 games: games, sources: integration.sources, refresh: integration.refreshWrapp, wrappsDir: integration.wrapps.resolve(session.repo),
-                ignoreLoad: integration.ignoreLoad, buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
+                ignoreLoad: integration.ignoreLoad, keepFailedBuilds: integration.keepFailedBuilds,
+                buildConcurrency: integration.resolvedBuildConcurrency, diskMargin: integration.diskMargin,
                 keepRecordings: integration.keepRecordings, vm: vm, stamp: stamp
             )
         }

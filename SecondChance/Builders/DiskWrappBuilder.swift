@@ -147,7 +147,7 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             return finalPath
         } catch {
             // Tear down builder-owned resources before rethrowing.
-            await helper.removeTempWrapp(folder)
+            await helper.removeFailedBuild(folder)
             await isoMounter.unmountAll()
 
             let installError = WrappBuildError(error)

@@ -83,7 +83,7 @@ nonisolated enum ShippedBundles {
                      in bundle: Bundle = .main) throws -> BuildPlan? {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
             let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
@@ -112,7 +112,7 @@ nonisolated enum ShippedBundles {
                      in bundle: Bundle = .main) throws -> WrappLock {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
             let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let plan = try plan(forGame: slug, edition: edition, in: bundle)
@@ -171,7 +171,7 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         let target = try lock(forGame: slug, edition: old.edition, source: source, composition: composition, in: bundle)
         do {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
             let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
@@ -199,7 +199,7 @@ nonisolated enum ShippedBundles {
                      in bundle: Bundle = .main) throws -> BuildPlan {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
             let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
             let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
@@ -228,7 +228,7 @@ nonisolated enum ShippedBundles {
     /// Every shipped bundle's download editions, in the catalogue's order.
     static func downloadEditions(in bundle: Bundle = .main) throws -> [DownloadEdition] {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
-        let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+        let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
         let loader = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules)
         return try GameInfoProvider.shared.allGames().flatMap { game -> [DownloadEdition] in
             let folder = resources.appendingPathComponent("Bundles/" + game.programID)

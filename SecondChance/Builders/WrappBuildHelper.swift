@@ -135,7 +135,7 @@ class WrappBuildHelper {
     /// is made with.
     private func engineModules(composition: Composition?, buildsWithWine: Bool) throws -> [ModuleFolder] {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
-        let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+        let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
         var wanted: [ModuleID] = buildsWithWine ? [.wine] : []
         for module in composition?.modules ?? [] where !wanted.contains(module) { wanted.append(module) }
         return wanted.compactMap { id in modules.first { $0.manifest.id == id.rawValue && $0.manifest.package() != nil } }
@@ -732,7 +732,7 @@ class WrappBuildHelper {
     /// needs it: what the runner's `ENGINE` steps install.
     func engine(_ id: String, version: String) async throws -> EngineStore.Engine {
         guard let resources = Bundle.main.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
-        let modules = try await Blocking.run { try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get() }
+        let modules = try await Blocking.run { try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get() }
         guard let module = modules.first(where: { $0.manifest.id == id }) else {
             throw WrappBuildError.buildRecipeProblem("there's no \(id) module to install the engine of")
         }
@@ -782,6 +782,18 @@ class WrappBuildHelper {
 
     /// Remove one tracked temp wrapp — a cleanup *primitive* the builder
     /// calls on its error path. No-op if already moved or removed.
+    /// A failed build's folder removed, or with `SECOND_CHANCE_KEEP_FAILED_BUILD=1`
+    /// (`sc … --debug keep-failed-build`) kept for a look, its path logged:
+    /// what an integration run's failure is diagnosed from.
+    func removeFailedBuild(_ path: URL) async {
+        if ProcessInfo.processInfo.environment["SECOND_CHANCE_KEEP_FAILED_BUILD"] == "1", fileManager.fileExists(atPath: path.path) {
+            Self.untrack(path)
+            logger.notice("Keeping the failed build's folder for a look: \(path.path)")
+            return
+        }
+        await removeTempWrapp(path)
+    }
+
     func removeTempWrapp(_ path: URL) async {
         defer { Self.untrack(path) }
 

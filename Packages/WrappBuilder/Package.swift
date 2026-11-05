@@ -41,14 +41,23 @@ let package = Package(
                 .product(name: "ProcessKit", package: "WrappKit"),
                 .product(name: "WrappFormat", package: "WrappKit"),
                 .product(name: "WrappModuleKit", package: "WrappKit"),
+                .product(name: "WrappLogging", package: "WrappKit"),
                 .product(name: "Logging", package: "swift-log"),
             ],
             swiftSettings: swiftSettings,
             linkerSettings: [.linkedFramework("JavaScriptCore")]
         ),
+        // A module's program, for the tests: an executor of its own served
+        // over the module protocol (docs/module-programs.md).
+        .executableTarget(
+            name: "wrapp-module-fixture",
+            dependencies: [.product(name: "WrappModuleKit", package: "WrappKit"), .product(name: "Logging", package: "swift-log")],
+            path: "Tests/ModuleFixture",
+            swiftSettings: swiftSettings
+        ),
         .testTarget(
             name: "WrappBuilderTests",
-            dependencies: ["WrappBuilder"],
+            dependencies: ["WrappBuilder", "wrapp-module-fixture"],
             swiftSettings: swiftSettings
         ),
     ]

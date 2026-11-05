@@ -88,7 +88,7 @@ nonisolated extension StepContext {
 
 /// A question a step asks the person, which the caller answers: through
 /// its windows, or for a headless build, from what it was given up front.
-public nonisolated enum StepQuestion: Sendable, Equatable {
+public nonisolated enum StepQuestion: Sendable, Equatable, Codable {
     /// A step failed that may be carried on without (`--on-failure=ask`).
     case confirmStepFailure(name: String, message: String)
     /// One of several things, by text (a module someone added asks this).
@@ -97,7 +97,7 @@ public nonisolated enum StepQuestion: Sendable, Equatable {
     case confirm(prompt: String)
 }
 
-public nonisolated enum StepAnswer: Sendable, Equatable {
+public nonisolated enum StepAnswer: Sendable, Equatable, Codable {
     case yes, no
     case chose(Int)
 }

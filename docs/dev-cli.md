@@ -197,6 +197,7 @@ They map onto the app's and wrapp's own switches:
 | `show-ui`                 | `SECOND_CHANCE_SHOW_UI=1`             |           | ✓             |             |
 | `skip-installer`          | `--skip-installer`                    | ✓         | ✓             |             |
 | `strict-install`          | `STRICT_INSTALL=true`                 |           | ✓             |             |
+| `keep-failed-build`       | `SECOND_CHANCE_KEEP_FAILED_BUILD=1`   | ✓         | ✓             |             |
 | `install-stall=<seconds>` | `SECOND_CHANCE_INSTALL_STALL_SECONDS` | ✓         | ✓             |             |
 | `layer-cache=<policy>`    | `SECOND_CHANCE_LAYER_CACHE=<policy>`  | ✓         | ✓             |             |
 | `settings-dialog`         | `--debug-options`                     |           |               | ✓           |
@@ -634,6 +635,8 @@ Its code is in `Tools/sc/`:
 - `Sources/SCKit/Support/Catalog.swift` — what the tool needs of the app's
   own game database, the `GameCatalog` package in `Packages/GameCatalog/`, so
   slugs and titles never drift from the app's.
+- `Tests/SCKitTests/` — Swift Testing; `swift test --package-path Tools/sc`,
+  also run by `sc test unit` and CI.
 
 `./sc` rebuilds the tool when anything in `Packages/` or `Tools/sc` changes
 (a hash of their files' contents, leaving out `.build` and `.swiftpm`), so a
@@ -642,8 +645,6 @@ doesn't use costs a build with nothing to do. A file added or removed means
 a clean build, as SwiftPM's incremental build of a local package can miss a
 new file and fail as though it weren't there, and a build that fails anyway
 is tried once more from clean.
-- `Tests/SCKitTests/` — Swift Testing; `swift test --package-path Tools/sc`,
-  also run by `sc test unit` and CI.
 
 Logic lives in the `SCKit` library so tests can parse real command lines with
 `SC.parseAsRoot`. Dependencies are swift-argument-parser, swift-subprocess and

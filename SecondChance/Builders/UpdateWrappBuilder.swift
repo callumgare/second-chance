@@ -156,7 +156,7 @@ final class UpdateWrappBuilder {
             await helper.launchIfAsked(finalPath, input: input)
             return .updated(finalPath)
         } catch {
-            await helper.removeTempWrapp(wrappPath)
+            await helper.removeFailedBuild(wrappPath)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }

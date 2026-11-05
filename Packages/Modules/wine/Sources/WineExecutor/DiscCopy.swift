@@ -50,6 +50,11 @@ public nonisolated enum DiscCopy {
                         NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: copyErrno) ?? .EIO),
                     ])
                 }
+                for failure in state.directoryFailures.prefix(3) {
+                    let sides = "From: \(describe(failure.source)). Its folder: \(describe((failure.destination as NSString).deletingLastPathComponent))"
+                    logger.error("Couldn't make \(failure.destination) (\(String(cString: strerror(failure.errno)))). \(sides)")
+                }
+                if state.directoryFailures.count > 3 { logger.error("…and \(state.directoryFailures.count - 3) more folders") }
                 try copyAgain(state.failures)
             }
         } onCancel: {
@@ -76,12 +81,34 @@ public nonisolated enum DiscCopy {
                 }
             }
             guard copied else {
+                // What a "not permitted" needs to be told apart: each side's
+                // modes, flags and ACL, and its folder's.
+                let sides = "From: \(describe(failure.source)); its folder: \(describe((failure.source as NSString).deletingLastPathComponent)). "
+                    + "To: \(describe(failure.destination)); its folder: \(describe((failure.destination as NSString).deletingLastPathComponent))"
+                logger.error("Copying \(failure.source) failed again (\(String(cString: strerror(lastErrno)))). \(sides)")
                 throw CocoaError(.fileReadUnknown, userInfo: [
                     NSFilePathErrorKey: failure.source,
                     NSUnderlyingErrorKey: POSIXError(POSIXErrorCode(rawValue: lastErrno) ?? .EIO),
                 ])
             }
         }
+    }
+
+    /// A path's mode, owner, flags and whether it has an ACL, for the log:
+    /// `drwxr-xr-x 501:20 flags=uchg acl`, or that it isn't there.
+    static func describe(_ path: String) -> String {
+        var info = stat()
+        guard lstat(path, &info) == 0 else { return "\(path) (\(String(cString: strerror(errno))))" }
+        let mode = String(info.st_mode & 0o7777, radix: 8)
+        let kind = info.st_mode & S_IFMT == S_IFDIR ? "dir" : info.st_mode & S_IFMT == S_IFLNK ? "link" : "file"
+        var flags: [String] = []
+        if info.st_flags & UInt32(UF_IMMUTABLE) != 0 { flags.append("uchg") }
+        if info.st_flags & UInt32(SF_IMMUTABLE) != 0 { flags.append("schg") }
+        if info.st_flags & UInt32(UF_APPEND) != 0 { flags.append("uappnd") }
+        if info.st_flags & UInt32(UF_HIDDEN) != 0 { flags.append("hidden") }
+        let acl = acl_get_link_np(path, ACL_TYPE_EXTENDED)
+        if acl != nil { acl_free(UnsafeMutableRawPointer(acl)) }
+        return "\(kind) \(mode) \(info.st_uid):\(info.st_gid)\(flags.isEmpty ? "" : " flags=\(flags.joined(separator: ","))")\(acl != nil ? " acl" : "")"
     }
 
     /// Directories copied without their modes can still come out without
@@ -103,6 +130,14 @@ public nonisolated enum DiscCopy {
         let progress: @Sendable (Progress) -> Void
         private let state = Mutex((cancelled: false, finishedFiles: Int64(0), current: Int64(0), lastReport: ContinuousClock.Instant.now))
         private let failed = Mutex<[(source: String, destination: String, errno: Int32)]>([])
+
+        private let failedDirectories = Mutex<[(source: String, destination: String, errno: Int32)]>([])
+
+        /// The folders the copy couldn't make, with why.
+        var directoryFailures: [(source: String, destination: String, errno: Int32)] { failedDirectories.withLock { $0 } }
+        func failDirectory(source: String, destination: String, errno: Int32) {
+            failedDirectories.withLock { $0.append((source, destination, errno)) }
+        }
 
         /// The files the copy went past, with why.
         var failures: [(source: String, destination: String, errno: Int32)] { failed.withLock { $0 } }
@@ -147,6 +182,11 @@ public nonisolated enum DiscCopy {
         if stage == COPYFILE_ERR, what == COPYFILE_RECURSE_FILE || what == COPYFILE_COPY_DATA, let source, let destination {
             state.fail(source: String(cString: source), destination: String(cString: destination), errno: errno)
             return COPYFILE_SKIP
+        }
+        // A folder it couldn't make leaves out everything in it: noted, so
+        // the log says why.
+        if stage == COPYFILE_ERR, what == COPYFILE_RECURSE_DIR || what == COPYFILE_RECURSE_DIR_CLEANUP, let source, let destination {
+            state.failDirectory(source: String(cString: source), destination: String(cString: destination), errno: errno)
         }
         if what == COPYFILE_COPY_DATA && stage == COPYFILE_PROGRESS || what == COPYFILE_RECURSE_FILE && stage == COPYFILE_FINISH {
             var copied: off_t = 0

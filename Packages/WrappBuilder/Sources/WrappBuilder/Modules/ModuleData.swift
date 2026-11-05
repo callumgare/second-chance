@@ -7,6 +7,9 @@
 
 import CryptoKit
 import Foundation
+import Logging
+
+private nonisolated let addedLogger = Logger(label: "au.gare.callum.second-chance.SecondChance.AddedModules")
 
 /// A module's `module.yaml`: as far as anything reads it so far. The schema
 /// (`Modules/module.schema.json`) has every field and checks it first.
@@ -34,6 +37,11 @@ public nonisolated struct ModuleManifest: Decodable, Hashable, Sendable {
     /// Its files of `SIGNAL` blocks, which its stages and functions, and a
     /// bundle's Wrappfile, name as `<id>.<signal>`.
     public let signals: [String]?
+    /// A module someone added: its program, a Mach-O in its folder that
+    /// carries out its instructions over the module protocol
+    /// (docs/module-programs.md). Shipped modules have none: they're
+    /// compiled in.
+    public let program: String?
     /// Its default updates, run after a bundle's for a wrapp whose copy of
     /// the module is behind this one (`UpdatePlanner`).
     public let updates: [Update]?
@@ -84,21 +92,28 @@ public nonisolated struct ModuleFolder: Sendable {
 /// there. Not thread-safe (its validator isn't): make one where it's used.
 public nonisolated final class ModuleLoader {
     public let root: URL
+    /// The modules someone added (`<namespace>/<name>/`), loaded after the
+    /// shipped ones, which a module of the same id never shadows.
+    public let added: URL?
     private let validator: SchemaValidator
     /// The `$id`s of the tables' schemas added to `validator` so far.
     private var addedSchemas: Set<String> = []
 
     static let schemaID = "https://second-chance.invalid/schemas/module.json"
 
-    public init(root: URL) throws {
+    public init(root: URL, added: URL? = nil) throws {
         self.root = root
+        self.added = added
         validator = try SchemaValidator()
         try validator.addSchema(Data(contentsOf: root.appendingPathComponent("module.schema.json")))
     }
 
     /// Every module's folder: `<id>/` or `<namespace>/<name>/`, holding a
     /// `module.yaml`, sorted.
-    public func moduleFolders() throws -> [URL] {
+    public func moduleFolders() throws -> [URL] { try Self.folders(in: root) }
+
+    /// The module folders in `root`: `<id>/` or `<namespace>/<name>/`.
+    static func folders(in root: URL) throws -> [URL] {
         let files = FileManager.default
         var folders: [URL] = []
         for top in try files.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) where top.hasDirectoryPath {
@@ -117,7 +132,9 @@ public nonisolated final class ModuleLoader {
     /// The module in `folder`, or what's wrong with it.
     public func load(_ folder: URL) -> Result<ModuleFolder, ProgramBundleLoader.Problems> {
         // Both resolved, as a temporary folder may be named by /var or /private/var.
-        let path = folder.resolvingSymlinksInPath().path, rootPath = root.resolvingSymlinksInPath().path
+        let path = folder.resolvingSymlinksInPath().path
+        let addedPath = added?.resolvingSymlinksInPath().path
+        let rootPath = addedPath.map { path.hasPrefix($0 + "/") } == true ? addedPath ?? "" : root.resolvingSymlinksInPath().path
         let name = path.hasPrefix(rootPath + "/") ? String(path.dropFirst(rootPath.count + 1)) : folder.path
         func problems(_ messages: [String]) -> Result<ModuleFolder, ProgramBundleLoader.Problems> {
             .failure(.init(all: messages.map { ProgramBundle.Problem(bundle: name, message: $0) }))
@@ -219,7 +236,30 @@ public nonisolated final class ModuleLoader {
             case .failure(let problems): all += problems.all
             }
         }
+        modules += addedModules(besides: modules)
         return all.isEmpty ? .success(modules) : .failure(.init(all: all))
+    }
+
+    /// The modules someone added that load, each namespaced and none
+    /// shadowing a shipped one: one that doesn't is left out, and logged,
+    /// rather than stopping every build.
+    public func addedModules(besides shipped: [ModuleFolder]) -> [ModuleFolder] {
+        guard let added, FileManager.default.fileExists(atPath: added.path) else { return [] }
+        let folders = (try? Self.folders(in: added)) ?? []
+        var modules: [ModuleFolder] = []
+        for folder in folders {
+            switch load(folder) {
+            case .success(let module) where !module.manifest.id.contains("/"):
+                addedLogger.warning("Leaving out the added module \(module.manifest.id): an added module's id is namespaced (<namespace>/<name>)")
+            case .success(let module) where shipped.contains(where: { $0.manifest.id == module.manifest.id }):
+                addedLogger.warning("Leaving out the added module \(module.manifest.id): a shipped module has its id")
+            case .success(let module):
+                modules.append(module)
+            case .failure(let problems):
+                addedLogger.warning("Leaving out an added module: \(problems.all.map(\.description).joined(separator: "; "))")
+            }
+        }
+        return modules
     }
 
     /// The module with `id`, loaded, or nil when there's none (or it has

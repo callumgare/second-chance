@@ -151,8 +151,8 @@ struct TestRunner {
 
     func integration(
         games requested: [CatalogGame], sources: [IntegrationSource] = [.disk], refresh: WrappRefresh, wrappsDir: URL,
-        ignoreLoad: Bool = false, buildConcurrency: Int = 1, diskMargin: Double = 10, keepRecordings: Bool = false,
-        vm: TestVM.Prepared? = nil, stamp: String
+        ignoreLoad: Bool = false, keepFailedBuilds: Bool = false, buildConcurrency: Int = 1, diskMargin: Double = 10,
+        keepRecordings: Bool = false, vm: TestVM.Prepared? = nil, stamp: String
     ) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
@@ -209,6 +209,7 @@ struct TestRunner {
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }
+        if keepFailedBuilds { env["TEST_RUNNER_SECOND_CHANCE_KEEP_FAILED_BUILD"] = "1" }
         env.merge(Self.recordingEnvironment(keepRecordings: keepRecordings)) { _, new in new }
         if keepRecordings && vm != nil {
             ui.warning("--keep-recordings keeps nothing from a VM: WrappPuppeteer doesn't record the screen there.")

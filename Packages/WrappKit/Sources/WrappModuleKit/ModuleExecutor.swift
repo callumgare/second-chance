@@ -66,7 +66,7 @@ nonisolated extension ModuleExecutor {
 
 /// A program to run as a `RUN` step would: by its path type, through the
 /// module that registered it, with its mounts put in place first.
-public nonisolated struct ProgramRun: Sendable {
+public nonisolated struct ProgramRun: Sendable, Codable {
     /// In full form: `wine:C:/setup.exe`.
     public var program: String
     public var arguments: [String]
@@ -106,7 +106,7 @@ public nonisolated struct KeyInput: Sendable, Equatable, Codable {
 }
 
 /// Why a step failed, which the build turns into what the person sees.
-public nonisolated enum StepFailure: Error, Sendable, Equatable, CustomStringConvertible {
+public nonisolated enum StepFailure: Error, Sendable, Equatable, CustomStringConvertible, Codable {
     /// What the Wrappfile or a module says can't be done: a recipe problem.
     case recipe(String)
     /// The step was tried and failed.

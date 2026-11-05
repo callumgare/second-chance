@@ -548,7 +548,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                 gameInfo = choice.game
                 chosen = choice
             } catch {
-                await helper.removeTempWrapp(scratch)
+                await helper.removeFailedBuild(scratch)
                 await bus.publishWrappBuild(.failed(WrappBuildError(error)))
                 throw error
             }
@@ -614,7 +614,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
-            await helper.removeTempWrapp(folder)
+            await helper.removeFailedBuild(folder)
             await bus.publishWrappBuild(.failed(WrappBuildError(error)))
             throw error
         }
@@ -929,7 +929,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
     nonisolated static func managerStage(in bundle: Bundle = .main) async throws -> PlannedStage {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
         return try await Blocking.run {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
             guard let stage = try BuildPlanner.moduleStage("big-fish", "manager", constraint: nil, modules: modules) else {
                 throw WrappBuildError.buildRecipeProblem("the big-fish module has no manager stage")
             }
@@ -942,7 +942,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
     nonisolated static func managerStages(in bundle: Bundle = .main) async throws -> (stages: [PlannedStage], stores: StoreDeclarations) {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.templateDamaged("Second Chance has no resources") }
         return try await Blocking.run {
-            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules")).loadAll().get()
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
             return (try BuildPlanner.moduleStages("big-fish", "manager", constraint: nil, modules: modules), StoreDeclarations(of: modules))
         }
     }

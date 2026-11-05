@@ -49,6 +49,18 @@ public nonisolated enum ModuleTool {
         output.success("Recorded release \(module.manifest.release) of \(id).")
     }
 
+    /// A module someone wrote, checked and copied in with the added ones
+    /// (`AddedModules`).
+    public static func importModule(_ folder: URL, shipped: URL, into added: URL = AddedModules.folder(),
+                                    output: some ToolOutput) async throws {
+        do {
+            let module = try await AddedModules.import(folder, shipped: shipped, into: added)
+            output.success("Imported \(module.manifest.id), release \(module.manifest.release)\(module.manifest.program.map { ", with its program \($0)" } ?? "").")
+        } catch let problem as AddedModules.Problem {
+            throw ToolError(problem.description)
+        }
+    }
+
     /// The module `id` in `root`, or its problems said and refused.
     public static func load(_ id: String, root: URL, output: some ToolOutput) throws -> ModuleFolder {
         switch try ModuleLoader(root: root).load(root.appendingPathComponent(id)) {

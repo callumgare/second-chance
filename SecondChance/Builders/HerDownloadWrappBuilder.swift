@@ -167,7 +167,7 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             await helper.removeTempWrapp(folder)
             return finalPath
         } catch {
-            await helper.removeTempWrapp(folder)
+            await helper.removeFailedBuild(folder)
             await isoMounter.unmountAll()
             await publishFailure(error)
             throw error

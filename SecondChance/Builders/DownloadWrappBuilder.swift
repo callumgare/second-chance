@@ -124,7 +124,7 @@ final class DownloadWrappBuilder: WrappBuildStrategy {
             await helper.launchIfAsked(finalPath, input: input)
             return finalPath
         } catch {
-            await helper.removeTempWrapp(folder)
+            await helper.removeFailedBuild(folder)
             do {
                 try FileManager.default.removeItem(at: unpacked)
             } catch CocoaError.fileNoSuchFile {

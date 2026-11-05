@@ -34,7 +34,19 @@ struct ModuleSteps {
 
     /// The executors the shipped modules have.
     nonisolated static func executors(helpers: URL? = nil) -> [String: any ModuleExecutor] {
-        ["wine": WineExecutor(helpers: helpers, buildTools: wineBuildTools), "nancy-drew": NancyDrewExecutor()]
+        // The shipped modules' executors, compiled in, and each added module's
+        // program (docs/module-programs.md).
+        let shipped: [String: any ModuleExecutor] = ["wine": WineExecutor(helpers: helpers, buildTools: wineBuildTools),
+                                                     "nancy-drew": NancyDrewExecutor()]
+        return shipped.merging(AddedModules.executors(addedModules())) { mine, _ in mine }
+    }
+
+    /// The modules someone added that load.
+    nonisolated static func addedModules() -> [ModuleFolder] {
+        guard let modules = Bundle.main.resourceURL?.appendingPathComponent("Modules"),
+              let shipped = try? ModuleLoader(root: modules).loadAll().get(),
+              let loader = try? ModuleLoader(root: modules, added: AddedModules.folder()) else { return [] }
+        return loader.addedModules(besides: shipped)
     }
 
     /// The `build-tools` of the Wine engine the tree has, in the engine store.
@@ -48,8 +60,8 @@ struct ModuleSteps {
     /// What each shipped module declares, by id (`build:`).
     nonisolated static func moduleDeclarations() -> [String: ModuleDeclarations] {
         guard let modules = Bundle.main.resourceURL?.appendingPathComponent("Modules"),
-              let loaded = try? ModuleLoader(root: modules).loadAll().get() else { return [:] }
-        return Dictionary(uniqueKeysWithValues: loaded.map { ($0.manifest.id, $0.declarations) })
+              let loaded = try? ModuleLoader(root: modules, added: AddedModules.folder()).loadAll().get() else { return [:] }
+        return Dictionary(loaded.map { ($0.manifest.id, $0.declarations) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// The shipped modules' folders, by id, for what an executor reads of
@@ -57,7 +69,9 @@ struct ModuleSteps {
     nonisolated static func moduleFolders() -> [String: URL] {
         guard let modules = Bundle.main.resourceURL?.appendingPathComponent("Modules"),
               let ids = try? FileManager.default.contentsOfDirectory(atPath: modules.path) else { return [:] }
-        return Dictionary(uniqueKeysWithValues: ids.map { ($0, modules.appendingPathComponent($0)) })
+        var folders = Dictionary(uniqueKeysWithValues: ids.map { ($0, modules.appendingPathComponent($0)) })
+        for module in addedModules() where folders[module.manifest.id] == nil { folders[module.manifest.id] = module.folder }
+        return folders
     }
 
     func run(_ step: PlannedStep, wrappPath: URL) async throws {
