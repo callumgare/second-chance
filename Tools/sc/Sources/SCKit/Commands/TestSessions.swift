@@ -269,11 +269,20 @@ enum SessionKeepAlive {
                 say("\(user): connected (\(connection.width)x\(connection.height))")
                 wait = 5
                 var checked = Date.distantPast
+                let connected = Date()
                 while !Task.isCancelled {
                     try connection.refresh()
                     if Date().timeIntervalSince(checked) >= 10 {
                         checked = Date()
-                        if await SessionPool.logins().first(where: { $0.user == user })?.locked == true {
+                        let login = await SessionPool.logins().first(where: { $0.user == user })
+                        // Logged out (as killing its Setup Assistant does), the
+                        // connection stays up, showing the login window: only a
+                        // new one logs the user in again. A fresh login takes a
+                        // few seconds to show, so not straight after connecting.
+                        if login == nil, Date().timeIntervalSince(connected) > 30 {
+                            throw SCError("logged out; connecting again logs it back in")
+                        }
+                        if login?.locked == true {
                             say("\(user): locked, unlocking")
                             try connection.unlock(password: password)
                         }
