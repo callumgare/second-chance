@@ -15,7 +15,7 @@ struct SessionCommand: AsyncParsableCommand {
         sc --on <host> session claim --purpose "…". See docs/dev-cli.md#test-sessions.
         """,
         subcommands: [SessionListCommand.self, SessionClaimCommand.self, SessionReleaseCommand.self,
-                      SessionKeepAliveCommand.self, SessionAddCommand.self, SessionSetupPeekabooCommand.self,
+                      SessionKeepAliveCommand.self, SessionAddCommand.self, SessionLogoutCommand.self, SessionSetupPeekabooCommand.self,
                       SessionScreenshotCommand.self],
         defaultSubcommand: SessionListCommand.self
     )
@@ -573,6 +573,10 @@ struct SessionAddCommand: AsyncParsableCommand {
     }
 
     private func sudo(_ arguments: [String]) async throws {
+        try await Self.sudo(arguments)
+    }
+
+    static func sudo(_ arguments: [String]) async throws {
         // With nobody at a terminal to type the password, sudo would wait for ever.
         let cached = try await Proc.collect("/usr/bin/sudo", ["-n", "true"]).succeeded
         guard isatty(STDIN_FILENO) != 0 || cached else {
@@ -589,5 +593,72 @@ struct SessionAddCommand: AsyncParsableCommand {
         let characters = Array("abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789")
         var generator = SystemRandomNumberGenerator()
         return String((0..<24).map { _ in characters.randomElement(using: &generator) ?? "x" })
+    }
+}
+
+struct SessionLogoutCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "logout",
+        abstract: "Log the test sessions out, so the Mac shuts down without asking about them.",
+        discussion: """
+        Stops the keep-alive first, which would log them in again within a \
+        minute; it comes back at your next login, or with sc session \
+        keep-alive --install. Ending another user's login takes sudo, which \
+        asks for your password. Whatever runs in a session is quit without \
+        saving, so a session leased to a run is left alone unless --force.
+        """
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    @Argument(help: "The test users to log out. Default: every one in the pool that's logged in.")
+    var users: [String] = []
+
+    @Flag(help: "Log out a session leased to a run too, ending the run.")
+    var force = false
+
+    func run() async throws {
+        let session = try Session.start(global)
+        let statuses = await SessionPool.statuses(users: users.isEmpty ? SessionPool.users() : users)
+        let loggedIn = statuses.filter { $0.login != nil }
+        guard !loggedIn.isEmpty else {
+            session.ui.detail("No test session on \(ScreenLease.shortHostName()) is logged in.")
+            return
+        }
+        let leased = force ? [] : loggedIn.filter { $0.lease != nil }
+        let going = loggedIn.filter { status in !leased.contains { $0.user == status.user } }
+        for status in leased {
+            session.ui.warning("Left \(SessionPool.screenName(of: status.user)) logged in: it's leased to a run.",
+                               next: "Log it out anyway, ending the run: sc session logout --force \(status.user)")
+        }
+        guard !going.isEmpty else { return }
+
+        let keepAlive = await SessionKeepAliveCommand.isInstalled()
+        if keepAlive {
+            _ = try await Proc.collect("/bin/launchctl", ["bootout", "\(SessionKeepAliveCommand.domain)/\(SessionKeepAliveCommand.label)"])
+            session.ui.detail("Stopped the keep-alive, so it doesn't log them in again.")
+        }
+        for status in going {
+            guard let login = status.login else { continue }
+            session.ui.detail("Logging out \(SessionPool.screenName(of: status.user)). sudo may ask for your password.")
+            try await SessionAddCommand.sudo(["/bin/launchctl", "bootout", "gui/\(login.uid)"])
+        }
+        // Gone once WindowServer no longer lists the login: seconds, as each
+        // session's programs are quit.
+        let deadline = Date().addingTimeInterval(60)
+        var left = going.map(\.user)
+        while !left.isEmpty, Date() < deadline {
+            let logins = await SessionPool.logins()
+            left.removeAll { user in !logins.contains { $0.user == user } }
+            if !left.isEmpty { try await Task.sleep(for: .milliseconds(500)) }
+        }
+        let done = going.map(\.user).filter { !left.contains($0) }
+        if !left.isEmpty {
+            session.ui.warning("Still logged in after a minute: \(left.joined(separator: ", ")).",
+                               next: "See what's holding it: sc session, or log it out over Screen Sharing.")
+        }
+        guard !done.isEmpty else { return }
+        session.ui.success("Logged out \(done.map { SessionPool.screenName(of: $0) }.joined(separator: ", ")).",
+                           takeaways: keepAlive ? ["The keep-alive logs them in again at your next login, or now: sc session keep-alive --install"] : [])
     }
 }

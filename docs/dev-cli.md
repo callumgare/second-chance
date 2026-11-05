@@ -600,6 +600,15 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   keep-alive to log in again. It gives each test user the console user's
   [signing certificate](#signing-in-test-sessions). Then it makes the Mac's
   installers store (below) and installs the keep-alive if it isn't running.
+- `sc session logout [--force] [<user>…]` logs the test sessions out (all
+  the pool's, unless named), so the Mac shuts down or restarts without asking
+  about other users. It stops the keep-alive first, which would log them in
+  again within a minute; it comes back at the console user's next login, or
+  with `sc session keep-alive --install`. Ending another user's login takes
+  `sudo launchctl bootout gui/<uid>`: a user can't end its own from SSH, and
+  loginwindow's log-out event, sent from inside the session, needs an
+  Automation grant nobody is there to give. What runs in a session is quit
+  without saving, so a leased session is left alone unless `--force`.
 - **Installers are kept once per Mac**, in the
   [installers store](testing.md#the-installers-store),
   `/Users/Shared/second-chance/installers`, writable by every user through an
