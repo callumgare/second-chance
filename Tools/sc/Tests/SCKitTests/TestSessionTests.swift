@@ -142,15 +142,18 @@ struct PeekabooSetupTests {
         {"name":"Accessibility","isRequired":true,"isGranted":true},
         {"name":"Event Synthesizing","isRequired":false,"isGranted":false}]},"success":true}
         """
-        #expect(SessionSetupPeekabooCommand.missing(fromPermissionsJSON: Data(json.utf8)) == ["Screen Recording"])
-        #expect(SessionSetupPeekabooCommand.missing(fromPermissionsJSON: Data("not json".utf8)) == ["Screen Recording", "Accessibility"])
+        #expect(PeekabooSetup.missing(fromPermissionsJSON: Data(json.utf8)) == ["Screen Recording"])
+        #expect(PeekabooSetup.missing(fromPermissionsJSON: Data("not json".utf8)) == ["Screen Recording", "Accessibility"])
     }
 
-    @Test("setup-peekaboo keeps --on for itself; other commands run there")
+    @Test("session setup keeps --on for itself; other commands run there")
     func runsHere() {
-        #expect(Remote.runsHere(["session", "setup-peekaboo", "sctest"]))
+        #expect(Remote.runsHere(["session", "setup", "sctest"]))
         #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(Remote.runsHere(["session", "view", "sctest"]))
+        #expect(Remote.followUp(after: ["session", "add", "--count", "2"]) == ["session", "setup"])
+        #expect(Remote.followUp(after: ["session", "add", "--no-setup"]) == nil)
+        #expect(Remote.followUp(after: ["session", "list"]) == nil)
         #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "remove"]) }
         #expect((try? SC.parseAsRoot(["session", "remove", "sctest2", "--delete-account"])) is SessionRemoveCommand)
         let port = try? Network.freePort()

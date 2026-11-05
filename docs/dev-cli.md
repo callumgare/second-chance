@@ -598,8 +598,13 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   can start (an Aqua LaunchAgent never runs) while `sc session` still says
   "logged in". A re-run frees a user stuck there, logging it out for the
   keep-alive to log in again. It gives each test user the console user's
-  [signing certificate](#signing-in-test-sessions). Then it makes the Mac's
-  installers store (below) and installs the keep-alive if it isn't running.
+  [signing certificate](#signing-in-test-sessions): over SSH macOS can't ask to
+  allow exporting the key, so it exports it in the GUI session instead, where
+  macOS asks on that Mac's screen (reach it over Screen Sharing; Always Allow
+  stops it asking again). Then it makes the Mac's installers store (below) and
+  installs the keep-alive if it isn't running. Last, unless `--no-setup`, the
+  `sc` you ran sets the test sessions up (`session setup`, with `--on` if `add`
+  ran there: below).
 - `sc session logout [--force] [<user>…]` logs the test sessions out (all
   the pool's, unless named), so the Mac shuts down or restarts without asking
   about other users. It stops the keep-alive first, which would log them in
@@ -677,7 +682,10 @@ Peekaboo reads and drives Mac windows (system prompts, installers, Finder) where
 puppet helper only sees a game's window. Its Screen Recording and Accessibility grants
 are per user, and no script can give them: they live in the system's TCC database
 behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
-`sc session setup-peekaboo [<user>] [--on <host>]`, run on the Mac you're at, makes the
+`sc session setup [<user>…] [--only signing|peekaboo …] [--on <host>]`, run on the Mac
+you're at, does every set-up task a test session needs, or those `--only` names, each
+skipping what's done: `signing` gives each test user the console user's signing
+certificate (above), done on the test Mac, where that certificate is; `peekaboo` makes the
 grants a minute each: with `--on`, for that Mac's test sessions, and without, this
 Mac's. Unlike other commands it doesn't run on the other Mac (`Remote.runsHere`): it
 reaches the test sessions over SSH itself, since the Screen Sharing window has to open
@@ -703,7 +711,7 @@ each test user (default: the pool) it:
 
 **Watching or using a test session by hand:** `sc session view [<user>] [--on <host>]`
 opens a Screen Sharing window here into that session, logged in with the password from
-that Mac's keychain, handed over as `setup-peekaboo` does (never saved). Like it, it
+that Mac's keychain, handed over as `session setup` does (never saved). Like it, it
 keeps `--on` for itself. For this Mac's own test sessions it goes through an SSH tunnel,
 which it keeps open until you press Return. If Screen Sharing asks, choose "Log in as
 yourself".
@@ -712,7 +720,7 @@ yourself".
 takes a Mac's screen (its logged-in user's, or a test user's session) with that user's
 Peekaboo, shrinks it to `--max` pixels across (1600) and saves it here, so prompts,
 installers and the Finder, which no game window shows, can be seen. Like
-`setup-peekaboo` it keeps `--on` for itself. `screencapture` over SSH can't do this
+`session setup` it keeps `--on` for itself. `screencapture` over SSH can't do this
 ("could not create image from display"): the process macOS checks for Screen Recording
 is the one in the GUI session, Peekaboo's bridge.
 

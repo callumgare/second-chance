@@ -3,7 +3,7 @@ import Foundation
 /// How sc reaches a test session (docs/dev-cli.md#test-sessions) from the Mac
 /// it's run on: commands over SSH as the Mac's own user or a test user (or,
 /// for this Mac, here), a program run once in a user's GUI session, and a
-/// Screen Sharing window into a session. `session setup-peekaboo` and
+/// Screen Sharing window into a session. `session setup` and
 /// `session view` use it.
 enum TestSessionAccess {
     /// A command as the user sc runs as: here, or over SSH on `mac`.
@@ -20,7 +20,9 @@ enum TestSessionAccess {
     /// a LaunchAgent (`open` or the keychain from SSH reach no GUI session),
     /// and streams its output back through a named pipe, so nothing it prints
     /// is written to disk.
-    static func inGUISession(_ arguments: [String]) -> String {
+    /// `timeout`: how long to wait for its output, longer for one that waits
+    /// on the person (a prompt on the Mac's screen).
+    static func inGUISession(_ arguments: [String], timeout: Int = 30) -> String {
         let program = arguments.map { "<string>\($0.replacingOccurrences(of: "&", with: "&amp;"))</string>" }.joined()
         return """
         set -eu
@@ -35,7 +37,7 @@ enum TestSessionAccess {
         <key>StandardOutPath</key><string>$dir/out</string><key>RunAtLoad</key><true/></dict></plist>
         P
         launchctl bootstrap gui/$(id -u) "$dir/job.plist"
-        perl -e 'alarm 30; exec "cat", @ARGV' "$dir/out"
+        perl -e 'alarm \(timeout); exec "cat", @ARGV' "$dir/out"
         """
     }
 
@@ -80,11 +82,20 @@ enum TestSessionAccess {
 }
 
 extension Remote {
+    /// What runs here once a command has finished, here or on another Mac:
+    /// `session add` sets the test sessions up (`session setup`: the signing
+    /// certificate, and Peekaboo, which opens Screen Sharing where the person
+    /// is), unless `--no-setup`.
+    static func followUp(after arguments: [String]) -> [String]? {
+        guard Array(arguments.prefix(2)) == ["session", "add"], !arguments.contains("--no-setup") else { return nil }
+        return ["session", "setup"]
+    }
+
     /// Commands that take `--on` but run here and reach the other Mac
-    /// themselves: `session setup-peekaboo` opens Screen Sharing on this Mac,
+    /// themselves: `session setup` opens Screen Sharing on this Mac,
     /// `session screenshot` brings its picture back here, and `session view`
     /// opens its Screen Sharing window here.
     static func runsHere(_ arguments: [String]) -> Bool {
-        arguments.first == "session" && ["setup-peekaboo", "screenshot", "view"].contains(arguments.dropFirst().first)
+        arguments.first == "session" && ["setup", "screenshot", "view"].contains(arguments.dropFirst().first)
     }
 }

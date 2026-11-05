@@ -15,8 +15,9 @@ struct SessionCommand: AsyncParsableCommand {
         sc --on <host> session claim --purpose "…". See docs/dev-cli.md#test-sessions.
         """,
         subcommands: [SessionListCommand.self, SessionClaimCommand.self, SessionReleaseCommand.self,
-                      SessionKeepAliveCommand.self, SessionAddCommand.self, SessionLogoutCommand.self, SessionRemoveCommand.self, SessionSetupPeekabooCommand.self, SessionViewCommand.self,
-                      SessionScreenshotCommand.self],
+                      SessionKeepAliveCommand.self, SessionAddCommand.self, SessionLogoutCommand.self, SessionRemoveCommand.self,
+                      SessionSetupCommand.self, SessionViewCommand.self, SessionScreenshotCommand.self,
+                      SessionExportSigningCommand.self],
         defaultSubcommand: SessionListCommand.self
     )
 }
@@ -341,6 +342,9 @@ struct SessionAddCommand: AsyncParsableCommand {
     @Argument(help: "Test users' short names. Default: the next free second-chance-testing-<n>.")
     var users: [String] = []
 
+    @Flag(help: "Don't set the test sessions up afterwards (session setup: your signing certificate, and Peekaboo, which opens Screen Sharing where you are).")
+    var noSetup = false
+
     @Option(help: "How many new ones to make. Default: one when the pool is empty, else none (the pool's are checked).")
     var count: Int?
 
@@ -367,7 +371,6 @@ struct SessionAddCommand: AsyncParsableCommand {
         try (pool.joined(separator: "\n") + "\n").write(to: SessionPool.file, atomically: true, encoding: .utf8)
         chmod(SessionPool.file.path, 0o666)
         session.ui.detail("The pool: \(pool.joined(separator: ", ")).")
-        await Self.installSigningIdentities(names, session: session)
 
         session.ui.detail(try await SessionPool.makeInstallersStore(store: InstallersStore.defaultRoot))
         if await SessionKeepAliveCommand.isInstalled() {
@@ -480,7 +483,15 @@ struct SessionAddCommand: AsyncParsableCommand {
                 if exported == nil {
                     session.ui.detail("Exporting your signing certificate for the test users: if macOS asks on this Mac's screen, allow it.")
                     let passphrase = newPassword()
-                    exported = (try SigningIdentity.export(found, passphrase: passphrase), SigningIdentity.intermediates(found), passphrase)
+                    do {
+                        exported = (try SigningIdentity.export(found, passphrase: passphrase), SigningIdentity.intermediates(found), passphrase)
+                    } catch let error as SCError where error.message.contains("User interaction is not allowed") {
+                        // Over SSH macOS can't ask: ask in the GUI session instead.
+                        session.ui.line("macOS will ask on \(ScreenLease.shortHostName())'s screen to allow exporting your signing key: "
+                                        + "choose Always Allow there (over Screen Sharing if you aren't at it).")
+                        let fromGUI = try await SigningIdentity.exportInGUISession(passphrase: passphrase)
+                        exported = (fromGUI.p12, fromGUI.intermediates, passphrase)
+                    }
                 }
                 guard let exported else { continue }
                 let script = SigningIdentity.installScript(p12: exported.p12, intermediates: exported.intermediates, passphrase: exported.passphrase,

@@ -15,6 +15,9 @@ public enum Entry {
                 // Validate here, so a typo fails before anything is synced.
                 _ = try SC.parseAsRoot(arguments)
                 let status = try await Interrupts.run { try await Remote.run(on: remote, arguments: arguments) }
+                if status == 0, let next = Remote.followUp(after: arguments) {
+                    try await runHere(next)
+                }
                 finish(status)
             }
             var command = try SC.parseAsRoot(arguments)
@@ -23,6 +26,10 @@ public enum Entry {
                 try await Interrupts.run { try await box.run() }
             } else {
                 try command.run()
+            }
+            // Over SSH the sc that sent it there runs the follow-up, where the person is.
+            if let next = Remote.followUp(after: arguments), ProcessInfo.processInfo.environment["SSH_CONNECTION"] == nil {
+                try await runHere(next)
             }
             finish(0)
         } catch let error as SCError {
@@ -37,6 +44,14 @@ public enum Entry {
             TTY.restoreForExit()
             SC.exit(withError: error)
         }
+    }
+
+    /// Run another command in this process, as the person would type it next.
+    private static func runHere(_ arguments: [String]) async throws {
+        Invocation.arguments = arguments
+        guard let command = try SC.parseAsRoot(arguments) as? AsyncParsableCommand else { return }
+        let box = CommandBox(command: command)
+        try await Interrupts.run { try await box.run() }
     }
 
     private static func report(_ error: SCError) {

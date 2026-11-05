@@ -9,7 +9,7 @@ struct SessionScreenshotCommand: AsyncParsableCommand {
         commandName: "screenshot",
         abstract: "Picture a Mac's whole screen, or a test session's, through Peekaboo, and bring it back here.",
         discussion: """
-        Takes it with that user's Peekaboo (`session setup-peekaboo` gives a test \
+        Takes it with that user's Peekaboo (`session setup` gives a test \
         session its grants), shrinks it to --max pixels across, and saves it here. \
         With --on, of that Mac; without, of this one. No user: the Mac's own \
         logged-in user's screen.
@@ -32,7 +32,7 @@ struct SessionScreenshotCommand: AsyncParsableCommand {
         let destination = user.map { "\($0)@\(mac ?? "localhost")" } ?? mac
         let remote = "/tmp/sc-screen-\(UUID().uuidString).png"
         let output = URL(fileURLWithPath: out ?? "screen-\(name.replacingOccurrences(of: "/", with: "-")).png")
-        let command = "cli=; for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(SessionSetupPeekabooCommand.sharedCLI); "
+        let command = "cli=; for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(PeekabooSetup.sharedCLI); "
             + "do [ -x $c ] && cli=$c && break; done; [ -n \"$cli\" ] || { echo 'Peekaboo is not installed' >&2; exit 3; }; "
             + "PEEKABOO_BRIDGE_SOCKET=\"$HOME/Library/Application Support/Peekaboo/bridge.sock\" $cli see --mode screen --no-elements "
             + "--path \(remote) >/dev/null && sips -Z \(max) \(remote) >/dev/null"
@@ -42,7 +42,7 @@ struct SessionScreenshotCommand: AsyncParsableCommand {
             let taken = try await Proc.collect(shell[0], Array(shell.dropFirst()))
             guard taken.succeeded else {
                 throw SCError("Peekaboo couldn't picture \(name)'s screen: \(taken.error.trimmingCharacters(in: .whitespacesAndNewlines))",
-                              hints: ["Give it Peekaboo and its grants: sc session setup-peekaboo" + (user.map { " \($0)" } ?? "")
+                              hints: ["Give it Peekaboo and its grants: sc session setup --only peekaboo" + (user.map { " \($0)" } ?? "")
                                       + (mac.map { " --on \($0)" } ?? ""),
                                       "Is someone logged in there, and is the screen unlocked? sc" + (mac.map { " --on \($0)" } ?? "") + " session list"])
             }

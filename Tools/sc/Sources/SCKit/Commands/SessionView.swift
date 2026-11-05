@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// A Screen Sharing window here into a test session, as `setup-peekaboo`
+/// A Screen Sharing window here into a test session, as `session setup`
 /// opens one: to watch a run, or to do something by hand there.
 struct SessionViewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(

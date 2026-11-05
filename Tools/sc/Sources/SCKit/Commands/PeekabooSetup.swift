@@ -6,38 +6,16 @@ import WrappBuilder
 /// started in each, and the person walked through the two grants macOS won't
 /// let a script give (Screen Recording and Accessibility live in the system's
 /// TCC database, behind SIP). See docs/dev-cli.md#peekaboo-in-test-sessions.
-struct SessionSetupPeekabooCommand: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "setup-peekaboo",
-        abstract: "Set Peekaboo up in a Mac's test sessions, opening Screen Sharing on each for you to grant it.",
-        discussion: """
-        Run it on the Mac you're at. With --on it sets up that Mac's test \
-        sessions, reaching them itself (the Screen Sharing window opens here); \
-        without, this Mac's. For each test user (or the one \
-        named) it installs Peekaboo on that Mac if it's missing, starts \
-        Peekaboo's bridge in the user's session, and if it lacks Screen \
-        Recording or Accessibility opens that pane there and a Screen Sharing \
-        window into the session here, logged in with the password from the test \
-        Mac's keychain (passed straight through, never saved). Turn Peekaboo on \
-        in the pane (macOS asks for an admin's password), and it moves on once \
-        the grant shows.
-        """
-    )
-
-    @OptionGroup var global: GlobalOptions
-
-    @Argument(help: "One test user. Default: every one in that Mac's pool.")
-    var user: String?
-
+/// `sc session setup`'s Peekaboo task.
+enum PeekabooSetup {
     static let version = "4.9.7"
     static let appZipSHA256 = "ad87379580bdc9a2d96a62f1d3db7545b18306f8fcd96d1b50b4eee033959ed0"
     static let cliSHA256 = "8a4136b9efd4c3a5591840375b024009a3cfb1b5fe994f62268cc755fb37744c"
     static let bridgeLabel = "boo.peekaboo.bridge-host"
 
-    func run() async throws {
-        let session = try Session.start(global)
-        // nil: this Mac, whose own steps run here without SSH.
-        let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
+    /// Set Peekaboo up in `users` (every test user in the pool when nil) on
+    /// `mac` (this Mac when nil).
+    static func run(users given: [String]?, on mac: String?, session: Session) async throws {
         let host = mac ?? ScreenLease.shortHostName()
         let present = try await session.ui.progressStep("Checking whether Peekaboo is installed on \(host)") { _ in
             try await TestSessionAccess.asConsoleUser(mac, "bash -s", input: Self.presentScript).output
@@ -48,10 +26,15 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
                 try await install(part, on: mac)
             }
         }
-        let pool = try await session.ui.progressStep("Reading the list of test accounts on \(host)") { _ in
-            try await TestSessionAccess.asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output
+        let users: [String]
+        if let given, !given.isEmpty {
+            users = given
+        } else {
+            let pool = try await session.ui.progressStep("Reading the list of test accounts on \(host)") { _ in
+                try await TestSessionAccess.asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output
+            }
+            users = SessionPool.users(fromPool: pool)
         }
-        let users = user.map { [$0] } ?? SessionPool.users(fromPool: pool)
         guard !users.isEmpty else { throw SCError("\(host) has no test sessions.", hints: ["Add some there: sc session add"]) }
         for user in users {
             try await setUp(user, on: mac, ui: session.ui)
@@ -98,7 +81,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     }
 
     /// One part from the release, checked against the release's checksums.
-    private func install(_ part: Part, on mac: String?) async throws {
+    private static func install(_ part: Part, on mac: String?) async throws {
         let script = "set -eu\nwork=$(mktemp -d); trap 'rm -rf \"$work\"' EXIT; cd \"$work\"\n" + part.script
         let result = try await TestSessionAccess.asConsoleUser(mac, "bash -s", input: script)
         guard result.succeeded else {
@@ -113,7 +96,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
 
     // MARK: One user
 
-    private func setUp(_ user: String, on mac: String?, ui: UI) async throws {
+    private static func setUp(_ user: String, on mac: String?, ui: UI) async throws {
         let host = mac ?? ScreenLease.shortHostName()
         let destination = "\(user)@\(mac ?? "localhost")"
         defer {
@@ -162,7 +145,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         }
         guard missing.isEmpty else {
             throw SCError("\(host)/\(user)'s Peekaboo still lacks \(missing.joined(separator: " and ")) after 15 minutes.",
-                          hints: ["Run it again for that user: sc session setup-peekaboo \(user)" + (mac.map { " --on \($0)" } ?? "")])
+                          hints: ["Run it again for that user: sc session setup --only peekaboo \(user)" + (mac.map { " --on \($0)" } ?? "")])
         }
     }
 
@@ -191,7 +174,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     """
 
     /// The required grants Peekaboo says it lacks, through the user's bridge.
-    private func missingGrants(_ destination: String) async throws -> [String] {
+    private static func missingGrants(_ destination: String) async throws -> [String] {
         let command = "cli=; for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(Self.sharedCLI); do [ -x $c ] && cli=$c && break; done; "
             + "PEEKABOO_BRIDGE_SOCKET=\"$HOME/Library/Application Support/Peekaboo/bridge.sock\" $cli permissions --json"
         let result = try await TestSessionAccess.ssh(destination, "bash -c \(Remote.quote(command))")
@@ -208,7 +191,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     }
 
     /// System Settings at the pane for `grant`, in the user's session.
-    private func openPane(for grant: String, _ destination: String) async throws {
+    private static func openPane(for grant: String, _ destination: String) async throws {
         let anchor = grant == "Accessibility" ? "Privacy_Accessibility" : "Privacy_ScreenCapture"
         let url = "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
         _ = try await TestSessionAccess.ssh(destination, "bash -s", input: TestSessionAccess.inGUISession(["/usr/bin/open", url]))
@@ -217,7 +200,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     /// This Mac's test sessions are reached over SSH too, which needs this
     /// Mac's own keys in each test user's authorized keys: `session add`
     /// puts them there (`--install-keys` for users made before it did).
-    private func letThisMacIn(_ user: String, ui: UI) async throws {
+    private static func letThisMacIn(_ user: String, ui: UI) async throws {
         let reachable = try await ui.progressStep("Checking this Mac can reach \(user) over SSH") { _ in
             try await TestSessionAccess.ssh("\(user)@localhost", "true").succeeded
         }

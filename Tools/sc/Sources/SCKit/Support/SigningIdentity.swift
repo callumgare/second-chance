@@ -63,6 +63,29 @@ enum SigningIdentity {
         return data as Data
     }
 
+    /// Export the identities in this user's GUI session, where macOS can ask
+    /// on the Mac's screen to allow it (over SSH it can't): a hidden sc
+    /// command run there by a one-off LaunchAgent, its output through a named
+    /// pipe, never a file. The person allows it there (Always Allow keeps it
+    /// from asking again).
+    static func exportInGUISession(passphrase: String) async throws -> (p12: Data, intermediates: [Data]) {
+        let executable = Bundle.main.executablePath ?? CommandLine.arguments[0]
+        let script = TestSessionAccess.inGUISession([executable, "session", "export-signing-identities", "--passphrase", passphrase], timeout: 300)
+        let result = try await Proc.collect("/bin/bash", ["-s"], input: script)
+        guard result.succeeded, let data = Data(base64Encoded: result.output.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let exported = try? JSONDecoder().decode(Exported.self, from: data) else {
+            throw SCError("Couldn't export your signing certificate in the Mac's GUI session (nobody allowed it within 5 minutes?).",
+                          hints: ["Allow it when macOS asks on the Mac's screen (Screen Sharing to it shows the prompt), then run sc session add again."])
+        }
+        return (exported.p12, exported.intermediates)
+    }
+
+    /// What `session export-signing-identities` prints, as base64 JSON.
+    struct Exported: Codable {
+        var p12: Data
+        var intermediates: [Data]
+    }
+
     /// The intermediate certificates the identities' chains need (Apple's
     /// WWDR, which Xcode puts in the login keychain, not the system's), each
     /// once, as DER. They go apart from the PKCS #12 file: one found by
