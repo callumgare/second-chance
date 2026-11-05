@@ -315,9 +315,7 @@ gathers one table naming each row's Mac and session
 ([testing.md](testing.md#sharding-a-run-across-macs)).
 
 `sc installers list` shows which games' installers are in this Mac's
-[installers store](testing.md#the-installers-store), and `sc installers
-migrate` moves installers laid out by slug, as they were before it, to where
-their manifests say (a dry run unless given `--yes`).
+[installers store](testing.md#the-installers-store).
 
 [testing.md](testing.md) covers the suites themselves.
 
@@ -463,12 +461,9 @@ below. On the remote Mac, the GUI-session re-run applies as usual.
   the store's files belong to whoever put them there, and another user may
   write them but not set those. The receiving rsync waits on a lock
   (`lockf` on `/tmp/second-chance-installers-sync.lock`) so two syncs into
-  one Mac's store never write the same file at once; `sc installers
-  migrate` takes it too. Commands that read no installers (`session`,
-  `puppet`, `lint`, `installers`, … or a run whose every source downloads)
-  send none. Nor does a sync between a store in the old layout and one in
-  the new, which would hold every installer twice: it says which Mac to run
-  `sc installers migrate` on.
+  one Mac's store never write the same file at once. Commands that read no
+  installers (`session`, `puppet`, `lint`, `installers`, … or a run whose
+  every source downloads) send none.
 
 ## The screen lease
 
@@ -609,8 +604,7 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   `/Users/Shared/second-chance/installers`, writable by every user through an
   inherited ACL, which every user's checkout reads: so a test user's first
   run copies no installer into its home. `session add` makes it if the Mac
-  has none, and says to run `sc installers migrate` when the checkout still
-  has an `installers/` from before it.
+  has none.
 - `sc session` (or `list`) shows each: logged in or not, locked, and leased or
   free. Logins come from `ioreg`'s console users, which any user can read.
 - `sc session claim --purpose "<text>" [--for 2h] [<user>]` leases a free test

@@ -785,22 +785,11 @@ struct DotEnvTests {
         #expect(sync.contains("--rsync-path=/usr/bin/lockf -k /tmp/second-chance-installers-sync.lock /usr/bin/rsync"))
     }
 
-    @Test("Before sending installers, the other Mac's store is made if it has none, and listed for its layout")
+    @Test("Before sending installers, the other Mac's store is made if it has none")
     func prepareInstallers() {
         let command = Remote.prepareInstallersCommand(path: "~/tmp/second chance")
         #expect(command.hasPrefix("mkdir -p ~/'tmp/second chance' && { [ -d '/Users/Shared/second-chance/installers' ] ||"))
         #expect(command.contains("chmod +a 'everyone allow"))
-        #expect(command.contains("ls -d '/Users/Shared/second-chance/installers'/*/disk-*.iso"))
-    }
-
-    @Test("Installers aren't sent between a store in the old layout and one in the new")
-    func layoutMismatch() {
-        #expect(Remote.layoutMismatch(localIsOld: false, remoteIsOld: false, host: "mac", rawTarget: "mac") == nil)
-        #expect(Remote.layoutMismatch(localIsOld: true, remoteIsOld: true, host: "mac", rawTarget: "mac") == nil)
-        #expect(Remote.layoutMismatch(localIsOld: false, remoteIsOld: true, host: "mac", rawTarget: "mac:~/x")?
-            .contains("sc --on mac:~/x installers migrate") == true)
-        #expect(Remote.layoutMismatch(localIsOld: true, remoteIsOld: false, host: "mac", rawTarget: "mac")?
-            .contains("Run sc installers migrate here") == true)
     }
 
     @Test("Of DerivedData, --on syncs only the built products")

@@ -111,9 +111,8 @@ In Xcode, set **Build Settings → Build Active Architecture Only → Debug → 
 Integration tests need the game's disc images in this Mac's installers store, `/Users/Shared/second-chance/installers`,
 where its manifest says they go: `nancy-drew/old-clock/cd/disc-1.iso` for Old Clock's disc, `disc-2.iso` beside it for a
 second, and a Her download as `<bundle id>/her-windows/installer.exe`. Anything kept with a game that no build reads goes
-in `<bundle id>/extras/`. `./sc installers list` shows what's there, and `./sc installers migrate` moves installers kept
-the old way (`installers/<game-slug>/disk-1.iso`) into place. Running the tests for every game takes hours and keeps
-bringing a full-screen game to the front, so name the games rather than running them all.
+in `<bundle id>/extras/`. `./sc installers list` shows what's there. Running the tests for every game takes hours and
+keeps bringing a full-screen game to the front, so name the games rather than running them all.
 [docs/testing.md](docs/testing.md) covers it all.
 
 ### Running integration tests without losing your Mac

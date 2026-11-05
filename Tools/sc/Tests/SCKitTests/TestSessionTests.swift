@@ -162,7 +162,7 @@ struct PeekabooSetupTests {
         #expect(Remote.readsInstallers(["test", "integration", "royal-tower"]))
         #expect(!Remote.readsInstallers(["wrapp", "build", "skifree", "--from", "download"]))
         #expect(Remote.readsInstallers(["test", "integration", "--source", "all"]))
-        #expect(!Remote.readsInstallers(["installers", "migrate"]))
+        #expect(!Remote.readsInstallers(["installers", "list"]))
     }
 
     @Test("A program run in the GUI session hands its output back through a pipe, not a file")

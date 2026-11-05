@@ -81,15 +81,12 @@ public nonisolated struct InstallersStore: Sendable, Hashable {
     /// one.
     public func found(_ manifest: Manifest, source: Manifest.Source? = nil) -> [Found] {
         let editions = manifest.editions.filter { source == nil || $0.source == source }
-        let legacy = isLegacy(manifest)
         return editions.compactMap { edition in
             let inputs = Self.fileInputs(of: edition)
             guard !inputs.isEmpty else { return nil }
             var files: [URL] = []
             for input in inputs {
-                let file = legacy ? legacyFile(manifest, edition: edition, input: input)
-                    : self.file(program: manifest.id, edition: edition.id, input: input.id)
-                guard let file else { return nil }
+                guard let file = self.file(program: manifest.id, edition: edition.id, input: input.id) else { return nil }
                 files.append(file)
             }
             return Found(program: manifest.id, edition: edition.id, source: edition.source, files: files, format: inputs.first?.format)
@@ -113,15 +110,10 @@ public nonisolated struct InstallersStore: Sendable, Hashable {
         })
         var found = Set<String>()
         for manifest in manifests {
-            let legacyNames = paths.filter { $0.hasPrefix(manifest.name + "/") }.map { String($0.dropFirst(manifest.name.count + 1)) }
-            let legacy = !paths.contains { $0.hasPrefix(manifest.id + "/") } && !legacyNames.isEmpty
             for edition in manifest.editions {
                 let inputs = fileInputs(of: edition)
                 guard !inputs.isEmpty else { continue }
-                let present = inputs.allSatisfy { input in
-                    legacy ? legacyName(of: input, among: legacyNames) != nil
-                        : stems.contains("\(manifest.id)/\(edition.id)/\(input.id)")
-                }
+                let present = inputs.allSatisfy { stems.contains("\(manifest.id)/\(edition.id)/\($0.id)") }
                 if present { found.insert("\(manifest.id)/\(edition.id)") }
             }
         }
@@ -140,71 +132,5 @@ public nonisolated struct InstallersStore: Sendable, Hashable {
     /// A name less its last extension: `disc-1` of `disc-1.iso`.
     static func stem(_ name: String) -> String {
         (name as NSString).deletingPathExtension
-    }
-
-    // MARK: The layout before this one
-
-    // Until `sc installers migrate` has run on a Mac, its store is laid out
-    // by slug: `<slug>/disk-1.iso`, `<slug>/her-download-<anything>.exe` or
-    // `.dmg`. A program with nothing in its own folder is looked for there,
-    // so builds keep finding their installers until then. Remove this once
-    // no Mac's store has the old layout.
-
-    /// Whether `manifest`'s files are still where the old layout kept them.
-    func isLegacy(_ manifest: Manifest) -> Bool {
-        let files = FileManager.default
-        return !files.fileExists(atPath: folder(program: manifest.id).path)
-            && files.fileExists(atPath: root.appendingPathComponent(manifest.name).path)
-    }
-
-    /// Whether the store holds any program's installers in the old layout.
-    public func hasLegacyLayout(manifests: [Manifest]) -> Bool {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
-        let listing = names.flatMap { name in
-            ((try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent(name).path)) ?? []).map { "\(name)/\($0)" }
-        }
-        return Self.isLegacy(listing: listing, manifests: manifests)
-    }
-
-    /// Whether a listing of a store's `<folder>/<file>`s has a program's
-    /// installer in the old layout: a folder named for a program holding a
-    /// file named as the old layout named installers.
-    public static func isLegacy(listing: [String], manifests: [Manifest]) -> Bool {
-        let programs = Set(manifests.map(\.name))
-        return listing.contains { line in
-            let parts = line.trimmingCharacters(in: .whitespaces).split(separator: "/").map(String.init).suffix(2)
-            return parts.count == 2 && programs.contains(parts[parts.startIndex]) && isLegacyInstallerName(parts[parts.startIndex + 1])
-        }
-    }
-
-    /// A name only the old layout gives an installer.
-    public static func isLegacyInstallerName(_ name: String) -> Bool {
-        let lower = name.lowercased()
-        return (lower.hasPrefix("disk-") && lower.hasSuffix(".iso"))
-            || (lower.hasPrefix("her-download") && (lower.hasSuffix(".exe") || lower.hasSuffix(".dmg")))
-    }
-
-    func legacyFile(_ manifest: Manifest, edition: Manifest.Edition, input: Manifest.Input) -> URL? {
-        let dir = root.appendingPathComponent(manifest.name)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        return Self.legacyName(of: input, among: names)
-            .map { dir.appendingPathComponent($0) }
-            .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
-    }
-
-    /// The old layout's name for `input`: `disk-<n>.iso` for `disc-<n>`, the
-    /// first `her-download*.exe` (Windows) or `.dmg` (Mac) for a download.
-    static func legacyName(of input: Manifest.Input, among names: [String]) -> String? {
-        switch input.type {
-        case .disc:
-            guard input.id.hasPrefix("disc-") else { return nil }
-            let name = "disk-\(input.id.dropFirst("disc-".count)).iso"
-            return names.contains(name) ? name : nil
-        case .herDownload:
-            let ext = input.format == "mac" ? "dmg" : "exe"
-            return names.sorted().first { $0.lowercased().hasPrefix("her-download") && ($0 as NSString).pathExtension.lowercased() == ext }
-        default:
-            return nil
-        }
     }
 }

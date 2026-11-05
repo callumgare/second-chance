@@ -368,7 +368,7 @@ struct SessionAddCommand: AsyncParsableCommand {
         chmod(SessionPool.file.path, 0o666)
         session.ui.detail("The pool: \(pool.joined(separator: ", ")).")
 
-        session.ui.detail(try await SessionPool.makeInstallersStore(store: InstallersStore.defaultRoot, checkout: session.repo.root))
+        session.ui.detail(try await SessionPool.makeInstallersStore(store: InstallersStore.defaultRoot))
         if await SessionKeepAliveCommand.isInstalled() {
             session.ui.detail("The keep-alive is running; it picks up new users within a minute.")
         } else {

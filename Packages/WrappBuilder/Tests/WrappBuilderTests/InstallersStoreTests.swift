@@ -63,23 +63,12 @@ struct InstallersStoreTests {
         #expect(found.map(\.format) == ["windows", "mac"])
     }
 
-    @Test func aStoreInTheOldLayoutIsStillRead() throws {
-        let twister = try manifest("nancy-drew/trail-of-the-twister")
-        let store = try store(["trail-of-the-twister/disk-1.iso", "trail-of-the-twister/disk-2.iso",
-                               "trail-of-the-twister/her-download-mac-Twister.dmg", "trail-of-the-twister/guide.pdf"])
-        #expect(store.hasLegacyLayout(manifests: Self.manifests))
-        let other = try self.store(["nancy-drew/old-clock/cd/disc-1.iso", "not-a-program/disk-1.iso"])
-        #expect(!other.hasLegacyLayout(manifests: Self.manifests))
-        #expect(store.found(twister).map(\.edition) == ["cd", "her-mac"])
-        #expect(store.found(twister, source: .disc).first?.files.map(\.lastPathComponent) == ["disk-1.iso", "disk-2.iso"])
-    }
-
     @Test func aListingNamesTheEditionsWhoseEveryInputIsInIt() {
         let found = InstallersStore.editions(inListing: [
             "./nancy-drew/trail-of-the-twister/cd/disc-1.iso", "nancy-drew/trail-of-the-twister/her-windows/installer.exe",
             "nancy-drew/old-clock/cd/disc-1.iso", "nancy-drew/old-clock/extras/guide.pdf",
-            "nancy-drew/scarlet-hand/extras/installer.exe", "ghost-dogs/disk-1.iso", "unsorted/notes.txt",
+            "nancy-drew/scarlet-hand/extras/installer.exe", "ghost-dogs/disk-1.iso", "unbundled/notes.txt",
         ], manifests: Self.manifests)
-        #expect(found == ["nancy-drew/trail-of-the-twister/her-windows", "nancy-drew/old-clock/cd", "nancy-drew/ghost-dogs/cd"])
+        #expect(found == ["nancy-drew/trail-of-the-twister/her-windows", "nancy-drew/old-clock/cd"])
     }
 }

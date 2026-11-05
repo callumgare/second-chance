@@ -338,25 +338,13 @@ input is the file in its edition's folder named `<input>.<anything>`.
   `disc-1.iso` links to whichever a run should use. A link that leads
   nowhere counts as no file. `--on` sends links as links.
 - **Extras**: what no build reads — guides, manuals, anything kept with a
-  game — goes in `<bundle id>/extras/`.
+  game — goes in `<bundle id>/extras/`, and what belongs to no bundle yet
+  (a game with no bundle, a loose script) in `unbundled/`.
 - **Nothing per checkout**: a checkout has no `installers/` of its own, so
   every checkout and test user on a Mac reads the one store. `sc session add`
   makes it, writable by every user, and `--on` sends this Mac's store to the
   other Mac's ([dev-cli.md](dev-cli.md#gui-session-and-remote-macs)).
 - **`sc installers list`** shows which editions' installers are all there.
-- **`sc installers migrate`** moves installers laid out the old way,
-  `<slug>/disk-1.iso` and `<slug>/her-download-….exe` in a checkout's
-  `installers/` or the store itself, to where their manifests say: each
-  `disk-<n>.iso` to its disc edition's `disc-<n>`, `disk-<n>-<name>.iso` to
-  `disc-<n>-<name>.iso` beside it (and a `disk-<n>.iso` link to it made
-  again), a Her `.exe` or `.dmg` to its Windows or Mac edition's input, and
-  everything else to extras. It shows what it would do; `--yes` does it,
-  moving (one rename each on the same volume; a copy checked by MD5
-  otherwise) under the lock `--on` syncs take, and leaves anything it can't
-  place where it is, listed. Until a Mac's store has been migrated, a game
-  with nothing in its new folder is still found in the old layout, and
-  `--on` sends no installers between a store in one layout and one in the
-  other, which would otherwise hold every installer twice.
 
 Each game runs the **real** build flow — real Wine/ScummVM install, real file
 copies — and asserts on the events the flow publishes:
@@ -801,14 +789,18 @@ handlers:
 - **Actions**: `click` (the needle's click point), `{ click: { x, y } }` (a
   point of the window), `{ check: "menu" }` (the picture's bars, and
   switching away and back, below), `expect-end` (the click before it
-  should end the game: once it has, only that handler runs again) and
-  `quit` (ask the program to quit as its app's Quit does, and expect it to
-  end).
+  should end the game: once it has, only that handler runs again),
+  `{ key: "escape" }` (press a key, by the in-process helper's names, then
+  wait a moment: for a program whose first screen waits for a key, as Iji's
+  does) and `quit` (ask the program to quit as its app's Quit does, and
+  expect it to end). A key's name may be a parameter (`"${first-key}"`): the
+  wine module's `starts-and-quits` presses its `first-key`, when a bundle sets
+  one, before it quits.
 - **`retry-after`** is how long a screen still showing after its handler
   clicked it waits before another click; **`once`** runs a handler once;
   **`repeat-where-last-seen`** clicks where its needle was last found when
   it isn't found this time, after that many seconds; **`if`** names a
-  parameter that must be true.
+  parameter that must be set: `true`, or any value but `false` or nothing.
 - **Parameters** are the scenario's `parameters:`, which a bundle's
   `tests.parameters` set: Secrets Can Kill Remastered's
   `blank-start-takes-click: true`. A parameter the scenario doesn't have is

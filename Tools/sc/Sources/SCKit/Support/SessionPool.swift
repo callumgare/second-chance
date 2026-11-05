@@ -65,11 +65,10 @@ enum SessionPool {
 
     /// Make the Mac's installers store (`InstallersStore`), which every
     /// user's checkout reads, if it isn't there, writable by every user.
-    /// Returns what it did, for the person, with what's left to do when the
-    /// checkout still has installers of its own from before the store.
-    static func makeInstallersStore(store: URL, checkout: URL) async throws -> String {
+    /// Returns what it did, for the person.
+    static func makeInstallersStore(store: URL) async throws -> String {
         let fm = FileManager.default
-        var said: String
+        let said: String
         if fm.fileExists(atPath: store.path) {
             said = "Installers are kept in \(store.path), which every user on this Mac shares."
         } else {
@@ -80,10 +79,6 @@ enum SessionPool {
                 throw SCError("Couldn't let every user write to \(store.path): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))")
             }
             said = "Made \(store.path), where every user on this Mac finds installers."
-        }
-        let old = checkout.appendingPathComponent("installers")
-        if (try? fm.attributesOfItem(atPath: old.path)) != nil {
-            said += " This checkout still has \(old.path) from before: sc installers migrate moves what's in it into the store."
         }
         return said
     }

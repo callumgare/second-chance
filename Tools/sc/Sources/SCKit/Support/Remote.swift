@@ -127,7 +127,7 @@ enum Remote {
     }
 
     /// Never in the main sync: a checkout's `installers/` from before the
-    /// installers store, which `sc installers migrate` empties.
+    /// installers store.
     static let installersExclude = ["--exclude", "/installers"]
 
     /// The installers' own sync, for commands that read them: this Mac's
@@ -154,24 +154,11 @@ enum Remote {
 
     /// Before a sync that sends installers: make the checkout there and,
     /// when that Mac has no installers store yet, the store, writable by
-    /// every user (as `sc session add` makes it). Then lists what in the store
-    /// there is named as installers were before `sc installers migrate`
-    /// (`<folder>/disk-1.iso`), for `InstallersStore.isLegacy`.
+    /// every user (as `sc session add` makes it).
     static func prepareInstallersCommand(path: String) -> String {
         let dir = shellPath(path)
         let store = quote(InstallersStore.defaultRoot.path)
         return "mkdir -p \(dir) && { [ -d \(store) ] || { mkdir -p \(store) && chmod +a \(quote(SessionPool.everyoneACL)) \(store); }; } "
-            + "&& { ls -d \(store)/*/disk-*.iso \(store)/*/her-download* 2>/dev/null || true; }"
-    }
-
-    /// Why installers aren't sent when one Mac's store has been migrated and
-    /// the other's hasn't: sent, every installer would be there twice, once
-    /// in each layout, until that Mac's was migrated.
-    static func layoutMismatch(localIsOld: Bool, remoteIsOld: Bool, host: String, rawTarget: String) -> String? {
-        guard localIsOld != remoteIsOld else { return nil }
-        return localIsOld
-            ? "Installers weren't sent to \(host): this Mac's store is in the old layout. Run sc installers migrate here first."
-            : "Installers weren't sent to \(host): its store is in the old layout. Run sc --on \(rawTarget) installers migrate first."
     }
 
     /// Of `DerivedData`, only what was built, `Build/Products`, is synced.
@@ -263,22 +250,16 @@ enum Remote {
                 + derivedDataFilters(for: arguments) + heavyFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
             let sendsInstallers = readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
             // The checkout there, and its Mac's store, made first.
-            var mismatch: String?
             if sendsInstallers {
                 let prepared = try await Proc.collect("ssh", ["-T", target.host, prepareInstallersCommand(path: target.path)])
                 guard prepared.succeeded else {
                     throw SCError("Couldn't make \(target.path) on \(target.host): \(prepared.error.trimmingCharacters(in: .whitespacesAndNewlines))")
                 }
-                let remoteListing = prepared.output.split(whereSeparator: \.isNewline).map(String.init)
-                mismatch = layoutMismatch(localIsOld: repo.installers.hasLegacyLayout(manifests: repo.manifests),
-                                          remoteIsOld: InstallersStore.isLegacy(listing: remoteListing, manifests: repo.manifests),
-                                          host: target.host, rawTarget: rawTarget)
             }
-            let sendingInstallers = sendsInstallers && mismatch == nil
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
                     let status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
-                    guard status == 0, sendingInstallers else { return status }
+                    guard status == 0, sendsInstallers else { return status }
                     return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {
                         await sink.line($0)
                     }
@@ -286,7 +267,6 @@ enum Remote {
             } catch let error as SCError where error.alreadyReported {
                 throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
             }
-            if let mismatch { ui.warning("\(mismatch)") }
         }
 
         ui.line(ui.format("\(.primary("▸ On \(target.host): sc \(arguments.joined(separator: " "))"))"))
