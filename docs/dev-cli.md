@@ -323,8 +323,13 @@ looking like a broken installer. `app run`, `wrapp build`, `wrapp run`,
 `wrapp wine` and `test integration` check `launchctl managername`; outside
 `Aqua` they re-run the same command as a one-off LaunchAgent in
 `gui/<uid>`, under a pty, stream its output back, forward keystrokes, and exit
-with its status. Someone must be logged in at that Mac's console as the same
-user. `sc in-gui-session -- <command>` does the same for any command.
+with its status. The same user must be logged in to a GUI session there, at the
+Mac or through Screen Sharing: sc asks launchd (`launchctl print gui/<uid>` says
+`type = login`), not `/dev/console`'s owner. A second user logged in through
+Screen Sharing ("Log in as yourself") takes over that file while the first user's
+session carries on at the screen, and that second session, in the background,
+can run commands too. `sc in-gui-session -- <command>` does the same for any
+command.
 
 A locked screen still has a GUI session — Wine runs — but synthetic clicks land
 on the lock screen and screenshots don't show the game. `test integration`,

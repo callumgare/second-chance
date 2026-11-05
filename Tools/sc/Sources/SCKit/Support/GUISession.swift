@@ -63,12 +63,27 @@ enum GUISession {
         }
     }
 
+    /// Whether this user has a GUI login session for a job to run in. Asked
+    /// of launchd rather than read from `/dev/console`'s owner: a second user
+    /// logged in through Screen Sharing ("Log in as yourself") takes that
+    /// file while the first user's session carries on at the Mac, and a
+    /// session in the background like that one is a session too.
+    static func hasLoginSession() async -> Bool {
+        guard let result = try? await Proc.collect("/bin/launchctl", ["print", "gui/\(getuid())"]), result.status == 0 else { return false }
+        return isLoginSession(launchctlPrint: result.output)
+    }
+
+    /// `launchctl print gui/<uid>` of a domain someone is logged in to says
+    /// `type = login`; one left from a logout, or never logged in, doesn't.
+    static func isLoginSession(launchctlPrint output: String) -> Bool {
+        output.split(separator: "\n").prefix(8).contains { $0.trimmingCharacters(in: .whitespaces) == "type = login" }
+    }
+
     /// Run `command` in the GUI session and return its exit status.
     static func run(command: [String], session: Session) async throws -> Int32 {
         let user = NSUserName()
-        let consoleUser = (try? FileManager.default.attributesOfItem(atPath: "/dev/console")[.ownerAccountName] as? String) ?? ""
-        guard consoleUser == user else {
-            throw SCError("There's no GUI session for \(user) — the console belongs to '\(consoleUser)'.",
+        guard await hasLoginSession() else {
+            throw SCError("There's no GUI session for \(user): nobody is logged in as \(user) at the Mac or through Screen Sharing.",
                           hints: ["Log in at the Mac (or via Screen Sharing) as \(user) first."])
         }
         if await managerName() == "Aqua" {

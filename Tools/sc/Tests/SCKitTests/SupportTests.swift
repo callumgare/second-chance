@@ -183,6 +183,13 @@ struct RemoteTests {
         #expect(Invocation.forwarding(logs: .raw, ["app", "build", "--logs", "full"]) == ["app", "build", "--logs", "full"])
     }
 
+    @Test("A GUI login session is told from launchctl's print of the domain")
+    func loginSession() {
+        #expect(GUISession.isLoginSession(launchctlPrint: "gui/502 = {\n\ttype = login\n\thandle = 100539\n"))
+        #expect(!GUISession.isLoginSession(launchctlPrint: "gui/502 = {\n\ttype = user\n"))
+        #expect(!GUISession.isLoginSession(launchctlPrint: ""))
+    }
+
     @Test("attach follows a run already there, so it doesn't sync")
     func attachDoesNotSync() {
         #expect(!Remote.syncs(["attach", "--list"]))
