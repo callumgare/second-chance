@@ -118,9 +118,17 @@ enum Remote {
     /// them but not set their times or extended attributes, which made the
     /// receiver quit (`utimensat: Permission denied`) and the sync fail.
     /// Finder's `.DS_Store` stays behind, as in the main sync.
+    /// One at a time on each Mac: the receiving rsync waits for a lock
+    /// (`lockf`, on a file every user can open), since test users' syncs
+    /// share one installers folder, and two writing the same files at once
+    /// each read the other's half-written copy as their basis.
     static func installersSync(host: String, path: String) -> [String] {
-        ["-rl", "--size-only", "--exclude", ".DS_Store", "--rsync-path=/usr/bin/rsync", "installers/", "\(host):\(path)/installers/"]
+        ["-rl", "--size-only", "--exclude", ".DS_Store", "--rsync-path=\(installersReceiver)",
+         "installers/", "\(host):\(path)/installers/"]
     }
+
+    static let installersSyncLock = "/tmp/second-chance-installers-sync.lock"
+    static let installersReceiver = "/usr/bin/lockf -k \(installersSyncLock) /usr/bin/rsync"
 
     /// Before a sync that sends installers: make the checkout there, and,
     /// when that Mac has shared installers (`sc session add`) and the checkout
