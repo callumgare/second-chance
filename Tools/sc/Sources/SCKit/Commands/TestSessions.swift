@@ -31,7 +31,7 @@ struct SessionListCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let pool = SessionPool.users()
         guard !pool.isEmpty else {
-            session.ui.detail("\(ScreenLease.shortHostName()) has no test sessions. Add one: sc session add <user>")
+            session.ui.detail("\(ScreenLease.shortHostName()) has no test sessions. Set some up: sc session add")
             return
         }
         for status in await SessionPool.statuses(users: pool) {
