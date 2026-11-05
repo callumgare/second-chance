@@ -31,12 +31,15 @@ nonisolated public struct FoundStore: Sendable, Equatable {
 
 nonisolated public enum StoreInventory {
     /// Every kept and cache store under `locations`' roots: the global
-    /// ones, then each app's.
-    public static func all(in locations: StoreLocations) -> [FoundStore] {
+    /// ones, then each wrapp's (only Second Chance's own apps' folders, by
+    /// their ids). A store with no record beside it takes its lock from
+    /// `declaredLocks` (by full name, the modules' declarations), as one an
+    /// app migrated in before any build wrote its record.
+    public static func all(in locations: StoreLocations, declaredLocks: [String: String] = [:]) -> [FoundStore] {
         var found: [FoundStore] = []
         let sharedRoot = locations.sharedAppSupport.appendingPathComponent("SecondChance/stores", isDirectory: true)
         found += stores(in: sharedRoot, retention: "keep", appID: nil)
-        for app in subfolders(of: locations.appSupport) where app.lastPathComponent != "SecondChance" {
+        for app in subfolders(of: locations.appSupport) where app.lastPathComponent.hasPrefix(WrappLock.wrappBundleIDPrefix) {
             found += stores(in: app.appendingPathComponent("stores", isDirectory: true), retention: "keep", appID: app.lastPathComponent)
         }
         let cacheRoot = locations.caches.appendingPathComponent("SecondChance/stores", isDirectory: true)
@@ -44,7 +47,11 @@ nonisolated public enum StoreInventory {
             let appID = scope.lastPathComponent == "global" ? nil : scope.lastPathComponent
             found += stores(in: scope, retention: "cache", appID: appID)
         }
-        return found
+        return found.map { store in
+            guard store.lock == nil, let lock = declaredLocks[store.fullName] else { return store }
+            return FoundStore(owner: store.owner, name: store.name, retention: store.retention, appID: store.appID,
+                              folder: store.folder, lock: lock, record: store.record)
+        }
     }
 
     /// The lock file `store` takes, if its declaration names one: by the

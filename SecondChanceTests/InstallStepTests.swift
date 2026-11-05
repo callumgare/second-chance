@@ -78,18 +78,6 @@ struct InstallStepTests {
         try WrappBuildHelper.checkLaunchMounts(launch("wine:C:/Game/"), in: app)
     }
 
-    @Test("A patch step is told by its shape")
-    func patchSteps() {
-        func step(_ module: String?, _ instruction: String, _ options: [String: [String]] = [:]) -> PlannedStep {
-            PlannedStep(instruction: instruction, module: module, options: options, arguments: [], name: nil, origin: "test")
-        }
-        #expect(GameInstallerRunner.isPatchStep(step(nil, "ADD")))
-        #expect(GameInstallerRunner.isPatchStep(step(nil, "RUN")))
-        #expect(GameInstallerRunner.isPatchStep(step("installer", "RUN", ["patch": [""]])))
-        #expect(!GameInstallerRunner.isPatchStep(step("installer", "RUN")))
-        #expect(!GameInstallerRunner.isPatchStep(step(nil, "EDIT")))
-    }
-
     @Test("A drive path in a program's arguments is written as Windows writes it")
     func windowsStyle() {
         #expect(GameInstallerRunner.windowsStyle("C:/patch.au3") == "C:\\patch.au3")

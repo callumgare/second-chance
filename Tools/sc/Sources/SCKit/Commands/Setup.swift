@@ -141,7 +141,7 @@ struct CleanCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let ui = session.ui
         let targets = self.targets.map { $0 == .winePrefixes ? .layers : $0 }
-        let stores = StoreInventory.all(in: StoreCommand.locations).filter { $0.retention == retention.rawValue }
+        let stores = StoreCommand.found(session.repo).filter { $0.retention == retention.rawValue }
         let paths: [Target: [URL]] = [
             .layers: [Repo.layerStore, Repo.formerWinePrefixCache],
             .build: [session.repo.derivedData],
@@ -197,7 +197,7 @@ struct CleanCommand: AsyncParsableCommand {
         var rows: [[String]] = []
         for target in chosen {
             if target == .stores {
-                let busy = stores.filter { StoreInventory.isInUse($0, in: StoreCommand.locations) }
+                let busy = stores.filter(StoreCommand.isInUse)
                 for store in busy {
                     ui.warning("\(store.fullName)\(store.appID.map { " (\($0))" } ?? "") is in use, so it's left alone.")
                 }

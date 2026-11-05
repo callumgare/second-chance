@@ -139,13 +139,10 @@ class WrappBuildHelper {
             throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
         }
 
-        // Update bundle identifier by replacing WrappTemplate with game ID
-        guard let currentBundleID = plist["CFBundleIdentifier"] as? String else {
-            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
-        }
-
-        guard currentBundleID.contains("WrappTemplate") else {
-            throw WrappBuildError.templateDamaged("its Info.plist has no WrappTemplate bundle identifier")
+        // The template's id, or the one a step's `APP --default-id` wrote:
+        // either way replaced by the caller's.
+        guard plist["CFBundleIdentifier"] is String else {
+            throw WrappBuildError.templateDamaged("its Info.plist has no bundle identifier")
         }
 
         // The program's bundle's id (`au.gare.callum.second-chance.program.nancy-drew.<slug>`),

@@ -121,19 +121,23 @@ public nonisolated final class ExternalExecutor: ModuleExecutor {
         (allow default)
         (deny network*)
         (deny file-write*)
-        (allow file-write* (subpath (param "TEMP")) (subpath (param "CACHE_STORES"))
+        (allow file-write* (subpath (param "TEMP")) (subpath (param "CACHE_STORES")) (subpath (param "OWN_STORES"))
                (literal "/dev/null") (literal "/dev/tty") (literal "/dev/dtracehelper"))
         """
 
     /// `sandbox-exec` and its arguments, which start `program` in the
-    /// sandbox; nil with `SECOND_CHANCE_MODULE_SANDBOX=0`, or where macOS
-    /// has no `sandbox-exec`.
-    static func sandboxed(_ program: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> (URL, [String])? {
+    /// sandbox, its module's own global kept stores (`module`'s) writable
+    /// too, as `context.store` hands it them; nil with
+    /// `SECOND_CHANCE_MODULE_SANDBOX=0`, or where macOS has no `sandbox-exec`.
+    static func sandboxed(_ program: URL, module: String = "", environment: [String: String] = ProcessInfo.processInfo.environment)
+        -> (URL, [String])? {
         let sandbox = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
         guard environment["SECOND_CHANCE_MODULE_SANDBOX"] != "0", FileManager.default.isExecutableFile(atPath: sandbox.path) else { return nil }
         let temp = realPath(FileManager.default.temporaryDirectory)
         let stores = realPath(StoreLocations.realCaches.appendingPathComponent("SecondChance/stores"))
-        return (sandbox, ["-p", sandboxProfile, "-D", "TEMP=\(temp)", "-D", "CACHE_STORES=\(stores)", program.path])
+        let own = realPath(StoreLocations.shared(owner: module.isEmpty ? "-" : module, name: "-").deletingLastPathComponent())
+        return (sandbox, ["-p", sandboxProfile, "-D", "TEMP=\(temp)", "-D", "CACHE_STORES=\(stores)", "-D", "OWN_STORES=\(own)",
+                          program.path])
     }
 
     /// `url`'s path with every link resolved, as the sandbox matches it
@@ -152,7 +156,7 @@ public nonisolated final class ExternalExecutor: ModuleExecutor {
     private func start() async throws -> Running {
         _ = Self.ignoringBrokenPipes
         let process = Process()
-        if let (sandbox, arguments) = Self.sandboxed(program) {
+        if let (sandbox, arguments) = Self.sandboxed(program, module: module) {
             process.executableURL = sandbox
             process.arguments = arguments
         } else {
@@ -177,6 +181,16 @@ public nonisolated final class ExternalExecutor: ModuleExecutor {
             throw StepFailure.failed("\(module)'s program couldn't start: \(error.localizedDescription)")
         }
         let connection = RPCConnection(input: output.fileHandleForReading, output: input.fileHandleForWriting)
+        // A cancelled step its program doesn't give up within 10 s: ended.
+        let name = module
+        connection.whenCancelUnanswered { [process] in
+            guard process.isRunning else { return }
+            logger.warning("\(name)'s program didn't stop within 10s of being cancelled: ending it")
+            process.terminate()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            }
+        }
         connection.setHandler { [weak self] method, params in
             guard let self else { throw RPCError(.failed, "the build has finished") }
             return try await self.answer(method, params, connection: connection)

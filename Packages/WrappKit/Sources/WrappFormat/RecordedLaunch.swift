@@ -36,6 +36,51 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// The format a build records now.
     public static let currentFormat = 2
 
+    private enum CodingKeys: String, CodingKey {
+        case program, arguments, environment, options, fallback, mounts, format, volumes
+    }
+
+    /// A launch a build before stores recorded (unreleased, but in apps built
+    /// from that code): its `volumes`, each the app's own store of its name
+    /// at its location, and at its Wine drive too (`wine.drive`), as
+    /// `wrapp-builder fmt --migrate` rewrites a `VOLUME`.
+    private struct Volume: Decodable {
+        var name: String
+        var location: String
+        var options: [String: String]?
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        program = try container.decode(String.self, forKey: .program)
+        arguments = try container.decodeIfPresent([String].self, forKey: .arguments) ?? []
+        environment = try container.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
+        options = try container.decodeIfPresent([String: String].self, forKey: .options) ?? [:]
+        fallback = try container.decodeIfPresent(String.self, forKey: .fallback)
+        format = try container.decodeIfPresent(Int.self, forKey: .format)
+        if let mounts = try container.decodeIfPresent([Mount].self, forKey: .mounts) {
+            self.mounts = mounts
+        } else {
+            mounts = try (container.decodeIfPresent([Volume].self, forKey: .volumes) ?? []).flatMap { volume -> [Mount] in
+                var options = volume.options ?? [:]
+                let drive = options.removeValue(forKey: "wine.drive")
+                let store = "app:\(volume.name)"
+                return (drive.map { [Mount(store: store, target: "wine:" + $0)] } ?? []) + [Mount(store: store, target: volume.location, options: options)]
+            }
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(program, forKey: .program)
+        try container.encode(arguments, forKey: .arguments)
+        try container.encode(environment, forKey: .environment)
+        try container.encode(options, forKey: .options)
+        try container.encodeIfPresent(fallback, forKey: .fallback)
+        try container.encode(mounts, forKey: .mounts)
+        try container.encodeIfPresent(format, forKey: .format)
+    }
+
     /// A store, where the program sees it
     /// (`LAUNCH --mount=type=store,source=<store>,target=<path>`).
     public struct Mount: Codable, Sendable, Equatable {

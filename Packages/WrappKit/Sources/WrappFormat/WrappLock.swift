@@ -153,8 +153,11 @@ nonisolated public struct WrappLock: Codable, Sendable, Equatable {
 
     /// The bundle id a wrapp of `program` (`nancy-drew/blue-moon`) has.
     public static func wrappBundleID(program: String) -> String {
-        "au.gare.callum.second-chance.program." + program.replacingOccurrences(of: "/", with: ".")
+        wrappBundleIDPrefix + program.replacingOccurrences(of: "/", with: ".")
     }
+
+    /// What every wrapp's bundle id starts with.
+    public static let wrappBundleIDPrefix = "au.gare.callum.second-chance.program."
 
     /// This wrapp's bundle id.
     public var wrappBundleID: String { Self.wrappBundleID(program: bundle.id) }

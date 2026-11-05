@@ -223,8 +223,11 @@ in `…/SecondChance/stores/<owner>/<name>/`, caches under
 `~/Library/Caches/SecondChance/stores/`. Under test,
 `SECOND_CHANCE_APP_SUPPORT_DIR` moves an app's own stores, so a test launch
 starts with none; the global ones stay where they are, as the integration
-tests' Steam builds sign in with the saved session. A unit test's builds
-keep the runner's stores in a temporary folder of their own.
+tests' Steam builds sign in with the saved session. Builds in the test host
+(the unit and integration tests both) keep the runner's stores, global ones
+too, in a temporary folder of their own; the Steam and Big Fish builders
+still use the real sign-ins themselves, and hold the real Steam lock
+(`SteamActiveLock`).
 
 `sc store list` shows the kept and cache stores on the Mac, with their
 sizes and whether one's lock is held; `sc store remove <owner>:<name>`

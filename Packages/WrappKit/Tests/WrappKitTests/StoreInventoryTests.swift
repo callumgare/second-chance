@@ -17,7 +17,8 @@ struct StoreInventoryTests {
             .write(to: signIn.deletingLastPathComponent().appendingPathComponent("sign-in.store.json"))
         try files.createDirectory(at: locations.lockFile(owner: "steam", name: "steam", global: true, appID: "").deletingLastPathComponent(),
                                   withIntermediateDirectories: true)
-        try files.createDirectory(at: locations.folder(owner: "app", name: "wine-documents", retention: "keep", global: false, appID: "com.example.game"),
+        let app = "au.gare.callum.second-chance.program.example.game"
+        try files.createDirectory(at: locations.folder(owner: "app", name: "wine-documents", retention: "keep", global: false, appID: app),
                                   withIntermediateDirectories: true)
         try files.createDirectory(at: locations.folder(owner: "steam", name: "client", retention: "cache", global: true, appID: ""),
                                   withIntermediateDirectories: true)
@@ -31,7 +32,7 @@ struct StoreInventoryTests {
         let found = StoreInventory.all(in: locations)
         #expect(found.map(\.fullName) == ["steam:sign-in", "app:wine-documents", "steam:client"])
         #expect(found.map(\.retention) == ["keep", "keep", "cache"])
-        #expect(found.map(\.appID) == [nil, "com.example.game", nil])
+        #expect(found.map(\.appID) == [nil, "au.gare.callum.second-chance.program.example.game", nil])
         #expect(found[0].lock == "steam:steam")
         #expect(found[1].record == nil)
     }

@@ -284,7 +284,8 @@ final class UpdateWrappBuilder {
         }
         guard composition.has(.wine) else { return }
         let wine = Wine(wrapp: tree)
-        let standIn = URL(fileURLWithPath: "/tmp/second-chance-update-\(UUID().uuidString)")
+        // In the working folder, which goes with the build.
+        let standIn = tree.deletingLastPathComponent().appendingPathComponent("saves-stand-in", isDirectory: true)
         try FileManager.default.createDirectory(at: standIn, withIntermediateDirectories: true)
         try wine.drives.mount(standIn, as: "a")
         try? FileManager.default.removeItem(at: wine.documents)

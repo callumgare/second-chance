@@ -314,8 +314,8 @@ The rules that keep it working:
   the core's itself, each stage in a tree of its own, keyed and kept as
   layers at expensive steps, with stores mounted where steps say, so any
   plan that checks can be built by any source. Every source builds through
-  it but the update source, which still makes its wrapp from the template
-  itself ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)).
+  it, updates too, from the old app's tree
+  ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)).
 - **`Composition`** (`WrappModules`, in `Packages/WrappKit`): the modules a
   wrapp runs — the one that starts the game (`launcher`: `wine`, `scummvm`,
   `dosbox`, `steam` or `big-fish`) and the services started before it — read from a wrapp's

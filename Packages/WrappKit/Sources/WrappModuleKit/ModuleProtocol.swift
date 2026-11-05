@@ -165,10 +165,19 @@ public nonisolated final class RPCConnection: Sendable {
     private let reader = Mutex<Task<Void, Never>?>(nil)
     /// Called once the other end has gone.
     private let onClose = Mutex<(@Sendable () -> Void)?>(nil)
-    private let running = Mutex<[Int: Task<Void, Never>]>([:])
+    /// The other end's requests being answered, by id, and those answered
+    /// before they could be registered.
+    private let running = Mutex<(tasks: [Int: Task<Void, Never>], finished: Set<Int>)>(([:], []))
+    /// How long a cancelled request waits for its answer before giving up
+    /// (decision 8 of the builders plan: 10 s).
+    private let cancelGrace: Duration
+    /// Called when a cancelled request went unanswered for `cancelGrace`:
+    /// the other end is to be ended.
+    private let onUnanswered = Mutex<(@Sendable () -> Void)?>(nil)
 
-    public init(input: FileHandle, output: FileHandle, handler: Handler? = nil) {
+    public init(input: FileHandle, output: FileHandle, handler: Handler? = nil, cancelGrace: Duration = .seconds(10)) {
         self.output = output
+        self.cancelGrace = cancelGrace
         self.handler = Mutex(handler)
         let task = Task.detached { [weak self] in
             do {
@@ -184,6 +193,7 @@ public nonisolated final class RPCConnection: Sendable {
 
     public func setHandler(_ handler: @escaping Handler) { self.handler.withLock { $0 = handler } }
     public func whenClosed(_ action: @escaping @Sendable () -> Void) { onClose.withLock { $0 = action } }
+    public func whenCancelUnanswered(_ action: @escaping @Sendable () -> Void) { onUnanswered.withLock { $0 = action } }
 
     /// Ask the other end, waiting for its reply.
     public func request<P: Encodable, R: Decodable>(_ method: String, _ params: P, as result: R.Type) async throws -> R {
@@ -199,6 +209,15 @@ public nonisolated final class RPCConnection: Sendable {
             }
         } onCancel: {
             try? self.send(RPCMessage(method: "$/cancelRequest", params: try? RawJSON(["id": id])))
+            // One that doesn't answer in time is given up on, and its end
+            // told to go, so a cancel never waits for ever.
+            let grace = self.cancelGrace
+            Task.detached { [weak self] in
+                try? await Task.sleep(for: grace)
+                guard let self, let waiting = self.pending.withLock({ $0.removeValue(forKey: id) }) else { return }
+                waiting.resume(throwing: CancellationError())
+                self.onUnanswered.withLock { $0 }?()
+            }
         }
         return try JSONDecoder().decode(R.self, from: data ?? Data("null".utf8))
     }
@@ -223,7 +242,7 @@ public nonisolated final class RPCConnection: Sendable {
         if let method = message.method {
             if method == "$/cancelRequest" {
                 if let id = try? message.params?.decode([String: Int].self)["id"] {
-                    running.withLock { $0[id] }?.cancel()
+                    running.withLock { $0.tasks[id] }?.cancel()
                 }
                 return
             }
@@ -238,9 +257,19 @@ public nonisolated final class RPCConnection: Sendable {
                 } catch {
                     if let id { try? self.send(RPCMessage(id: id, error: RPCError(error))) }
                 }
-                if let id { _ = self.running.withLock { $0.removeValue(forKey: id) } }
+                // One that ends before it's registered is noted, so it isn't
+                // registered after.
+                if let id {
+                    self.running.withLock { running in
+                        if running.tasks.removeValue(forKey: id) == nil { running.finished.insert(id) }
+                    }
+                }
             }
-            if let id { running.withLock { $0[id] = task } }
+            if let id {
+                running.withLock { running in
+                    if running.finished.remove(id) == nil { running.tasks[id] = task }
+                }
+            }
             return
         }
         guard let id = message.id, let waiting = pending.withLock({ $0.removeValue(forKey: id) }) else { return }

@@ -44,27 +44,31 @@ nonisolated public struct FilesMount: Sendable, Equatable {
         value.split(separator: ";").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
+    /// Whatever its case, as Windows matches names.
     public func matches(_ name: String) -> Bool {
-        patterns.contains { fnmatch($0, name, 0) == 0 }
+        patterns.contains { fnmatch($0, name, FNM_CASEFOLD) == 0 }
     }
 
-    /// Before the program starts. A file the build left in the folder is
-    /// moved into the store when the store has none of that name, so the
-    /// person's copy starts from it; otherwise the store's wins. Then each
-    /// of the store's files is linked into the folder. Returns what it did,
-    /// for the log.
+    /// Before the program starts. A file in the folder that isn't a link
+    /// is moved into the store when the store has none of that name (the
+    /// build's default, so the person's copy starts from it), or when it
+    /// was written after the store's (the game wrote it afresh and ended
+    /// before `collect` could keep it); otherwise the store's wins. Then
+    /// each of the store's files is linked into the folder. Returns what it
+    /// did, for the log.
     @discardableResult
     public func connect() throws -> [String] {
         let files = FileManager.default
         try files.createDirectory(at: store, withIntermediateDirectories: true)
         var done: [String] = []
         for name in try names(in: folder) where matches(name) && !isLink(folder.appendingPathComponent(name)) {
-            let inStore = store.appendingPathComponent(name)
-            if files.fileExists(atPath: inStore.path) {
-                try files.removeItem(at: folder.appendingPathComponent(name))
+            let inStore = store.appendingPathComponent(name), inFolder = folder.appendingPathComponent(name)
+            if files.fileExists(atPath: inStore.path), modified(inStore) >= modified(inFolder) {
+                try files.removeItem(at: inFolder)
                 done.append("the store's \(name) replaces the app's")
             } else {
-                try files.moveItem(at: folder.appendingPathComponent(name), to: inStore)
+                if files.fileExists(atPath: inStore.path) { try files.removeItem(at: inStore) }
+                try files.moveItem(at: inFolder, to: inStore)
                 done.append("moved the app's \(name) into the store")
             }
         }
@@ -103,6 +107,10 @@ nonisolated public struct FilesMount: Sendable, Equatable {
     private func names(in url: URL) throws -> [String] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         return try FileManager.default.contentsOfDirectory(atPath: url.path).sorted()
+    }
+
+    private func modified(_ url: URL) -> Date {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date) ?? .distantPast
     }
 
     private func isLink(_ url: URL) -> Bool {

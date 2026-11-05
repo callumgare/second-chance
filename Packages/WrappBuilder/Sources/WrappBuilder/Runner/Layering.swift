@@ -61,6 +61,18 @@ nonisolated final class Layering: Sendable {
     /// The stages still to build, walking back from the target: a stage is
     /// needed if a needed stage starts from it with nothing restored, or a
     /// step still to run in one copies from it.
+    /// Why each stage the policy caches has nothing to restore, for the
+    /// log: which of its deepest layer's inputs differ from the layer last
+    /// kept in that place (`LayerStore.explain`).
+    func explainMisses() {
+        guard let store = configuration.layers else { return }
+        for stage in plan.stages where restorable[stage.name] == nil && Self.allows(stage, configuration.layerPolicy) {
+            guard let index = stage.steps.indices.reversed().first(where: { reason(stage, $0) != nil }),
+                  let key = keys.keys[stage.name]?[index], let why = store.explain(key) else { continue }
+            logger.notice("[Layer] Nothing kept to restore for \(stage.name.isEmpty ? "the target" : stage.name): \(why)")
+        }
+    }
+
     func neededStages() -> Set<String> {
         guard let target = plan.stages.last else { return [] }
         var needed: Set<String> = [target.name]

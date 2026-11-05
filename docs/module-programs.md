@@ -79,12 +79,17 @@ checkpoints and events work as for any other.
 ## The sandbox
 
 A module's program runs under `sandbox-exec` (`ExternalExecutor.sandboxed`):
-it reads what the person can, but reaches no network and writes only to the
-temporary folder, where the build's trees and session stores are, and the
-cache stores (`~/Library/Caches/SecondChance/stores/`). What it needs from
-outside it asks the build for (`input`, `fetch`), which isn't sandboxed. So
-a module someone adds can't change the person's files or send them
-anywhere, whatever their agreement to import it covered.
+it reads what the person can, but reaches no network itself and writes only
+to the temporary folder, where the build's trees and session stores are,
+the cache stores (`~/Library/Caches/SecondChance/stores/`) and its own
+module's global kept stores. What it needs from outside it asks the build
+for (`input`, `fetch`, `runProgram`), which the build does outside the
+sandbox. So it can't change the person's files directly, but it isn't
+contained: `fetch` fetches any URL it names (so data could leave in one),
+and `runProgram` runs a Wine program with the network, its mounts not yet
+held to the host path rule. Importing a module is still agreeing to trust
+it (decision 10 of the builders plan); the sandbox narrows what a mistake
+in one can do.
 
 - **The profile names real paths**: `/private/var/folders/…`, not the
   `/var/folders/…` `FileManager` gives, or every write in the tree is

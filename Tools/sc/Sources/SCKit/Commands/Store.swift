@@ -1,5 +1,7 @@
+import AppKit
 import ArgumentParser
 import Foundation
+import WrappBuilder
 import WrappFormat
 
 struct StoreCommand: AsyncParsableCommand {
@@ -16,11 +18,27 @@ struct StoreCommand: AsyncParsableCommand {
         StoreLocations.current(session: FileManager.default.temporaryDirectory.appendingPathComponent("sc-no-session-stores"))
     }
 
+    /// The stores on this Mac, each with its lock as the shipped modules
+    /// declare it when no build has recorded one yet.
+    static func found(_ repo: Repo) -> [FoundStore] {
+        let modules = (try? ModuleLoader(root: repo.modules).loadAll().get()) ?? []
+        let declared = StoreDeclarations(of: modules)
+        return StoreInventory.all(in: locations, declaredLocks: declared.stores.compactMapValues(\.lock))
+    }
+
+    /// Whether a build or an app is using `store`: its lock held, or, for a
+    /// wrapp's own store, the wrapp running.
+    static func isInUse(_ store: FoundStore) -> Bool {
+        if StoreInventory.isInUse(store, in: locations) { return true }
+        guard let app = store.appID else { return false }
+        return !NSRunningApplication.runningApplications(withBundleIdentifier: app).isEmpty
+    }
+
     static func rows(_ stores: [FoundStore]) async -> [[String]] {
         var rows: [[String]] = []
         for store in stores {
             let size = await CleanCommand.size(of: store.folder)
-            let inUse = StoreInventory.isInUse(store, in: locations) ? "in use" : ""
+            let inUse = isInUse(store) ? "in use" : ""
             rows.append([store.fullName, store.appID ?? "(every app)", store.retention,
                          ByteCountFormatter.string(fromByteCount: size, countStyle: .file), inUse,
                          (store.folder.path as NSString).abbreviatingWithTildeInPath])
@@ -45,7 +63,7 @@ struct StoreListCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let stores = StoreInventory.all(in: StoreCommand.locations)
+        let stores = StoreCommand.found(session.repo)
             .filter { retention == nil || $0.retention == retention }
             .filter { app == nil || $0.appID == app }
         if stores.isEmpty {
@@ -81,7 +99,7 @@ struct StoreRemoveCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let found = StoreInventory.all(in: StoreCommand.locations).filter { $0.fullName == store && (app == nil || $0.appID == app) }
+        let found = StoreCommand.found(session.repo).filter { $0.fullName == store && (app == nil || $0.appID == app) }
         guard !found.isEmpty else {
             throw SCError("There's no store \(store)\(app.map { " for \($0)" } ?? "").", hints: ["sc store list shows the stores there are."])
         }
@@ -94,7 +112,7 @@ extension StoreCommand {
     /// of what went.
     static func remove(_ stores: [FoundStore], yes: Bool, session: Session) async throws {
         let ui = session.ui
-        let busy = stores.filter { StoreInventory.isInUse($0, in: locations) }
+        let busy = stores.filter(isInUse)
         for store in busy {
             ui.warning("\(store.fullName)\(store.appID.map { " (\($0))" } ?? "") is in use, so it's left alone.",
                        next: "Quit the app or build using it, then try again.")

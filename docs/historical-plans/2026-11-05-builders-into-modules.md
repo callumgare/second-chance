@@ -3217,8 +3217,11 @@ Where the code differs from the plan, or a phase left something out:
   build (nothing more is kept) rather than naming itself in later keys.
   Layer locks hold only while a layer is cloned in. There's no room-to-build
   estimate or `sc bundle plan --layers`.
-- **Stores** (decision 23): only app stores move under test; global ones
-  stay real, as the integration tests sign in with the saved Steam session.
+- **Stores** (decision 23): under test (`SECOND_CHANCE_APP_SUPPORT_DIR`) a
+  wrapp's own stores move and global ones stay real, as the integration
+  tests sign in with the saved Steam session; but in the test host the
+  runner keeps every store, global ones too, in a temporary root, while the
+  Steam and Big Fish builders use the real sign-ins and Steam lock.
   Steam keeps `SIGN-OUT` and its client cache laid over each tree rather
   than a `snapshot` mount; Big Fish has no separate trial or test-account
   functions, so no session stores, and `STORE` inside a function wasn't

@@ -541,11 +541,12 @@ step and keeps a layer after the expensive ones (`StepKeys`, `Layering`).
   installs every game for real, and `off`.
 - **Every layer keeps its key's inputs**, so a miss is explained: the build
   logs which inputs differ from the layer last used for the same slot.
-- **One build makes a layer; the rest wait and clone it.** A build takes a
-  lock on the key (`flock`, so across processes too) before looking, makes the
-  layer under a hidden name and renames it into place whole, so none is ever
-  taken half made. A build whose caching fails carries on with the tree it
-  made.
+- **A layer is put in place whole.** It's made under a hidden name and
+  renamed into place under a lock on its key (`flock`, so across processes
+  too), so none is ever taken half made. Two builds side by side that both
+  find no layer each run its steps, and the one that keeps it second finds
+  it there and keeps nothing. A build whose caching fails carries on with
+  the tree it made.
 - **Restoring clones** (`clonefile`), which costs nothing until a file
   changes; across volumes the layer is copied, and the log says so.
 - **Pruned by use**: Second Chance, at most once a day and off the main
@@ -554,8 +555,9 @@ step and keeps a layer after the expensive ones (`StepKeys`, `Layering`).
   blocks with a wrapp frees less when it goes.
 
 `./sc clean layers` (or the app's `--clear-wine-cache`) removes every layer.
-The cache that came before, `wine-prefix-cache/`, is removed by the next
-build.
+The cache that came before, `wine-prefix-cache/`, is removed when Second
+Chance starts (`AppMigrations`). Layers an earlier Second Chance kept, whose
+keys no build makes now, go when they've been unused for 30 days.
 
 ## Updating a wrapp
 
@@ -633,9 +635,7 @@ where its first disc would go (or given as `DISK_1_PATH`) is updated by
   the same engine version is simply this build's, and another version within
   Wine's major version moves the prefix as above. Its
   `Documents` and A: drive lead to the person's saves, so both are pointed at
-  an empty stand-in before anything runs (the first launch points them back),
-  and Z: is mounted for the update's Wine programs and taken away again as
-  the wrapp is finished. An update's stage runs patches and the .ini settings
+  an empty stand-in before anything runs (the first launch points them back). An update's stage runs patches and the .ini settings
   over the installed game; a step that installs the game again makes it a
   fresh build. Nothing carried over from the old wrapp is cached.
 - **The new lock records the chain** (`updated`: the old bundle version and

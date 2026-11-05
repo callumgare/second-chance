@@ -34,6 +34,16 @@ nonisolated enum AppMigrations {
         migrateSteam(roots)
         // A cache, and nothing released reads it from elsewhere.
         move(roots.caches.appendingPathComponent("SecondChance/steam-client"), to: roots.steamClient, linkBack: false)
+        // The prefix cache from before the layer store.
+        let formerPrefixCache = roots.caches.appendingPathComponent("SecondChance/wine-prefix-cache")
+        if FileManager.default.fileExists(atPath: formerPrefixCache.path) {
+            do {
+                try FileManager.default.removeItem(at: formerPrefixCache)
+                logger.notice("Removed the prefix cache from before the layer store")
+            } catch {
+                logger.error("Couldn't remove \(formerPrefixCache.path): \(error.localizedDescription)")
+            }
+        }
         // Big Fish's sign-in isn't released: moved, no link.
         move(roots.appSupport.appendingPathComponent("SecondChance/BigFish/sign-in.reg"),
              to: roots.bigFishSignIn.appendingPathComponent("sign-in.reg"), linkBack: false)

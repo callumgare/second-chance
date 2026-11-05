@@ -141,9 +141,8 @@ A patch is applied by the steps `DO nancy-drew.patch` expands to
 as it does any other ([wrapp-build.md](wrapp-build.md#the-runner)), in the
 order the Wrappfile names the patches; each is named after its patch
 (`--name=<id>`), which is how Second Chance publishes `patchApplied` and
-`patchFailed` for it. The update source, which doesn't build through the
-runner yet, carries them out with `GameInstallerRunner.runPatchStep`. The
-step its `action` takes:
+`patchFailed` for it; an update's patches are steps of its bundle's update
+stages, carried out the same way. The step its `action` takes:
 
 | Patch | Step | Carried out |
 | --- | --- | --- |

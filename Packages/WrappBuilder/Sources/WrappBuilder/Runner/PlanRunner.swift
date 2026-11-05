@@ -130,6 +130,7 @@ public nonisolated struct PlanRunner: Sendable {
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let layering = try await Layering(plan: plan, configuration: configuration, trees: trees.trees)
+            layering.explainMisses()
             let needed = layering.neededStages()
             var logs: [URL: [BuildEvent]] = [:]
             for (stage, start) in zip(plan.stages, trees.starts) {

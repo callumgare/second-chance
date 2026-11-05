@@ -49,6 +49,11 @@ public nonisolated final class SignalWatcher: Sendable {
     }
 
     private let state: Mutex<State>
+    /// Held for a whole look, so two never interleave (the polling thread's
+    /// and an exit's or the stop's), while `state` is held only to read and
+    /// write it: what's told the watcher meanwhile never waits on a look's
+    /// walk of a folder.
+    private let looking = Mutex(())
 
     public init(signals: [PlannedSignal], resolve: @escaping @Sendable (String) -> URL?,
                 moduleWatch: @escaping @Sendable (String, String, String?) -> (any WatchProbe)? = { _, _, _ in nil },
@@ -88,9 +93,10 @@ public nonisolated final class SignalWatcher: Sendable {
     }
 
     public func stop() {
-        state.withLock { $0.stopped = true }
-        // A last look, so a line written just before the end still counts.
+        // A last look, so a line written just before the end still counts;
+        // then none, so no signal fires once the step's done.
         poll()
+        looking.withLock { _ in state.withLock { $0.stopped = true } }
     }
 
     /// The program the signals are about, once it's known.
@@ -111,30 +117,34 @@ public nonisolated final class SignalWatcher: Sendable {
 
     /// One look at every watch.
     func poll() {
-        let (program, lines, exit) = state.withLock { state -> (WatchedProgram?, [String], Int32?) in
+        looking.withLock { _ in lookOnce() }
+    }
+
+    private func lookOnce() {
+        let (program, lines, exit, stopped) = state.withLock { state -> (WatchedProgram?, [String], Int32?, Bool) in
             defer { state.output = [] }
-            return (state.program, state.output, state.exit)
+            return (state.program, state.output, state.exit, state.stopped)
         }
+        guard !stopped else { return }
         let processes = signals.contains { $0.watches.contains { if case .process = $0 { return true }; return false } }
             ? ProcessList.recent(maxAge: .seconds(1)) : nil
         for signal in signals {
             var fires: [[String: String]] = []
-            state.withLock { state in
-                guard var watches = state.watches[signal.name] else { return }
-                for (index, watch) in signal.watches.enumerated() {
-                    if let fields = Self.look(watch, state: &watches[index], program: program, lines: lines, exit: exit,
-                                              processes: processes, resolve: resolve) {
-                        watches[index].fired = fields
-                        if signal.combine == .any { fires.append(fields) }
-                    }
+            guard var watches = state.withLock({ $0.watches[signal.name] }) else { continue }
+            for (index, watch) in signal.watches.enumerated() {
+                if let fields = Self.look(watch, state: &watches[index], program: program, lines: lines, exit: exit,
+                                          processes: processes, resolve: resolve) {
+                    watches[index].fired = fields
+                    if signal.combine == .any { fires.append(fields) }
                 }
-                if signal.combine == .all, watches.allSatisfy({ $0.fired != nil }) {
-                    fires.append(watches.reduce(into: [:]) { all, watch in all.merge(watch.fired ?? [:]) { $1 } })
-                    for index in watches.indices { watches[index].fired = nil }
-                }
-                if signal.combine == .any { for index in watches.indices { watches[index].fired = nil } }
-                state.watches[signal.name] = watches
             }
+            if signal.combine == .all, watches.allSatisfy({ $0.fired != nil }) {
+                fires.append(watches.reduce(into: [:]) { all, watch in all.merge(watch.fired ?? [:]) { $1 } })
+                for index in watches.indices { watches[index].fired = nil }
+            }
+            if signal.combine == .any { for index in watches.indices { watches[index].fired = nil } }
+            let latest = watches
+            state.withLock { $0.watches[signal.name] = latest }
             for fields in fires { onFire(signal.name, fields) }
         }
     }

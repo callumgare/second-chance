@@ -75,4 +75,20 @@ struct FilesMountTests {
         #expect(try text(mount.store.appendingPathComponent("LaserTank.ini")) == "saved")
         #expect(try FileManager.default.destinationOfSymbolicLink(atPath: ini.path) == mount.store.appendingPathComponent("LaserTank.ini").path)
     }
+
+    @Test("A file the game wrote afresh before a crash, newer than the store's, isn't lost at the next launch")
+    func crashBeforeCollect() throws {
+        let (mount, root) = try make()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try mount.connect()
+        let ini = mount.folder.appendingPathComponent("LaserTank.ini")
+        try FileManager.default.removeItem(at: ini)
+        try Data("saved".utf8).write(to: ini)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: 60)], ofItemAtPath: ini.path)
+        // No collect: the wrapp ended. The next launch connects.
+        try mount.connect()
+        #expect(try text(mount.store.appendingPathComponent("LaserTank.ini")) == "saved")
+        #expect(try text(ini) == "saved")
+        #expect(mount.matches("LASERTANK.INI") && mount.matches("level1.HS"))
+    }
 }

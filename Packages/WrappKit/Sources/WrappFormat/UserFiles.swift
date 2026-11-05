@@ -54,15 +54,20 @@ nonisolated public struct UserFilesLayout: Sendable, Equatable {
     }
 
     /// `volumes/`, as a wrapp built before stores kept the app's own,
-    /// renamed `stores/app/` if there's none yet. True when it moved.
+    /// renamed `stores/app/` if there's none yet, and a link left at
+    /// `volumes`: the links an earlier launch made into it (from the
+    /// folders of the ids the app had before, ScummVM's settings in
+    /// Preferences) still lead to the same files. True when it moved.
     @discardableResult
     public func moveVolumesIntoStores() throws -> Bool {
         let volumes = folder.appendingPathComponent("volumes", isDirectory: true)
         let stores = folder.appendingPathComponent("stores/app", isDirectory: true)
         let files = FileManager.default
-        guard files.fileExists(atPath: volumes.path), !files.fileExists(atPath: stores.path) else { return false }
+        guard (try? files.destinationOfSymbolicLink(atPath: volumes.path)) == nil,
+              files.fileExists(atPath: volumes.path), !files.fileExists(atPath: stores.path) else { return false }
         try files.createDirectory(at: stores.deletingLastPathComponent(), withIntermediateDirectories: true)
         try files.moveItem(at: volumes, to: stores)
+        try files.createSymbolicLink(at: volumes, withDestinationURL: stores)
         return true
     }
     public var settings: URL { folder.appendingPathComponent("wrapp-settings", isDirectory: true) }
