@@ -465,9 +465,76 @@ exit. If the process is killed or the Mac restarts, the next command finds
 that process gone and takes the stale lease over. The holder is checked by its
 pid and its start time, so a reused pid doesn't count as the holder. A command
 that sc itself starts inside a leased run (a descendant of the holder) runs
-under the same lease. The lease is
+under the same lease.
+
+**Each user's screen has its own lease,** because each logged-in user has a
+screen of their own (see [Test sessions](#test-sessions)). The lease is
+`/Users/Shared/second-chance/leases/<user>.json`, where every user can read
+and write it, or the file `SC_SCREEN_LEASE_FILE` names, with other users'
+beside it (`ScreenLease`). `sc lease --all` lists every lease on the Mac.
+A test session's screen is named `<mac>/<user>` in messages. A live lease in
+the place older `sc` builds kept it, the user's
 `~/Library/Application Support/au.gare.callum.second-chance.sc/screen-lease.json`,
-or the file `SC_SCREEN_LEASE_FILE` names (`ScreenLease`).
+is respected too, until every checkout has the change.
+
+## Test sessions
+
+**A Mac can run games in the background, in test users' own GUI logins**, while
+someone uses its screen or another run has it. macOS keeps a separate screen for
+each logged-in user. A login made through Screen Sharing ("Log in as yourself")
+gets a virtual display of its own. Wine, ScummVM and DOSBox games run there at
+full fidelity, and WrappPuppeteer's helper captures them as on the console.
+
+**A test session needs a viewer.** With nobody connected, macOS locks the
+session. A locked session never moves a game into its fullscreen Space, so the
+game can't be captured or driven. Before the lock, an unwatched session also
+stopped OpenGL reaching its windows: Direct3D games went black and ScummVM froze.
+So the console user runs a keep-alive, `sc session keep-alive`, a LaunchAgent
+(`--install`) that holds a Screen Sharing connection into each test session as a
+viewer would:
+
+- **It logs the session in** if it isn't: Apple's login over RFB starts a
+  user's GUI session when they have none, in about three seconds, with nothing
+  shown on the console.
+- **It unlocks it** when it's locked: a click on the user's picture, then the
+  password typed (`ScreenSharingConnection.unlock`).
+- **It asks for an 8x8 corner every 2 seconds** and draws nothing. It costs
+  about 23 MB and no measurable CPU; Screen Sharing's server takes about 2% while
+  it's connected.
+- **It reconnects** when the connection drops, waiting longer each time (up to
+  10 minutes, so a wrong password can't lock the account).
+
+It speaks just enough of RFB for this (`ScreenSharing.swift`): Apple's login,
+security type 30, is a Diffie-Hellman exchange whose key (MD5 of the shared
+secret) encrypts the user name and password with AES-128. The server announces
+version 003.889 and accepts 3.8. Passwords come from the console user's login
+keychain (service `second-chance-session`, the user's name as account), which is
+locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI session.
+
+**The pool** is the Mac's list of test users,
+`/Users/Shared/second-chance/pool`, one name a line (`SessionPool`):
+
+- `sc session add <user>` makes one at the Mac, as an admin (it uses `sudo`).
+  It creates a standard user with a random password, keeps the password in the
+  keychain, lets the user in over SSH and Screen Sharing, gives them the console
+  user's authorized SSH keys, and adds them to the pool. Given an existing user
+  whose password is already in the keychain, it adopts them.
+- `sc session` (or `list`) shows each: logged in or not, locked, and leased or
+  free. Logins come from `ioreg`'s console users, which any user can read.
+- `sc session claim --purpose "<text>" [--for 2h] [<user>]` leases a free test
+  session's screen to you, as `sc lease take` would, and says how to reach it.
+  `sc session release [<user>]` gives it back.
+
+**Running in one** is `--on` with the test user: `sc --on <user>@<mac>:<path>
+<command>`. The lease travels with `--on`, so your commands go ahead under the
+claim, and anyone else's stop. Each test user has its own checkout and its own
+copies of wrapps, since Wine refuses a prefix another user owns
+([wrapps for every user](plans-for-consideration/wrapps-for-every-user.md)).
+
+**Sessions share the Mac's processes and system log.** `ps` and `log show` see
+every user's. So a lookup by name must be this user's alone (`ProcessList`'s are),
+and a log read filters on the line's user id. A game in a test session also loads
+the Mac like any other, so a console run's launches are slower while one plays.
 
 ## Changing sc
 

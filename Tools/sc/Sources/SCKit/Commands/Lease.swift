@@ -31,11 +31,19 @@ struct LeaseShowCommand: AsyncParsableCommand {
     @Flag(help: "Print the lease as JSON.")
     var json = false
 
+    @Flag(help: "List every screen's lease on this Mac: its own user's and each test session's.")
+    var all = false
+
+    func validate() throws {
+        if all && breakLease { throw ValidationError("--all lists; break one lease at a time, in its own session.") }
+    }
+
     func run() async throws {
         let session = try Session.start(global)
+        if all { return listAll(session) }
         let file = ScreenLease.file()
         guard let lease = ScreenLease.read(file) else {
-            if json { session.ui.line("null") } else { session.ui.detail("\(ScreenLease.shortHostName())'s screen isn't leased.") }
+            if json { session.ui.line("null") } else { session.ui.detail("\(SessionPool.screenName())'s screen isn't leased.") }
             return
         }
         guard lease.isAlive else {
@@ -61,9 +69,25 @@ struct LeaseShowCommand: AsyncParsableCommand {
             session.ui.line(String(decoding: try encoder.encode(lease), as: UTF8.self))
             return
         }
-        session.ui.line(lease.heldMessage(onHost: ScreenLease.shortHostName()))
+        session.ui.line(lease.heldMessage(onHost: SessionPool.screenName()))
         if !lease.isTakenByHand { session.ui.line("Its process: pid \(lease.pid), in \(lease.runCheckout).") }
         if let pid = lease.holder.agentPID { session.ui.line("The agent's process: pid \(pid) on \(lease.holder.host).") }
+    }
+
+    private func listAll(_ session: Session) {
+        let leases = ScreenLease.all().filter { $0.lease.isAlive }
+        if json {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            let byUser = Dictionary(uniqueKeysWithValues: leases.map { ($0.user, $0.lease) })
+            session.ui.line(String(decoding: (try? encoder.encode(byUser)) ?? Data("{}".utf8), as: UTF8.self))
+            return
+        }
+        if leases.isEmpty { session.ui.detail("No screen on \(ScreenLease.shortHostName()) is leased.") }
+        for (user, lease) in leases {
+            session.ui.line(lease.heldMessage(onHost: SessionPool.screenName(of: user)))
+        }
     }
 }
 
@@ -98,7 +122,7 @@ struct LeaseTakeCommand: AsyncParsableCommand {
         let seconds = ScreenLease.parseDuration(duration) ?? 1800
         let lease = try await ScreenLease.take(session, policy: global.leasePolicy, purpose: global.purpose, duration: seconds)
         let until = lease.expires.map(ScreenLease.clock) ?? "?"
-        session.ui.detail("\(ScreenLease.shortHostName())'s screen is yours until \(until). Give it back with: sc lease release")
+        session.ui.detail("\(SessionPool.screenName())'s screen is yours until \(until). Give it back with: sc lease release")
     }
 }
 
@@ -113,9 +137,9 @@ struct LeaseReleaseCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         if try await ScreenLease.releaseTaken(session) {
-            session.ui.detail("Released: \(ScreenLease.shortHostName())'s screen is free.")
+            session.ui.detail("Released: \(SessionPool.screenName())'s screen is free.")
         } else {
-            session.ui.detail("\(ScreenLease.shortHostName())'s screen wasn't leased.")
+            session.ui.detail("\(SessionPool.screenName())'s screen wasn't leased.")
         }
     }
 }

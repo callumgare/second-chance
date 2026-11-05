@@ -74,12 +74,45 @@ struct ScreenLease: Codable, Equatable, Sendable {
     /// The exit status when the screen is leased: EX_TEMPFAIL.
     static let heldExitCode: Int32 = 75
 
-    /// Per Mac, outside any checkout, so every checkout there sees it.
-    static func file(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
-        if let path = environment[fileVariable], !path.isEmpty { return URL(fileURLWithPath: path) }
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        return support.appendingPathComponent("au.gare.callum.second-chance.sc/screen-lease.json")
+    /// Every user's leases on this Mac, one file each, where every user can
+    /// read and write them: each logged-in user has a screen of their own (a
+    /// test session in the background has one too), and `sc session claim`
+    /// leases a test session's screen on its behalf.
+    static let sharedDirectory = URL(fileURLWithPath: "/Users/Shared/second-chance/leases")
+
+    /// The lease on `user`'s screen (this user's unless said), outside any
+    /// checkout, so every checkout on the Mac sees it.
+    static func file(for user: String = NSUserName(),
+                     environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        if let path = environment[fileVariable], !path.isEmpty {
+            let own = URL(fileURLWithPath: path)
+            return user == NSUserName() ? own : own.deletingLastPathComponent().appendingPathComponent("\(user).json")
+        }
+        return sharedDirectory.appendingPathComponent("\(user).json")
+    }
+
+    /// Where a user's lease was kept before test sessions (in their home):
+    /// a checkout on an older sc still writes it there, so it's respected too.
+    static func legacyFile(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL? {
+        if let path = environment[fileVariable], !path.isEmpty { return nil }
+        return URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("Library/Application Support/au.gare.callum.second-chance.sc/screen-lease.json")
+    }
+
+    /// A live lease an older sc holds on this user's screen that isn't the asker's.
+    static func legacyLease(for user: String, holder: Holder) -> ScreenLease? {
+        guard user == NSUserName(), let file = legacyFile(), let lease = read(file), lease.isAlive else { return nil }
+        if lease.pid == getpid() || ProcessFacts.isAncestor(lease.pid, of: getpid()) { return nil }
+        return lease.isTakenByHand && lease.holder.isSame(as: holder) ? nil : lease
+    }
+
+    /// Every lease file in the folder `file()` is in, by user.
+    static func all(environment: [String: String] = ProcessInfo.processInfo.environment) -> [(user: String, lease: ScreenLease)] {
+        let folder = file(environment: environment).deletingLastPathComponent()
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return names.filter { $0.hasSuffix(".json") && !$0.hasPrefix(".") }.sorted().compactMap { name in
+            read(folder.appendingPathComponent(name)).map { (String(name.dropLast(5)), $0) }
+        }
     }
 
     // MARK: Who's asking
@@ -147,12 +180,17 @@ struct ScreenLease: Codable, Equatable, Sendable {
     /// Take the screen for this process, or throw saying who has it.
     static func acquire(_ session: Session, policy: Policy, purpose: String?) async throws {
         let file = file()
+        let screen = SessionPool.screenName()
         let holder = currentHolder(repoRoot: session.repo.root, branch: await branch(of: session.repo.root))
         let lease = ScreenLease(
             holder: holder, purpose: purpose, command: commandLine(Invocation.arguments),
             runCheckout: session.repo.root.path, pid: getpid(), pidStarted: ProcessFacts.startTime(of: getpid()) ?? 0,
             started: Date()
         )
+        if let older = legacyLease(for: NSUserName(), holder: holder), policy == .respect {
+            throw SCError(older.heldMessage(onHost: screen), hints: older.hints(onHost: screen, askingSession: holder.sessionID),
+                          exitCode: heldExitCode)
+        }
         for _ in 0..<3 {
             if try create(lease, at: file) {
                 held = file
@@ -177,7 +215,7 @@ struct ScreenLease: Codable, Equatable, Sendable {
             }
             switch policy {
             case .respect:
-                throw SCError(existing.heldMessage(onHost: shortHostName()), hints: existing.hints(onHost: shortHostName(), askingSession: holder.sessionID),
+                throw SCError(existing.heldMessage(onHost: screen), hints: existing.hints(onHost: screen, askingSession: holder.sessionID),
                               exitCode: heldExitCode)
             case .ignore:
                 session.ui.warning("Going ahead although \(existing.summary) has the screen (--ignore-screen-lease). Its windows and ours may get in each other's way.")
@@ -193,14 +231,20 @@ struct ScreenLease: Codable, Equatable, Sendable {
 
     /// Take the screen by hand for `duration`, for work sc doesn't run. Taking
     /// it again renews it.
-    static func take(_ session: Session, policy: Policy, purpose: String?, duration: TimeInterval) async throws -> ScreenLease {
-        let file = file()
+    static func take(_ session: Session, policy: Policy, purpose: String?, duration: TimeInterval,
+                     user: String = NSUserName()) async throws -> ScreenLease {
+        let file = file(for: user)
+        let screen = SessionPool.screenName(of: user)
         let holder = currentHolder(repoRoot: session.repo.root, branch: await branch(of: session.repo.root))
         let now = Date()
         let lease = ScreenLease(
             holder: holder, purpose: purpose, command: commandLine(Invocation.arguments),
             runCheckout: session.repo.root.path, pid: 0, pidStarted: 0, started: now, expires: now.addingTimeInterval(duration)
         )
+        if let older = legacyLease(for: user, holder: holder), policy == .respect {
+            throw SCError(older.heldMessage(onHost: screen), hints: older.hints(onHost: screen, askingSession: holder.sessionID),
+                          exitCode: heldExitCode)
+        }
         for _ in 0..<3 {
             if try create(lease, at: file) { return lease }
             guard let existing = read(file) else {
@@ -216,15 +260,15 @@ struct ScreenLease: Codable, Equatable, Sendable {
                 try? FileManager.default.removeItem(at: file)
                 continue
             }
-            throw SCError(existing.heldMessage(onHost: shortHostName()), hints: existing.hints(onHost: shortHostName(), askingSession: holder.sessionID),
+            throw SCError(existing.heldMessage(onHost: screen), hints: existing.hints(onHost: screen, askingSession: holder.sessionID),
                           exitCode: heldExitCode)
         }
         throw SCError("Couldn't take the screen lease at \(file.path): it kept changing under sc.")
     }
 
     /// Give back a lease taken by hand, if it's the asker's.
-    static func releaseTaken(_ session: Session) async throws -> Bool {
-        let file = file()
+    static func releaseTaken(_ session: Session, user: String = NSUserName()) async throws -> Bool {
+        let file = file(for: user)
         guard let existing = read(file), existing.isAlive else {
             try? FileManager.default.removeItem(at: file)
             return false
@@ -268,7 +312,7 @@ struct ScreenLease: Codable, Equatable, Sendable {
     /// file is atomic and fails if the name exists, so two runs starting at
     /// once can't both win, and a reader never sees half a file.
     static func create(_ lease: ScreenLease, at file: URL) throws -> Bool {
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try makeFolder(file.deletingLastPathComponent())
         let temp = file.deletingLastPathComponent().appendingPathComponent(".lease-\(getpid())-\(UUID().uuidString)")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -280,6 +324,16 @@ struct ScreenLease: Codable, Equatable, Sendable {
             throw SCError("Couldn't write the screen lease at \(file.path): \(String(cString: strerror(errno))).")
         }
         return false
+    }
+
+    /// The folder, writable by every user when it's the shared one: whoever
+    /// makes it first mustn't lock the others out (its parent is world-writable).
+    static func makeFolder(_ folder: URL) throws {
+        guard !FileManager.default.fileExists(atPath: folder.path) else { return }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        if folder.path.hasPrefix("/Users/Shared/") {
+            for path in [folder.deletingLastPathComponent().path, folder.path] { chmod(path, 0o777) }
+        }
     }
 
     static func read(_ file: URL) -> ScreenLease? {
@@ -359,7 +413,9 @@ struct ScreenLease: Codable, Equatable, Sendable {
         } else if let socket = holder.agentSocket {
             hints.append("Ask that session when it'll be done: SendMessage to uds:\(socket) (ListAgents shows its name).")
         }
-        if !isTakenByHand { hints.append("Watch it: sc --on \(host):\(runCheckout) attach") }
+        // A test session's screen is named <mac>/<user>, reached as <user>@<mac>.
+        let target = host.split(separator: "/").reversed().joined(separator: "@")
+        if !isTakenByHand { hints.append("Watch it: sc --on \(target):\(runCheckout) attach") }
         hints.append("Go ahead anyway, leaving the lease (windows may clash): add --ignore-screen-lease")
         hints.append(isTakenByHand ? "Clear their lease and take the screen: add --break-screen-lease"
                                    : "Stop that run and take the screen: add --break-screen-lease")
