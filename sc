@@ -8,18 +8,22 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$root/Tools/sc"
 binary="$package/.build/release/sc"
-# What the binary was built from, as a hash of the sources' contents: with
-# Packages/GameCatalog, the game catalog sc shares with the app, and
-# Packages/WrappBuilder, the bundle loading `sc bundle` uses, with the
-# WrappKit modules it needs. Not their modification times: `sc --on` syncs
-# with rsync, which keeps the sending Mac's times, so a checkout synced over
-# another's (another branch, or an older commit) kept the binary built from
-# that one (~50 ms).
+# What the binary was built from, as a hash of the sources' contents:
+# everything in Packages/ and Tools/sc but what builds leave, so a package
+# sc comes to depend on is covered without a list to keep up (one sc
+# doesn't use costs a rebuild that finds nothing to do). Not their
+# modification times: `sc --on` syncs with rsync, which keeps the sending
+# Mac's times, so a checkout synced over another's (another branch, or an
+# older commit) kept the binary built from that one (~50 ms).
 stamp="$binary.sources"
-sources_hash="$(cd "$root" && find -L Tools/sc/Sources Packages/GameCatalog Packages/WrappBuilder/Sources Packages/WrappBuilder/Package.swift \
-    Packages/WrappKit/Sources Packages/WrappKit/Package.swift Tools/sc/Package.swift Tools/sc/Package.resolved \
-    -type f -not -path '*/.build/*' -not -path '*/.swiftpm/*' -not -name .DS_Store -print0 2>/dev/null \
-    | sort -z | xargs -0 shasum | shasum)"
+files_stamp="$binary.files"
+files="$(cd "$root" && find -L Packages Tools/sc \( -name .build -o -name .swiftpm \) -prune -o -type f -not -name .DS_Store \
+    -print 2>/dev/null | LC_ALL=C sort)"
+sources_hash="$(cd "$root" && printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 shasum | shasum)"
+# Which files there are, apart from what's in them: SwiftPM's incremental
+# build of a local package can miss a file added to it, and fail as though
+# it weren't there, so a file added or removed means a clean build.
+files_hash="$(printf '%s\n' "$files" | shasum)"
 
 if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]]; then
     # Rebuilding takes ~10 s (longer the first time), so say so. In a
@@ -55,8 +59,17 @@ if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]
     else
         echo "${message}…" >&2
     fi
+    if [[ "$(cat "$files_stamp" 2>/dev/null)" != "$files_hash" ]]; then
+        rm -rf "$package/.build/release" "$package/.build/arm64-apple-macosx/release" "$package/.build/x86_64-apple-macosx/release"
+    fi
     status=0
     output="$(swift build -c release --package-path "$package" 2>&1)" || status=$?
+    if [[ $status -ne 0 ]]; then
+        # Once more from clean, in case the build's own state was what failed.
+        rm -rf "$package/.build"
+        status=0
+        output="$(swift build -c release --package-path "$package" 2>&1)" || status=$?
+    fi
     stop_spinner
     trap - INT TERM
     if [[ $status -ne 0 ]]; then
@@ -65,6 +78,7 @@ if [[ ! -x "$binary" ]] || [[ "$(cat "$stamp" 2>/dev/null)" != "$sources_hash" ]
         exit 1
     fi
     printf '%s\n' "$sources_hash" > "$stamp"
+    printf '%s\n' "$files_hash" > "$files_stamp"
 fi
 
 SC_REPO_ROOT="$root" exec "$binary" "$@"

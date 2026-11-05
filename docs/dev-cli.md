@@ -633,8 +633,15 @@ Its code is in `Tools/sc/`:
 - `Sources/SCKit/Support/` — the pieces they share.
 - `Sources/SCKit/Support/Catalog.swift` — what the tool needs of the app's
   own game database, the `GameCatalog` package in `Packages/GameCatalog/`, so
-  slugs and titles never drift from the app's. `./sc` rebuilds when that
-  package changes too.
+  slugs and titles never drift from the app's.
+
+`./sc` rebuilds the tool when anything in `Packages/` or `Tools/sc` changes
+(a hash of their files' contents, leaving out `.build` and `.swiftpm`), so a
+package it comes to depend on needs no list kept up; a change to one it
+doesn't use costs a build with nothing to do. A file added or removed means
+a clean build, as SwiftPM's incremental build of a local package can miss a
+new file and fail as though it weren't there, and a build that fails anyway
+is tried once more from clean.
 - `Tests/SCKitTests/` — Swift Testing; `swift test --package-path Tools/sc`,
   also run by `sc test unit` and CI.
 
