@@ -675,6 +675,14 @@ debugger, which has no window, started six seconds after the game: every
 request got `error no game window`. WrappPuppeteer works out which process has
 the game's window before its first request, and talks to that one's socket.
 
+The sockets are also how WrappPuppeteer finds the game at all. It waits for a
+`game-<pid>.sock` whose process is alive to appear in its directory, then for a
+window of any process serving one there (`ProcessSockets`). It doesn't look the
+game up by name: most Nancy Drew games are `Game.exe`, and another started
+meanwhile, by a person or another wrapp in the same login, would have passed
+for it. A game whose process is running but never serves a socket fails the
+run with "puppet control never armed".
+
 ScummVM games use it too, though nothing else here applies to them.
 `scummvm` is an ordinary binary — ad-hoc signed, without hardened runtime — so
 when the directory is set, `GameLauncher` starts it with

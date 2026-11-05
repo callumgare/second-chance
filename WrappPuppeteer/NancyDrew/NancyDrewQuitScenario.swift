@@ -131,7 +131,7 @@ struct NancyDrewQuitScenario {
         }
 
         let gamePid: Int32
-        switch waitForGameWindow(launchedAt: launchedAt) {
+        switch waitForGameWindow(directory: directory, launchedAt: launchedAt) {
         case .found(let pid, _):
             gamePid = pid
         case .failed(let reason):
@@ -436,78 +436,108 @@ struct NancyDrewQuitScenario {
         case failed(String)
     }
 
-    /// Wait for the game's process, one started since `launchedAt`, then
-    /// its window. Found: the game process's PID and its windows.
-    private func waitForGameWindow(launchedAt: Date) -> GameWindowWait {
+    /// Wait for the game's process, then its window. Found: the PID of the
+    /// game process with the window, and its windows.
+    ///
+    /// The game is whichever process serves `game-<pid>.sock` in this run's
+    /// control `directory`: the helper arms only in the game's own program,
+    /// started by the wrapp this run launched
+    /// (docs/wine-in-process-helpers.md#puppet-control). So another game of
+    /// the same name — most Nancy Drew games are `Game.exe` — started by
+    /// someone else meanwhile is never taken for it, as it could be when the
+    /// game was found by its name.
+    private func waitForGameWindow(directory: String, launchedAt: Date) -> GameWindowWait {
         let processName = wrapp.gameProcessName
+        let games = GameSockets(directory: directory)
         logger.notice("⏳ Waiting for game process (timeout: \(Int(options.processDetectTimeout))s), then its window...")
         let start = Date()
         let timedOut = "Game process or window did not appear in time"
 
-        logger.notice("[Step 1] Monitoring for \(processName) process...")
-        guard let process = ProcessFinder.waitForProcess(named: processName, startedSince: launchedAt,
-                                                                timeout: options.processDetectTimeout) else {
-            return .failed(timedOut)
-        }
-        var pid = process.pid
-
-        logger.notice("[Step 2] Monitoring for windows from \(processName) (PID: \(pid))...")
-        let windowDeadline = Date().addingTimeInterval(options.windowDetectTimeout)
-        while true {
-            let watched = pid
-            // A window of another process of the same exe counts too: a game
-            // wrapped in Armadillo (Big Fish's) runs as two, and the window is
-            // the second's, the first running it under its own debugger.
-            let sameExe: (Int32) -> Bool = { owner in
-                ProcessName.executable(ofPID: owner)?.caseInsensitiveCompare(processName) == .orderedSame
+        logger.notice("[Step 1] Waiting for \(processName) to serve its control socket...")
+        let processDeadline = start.addingTimeInterval(options.processDetectTimeout)
+        var lastLog = start
+        var first = games.pids()
+        while first.isEmpty {
+            guard Date() < processDeadline else {
+                return .failed(noSocket(processName: processName, launchedAt: launchedAt) ?? timedOut)
             }
-            if let windows = WindowFinder.waitForWindows(timeout: windowDeadline.timeIntervalSinceNow,
-                                                         where: { $0.ownerPid == watched || sameExe($0.ownerPid) },
-                                                         giveUp: { !ProcessControl.isAlive(watched) }) {
-                logger.notice("✅ Game window detected after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
-                for (index, window) in windows.enumerated() {
-                    logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
-                }
-                let owner = windows.first?.ownerPid ?? watched
-                if owner != watched {
-                    logger.notice("   The window is \(processName)'s second process's (PID: \(owner)), not the first's (PID: \(watched))")
-                }
-                return .found(pid: owner, windows: windows.filter { $0.ownerPid == owner })
-            }
-            if ProcessControl.isAlive(watched) {
-                logger.critical("❌ Timeout: \(processName) process found but no windows appeared")
-                WindowFinder.logAllWindows()
-                return .failed(timedOut)
-            }
-            // Gone without a window. A launcher stub (Steam's DRM wrapper,
-            // say) can start the exe again, so look briefly for its successor
-            // before calling it: waiting out the full window timeout for a
-            // process that has already died only delays the failure by minutes.
-            logger.warning("⚠️  \(processName) (PID: \(watched)) exited before showing a window; checking whether it started again...")
-            if let successor = successor(named: processName, replacing: watched, within: 10),
-               windowDeadline.timeIntervalSinceNow > 0 {
-                pid = successor.pid
-                logger.notice("[Step 2] Monitoring for windows from \(processName) (PID: \(pid))...")
-                continue
-            }
-            logger.critical("❌ \(processName) exited before showing a window")
-            return .failed("\(processName) exited before showing a window")
-        }
-    }
-
-    /// A live process named `name` other than `pid`, if one starts within
-    /// `timeout`. `pid` itself can linger in the process list as a zombie.
-    private func successor(named name: String, replacing pid: Int32, within timeout: TimeInterval) -> RunningProcess? {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if let match = ProcessFinder.allProcesses().first(where: {
-                $0.pid != pid && $0.name.lowercased() == name.lowercased() && ProcessControl.isAlive($0.pid)
-            }) {
-                return match
+            if Date().timeIntervalSince(lastLog) >= 5 {
+                logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] Waiting for \(processName)...")
+                lastLog = Date()
             }
             Thread.sleep(forTimeInterval: 0.5)
+            first = games.pids()
         }
-        return nil
+        let firstPid = first[0]
+        logger.notice("✅ \(processName) process detected (PID: \(first.map(String.init).joined(separator: ", ")))")
+
+        // Any process serving a socket here counts, not only the first: a
+        // game wrapped in Armadillo (Big Fish's) runs as two, and the window
+        // is the second's, the first running it under its own debugger; and
+        // a launcher stub (Steam's DRM wrapper, say) can start the exe again,
+        // which serves a socket of its own. Once none is left for a while, the
+        // game has gone without a window: waiting out the full window timeout
+        // would only delay the failure by minutes.
+        logger.notice("[Step 2] Monitoring for windows from \(processName)...")
+        var lastAlive = Date()
+        let windows = WindowFinder.waitForWindows(
+            timeout: options.windowDetectTimeout,
+            where: { games.pids().contains($0.ownerPid) },
+            giveUp: {
+                if !games.pids().isEmpty { lastAlive = Date() }
+                return Date().timeIntervalSince(lastAlive) > 10
+            })
+        guard let windows else {
+            if games.pids().isEmpty {
+                logger.critical("❌ \(processName) exited before showing a window")
+                return .failed("\(processName) exited before showing a window")
+            }
+            logger.critical("❌ Timeout: \(processName) process found but no windows appeared")
+            WindowFinder.logAllWindows()
+            return .failed(timedOut)
+        }
+        logger.notice("✅ Game window detected after \(String(format: "%.1f", Date().timeIntervalSince(start)))s")
+        for (index, window) in windows.enumerated() {
+            logger.notice("   [\(index + 1)] \(window.title) - \(Int(window.bounds.width))x\(Int(window.bounds.height))")
+        }
+        let owner = windows.first?.ownerPid ?? firstPid
+        if owner != firstPid {
+            logger.notice("   The window is another \(processName) process's (PID: \(owner)), not the first's (PID: \(firstPid))")
+        }
+        return .found(pid: owner, windows: windows.filter { $0.ownerPid == owner })
+    }
+
+    /// Why no game served a socket in time, when it was started all the same:
+    /// its puppet control never armed. Nil when it never started at all.
+    private func noSocket(processName: String, launchedAt: Date) -> String? {
+        let started = ProcessFinder.processes(named: processName, startedSince: launchedAt)
+        guard !started.isEmpty else {
+            logger.critical("❌ Timeout: \(processName) process not detected")
+            return nil
+        }
+        let pids = started.map { String($0.pid) }.joined(separator: ", ")
+        logger.critical("❌ \(processName) is running (PID: \(pids)) but never served its control socket")
+        logger.critical("   Its puppet control didn't arm — look for '[Helpers] Puppet control' in the wrapp's log")
+        return "\(processName) started, but its puppet control never armed"
+    }
+
+    /// The game processes serving sockets in the run's control directory,
+    /// listed again at most every half second: a window wait asks once for
+    /// every window on screen, several times a second.
+    private final class GameSockets {
+        let directory: String
+        private var listed: (at: Date, pids: [Int32])?
+
+        init(directory: String) {
+            self.directory = directory
+        }
+
+        func pids() -> [Int32] {
+            if let listed, Date().timeIntervalSince(listed.at) < 0.5 { return listed.pids }
+            let pids = ProcessSockets.livePids(in: directory, prefix: "game-")
+            listed = (Date(), pids)
+            return pids
+        }
     }
 
     /// Wait for the game's window to take focus.

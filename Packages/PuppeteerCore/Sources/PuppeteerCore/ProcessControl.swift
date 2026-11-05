@@ -173,32 +173,19 @@ nonisolated public enum ProcessFinder {
         return processes.entries.filter(\.isMine)
     }
 
-    /// Poll until a process with this executable name (case-insensitive) is running.
+    /// This user's processes with this executable name (case-insensitive).
     ///
-    /// Only one started since `since`, when given: one by the same name left
+    /// Only those started since `since`, when given: one by the same name left
     /// over from something else (a process stuck exiting can't be killed)
-    /// would otherwise be watched in place of the one just launched.
-    /// `ps` gives start times to the second, hence the second's leeway.
-    public static func waitForProcess(named name: String, startedSince since: Date? = nil, timeout: TimeInterval) -> RunningProcess? {
-        let start = Date()
-        var lastLog = Date()
-        while Date().timeIntervalSince(start) < timeout {
-            let isNew = { (process: RunningProcess) in
-                guard let since else { return true }
-                return Date().addingTimeInterval(-process.elapsedSeconds) >= since.addingTimeInterval(-2)
-            }
-            if let match = allProcesses().first(where: { $0.name.lowercased() == name.lowercased() && isNew($0) }) {
-                logger.notice("✅ \(name) process detected (PID: \(match.pid))")
-                return match
-            }
-            if Date().timeIntervalSince(lastLog) >= 5 {
-                logger.notice("   [\(Int(Date().timeIntervalSince(start)))s] Checking for \(name) process...")
-                lastLog = Date()
-            }
-            Thread.sleep(forTimeInterval: 0.5)
+    /// isn't the one just launched. `ps` gives start times to the second,
+    /// hence the second's leeway.
+    public static func processes(named name: String, startedSince since: Date? = nil) -> [RunningProcess] {
+        let now = Date()
+        return allProcesses().filter { process in
+            guard process.name.caseInsensitiveCompare(name) == .orderedSame else { return false }
+            guard let since else { return true }
+            return now.addingTimeInterval(-process.elapsedSeconds) >= since.addingTimeInterval(-2)
         }
-        logger.critical("❌ Timeout: \(name) process not detected")
-        return nil
     }
 }
 
@@ -323,7 +310,7 @@ public enum ProcessControl {
     /// check that's reliable for processes LaunchServices doesn't track. It
     /// also succeeds for a zombie — a process that has exited and is only
     /// waiting for its parent to collect it — which counts as dead here.
-    public static func isAlive(_ pid: Int32) -> Bool {
+    nonisolated public static func isAlive(_ pid: Int32) -> Bool {
         guard kill(pid, 0) == 0 else { return false }
         var info = kinfo_proc()
         var size = MemoryLayout<kinfo_proc>.stride
