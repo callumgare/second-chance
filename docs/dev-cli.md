@@ -611,8 +611,14 @@ Peekaboo reads and drives Mac windows (system prompts, installers, Finder) where
 puppet helper only sees a game's window. Its Screen Recording and Accessibility grants
 are per user, and no script can give them: they live in the system's TCC database
 behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
-`sc session setup-peekaboo [<user>] --mac <host>`, run on the Mac you're at, makes the
-grants a minute each. For each test user (default: the pool) it:
+`sc session setup-peekaboo [<user>] [--on <host>]`, run on the Mac you're at, makes the
+grants a minute each: with `--on`, for that Mac's test sessions, and without, this
+Mac's. Unlike other commands it doesn't run on the other Mac (`Remote.runsHere`): it
+reaches the test sessions over SSH itself, since the Screen Sharing window has to open
+where you are. This Mac's own test users let in only other Macs' keys, so the first run
+here adds this Mac's default public keys to them, with `sudo`; and as Screen Sharing
+won't connect a Mac to itself, it goes through an SSH tunnel into the test user. For
+each test user (default: the pool) it:
 
 1. installs Peekaboo on the test Mac if it's missing: the app into `/Applications`
    and the CLI into `/Users/Shared/second-chance/bin` when Homebrew's isn't there, both
@@ -681,6 +687,10 @@ doesn't use costs a build with nothing to do. A file added or removed means
 a clean build, as SwiftPM's incremental build of a local package can miss a
 new file and fail as though it weren't there, and a build that fails anyway
 is tried once more from clean. `.run`, below, is left out of the hash too.
+It's a release build optimised file by file
+(`-Xswiftc -no-whole-module-optimization`), not as one whole module, so a
+change to one file rebuilds little: about 25 s on a loaded Mac, where a
+whole-module build took about two minutes for any change.
 
 **One build at a time.** Agents and people often run `./sc` in one checkout at
 once, and rebuilds used to clear each other's build folder. So `./sc` takes a
