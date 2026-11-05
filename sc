@@ -90,8 +90,28 @@ if needs_build; then
             i=0
             # Until it's stopped, or the script has gone however it went
             # ($$ is the script's PID, here too).
+            shown="$message"
             while kill -0 $$ 2>/dev/null; do
-                printf '\r  %s \033[2m%s · %ss\033[0m' "${frames:i++%10:1}" "$message" "$((SECONDS - start))" >&2
+                # Once a second: is SwiftPM waiting for its own lock on
+                # .build, held by something other than this build (an agent's
+                # swift test, an editor)? Then say that, not "Building".
+                if (( i % 10 == 0 )); then
+                    shown="$message"
+                    holder="$(cat "$package/.build/.lock" 2>/dev/null || true)"
+                    if [[ "$holder" =~ ^[0-9]+$ ]] && kill -0 "$holder" 2>/dev/null; then
+                        ours="" pid="$holder"
+                        for _ in 1 2 3 4 5; do
+                            pid="$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')"
+                            [[ -z "$pid" || "$pid" == 1 ]] && break
+                            [[ "$pid" == $$ ]] && { ours=1; break; }
+                        done
+                        if [[ -z "$ours" ]]; then
+                            name="$(basename "$(ps -o comm= -p "$holder" 2>/dev/null)")"
+                            shown="Waiting for ${name:-another program} (pid $holder) to finish with Tools/sc/.build"
+                        fi
+                    fi
+                fi
+                printf '\r\033[K  %s \033[2m%s · %ss\033[0m' "${frames:i++%10:1}" "$shown" "$((SECONDS - start))" >&2
                 sleep 0.1
             done
         ) &
