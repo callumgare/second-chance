@@ -596,6 +596,30 @@ every user's. So a lookup by name must be this user's alone (`ProcessList`'s are
 and a log read filters on the line's user id. A game in a test session also loads
 the Mac like any other, so a console run's launches are slower while one plays.
 
+### Peekaboo in test sessions
+
+Peekaboo reads and drives Mac windows (system prompts, installers, Finder) where the
+puppet helper only sees a game's window. Its Screen Recording and Accessibility grants
+are per user, and no script can give them: they live in the system's TCC database
+behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
+`sc session setup-peekaboo [<user>] --mac <host>`, run on the Mac you're at, makes the
+grants a minute each. For each test user (default: the pool) it:
+
+1. installs Peekaboo on the test Mac if it's missing: the app into `/Applications`
+   and the CLI into `/Users/Shared/second-chance/bin` when Homebrew's isn't there, both
+   from the release `sc` pins, checked against the release's checksums;
+2. starts Peekaboo's bridge in the user's session (the LaunchAgent
+   `boo.peekaboo.bridge-host`), which Peekaboo's commands over SSH reach through
+   `PEEKABOO_BRIDGE_SOCKET`;
+3. if a grant is missing, opens its pane in System Settings there, and a Screen
+   Sharing window here into that session, logged in with the user's password: read
+   from the test Mac's keychain in its GUI session (by a one-off LaunchAgent writing to
+   a named pipe), brought back over SSH and handed to Screen Sharing by AppleScript, so
+   it's never written to a file or a command line;
+4. waits for you to turn Peekaboo on (macOS asks for an admin's password, as test
+   users are standard users), restarts the bridge so the grant takes, opens the next
+   pane, and moves on once `peekaboo permissions` shows both.
+
 ## Puppet sessions
 
 **`sc puppet` drives a program by hand,** for porting and debugging, where a

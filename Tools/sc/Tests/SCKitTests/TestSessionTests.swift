@@ -141,3 +141,25 @@ struct TestSessionTests {
         #expect(SCError("No password for x").localizedDescription == "No password for x")
     }
 }
+
+@Suite("Peekaboo in test sessions")
+struct PeekabooSetupTests {
+    @Test("Missing grants are the required ones Peekaboo says it lacks")
+    func missingGrants() {
+        let json = """
+        {"data":{"permissions":[{"name":"Screen Recording","isRequired":true,"isGranted":false},
+        {"name":"Accessibility","isRequired":true,"isGranted":true},
+        {"name":"Event Synthesizing","isRequired":false,"isGranted":false}]},"success":true}
+        """
+        #expect(SessionSetupPeekabooCommand.missing(fromPermissionsJSON: Data(json.utf8)) == ["Screen Recording"])
+        #expect(SessionSetupPeekabooCommand.missing(fromPermissionsJSON: Data("not json".utf8)) == ["Screen Recording", "Accessibility"])
+    }
+
+    @Test("A program run in the GUI session hands its output back through a pipe, not a file")
+    func guiSessionScript() {
+        let script = SessionSetupPeekabooCommand.inGUISession(["/usr/bin/open", "x?a&b"])
+        #expect(script.contains("mkfifo -m 600"))
+        #expect(script.contains("<string>x?a&amp;b</string>"))
+        #expect(script.contains("launchctl bootstrap gui/$(id -u)"))
+    }
+}
