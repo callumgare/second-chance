@@ -89,6 +89,9 @@ struct Session: Sendable {
 /// `--on`), so it can be re-run elsewhere: in the GUI session, or remotely.
 enum Invocation {
     nonisolated(unsafe) static var arguments: [String] = []
+    /// `--on`'s target, for a command that reaches the other Mac itself
+    /// rather than running there (`Remote.runsHere`).
+    nonisolated(unsafe) static var remote: String?
 
     /// The arguments with `--logs <mode>` made explicit, so a re-run under a
     /// pty shows output the way the original terminal would have.

@@ -10,8 +10,9 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         commandName: "setup-peekaboo",
         abstract: "Set Peekaboo up in a Mac's test sessions, opening Screen Sharing on each for you to grant it.",
         discussion: """
-        Run it on the Mac you're at, naming the test Mac with --mac (not --on: \
-        the Screen Sharing window opens here). For each test user (or the one \
+        Run it on the Mac you're at. With --on it sets up that Mac's test \
+        sessions, reaching them itself (the Screen Sharing window opens here); \
+        without, this Mac's. For each test user (or the one \
         named) it installs Peekaboo on that Mac if it's missing, starts \
         Peekaboo's bridge in the user's session, and if it lacks Screen \
         Recording or Accessibility opens that pane there and a Screen Sharing \
@@ -24,9 +25,6 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
 
     @OptionGroup var global: GlobalOptions
 
-    @Option(help: ArgumentHelp("The test Mac.", valueName: "host"))
-    var mac: String
-
     @Argument(help: "One test user. Default: every one in that Mac's pool.")
     var user: String?
 
@@ -37,19 +35,20 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let target = Remote.parse(mac, localRoot: session.repo.root)
-        let host = target.host
+        // nil: this Mac, whose own steps run here without SSH.
+        let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
+        let host = mac ?? ScreenLease.shortHostName()
         let installed = try await session.ui.progressStep("Checking Peekaboo on \(host)", success: "Peekaboo is on \(host)") { _ in
-            try await install(on: host)
+            try await install(on: mac)
         }
         installed.forEach { session.ui.detail("\(host): \($0)") }
         let pool = try await session.ui.progressStep("Reading \(host)'s test sessions") { _ in
-            try await ssh(host, "cat \(SessionPool.file.path) 2>/dev/null").output
+            try await asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output
         }
         let users = user.map { [$0] } ?? SessionPool.users(fromPool: pool)
         guard !users.isEmpty else { throw SCError("\(host) has no test sessions.", hints: ["Add some there: sc session add"]) }
         for user in users {
-            try await setUp(user, on: target, ui: session.ui)
+            try await setUp(user, on: mac, ui: session.ui)
         }
         session.ui.success("Peekaboo is set up in \(users.count == 1 ? users[0] : "\(users.count) test sessions") on \(host).")
     }
@@ -59,7 +58,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     /// Peekaboo.app in /Applications and its CLI, from the release, checked
     /// against the release's checksums, unless they're there.
     /// What it installed, a line each.
-    private func install(on host: String) async throws -> [String] {
+    private func install(on mac: String?) async throws -> [String] {
         let base = "https://github.com/openclaw/Peekaboo/releases/download/v\(Self.version)"
         let script = """
         set -eu
@@ -68,14 +67,14 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         if [ -d /Applications/Peekaboo.app ] && [ -n "$cli" ]; then echo "present $cli"; exit 0; fi
         work=$(mktemp -d); trap 'rm -rf "$work"' EXIT; cd "$work"
         if [ ! -d /Applications/Peekaboo.app ]; then
-          curl -fsSL -o app.zip "\(base)/Peekaboo-\(Self.version).app.zip"
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 3 -o app.zip "\(base)/Peekaboo-\(Self.version).app.zip"
           echo "\(Self.appZipSHA256)  app.zip" | shasum -a 256 -c - >/dev/null
           ditto -x -k app.zip app && spctl -a -vv app/Peekaboo.app 2>&1 | grep -q accepted
           ditto app/Peekaboo.app /Applications/Peekaboo.app
           echo "installed /Applications/Peekaboo.app"
         fi
         if [ -z "$cli" ]; then
-          curl -fsSL -o cli.tgz "\(base)/peekaboo-macos-universal.tar.gz"
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 3 -o cli.tgz "\(base)/peekaboo-macos-universal.tar.gz"
           echo "\(Self.cliSHA256)  cli.tgz" | shasum -a 256 -c - >/dev/null
           mkdir cli && tar -xzf cli.tgz -C cli
           found=$(find cli -type f -name peekaboo -perm -u+x | head -1)
@@ -83,10 +82,11 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
           echo "installed \(Self.sharedCLI)"
         fi
         """
-        let result = try await ssh(host, "bash -s", input: script)
+        let result = try await asConsoleUser(mac, "bash -s", input: script)
         guard result.succeeded else {
-            throw SCError("Couldn't install Peekaboo \(Self.version) on \(host): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
-                          hints: ["It downloads from GitHub and needs /Applications writable by the user sc logs in as there."])
+            throw SCError("Couldn't install Peekaboo \(Self.version) on \(mac ?? "this Mac"): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
+                          hints: ["A 5xx from GitHub passes: run it again in a minute.",
+                                  "It needs /Applications writable by " + (mac.map { "the user sc logs in as on \($0)" } ?? "you") + "."])
         }
         return result.output.split(separator: "\n").filter { $0.hasPrefix("installed") }.map(String.init)
     }
@@ -96,14 +96,19 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
 
     // MARK: One user
 
-    private func setUp(_ user: String, on target: Remote.Target, ui: UI) async throws {
-        let host = target.host
-        let destination = "\(user)@\(host)"
+    private func setUp(_ user: String, on mac: String?, ui: UI) async throws {
+        let host = mac ?? ScreenLease.shortHostName()
+        let destination = "\(user)@\(mac ?? "localhost")"
+        defer {
+            Self.tunnels.forEach { $0.terminate() }
+            Self.tunnels.removeAll()
+        }
+        if mac == nil { try await letThisMacIn(user, ui: ui) }
         var missing = try await ui.progressStep("Starting Peekaboo's bridge for \(host)/\(user)") { _ in
             let started = try await ssh(destination, "bash -s", input: Self.bridgeScript)
             guard started.succeeded else {
                 throw SCError("Couldn't start Peekaboo's bridge for \(user) on \(host): \(started.error.trimmingCharacters(in: .whitespacesAndNewlines))",
-                              hints: ["Is \(user) logged in? sc --on \(host) session list"])
+                              hints: ["Is \(user) logged in? sc" + (mac.map { " --on \($0)" } ?? "") + " session list"])
             }
             return try await missingGrants(destination)
         }
@@ -113,7 +118,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         }
         try await ui.progressStep("Opening \(missing[0]) in \(host)/\(user)'s System Settings, and Screen Sharing here") { _ in
             try await openPane(for: missing[0], destination)
-            try await openScreenSharing(user, target)
+            try await openScreenSharing(user, on: mac)
         }
         ui.line("In the Screen Sharing window (choose \"Log in as yourself\" if asked), turn Peekaboo on in \(missing[0]). "
                 + "macOS asks for an admin's name and password.")
@@ -141,7 +146,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         }
         guard missing.isEmpty else {
             throw SCError("\(host)/\(user)'s Peekaboo still lacks \(missing.joined(separator: " and ")) after 15 minutes.",
-                          hints: ["Run it again for that user: sc session setup-peekaboo \(user) --mac \(host)"])
+                          hints: ["Run it again for that user: sc session setup-peekaboo \(user)" + (mac.map { " --on \($0)" } ?? "")])
         }
     }
 
@@ -218,25 +223,84 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
 
     /// A Screen Sharing window here into the user's session, logged in with
     /// the password from the test Mac's keychain. That keychain is locked
-    /// over SSH, so it's read in the GUI session, comes back over SSH through
-    /// a pipe, and goes to Screen Sharing by AppleScript, not a command line
-    /// any process here could read. It's never written anywhere.
-    private func openScreenSharing(_ user: String, _ target: Remote.Target) async throws {
+    /// over SSH, so it's read in the GUI session, comes back through a pipe,
+    /// and goes to Screen Sharing by AppleScript, not a command line any
+    /// process here could read. It's never written anywhere. Screen Sharing
+    /// won't connect a Mac to itself, so this Mac's sessions are reached
+    /// through an SSH tunnel to its own Screen Sharing.
+    private func openScreenSharing(_ user: String, on mac: String?) async throws {
         let script = Self.inGUISession(["/usr/bin/security", "find-generic-password", "-s", SessionPool.keychainService, "-a", user, "-w"])
-        let result = try await ssh(target.host, "bash -s", input: script)
+        let result = try await asConsoleUser(mac, "bash -s", input: script)
         let password = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard result.succeeded, !password.isEmpty, !password.contains("\n") else {
-            throw SCError("Couldn't read \(user)'s password from \(target.host)'s keychain.",
-                          hints: ["sc session add stores it there; someone must be logged in at \(target.host)'s console."])
+            throw SCError("Couldn't read \(user)'s password from \(mac ?? "this Mac")'s keychain.",
+                          hints: ["sc session add stores it there; someone must be logged in at its console."])
+        }
+        var server = mac ?? "localhost"
+        if mac == nil {
+            let port = 5901
+            let tunnel = Process()
+            tunnel.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+            tunnel.arguments = ["-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-N", "-L", "\(port):localhost:5900", "\(user)@localhost"]
+            tunnel.standardInput = FileHandle.nullDevice
+            try tunnel.run()
+            // Ended once this user is done (`setUp`); a second or two to listen.
+            try await Task.sleep(for: .seconds(2))
+            guard tunnel.isRunning else { throw SCError("Couldn't make the SSH tunnel to this Mac's Screen Sharing (is port \(port) in use?).") }
+            server = "localhost:\(port)"
+            Self.tunnels.append(tunnel)
         }
         let allowed = CharacterSet.alphanumerics
         let address = "vnc://\(user.addingPercentEncoding(withAllowedCharacters: allowed) ?? user):"
-            + "\(password.addingPercentEncoding(withAllowedCharacters: allowed) ?? password)@\(target.host)"
+            + "\(password.addingPercentEncoding(withAllowedCharacters: allowed) ?? password)@\(server)"
         let opened = try await Proc.collect("/usr/bin/osascript", ["-"], input: "open location \"\(address)\"\n")
         guard opened.succeeded else { throw SCError("Couldn't open Screen Sharing: \(opened.error)") }
     }
 
+    /// Tunnels this run opened, ended when it's done.
+    nonisolated(unsafe) static var tunnels: [Process] = []
+
+    /// This Mac's test sessions are reached over SSH too, and a test user lets
+    /// in only the keys `session add` gave it, from the console user's
+    /// authorized keys: other Macs' keys, not this Mac's own. So this Mac's
+    /// default public keys are added, with sudo, the first time.
+    private func letThisMacIn(_ user: String, ui: UI) async throws {
+        if try await ssh("\(user)@localhost", "true").succeeded { return }
+        let keys = ["id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub"].map { URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ssh/\($0)") }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !keys.isEmpty, let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) else {
+            throw SCError("\(user) doesn't let this Mac in over SSH, and this Mac has no default SSH key to give it.",
+                          hints: ["Make one: ssh-keygen -t ed25519"])
+        }
+        ui.line("\(user) doesn't yet let this Mac in over SSH: adding your public key to it. sudo may ask for your password.")
+        let authorized = "\(home)/.ssh/authorized_keys"
+        let add = keys.map { key in
+            let file = Remote.quote(key.path)
+            return "grep -qxF \"$(cat \(file))\" \(authorized) 2>/dev/null || cat \(file) >> \(authorized)"
+        }.joined(separator: "; ")
+        let script = "install -d -o \(user) -g staff -m 700 \(home)/.ssh && { \(add); } "
+            + "&& chown \(user):staff \(authorized) && chmod 600 \(authorized)"
+        let status = try await Proc.inheritingTerminal("/usr/bin/sudo", ["/bin/sh", "-c", script])
+        guard status == 0, try await ssh("\(user)@localhost", "true").succeeded else {
+            throw SCError("Couldn't let this Mac in to \(user) over SSH.", hints: ["Is Remote Login on? System Settings → General → Sharing."])
+        }
+    }
+
+    /// A command as the user sc runs as: here, or over SSH on `mac`.
+    private func asConsoleUser(_ mac: String?, _ command: String, input: String? = nil) async throws -> Proc.Collected {
+        if let mac { return try await ssh(mac, command, input: input) }
+        return try await Proc.collect("/bin/bash", ["-c", command], input: input)
+    }
+
     private func ssh(_ destination: String, _ command: String, input: String? = nil) async throws -> Proc.Collected {
         try await Proc.collect("/usr/bin/ssh", ["-o", "BatchMode=yes", destination, command], input: input)
+    }
+}
+
+extension Remote {
+    /// Commands that take `--on` but run here and reach the other Mac
+    /// themselves: `session setup-peekaboo` opens Screen Sharing on this Mac.
+    static func runsHere(_ arguments: [String]) -> Bool {
+        Array(arguments.prefix(2)) == ["session", "setup-peekaboo"]
     }
 }

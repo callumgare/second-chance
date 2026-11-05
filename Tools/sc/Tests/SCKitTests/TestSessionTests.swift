@@ -155,6 +155,13 @@ struct PeekabooSetupTests {
         #expect(SessionSetupPeekabooCommand.missing(fromPermissionsJSON: Data("not json".utf8)) == ["Screen Recording", "Accessibility"])
     }
 
+    @Test("setup-peekaboo keeps --on for itself; other commands run there")
+    func runsHere() {
+        #expect(Remote.runsHere(["session", "setup-peekaboo", "sctest"]))
+        #expect(!Remote.runsHere(["session", "list"]))
+        #expect(!Remote.runsHere(["puppet", "start"]))
+    }
+
     @Test("A program run in the GUI session hands its output back through a pipe, not a file")
     func guiSessionScript() {
         let script = SessionSetupPeekabooCommand.inGUISession(["/usr/bin/open", "x?a&b"])

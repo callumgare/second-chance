@@ -6,10 +6,11 @@ public enum Entry {
     public static func main() async -> Never {
         let (remote, arguments) = Remote.extractTarget(from: Array(CommandLine.arguments.dropFirst()))
         Invocation.arguments = arguments
+        Invocation.remote = remote
 
         do {
             try HelpRequestCheck.validate(arguments)
-            if let remote {
+            if let remote, !Remote.runsHere(arguments) {
                 // Validate here, so a typo fails before anything is synced.
                 _ = try SC.parseAsRoot(arguments)
                 let status = try await Interrupts.run { try await Remote.run(on: remote, arguments: arguments) }
