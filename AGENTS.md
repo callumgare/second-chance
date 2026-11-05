@@ -735,8 +735,9 @@ Rules wherever it runs:
   with when your windows were up. A claimed test session needs no agreeing, but
   a game or a build there still loads the Mac: while another agent has a
   timing-sensitive run (an integration run, a load experiment) anywhere on that
-  Mac, on its console or in any test session, agree any heavy work of your own
-  there (a game, a build, several of either) with them first.
+  Mac, on its console or in any test session, tell them before you run anything
+  that could make a noticeable difference to the Mac's load (a game, a build,
+  several of either), and work out the timing with them.
 - **Keep the screen you hold clean.** Prompts, notifications and stray windows
   steal focus and end up in captures. While you hold it you may dismiss or answer
   them, hide windows, and change settings (Do Not Disturb), putting every change
