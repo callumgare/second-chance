@@ -19,15 +19,33 @@ built="$package/.build/release/sc"
 run="$package/.run"
 binary="$run/sc"
 # What the binary was built from, as a hash of the sources' contents:
-# everything in Packages/ and Tools/sc but what builds leave, so a package
-# sc comes to depend on is covered without a list to keep up (one sc
-# doesn't use costs a rebuild that finds nothing to do). Not their
-# modification times: `sc --on` syncs with rsync, which keeps the sending
-# Mac's times, so a checkout synced over another's (another branch, or an
-# older commit) kept the binary built from that one (~50 ms).
+# Tools/sc and the local packages it depends on, directly or through one
+# another, read from each Package.swift's `.package(path:)`s, so a package sc
+# comes to depend on is covered without a list to keep up, and a change to
+# one it doesn't use (SecondChanceKit, PuppeteerCore) costs no rebuild. Not
+# their modification times: `sc --on` syncs with rsync, which keeps the
+# sending Mac's times, so a checkout synced over another's (another branch,
+# or an older commit) kept the binary built from that one (~50 ms).
 stamp="$binary.sources"
 files_stamp="$binary.files"
-files="$(cd "$root" && find -L Packages Tools/sc \( -name .build -o -name .swiftpm -o -name .run \) -prune -o -type f -not -name .DS_Store \
+local_packages() {
+    # Breadth first from Tools/sc; bash 3.2 (macOS's) has no sets, so a list.
+    local queue="Tools/sc" seen=" Tools/sc " dir rel dep
+    while [[ -n "$queue" ]]; do
+        dir="${queue%% *}"
+        [[ "$queue" == *" "* ]] && queue="${queue#* }" || queue=""
+        echo "$dir"
+        for rel in $(tr '\n' ' ' < "$root/$dir/Package.swift" \
+                     | grep -oE '\.package\([[:space:]]*path:[[:space:]]*"[^"]+"' | sed -E 's/.*"([^"]+)"/\1/'); do
+            dep="$(cd "$root/$dir/$rel" 2>/dev/null && pwd)" || continue
+            dep="${dep#"$root"/}"
+            [[ "$seen" == *" $dep "* ]] && continue
+            seen="$seen$dep "
+            queue="${queue:+$queue }$dep"
+        done
+    done
+}
+files="$(cd "$root" && find -L $(local_packages) \( -name .build -o -name .swiftpm -o -name .run \) -prune -o -type f -not -name .DS_Store \
     -print 2>/dev/null | LC_ALL=C sort)"
 sources_hash="$(cd "$root" && printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 shasum | shasum)"
 # Which files there are, apart from what's in them: SwiftPM's incremental

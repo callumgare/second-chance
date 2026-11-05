@@ -709,10 +709,12 @@ Its code is in `Tools/sc/`:
 - `Tests/SCKitTests/` — Swift Testing; `swift test --package-path Tools/sc`,
   also run by `sc test unit` and CI.
 
-`./sc` rebuilds the tool when anything in `Packages/` or `Tools/sc` changes
-(a hash of their files' contents, leaving out `.build` and `.swiftpm`), so a
-package it comes to depend on needs no list kept up; a change to one it
-doesn't use costs a build with nothing to do. A file added or removed means
+`./sc` rebuilds the tool when anything in `Tools/sc` or a local package it
+depends on changes (a hash of their files' contents, leaving out `.build` and
+`.swiftpm`). It finds those packages by following each `Package.swift`'s
+`.package(path:)`s from `Tools/sc`, so a package it comes to depend on needs
+no list kept up, and a change to one it doesn't use (`SecondChanceKit`,
+`PuppeteerCore`) costs no rebuild. A file added or removed means
 a clean build, as SwiftPM's incremental build of a local package can miss a
 new file and fail as though it weren't there, and a build that fails anyway
 is tried once more from clean. `.run`, below, is left out of the hash too.
