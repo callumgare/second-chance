@@ -649,6 +649,52 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
   condition with a deadline, or use a hook such as
   `LogWindow.waitUntilShownForTesting`, never a fixed sleep.
 
+## Where to run what takes the screen
+
+Some work takes a Mac's screen: anything that opens a window or moves the
+mouse (an integration test, `sc wrapp run`, an engine or installer run by hand,
+`sc app run`). A window of yours in the middle of someone's work, or of another
+run, fails their tests and gets in the person's way. Other work loads a Mac
+heavily (several builds at once, a VM). Run both where they bother nobody, in
+this order of preference:
+
+1. **A test session**: a test user's GUI login, in the background, with a screen
+   of its own ([docs/dev-cli.md](docs/dev-cli.md#test-sessions)). Claim one with
+   `sc --on <host> session claim --purpose "…"` and run in it with
+   `sc --on <user>@<host>:<path> …`. Prefer a Mac nobody is using to the one the
+   person is at. Test sessions are made with `sc session add`, which needs an
+   admin's password: if there are none, ask the person rather than taking a
+   screen.
+2. **The screen of a Mac nobody is sitting at**, after agreeing it with the
+   other agents (next list).
+3. **The screen of the Mac the person is using**, only when they've said so for
+   this task. Keep its display awake meanwhile (`caffeinate -d -i -w <pid>`), as a
+   locked screen fails launches, and stop it when you finish.
+
+`.local/AGENTS.md`, where it exists, names this setup's Macs in that order.
+
+Rules wherever it runs:
+
+- **The lease says who has a screen.** `sc` takes it for anything that opens
+  windows (pass `--purpose`); work without `sc` takes it by hand (`sc lease take
+  --for 30m --purpose "…"`, then `sc lease release`), and `sc lease expiring` in
+  the background warns before it runs out. A claimed test session is leased to you
+  in the same way. **Looking needs no lease**: a screenshot, a window list, logs.
+  Looking during someone else's lease leaves the screen alone.
+- **Agree a console screen with the other agents first**, every time: list them
+  (`ListAgents`), message the ones working on Second Chance with the Mac, what
+  you'll run and for how long, and wait for a yes. Tell them when you're done,
+  with when your windows were up. A claimed test session needs no agreeing, but
+  a game there still loads the Mac: don't play in a test session while another
+  agent's timing-sensitive run (an integration run, a load experiment) has that
+  Mac's console, unless they agree.
+- **Keep the screen you hold clean.** Prompts, notifications and stray windows
+  steal focus and end up in captures. While you hold it you may dismiss or answer
+  them, hide windows, and change settings (Do Not Disturb), putting every change
+  back when you finish. Never during someone else's lease.
+- **Leave nothing running.** An engine started by hand outlives its shell and
+  keeps a window up: stop it, and check, by pid, that it's gone.
+
 ## Releasing
 
 **Commit messages are load-bearing.** `./sc release` derives the next

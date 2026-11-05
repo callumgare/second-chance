@@ -112,6 +112,56 @@ Integration tests need the game's installer in `installers/<game-slug>/`. Runnin
 keeps bringing a full-screen game to the front, so name the games rather than running them all.
 [docs/testing.md](docs/testing.md) covers it all.
 
+### Running integration tests without losing your Mac
+
+An integration test plays each game full-screen, so a long run takes over your screen, and anything you click can fail
+it. Run long tests in a **test account** instead: a second user on the Mac, logged in in the background with a screen
+of its own. The games play there at full quality while you keep using yours. It can be the Mac you're on, or another
+Mac you can reach over SSH.
+
+**Setting it up**, once per Mac, as an admin who uses that Mac's display:
+
+```bash
+./sc session add                    # on this Mac: one test account, second-chance-testing-1
+./sc session add --count 3          # or three: second-chance-testing-1, -2 and -3
+./sc --on <host> session add        # on another Mac, from a terminal here
+```
+
+It asks for your password twice: once for `sudo`, to make the account, and once (over SSH) to unlock your keychain,
+where it keeps the account's password. It also:
+
+- lets the account in over SSH and Screen Sharing with your SSH keys, so `sc` can reach it;
+- moves your checkout's `installers/` into `/Users/Shared/second-chance/installers`, where every account on the Mac
+  shares one copy, and leaves a link in its place;
+- starts the **keep-alive**.
+
+**Why the keep-alive.** macOS only keeps drawing a background account's screen while someone is watching it through
+Screen Sharing; with nobody watching, it locks the account within moments and games there stop drawing. So your own
+account, the one at the display, runs `sc session keep-alive`: a small background job that connects to each test
+account as Screen Sharing would, logs it in when it isn't, unlocks it when it locks, and draws nothing. It costs about
+20 MB and no noticeable CPU, and starts again at every login. Its log is
+`~/Library/Logs/SecondChance/session-keep-alive.log`; `./sc session keep-alive --uninstall` removes it. Because it runs
+in your account, a test account only stays usable while you're logged in at that Mac.
+
+**Running tests there.** See the accounts, claim one, and run in it with `--on`:
+
+```bash
+./sc session                                                     # each account: logged in, locked, free or claimed
+./sc session claim --purpose "scarlet-hand integration"          # gives you a free one, say second-chance-testing-1
+./sc --on second-chance-testing-1@localhost:~/second-chance test integration scarlet-hand
+./sc session release
+```
+
+For another Mac, put its name in place of `localhost` and add `--on <host>` to `claim` and `release`. `--on` copies
+your checkout into the account and runs the command there, building whatever it needs. The first run in an account
+takes a few minutes longer, while it builds `sc` and the app there and fetches the game engines into the account's
+cache. A run carries on if your connection drops; `./sc --on second-chance-testing-1@localhost:~/second-chance attach` picks it up.
+
+Each account is a separate user, so it has its own build, its own copies of game apps, and its own `.env`: copy yours
+in (`scp .env second-chance-testing-1@localhost:second-chance/`) if the tests need its settings, such as the Big Fish test account.
+A game in a test account still uses the Mac's processor, so a run there slows down anything heavy on the same Mac.
+[docs/dev-cli.md](docs/dev-cli.md#test-sessions) has how it all works.
+
 ## Writing for players
 
 Second Chance is for people who aren't into computers, so anything it shows

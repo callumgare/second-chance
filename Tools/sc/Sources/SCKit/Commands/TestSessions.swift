@@ -282,7 +282,7 @@ struct SessionAddCommand: AsyncParsableCommand {
         Run it as the admin who uses the Mac's display, at the Mac or with \
         sc --on <host> session add from a terminal: it uses sudo, and keeps \
         each new user's password in this user's keychain (asking to unlock it \
-        over SSH). It makes standard users named sctest1, sctest2, … (or the \
+        over SSH). It makes standard users named second-chance-testing-1, -2, … (or the \
         names given; an existing user whose password is in the keychain is \
         adopted), lets them in over SSH and Screen Sharing with this user's \
         authorized keys, and adds them to the pool. Then it moves this \
@@ -294,7 +294,7 @@ struct SessionAddCommand: AsyncParsableCommand {
 
     @OptionGroup var global: GlobalOptions
 
-    @Argument(help: "Test users' short names. Default: the next free sctest<n>.")
+    @Argument(help: "Test users' short names. Default: the next free second-chance-testing-<n>.")
     var users: [String] = []
 
     @Option(help: "How many to make when no names are given.")
@@ -304,8 +304,8 @@ struct SessionAddCommand: AsyncParsableCommand {
     var keepInstallers = false
 
     func validate() throws {
-        for user in users where user.range(of: #"^[a-z][a-z0-9_]{1,30}$"#, options: .regularExpression) == nil {
-            throw ValidationError("\(user): a user's short name is lower-case letters and digits, starting with a letter.")
+        for user in users where user.range(of: #"^[a-z][a-z0-9_-]{1,30}$"#, options: .regularExpression) == nil {
+            throw ValidationError("\(user): a user's short name is lower-case letters, digits and hyphens, starting with a letter.")
         }
         if !(1...9).contains(count) { throw ValidationError("--count is 1 to 9.") }
     }
@@ -360,14 +360,20 @@ struct SessionAddCommand: AsyncParsableCommand {
             }
             try await sudo(["/usr/sbin/createhomedir", "-c", "-u", user])
         }
+        // Each step only if it's missing, so running it again (or adopting a
+        // user) asks for no password when nothing needs changing.
         for group in ["com.apple.access_ssh", "com.apple.access_screensharing"] {
             let found = try await Proc.collect("/usr/bin/dscl", [".", "-read", "/Groups/\(group)"])
-            if found.succeeded {
+            let member = try await Proc.collect("/usr/sbin/dseditgroup", ["-o", "checkmember", "-m", user, group])
+            if found.succeeded, !member.succeeded {
                 try await sudo(["/usr/sbin/dseditgroup", "-o", "edit", "-a", user, "-t", "user", group])
             }
         }
         let keys = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".ssh/authorized_keys")
-        if FileManager.default.fileExists(atPath: keys.path), let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) {
+        let reachable = try await Proc.collect("/usr/bin/ssh", ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
+                                                                "-o", "ConnectTimeout=5", "\(user)@localhost", "true"])
+        if !reachable.succeeded, FileManager.default.fileExists(atPath: keys.path),
+           let home = getpwnam(user).map({ String(cString: $0.pointee.pw_dir) }) {
             try await sudo(["/usr/bin/install", "-d", "-o", user, "-g", "staff", "-m", "700", "\(home)/.ssh"])
             try await sudo(["/usr/bin/install", "-o", user, "-g", "staff", "-m", "600", keys.path, "\(home)/.ssh/authorized_keys"])
         }

@@ -101,10 +101,11 @@ struct TestSessionTests {
         #expect(lease.hints(onHost: "mac/sctest", askingSession: nil).contains("Watch it: sc --on sctest@mac:/Users/sctest/tmp/second-chance attach"))
     }
 
-    @Test("New test users take the lowest sctest numbers no user has")
+    @Test("New test users take the lowest numbers no user has")
     func names() {
-        #expect(SessionPool.nextNames(1, taken: []) == ["sctest1"])
-        #expect(SessionPool.nextNames(3, taken: ["sctest", "sctest2", "callumgare"]) == ["sctest1", "sctest3", "sctest4"])
+        #expect(SessionPool.nextNames(1, taken: []) == ["second-chance-testing-1"])
+        #expect(SessionPool.nextNames(3, taken: ["sctest", "second-chance-testing-2", "callumgare"])
+            == ["second-chance-testing-1", "second-chance-testing-3", "second-chance-testing-4"])
     }
 
     @Test("Installers move into the shared store only when it has none, and are never merged")
@@ -120,8 +121,8 @@ struct TestSessionTests {
     func addArguments() throws {
         let numbered = try #require(try SC.parseAsRoot(["session", "add", "--count", "3"]) as? SessionAddCommand)
         #expect(numbered.users.isEmpty && numbered.count == 3)
-        let named = try #require(try SC.parseAsRoot(["session", "add", "sctest", "sctest7"]) as? SessionAddCommand)
-        #expect(named.users == ["sctest", "sctest7"])
+        let named = try #require(try SC.parseAsRoot(["session", "add", "sctest", "second-chance-testing-7"]) as? SessionAddCommand)
+        #expect(named.users == ["sctest", "second-chance-testing-7"])
         #expect(throws: (any Error).self) { try SC.parseAsRoot(["session", "add", "Bad Name"]) }
     }
 }

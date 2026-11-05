@@ -33,9 +33,10 @@ enum SessionPool {
 
     // MARK: Naming them
 
-    /// Test users are `sctest1`, `sctest2`, …, so a pool reads the same on
-    /// every Mac and scripts can count on the names.
-    static let namePrefix = "sctest"
+    /// Test users are `second-chance-testing-1`, `-2`, …, so a pool reads the
+    /// same on every Mac, scripts can count on the names, and nobody mistakes
+    /// one for a person's account.
+    static let namePrefix = "second-chance-testing-"
 
     /// The next `count` names in the scheme that no user on the Mac has.
     static func nextNames(_ count: Int, taken: Set<String>) -> [String] {
