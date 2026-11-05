@@ -190,6 +190,18 @@ struct RemoteTests {
         #expect(!GUISession.isLoginSession(launchctlPrint: ""))
     }
 
+    @Test("Only this user's session being locked counts, not another's left in the background")
+    func screenLockIsThisUsers() throws {
+        let sessions: [[String: Any]] = [
+            ["kCGSSessionUserIDKey": 501, "kCGSSessionOnConsoleKey": true],
+            ["kCGSSessionUserIDKey": 502, "kCGSSessionOnConsoleKey": false, "CGSSessionScreenIsLocked": true],
+        ]
+        let plist = try PropertyListSerialization.data(fromPropertyList: ["IOConsoleUsers": sessions], format: .xml, options: 0)
+        #expect(!GUISession.isScreenLocked(ioregPlist: plist, uid: 501))
+        #expect(GUISession.isScreenLocked(ioregPlist: plist, uid: 502))
+        #expect(!GUISession.isScreenLocked(ioregPlist: Data(), uid: 501))
+    }
+
     @Test("attach follows a run already there, so it doesn't sync")
     func attachDoesNotSync() {
         #expect(!Remote.syncs(["attach", "--list"]))
