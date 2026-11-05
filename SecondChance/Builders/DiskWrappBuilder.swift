@@ -125,6 +125,9 @@ final class DiskWrappBuilder: WrappBuildStrategy {
             try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
             if launch.launcher() == .scummvm {
                 await bus.publishWrappBuild(.gameExeDetected(path: "/SharedSupport/game", gameInfo: gameInfo))
+            } else if !installer.installed {
+                // An install restored from a layer, which never said.
+                await bus.publishWrappBuild(.gameExeDetected(path: String(launch.path.dropFirst(2)), gameInfo: gameInfo))
             }
 
             // ── Shared tail: configure → sign → save → notify ──────────────

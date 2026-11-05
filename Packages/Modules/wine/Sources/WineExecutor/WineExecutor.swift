@@ -5,6 +5,7 @@
 //  The wine module's executor: its instructions, carried out in a tree's
 //  prefix, and the Windows programs a build runs.
 
+import CryptoKit
 import Foundation
 import Logging
 import ProcessKit
@@ -42,6 +43,27 @@ public nonisolated struct WineExecutor: ModuleExecutor {
         self.winetricks = winetricks
         self.helpers = helpers
         self.programTimeout = programTimeout
+    }
+
+    /// What a step makes that its text doesn't say: `HELPERS` lays in this
+    /// build's helpers, and `WINETRICKS` runs this winetricks, so a layer
+    /// kept by another Second Chance with other ones isn't restored.
+    public func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs {
+        switch step.instruction {
+        case "HELPERS":
+            guard let helpers else { return KeyInputs() }
+            return KeyInputs([KeyInput("helpers", try await Blocking.run { try Self.hash(helpers) })])
+        case "WINETRICKS":
+            guard let script = await Winetricks(wine: Wine(wrapp: context.tree), script: winetricks).resolvedScript() else { return KeyInputs() }
+            return KeyInputs([KeyInput("winetricks", try await Blocking.run { try Self.hash(script) })])
+        default:
+            return KeyInputs()
+        }
+    }
+
+    /// A file's sha256.
+    nonisolated static func hash(_ file: URL) throws -> String {
+        SHA256.hash(data: try Data(contentsOf: file, options: .mappedIfSafe)).map { String(format: "%02x", $0) }.joined()
     }
 
     public func run(_ step: PlannedStep, in context: any StepContext) async throws {

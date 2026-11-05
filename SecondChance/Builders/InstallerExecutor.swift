@@ -6,6 +6,7 @@
 //  INSTALLER.RUN, carried out by GameInstallerRunner.
 
 import Foundation
+import Synchronization
 import GameCatalog
 import SecondChanceKit
 import WrappBuilder
@@ -24,6 +25,10 @@ nonisolated final class InstallerExecutor: ModuleExecutor, @unchecked Sendable {
     /// The program to install with when the input's isn't an installer by name.
     let installerName: String?
     let input: WrappBuildInput
+    /// Whether an install ran, rather than being restored from a layer:
+    /// only one that ran said where the game's program is.
+    var installed: Bool { ran.withLock { $0 } }
+    private let ran = Mutex(false)
 
     init(runner: GameInstallerRunner, gameInfo: GameInfo, source: WrappSource, installerName: String?, input: WrappBuildInput) {
         self.runner = runner
@@ -53,6 +58,7 @@ nonisolated final class InstallerExecutor: ModuleExecutor, @unchecked Sendable {
             wrappPath: tree, gameInfo: gameInfo, source: source, installerName: installerName,
             unattended: await input.isUnattended, chooseGameProgram: { try await input.chooseGameProgram(among: $0) },
             automation: automation, creates: creates, stepContext: context)
+        ran.withLock { $0 = true }
     }
 
     /// Put the plan's answer file (`bundle:assets/disc.iss`) where the
@@ -76,6 +82,7 @@ nonisolated final class DiscInputs: InputProvider, @unchecked Sendable {
     let resolveDisc2: @Sendable () async throws -> URL?
     private let lock = NSLock()
     private var disc2: Task<URL?, Error>?
+    private var disc2Resolved: URL?
 
     init(disc1: URL, diskCount: Int, resolveDisc2: @escaping @Sendable () async throws -> URL?) {
         self.disc1 = disc1
@@ -101,11 +108,25 @@ nonisolated final class DiscInputs: InputProvider, @unchecked Sendable {
         }
     }
 
+    /// Disc 1 always; disc 2 only once a step has asked for it, as working
+    /// it out ejects disc 1 and asks for disc 2.
+    func inputIfReady(_ name: String) async throws -> URL? {
+        switch name {
+        case "disc-1": return disc1
+        case "disc-2": return lock.withLock { disc2Resolved }
+        default: return nil
+        }
+    }
+
     /// Disc 2, resolved once, whoever asks first.
     private func secondDisc() async throws -> URL? {
         let task = lock.withLock { () -> Task<URL?, Error> in
             if let disc2 { return disc2 }
-            let made = Task { try await resolveDisc2() }
+            let made = Task { [self] in
+                let url = try await resolveDisc2()
+                lock.withLock { disc2Resolved = url }
+                return url
+            }
             disc2 = made
             return made
         }

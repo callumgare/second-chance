@@ -414,10 +414,14 @@ STORE sign-in --scope=global --exclusive=steam
 **1.1.0 kept these elsewhere**, and its apps still look there:
 `…/SecondChance/Steam/session/`, `…/Steam/session.lock` and
 `…/Steam/active-wrapp.lock`. When Second Chance starts (`AppMigrations`), it
-moves each into its store, if it hasn't already, and leaves a link at the
-old path: a 1.1.0 app follows the link to the same session and saves the
-same session back, and its `flock` through the link locks the same file, so
-old and new apps and builds still exclude each other. The lock's file keeps
+moves what's in `…/SecondChance/Steam/` into the sign-in store (the one
+written last, where both have a session) and makes the folder a link to the
+store, and in the store an `active-wrapp.lock` link to the `steam` lock's
+file, made if there's none. A 1.1.0 app then reads and saves the same
+session in one real folder (its save swaps `session.new` in with
+`replaceItemAt`, which fails on a link to a folder, so the folder is linked
+rather than the session), and its `flock` through the link locks the same
+file, so old and new apps and builds still exclude each other. The lock's file keeps
 its format, the holder's pid then its bundle id, which 1.1.0 reads to name
 the holder. The cached client (`~/Library/Caches/SecondChance/steam-client`)
 is moved, with no link.

@@ -399,11 +399,26 @@ nonisolated final class BigFishExecutor: ModuleExecutor, @unchecked Sendable {
     /// The edition `INSTALL` installed, for the wrapp's settings.
     var installed: BigFishGameChoice? { lock.withLock { state.choice } }
 
+    /// What `INSTALL` emits, the edition's SKU as its payload.
+    static let installedEvent = "installed"
+
+    /// An event of the build's, fresh or replayed from a layer: the edition
+    /// a restored `INSTALL` installed, which it then never ran to say.
+    func heard(_ event: BuildEvent) {
+        guard case .replayed(.module("big-fish", Self.installedEvent, let payload, _)) = event,
+              let sku = BigFishSKU(String(decoding: payload, as: UTF8.self)) else { return }
+        let game = chosen?.game ?? self.game
+        lock.withLock { if state.choice == nil { state.choice = BigFishGameChoice(game: game, sku: sku) } }
+    }
+
     /// The game, and whether as a trial: the Game Manager installs whatever
     /// version Big Fish has now, which nothing says beforehand.
     func keyInputs(for step: PlannedStep, in context: any StepContext) async throws -> KeyInputs {
         guard step.instruction == "INSTALL" else { return KeyInputs() }
-        return KeyInputs([KeyInput("big-fish game", chosen?.sku.description ?? game.id), KeyInput("trial", String(trial))])
+        // A trial is never restored: it runs out after a few launches, and a
+        // build of one is how a fresh one is had.
+        return KeyInputs([KeyInput("big-fish game", chosen?.sku.description ?? game.id),
+                          KeyInput("trial", trial ? "fresh \(UUID().uuidString)" : "false")])
     }
 
     func run(_ step: PlannedStep, in context: any StepContext) async throws {
@@ -421,6 +436,9 @@ nonisolated final class BigFishExecutor: ModuleExecutor, @unchecked Sendable {
             }
             let choice = try await builder.install(step, in: context.tree, executor: self)
             lock.withLock { state.choice = choice }
+            // Kept with the layer, so a build that restores the install
+            // still knows which edition it is (`heard`).
+            context.emitter.emit(.module(id: "big-fish", name: Self.installedEvent, payload: Data(choice.sku.description.utf8), lasting: true))
         case "SIGN-OUT":
             try await builder.signOut(in: context.tree, executor: self)
         default:
@@ -628,6 +646,7 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
                                                                downloader: DownloadWrappBuilder.standardDownloader(), helper: helper,
                                                                executors: ["big-fish": executor])
         if let wine = configuration.executors["wine"] { configuration.executors["wine"] = preparer.wineExecutor(wine) }
+        configuration.emitter = HearingEmitter(inner: configuration.emitter) { [executor] in executor.heard($0) }
         let preparer = preparer
         configuration.moduleStage = { stage, tree in try await preparer.makeStage(stage, in: tree) }
         return (configuration, emitter)
@@ -962,5 +981,16 @@ final class BigFishWrappBuilder: WrappBuildStrategy {
         try FileManager.default.createSymbolicLink(
             atPath: link.path, withDestinationPath: GameInstallerRunner.relativePath(from: link.deletingLastPathComponent(), to: folder))
         logger.notice("Big Fish installed the game in \(folder.path); \(into) links to it")
+    }
+}
+
+/// Passes each event on, and lets `hear` see it first.
+nonisolated struct HearingEmitter: EventEmitter {
+    let inner: any EventEmitter
+    let hear: @Sendable (BuildEvent) -> Void
+
+    func emit(_ event: BuildEvent) {
+        hear(event)
+        inner.emit(event)
     }
 }

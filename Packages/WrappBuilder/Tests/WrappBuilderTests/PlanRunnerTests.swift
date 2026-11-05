@@ -194,4 +194,58 @@ struct RunnerLayerTests {
         _ = try await build([write("z"), write("c")], store: store, executor: fourth, recorder: .init(), in: scratch.appendingPathComponent("four"))
         #expect(fourth.ran.withLock { $0 } == ["z", "c"])
     }
+
+    /// Inputs a person would be asked for: counted when asked for.
+    final class AskingInputs: InputProvider, @unchecked Sendable {
+        let folder: URL
+        let asked = Mutex<[String]>([])
+        init(_ folder: URL) { self.folder = folder }
+        func input(_ name: String) async throws -> URL {
+            asked.withLock { $0.append(name) }
+            return folder
+        }
+        func inputIfReady(_ name: String) async throws -> URL? { nil }
+    }
+
+    @Test("Keying a build asks for no input: one that isn't to hand is keyed as such, and asked for when its step runs")
+    func keysAskForNothing() async throws {
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("layers-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        try FileManager.default.createDirectory(at: scratch.appendingPathComponent("disc"), withIntermediateDirectories: true)
+        let inputs = AskingInputs(scratch.appendingPathComponent("disc"))
+        final class Reader: ModuleExecutor {
+            static let handles = ["READ"]
+            let inputs: AskingInputs
+            init(_ inputs: AskingInputs) { self.inputs = inputs }
+            func run(_ step: PlannedStep, in context: any StepContext) async throws { _ = try await context.input("disc-2") }
+        }
+        var configuration = RunnerConfiguration(executors: ["fake": Reader(inputs)], inputs: inputs, emitter: PlanRunnerTests.Recorder(),
+                                                fetch: { _, _, _ in throw StepFailure.failed("no downloads") })
+        configuration.layers = LayerStore(root: scratch.appendingPathComponent("store"))
+        configuration.layerPolicy = .all
+        let step = PlannedStep(instruction: "READ", module: "fake", options: [:], arguments: [PlannedStep.inputToken("disc-2")],
+                               name: nil, origin: "Wrappfile:1")
+        let plan = BuildPlan(edition: "e", stages: [PlannedStage(name: "only", from: .scratch, modules: ["fake"], steps: [step])])
+        let keys = try await StepKeys.make(for: plan, configuration: configuration, trees: ["only": scratch.appendingPathComponent("t.app")])
+        #expect(inputs.asked.withLock { $0 }.isEmpty)
+        #expect(keys.keys["only"]?.first?.inputs.contains(LayerKey.Input("input disc-2", "given when needed")) == true)
+        _ = try await PlanRunner(plan: plan, configuration: configuration).build(in: scratch.appendingPathComponent("build"))
+        #expect(inputs.asked.withLock { $0 } == ["disc-2"])
+    }
+
+    @Test("An ENGINE step's key is its prepared engine's: one prepared again at the same version is a fresh layer")
+    func engineKey() async throws {
+        func key(_ hash: String) async throws -> LayerKey? {
+            var configuration = RunnerConfiguration(emitter: PlanRunnerTests.Recorder(), fetch: { _, _, _ in throw StepFailure.failed("no downloads") })
+            configuration.layers = LayerStore(root: FileManager.default.temporaryDirectory.appendingPathComponent("layers-\(UUID().uuidString)"))
+            configuration.engine = { module, version in
+                EngineStore.Engine(module: module, version: version, hash: hash, tree: URL(fileURLWithPath: "/"), prepared: false)
+            }
+            let step = PlannedStep(instruction: "ENGINE", module: nil, options: [:], arguments: ["wine@10.0_8"], name: nil, origin: "x", setup: true)
+            let plan = BuildPlan(edition: "e", stages: [PlannedStage(name: "only", from: .scratch, modules: [], steps: [step])])
+            return try await StepKeys.make(for: plan, configuration: configuration, trees: [:]).keys["only"]?.first
+        }
+        #expect(try await key("a") == key("a"))
+        #expect(try await key("a")?.hash != key("b")?.hash)
+    }
 }

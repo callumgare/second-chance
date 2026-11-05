@@ -83,9 +83,22 @@ nonisolated struct StepKeys: Sendable {
                     }
                 }
                 inputs.append(.init("revision", String(configuration.revision(step))))
+                // Only what's to hand: keys are made before anything runs,
+                // and working out a disc 2 would eject disc 1 before it's
+                // copied. One not to hand is keyed as such, the same each
+                // build.
                 for name in Self.inputs(of: step) {
-                    guard let url = try await context.inputIfGiven(name) else { continue }
+                    guard let url = try await context.configuration.inputs.inputIfReady(name) else {
+                        inputs.append(.init("input \(name)", "given when needed"))
+                        continue
+                    }
                     inputs.append(.init("input \(name)", try Self.fingerprint(url)))
+                }
+                // An engine by its prepared hash, as one prepared again at the
+                // same version (a Rosetta fix) is another engine.
+                if step.module == nil, step.instruction == "ENGINE", let named = step.arguments.first, let at = named.firstIndex(of: "@") {
+                    let engine = try await configuration.engine(String(named[..<at]), String(named[named.index(after: at)...]))
+                    inputs.append(.init("engine", engine.hash))
                 }
                 if step.module == nil, step.instruction == "COPY", let from = step.option("from"), let copied = made.last(of: from) {
                     inputs.append(.init("copied from \(from)", copied.hash))

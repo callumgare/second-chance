@@ -17,10 +17,16 @@ public nonisolated protocol InputProvider: Sendable {
     /// The input, or nil when the build has none of that name to give: a
     /// one-disc game's disc 2.
     func inputIfGiven(_ name: String) async throws -> URL?
+
+    /// The input when it's to hand without asking the person (a disc not
+    /// yet put in isn't), else nil: what a step's key reads before the
+    /// build starts, which must never ask.
+    func inputIfReady(_ name: String) async throws -> URL?
 }
 
 nonisolated extension InputProvider {
     public func inputIfGiven(_ name: String) async throws -> URL? { try await input(name) }
+    public func inputIfReady(_ name: String) async throws -> URL? { try await inputIfGiven(name) }
 }
 
 /// Inputs already where they are, by name.

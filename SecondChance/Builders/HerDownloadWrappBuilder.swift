@@ -14,6 +14,7 @@
 //
 
 import Foundation
+import Synchronization
 import Logging
 import SecondChanceKit
 import GameCatalog
@@ -160,6 +161,9 @@ final class HerDownloadWrappBuilder: WrappBuildStrategy {
             try await Blocking.run { try WrappAssembler.layIn(template, into: wrappPath) }
             if launch.launcher() == .scummvm {
                 await bus.publishWrappBuild(.gameExeDetected(path: "/SharedSupport/game", gameInfo: gameInfo))
+            } else if !executor.installed && !installers.installed {
+                // An install restored from a layer, which never said.
+                await bus.publishWrappBuild(.gameExeDetected(path: String(launch.path.dropFirst(2)), gameInfo: gameInfo))
             }
             let finalPath = try await finish(wrappPath: wrappPath, gameInfo: gameInfo,
                                              gameExePath: launch.launcher() == .scummvm ? "" : String(launch.path.dropFirst(2)),
@@ -379,6 +383,9 @@ nonisolated final class HerDownloadExecutor: ModuleExecutor, @unchecked Sendable
     /// The Mac download being built from; nil for a Windows one.
     let package: CiderPackage?
     let input: WrappBuildInput
+    /// Whether the install ran, rather than being restored from a layer.
+    var installed: Bool { ran.withLock { $0 } }
+    private let ran = Mutex(false)
 
     init(builder: HerDownloadWrappBuilder, gameInfo: GameInfo, package: CiderPackage?, input: WrappBuildInput) {
         self.builder = builder
@@ -388,6 +395,7 @@ nonisolated final class HerDownloadExecutor: ModuleExecutor, @unchecked Sendable
     }
 
     func run(_ step: PlannedStep, in context: any StepContext) async throws {
+        defer { ran.withLock { $0 = true } }
         if let package {
             _ = try await builder.extractMacDownload(package, wrappPath: context.tree, into: step.option("into"), gameInfo: gameInfo)
             return

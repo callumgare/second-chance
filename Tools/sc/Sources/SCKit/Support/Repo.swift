@@ -83,11 +83,10 @@ struct Repo: Sendable {
     }
 
     /// The Steam sign-in every Steam wrapp shares (`SteamSessionStore`, in
-    /// the steam module's `sign-in` store), and the link 1.1.0's apps find
-    /// it through (`AppMigrations`).
+    /// the steam module's `sign-in` store, which 1.1.0's apps reach through
+    /// a link, `AppMigrations`).
     static var steamSession: [URL] {
-        [StoreLocations.shared(owner: "steam", name: "sign-in").appendingPathComponent("session"),
-         StoreLocations.realAppSupport.appendingPathComponent("SecondChance/Steam/session")]
+        [StoreLocations.shared(owner: "steam", name: "sign-in").appendingPathComponent("session")]
     }
 
     /// The engine store: prepared engines (docs/modules.md#the-engine-store).
