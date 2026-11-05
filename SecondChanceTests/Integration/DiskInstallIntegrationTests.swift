@@ -101,6 +101,9 @@ struct DiskInstallIntegrationTests {
                 outcome.expect(plistExe == expectedExe, "Wrapp plist GameExePath \(plistExe ?? "nil") ≠ \(expectedExe)")
             }
 
+            // A fixture that couldn't be read would expect no patches, and pass a
+            // build that applied none it should have.
+            outcome.expect(!GamePatchCatalogTests.editionPatches.isEmpty, "TestFixtures/edition-patches.json couldn't be read from \(TestPaths.repoRoot.path)")
             let expectedPatches = GamePatchCatalogTests.editionPatches[game.id]?["disc"] ?? []
             outcome.expect(recorder.appliedPatches == expectedPatches,
                     "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")

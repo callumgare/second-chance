@@ -63,6 +63,9 @@ struct HerDownloadInstallIntegrationTests {
                 outcome.expect(recorder.detectedExePath == expectedExe, "Exe \(recorder.detectedExePath ?? "nil"), expected \(expectedExe)")
             }
 
+            // A fixture that couldn't be read would expect no patches, and pass a
+            // build that applied none it should have.
+            outcome.expect(!GamePatchCatalogTests.editionPatches.isEmpty, "TestFixtures/edition-patches.json couldn't be read from \(TestPaths.repoRoot.path)")
             let expectedPatches = download.isMacDownload ? [] : GamePatchCatalogTests.editionPatches[game.id]?["her-download"] ?? []
             outcome.expect(recorder.appliedPatches == expectedPatches,
                            "Applied patches \(recorder.appliedPatches) but expected \(expectedPatches)")

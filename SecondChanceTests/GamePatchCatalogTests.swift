@@ -22,10 +22,7 @@ struct GamePatchCatalogTests {
     /// The manifest as it sits in the source tree, so these tests do not
     /// depend on a build having staged it into a bundle.
     private static var sourceManifestURL: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // SecondChanceTests
-            .deletingLastPathComponent()   // repo root
-            .appendingPathComponent("Modules/nancy-drew/patches.json")
+        TestPaths.repoRoot.appendingPathComponent("Modules/nancy-drew/patches.json")
     }
 
     private func catalog() -> GamePatchCatalog {
@@ -97,8 +94,9 @@ struct GamePatchCatalogTests {
     /// editions, as `patches.json`'s automatic and edition fields chose them
     /// before they went: what the Wrappfiles' patch steps are checked against.
     nonisolated static let editionPatches: [String: [String: [String]]] = {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("TestFixtures/edition-patches.json")
+        // The repo `sc` names, not this file's path when compiled: an
+        // integration run on another Mac of a build made here found none.
+        let url = TestPaths.repoRoot.appendingPathComponent("TestFixtures/edition-patches.json")
         struct Fixture: Decodable { let games: [String: [String: [String]]] }
         guard let data = try? Data(contentsOf: url) else { return [:] }
         return (try? JSONDecoder().decode(Fixture.self, from: data).games) ?? [:]
