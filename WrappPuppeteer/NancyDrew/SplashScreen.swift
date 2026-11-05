@@ -26,9 +26,8 @@ struct SplashScreen {
     var name: String { needle.name }
 
     /// How far a capture's fingerprint may be from a reference's to be that
-    /// screen. Tuned against recordings of every game, where a game's
-    /// splashes and its menu sit well either side of it.
-    static let matchDistance: Float = 0.08
+    /// screen (`sc puppet screen` judges by the same).
+    static let matchDistance = ImageFingerprint.sameScreenDistance
 
     /// A capture recognised as one of the screens.
     struct Match {

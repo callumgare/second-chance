@@ -56,7 +56,7 @@ nonisolated public enum TextRecognizer {
         for searchText in searchTexts {
             for observation in observations {
                 guard let candidate = observation.topCandidates(1).first,
-                      candidate.string.lowercased().contains(searchText.lowercased()) else { continue }
+                      lineContains(candidate.string, searchText) else { continue }
 
                 // Vision's bounding box is normalised with a bottom-left origin
                 let box = observation.boundingBox
@@ -76,6 +76,12 @@ nonisolated public enum TextRecognizer {
         }
 
         return foundTexts
+    }
+
+    /// Whether a line read off the screen holds `searchText`, as a `text`
+    /// needle's strings are looked for: anywhere in the line, ignoring case.
+    public static func lineContains(_ line: String, _ searchText: String) -> Bool {
+        line.lowercased().contains(searchText.lowercased())
     }
 
     /// Box the found text on a copy of the screenshot (`<name>-annotated.png`).

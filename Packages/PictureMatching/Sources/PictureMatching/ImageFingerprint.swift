@@ -27,6 +27,12 @@ nonisolated public struct ImageFingerprint {
     /// trimmed.
     public let contentRect: CGRect
 
+    /// How far a capture's fingerprint may be from a reference's to be that
+    /// screen. Tuned against recordings of every Nancy Drew game, where a
+    /// game's splashes and its menu sit well either side of it; WrappPuppeteer
+    /// and `sc puppet screen` both judge `screen` needles by it.
+    public static let sameScreenDistance: Float = 0.08
+
     /// Mean difference per channel, 0 (identical) … 1.
     public func distance(to other: ImageFingerprint) -> Float {
         var total: Float = 0

@@ -749,6 +749,47 @@ The other verbs are clients, and `--on` doesn't sync for them:
 Run it in a [test session](#test-sessions), `sc --on <user>@<mac> puppet …`,
 to leave the Mac's screen free.
 
+### Named screens, needles and locators
+
+A session names what's on the screen with the same
+[needles](testing.md#needles) an integration test waits for, matched as
+WrappPuppeteer matches them (`Packages/PictureMatching`: a `screen` needle by
+its fingerprint's distance, at most 0.08; a `region` one by the template
+search's correlation; a `text` one by its strings in OCR's lines). Its
+needles are the session's own, then its bundle's `tests/needles`, then those
+of the module its test scenario is in: the bundle is the wrapp's (its
+`WrappLock.json`), or the one `--bundle <id>` names, which the session then
+remembers (an engine run by hand has none of its own). `--needles <folder>`
+adds a folder looked in first.
+
+- `screen <name>` says which tags (screens) the window matches, each with
+  the needle that matched and how surely, and for the rest the nearest
+  needle and how near it came.
+- `name <name> <tag>` cuts a needle from the window in the bundles' format:
+  a `screen` needle of the whole picture, its bars trimmed (as
+  WrappPuppeteer's splash references are); with `--region x,y,w,h` (points,
+  as `text` gives them) a `region` needle of that part, searched for around
+  where it is now and sized to the window; with `--text`, a `text` needle of
+  the lines read there. It goes in the session's `needles/` (or `--out
+  <folder>`, named the tag or `--as <name>`), which `screen` reads first, and
+  is checked against the frame it was cut from. Copied into the bundle's
+  `tests/needles/`, with a comment saying what it shows, it becomes the
+  integration test's.
+- `expect <name> --screen <tag> | --text <text> [--timeout 20]` tries until
+  it's true. A failure (exit 3) keeps the last shot and says the closest
+  thing there: the tag's nearest needle, or the line of text most like it.
+- `do <name> click --text "<text>"` and `--needle <file>` (a needle's
+  `.yaml`, or a `.png` found at its own size) find what to act on at the
+  moment of acting, for `click`, `move`, `down` and `up`, in place of a
+  point, at the needle's click point (a line's middle for text). Text
+  prefers a line that is it exactly, ignoring case, to lines holding it.
+  They're strict: two matches is an error listing both (exit 5); `--nth <n>`
+  picks one, reading top to bottom, and `--within x,y,w,h` narrows the
+  search. Nothing found by `--find-timeout` (5 s) is exit 3, with the
+  nearest line.
+- When the session has needles, every `do` reply ends its line with the
+  screen it's on now (`→ screen: title`, or `?`).
+
 ## Changing sc
 
 Its code is in `Tools/sc/`:

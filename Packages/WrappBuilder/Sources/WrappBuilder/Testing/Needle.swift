@@ -117,6 +117,20 @@ public nonisolated struct NeedleLibrary: Sendable {
         return NeedleLibrary(needles: order.compactMap { byID[$0] })
     }
 
+    /// The needle a `<name>.yaml` describes, with its `<name>.png` beside it
+    /// for an image needle: one needle on its own, as `sc puppet do …
+    /// --needle` names it.
+    public static func needle(at file: URL) throws -> Needle {
+        let name = file.deletingPathExtension().lastPathComponent
+        let image = file.deletingLastPathComponent().appendingPathComponent(name + ".png")
+        let needle = Needle(id: name, spec: try spec(at: file),
+                            image: FileManager.default.fileExists(atPath: image.path) ? image : nil)
+        if needle.spec.kind != .text, needle.image == nil {
+            throw NeedleError(description: "\(file.lastPathComponent) is a \(needle.spec.kind.rawValue) needle with no \(name).png")
+        }
+        return needle
+    }
+
     /// The needles carrying `tag`.
     public func tagged(_ tag: String) -> [Needle] {
         needles.filter { $0.spec.tags.contains(tag) }

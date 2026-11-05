@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import CoreGraphics
 import Accelerate
+import ImageIO
 import Logging
 
 private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappPuppeteer.TemplateMatcher")
@@ -67,12 +68,43 @@ nonisolated public struct TemplateMatchOptions: Sendable {
     }
 }
 
+/// Where a template was found, and how well it matched there.
+nonisolated public struct TemplateMatch: Sendable, Equatable {
+    /// In screenshot pixels, top-left origin.
+    public let rect: CGRect
+    /// The normalised correlation there, −1…1: 1 is pixel for pixel.
+    public let confidence: Float
+    /// Whether it clears the options' `minConfidence` (less 10%): a match
+    /// rather than only the nearest thing to one.
+    public let isMatch: Bool
+}
+
 /// Normalised cross-correlation template matching on the CPU, using a
 /// coarse → fine → pixel-perfect search.
 nonisolated public enum TemplateMatcher {
     /// Find a template image within a screenshot. Returns the match rect in
     /// screenshot pixels, top-left origin.
     public static func findImage(_ templatePath: String, in screenshotPath: String, options: TemplateMatchOptions = TemplateMatchOptions()) -> CGRect? {
+        let name = (templatePath as NSString).lastPathComponent
+        guard let best = best(templatePath, in: screenshotPath, options: options) else {
+            logger.notice("✗ \(name): no match in any scale")
+            return nil
+        }
+        let confidence = String(format: "%.2f", best.confidence)
+        guard best.isMatch else {
+            let threshold = String(format: "%.2f", options.minConfidence * 0.9)
+            logger.notice("✗ \(name) not found (best: \(confidence), threshold: \(threshold))")
+            return nil
+        }
+        logger.notice("✓ \(name) found at (\(Int(best.rect.minX)), \(Int(best.rect.minY))) confidence=\(confidence)")
+        return best.rect
+    }
+
+    /// The best place for the template in the screenshot, whether or not it
+    /// matches there (`isMatch`): nil only when there's no candidate at all
+    /// (or the images couldn't be read). Logs nothing above debug, for a
+    /// caller that reports for itself.
+    public static func best(_ templatePath: String, in screenshotPath: String, options: TemplateMatchOptions = TemplateMatchOptions()) -> TemplateMatch? {
         let startTime = Date()
         var stepStartTime = Date()
         logger.debug("⏱️  Starting template matching for \((templatePath as NSString).lastPathComponent)...")
@@ -362,7 +394,7 @@ nonisolated public enum TemplateMatcher {
         }
 
         guard let bestMatch = globalBestMatch, let templateGray = bestTemplateGray else {
-            logger.notice("✗ \((templatePath as NSString).lastPathComponent): no match in any scale (\(String(format: "%.2f", Date().timeIntervalSince(startTime)))s)")
+            logger.debug("✗ \((templatePath as NSString).lastPathComponent): no match in any scale (\(String(format: "%.2f", Date().timeIntervalSince(startTime)))s)")
             if findImageExtraDebugging {
                 logger.debug("  💾 Check debug images:")
                 logger.debug("     - \(screenshotPath.replacingOccurrences(of: ".png", with: "-search-region.png"))")
@@ -420,15 +452,11 @@ nonisolated public enum TemplateMatcher {
         free(templateGray.data)
 
         let lowerThreshold = options.minConfidence * 0.9  // 10% tolerance
-        guard refinedMatch.correlation >= lowerThreshold else {
-            let best = String(format: "%.2f", refinedMatch.correlation)
-            logger.notice("✗ \((templatePath as NSString).lastPathComponent) not found (best: \(best), threshold: \(String(format: "%.2f", lowerThreshold)))")
-            return nil
-        }
-
+        let isMatch = refinedMatch.correlation >= lowerThreshold
         let scalePercent = Int(scaledTemplates[bestMatch.scaleIndex].scale * 100)
         let confidence = String(format: "%.2f", refinedMatch.correlation)
-        logger.notice("✓ \((templatePath as NSString).lastPathComponent) found at (\(refinedMatch.x), \(refinedMatch.y)) scale=\(scalePercent)% confidence=\(confidence)")
+        let name = (templatePath as NSString).lastPathComponent
+        logger.debug("\(isMatch ? "✓" : "✗") \(name) best at (\(refinedMatch.x), \(refinedMatch.y)) scale=\(scalePercent)% confidence=\(confidence)")
 
         // Convert coordinates back to full screenshot space
         let result = CGRect(
@@ -438,14 +466,61 @@ nonisolated public enum TemplateMatcher {
             height: CGFloat(templateHeight)
         )
 
-        if findImageExtraDebugging {
+        if findImageExtraDebugging, isMatch {
             TemplateMatchDebugImages.finalMatch(screenshotPath: screenshotPath, match: result, correlation: refinedMatch.correlation)
             logger.debug("⏱️  [\(String(format: "%.3f", Date().timeIntervalSince(stepStartTime)))s] Final match debug")
         }
 
         logger.debug("⏱️  TOTAL: [\(String(format: "%.3f", Date().timeIntervalSince(startTime)))s]")
 
-        return result
+        return TemplateMatch(rect: result, confidence: refinedMatch.correlation, isMatch: isMatch)
+    }
+
+    /// Every place the template matches, best first, up to `limit`: after
+    /// each match the place it was found is painted over mid grey and
+    /// the search run again. For a caller that must know
+    /// whether a target is unique (`sc puppet do … --needle`); `limit` 2
+    /// answers that.
+    public static func matches(_ templatePath: String, in screenshotPath: String, options: TemplateMatchOptions = TemplateMatchOptions(),
+                               limit: Int = 2) -> [TemplateMatch] {
+        var found: [TemplateMatch] = []
+        var current = screenshotPath
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("template-matches-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        while found.count < limit, let match = best(templatePath, in: current, options: options), match.isMatch {
+            // The same place again: painting over didn't take.
+            if found.contains(where: { $0.rect == match.rect }) { break }
+            found.append(match)
+            guard found.count < limit, let next = paintedOver(current, match.rect, into: scratch, number: found.count) else { break }
+            current = next
+        }
+        return found
+    }
+
+    /// A copy of the image at `path` with `rect` filled grey, saved in
+    /// `folder`.
+    private static func paintedOver(_ path: String, _ rect: CGRect, into folder: URL, number: Int) -> String? {
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return nil
+        }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        context.setFillColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        // A top-left rect in a bottom-left context
+        context.fill(CGRect(x: rect.minX, y: CGFloat(image.height) - rect.maxY, width: rect.width, height: rect.height))
+        guard let painted = context.makeImage() else { return nil }
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            logger.warning("Couldn't make \(folder.path): \(error)")
+            return nil
+        }
+        let out = folder.appendingPathComponent("painted-\(number).png")
+        guard let destination = CGImageDestinationCreateWithURL(out as CFURL, "public.png" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, painted, nil)
+        return CGImageDestinationFinalize(destination) ? out.path : nil
     }
 
     // MARK: - Private

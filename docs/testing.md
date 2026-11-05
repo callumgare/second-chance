@@ -652,8 +652,10 @@ dependency only runs one way:
 - **`Packages/PuppeteerCore`** (a local package, so its matching can be tested
   with `swift test`, in `Tests/PuppeteerCoreTests`) — reusable automation with no knowledge of Nancy
   Drew, wrapps or engines: the control-socket client (`InProcessControl`),
-  OCR (`TextRecognizer`), template matching (`TemplateMatcher`), screen
-  fingerprints (`ImageFingerprint`), checking a picture's bars
+  OCR (`TextRecognizer`), template matching (`TemplateMatcher`) and screen
+  fingerprints (`ImageFingerprint`) (these three a package of their own,
+  `Packages/PictureMatching`, re-exported, so `sc puppet` matches needles with
+  them without PuppeteerCore's dependencies), checking a picture's bars
   (`PictureFrameCheck`), recording a window (`WindowRecorder`),
   window listing (`WindowFinder`), focus (`FocusDetector`), processes
   (`ProcessControl`, `ProcessFinder`, `ProcessCleanup`), the click ring
@@ -763,6 +765,10 @@ module's. Within a tag, a `text` needle found wins over a `region` one.
 WrappPuppeteer reads them from the source tree when it runs from a build
 inside it, so one just made is used without rebuilding, and otherwise from
 the copies of `Bundles/` and `Modules/` in its bundle (`TestData`).
+
+`sc puppet name` cuts one from a game being driven by hand, and `sc puppet
+screen` says which a screen matches, with the same matching
+([dev-cli.md](dev-cli.md#named-screens-needles-and-locators)).
 
 ### Scenarios
 

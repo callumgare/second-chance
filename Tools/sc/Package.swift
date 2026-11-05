@@ -22,6 +22,10 @@ let package = Package(
         .package(path: "../../Packages/WrappBuilder"),
         // Ending a puppet session's Wine, for `sc puppet`.
         .package(path: "../../Packages/Modules/wine"),
+        // WrappPuppeteer's picture matching, for `sc puppet screen` and
+        // its locators (a package of its own, so not PuppeteerCore's
+        // SecondChanceKit and Sentry).
+        .package(path: "../../Packages/PictureMatching"),
         // The builder's own tool, whose module, engine and fmt commands sc
         // runs as its own.
         .package(path: "../../Packages/WrappBuilderCLI"),
@@ -37,6 +41,7 @@ let package = Package(
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "WrappBuilder", package: "WrappBuilder"),
                 .product(name: "WineKit", package: "wine"),
+                .product(name: "PictureMatching", package: "PictureMatching"),
                 .product(name: "WrappBuilderTool", package: "WrappBuilderCLI"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Subprocess", package: "swift-subprocess"),

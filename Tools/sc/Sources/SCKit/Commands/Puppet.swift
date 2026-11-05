@@ -19,6 +19,7 @@ struct PuppetCommand: AsyncParsableCommand {
             PuppetStartCommand.self, PuppetStopCommand.self, PuppetListCommand.self, PuppetStatusCommand.self,
             PuppetActionCommand.self, PuppetShotCommand.self, PuppetTextCommand.self, PuppetWindowsCommand.self,
             PuppetWaitCommand.self, PuppetLogCommand.self, PuppetSavesCommand.self, PuppetServeCommand.self,
+            PuppetScreenCommand.self, PuppetNameCommand.self, PuppetExpectCommand.self,
         ]
     )
 }
@@ -354,6 +355,7 @@ struct PuppetActionCommand: AsyncParsableCommand {
     @Option(help: "Clicks: 2 for a double click.") var count: Int?
     @Option(help: "How long to hold the key or button, in ms.") var hold: Int?
     @Option(help: "Seconds to wait before measuring what changed.") var wait: Double = 0.8
+    @OptionGroup(title: "Locating (in place of x y)") var locator: PuppetLocator
 
     func run() async throws {
         let session = try Session.start(global)
@@ -361,7 +363,10 @@ struct PuppetActionCommand: AsyncParsableCommand {
         guard puppet.isRunning else { throw SCError("\(name) has stopped: \(puppet.stopReason ?? "?").", exitCode: 4) }
         puppet.touch()
         guard let verb = action.first else { throw ValidationError("Say what to do: click, move, drag, down, up, key, type or focus.") }
-        let arguments = Array(action.dropFirst())
+        var arguments = Array(action.dropFirst())
+        let located = try await locator.locate(verb, arguments, puppet: puppet)
+        if let located { arguments = located.arguments }
+        let described = located.map { "\(verb) \($0.description) (\($0.arguments.joined(separator: ",")))" } ?? action.joined(separator: " ")
         var request: String
         switch (verb, arguments.count) {
         case ("click", 2), ("move", 2), ("down", 2), ("up", 2), ("drag", 4):
@@ -385,7 +390,8 @@ struct PuppetActionCommand: AsyncParsableCommand {
         _ = try puppet.ask(request)
         try await Task.sleep(for: .seconds(wait))
         let after = Probe(puppet)
-        session.ui.line(PuppetReply.outcome(of: action.joined(separator: " "), before: before, after: after, puppet: puppet))
+        let screen = PuppetScreens.replyName(puppet, repo: session.repo.root).map { " → screen: \($0)" } ?? ""
+        session.ui.line(PuppetReply.outcome(of: described, before: before, after: after, puppet: puppet) + screen)
     }
 }
 

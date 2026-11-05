@@ -1,7 +1,8 @@
 // swift-tools-version: 6.2
 //
 // WrappPuppeteer's generic utilities: capturing, finding and clicking an
-// app's windows, matching pictures, and running and ending processes. Kept
+// app's windows, matching pictures (Packages/PictureMatching, re-exported),
+// and running and ending processes. Kept
 // out of the executable so they can be tested (Tests/PuppeteerCoreTests),
 // and generic: nothing here knows about Nancy Drew, wrapps or engines; what
 // is specific to driving a game lives in WrappPuppeteer/NancyDrew/ and
@@ -28,6 +29,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
         .package(path: "../SecondChanceKit"),
+        // Fingerprints, template matching and OCR, re-exported (Exports.swift).
+        .package(path: "../PictureMatching"),
     ],
     targets: [
         .target(
@@ -35,6 +38,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "SecondChanceKit", package: "SecondChanceKit"),
+                .product(name: "PictureMatching", package: "PictureMatching"),
             ],
             swiftSettings: swiftSettings
         ),
