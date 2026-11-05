@@ -163,6 +163,16 @@ struct PeekabooSetupTests {
         #expect(!Remote.runsHere(["puppet", "start"]))
     }
 
+    @Test("Installers are sent only to commands whose sources may read them")
+    func readsInstallers() {
+        #expect(!Remote.readsInstallers(["test", "integration", "laser-tank", "--source", "download"]))
+        #expect(!Remote.readsInstallers(["test", "integration", "--source=download,big-fish-trial"]))
+        #expect(Remote.readsInstallers(["test", "integration", "--source", "download,disk"]))
+        #expect(Remote.readsInstallers(["test", "integration", "royal-tower"]))
+        #expect(!Remote.readsInstallers(["wrapp", "build", "skifree", "--from", "download"]))
+        #expect(Remote.readsInstallers(["test", "integration", "--source", "all"]))
+    }
+
     @Test("A program run in the GUI session hands its output back through a pipe, not a file")
     func guiSessionScript() {
         let script = SessionSetupPeekabooCommand.inGUISession(["/usr/bin/open", "x?a&b"])

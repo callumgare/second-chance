@@ -105,6 +105,23 @@ enum Remote {
         return light.contains(arguments.first ?? "") ? heavy.flatMap { ["--exclude", $0] } : []
     }
 
+    /// Whether the command may read installers/: not when every source it
+    /// names (`--source` for a test run, `--from` for a build) gets its game
+    /// some other way, so a download test into a test session doesn't wait on
+    /// tens of gigabytes of disc images.
+    static func readsInstallers(_ arguments: [String]) -> Bool {
+        let fetched: Set = ["download", "steam", "big-fish", "big-fish-trial"]
+        var values: [String] = []
+        for (index, argument) in arguments.enumerated() {
+            for flag in ["--source", "--from"] {
+                if argument == flag, index + 1 < arguments.count { values.append(arguments[index + 1]) }
+                if argument.hasPrefix(flag + "=") { values.append(String(argument.dropFirst(flag.count + 1))) }
+            }
+        }
+        let sources = values.flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() } }
+        return sources.isEmpty || !sources.allSatisfy(fetched.contains)
+    }
+
     /// Never in the main sync: installers go by a sync of their own
     /// (`installersSync`), so a link at either end is followed, into the Mac's
     /// shared installers, rather than replaced.
@@ -228,7 +245,7 @@ enum Remote {
             let excludeRules: [String] = excludes.flatMap { ["--exclude", $0] }
             let rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + installersExclude + excludeRules
                 + derivedDataFilters(for: arguments) + heavyFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
-            let sendsInstallers = heavyFilters(for: arguments).isEmpty
+            let sendsInstallers = heavyFilters(for: arguments).isEmpty && readsInstallers(arguments)
                 && FileManager.default.fileExists(atPath: repo.root.appendingPathComponent("installers").path)
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
