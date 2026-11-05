@@ -150,6 +150,7 @@ struct PeekabooSetupTests {
     func runsHere() {
         #expect(Remote.runsHere(["session", "setup-peekaboo", "sctest"]))
         #expect(Remote.runsHere(["session", "screenshot"]))
+        #expect(Remote.runsHere(["session", "view", "sctest"]))
         #expect(!Remote.runsHere(["session", "list"]))
         #expect(!Remote.runsHere(["puppet", "start"]))
     }
