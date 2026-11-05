@@ -763,7 +763,7 @@ handlers:
   must reach a fullscreen Space, or `windowed`, it must stay out of one,
   checked for a few seconds once its window is up. Every Nancy Drew bundle
   says `fullscreen`, as do Lure of the Temptress and Tyrian 2000, and
-  SkiFree `windowed`. A bundle that says neither is expected fullscreen
+  LaserTank `windowed`. A bundle that says neither is expected fullscreen
   unless its launch keeps it windowed (`--wine.window=windowed`).
 
 A program with no menu to quit from uses its engine module's

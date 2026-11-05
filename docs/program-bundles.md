@@ -104,7 +104,7 @@ scenario, its parameters, and `window`, the window the program is expected to
 end up in) by WrappPuppeteer, with the needles in the
 bundle's `tests/needles/` ([testing.md](testing.md#needles)). `window` is
 `fullscreen`, which every Nancy Drew bundle, Lure of the Temptress and Tyrian
-2000 say, or `windowed`, which SkiFree's does
+2000 say, or `windowed`, which LaserTank's does
 ([testing.md](testing.md#scenarios)). What today's code reads
 into `GameInfo`, by field:
 
