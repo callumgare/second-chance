@@ -59,8 +59,21 @@ nonisolated extension Wine {
         gameExe exeURL: URL, game: GameInfo? = nil, launch: RecordedLaunch? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String: String] {
-        inProcessHelperVariables(gameExe: exeURL.lastPathComponent, graphicsAPI: GameGraphicsAPI(exeAt: exeURL, game: game),
+        inProcessHelperVariables(gameExe: exeURL.lastPathComponent, graphicsAPI: graphicsAPI(gameExe: exeURL, game: game, launch: launch).api,
                                  launch: launch, environment: environment)
+    }
+
+    /// What the game at `gameExe` draws with: what its launch declares
+    /// (`--wine.graphics`), as a game that loads Direct3D itself doesn't
+    /// import it; for a launch recorded before that, the .exe's imports, and
+    /// the catalog for one whose imports Armadillo hides (Big Fish's). The
+    /// helpers a game is started with and those the wrapp expects to arm both
+    /// come from this, so they can't disagree.
+    public static func graphicsAPI(
+        gameExe: URL, game: GameInfo?, launch: RecordedLaunch?
+    ) -> (api: GameGraphicsAPI, declared: Bool) {
+        if let declared = launch.flatMap({ GameGraphicsAPI(declared: $0.options["wine.graphics"]) }) { return (declared, true) }
+        return (GameGraphicsAPI(exeAt: gameExe, game: game), false)
     }
 
     /// The same, for a game whose launch declares what it draws with.

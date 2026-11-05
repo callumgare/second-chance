@@ -51,6 +51,21 @@ struct InProcessHelperVariablesTests {
         #expect(Wine.inProcessHelperVariables(gameExe: wrapped, game: crystalSkull, environment: [:])["CURSOR_LOCK_EXE"] == nil)
     }
 
+    @Test("What the launch declares the game draws with beats its .exe's imports")
+    func theLaunchDeclaresTheGraphics() {
+        // Missing, so its imports can't say; Iji's say DirectDraw (it imports
+        // ddraw.dll) while it draws with Direct3D, which it loads itself.
+        let exe = URL(fileURLWithPath: "/nonexistent/Iji.exe")
+        let declared = RecordedLaunch(program: "wine:C:/Iji.exe", options: ["wine.graphics": "direct-3d"],
+                                      format: RecordedLaunch.currentFormat)
+        let graphics = Wine.graphicsAPI(gameExe: exe, game: nil, launch: declared)
+        #expect(graphics.api == .direct3D)
+        #expect(graphics.declared)
+        #expect(Wine.inProcessHelperVariables(gameExe: exe, launch: declared, environment: [:])["EMULATED_MODE_SCALING_EXE"] == "Iji.exe")
+        let older = RecordedLaunch(program: "wine:C:/Iji.exe")
+        #expect(Wine.graphicsAPI(gameExe: exe, game: nil, launch: older).declared == false)
+    }
+
     @Test("A launch that says what it wants gets cursor lock only when it asks, whatever the game draws with")
     func theLaunchChoosesCursorLock() {
         let asks = RecordedLaunch(program: "wine:C:/Game.exe", options: ["wine.cursor-lock": ""], format: RecordedLaunch.currentFormat)

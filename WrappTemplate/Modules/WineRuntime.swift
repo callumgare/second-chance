@@ -71,13 +71,9 @@ final class WineRuntime: GameStarting {
 
     func armWatchers(_ watchers: LaunchWatchers, gameExe: URL?) {
         guard let gameExe else { return }
-        // What the launch declares (`--wine.graphics`); for a wrapp built
-        // before, the .exe's imports, and the catalog for one whose imports
-        // Armadillo hides (Big Fish's).
-        let game = GameInfoProvider.shared.gameInfo(for: config.gameSlug)
-        let declared = GameGraphicsAPI(declared: config.launch.options["wine.graphics"])
-        let graphics = declared ?? GameGraphicsAPI(exeAt: gameExe, game: game)
-        let said = declared == nil ? "" : ", as its launch says"
+        let (graphics, declared) = Wine.graphicsAPI(
+            gameExe: gameExe, game: GameInfoProvider.shared.gameInfo(for: config.gameSlug), launch: config.launch)
+        let said = declared ? ", as its launch says" : ""
         let lock = config.launch.cursorLock(inferred: graphics.mayUseCncDdraw)
         let why = config.launch.choosesItsHelpers ? "its launch doesn't ask for it" : "it doesn't draw through cnc-ddraw"
         logger.notice("[Helpers] \(gameExe.lastPathComponent) draws with \(graphics.logDescription)\(said)\(lock ? "" : ", and cursor lock isn't armed: \(why)")")
