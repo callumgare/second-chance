@@ -547,7 +547,9 @@ runs `C:\Program Files (x86)\Steam\steam.exe` in the prefix:
   its own, whose errors as the wrapp is deleted beneath it ended up in the
   failure summary. Steam usually goes in seconds but
   has been seen to leave a web helper running for minutes, so after the
-  timeout it stops the wineserver.
+  timeout it stops the wineserver. A session still running after 25 s has
+  the Wine programs then running logged, and again before it is stopped,
+  so the log names what held it open.
 
 **Steam writes its logs with Windows line endings.** In Swift `"\r\n"` is a
 single `Character`, so `split(separator: "\n")` never splits them; split with

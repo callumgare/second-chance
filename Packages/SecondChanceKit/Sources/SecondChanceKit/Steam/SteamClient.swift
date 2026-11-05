@@ -247,14 +247,30 @@ nonisolated public final class SteamClient: SteamClientDriving, @unchecked Senda
         // Steam usually exits within seconds, but has been seen to leave a
         // web helper running for minutes; waiting on the whole session
         // covers every Steam process, and the timeout covers the stragglers.
-        let stopped = await wine.server.waitUntilStopped(timeout: max(0, timeout - Date().timeIntervalSince(start)))
+        // Steam has taken up to ~20 s; past that, which program holds the
+        // session open is what a slow shutdown's cause is found from, and
+        // once the session is stopped (or the wrapp killed) it's gone.
+        let usual: TimeInterval = 25
+        var stopped = await wine.server.waitUntilStopped(timeout: max(0, min(usual, timeout) - Date().timeIntervalSince(start)))
+        if !stopped {
+            let running = await Self.runningWinePrograms()
+            logger.notice("Steam's Wine session is still running after \(String(format: "%.1f", Date().timeIntervalSince(start)))s: \(running)")
+            stopped = await wine.server.waitUntilStopped(timeout: max(0, timeout - Date().timeIntervalSince(start)))
+        }
         let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
         if stopped {
             logger.notice("Steam and its Wine session stopped after \(elapsed)s")
         } else {
-            logger.warning("Steam's Wine session was still running after \(elapsed)s; stopping it")
+            let running = await Self.runningWinePrograms()
+            logger.warning("Steam's Wine session was still running after \(elapsed)s; stopping it. \(running)")
             await wine.server.stop()
         }
+    }
+
+    /// The Wine programs running, for the log.
+    private static func runningWinePrograms() async -> String {
+        let programs = await Blocking.run { ProcessList.current()?.wine.map { "\($0.name) (pid \($0.pid), parent \($0.parent))" } ?? [] }
+        return programs.isEmpty ? "no Wine programs are running" : "Wine programs running: \(programs.joined(separator: ", "))"
     }
 
     // MARK: Helpers
