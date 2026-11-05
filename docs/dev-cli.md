@@ -807,7 +807,11 @@ to quit, then ends the wrapp and anything left in its Wine prefix
 (`WineServer.kill`), and says when the screen was held. Each session keeps
 its files in `~/Library/Caches/SecondChance/puppet/<name>/`: its logs, its
 shots, and an app-support folder of its own, so the player's saves are
-never touched.
+never touched. The `SECOND_CHANCE_*` debug switches `start` is run with
+(`SECOND_CHANCE_WINEDEBUG=+cursor,+event`, …) go into the server's LaunchAgent
+and so reach the wrapp; launchd would otherwise start the server with none of
+them. Over `--on` they don't travel, as ssh passes no environment: set them in
+a shell on that Mac.
 
 The other verbs are clients, and `--on` doesn't sync for them:
 

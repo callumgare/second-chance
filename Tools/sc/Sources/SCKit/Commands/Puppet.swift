@@ -121,7 +121,11 @@ struct PuppetStartCommand: AsyncParsableCommand {
             "Label": label,
             "ProgramArguments": arguments,
             "WorkingDirectory": session.repo.root.path,
-            "EnvironmentVariables": [ScreenLease.holderVariable: ScreenLease.encodeHolder(holder)],
+            // The debug switches (SECOND_CHANCE_WINEDEBUG, …) reach the wrapp
+            // through the server, which launchd starts with none of ours.
+            "EnvironmentVariables": ProcessInfo.processInfo.environment
+                .filter { $0.key.hasPrefix("SECOND_CHANCE_") && $0.key != "SECOND_CHANCE_PUPPET_DIR" }
+                .merging([ScreenLease.holderVariable: ScreenLease.encodeHolder(holder)]) { _, holder in holder },
             "StandardOutPath": puppet.serverLog.path,
             "StandardErrorPath": puppet.serverLog.path,
             "RunAtLoad": true,
