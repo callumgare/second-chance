@@ -282,9 +282,12 @@ struct TestIntegrationCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let games = try TestCommandSupport.resolve(self.games, ui: session.ui)
         if let shardOn {
-            // Nothing runs here, so it needs neither this Mac's screen nor a test build.
+            // Nothing runs here, so it needs no screen; but every shard runs
+            // this Mac's test build, which a test user couldn't sign.
+            try TestCommandSupport.requireTools()
+            try await TestRunner(session: session).xcode.ensureTestBuild(appBuild)
             let coordinator = ShardCoordinator(session: session, sources: integration.sources,
-                                               forwarded: ShardCoordinator.forwardedOptions(integration, appBuild),
+                                               forwarded: ShardCoordinator.forwardedOptions(integration),
                                                macs: ShardCoordinator.parseMacs(shardOn))
             try await coordinator.run(games: games, stamp: UI.timestamp())
             return

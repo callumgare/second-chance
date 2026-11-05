@@ -366,8 +366,10 @@ the Mac it's typed on, which only coordinates:
 3. **Each shard is today's run**,
    `sc --on <user>@<host>:<path> test integration <its games>`, with the
    options given here (`--source`, `--refresh-wrapp`, `--build-concurrency`,
-   `--skip-app-build`, …), so the session's checkout syncs and builds as any
-   `--on` run would. Shards on different Macs run side by side; within one,
+   …) and always `--skip-app-build`: the coordinator builds the app for
+   testing here first (unless given `--skip-app-build` itself), and each
+   session's checkout gets that build by the sync, since a test user has no
+   signing certificate to build it with. Shards on different Macs run side by side; within one,
    games build side by side and launch one at a time, as ever. The terminal
    shows each shard's `▸` lines, prefixed with its Mac and session; each
    shard's full output is kept in `DerivedData/sc-logs/`.

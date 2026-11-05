@@ -393,14 +393,16 @@ struct ShardCoordinator: Sendable {
     /// `sc test integration`'s options, as given here, for a shard's run.
     /// Not `--wrapps-dir`, a path here, nor the lease's flags: a shard runs
     /// under the session's claim.
-    static func forwardedOptions(_ integration: IntegrationOptions, _ appBuild: AppBuildOptions) -> [String] {
+    static func forwardedOptions(_ integration: IntegrationOptions) -> [String] {
         var arguments = ["--source", integration.source, "--refresh-wrapp", integration.refreshWrapp.rawValue,
                          "--disk-margin", "\(integration.diskMargin)"]
         if let count = integration.buildConcurrency { arguments += ["--build-concurrency", "\(count)"] }
         if integration.ignoreLoad { arguments.append("--ignore-load") }
         if integration.keepFailedBuilds { arguments.append("--keep-failed-builds") }
         if integration.keepRecordings { arguments.append("--keep-recordings") }
-        if appBuild.skipAppBuild { arguments.append("--skip-app-build") }
+        // Always this Mac's build, sent by the sync: a test user has no
+        // signing certificate to build the app with.
+        arguments.append("--skip-app-build")
         return arguments
     }
 
