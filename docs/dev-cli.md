@@ -33,6 +33,9 @@ nearest command's help.
 ./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
 ./sc clean engines                     # Prepare engines afresh, from their downloads
 ./sc clean downloads                   # Fetch (and check) AutoIt, the patches, engines' files and Big Fish's installer afresh
+./sc store list                        # The stores builds and apps keep: Steam's sign-in and client, each app's saves
+./sc store remove steam:client         # Remove one (an app's from every app, unless --app names one)
+./sc clean stores                      # Remove the cache stores (--retention keep: the kept ones, saves and sign-ins)
 ./sc in-gui-session -- <command>       # Run anything in the GUI session (over SSH)
 ./sc --on <host> attach                # Pick up a remote run after the connection dropped
 ./sc --on <host> lease                 # Who has that Mac's screen (--break to stop their run)

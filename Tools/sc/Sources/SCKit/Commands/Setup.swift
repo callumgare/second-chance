@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import WrappFormat
 import Noora
 
 struct SetupCommand: AsyncParsableCommand {
@@ -99,6 +100,9 @@ struct CleanCommand: AsyncParsableCommand {
         again, from downloads when they are still there). \
         downloads: what building Second Chance and its builds downloaded (AutoIt, game patches, engines' \
         and free games' files, Big Fish's Game Manager installer), fetched and checked again when next needed. \
+        stores: the stores builds and apps keep (sc store list), those with --retention's retention, cache \
+        by default (Steam's client among them); --retention keep takes the kept ones, every app's saves and \
+        Steam's sign-in among them. A store in use is left alone. \
         With no target in a terminal, asks which. Without a terminal, deletes only with -y.
         """
     )
@@ -114,8 +118,9 @@ struct CleanCommand: AsyncParsableCommand {
         case steamClient = "steam-client"
         case engines
         case downloads
+        case stores
         var description: String { rawValue }
-        static var allCases: [Target] { [.layers, .build, .wrapps, .testResults, .steamSession, .steamClient, .engines, .downloads] }
+        static var allCases: [Target] { [.layers, .build, .wrapps, .testResults, .steamSession, .steamClient, .engines, .downloads, .stores] }
     }
 
     @OptionGroup var global: GlobalOptions
@@ -124,22 +129,29 @@ struct CleanCommand: AsyncParsableCommand {
     @Flag(name: [.customLong("yes"), .customShort("y")], help: "Don't ask before deleting.")
     var yes = false
 
-    @Argument(help: "What to delete: layers, build, wrapps, test-results, steam-session, steam-client, engines, downloads.")
+    @Option(help: "For stores: which retention's to delete, cache or keep.")
+    var retention: Retention = .cache
+
+    enum Retention: String, ExpressibleByArgument { case cache, keep }
+
+    @Argument(help: "What to delete: layers, build, wrapps, test-results, steam-session, steam-client, engines, downloads, stores.")
     var targets: [Target] = []
 
     func run() async throws {
         let session = try Session.start(global)
         let ui = session.ui
         let targets = self.targets.map { $0 == .winePrefixes ? .layers : $0 }
+        let stores = StoreInventory.all(in: StoreCommand.locations).filter { $0.retention == retention.rawValue }
         let paths: [Target: [URL]] = [
             .layers: [Repo.layerStore, Repo.formerWinePrefixCache],
             .build: [session.repo.derivedData],
             .wrapps: [wrapps.resolve(session.repo)],
             .testResults: [session.repo.testResults],
-            .steamSession: [Repo.steamSession],
-            .steamClient: [Repo.steamClientCache],
+            .steamSession: Repo.steamSession,
+            .steamClient: Repo.steamClientCache,
             .engines: [Repo.engineStore],
             .downloads: Repo.downloads,
+            .stores: stores.map(\.folder),
         ]
         // Only what's on offer is measured: everything when asking which,
         // else just what was named.
@@ -184,6 +196,17 @@ struct CleanCommand: AsyncParsableCommand {
 
         var rows: [[String]] = []
         for target in chosen {
+            if target == .stores {
+                let busy = stores.filter { StoreInventory.isInUse($0, in: StoreCommand.locations) }
+                for store in busy {
+                    ui.warning("\(store.fullName)\(store.appID.map { " (\($0))" } ?? "") is in use, so it's left alone.")
+                }
+                let removing = stores.filter { !busy.contains($0) }
+                for store in removing { try StoreInventory.remove(store) }
+                rows.append([target.rawValue, removing.isEmpty ? "(nothing there)" : "\(removing.count) \(retention.rawValue) stores",
+                             removing.isEmpty ? "" : ByteCountFormatter.string(fromByteCount: sizes[target] ?? 0, countStyle: .file)])
+                continue
+            }
             let urls = (paths[target] ?? []).filter { FileManager.default.fileExists(atPath: $0.path) }
             if urls.isEmpty {
                 rows.append([target.rawValue, "", "(nothing there)"])

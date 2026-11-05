@@ -210,7 +210,8 @@ STORE sign-in --scope=global --exclusive=steam
   through `context.store` and knows how to change safely.
 - **A store's declaration is recorded beside it** (`<name>.store.json`). One
   declared otherwise later (another retention, scope or lock) is refused,
-  naming both: a store that changes gets a new name.
+  naming both: a store that changes gets a new name, or the old one is
+  removed (`sc store remove <owner>:<name>`).
 - **A launch mounts stores too**, which is where a game's saves are
   ([The launch, volumes and app](#the-launch-volumes-and-app)).
 
@@ -224,8 +225,16 @@ starts with none; the global ones stay where they are, as the integration
 tests' Steam builds sign in with the saved session. A unit test's builds
 keep the runner's stores in a temporary folder of their own.
 
-Not built yet: a store declared inside a function, a launch mount of files
-beside a program (`files=`), and `sc` commands to list and remove stores.
+`sc store list` shows the kept and cache stores on the Mac, with their
+sizes and whether one's lock is held; `sc store remove <owner>:<name>`
+removes one (an app's from every app, unless `--app` names one), and
+`sc clean stores` the cache ones, or the kept ones with `--retention keep`.
+A store whose lock is held is left alone (`StoreInventory`, in
+`WrappFormat`). `sc clean layers` leaves stores alone, so clearing layers
+doesn't sign anyone out of Steam.
+
+Not built yet: a store declared inside a function, and a launch mount of
+files beside a program (`files=`).
 
 ## Signals
 

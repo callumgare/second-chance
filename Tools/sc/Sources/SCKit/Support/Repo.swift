@@ -1,4 +1,5 @@
 import Foundation
+import WrappFormat
 
 /// Every path the CLI reads or writes, resolved from the repo root.
 ///
@@ -81,11 +82,12 @@ struct Repo: Sendable {
             .appendingPathComponent("SecondChance/wine-prefix-cache")
     }
 
-    /// The Steam sign-in every Steam wrapp shares (`SteamSessionStore`,
-    /// `~/Library/Application Support/SecondChance/Steam/session`).
-    static var steamSession: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SecondChance/Steam/session")
+    /// The Steam sign-in every Steam wrapp shares (`SteamSessionStore`, in
+    /// the steam module's `sign-in` store), and the link 1.1.0's apps find
+    /// it through (`AppMigrations`).
+    static var steamSession: [URL] {
+        [StoreLocations.shared(owner: "steam", name: "sign-in").appendingPathComponent("session"),
+         StoreLocations.realAppSupport.appendingPathComponent("SecondChance/Steam/session")]
     }
 
     /// The engine store: prepared engines (docs/modules.md#the-engine-store).
@@ -102,15 +104,17 @@ struct Repo: Sendable {
     static var downloads: [URL] {
         let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SecondChance")
-        let kept: Set = ["layers", "wine-prefix-cache", "steam-client", "engines", "wrapp-cache", "wrapper-cache"]
+        // `stores` is the cache stores' (`sc clean stores`), Steam's client among them.
+        let kept: Set = ["layers", "wine-prefix-cache", "steam-client", "engines", "wrapp-cache", "wrapper-cache", "stores"]
         let entries = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
         return entries.filter { !kept.contains($0.lastPathComponent) }
     }
 
-    /// The updated Steam client Steam builds reuse (`SteamClientCache`).
-    static var steamClientCache: URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SecondChance/steam-client")
+    /// The updated Steam client Steam builds reuse (`SteamClientCache`): the
+    /// steam module's `client` store, and where 1.1.0 kept it.
+    static var steamClientCache: [URL] {
+        [StoreLocations.sharedCache(owner: "steam", name: "client"),
+         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("SecondChance/steam-client")]
     }
 
     /// The path to show the user: relative to the repo when inside it.
