@@ -514,11 +514,24 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
 **The pool** is the Mac's list of test users,
 `/Users/Shared/second-chance/pool`, one name a line (`SessionPool`):
 
-- `sc session add <user>` makes one at the Mac, as an admin (it uses `sudo`).
-  It creates a standard user with a random password, keeps the password in the
-  keychain, lets the user in over SSH and Screen Sharing, gives them the console
-  user's authorized SSH keys, and adds them to the pool. Given an existing user
-  whose password is already in the keychain, it adopts them.
+- `sc session add [--count <n>] [<user>…]` sets a Mac up, run by the admin at
+  its display, there or with `--on` from a terminal (it uses `sudo`, and over SSH
+  asks to unlock the keychain). It creates standard users, named
+  `second-chance-testing-<n>` unless named, each with a random password kept in
+  the keychain; lets them in over SSH and Screen Sharing; gives new ones the
+  console user's authorized SSH keys (existing ones only with `--install-keys`);
+  and adds them to the pool. An existing user whose password is in the keychain
+  is adopted, and a step already done is skipped, so running it again fixes only
+  what's missing. A step needing `sudo` with no terminal fails at once rather
+  than wait for a password. Then it shares the checkout's installers (below)
+  and installs the keep-alive if it isn't running.
+- **Installers are shared per Mac**, in `/Users/Shared/second-chance/installers`,
+  writable by every user through an inherited ACL. `session add` moves the
+  checkout's `installers/` there when the store is empty, and links it back.
+  `--on` sends installers by an rsync of their own, folder to folder, which
+  follows a link at either end, and first links the checkout there to the
+  store when it has none, so a test user's first run doesn't copy every
+  installer into its home.
 - `sc session` (or `list`) shows each: logged in or not, locked, and leased or
   free. Logins come from `ioreg`'s console users, which any user can read.
 - `sc session claim --purpose "<text>" [--for 2h] [<user>]` leases a free test

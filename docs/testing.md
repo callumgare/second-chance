@@ -20,9 +20,13 @@ why. Where the repo's `.env` sets `SECOND_CHANCE_HIDE_TEST_UI=1`,
 `sc test unit` and `sc test integration` pass it on and the host also opens no
 build windows and stays out of the Dock and the foreground — a log window a
 test opens is built but never put on screen — so a run doesn't take over a Mac
-someone is using. Leave it unset on a test Mac: there the windows show, which
-helps explain a failure. `.env` isn't synced by `--on`, so each Mac keeps its
-own. A game an integration test launches still comes to the front either way.
+someone is using. Leave it unset on a test Mac or in a test account: there the
+windows show, which helps explain a failure. `.env` isn't synced by `--on`, so
+each Mac (and each account) keeps its own. A game an integration test launches
+still comes to the front either way, so a long run belongs in a test account,
+a background login with a screen of its own
+([CONTRIBUTING](../CONTRIBUTING.md#running-integration-tests-without-losing-your-mac),
+[dev-cli.md](dev-cli.md#test-sessions)).
 
 For the repo-wide conventions see `AGENTS.md`; for the build flow these tests
 exercise, see [wrapp-build.md](wrapp-build.md).
