@@ -733,9 +733,10 @@ Rules wherever it runs:
   (`ListAgents`), message the ones working on Second Chance with the Mac, what
   you'll run and for how long, and wait for a yes. Tell them when you're done,
   with when your windows were up. A claimed test session needs no agreeing, but
-  a game there still loads the Mac: don't play in a test session while another
-  agent's timing-sensitive run (an integration run, a load experiment) has that
-  Mac's console, unless they agree.
+  a game or a build there still loads the Mac: while another agent has a
+  timing-sensitive run (an integration run, a load experiment) anywhere on that
+  Mac, on its console or in any test session, agree any heavy work of your own
+  there (a game, a build, several of either) with them first.
 - **Keep the screen you hold clean.** Prompts, notifications and stray windows
   steal focus and end up in captures. While you hold it you may dismiss or answer
   them, hide windows, and change settings (Do Not Disturb), putting every change
