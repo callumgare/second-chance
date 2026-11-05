@@ -575,7 +575,11 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   and adds them to the pool. An existing user whose password is in the keychain
   is adopted, and a step already done is skipped, so running it again fixes only
   what's missing. A step needing `sudo` with no terminal fails at once rather
-  than wait for a password. Then it shares the checkout's installers (below)
+  than wait for a password. A new user's Setup Assistant is marked done
+  before its first login: left to run, it holds the session where no sc job
+  can start (an Aqua LaunchAgent never runs) while `sc session` still says
+  "logged in". A re-run frees a user stuck there, logging it out for the
+  keep-alive to log in again. Then it shares the checkout's installers (below)
   and installs the keep-alive if it isn't running.
 - **Installers are shared per Mac**, in `/Users/Shared/second-chance/installers`,
   writable by every user through an inherited ACL. `session add` moves the
