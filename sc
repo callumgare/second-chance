@@ -4,6 +4,9 @@
 # This only builds Tools/sc (when its sources have changed, quietly unless the
 # build fails) and runs it; everything else lives in the Swift package.
 set -euo pipefail
+# Anything here that fails ends the script (set -e): say that it was sc's own
+# set-up, not the command, so a failure never passes for a run that worked.
+trap 'echo "sc: getting sc ready failed (line $LINENO, exit $?), so the command didn'"'"'t run." >&2' ERR
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 package="$root/Tools/sc"
