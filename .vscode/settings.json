@@ -6,6 +6,9 @@
     // honouring .gitignore, so it crawls the whole disk through Wine
     // prefixes' dosdevices/z: -> /
     "npm.autoDetect": "off",
+    // Same reason, for every extension's file search (Copilot's test
+    // set-up looks for package.json the same way)
+    "search.followSymlinks": false,
     // Build and test output; the file watcher ignores .gitignore
     "files.watcherExclude": {
         "**/build/**": true,
