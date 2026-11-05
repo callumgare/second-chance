@@ -618,7 +618,8 @@ direct assignment.
 - **Bundled resources**: the `WrappTemplate.app` template (the launcher alone), `winetricks` (the wine module's package's resource, `WineModule_WineExecutor.bundle`) and AutoIt are bundled. Test
   that features work with bundled paths, not just system-installed equivalents.
 - **Engines aren't bundled.** Wine and ScummVM are fetched from their makers and prepared the first time a build
-  on that Mac needs one, then kept in the engine store, and each wrapp holds its own copy
+  on that Mac needs one, then kept in the engine store (one per user, or one shared by every user on a Mac
+  with test users), and each wrapp holds its own copy
   ([docs/modules.md](docs/modules.md#engine-packages)). Nothing fetches one ahead of a build. `sc engine fetch` fills
   the store, so a test needn't wait for it.
 

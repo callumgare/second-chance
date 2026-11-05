@@ -339,6 +339,16 @@ Only a version whose package names its `prepared` hash can be stored.
   preparation that stopped partway left; one whose lock is taken is being
   prepared, and is left.
 
+**On a Mac with test users** (it has a pool file, `/Users/Shared/second-chance/pool`,
+from `sc session add`), the store is `/Users/Shared/second-chance/engines`, shared by
+every user, so a test account doesn't fetch and prepare every engine again
+(`EngineStore.standardRoot`). It's made with an inheriting ACL that lets every user
+use and add to it, and the lock and the rename work across users as across builds.
+A user who can't write it uses their own store. Since any user could change a shared
+engine, and a wrapp signs and runs what it copies, an engine another user prepared is
+used only when its tree hashes to its package's `prepared` hash (`isTrusted`, a second
+or two for Wine); one that doesn't is prepared again.
+
 It is a cache: a wrapp holds its own copy of its engine, so clearing it costs
 only the next build's download. `sc engine fetch [<id>…]` fills it here, as
 a build would.

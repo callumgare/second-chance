@@ -122,4 +122,32 @@ struct EngineStoreTests {
         let unhashed = try #require(try ModuleLoader(root: module.folder.deletingLastPathComponent()).module("demo"))
         await #expect(throws: EngineError.self) { try await store.engine(unhashed) }
     }
+
+    @Test("The shared store is used only on a Mac with test users, and only when this user can write it")
+    func sharedRoot() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("engine-shared-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let shared = folder.appendingPathComponent("engines"), pool = folder.appendingPathComponent("pool")
+        #expect(EngineStore.sharedRootIfUsable(shared: shared, pool: pool) == nil)
+        try Data("sctest\n".utf8).write(to: pool)
+        #expect(EngineStore.sharedRootIfUsable(shared: shared, pool: pool) == shared)
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: shared.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shared.path) }
+        #expect(EngineStore.sharedRootIfUsable(shared: shared, pool: pool) == nil)
+    }
+
+    @Test("An engine another user prepared is trusted only when it hashes to its package's hash")
+    func trustedEngine() throws {
+        let tree = FileManager.default.temporaryDirectory.appendingPathComponent("engine-tree-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: tree) }
+        try FileManager.default.createDirectory(at: tree.appendingPathComponent("SharedSupport"), withIntermediateDirectories: true)
+        try Data("engine".utf8).write(to: tree.appendingPathComponent("SharedSupport/engine"))
+        let hash = try EngineTree.hash(of: tree)
+        #expect(EngineStore.isTrusted(tree, hash: "anything"))
+        let someoneElse = getuid() + 1
+        #expect(EngineStore.isTrusted(tree, hash: hash, user: someoneElse))
+        #expect(!EngineStore.isTrusted(tree, hash: String(repeating: "0", count: 64), user: someoneElse))
+    }
 }

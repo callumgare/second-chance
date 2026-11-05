@@ -1,4 +1,5 @@
 import Foundation
+import WrappBuilder
 import WrappFormat
 
 /// Every path the CLI reads or writes, resolved from the repo root.
@@ -89,11 +90,9 @@ struct Repo: Sendable {
         [StoreLocations.shared(owner: "steam", name: "sign-in").appendingPathComponent("session")]
     }
 
-    /// The engine store: prepared engines (docs/modules.md#the-engine-store).
-    static var engineStore: URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SecondChance/engines")
-    }
+    /// The engine store: prepared engines (docs/modules.md#the-engine-store),
+    /// the one every user shares on a Mac with test users.
+    static var engineStore: URL { EngineStore.standardRoot() }
 
     /// What the build downloads into `~/Library/Caches/SecondChance` (AutoIt,
     /// the game patches, Steam's installer, Big Fish's Game Manager installer

@@ -50,7 +50,8 @@ struct EngineFetchCommand: AsyncParsableCommand {
         abstract: "Put engines in this Mac's engine store, as a build would.",
         discussion: """
         Prepares each engine module's newest version (or --version's) into \
-        ~/Library/Caches/SecondChance/engines unless it is there already, so a \
+        the engine store (~/Library/Caches/SecondChance/engines, or on a Mac \
+        with test users the shared one) unless it is there already, so a \
         build or test that follows needn't wait for it. With no ids, every \
         engine module.
         """

@@ -42,12 +42,40 @@ public nonisolated final class EngineStore: Sendable {
         self.prepare = prepare
     }
 
-    /// `~/Library/Caches/SecondChance/engines`.
+    /// This user's store, `~/Library/Caches/SecondChance/engines`, or on a
+    /// Mac with test users (`sharedRoot`) the one they all share.
     public static func standardRoot() -> URL {
+        sharedRootIfUsable() ?? userRoot()
+    }
+
+    /// `~/Library/Caches/SecondChance/engines`.
+    public static func userRoot() -> URL {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches")
         return caches.appendingPathComponent("SecondChance/engines", isDirectory: true)
     }
+
+    /// One store for every user on a Mac with test users, so each test
+    /// account doesn't fetch and prepare every engine again: the Mac's pool
+    /// file (`sc session`) says it has them. Every user can write it, through
+    /// an inheriting ACL set when it's made, so an engine another user
+    /// prepared is used only once its hash checks out (`engine`).
+    public static let sharedRoot = URL(fileURLWithPath: "/Users/Shared/second-chance/engines", isDirectory: true)
+    static let poolFile = URL(fileURLWithPath: "/Users/Shared/second-chance/pool")
+
+    /// The shared store, when this Mac has test users and this user can
+    /// write it (or make it); nil means this user's own.
+    static func sharedRootIfUsable(shared: URL = sharedRoot, pool: URL = poolFile) -> URL? {
+        let files = FileManager.default
+        guard files.fileExists(atPath: pool.path) else { return nil }
+        if files.fileExists(atPath: shared.path) { return files.isWritableFile(atPath: shared.path) ? shared : nil }
+        return files.isWritableFile(atPath: shared.deletingLastPathComponent().path) ? shared : nil
+    }
+
+    /// ACL entry that lets every user use and add to the shared store, and
+    /// that everything made in it inherits.
+    static let everyoneACL = "everyone allow list,add_file,search,delete,add_subdirectory,delete_child,readattr,writeattr,"
+        + "readextattr,writeextattr,readsecurity,read,write,append,execute,file_inherit,directory_inherit"
 
     /// An engine in the store.
     public struct Engine: Sendable, Equatable {
@@ -73,10 +101,11 @@ public nonisolated final class EngineStore: Sendable {
         guard let hash = package.prepared else {
             throw EngineError("\(id) \(version)'s package names no prepared hash: run `sc engine prepare \(id)` and add it")
         }
+        try await makeRoot()
         let lock = try await LayerStore.lock(lockFile(hash))
         defer { lock.release() }
         let tree = folder(hash)
-        if Self.isWhole(tree, module: id) {
+        if Self.isWhole(tree, module: id), Self.isTrusted(tree, hash: hash) {
             touch(tree)
             return Engine(module: id, version: version, hash: hash, tree: tree, prepared: false)
         }
@@ -95,6 +124,27 @@ public nonisolated final class EngineStore: Sendable {
             throw error
         }
         return Engine(module: id, version: version, hash: hash, tree: tree, prepared: true)
+    }
+
+    /// The store's folder, made shareable if it's the shared one.
+    func makeRoot() async throws {
+        let files = FileManager.default
+        guard !files.fileExists(atPath: root.path) else { return }
+        try files.createDirectory(at: root, withIntermediateDirectories: true)
+        if root.standardizedFileURL.path == Self.sharedRoot.path {
+            let result = try await Process.output(of: "/bin/chmod", ["+a", Self.everyoneACL, root.path])
+            if result.status != 0 { throw EngineError("Couldn't share \(root.path) with every user: \(result.output)") }
+        }
+    }
+
+    /// Whether an engine found in the store can be used as it is: one this
+    /// user prepared, or one whose tree hashes to its package's prepared
+    /// hash. In the shared store another user could have changed one, and a
+    /// wrapp signs and runs what it copies.
+    static func isTrusted(_ tree: URL, hash: String, user: uid_t = getuid()) -> Bool {
+        guard let owner = (try? FileManager.default.attributesOfItem(atPath: tree.path))?[.ownerAccountID] as? NSNumber,
+              owner.uint32Value != user else { return true }
+        return (try? EngineTree.hash(of: tree)) == hash
     }
 
     /// A preparation's folder until it is whole: `.incoming-<hash>-<uuid>`.
