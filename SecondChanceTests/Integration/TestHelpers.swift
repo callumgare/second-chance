@@ -41,18 +41,28 @@ enum SystemLogReader {
         )
     }
 
-    /// Fetch log lines emitted by the wrapp itself (the game container) since
-    /// `start`: its own, and the shared package's that it logged (the Steam
-    /// sign-in, Wine's desktop), whose subsystem is `…Shared`. Unlike
+    /// Fetch log lines emitted by the wrapp at `wrapp` (the game container)
+    /// since `start`: its own, and the shared package's that it logged (the
+    /// Steam sign-in, Wine's desktop), whose subsystem is `…Shared`. Unlike
     /// `fetch(pid:since:)` this is not pid-scoped: the wrapp is launched by
-    /// WrappPuppeteer, so its pid is not known here; its executable is
-    /// always WrappTemplate.
-    static func fetchGame(since start: Date) -> Data {
-        fetch(
-            predicate: "subsystem == 'au.gare.callum.second-chance.WrappTemplate'"
-                + " OR (subsystem == 'au.gare.callum.second-chance.Shared' AND process == 'WrappTemplate')",
-            since: start
-        )
+    /// WrappPuppeteer, so its pid is not known here. It is scoped to the
+    /// wrapp's own executable instead, as every wrapp's is WrappTemplate: a
+    /// wrapp another user on the Mac runs meanwhile logs to the same system
+    /// log, and its failure would be judged as this game's.
+    static func fetchGame(wrapp: URL, since start: Date) -> Data {
+        fetch(predicate: gamePredicate(wrapp: wrapp), since: start)
+    }
+
+    /// `fetchGame`'s predicate. The system log has the real path, past any
+    /// link (`/var` is `/private/var`).
+    static func gamePredicate(wrapp: URL) -> String {
+        let path = realpath(wrapp.path, nil).map { pointer in
+            defer { free(pointer) }
+            return String(cString: pointer)
+        } ?? wrapp.path
+        let quoted = path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        return "processImagePath BEGINSWITH \"\(quoted)/\" AND (subsystem == 'au.gare.callum.second-chance.WrappTemplate'"
+            + " OR subsystem == 'au.gare.callum.second-chance.Shared')"
     }
 
     /// Run `log show` with `predicate` and return its entries as lines in
@@ -413,24 +423,26 @@ enum AppPuppetRunner {
         }
         let slug = game.id
 
-        // A Wine game has to arm native fullscreen, cursor lock unless it
-        // draws with Direct3D (so never through cnc-ddraw), and mode scaling
-        // unless it draws through cnc-ddraw; nothing else would notice if they
+        // A Wine game has to arm the helpers the wrapp arms for it — native
+        // fullscreen, cursor lock and mode scaling as its launch and what it
+        // draws with decide, and quit watch; nothing else would notice if they
         // didn't (the game still plays, in a window, or in a corner of the
         // screen). Every game arms puppet control, which WrappPuppeteer drives
         // it through; naming it here says so when it didn't, rather than
         // leaving WrappPuppeteer's failure to explain it.
         let requiredHelpers: [InProcessHelperReport.Helper]
         if WrappInfo.gameEngine(at: wrappURL)?.runsInWine == true {
-            // As the wrapp decides: what its launch declares, or for a wrapp
-            // built before launches were recorded, its .exe's imports (or the
-            // catalog, for a Big Fish .exe, whose imports Armadillo hides).
-            let declared = GameGraphicsAPI(declared: WrappInfo.settings(at: wrappURL)?.launch.options["wine.graphics"])
-            let graphicsAPI = declared ?? WrappInfo.gameExe(at: wrappURL).map { GameGraphicsAPI(exeAt: $0, game: game) } ?? .unknown
-            requiredHelpers = [.nativeFullscreen]
-                + (graphicsAPI.mayUseCncDdraw ? [.cursorLock] : [])
-                + (graphicsAPI.mayUseDirect3D ? [.modeScaling] : [])
-                + [.quitWatch, .puppetControl]
+            // As the wrapp decides, through the same call: what its launch
+            // declares, or for a wrapp built before launches were recorded,
+            // its .exe's imports (or the catalog, for a Big Fish .exe, whose
+            // imports Armadillo hides).
+            let launch = WrappInfo.settings(at: wrappURL)?.launch
+            let gameExe = WrappInfo.gameExe(at: wrappURL)
+            let declared = GameGraphicsAPI(declared: launch?.options["wine.graphics"])
+            let graphicsAPI = declared ?? gameExe.map { GameGraphicsAPI(exeAt: $0, game: game) } ?? .unknown
+            let armed = Wine.inProcessHelperVariables(gameExe: gameExe ?? URL(fileURLWithPath: "game.exe"), declared: graphicsAPI,
+                                                      launch: launch, environment: [:])
+            requiredHelpers = InProcessHelperReport.Helper.allCases.filter { armed[$0.variable] != nil } + [.puppetControl]
         } else {
             requiredHelpers = [.puppetControl]
         }
@@ -512,7 +524,7 @@ enum AppPuppetRunner {
             let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
             // The game runs in its own process inside the wrapp, so it is not covered
             // by the pid-scoped fetch above and needs its own subsystem query.
-            let gameLogData = SystemLogReader.fetchGame(since: launchTime)
+            let gameLogData = SystemLogReader.fetchGame(wrapp: wrappURL, since: launchTime)
             attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
             var warned = false
             try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
