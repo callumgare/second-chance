@@ -41,28 +41,23 @@ enum SystemLogReader {
         )
     }
 
-    /// Fetch log lines emitted by the wrapp at `wrapp` (the game container)
-    /// since `start`: its own, and the shared package's that it logged (the
-    /// Steam sign-in, Wine's desktop), whose subsystem is `…Shared`. Unlike
+    /// Fetch log lines emitted by the wrapp itself (the game container) since
+    /// `start`: its own, and the shared package's that it logged (the Steam
+    /// sign-in, Wine's desktop), whose subsystem is `…Shared`. Unlike
     /// `fetch(pid:since:)` this is not pid-scoped: the wrapp is launched by
-    /// WrappPuppeteer, so its pid is not known here. It is scoped to the
-    /// wrapp's own executable instead, as every wrapp's is WrappTemplate: a
-    /// wrapp another user on the Mac runs meanwhile logs to the same system
-    /// log, and its failure would be judged as this game's.
-    static func fetchGame(wrapp: URL, since start: Date) -> Data {
-        fetch(predicate: gamePredicate(wrapp: wrapp), since: start)
-    }
-
-    /// `fetchGame`'s predicate. The system log has the real path, past any
-    /// link (`/var` is `/private/var`).
-    static func gamePredicate(wrapp: URL) -> String {
-        let path = realpath(wrapp.path, nil).map { pointer in
-            defer { free(pointer) }
-            return String(cString: pointer)
-        } ?? wrapp.path
-        let quoted = path.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-        return "processImagePath BEGINSWITH \"\(quoted)/\" AND (subsystem == 'au.gare.callum.second-chance.WrappTemplate'"
-            + " OR subsystem == 'au.gare.callum.second-chance.Shared')"
+    /// WrappPuppeteer, so its pid is not known here; its executable is
+    /// always WrappTemplate. Only this user's: a wrapp another user on the
+    /// Mac runs meanwhile logs to the same system log, and its failure would
+    /// be judged as this game's. Not by the wrapp's path either, which the
+    /// log gets wrong: every wrapp's executable is the same build, and it
+    /// names each by the first path it saw for that build.
+    static func fetchGame(since start: Date) -> Data {
+        let raw = fetchRaw(
+            predicate: "subsystem == 'au.gare.callum.second-chance.WrappTemplate'"
+                + " OR (subsystem == 'au.gare.callum.second-chance.Shared' AND process == 'WrappTemplate')",
+            since: start
+        )
+        return Data(compactLines(fromNDJSON: raw, user: getuid()).utf8)
     }
 
     /// Run `log show` with `predicate` and return its entries as lines in
@@ -73,8 +68,9 @@ enum SystemLogReader {
         Data(compactLines(fromNDJSON: fetchRaw(predicate: predicate, since: start)).utf8)
     }
 
-    /// `log show --style ndjson` output as compact lines.
-    static func compactLines(fromNDJSON data: Data) -> String {
+    /// `log show --style ndjson` output as compact lines; only `user`'s
+    /// processes', when given.
+    static func compactLines(fromNDJSON data: Data, user: uid_t? = nil) -> String {
         let parser = DateFormatter()
         parser.locale = Locale(identifier: "en_US_POSIX")
         parser.dateFormat = "yyyy-MM-dd HH:mm:ss.SSSSSSZ"
@@ -85,6 +81,7 @@ enum SystemLogReader {
         for raw in String(decoding: data, as: UTF8.self).split(separator: "\n") {
             guard let object = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any],
                   let message = object["eventMessage"] as? String else { continue }
+            if let user, (object["userID"] as? Int).map({ uid_t($0) }) != user { continue }
             let stamp = (object["timestamp"] as? String).flatMap(parser.date(from:)).map(time.string(from:)) ?? "??:??:??.???"
             // OSLogHandler maps warning and error both to OSLog's error type.
             let level: String
@@ -524,7 +521,7 @@ enum AppPuppetRunner {
             let logData = SystemLogReader.fetch(pid: pid, since: launchTime)
             // The game runs in its own process inside the wrapp, so it is not covered
             // by the pid-scoped fetch above and needs its own subsystem query.
-            let gameLogData = SystemLogReader.fetchGame(wrapp: wrappURL, since: launchTime)
+            let gameLogData = SystemLogReader.fetchGame(since: launchTime)
             attachScreenshots(loggedIn: String(decoding: logData, as: UTF8.self), gameSlug: gameSlug, attemptLabel: attemptLabel)
             var warned = false
             try judge(puppeteerLog: logData, gameLog: gameLogData, exitCode: observedExitCode, gameSlug: gameSlug,
