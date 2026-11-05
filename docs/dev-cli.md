@@ -692,6 +692,13 @@ each test user (default: the pool) it:
    users are standard users), restarts the bridge so the grant takes, opens the next
    pane, and moves on once `peekaboo permissions` shows both.
 
+**Watching or using a test session by hand:** `sc session view [<user>] [--on <host>]`
+opens a Screen Sharing window here into that session, logged in with the password from
+that Mac's keychain, handed over as `setup-peekaboo` does (never saved). Like it, it
+keeps `--on` for itself. For this Mac's own test sessions it goes through an SSH tunnel,
+which it keeps open until you press Return. If Screen Sharing asks, choose "Log in as
+yourself".
+
 **Picturing a whole screen:** `sc session screenshot [<user>] [--on <host>] [--out <png>]`
 takes a Mac's screen (its logged-in user's, or a test user's session) with that user's
 Peekaboo, shrinks it to `--max` pixels across (1600) and saves it here, so prompts,
