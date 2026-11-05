@@ -33,3 +33,7 @@ xcuserdata/
 /Packages/Modules/*/.swiftpm
 /Packages/*/Package.resolved
 /Packages/Modules/*/Package.resolved
+
+# SourceKit-LSP's settings, which sc worktree prepare writes into a worktree's
+# packages to turn off background indexing (docs/dev-cli.md#worktrees)
+.sourcekit-lsp/

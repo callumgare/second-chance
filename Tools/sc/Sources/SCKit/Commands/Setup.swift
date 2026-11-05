@@ -6,10 +6,11 @@ import Noora
 struct SetupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "setup",
-        abstract: "One-time setup for a clone: tools, commit hook, shell completions and editor highlighting.",
+        abstract: "One-time setup for a clone: tools, git hooks, shell completions and editor highlighting.",
         discussion: """
         Checks the tools sc uses are installed, installs cog's commit-msg hook \
-        (git hooks live in .git/ and can't be committed), installs fish \
+        and the post-checkout hook that prepares new worktrees (git hooks live \
+        in .git/ and can't be committed), installs fish \
         completions when fish is your shell, and links Wrappfile highlighting \
         (Tools/vscode-wrappfile) into VS Code when it's installed. Safe to run again.
         """
@@ -51,6 +52,8 @@ struct SetupCommand: AsyncParsableCommand {
             }
         }
 
+        try await installWorktreeHook(session)
+
         let shell = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SHELL"] ?? "").lastPathComponent
         if shell == "fish" {
             let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/fish/completions")
@@ -83,6 +86,23 @@ struct SetupCommand: AsyncParsableCommand {
             throw SCError("Some tools are missing.", hints: missing.map { "brew install \($0.formula)" })
         }
         ui.success("Ready.")
+    }
+
+    /// The post-checkout hook that prepares a new worktree, however it was
+    /// made (docs/dev-cli.md#worktrees). Hooks are shared by every
+    /// worktree, so this is once per clone. A hook of someone else's is
+    /// left alone.
+    func installWorktreeHook(_ session: Session) async throws {
+        let path = try await Worktrees.git(["rev-parse", "--path-format=absolute", "--git-path", "hooks/post-checkout"], in: session.repo.root)
+        let hook = URL(fileURLWithPath: path)
+        if let existing = try? String(contentsOf: hook, encoding: .utf8), !existing.contains(Worktrees.hookMarker) {
+            session.ui.detail("Worktrees: \(hook.path) is another hook, so new worktrees aren't prepared by themselves; run sc worktree prepare in each.")
+            return
+        }
+        try FileManager.default.createDirectory(at: hook.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Worktrees.hookScript.write(to: hook, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+        session.ui.line(session.ui.format("\(.success("✔︎ post-checkout hook installed — new worktrees are prepared (sc worktree prepare)"))"))
     }
 }
 

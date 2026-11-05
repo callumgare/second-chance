@@ -25,6 +25,7 @@ public struct SC: AsyncParsableCommand {
             LintCommand.self,
             ReleaseCommand.self,
             SetupCommand.self,
+            WorktreeCommand.self,
             CleanCommand.self,
             InGUISessionCommand.self,
             AttachCommand.self,

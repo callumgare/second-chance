@@ -108,6 +108,25 @@ enum Remote {
         lightCommands.contains(arguments.first ?? "") ? heavy.flatMap { ["--exclude", $0] } : []
     }
 
+    /// A worktree's links to the main checkout's files (`Worktrees.linked`)
+    /// mean nothing on another Mac, so the sync leaves them out; and it
+    /// can't follow them, as what they hold has links of its own that must
+    /// stay links (a Wine prefix's `z:` is `/`).
+    static func linkExcludes(_ links: [(name: String, target: URL)]) -> [String] {
+        links.flatMap { ["--exclude", "/\($0.name)"] }
+    }
+
+    /// The rsyncs that send what a worktree's links hold, as the main
+    /// checkout's sync sends its own: only the heavy folders a command can
+    /// read (`.local`), into the folder the link stands for there.
+    static func linkedSyncs(_ links: [(name: String, target: URL)], arguments: [String], target: Target) -> [[String]] {
+        guard !lightCommands.contains(arguments.first ?? "") else { return [] }
+        return links.filter { heavy.contains("/\($0.name)") }.map { link in
+            ["-aE", "--delete", "--rsync-path=/usr/bin/rsync", "--exclude", ".DS_Store",
+             link.target.path + "/", "\(target.host):\(target.path)/\(link.name)/"]
+        }
+    }
+
     /// Whether the command may read installers: not a light command, and
     /// not one whose every source (`--source` for a test run, `--from` for
     /// a build) gets its game some other way, so a download test into a
@@ -245,8 +264,11 @@ enum Remote {
             // spells it -E and rejects -X, while rsync 3.x reads -E as
             // --executability and would drop them without a word.
             let excludeRules: [String] = excludes.flatMap { ["--exclude", $0] }
-            let rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + installersExclude + excludeRules
-                + derivedDataFilters(for: arguments) + heavyFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
+            let links = Worktrees.links(in: repo.root)
+            var rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + installersExclude + excludeRules
+            rsyncArgs += linkExcludes(links) + derivedDataFilters(for: arguments) + heavyFilters(for: arguments)
+            rsyncArgs += ["./", "\(target.host):\(target.path)/"]
+            let linkSyncs = linkedSyncs(links, arguments: arguments, target: target)
             let sendsInstallers = readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
             // The checkout there, and its Mac's store, made first.
             if sendsInstallers {
@@ -257,7 +279,10 @@ enum Remote {
             }
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
-                    let status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                    var status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                    for linkSync in linkSyncs where status == 0 {
+                        status = try await Proc.stream("/usr/bin/rsync", linkSync, cwd: repo.root) { await sink.line($0) }
+                    }
                     guard status == 0, sendsInstallers else { return status }
                     return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {
                         await sink.line($0)

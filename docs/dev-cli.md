@@ -30,7 +30,9 @@ nearest command's help.
 ./sc release --notes-model opus        # Rewrite the notes with a model other than Sonnet
 ./sc release --build-only              # Build and zip the next version, changing nothing
 ./sc lint                              # SwiftLint, markdownlint and the Wrappfiles' format, as CI runs them
-./sc setup                             # Once per clone: tools, commit hook, completions, Wrappfile highlighting
+./sc setup                             # Once per clone: tools, git hooks, completions, Wrappfile highlighting
+./sc worktree add <name>               # A worktree in .claude/worktrees, sharing .local and cloning caches
+./sc worktree remove <name>            # Remove one (and its build output) once it's merged
 ./sc clean layers                      # Start the next build from scratch: no cached Wine prefix
 ./sc clean engines                     # Prepare engines afresh, from their downloads
 ./sc clean downloads                   # Fetch (and check) AutoIt, the patches, engines' files and Big Fish's installer afresh
@@ -367,6 +369,54 @@ default `./Modules`. A failure prints `error:` and its reason and exits
 non-zero. Its tests (`Tests/WrappBuilderToolTests/`) run with `swift test`,
 and in `sc test unit`.
 
+## Worktrees
+
+`sc worktree add <name>` makes a worktree in `.claude/worktrees/<name>`, where
+Claude Code makes its own, and prepares it. Every other way of making one is
+prepared too: `sc setup` installs a `post-checkout` hook, which git runs for a
+new worktree with a null old HEAD, and it runs the main checkout's
+`sc worktree prepare`. The hook never fails, as a failing hook would fail the
+`git worktree add`; it says to run `./sc worktree prepare` in the worktree
+instead. `prepare` does only what a worktree lacks, so it's safe to run again,
+on a worktree made before the hook or after a clean.
+
+- **Ignored files it needs are links to the main checkout's**: `.local`,
+  `.env`, `.claude/agents` and `.claude/skills` (`Worktrees.linked`). One copy,
+  so nothing drifts, and a note written in a worktree is in every other. An
+  empty folder left where one goes is replaced; one with files is left as the
+  worktree's own.
+- **Caches start as APFS clones of the main checkout's**, which take no space
+  until one side changes a file, and then only that file. Only what doesn't
+  depend on where the checkout is: `DerivedData/SourcePackages` (the packages
+  Xcode fetched, Sentry's frameworks among them), `DerivedData/ModuleCache.noindex`
+  (most of its modules are keyed by a hash that doesn't name the checkout,
+  and clang checks each against its inputs before using it), and each
+  SwiftPM package's fetched dependencies in its `.build` (`checkouts`,
+  `repositories`, `artifacts`, `workspace-state.json`). The package state
+  records the checkout's absolute path, as do the checkouts' git remotes, so
+  those are rewritten to the worktree's; left as they were, the worktree
+  would fetch through the main checkout's and break once that was cleaned.
+  What a build compiles (`DerivedData/Build`, a package's `.build/<arch>`) isn't
+  cloned: it records the path throughout, so it's rebuilt anyway, and a clone
+  would only keep old blocks alive. `du` counts clones in full; `df` shows
+  what they cost. A worktree on another volume gets no clones, and its first
+  build fetches as usual.
+- **SourceKit-LSP's background indexing is off in each of its packages**,
+  through `.sourcekit-lsp/config.json` (ignored), which otherwise fills each
+  package's `.build/index-build` with gigabytes. It has to be the package's own
+  file: SourceKit-LSP indexes unless the workspace says not to, a workspace's
+  file outranks what the editor asks for (the Swift extension's `auto` asks for
+  indexing), and one at the checkout's root doesn't reach the packages below.
+  `prepare` also adds `.sourcekit-lsp/` to the repo's `info/exclude`, so a
+  worktree of a commit from before `.gitignore` had it isn't counted as
+  changed.
+
+`sc worktree list` shows each worktree with whether its HEAD is in `main` and
+whether it has changes. `sc worktree remove <name>` refuses while either would
+be lost, unless `--force`; it removes the links first, so nothing of the main
+checkout's is in reach, then the worktree with all its build output.
+`--delete-branch` deletes its branch too.
+
 ## GUI session and remote Macs
 
 **Over SSH, commands that open windows re-run themselves in the GUI session.**
@@ -441,6 +491,14 @@ below. On the remote Mac, the GUI-session re-run applies as usual.
   fails to sign. Apple's rsync spells that `-E` and rejects `-X`; Homebrew's
   rsync 3.x reads `-E` as `--executability` and would drop them silently,
   which is why the remote end is named rather than left to its `PATH`.
+- **From a worktree, its links are left out and `.local` is sent from
+  where it points.** A worktree's `.local`, `.env` and `.claude` agents and
+  skills are links to the main checkout's ([Worktrees](#worktrees)), which
+  would mean nothing on the other Mac, and rsync can't follow them:
+  `.local` holds links of its own that must stay links (a Wine prefix's
+  `z:` is `/`, so following every link sends the whole disk). So the sync
+  excludes them, and a command that reads `.local` gets a second rsync of
+  the folder the link points to, into `.local` there.
 - **A sync that stops partway runs nothing there**, and sc says so: most
   often files here changed while being copied (another build, or an agent's
   worktree, which isn't synced). With `--skip-app-build` the other Mac's app
