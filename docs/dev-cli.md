@@ -680,7 +680,26 @@ package it comes to depend on needs no list kept up; a change to one it
 doesn't use costs a build with nothing to do. A file added or removed means
 a clean build, as SwiftPM's incremental build of a local package can miss a
 new file and fail as though it weren't there, and a build that fails anyway
-is tried once more from clean.
+is tried once more from clean. `.run`, below, is left out of the hash too.
+
+**One build at a time.** Agents and people often run `./sc` in one checkout at
+once, and rebuilds used to clear each other's build folder. So `./sc` takes a
+lock (`Tools/sc/.run/build.lock`) to build, says "Waiting for another build of
+sc to finish" while another holds it, and runs a copy, `Tools/sc/.run/sc`,
+swapped in by a rename once a build is done, so a rebuild never deletes the
+file a running sc started from (or copies, as the keep-alive's install does).
+Anything in `./sc`'s own set-up that fails says so ("getting sc ready failed")
+and exits non-zero, so it can't pass for the command having run. To build or
+test sc yourself without holding up everyone's `./sc`, give SwiftPM a folder of
+your own: `swift test --package-path Tools/sc --scratch-path <tmp>/sc-build`.
+`.build` is SwiftPM's lock as well as `./sc`'s output. Change `./sc` itself by
+writing a new file and renaming it over the old one: bash reads a script as it
+runs, so editing it in place breaks every run already going.
+
+**Show anything slow.** A step that can take more than about half a second
+(an SSH round trip, a build, a wait for something to appear) runs inside
+`ui.progressStep` or `ui.logStep`, so it shows a spinner saying what it's doing
+and how long it has taken. A command that sits silent looks hung.
 
 Logic lives in the `SCKit` library so tests can parse real command lines with
 `SC.parseAsRoot`. Dependencies are swift-argument-parser, swift-subprocess and
