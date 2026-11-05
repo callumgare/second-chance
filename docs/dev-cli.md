@@ -758,7 +758,7 @@ whole-module build took about two minutes for any change.
 
 **Several at once.** Agents and people often run `./sc` in one checkout at
 once. Their builds queue on SwiftPM's own lock on `Tools/sc/.build`, and the
-spinner says "Waiting for <program> (pid …) to finish with Tools/sc/.build"
+spinner says `Waiting for <program> (pid …) to finish with Tools/sc/.build`
 while something else holds it. sc runs from a copy, `Tools/sc/.run/sc`,
 replaced by a rename only when SwiftPM made a new binary, so a rebuild never
 changes the file a running sc started from (or copies, as the keep-alive's
