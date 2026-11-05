@@ -403,15 +403,21 @@ static NSString *captureCommand(NSString *path, NSDictionary<NSString *, NSStrin
 
 static NSEvent *mouseEvent(NSEventType type, NSPoint point, NSWindow *window, NSInteger clickCount) {
     BOOL down = type == NSEventTypeLeftMouseDown || type == NSEventTypeRightMouseDown || type == NSEventTypeLeftMouseDragged;
-    return [NSEvent mouseEventWithType:type
-                              location:point
-                         modifierFlags:0
-                             timestamp:NSProcessInfo.processInfo.systemUptime
-                          windowNumber:window.windowNumber
-                               context:nil
-                           eventNumber:0
-                            clickCount:clickCount
-                              pressure:down ? 1.0 : 0.0];
+    NSEvent *event = [NSEvent mouseEventWithType:type
+                                        location:point
+                                   modifierFlags:0
+                                       timestamp:NSProcessInfo.processInfo.systemUptime
+                                    windowNumber:window.windowNumber
+                                         context:nil
+                                     eventNumber:0
+                                      clickCount:clickCount
+                                        pressure:down ? 1.0 : 0.0];
+    // Marked as ours, for virtual_pointer.m. Of the event's fields, its
+    // CGEvent's user data is the one -postEvent: keeps (it renumbers events).
+    CGEventRef cgEvent = event.CGEvent;
+    if (!cgEvent) return event;
+    CGEventSetIntegerValueField(cgEvent, kCGEventSourceUserData, kPuppetEventTag);
+    return [NSEvent eventWithCGEvent:cgEvent] ?: event;
 }
 
 /// Post a mouse event of `type` at a window point given with a top-left
@@ -428,6 +434,10 @@ static NSString *postMouseEvent(NSEventType type, double x, double y, NSInteger 
             error = @"error the event would not land on the game window";
             return NO;
         }
+        // Where it points, for virtual_pointer.m: global, from the top left.
+        NSPoint screen = [window convertPointToScreen:point];
+        CGFloat mainHeight = CGDisplayBounds(CGMainDisplayID()).size.height;
+        virtualPointerNotePuppetMove(CGPointMake(screen.x, mainHeight - screen.y));
         [NSApp postEvent:event atStart:NO];
         error = nil;
         return YES;

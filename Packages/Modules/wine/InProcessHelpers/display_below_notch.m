@@ -163,13 +163,9 @@ static CGError belowNotchWarpMouseCursorPosition(CGPoint point) {
     return CGWarpMouseCursorPosition(point);
 }
 
-/// Point winemac.so's imported address of `original` at `replacement`. Its
-/// imports are bound before this dylib's constructor runs (dyld binds a
-/// whole batch of images before running any initializer), so the entries
-/// already hold the real addresses. Returns how many entries it replaced.
-static int replaceWinemacImport(void *original, void *replacement) {
+int replaceImageImport(const struct mach_header_64 *image, void *original, void *replacement) {
     unsigned long size = 0;
-    void **entries = (void **)getsectiondata(gWinemac, "__DATA_CONST", "__got", &size);
+    void **entries = (void **)getsectiondata(image, "__DATA_CONST", "__got", &size);
     long pageSize = getpagesize();
     int replaced = 0;
     for (unsigned long i = 0; entries && i < size / sizeof(void *); i++) {
@@ -181,6 +177,18 @@ static int replaceWinemacImport(void *original, void *replacement) {
         replaced++;
     }
     return replaced;
+}
+
+static int replaceWinemacImport(void *original, void *replacement) {
+    return replaceImageImport(gWinemac, original, replacement);
+}
+
+void *belowNotchWinemacImport(void *original) {
+    // gScreenFrame is set only once every replacement is in.
+    if (!gScreenFrame) return original;
+    if (original == (void *)CGEventGetLocation) return (void *)belowNotchEventGetLocation;
+    if (original == (void *)CGWarpMouseCursorPosition) return (void *)belowNotchWarpMouseCursorPosition;
+    return original;
 }
 
 __attribute__((constructor))

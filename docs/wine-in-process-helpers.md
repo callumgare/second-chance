@@ -15,6 +15,7 @@ wrapp does not have:
 | Cocoa start wait | `Packages/Modules/wine/InProcessHelpers/cocoa_start_wait.m` | Lets each Wine program's Mac driver wait for its main thread to start Cocoa beyond Wine's 5 s, which a fully loaded Mac runs out, leaving the program with no display driver for good | Nothing: every Wine process ([below](#cocoa-start-wait)) | `SECOND_CHANCE_COCOA_START_WAIT=0` |
 | Hidden windows | `Packages/Modules/wine/InProcessHelpers/hidden_windows.m` | Keeps Big Fish's Game Manager's windows and Dock icon off the screen, but while the person signs in | `HIDDEN_WINDOWS_EXE`, set on the Game Manager; `*` for everything it runs during a build ([below](#hidden-windows)) | — |
 | Puppet control | `Packages/Modules/wine/InProcessHelpers/puppet_control.m` | Lets the integration tests' WrappPuppeteer capture and click the game window | `PUPPET_CONTROL_EXE`, set only when `SECOND_CHANCE_PUPPET_DIR` is | — (never armed for players) |
+| Virtual pointer | `Packages/Modules/wine/InProcessHelpers/virtual_pointer.m` | Shows the game (Wine, or ScummVM) a pointer that goes where it's put, in a login where the Mac's can't be moved (a test session), so puppet control's clicks land | As puppet control is, and only once a warp is seen not to move the pointer ([below](#virtual-pointer)) | — (never armed for players) |
 
 ## How they get into the game process
 
@@ -798,3 +799,64 @@ start the wrapp with the variable and talk to the socket:
 mkdir -m 700 /tmp/wp && SECOND_CHANCE_PUPPET_DIR=/tmp/wp "<wrapp>.app/Contents/MacOS/WrappTemplate" &
 echo state | /usr/bin/nc -U /tmp/wp/game-<pid>.sock   # the game process's PID
 ```
+
+## Virtual pointer
+
+**In a test session the Mac's pointer can't be moved by a program.** A test
+session ([dev-cli.md](dev-cli.md#test-sessions)) is a login made through
+Screen Sharing, running in the background on a virtual display. There the
+pointer stays where Screen Sharing's viewer last put it — (10,10) when it
+never has, as with the keep-alive — and `CGWarpMouseCursorPosition`, though it
+reports success, puts it back there whatever it was asked for;
+`CGDisplayMoveCursorToPoint` and posted HID moves don't move it either. Only a
+pointer event over Screen Sharing does. On a console the same calls move it.
+
+Wine reads the real pointer for `GetCursorPos` (`+[NSEvent mouseLocation]`,
+in `macdrv_get_cursor_position`), and a game that holds the cursor —
+cnc-ddraw's [lock](#cursor-lock) — warps it to where the game's cursor should
+be and reads it straight back. So in a test session a click puppet control
+posted on old-clock's Exit button reached Wine at the button
+(`button 0 pressed at (1160,1272)` in a `WINEDEBUG=+cursor` trace), but the
+game, reading `pointer at (10,10)`, put its cursor in the picture's top-left
+corner (`warped to 320,9`) and took every click there. Every click-driven
+test of a Wine game failed in test sessions; keys, which don't involve the
+pointer, worked. ScummVM 2026.3 took a click's position from its event, so
+its clicks landed; 2026.4 warps the pointer and then reads it (SDL, through
+`+[NSEvent mouseLocation]`), and its clicks on Stay Tuned's Exit button did
+nothing in a test session though they quit it on a console.
+
+`virtual_pointer.m` keeps a pointer of its own for the game where the real
+one is stuck. It arms where puppet control does, and acts only once a warp,
+on the game's first use of the pointer, is seen not to move it — one point
+across and back, which nobody sees on a console — so a console run uses the
+real pointer as before. In a Wine process:
+
+- it wraps `winemac.so`'s imports of `CGWarpMouseCursorPosition` and
+  `CGEventGetLocation` (on top of [the notch
+  helper](#on-a-display-with-a-notch)'s wrappers, when those are in;
+  `helper_common.h`), and `+[NSEvent mouseLocation]` for calls from
+  `winemac.so`;
+- a warp moves its pointer (and still goes through), and so does a move or
+  click puppet control posted, which puppet control marks with
+  `kPuppetEventTag` in the event's user data — the one field
+  `-[NSApplication postEvent:atStart:]` keeps (it renumbers events);
+- every other mouse event is given its pointer as its position: the window
+  server's, the moves AppKit makes up when the app is activated (as a click
+  activates it), which even carry the game's own process id, and cursor
+  lock's middle clicks, which aim at the real pointer. Any of them would
+  otherwise drag the game's cursor back to the corner.
+
+In ScummVM, which loads the dylib through `DYLD_INSERT_LIBRARIES`
+([above](#puppet-control)), it redirects scummvm's own imports of
+`CGWarpMouseCursorPosition` and `CGDisplayMoveCursorToPoint` — found by name
+through its indirect symbol table, as scummvm binds the old way, through lazy
+pointers that hold a stub until the first call — and `+[NSEvent
+mouseLocation]` for calls from scummvm. SDL reads no event's location
+through `CGEventGetLocation`, so puppet control tells it where each event it
+posts points instead (`virtualPointerNotePuppetMove`).
+
+It says `second-chance-helper[PuppetControl] notice: the pointer can't be moved
+in this login (it stays at 10,10); showing the game one that can` when it acts.
+Swapping a new `in_process_helpers.dylib` into a wrapp by hand, remove the old
+file first: written over in place, its cached code signature no longer
+matches, and dyld kills scummvm, which inserts it, at launch.

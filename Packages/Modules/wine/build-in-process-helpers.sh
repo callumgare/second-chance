@@ -21,8 +21,10 @@ IFS=$'\n\t'
 # cocoa_start_wait.m (lets every Wine process's driver wait for Cocoa to
 # start beyond Wine's 5 s, which a busy Mac runs out),
 # hidden_windows.m (keeps Big Fish's Game Manager off the screen but to sign
-# in) and puppet_control.m (lets the integration tests' WrappPuppeteer see and
-# click the game). ScummVM wrapps load the same dylib into scummvm, for
+# in), puppet_control.m (lets the integration tests' WrappPuppeteer see and
+# click the game) and virtual_pointer.m (shows Wine a pointer that moves, for
+# those clicks, in a login where the Mac's can't; it wraps display_below_notch.m's
+# wrappers, so it is linked after it). ScummVM wrapps load the same dylib into scummvm, for
 # puppet_control.m alone. ScreenCaptureKit is weak-linked: puppet_control.m
 # needs macOS 14.4 and checks for it.
 # See docs/wine-in-process-helpers.md.
@@ -44,6 +46,7 @@ clang -dynamiclib \
     "${HELPERS_DIR}/quit_watch.m" \
     "${HELPERS_DIR}/cocoa_start_wait.m" \
     "${HELPERS_DIR}/hidden_windows.m" \
+    "${HELPERS_DIR}/virtual_pointer.m" \
     -framework Cocoa \
     -framework OpenGL \
     -framework ImageIO \

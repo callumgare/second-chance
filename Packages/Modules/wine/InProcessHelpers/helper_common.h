@@ -182,6 +182,36 @@ int nativeFullscreenSettled(void);
 /// notch when display_below_notch.m is showing it that, else the whole display.
 CGSize wineMainDisplaySize(void);
 
+// ## Redirecting what winemac.so imports
+//
+// display_below_notch.m and virtual_pointer.m both wrap winemac.so's
+// CGEventGetLocation and CGWarpMouseCursorPosition, by rewriting its __got
+// entries. virtual_pointer.m's constructor runs after display_below_notch.m's
+// (it is linked later), so it wraps whatever is there: below-notch's wrapper
+// when that's in, else the function itself.
+
+#include <mach-o/loader.h>
+
+/// Point `image`'s imported address of `original` at `replacement`. An
+/// image's imports are bound before this dylib's constructors run (dyld binds
+/// a whole batch of images before running any initializer), so the entries
+/// already hold the real addresses. Returns how many entries it replaced.
+int replaceImageImport(const struct mach_header_64 *image, void *original, void *replacement);
+
+/// The user data (kCGEventSourceUserData) puppet_control.m marks its mouse
+/// events with, so virtual_pointer.m can tell them from the moves AppKit
+/// makes up itself, which also carry this process's id.
+#define kPuppetEventTag 0x5C1C4C3D
+
+/// Puppet control's aim, in global display coordinates from the top left:
+/// virtual_pointer.m moves its pointer there when it's armed and the real
+/// pointer is stuck (ScummVM reads no event's location for it to see).
+void virtualPointerNotePuppetMove(CGPoint point);
+
+/// What winemac.so's import of `original` points at now: display_below_notch.m's
+/// wrapper once its replacements are in, else `original` itself.
+void *belowNotchWinemacImport(void *original);
+
 // ## Replacing one of Wine's methods
 //
 // class_getInstanceMethod also finds a method a class only inherits, and

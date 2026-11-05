@@ -710,6 +710,16 @@ every user's. So a lookup by name must be this user's alone (`ProcessList`'s are
 and a log read filters on the line's user id. A game in a test session also loads
 the Mac like any other, so a console run's launches are slower while one plays.
 
+**A program can't move a test session's pointer.** It stays where Screen
+Sharing's viewer last put it, (10,10) under the keep-alive, and a warp
+(`CGWarpMouseCursorPosition`) puts it back there whatever it asked for. A Wine
+game, and ScummVM 2026.4 after a warp, read the real pointer, so
+WrappPuppeteer's clicks landed in its corner until the [virtual
+pointer](wine-in-process-helpers.md#virtual-pointer) gave the game one that
+moves; check a session's pointer with a few lines of Swift
+through `sc in-gui-session` (`CGEvent(source: nil)?.location`, a warp, and
+again).
+
 ### Signing in test sessions
 
 **A test user signs its builds with the console user's certificate.** The
