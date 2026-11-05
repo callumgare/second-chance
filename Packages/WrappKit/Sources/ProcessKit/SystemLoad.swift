@@ -84,13 +84,14 @@ nonisolated public enum SystemLoad {
     }
 
     /// The reading `processes` give, leaving out `excluded`, everything it
-    /// started when `andDescendants`, and every Wine process.
+    /// started when `andDescendants`, and this user's Wine processes. Another
+    /// user's Wine (a game in a background login) is load like any other.
     static func reading(from processes: ProcessList, excluding excluded: pid_t, andDescendants: Bool,
                         fastCores: Int) -> SystemLoadReading {
         var total = 0.0
         var byName: [String: Double] = [:]
         for process in processes.entries {
-            guard process.pid != excluded, !process.isWine,
+            guard process.pid != excluded, !(process.isWine && process.isMine),
                   !(andDescendants && processes.descends(process.pid, from: excluded)) else { continue }
             let cores = process.cpuPercent / 100
             total += cores

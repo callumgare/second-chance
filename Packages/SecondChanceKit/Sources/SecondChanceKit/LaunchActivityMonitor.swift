@@ -151,7 +151,7 @@ nonisolated public final class LaunchActivityMonitor: @unchecked Sendable {
             var names: Set<String> = []
             for process in processes.entries {
                 let name = process.name.lowercased()
-                guard process.isWine || name == "scummvm" || name == "dosbox", !Self.ignored.contains(name),
+                guard process.isMine, process.isWine || name == "scummvm" || name == "dosbox", !Self.ignored.contains(name),
                       isOurs?(process.pid) ?? true else { continue }
                 cpu[process.pid] = process.cpuSeconds
                 if Self.steam.contains(name) { steamPids.insert(process.pid) }

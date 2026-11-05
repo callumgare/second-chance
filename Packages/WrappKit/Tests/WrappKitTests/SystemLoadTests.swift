@@ -25,6 +25,17 @@ struct SystemLoadTests {
     400     1  99.0 0:00.00 00:01 /Applications/Second Chance.app/Contents/MacOS/Second Chance
     """
 
+    @Test("Another user's Wine is load; this user's isn't")
+    func otherUsersWine() {
+        let me = getuid(), other = me + 1
+        let ps = """
+          300     1 \(me)  80.0 0:00.00 00:01 /tmp/A.app/Contents/SharedSupport/wine/bin/wineserver
+          900     1 \(other)  150.0 0:00.00 00:01 C:\\SkiFree\\ski32.exe
+        """
+        let reading = SystemLoad.reading(from: ProcessList(psOutput: ps), excluding: 1, andDescendants: false, fastCores: 8)
+        #expect(abs(reading.otherCores - 1.5) < 0.001)
+    }
+
     @Test("Counts other programs' CPU in cores, leaving out Wine and the caller")
     func countsOthers() {
         let reading = SystemLoad.reading(from: ProcessList(psOutput: ps), excluding: 400, andDescendants: false, fastCores: 8)

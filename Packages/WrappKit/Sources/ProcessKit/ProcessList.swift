@@ -25,16 +25,26 @@ nonisolated public struct ProcessList: Sendable {
         /// `ps`'s `comm`: the executable's path, or for a Windows program
         /// under Wine 10, its Windows path (`ProcessName`).
         public let command: String
+        /// The user it runs as; nil when the listing didn't say, which counts
+        /// as this process's user.
+        public let uid: uid_t?
 
         public init(pid: pid_t, parent: pid_t = 1, cpuPercent: Double = 0, cpuSeconds: Double = 0,
-                    elapsedSeconds: Double = 0, command: String) {
+                    elapsedSeconds: Double = 0, command: String, uid: uid_t? = nil) {
             self.pid = pid
             self.parent = parent
             self.cpuPercent = cpuPercent
             self.cpuSeconds = cpuSeconds
             self.elapsedSeconds = elapsedSeconds
             self.command = command
+            self.uid = uid
         }
+
+        /// Whether it runs as the same user as this process. A Mac can have
+        /// several users logged in at once (a test user in the background, say),
+        /// each running games of their own: those are never this process's
+        /// game, its Wine, or a sign its launch is progressing.
+        public var isMine: Bool { uid.map { $0 == getuid() } ?? true }
 
         /// The executable's file name: "Game.exe", "wineserver".
         public var name: String { ProcessName.executable(fromPSCommand: command) }
@@ -74,7 +84,7 @@ nonisolated public struct ProcessList: Sendable {
         let taken = ContinuousClock.now
         let ps = Process()
         ps.executableURL = URL(fileURLWithPath: "/bin/ps")
-        ps.arguments = ["-A", "-o", "pid=,ppid=,pcpu=,time=,etime=,comm="]
+        ps.arguments = ["-A", "-o", "pid=,ppid=,uid=,pcpu=,time=,etime=,comm="]
         let pipe = Pipe()
         ps.standardOutput = pipe
         ps.standardError = FileHandle.nullDevice
@@ -91,26 +101,35 @@ nonisolated public struct ProcessList: Sendable {
         return list
     }
 
-    /// From `ps -A -o pid=,ppid=,pcpu=,time=,etime=,comm=`. The command is
-    /// last because it can hold spaces.
+    /// From `ps -A -o pid=,ppid=,uid=,pcpu=,time=,etime=,comm=`. The command
+    /// is last because it can hold spaces. A line without the `uid` column
+    /// (`pid=,ppid=,pcpu=,…`) is read too, as this user's.
     init(psOutput: String) {
-        self.init(entries: psOutput.split(whereSeparator: \.isNewline).compactMap { line in
-            let fields = line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true)
-            guard fields.count == 6, let pid = pid_t(fields[0]), let parent = pid_t(fields[1]),
-                  let cpuPercent = Double(fields[2]), let cpuSeconds = Self.seconds(fromPSTime: String(fields[3])),
-                  let elapsedSeconds = Self.seconds(fromPSTime: String(fields[4])) else { return nil }
-            return Entry(pid: pid, parent: parent, cpuPercent: cpuPercent, cpuSeconds: cpuSeconds,
-                         elapsedSeconds: elapsedSeconds, command: String(fields[5]))
-        })
+        self.init(entries: psOutput.split(whereSeparator: \.isNewline).compactMap(Self.entry(fromPSLine:)))
     }
 
-    /// Wine's processes, the game among them.
-    public var wine: [Entry] { entries.filter(\.isWine) }
+    private static func entry(fromPSLine line: Substring) -> Entry? {
+        let fields = line.split(separator: " ", maxSplits: 6, omittingEmptySubsequences: true)
+        // A uid is a whole number; a CPU percentage, in the same place
+        // without one, always has a decimal point.
+        let hasUID = fields.count == 7 && uid_t(fields[2]) != nil
+        let rest = hasUID ? Array(fields[3...]) : Array(line.split(separator: " ", maxSplits: 5, omittingEmptySubsequences: true).dropFirst(2))
+        guard fields.count >= 6, rest.count == 4, let pid = pid_t(fields[0]), let parent = pid_t(fields[1]),
+              let cpuPercent = Double(rest[0]), let cpuSeconds = seconds(fromPSTime: String(rest[1])),
+              let elapsedSeconds = seconds(fromPSTime: String(rest[2])) else { return nil }
+        return Entry(pid: pid, parent: parent, cpuPercent: cpuPercent, cpuSeconds: cpuSeconds,
+                     elapsedSeconds: elapsedSeconds, command: String(rest[3]), uid: hasUID ? uid_t(fields[2]) : nil)
+    }
 
-    /// The processes whose executable is `name`, compared without case.
+    /// Wine's processes, the game among them: this user's only.
+    public var wine: [Entry] { entries.filter { $0.isWine && $0.isMine } }
+
+    /// The processes whose executable is `name`, compared without case: this
+    /// user's only, so another user's game of the same name is never taken
+    /// for ours.
     public func named(_ name: String) -> [Entry] {
         let wanted = name.lowercased()
-        return entries.filter { $0.name.lowercased() == wanted }
+        return entries.filter { $0.isMine && $0.name.lowercased() == wanted }
     }
 
     /// Whether `pid` is `ancestor`, or was started by it or by something it

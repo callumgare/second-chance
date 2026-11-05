@@ -162,14 +162,15 @@ nonisolated public enum ProcessCleanup {
 public typealias RunningProcess = ProcessList.Entry
 
 nonisolated public enum ProcessFinder {
-    /// Every process on the system, via `ps`. Sees processes that
-    /// NSWorkspace doesn't, such as Wine's.
+    /// Every process of this user's, via `ps`. Sees processes that
+    /// NSWorkspace doesn't, such as Wine's. Another user's (a game in a
+    /// background login) never counts: it isn't the game this run launched.
     public static func allProcesses() -> [RunningProcess] {
         guard let processes = ProcessList.current() else {
             logger.error("  ⚠️  Couldn't list processes")
             return []
         }
-        return processes.entries
+        return processes.entries.filter(\.isMine)
     }
 
     /// Poll until a process with this executable name (case-insensitive) is running.
