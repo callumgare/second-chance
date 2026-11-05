@@ -657,9 +657,14 @@ signed with hardened runtime, `scummvm` will need the
 `com.apple.security.cs.allow-dyld-environment-variables` entitlement for this
 to keep working.
 
-One request per connection, one line each way, replies starting `ok` or
-`error`. Coordinates are points in the game window with a top-left origin — a
-capture's pixels divided by `scale` — so no screen geometry is involved.
+One request per connection: a line in, a reply out (one line, but for
+`windows`), starting `ok` or `error`. Connections are served at once, each on a
+thread of its own, so a capture that takes seconds holds up no click. Coordinates
+are points in the game window with a top-left origin — a capture's pixels divided
+by `scale` — so no screen geometry is involved. Options are `name=value` words
+after the arguments. `PUPPET_CONTROL_EXE=*` arms it in every process that loads
+it (an installer, a launcher and the game each get a socket), as
+`HIDDEN_WINDOWS_EXE=*` does for hidden windows.
 
 A capture has to show what the screen shows, or clicks aimed by it miss. On
 macOS 15 they didn't always. The move into a fullscreen Space left a Direct3D
@@ -676,10 +681,17 @@ macOS 26 doesn't leave the surface undersized.
 
 | Request | Reply |
 | --- | --- |
+| `hello` | `ok version=2 pid=<n> exe=<name> commands=<list>`: older helpers in built wrapps answer `error unknown request`, which says they're version 1 |
 | `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
-| `capture <path>` | `ok <w>x<h>`, with a PNG of the game window at `<path>` |
-| `click <x> <y>` | `ok`: a mouse move, 150 ms for the game to see it, then the left button held for 100 ms |
+| `windows` | `ok <n> windows`, then a line each: `id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0\|1 key=0\|1 main=0\|1 kind=game\|panel\|other title=<percent-encoded>`, the frame from the screen's top left; `game` is the window the other requests act on |
+| `capture <path> [region=<x>,<y>,<w>,<h>] [scale=<s>]` | `ok <w>x<h>`, with a PNG of the game window at `<path>`: a part of it (in points) for `region`, and at `scale` pixels a point rather than the window's own |
+| `click <x> <y> [button=left\|right] [count=1-3] [hold=<ms>]` | `ok`: a mouse move, 150 ms for the game to see it, then the button held for 100 ms (or `hold`), `count` times |
 | `move <x> <y>` | `ok`: a mouse move alone (to park the game's drawn cursor) |
+| `down <x> <y>`, `up <x> <y>` `[button=]` | `ok`: a press, or a release, alone |
+| `drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>]` | `ok`: a press at the start, `steps` moves (10) along the line with the button down, a release at the end |
+| `key <name>[+<mod>…] [hold=<ms>]` | `ok`: modifiers down, the key down, held 60 ms, up, modifiers up, each with its own virtual keycode (US layout), which is what Wine and SDL read. Names: `a`–`z`, `0`–`9`, punctuation, `return`, `escape`, `tab`, `space`, `delete`, the arrows `left` `right` `up` `down`, `f1`–`f12`, `home`, `end`, `pageup`, `pagedown`; modifiers `cmd`, `shift`, `opt`, `ctrl` |
+| `type <text>` | `ok`: each character as its key, with shift where it needs it, 40 ms apart; the text percent-encoded (`Hi%20there`) |
+| `focus` | `ok`: the app made active and the game window key |
 | `quit` | `ok`: the app is asked to quit as its Quit menu item (Wine's ⌘⌥Q) does, with `-[NSApplication terminate:]`, not waited for, since a hang would be inside it |
 | `yield <pid>` | `ok`: the game's app hands activation to that app, which may then make itself active: WrappPuppeteer switching away from the game, as Cmd-Tab would, since macOS 14 only lets the active app hand activation on |
 
@@ -732,6 +744,12 @@ learned building it:
   watches for every helper — `helper_common.h`), or it gave up, or it isn't
   armed. `state` likewise says `native=0` until the move has finished, so
   WrappPuppeteer starts on the game once it's there.
+
+Keys and mouse buttons are posted as clicks are, so they need nothing more. Posted
+keys reach a Wine game (SkiFree turns at the arrows and restarts at F2) and ScummVM
+(Ctrl-F5 opens its menu), in a test session too. A Direct3D Nancy Drew game
+ignored Escape at its desk and in its case file, which may only mean it doesn't
+use the key there.
 
 To watch it, set `IN_PROCESS_HELPERS_LOG`: each request and its reply is
 logged as `pid=… puppet-control | <request> -> <reply>`. To drive it by hand,
