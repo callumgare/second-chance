@@ -15,8 +15,8 @@ struct SessionCommand: AsyncParsableCommand {
         sc --on <host> session claim --purpose "…". See docs/dev-cli.md#test-sessions.
         """,
         subcommands: [SessionListCommand.self, SessionClaimCommand.self, SessionReleaseCommand.self,
-                      SessionKeepAliveCommand.self, SessionAddCommand.self, SessionLogoutCommand.self, SessionRemoveCommand.self,
-                      SessionSetupCommand.self, SessionViewCommand.self, SessionScreenshotCommand.self,
+                      SessionKeepAliveCommand.self, SessionAddCommand.self, SessionLogoutCommand.self,
+                      SessionRemoveCommand.self, SessionSetupCommand.self, SessionViewCommand.self, SessionScreenshotCommand.self,
                       SessionExportSigningCommand.self],
         defaultSubcommand: SessionListCommand.self
     )
