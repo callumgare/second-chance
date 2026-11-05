@@ -35,12 +35,24 @@ struct Xcode {
         ] + Self.signingOverrides
     }
 
-    /// On CI (`CI=true`, which GitHub Actions sets), sign ad hoc: the project
-    /// signs with the developer's team, whose certificate a CI runner doesn't
-    /// have ("No signing certificate 'Mac Development' found").
-    static var signingOverrides: [String] {
-        guard ProcessInfo.processInfo.environment["CI"] == "true" else { return [] }
-        return ["CODE_SIGN_IDENTITY=-", "CODE_SIGN_STYLE=Manual", "DEVELOPMENT_TEAM="]
+    /// Sign ad hoc where there's no Apple Development certificate to sign
+    /// with ("No signing certificate 'Mac Development' found"): on CI
+    /// (`CI=true`, which GitHub Actions sets), and for a user without one, as
+    /// a test user is until `sc session add` gives it the console user's.
+    /// Better than no build, but an ad-hoc signature changes with every
+    /// build, and macOS forgets the permissions it gave the last.
+    static let signingOverrides: [String] = {
+        let adHoc = ["CODE_SIGN_IDENTITY=-", "CODE_SIGN_STYLE=Manual", "DEVELOPMENT_TEAM="]
+        if ProcessInfo.processInfo.environment["CI"] == "true" { return adHoc }
+        let listing = SessionPool.quickly("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"])
+        guard let listing, listing.status == 0 else { return [] }
+        return SigningIdentity.hasDevelopment(findIdentityOutput: String(decoding: listing.output, as: UTF8.self)) ? [] : adHoc
+    }()
+
+    private func noteAdHocSigning() {
+        guard !Self.signingOverrides.isEmpty, ProcessInfo.processInfo.environment["CI"] != "true" else { return }
+        ui.detail("You have no Apple Development certificate, so this build is signed ad hoc"
+                  + " (in a test user, sc session add gives it the console user's).")
     }
 
     private static let environment: [String: String?] = ["NSUnbufferedIO": "YES"]
@@ -49,6 +61,7 @@ struct Xcode {
     /// and the tests' dependencies) incrementally.
     func buildApp(configuration: String = "Debug") async throws {
         try Proc.require("xcbeautify", brew: "xcbeautify")
+        noteAdHocSigning()
         let args = arguments(configuration: configuration) + ["build"]
         try await ui.logStep(
             configuration == "Debug" ? "Build Second Chance" : "Build Second Chance (\(configuration))",
@@ -77,6 +90,7 @@ struct Xcode {
     /// Build the app and the test bundle.
     func buildForTesting() async throws {
         try Proc.require("xcbeautify", brew: "xcbeautify")
+        noteAdHocSigning()
         let args = ["build-for-testing"] + testArguments + ["ONLY_ACTIVE_ARCH=NO"] + Self.signingOverrides
         try await ui.logStep("Build for testing", log: "build-for-testing", formatting: .xcbeautify, success: "Built for testing") { sink in
             try await Proc.stream("xcodebuild", args, env: Self.environment, cwd: repo.root) { await sink.line($0) }

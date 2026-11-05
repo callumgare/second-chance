@@ -367,6 +367,7 @@ struct SessionAddCommand: AsyncParsableCommand {
         try (pool.joined(separator: "\n") + "\n").write(to: SessionPool.file, atomically: true, encoding: .utf8)
         chmod(SessionPool.file.path, 0o666)
         session.ui.detail("The pool: \(pool.joined(separator: ", ")).")
+        await Self.installSigningIdentities(names, session: session)
 
         session.ui.detail(try await SessionPool.makeInstallersStore(store: InstallersStore.defaultRoot))
         if await SessionKeepAliveCommand.isInstalled() {
@@ -443,6 +444,65 @@ struct SessionAddCommand: AsyncParsableCommand {
             try await sudo(["/usr/bin/install", "-d", "-o", user, "-g", "staff", "-m", "700", "\(home)/.ssh"])
             try await sudo(["/usr/bin/install", "-o", user, "-g", "staff", "-m", "600", file.path, "\(home)/.ssh/authorized_keys"])
         }
+    }
+
+    /// Copies this user's Apple Development identities into each test user's
+    /// login keychain, so its builds are signed as this user's are rather
+    /// than ad hoc, whose signature changes with every build and loses the
+    /// permissions macOS gave the last. A failure here leaves the rest of the
+    /// set-up standing.
+    static func installSigningIdentities(_ users: [String], session: Session) async {
+        let found = SigningIdentity.development()
+        guard !found.isEmpty else {
+            session.ui.warning("You have no Apple Development certificate to give the test users, so their builds will be signed ad hoc.",
+                               next: "Sign in to Xcode with your Apple account (Settings → Accounts), then run sc session add again.")
+            return
+        }
+        let hashes = found.map(\.hash)
+        var exported: (p12: Data, intermediates: [Data], passphrase: String)?
+        for user in users {
+            do {
+                let check = try await ssh(user, SigningIdentity.checkScript(hashes: hashes))
+                switch check.status {
+                case 0:
+                    session.ui.detail("\(user) has your signing certificate.")
+                    continue
+                case 3:
+                    session.ui.warning("\(user) hasn't logged in yet, so it has no keychain for your signing certificate.",
+                                       next: "Run sc session add again once sc session shows it logged in.")
+                    continue
+                case 255:
+                    throw SCError("This Mac can't reach \(user) over SSH.",
+                                  hints: ["Give it this Mac's keys (sudo asks for your password): sc session add --install-keys"])
+                default:
+                    break
+                }
+                if exported == nil {
+                    session.ui.detail("Exporting your signing certificate for the test users: if macOS asks on this Mac's screen, allow it.")
+                    let passphrase = newPassword()
+                    exported = (try SigningIdentity.export(found, passphrase: passphrase), SigningIdentity.intermediates(found), passphrase)
+                }
+                guard let exported else { continue }
+                let script = SigningIdentity.installScript(p12: exported.p12, intermediates: exported.intermediates, passphrase: exported.passphrase,
+                                                           keychainPassword: try await SessionPool.password(for: user), hashes: hashes)
+                let installed = try await ssh(user, script)
+                guard installed.succeeded else {
+                    throw SCError("Couldn't add your signing certificate to \(user)'s keychain: "
+                                  + installed.error.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                session.ui.detail("Gave \(user) your signing certificate (\(found.map(\.name).joined(separator: ", "))).")
+            } catch {
+                if let hint = (error as? SCError)?.hints.first {
+                    session.ui.warning("\(user)'s builds will be signed ad hoc: \(error)", next: "\(hint)")
+                } else {
+                    session.ui.warning("\(user)'s builds will be signed ad hoc: \(error)")
+                }
+            }
+        }
+    }
+
+    private static func ssh(_ user: String, _ script: String) async throws -> Proc.Collected {
+        try await Proc.collect("/usr/bin/ssh", ["-o", "BatchMode=yes", "\(user)@localhost", "bash -s"], input: script)
     }
 
     /// What macOS's Setup Assistant asks a new user, marked as seen: the

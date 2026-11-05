@@ -927,3 +927,55 @@ struct LeakedHelpersTests {
         #expect(LeakedHelpers.toEnd(Array(100..<110)).isEmpty)
     }
 }
+
+@Suite("Test users' signing certificate")
+struct SigningIdentityTests {
+    @Test("Only an Apple Development identity counts as one the project can sign with")
+    func hasDevelopment() {
+        let mine = """
+          1) 35E94C0D29115DD25A212BCD3F7039311005129F "Apple Development: someone@example.com (ABCDE12345)"
+             1 valid identities found
+        """
+        #expect(SigningIdentity.hasDevelopment(findIdentityOutput: mine))
+        #expect(!SigningIdentity.hasDevelopment(findIdentityOutput: "     0 valid identities found\n"))
+        #expect(!SigningIdentity.hasDevelopment(findIdentityOutput: "  1) 00AA \"Developer ID Application: Someone (ABCDE12345)\"\n"))
+    }
+
+    /// Runs a script as `ssh … bash -s` would, with `home` as its HOME.
+    private func run(_ script: String, home: URL, syntaxOnly: Bool = false) throws -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = syntaxOnly ? ["-n", "-s"] : ["-s"]
+        process.environment = ["HOME": home.path, "PATH": "/usr/bin:/bin"]
+        let input = Pipe()
+        process.standardInput = input
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        input.fileHandleForWriting.write(Data(script.utf8))
+        try input.fileHandleForWriting.close()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    @Test("The scripts are valid shell, wait for a first login's keychain, and see a missing identity")
+    func scripts() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("sc signing \(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        let hashes = ["35E94C0D29115DD25A212BCD3F7039311005129F"]
+        let install = SigningIdentity.installScript(p12: Data(repeating: 7, count: 200), intermediates: [Data(repeating: 8, count: 100)], passphrase: "a'b c",
+                                                    keychainPassword: "p w", hashes: hashes)
+        #expect(install.contains("\nP12\n") && install.contains("\nCER\n"), "each heredoc's end is at the start of its line")
+        #expect(try run(install, home: home, syntaxOnly: true) == 0)
+        #expect(try run(SigningIdentity.checkScript(hashes: hashes), home: home, syntaxOnly: true) == 0)
+        #expect(try run(SigningIdentity.checkScript(hashes: hashes), home: home) == 3)
+        #expect(try run(install, home: home) == 3)
+
+        // A keychain without the identity: security can't read this one, which is as good as empty.
+        let keychains = home.appendingPathComponent("Library/Keychains")
+        try FileManager.default.createDirectory(at: keychains, withIntermediateDirectories: true)
+        try Data().write(to: keychains.appendingPathComponent("login.keychain-db"))
+        #expect(try run(SigningIdentity.checkScript(hashes: hashes), home: home) == 1)
+    }
+}

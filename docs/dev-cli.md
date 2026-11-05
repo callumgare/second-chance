@@ -597,8 +597,9 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   before its first login: left to run, it holds the session where no sc job
   can start (an Aqua LaunchAgent never runs) while `sc session` still says
   "logged in". A re-run frees a user stuck there, logging it out for the
-  keep-alive to log in again. Then it makes the Mac's installers store (below)
-  and installs the keep-alive if it isn't running.
+  keep-alive to log in again. It gives each test user the console user's
+  [signing certificate](#signing-in-test-sessions). Then it makes the Mac's
+  installers store (below) and installs the keep-alive if it isn't running.
 - **Installers are kept once per Mac**, in the
   [installers store](testing.md#the-installers-store),
   `/Users/Shared/second-chance/installers`, writable by every user through an
@@ -625,6 +626,32 @@ copies of wrapps, since Wine refuses a prefix another user owns
 every user's. So a lookup by name must be this user's alone (`ProcessList`'s are),
 and a log read filters on the line's user id. A game in a test session also loads
 the Mac like any other, so a console run's launches are slower while one plays.
+
+### Signing in test sessions
+
+**A test user signs its builds with the console user's certificate.** The
+project signs with an Apple Development identity, which lives in the
+developer's login keychain. Without one, sc signs ad hoc (as it does on CI),
+and says so in the build's output. That builds, but an ad-hoc signature changes
+with every build, so macOS forgets each build's permissions at the next.
+
+So `sc session add` copies the console user's valid Apple Development
+identities (`SigningIdentity`) into each test user's login keychain, with the
+intermediate certificates their chains need: Xcode keeps Apple's WWDR
+certificate in the login keychain, not the system's. It exports the
+identities as one PKCS #12 file and the intermediates as certificates of
+their own (`SecItemExport` won't mix a certificate found by building a chain,
+which isn't a keychain item, into the file). Where the key's access list asks,
+macOS shows a dialog on the Mac's screen to allow the export, which can't be
+answered over SSH alone. Then it imports them over SSH as each test user
+(`<user>@localhost`) and lets `codesign` use the keys without asking. It skips
+a user that already has every identity, exporting nothing. A login keychain is
+unlocked in the user's GUI session, where test runs build (`GUISession.ensure`
+comes first), but not over plain SSH: a build there fails with
+`errSecInternalComponent`, so build through `in-gui-session` there. A user that has never logged in has no
+login keychain yet: run `session add` again once it has. A failure here is a
+warning, and the rest of the set-up goes ahead. A renewed certificate reaches
+the test users the next time `session add` runs.
 
 ### Peekaboo in test sessions
 
