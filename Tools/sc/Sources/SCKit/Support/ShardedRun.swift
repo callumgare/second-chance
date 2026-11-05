@@ -1,5 +1,6 @@
 import Foundation
 import Noora
+import WrappBuilder
 
 /// `sc test integration --shard-on <host>[,<host>…]`: one integration run
 /// split into shards, each run in a test session on another Mac, gathered
@@ -84,18 +85,21 @@ enum ShardPlan {
         return Assignment(shards: shards, unrunnable: unrunnable)
     }
 
-    /// The installers a listing of an installers folder holds (`<slug>/<file>`
-    /// a line): `disk/<slug>` for a game's first disc image, as the disc suite
-    /// needs, and `her-download/<slug>` for a Her download
-    /// (`Games.herDownloads`).
-    static func installerKeys(listing: [String]) -> Set<String> {
+    /// The installers a listing of an installers store holds (paths in it,
+    /// a line each): `disk/<slug>` for a game whose disc edition's images
+    /// are all there, as the disc suite needs, and `her-download/<slug>`
+    /// for one with a Her download (`Games.herDownloads`).
+    static func installerKeys(listing: [String], manifests: [Manifest]) -> Set<String> {
+        let editions = InstallersStore.editions(inListing: listing, manifests: manifests)
         var keys = Set<String>()
-        for line in listing {
-            let parts = line.trimmingCharacters(in: .whitespaces).split(separator: "/", omittingEmptySubsequences: true)
-            guard parts.count == 2 else { continue }
-            let slug = String(parts[0]), file = parts[1].lowercased()
-            if file == "disk-1.iso" { keys.insert("disk/\(slug)") }
-            if file.hasPrefix("her-download"), file.hasSuffix(".exe") || file.hasSuffix(".dmg") { keys.insert("her-download/\(slug)") }
+        for manifest in manifests {
+            for edition in manifest.editions where editions.contains("\(manifest.id)/\(edition.id)") {
+                switch edition.source {
+                case .disc: keys.insert("disk/\(manifest.name)")
+                case .herDownload: keys.insert("her-download/\(manifest.name)")
+                case .steam, .bigFish, .download: break
+                }
+            }
         }
         return keys
     }
@@ -310,26 +314,27 @@ struct ShardCoordinator: Sendable {
         }
     }
 
-    /// The installers on a Mac: its shared store, or else the checkout's own.
+    /// The installers in a Mac's store. Its own environment can't be read
+    /// from here, so it's the Mac's store at the usual place.
     private func installers(on mac: Mac) async -> Set<String> {
-        let script = """
-        if [ -d \(Remote.quote(SessionPool.installers.path)) ]; then cd \(Remote.quote(SessionPool.installers.path)); \
-        else cd "$1/installers" 2>/dev/null || exit 0; fi
-        find -L . -mindepth 2 -maxdepth 2 -type f | sed 's|^\\./||'
-        """
-        let command = "bash -c \(Remote.quote(script)) _ \(Remote.shellPath(mac.path))"
+        let store = Remote.quote(InstallersStore.defaultRoot.path)
+        let command = "cd \(store) 2>/dev/null && find -L . -mindepth 2 -maxdepth 4 -type f"
         let host = mac.raw.split(separator: ":", maxSplits: 1).first.map(String.init) ?? mac.host
         guard let result = try? await Proc.collect("ssh", ["-T", host, command]), result.succeeded else { return [] }
-        return ShardPlan.installerKeys(listing: result.output.split(whereSeparator: \.isNewline).map(String.init))
+        return ShardPlan.installerKeys(listing: result.output.split(whereSeparator: \.isNewline).map(String.init), manifests: repo.manifests)
     }
 
     private var localInstallers: Set<String> {
-        let dir = repo.defaultInstallersDir
-        let slugs = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-        let listing = slugs.flatMap { slug in
-            ((try? FileManager.default.contentsOfDirectory(atPath: dir.appendingPathComponent(slug).path)) ?? []).map { "\(slug)/\($0)" }
+        let root = repo.installers.root
+        let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)
+        var listing: [String] = []
+        while let url = walker?.nextObject() as? URL {
+            let path = String(url.path.dropFirst(root.path.count + 1))
+            if path.split(separator: "/").count >= 4 { walker?.skipDescendants() }
+            var isFolder: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isFolder), !isFolder.boolValue { listing.append(path) }
         }
-        return ShardPlan.installerKeys(listing: listing)
+        return ShardPlan.installerKeys(listing: listing, manifests: repo.manifests)
     }
 
     // MARK: During

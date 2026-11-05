@@ -70,7 +70,7 @@ build failure. AGENTS.md's *Build, Run, Test* section has the full story.
 # Build from Steam instead (or as well: --source disk,steam, or all)
 ./sc test integration thornton-hall --source steam
 
-# Build from each Her Interactive download in installers/<slug>/
+# Build from each Her Interactive download in the installers store
 ./sc test integration scarlet-hand --source her-download
 
 # Build from Big Fish Games: the games the test account in .env owns, or
@@ -93,8 +93,8 @@ output kept in `DerivedData/sc-logs/`.
 
 A bare `./sc test` runs nothing but its help: name `unit`, `integration` or
 `all`. `./sc test all` and an unfiltered
-`xcodebuild test` run the integration suite too, which with real ISOs present
-in `installers/` doesn't skip, and takes hours.
+`xcodebuild test` run the integration suite too, which with disc images in
+the [installers store](#the-installers-store) doesn't skip, and takes hours.
 
 ## Test structure
 
@@ -158,14 +158,15 @@ run it.
 ### Integration tests (`SecondChanceTests/Integration/`)
 
 Slow (~1.5 min for a cached ScummVM game, minutes for a Wine install), and they
-need real ISOs at `installers/<slug>/disk-1.iso` (gitignored). Absent ISOs, the
-suite disables itself via `.disabled(if: !InstallersPresent.shouldRun())` — so
-a plain `xcodebuild test` on a machine without them skips rather than fails.
+need the games' real disc images in the [installers store](#the-installers-store)
+(`nancy-drew/old-clock/cd/disc-1.iso`). With none there, the suite disables
+itself via `.disabled(if: !InstallersPresent.shouldRun())` — so a plain
+`xcodebuild test` on a machine without them skips rather than fails.
 
 `./sc test integration` is different: asking for the suite by name sets
-`TEST_RUNNER_REQUIRE_INSTALLERS=1`, the suite always runs, and a game whose ISO
-is missing fails its `#require` with the path it looked at. A skipped suite
-there would report a pass having tested nothing.
+`TEST_RUNNER_REQUIRE_INSTALLERS=1`, the suite always runs, and a game whose
+images are missing fails its `#require` with the folder it looked in. A
+skipped suite there would report a pass having tested nothing.
 
 **Each build source has its own suite**, picked with `--source`:
 `DiskInstallIntegrationTests` (`disk`, the default),
@@ -252,9 +253,10 @@ that Mac, one on a Mac with six. That is measured on one Mac only; on a
 bigger one, try `--build-concurrency` above the default and see whether the
 run's time still drops.
 
-The Her suite tests each download in `installers/<slug>/` named
-`her-download*.exe` or `her-download*.dmg`, once per file (a Mac download's
-row is `<slug> mac`), and disables itself when there are none. It always
+The Her suite tests each Her download edition whose installer is in the
+installers store (`<bundle id>/her-windows/installer.exe`,
+`<bundle id>/her-mac/installer.dmg`), once per edition (a Mac download's row
+is `<slug> mac`), and disables itself when there are none. It always
 builds, and is in `TestRunner.unitExclusions`.
 [her-download.md](her-download.md#testing) has more.
 
@@ -295,11 +297,66 @@ The Big Fish suites, both in `TestRunner.unitExclusions`:
 Both always build and download every game they test.
 [big-fish.md](big-fish.md#testing) has what each checks.
 
-The tests find the repo, and so `installers/`, through `TestPaths.repoRoot`.
-That defaults to `#filePath`, which is fixed at compile time and wrong on any
-machine the build was copied to, so `sc test` passes the real location as
-`TEST_RUNNER_REPO_ROOT`. Calling `xcodebuild` directly on a copied build, pass
-it yourself.
+The tests find the repo, and so the bundles' manifests, through
+`TestPaths.repoRoot`. That defaults to `#filePath`, which is fixed at compile
+time and wrong on any machine the build was copied to, so `sc test` passes
+the real location as `TEST_RUNNER_REPO_ROOT`. Calling `xcodebuild` directly
+on a copied build, pass it yourself. They find the installers store through
+`TestPaths.installers`, which `sc test` passes as
+`TEST_RUNNER_SECOND_CHANCE_INSTALLERS`.
+
+### The installers store
+
+The disc images and Her downloads that tests and `sc wrapp build` read are
+kept once per Mac, outside every checkout, in
+`/Users/Shared/second-chance/installers` (`InstallersStore`, in
+`Packages/WrappBuilder`). `SECOND_CHANCE_INSTALLERS` names another, for a
+test or CI. Each file is where its game's manifest says it goes,
+`<bundle id>/<edition id>/<input name>.<ext>`: the program bundle's id, an
+edition's `id` from its `editions:`, and the name of one of that edition's
+`build.inputs` ([program-bundles.md](program-bundles.md)):
+
+```text
+/Users/Shared/second-chance/installers/
+  nancy-drew/old-clock/cd/disc-1.iso
+  nancy-drew/white-wolf/cd/disc-1.iso
+  nancy-drew/white-wolf/cd/disc-2.iso
+  nancy-drew/scarlet-hand/her-windows/installer.exe
+  nancy-drew/trail-of-the-twister/her-mac/installer.dmg
+  nancy-drew/stay-tuned/cd/disc-1.iso -> disc-1-slim.iso
+  nancy-drew/stay-tuned/cd/disc-1-slim.iso
+  nancy-drew/stay-tuned/cd/disc-1-full.iso
+  nancy-drew/scarlet-hand/extras/06_SSH_Guide.pdf
+```
+
+So anything that needs an installer finds it from the manifest alone: an
+input is the file in its edition's folder named `<input>.<anything>`.
+
+- **Alternatives**: the file read may be a link to one of several kept
+  beside it under any other name, which only matters to a person. Stay Tuned
+  keeps its full disc and a cut-down copy that builds faster, and
+  `disc-1.iso` links to whichever a run should use. A link that leads
+  nowhere counts as no file. `--on` sends links as links.
+- **Extras**: what no build reads — guides, manuals, anything kept with a
+  game — goes in `<bundle id>/extras/`.
+- **Nothing per checkout**: a checkout has no `installers/` of its own, so
+  every checkout and test user on a Mac reads the one store. `sc session add`
+  makes it, writable by every user, and `--on` sends this Mac's store to the
+  other Mac's ([dev-cli.md](dev-cli.md#gui-session-and-remote-macs)).
+- **`sc installers list`** shows which editions' installers are all there.
+- **`sc installers migrate`** moves installers laid out the old way,
+  `<slug>/disk-1.iso` and `<slug>/her-download-….exe` in a checkout's
+  `installers/` or the store itself, to where their manifests say: each
+  `disk-<n>.iso` to its disc edition's `disc-<n>`, `disk-<n>-<name>.iso` to
+  `disc-<n>-<name>.iso` beside it (and a `disk-<n>.iso` link to it made
+  again), a Her `.exe` or `.dmg` to its Windows or Mac edition's input, and
+  everything else to extras. It shows what it would do; `--yes` does it,
+  moving (one rename each on the same volume; a copy checked by MD5
+  otherwise) under the lock `--on` syncs take, and leaves anything it can't
+  place where it is, listed. Until a Mac's store has been migrated, a game
+  with nothing in its new folder is still found in the old layout, and
+  `--on` sends no installers between a store in one layout and one in the
+  other, which would otherwise hold every installer twice.
 
 Each game runs the **real** build flow — real Wine/ScummVM install, real file
 copies — and asserts on the events the flow publishes:
@@ -353,7 +410,7 @@ the Mac it's typed on, which only coordinates:
 1. **It claims a free test session on each Mac**
    (`sc --on <host>:<path> session claim --new --json`), never one you already
    hold for other work, and lists the installers
-   there: the Mac's shared store, or else the checkout's `installers/`. A Mac
+   in that Mac's [installers store](#the-installers-store). A Mac
    with no free session is left out, with a warning.
 2. **It hands out the games** (`ShardPlan.assign`): the biggest builds first
    (the sizes this Mac has recorded in `test-results/integration-sizes.json`,
@@ -1211,8 +1268,8 @@ struct MyFeatureTests {
 
 A new unit suite runs in `sc test unit` without any registration — add it to
 the list above while you are there. A slow or environment-dependent one belongs
-in `TestRunner.unitExclusions` instead. Integration coverage for a new game needs only its ISOs dropped into
-`installers/<slug>/`; the suite enumerates games from `GameInfoProvider`.
+in `TestRunner.unitExclusions` instead. Integration coverage for a new game needs only its disc images in
+the [installers store](#the-installers-store); the suite enumerates games from `GameInfoProvider`.
 
 Adding a file under `docs/` also means adding its row to AGENTS.md's
 Documentation table: `DocsTableTests` asserts the two match in both directions,

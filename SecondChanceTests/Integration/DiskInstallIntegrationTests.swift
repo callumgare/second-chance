@@ -8,7 +8,8 @@
 //  results via the event bus.
 //
 //  REQUIREMENTS:
-//    - Real installer ISOs must be present in `installers/<slug>/disk-1.iso`.
+//    - Real disc images must be in the installers store, at
+//      `<bundle id>/cd/disc-1.iso` (docs/testing.md#the-installers-store).
 //      These are gitignored (too large for git) so tests auto-disable when
 //      absent via `.disabled(if: !InstallersPresent.shouldRun())` — except
 //      under `sc test integration`, which sets REQUIRE_INSTALLERS so a
@@ -33,7 +34,7 @@ import SecondChanceKit
 
 @Suite(
     "Disk install — per game",
-    .disabled(if: !InstallersPresent.shouldRun(), "No installer ISOs found in installers/")
+    .disabled(if: !InstallersPresent.shouldRun(), "No disc images in the installers store")
 )
 struct DiskInstallIntegrationTests {
 
@@ -77,13 +78,14 @@ struct DiskInstallIntegrationTests {
 
         let run = IntegrationGameRun(game: game, label: game.id, source: "disk", progress: Self.progress)
         try await run.run(prebuiltWrapp: usingPrebuiltWrapp ? prebuiltWrapp : nil) { outcome in
-            let disk1 = try #require(
-                InstallerPaths.diskISO(for: game, diskNumber: 1),
-                "disk-1.iso not found for \(game.id) at \(TestPaths.installersDir.path)/\(game.id)/"
+            let discs = try #require(
+                InstallerPaths.discs(for: game),
+                "\(game.id)'s disc images aren't all in \(InstallerPaths.discFolder(for: game))"
             )
-            let disk2 = InstallerPaths.diskISO(for: game, diskNumber: 2)
+            let disk1 = try #require(discs.first)
+            let disk2 = discs.dropFirst().first
             if game.diskCount > 1 {
-                outcome.expect(disk2 != nil, "Game \(game.id) requires \(game.diskCount) disks but disk-2.iso not found")
+                outcome.expect(disk2 != nil, "Game \(game.id) requires \(game.diskCount) disks but its edition has one")
             }
             return IntegrationGameRun.Build(
                 expectedEngine: game.gameEngine,

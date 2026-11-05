@@ -155,12 +155,13 @@ needs a sample of one.
   embedded names, recognising and extracting a Cider package (built in the
   test with `tar`), the path mapping, and `HER_INSTALLER_PATH`.
 - **Integration tests:** `HerDownloadInstallIntegrationTests` builds and
-  launches every download it finds: `installers/<slug>/her-download*.exe` or
-  `her-download*.dmg`, once each. A Mac download's row in `sc`'s table is
-  `<slug> mac`.
+  launches every download in the
+  [installers store](testing.md#the-installers-store), each Her edition's
+  `<bundle id>/her-windows/installer.exe` or `<bundle id>/her-mac/installer.dmg`,
+  once each. A Mac download's row in `sc`'s table is `<slug> mac`.
 
 ```shell
-./sc test integration --source her-download                  # every download in installers/
+./sc test integration --source her-download                  # every download in the installers store
 ./sc test integration scarlet-hand --source her-download
 ./sc wrapp build trail-of-the-twister --from her-download    # or --her-download <file>
 ```

@@ -18,6 +18,7 @@ import Testing
 @testable import WrappFormat
 @testable import WrappLogging
 import GameCatalog
+import WrappBuilder
 
 // Rename the kevent C syscall so it doesn't collide with Swift's kevent struct init.
 @_silgen_name("kevent")
@@ -158,8 +159,14 @@ enum TestPaths {
             .deletingLastPathComponent()  // repo root
     }()
 
-    /// The `installers/` directory at the repo root.
-    static let installersDir: URL = repoRoot.appendingPathComponent("installers")
+    /// The Mac's installers store: `SECOND_CHANCE_INSTALLERS` (set by `sc
+    /// test` as `TEST_RUNNER_SECOND_CHANCE_INSTALLERS`), else
+    /// `/Users/Shared/second-chance/installers` (docs/testing.md#the-installers-store).
+    static let installers = InstallersStore.current()
+
+    /// The repo's program bundles' manifests, which say where in the
+    /// installers store each game's installers are.
+    static let manifests: [Manifest] = InstallersStore.manifests(bundles: repoRoot.appendingPathComponent("Bundles"))
 
     /// Where prebuilt wrapps live: `WRAPPS_DIR` (set by `sc test` as
     /// `TEST_RUNNER_WRAPPS_DIR` from its `--wrapps-dir`), else `built-apps/`.
@@ -171,77 +178,50 @@ enum TestPaths {
     }()
 }
 
-/// Resolves installer ISO paths for a given game.
+/// A game's installers in the installers store, found from its manifest.
 enum InstallerPaths {
-    /// The path to `installers/<slug>/disk-N.iso`, or `nil` if it doesn't exist.
-    static func diskISO(for game: GameInfo, diskNumber: Int) -> URL? {
-        let isoURL = TestPaths.installersDir
-            .appendingPathComponent(game.id)
-            .appendingPathComponent("disk-\(diskNumber).iso")
-
-        return FileManager.default.fileExists(atPath: isoURL.path) ? isoURL : nil
+    static func manifest(of game: GameInfo) -> Manifest? {
+        TestPaths.manifests.first { $0.id == game.programID }
     }
 
-    /// The game's Her Interactive downloads: `installers/<slug>/her-download*`
-    /// with a `.exe` (Windows installer) or `.dmg` (Mac download) extension,
-    /// the Windows one first.
-    static func herDownloads(for game: GameInfo) -> [URL] {
-        let dir = TestPaths.installersDir.appendingPathComponent(game.id)
-        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        return ["exe", "dmg"].flatMap { ext in
-            files.filter { $0.lastPathComponent.lowercased().hasPrefix("her-download") && $0.pathExtension.lowercased() == ext }
-                .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        }
+    /// The game's disc images, its disc edition's `disc-1`, `disc-2`… in
+    /// order, or `nil` unless every one is there.
+    static func discs(for game: GameInfo) -> [URL]? {
+        manifest(of: game).flatMap { TestPaths.installers.found($0, source: .disc).first?.files }
     }
 
-    /// The path to a directory containing the disk contents (as an alternative
-    /// to an ISO). Returns `nil` if no such directory exists.
-    static func diskDirectory(for game: GameInfo) -> URL? {
-        let dirURL = TestPaths.installersDir.appendingPathComponent(game.id)
-        var isDir: ObjCBool = false
-        guard FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDir),
-              isDir.boolValue else { return nil }
+    /// Where the game's disc images go, for a message saying they aren't there.
+    static func discFolder(for game: GameInfo) -> String {
+        let edition = manifest(of: game)?.editions.first { $0.source == .disc }?.id ?? "cd"
+        return TestPaths.installers.folder(program: game.programID, edition: edition).path
+    }
 
-        // Only return it if it contains files (not just disk-N.iso at top level)
-        let contents = try? FileManager.default.contentsOfDirectory(atPath: dirURL.path)
-        return (contents?.isEmpty == false) ? dirURL : nil
+    /// The game's Her Interactive downloads, one for each of its Her
+    /// editions in the store: the Windows installer and the Mac download,
+    /// in the manifest's order.
+    static func herDownloads(for game: GameInfo) -> [InstallersStore.Found] {
+        manifest(of: game).map { TestPaths.installers.found($0, source: .herDownload) } ?? []
     }
 }
 
-/// Whether any installer ISOs are present in `installers/`. Used by the
+/// Whether any game's disc images are in the installers store. Used by the
 /// `.disabled(if:)` trait so integration tests no-op cleanly on CI / machines
-/// without the (gitignored) real installers.
+/// without the real installers.
 enum InstallersPresent {
     /// Set by `sc test integration` (as `TEST_RUNNER_REQUIRE_INSTALLERS`) when the
-    /// integration suite was asked for by name. Then a missing ISO must fail
-    /// the run — the per-game `#require` reports the path it looked at —
+    /// integration suite was asked for by name. Then a missing image must fail
+    /// the run — the per-game `#require` reports where it looked —
     /// rather than disable the suite and let it pass having tested nothing.
     static let required = ProcessInfo.processInfo.environment["REQUIRE_INSTALLERS"] == "1"
 
     /// Whether the integration suite should run: always when required,
-    /// otherwise only if some `installers/<slug>/disk-1.iso` exists.
+    /// otherwise only if some game's disc images are in the store.
     static func shouldRun() -> Bool {
         required || check()
     }
 
     static func check() -> Bool {
-        let fm = FileManager.default
-        let entries: [String]
-        do {
-            entries = try fm.contentsOfDirectory(atPath: TestPaths.installersDir.path)
-        } catch {
-            TestConsole.echo(
-                Data("Cannot read \(TestPaths.installersDir.path): \(error.localizedDescription)\n".utf8),
-                title: "Installers directory"
-            )
-            return false
-        }
-        for entry in entries {
-            let dir = TestPaths.installersDir.appendingPathComponent(entry)
-            let iso = dir.appendingPathComponent("disk-1.iso")
-            if fm.fileExists(atPath: iso.path) { return true }
-        }
-        return false
+        TestPaths.manifests.contains { !TestPaths.installers.found($0, source: .disc).isEmpty }
     }
 }
 

@@ -71,7 +71,7 @@ its hash in the setup script (or the patch manifest) too. winetricks is committe
 ```bash
 ./sc app build                 # Build Second Chance.app
 ./sc app run                   # Build it and launch it, with its log in this terminal
-./sc wrapp build <game-slug>   # Build a game's wrapp without the GUI, from installers/<game-slug>/
+./sc wrapp build <game-slug>   # Build a game's wrapp without the GUI, from its disc in the installers store
 ./sc wrapp run <game-slug>     # Launch that wrapp
 ```
 
@@ -108,8 +108,12 @@ In Xcode, set **Build Settings → Build Active Architecture Only → Debug → 
 ./sc lint                             # SwiftLint and markdownlint, as CI runs them
 ```
 
-Integration tests need the game's installer in `installers/<game-slug>/`. Running them for every game takes hours and
-keeps bringing a full-screen game to the front, so name the games rather than running them all.
+Integration tests need the game's disc images in this Mac's installers store, `/Users/Shared/second-chance/installers`,
+where its manifest says they go: `nancy-drew/old-clock/cd/disc-1.iso` for Old Clock's disc, `disc-2.iso` beside it for a
+second, and a Her download as `<bundle id>/her-windows/installer.exe`. Anything kept with a game that no build reads goes
+in `<bundle id>/extras/`. `./sc installers list` shows what's there, and `./sc installers migrate` moves installers kept
+the old way (`installers/<game-slug>/disk-1.iso`) into place. Running the tests for every game takes hours and keeps
+bringing a full-screen game to the front, so name the games rather than running them all.
 [docs/testing.md](docs/testing.md) covers it all.
 
 ### Running integration tests without losing your Mac
@@ -131,8 +135,8 @@ It asks for your password twice: once for `sudo`, to make the account, and once 
 where it keeps the account's password. It also:
 
 - lets the account in over SSH and Screen Sharing with your SSH keys, so `sc` can reach it;
-- moves your checkout's `installers/` into `/Users/Shared/second-chance/installers`, where every account on the Mac
-  shares one copy, and leaves a link in its place;
+- makes the installers store, `/Users/Shared/second-chance/installers`, if the Mac has none, where every account on
+  the Mac shares one copy;
 - starts the **keep-alive**.
 
 **Why the keep-alive.** macOS only keeps drawing a background account's screen while someone is watching it through

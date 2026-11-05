@@ -2,6 +2,7 @@ import ArgumentParser
 import Foundation
 import Testing
 @testable import SCKit
+import WrappBuilder
 
 @Suite("Swift Testing output parsing")
 struct TestEventTests {
@@ -330,6 +331,10 @@ struct BuildStatusLineTests {
     }
 }
 
+/// This checkout, whose bundles the installers store is laid out by.
+let repoRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+
 @Suite("Games and sources")
 struct GameTests {
     @Test("Slugs resolve from the app's own catalog")
@@ -340,24 +345,28 @@ struct GameTests {
         #expect(Catalog.games.count > 30)
     }
 
-    @Test("Disk sources find images and refuse missing second disks")
+    @Test("Disk sources find images in the store and refuse missing second disks")
     func diskSource() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-installers-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
-        let oneDisk = try #require(Catalog.games.first { $0.diskCount == 1 })
-        let twoDisk = try #require(Catalog.games.first { $0.diskCount == 2 })
+        let oneDisk = try #require(Catalog.game(slug: "old-clock"))
+        let twoDisk = try #require(Catalog.game(slug: "secrets-can-kill"))
+        #expect(oneDisk.diskCount == 1 && twoDisk.diskCount == 2)
         for game in [oneDisk, twoDisk] {
-            try FileManager.default.createDirectory(at: dir.appendingPathComponent(game.slug), withIntermediateDirectories: true)
-            FileManager.default.createFile(atPath: dir.appendingPathComponent("\(game.slug)/disk-1.iso").path, contents: Data())
+            let edition = dir.appendingPathComponent("\(game.programID)/cd")
+            try FileManager.default.createDirectory(at: edition, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: edition.appendingPathComponent("disc-1.iso").path, contents: Data())
         }
-        let repo = Repo(root: dir)
+        let repo = Repo(root: repoRoot, installers: InstallersStore(root: FileManager.default.temporaryDirectory.appendingPathComponent("sc-none")))
         var source = try DiskSourceOptions.parse(["--installers-dir", dir.path])
         let env = try source.environment(for: oneDisk, repo: repo)
         #expect(env["INSTALLATION_SOURCE"] == "disk")
-        #expect(env["DISK_1_PATH"]?.hasSuffix("\(oneDisk.slug)/disk-1.iso") == true)
+        #expect(env["DISK_1_PATH"]?.hasSuffix("\(oneDisk.programID)/cd/disc-1.iso") == true)
         #expect(env["DISK_2_PATH"] == nil)
         #expect(throws: SCError.self) { try source.environment(for: twoDisk, repo: repo) }
-        #expect(Set(source.availableGames(repo: repo).map(\.slug)) == [oneDisk.slug, twoDisk.slug])
+        #expect(source.availableGames(repo: repo).map(\.slug) == [oneDisk.slug])
+        FileManager.default.createFile(atPath: dir.appendingPathComponent("\(twoDisk.programID)/cd/disc-2.iso").path, contents: Data())
+        #expect(try source.environment(for: twoDisk, repo: repo)["DISK_2_PATH"]?.hasSuffix("/cd/disc-2.iso") == true)
         source = try DiskSourceOptions.parse(["--disk", "/nonexistent.iso"])
         #expect(throws: SCError.self) { try source.environment(for: oneDisk, repo: repo) }
     }
@@ -383,25 +392,24 @@ struct GameTests {
     func herDownloadSource() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("sc-her-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
-        let repo = Repo(root: root)
+        let repo = Repo(root: repoRoot, installers: InstallersStore(root: root))
         let windows = try #require(Catalog.game(slug: "scarlet-hand"))
         let both = try #require(Catalog.game(slug: "trail-of-the-twister"))
         let none = try #require(Catalog.game(slug: "stay-tuned"))
-        let installers = repo.defaultInstallersDir
-        for (slug, files) in [(windows.slug, ["her-download-Setup.exe", "disk-1.iso"]),
-                              (both.slug, ["her-download-mac.dmg", "her-download-windows.exe"])] {
-            let dir = installers.appendingPathComponent(slug)
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            for file in files { try Data().write(to: dir.appendingPathComponent(file)) }
+        for path in ["nancy-drew/scarlet-hand/her-windows/installer.exe", "nancy-drew/scarlet-hand/cd/disc-1.iso",
+                     "nancy-drew/trail-of-the-twister/her-mac/installer.dmg", "nancy-drew/trail-of-the-twister/her-windows/installer.exe"] {
+            let file = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: file)
         }
 
         let source = try HerDownloadSourceOptions.parse([])
         let env = try source.environment(for: windows, repo: repo)
         #expect(env["INSTALLATION_SOURCE"] == "her-download")
-        #expect(env["HER_INSTALLER_PATH"]?.hasSuffix("scarlet-hand/her-download-Setup.exe") == true)
+        #expect(env["HER_INSTALLER_PATH"]?.hasSuffix("scarlet-hand/her-windows/installer.exe") == true)
         #expect(throws: SCError.self) { try source.environment(for: both, repo: repo) }
         #expect(throws: SCError.self) { try source.environment(for: none, repo: repo) }
-        #expect(Games.herDownloads(for: both.slug, in: installers).map(\.pathExtension) == ["exe", "dmg"])
+        #expect(Games.herDownloads(for: both, repo: repo).map(\.format) == ["windows", "mac"])
         #expect(Set(source.availableGames(repo: repo).map(\.slug)) == [windows.slug, both.slug])
     }
 
@@ -763,12 +771,13 @@ struct DotEnvTests {
         #expect(Remote.excludes.contains("Packages/*/.build"))
     }
 
-    @Test("--on sends installers by a sync of their own, which follows links and never deletes the other Mac's")
+    @Test("--on sends this Mac's installers store to the other Mac's, links as links, never deleting what's there")
     func installersSync() {
         #expect(Remote.installersExclude == ["--exclude", "/installers"])
-        let sync = Remote.installersSync(host: "mac", path: "~/sc")
-        #expect(sync.suffix(2) == ["installers/", "mac:~/sc/installers/"])
+        let sync = Remote.installersSync(from: URL(fileURLWithPath: "/stores/installers"), host: "mac")
+        #expect(sync.suffix(2) == ["/stores/installers/", "mac:/Users/Shared/second-chance/installers/"])
         #expect(!sync.contains("--delete"))
+        #expect(sync.first == "-rl")
         // Another user's files in the shared store: no times or attributes to set, and no Finder litter.
         #expect(!sync.contains("-aE") && sync.contains("--size-only"))
         #expect(sync.contains(".DS_Store"))
@@ -776,12 +785,22 @@ struct DotEnvTests {
         #expect(sync.contains("--rsync-path=/usr/bin/lockf -k /tmp/second-chance-installers-sync.lock /usr/bin/rsync"))
     }
 
-    @Test("Before sending installers, the checkout there links to the Mac's shared ones, if it has none of its own")
-    func linkInstallers() {
-        let command = Remote.linkInstallersCommand(path: "~/tmp/second chance")
-        #expect(command.hasPrefix("mkdir -p ~/'tmp/second chance' && cd ~/'tmp/second chance'"))
-        #expect(command.contains("[ -e installers ] || [ -L installers ]"))
-        #expect(command.hasSuffix("|| ln -s '/Users/Shared/second-chance/installers' installers; }"))
+    @Test("Before sending installers, the other Mac's store is made if it has none, and listed for its layout")
+    func prepareInstallers() {
+        let command = Remote.prepareInstallersCommand(path: "~/tmp/second chance")
+        #expect(command.hasPrefix("mkdir -p ~/'tmp/second chance' && { [ -d '/Users/Shared/second-chance/installers' ] ||"))
+        #expect(command.contains("chmod +a 'everyone allow"))
+        #expect(command.contains("ls -d '/Users/Shared/second-chance/installers'/*/disk-*.iso"))
+    }
+
+    @Test("Installers aren't sent between a store in the old layout and one in the new")
+    func layoutMismatch() {
+        #expect(Remote.layoutMismatch(localIsOld: false, remoteIsOld: false, host: "mac", rawTarget: "mac") == nil)
+        #expect(Remote.layoutMismatch(localIsOld: true, remoteIsOld: true, host: "mac", rawTarget: "mac") == nil)
+        #expect(Remote.layoutMismatch(localIsOld: false, remoteIsOld: true, host: "mac", rawTarget: "mac:~/x")?
+            .contains("sc --on mac:~/x installers migrate") == true)
+        #expect(Remote.layoutMismatch(localIsOld: true, remoteIsOld: false, host: "mac", rawTarget: "mac")?
+            .contains("Run sc installers migrate here") == true)
     }
 
     @Test("Of DerivedData, --on syncs only the built products")

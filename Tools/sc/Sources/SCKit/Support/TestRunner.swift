@@ -1,5 +1,6 @@
 import Foundation
 import Noora
+import WrappBuilder
 
 /// One finished xcodebuild test run.
 struct TestRun: Sendable {
@@ -23,7 +24,7 @@ enum IntegrationSource: String, CaseIterable, Sendable {
     case download
 
     /// Whether the source's suite tests `game`, given the games sold on
-    /// disc, those with Her downloads in installers/ and those with a
+    /// disc, those with Her downloads in the installers store and those with a
     /// download edition.
     func tests(_ game: CatalogGame, discs: Set<String>, herDownloads: Set<String>, downloads: Set<String>) -> Bool {
         switch self {
@@ -126,7 +127,8 @@ struct TestRunner {
             guard let event = TestEvent.parse(line) else { return }
             if let keep = board.apply(event), live { ui.line(ui.format("\(.danger(keep))")) }
         }
-        let env = ["TEST_RUNNER_REPO_ROOT": repo.root.path]
+        // The detection suite reads every disc image and Her download in the store.
+        let env = ["TEST_RUNNER_REPO_ROOT": repo.root.path, "TEST_RUNNER_\(InstallersStore.environmentVariable)": repo.installers.root.path]
             .merging(Self.hostEnvironment(dotEnv: DotEnv.load(repo))) { _, new in new }
 
         let status = try await runSuite(
@@ -158,11 +160,11 @@ struct TestRunner {
     ) async throws -> TestRun {
         let games = requested.isEmpty ? Catalog.games : requested
         // Each source tests the games it can build: the Steam suite, those on
-        // Steam; the Her suite, those with a Her download in installers/; the
+        // Steam; the Her suite, those with a Her download in the installers store; the
         // Big Fish suites, those Big Fish sells; the download suite, those
         // with a download edition.
         let soldOnDisc = Set(Catalog.games.filter { $0.hasEdition(source: "disc", repo: repo) }.map(\.slug))
-        let withHerDownloads = Set(Games.withHerDownloads(in: repo.defaultInstallersDir).map(\.slug))
+        let withHerDownloads = Set(Games.withHerDownloads(repo: repo).map(\.slug))
         let toDownload = Set(DownloadSourceOptions().availableGames(repo: repo).map(\.slug))
         let entries = sources.flatMap { source in
             games.filter { source.tests($0, discs: soldOnDisc, herDownloads: withHerDownloads, downloads: toDownload) }
@@ -199,6 +201,7 @@ struct TestRunner {
         let sizes = IntegrationSizes(testResults: repo.testResults)
         var env = [
             "TEST_RUNNER_REPO_ROOT": repo.root.path,
+            "TEST_RUNNER_\(InstallersStore.environmentVariable)": repo.installers.root.path,
             "TEST_RUNNER_PROGRESS_PATH": progressFile.path,
             "TEST_RUNNER_WRAPPS_DIR": wrappsDir.path,
             "TEST_RUNNER_SIZE_ESTIMATES_PATH": sizes.url.path,
@@ -231,8 +234,8 @@ struct TestRunner {
             guard entry.source == IntegrationSource.herDownload.rawValue else {
                 return [(source: entry.source, slug: entry.game.slug, engine: entry.game.engine)]
             }
-            return Games.herDownloads(for: entry.game.slug, in: repo.defaultInstallersDir).map { file in
-                let label = file.pathExtension.lowercased() == "dmg" ? "\(entry.game.slug) mac" : entry.game.slug
+            return Games.herDownloads(for: entry.game, repo: repo).map { download in
+                let label = download.format == "mac" ? "\(entry.game.slug) mac" : entry.game.slug
                 return (source: entry.source, slug: label, engine: entry.game.engine)
             }
         })

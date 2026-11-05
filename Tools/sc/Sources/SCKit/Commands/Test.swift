@@ -58,7 +58,7 @@ struct IntegrationOptions: ParsableArguments {
     @Option(help: ArgumentHelp(
         "Which builds to test: disk, steam, her-download, big-fish, big-fish-trial, download, or all — comma-separated. Default: disk.",
         discussion: "steam builds each game from Steam with the saved Steam sign-in (docs/steam.md) and skips games the account doesn't own. "
-            + "her-download builds each game from every installers/<slug>/her-download*.exe or .dmg (docs/her-download.md). "
+            + "her-download builds each game from every Her download in the installers store (docs/her-download.md). "
             + "big-fish builds each game Big Fish sells, signed in with the test account in .env (BIG_FISH_EMAIL, BIG_FISH_PASSWORD), "
             + "and skips games the account doesn't own; big-fish-trial builds each one's free trial, signed out (docs/big-fish.md). "
             + "download builds each program with a download edition from the URLs its bundle names (docs/wrapp-build.md#the-download-source). "
@@ -247,7 +247,7 @@ struct TestIntegrationCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "integration",
         abstract: "Install, launch and quit games for real (minutes per game).",
-        discussion: "Needs the games' disk images in installers/<slug>/. Missing images fail rather than skip."
+        discussion: "Needs the games' disc images in the installers store (docs/testing.md#the-installers-store). Missing images fail rather than skip."
     )
 
     @OptionGroup var global: GlobalOptions

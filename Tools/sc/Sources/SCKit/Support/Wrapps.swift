@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import WrappBuilder
 
 // MARK: - Sources
 
@@ -26,43 +27,47 @@ protocol WrappSourceInput {
 /// `--from disk`: the game's CD images.
 struct DiskSourceOptions: ParsableArguments, WrappSourceInput {
     @Option(help: ArgumentHelp(
-        "Where disk images live, as <dir>/<slug>/disk-1.iso. Default: $INSTALLERS_DIR, else installers/.",
+        "The installers store to read disc images from. Default: $SECOND_CHANCE_INSTALLERS, else /Users/Shared/second-chance/installers.",
         valueName: "dir"
     ))
     var installersDir: String?
 
     @Option(name: .customLong("disk"), help: ArgumentHelp(
-        "A disk image to install from (repeat for disk 2). Overrides the installers directory.",
+        "A disk image to install from (repeat for disk 2). Overrides the installers store.",
         valueName: "iso"
     ))
     var disks: [String] = []
 
-    func installersURL(_ repo: Repo) -> URL {
-        installersDir.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true) }
-            ?? repo.defaultInstallersDir
+    /// `repo`, reading the store `--installers-dir` names if it names one.
+    func reading(_ repo: Repo) -> Repo {
+        guard let installersDir else { return repo }
+        var repo = repo
+        repo.installers = InstallersStore(root: URL(fileURLWithPath: (installersDir as NSString).expandingTildeInPath, isDirectory: true))
+        return repo
     }
 
     func availableGames(repo: Repo) -> [CatalogGame] {
-        Games.withInstallers(in: installersURL(repo))
+        Games.withInstallers(repo: reading(repo))
     }
 
     var availabilityDescription: String { "installers" }
 
     func environment(for game: CatalogGame, repo: Repo) throws -> [String: String] {
+        let repo = reading(repo)
         var images: [URL]
         if disks.isEmpty {
-            let dir = installersURL(repo).appendingPathComponent(game.slug)
-            images = (1...max(game.diskCount, 1)).map { dir.appendingPathComponent("disk-\($0).iso") }
-            guard FileManager.default.fileExists(atPath: images[0].path) else {
+            guard let found = Games.discs(for: game, repo: repo) else {
                 let available = availableGames(repo: repo).map(\.slug)
+                let edition = repo.manifest(of: game)?.editions.first { $0.source == .disc }
+                let folder = edition.map { repo.installers.folder(program: game.programID, edition: $0.id) }
+                let inputs = edition.map { InstallersStore.fileInputs(of: $0).map { "\($0.id).iso" }.joined(separator: " and ") } ?? "disc-1.iso"
                 throw SCError(
-                    "No disk image for \(game.slug) at \(repo.display(images[0])).",
-                    hints: available.isEmpty
-                        ? ["Put the game's disk images in \(repo.display(installersURL(repo)))/<slug>/disk-1.iso, or pass --disk."]
-                        : ["Games with installers: \(available.joined(separator: ", "))", "Or pass the image with --disk."]
+                    folder.map { "No disc images for \(game.slug): put \(inputs) in \($0.path)." } ?? "\(game.title) wasn't sold on disc.",
+                    hints: (available.isEmpty ? [] : ["Games with installers: \(available.joined(separator: ", "))"])
+                        + ["Or pass the image with --disk."]
                 )
             }
-            images = images.filter { FileManager.default.fileExists(atPath: $0.path) }
+            images = found.files
         } else {
             images = disks.map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
             for image in images where !FileManager.default.fileExists(atPath: image.path) {
@@ -71,7 +76,7 @@ struct DiskSourceOptions: ParsableArguments, WrappSourceInput {
         }
         if game.diskCount > images.count {
             throw SCError("\(game.title) has \(game.diskCount) disks, but only \(images.count) image was found.",
-                          hints: ["Add disk-2.iso next to disk-1.iso, or pass both with --disk."])
+                          hints: ["Pass both with --disk."])
         }
         var env = ["INSTALLATION_SOURCE": "disk", "DISK_1_PATH": images[0].path]
         if images.count > 1 { env["DISK_2_PATH"] = images[1].path }
@@ -120,13 +125,13 @@ struct SteamSourceOptions: ParsableArguments, WrappSourceInput {
 /// installer (.exe) or Mac download (.dmg) (docs/her-download.md).
 struct HerDownloadSourceOptions: ParsableArguments, WrappSourceInput {
     @Option(name: .customLong("her-download"), help: ArgumentHelp(
-        "The download to build from. Default: the one in <installers>/<slug>/ named her-download*.exe or her-download*.dmg.",
+        "The download to build from. Default: the game's in the installers store, <bundle id>/<edition>/installer.exe or .dmg.",
         valueName: "file"
     ))
     var download: String?
 
     func availableGames(repo: Repo) -> [CatalogGame] {
-        Games.withHerDownloads(in: repo.defaultInstallersDir)
+        Games.withHerDownloads(repo: repo)
     }
 
     var availabilityDescription: String { "Her Interactive downloads" }
@@ -139,17 +144,20 @@ struct HerDownloadSourceOptions: ParsableArguments, WrappSourceInput {
                 throw SCError("Her download not found: \(file.path)")
             }
         } else {
-            let found = Games.herDownloads(for: game.slug, in: repo.defaultInstallersDir)
-            guard let first = found.first else {
+            let found = Games.herDownloads(for: game, repo: repo)
+            guard let first = found.first?.files.first else {
                 let available = availableGames(repo: repo).map(\.slug)
+                let folders = (repo.manifest(of: game)?.editions ?? []).filter { $0.source == .herDownload }
+                    .map { repo.installers.folder(program: game.programID, edition: $0.id).path }
                 throw SCError(
-                    "No Her Interactive download for \(game.slug) in \(repo.display(repo.defaultInstallersDir.appendingPathComponent(game.slug))).",
-                    hints: ["Name it her-download-<anything>.exe or .dmg, or pass --her-download."]
+                    "No Her Interactive download for \(game.slug) in the installers store.",
+                    hints: (folders.isEmpty ? ["\(game.title) has no Her download edition."]
+                        : ["Put it in \(folders.joined(separator: " or ")) as installer.exe (Windows) or installer.dmg (Mac), or pass --her-download."])
                         + (available.isEmpty ? [] : ["Games with Her downloads: \(available.joined(separator: ", "))"])
                 )
             }
             guard found.count == 1 else {
-                throw SCError("\(game.slug) has more than one Her download: \(found.map(\.lastPathComponent).joined(separator: ", ")).",
+                throw SCError("\(game.slug) has more than one Her download: \(found.map(\.edition).joined(separator: ", ")).",
                               hints: ["Pick one with --her-download."])
             }
             file = first

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import WrappBuilder
 import WrappFormat
 
@@ -9,6 +10,10 @@ import WrappFormat
 /// so `sc` works from any directory inside the repo.
 struct Repo: Sendable {
     let root: URL
+    /// The Mac's installers store (`$SECOND_CHANCE_INSTALLERS`, else
+    /// `/Users/Shared/second-chance/installers`): every checkout's, and no
+    /// checkout's own (docs/testing.md#the-installers-store).
+    var installers: InstallersStore = .current()
 
     static func locate() throws -> Repo {
         let env = ProcessInfo.processInfo.environment
@@ -62,12 +67,22 @@ struct Repo: Sendable {
 
     var defaultWrappsDir: URL { root.appendingPathComponent("built-apps") }
 
-    /// `$INSTALLERS_DIR` when set, else `installers/`.
-    var defaultInstallersDir: URL {
-        if let override = ProcessInfo.processInfo.environment["INSTALLERS_DIR"], !override.isEmpty {
-            return URL(fileURLWithPath: override, isDirectory: true)
+    /// Every program bundle's manifest that loads, read once: what the
+    /// installers store is laid out by.
+    var manifests: [Manifest] {
+        Self.manifestCache.withLock { cache in
+            if let found = cache[bundles.path] { return found }
+            let loaded = InstallersStore.manifests(bundles: bundles)
+            cache[bundles.path] = loaded
+            return loaded
         }
-        return root.appendingPathComponent("installers")
+    }
+
+    private static let manifestCache = Mutex<[String: [Manifest]]>([:])
+
+    /// The manifest of `game`'s program bundle.
+    func manifest(of game: CatalogGame) -> Manifest? {
+        manifests.first { $0.id == game.programID }
     }
 
     /// The layer cache builds keep (`LayerStore`, `~/Library/Caches/SecondChance/layers`).

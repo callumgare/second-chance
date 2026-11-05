@@ -1,4 +1,5 @@
 import Foundation
+import WrappBuilder
 
 /// `--on <host>[:<path>]`: run the same command on another Mac.
 ///
@@ -93,23 +94,26 @@ enum Remote {
         "Packages/*/.build", "Packages/*/.swiftpm", "/build", ".DS_Store",
     ]
 
-    /// Local-only folders of gigabytes (the installers, the porting
-    /// workspace) that only commands building, running or testing games can
-    /// read. Anything else, such as driving a puppet session or claiming a test
-    /// session, leaves them out: a test user's first sync would otherwise copy
-    /// them all into its own home. Left out, they're never deleted there.
-    static let heavy = ["/installers", "/.local"]
+    /// Local-only folders of gigabytes (the porting workspace) that only
+    /// commands building, running or testing games can read. Anything else,
+    /// such as driving a puppet session or claiming a test session, leaves
+    /// them out: a test user's first sync would otherwise copy them all into
+    /// its own home. Left out, they're never deleted there.
+    static let heavy = ["/.local"]
+
+    /// Commands that read none of the heavy folders, nor installers.
+    static let lightCommands: Set = ["puppet", "session", "lease", "attach", "lint", "generate", "clean", "setup", "installers"]
 
     static func heavyFilters(for arguments: [String]) -> [String] {
-        let light: Set = ["puppet", "session", "lease", "attach", "lint", "generate", "clean", "setup"]
-        return light.contains(arguments.first ?? "") ? heavy.flatMap { ["--exclude", $0] } : []
+        lightCommands.contains(arguments.first ?? "") ? heavy.flatMap { ["--exclude", $0] } : []
     }
 
-    /// Whether the command may read installers/: not when every source it
-    /// names (`--source` for a test run, `--from` for a build) gets its game
-    /// some other way, so a download test into a test session doesn't wait on
-    /// tens of gigabytes of disc images.
+    /// Whether the command may read installers: not a light command, and
+    /// not one whose every source (`--source` for a test run, `--from` for
+    /// a build) gets its game some other way, so a download test into a
+    /// test session doesn't wait on tens of gigabytes of disc images.
     static func readsInstallers(_ arguments: [String]) -> Bool {
+        if lightCommands.contains(arguments.first ?? "") { return false }
         let fetched: Set = ["download", "steam", "big-fish", "big-fish-trial"]
         var values: [String] = []
         for (index, argument) in arguments.enumerated() {
@@ -122,40 +126,52 @@ enum Remote {
         return sources.isEmpty || !sources.allSatisfy(fetched.contains)
     }
 
-    /// Never in the main sync: installers go by a sync of their own
-    /// (`installersSync`), so a link at either end is followed, into the Mac's
-    /// shared installers, rather than replaced.
+    /// Never in the main sync: a checkout's `installers/` from before the
+    /// installers store, which `sc installers migrate` empties.
     static let installersExclude = ["--exclude", "/installers"]
 
-    /// The installers' own sync, for commands that read them: the folder's
-    /// contents into the folder there, whether either is a link. Never
+    /// The installers' own sync, for commands that read them: this Mac's
+    /// store into the other Mac's, which is at the usual place there
+    /// (`InstallersStore.defaultRoot`). Links go as links, so a disc image
+    /// linked to one of its alternatives is linked the same there. Never
     /// `--delete`: the other Mac may hold installers this one doesn't have.
-    /// No `-t` or `-E`, and files are compared by size: the shared store's
-    /// files belong to whoever put them there, and another user is let write
-    /// them but not set their times or extended attributes, which made the
+    /// No `-t` or `-E`, and files are compared by size: the store's files
+    /// belong to whoever put them there, and another user is let write them
+    /// but not set their times or extended attributes, which made the
     /// receiver quit (`utimensat: Permission denied`) and the sync fail.
     /// Finder's `.DS_Store` stays behind, as in the main sync.
     /// One at a time on each Mac: the receiving rsync waits for a lock
     /// (`lockf`, on a file every user can open), since test users' syncs
-    /// share one installers folder, and two writing the same files at once
-    /// each read the other's half-written copy as their basis.
-    static func installersSync(host: String, path: String) -> [String] {
+    /// share one store, and two writing the same files at once each read
+    /// the other's half-written copy as their basis.
+    static func installersSync(from store: URL, host: String) -> [String] {
         ["-rl", "--size-only", "--exclude", ".DS_Store", "--rsync-path=\(installersReceiver)",
-         "installers/", "\(host):\(path)/installers/"]
+         store.path + "/", "\(host):\(InstallersStore.defaultRoot.path)/"]
     }
 
     static let installersSyncLock = "/tmp/second-chance-installers-sync.lock"
     static let installersReceiver = "/usr/bin/lockf -k \(installersSyncLock) /usr/bin/rsync"
 
-    /// Before a sync that sends installers: make the checkout there, and,
-    /// when that Mac has shared installers (`sc session add`) and the checkout
-    /// none, link its `installers` to them. Otherwise a test user's first run
-    /// would copy every installer into its own home.
-    static func linkInstallersCommand(path: String) -> String {
-        let dir = path.hasPrefix("~/") ? "~/" + quote(String(path.dropFirst(2))) : quote(path)
-        let store = SessionPool.installers.path
-        return "mkdir -p \(dir) && cd \(dir) && { [ -e installers ] || [ -L installers ] || [ ! -d \(quote(store)) ] "
-            + "|| ln -s \(quote(store)) installers; }"
+    /// Before a sync that sends installers: make the checkout there and,
+    /// when that Mac has no installers store yet, the store, writable by
+    /// every user (as `sc session add` makes it). Then lists what in the store
+    /// there is named as installers were before `sc installers migrate`
+    /// (`<folder>/disk-1.iso`), for `InstallersStore.isLegacy`.
+    static func prepareInstallersCommand(path: String) -> String {
+        let dir = shellPath(path)
+        let store = quote(InstallersStore.defaultRoot.path)
+        return "mkdir -p \(dir) && { [ -d \(store) ] || { mkdir -p \(store) && chmod +a \(quote(SessionPool.everyoneACL)) \(store); }; } "
+            + "&& { ls -d \(store)/*/disk-*.iso \(store)/*/her-download* 2>/dev/null || true; }"
+    }
+
+    /// Why installers aren't sent when one Mac's store has been migrated and
+    /// the other's hasn't: sent, every installer would be there twice, once
+    /// in each layout, until that Mac's was migrated.
+    static func layoutMismatch(localIsOld: Bool, remoteIsOld: Bool, host: String, rawTarget: String) -> String? {
+        guard localIsOld != remoteIsOld else { return nil }
+        return localIsOld
+            ? "Installers weren't sent to \(host): this Mac's store is in the old layout. Run sc installers migrate here first."
+            : "Installers weren't sent to \(host): its store is in the old layout. Run sc --on \(rawTarget) installers migrate first."
     }
 
     /// Of `DerivedData`, only what was built, `Build/Products`, is synced.
@@ -245,25 +261,32 @@ enum Remote {
             let excludeRules: [String] = excludes.flatMap { ["--exclude", $0] }
             let rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + installersExclude + excludeRules
                 + derivedDataFilters(for: arguments) + heavyFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
-            let sendsInstallers = heavyFilters(for: arguments).isEmpty && readsInstallers(arguments)
-                && FileManager.default.fileExists(atPath: repo.root.appendingPathComponent("installers").path)
+            let sendsInstallers = readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
+            // The checkout there, and its Mac's store, made first.
+            var mismatch: String?
+            if sendsInstallers {
+                let prepared = try await Proc.collect("ssh", ["-T", target.host, prepareInstallersCommand(path: target.path)])
+                guard prepared.succeeded else {
+                    throw SCError("Couldn't make \(target.path) on \(target.host): \(prepared.error.trimmingCharacters(in: .whitespacesAndNewlines))")
+                }
+                let remoteListing = prepared.output.split(whereSeparator: \.isNewline).map(String.init)
+                mismatch = layoutMismatch(localIsOld: repo.installers.hasLegacyLayout(manifests: repo.manifests),
+                                          remoteIsOld: InstallersStore.isLegacy(listing: remoteListing, manifests: repo.manifests),
+                                          host: target.host, rawTarget: rawTarget)
+            }
+            let sendingInstallers = sendsInstallers && mismatch == nil
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
-                    if sendsInstallers {
-                        let linked = try await Proc.collect("ssh", ["-T", target.host, linkInstallersCommand(path: target.path)])
-                        guard linked.succeeded else {
-                            throw SCError("Couldn't make \(target.path) on \(target.host): \(linked.error.trimmingCharacters(in: .whitespacesAndNewlines))")
-                        }
-                    }
                     let status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
-                    guard status == 0, sendsInstallers else { return status }
-                    return try await Proc.stream("/usr/bin/rsync", installersSync(host: target.host, path: target.path), cwd: repo.root) {
+                    guard status == 0, sendingInstallers else { return status }
+                    return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {
                         await sink.line($0)
                     }
                 }
             } catch let error as SCError where error.alreadyReported {
                 throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
             }
+            if let mismatch { ui.warning("\(mismatch)") }
         }
 
         ui.line(ui.format("\(.primary("▸ On \(target.host): sc \(arguments.joined(separator: " "))"))"))

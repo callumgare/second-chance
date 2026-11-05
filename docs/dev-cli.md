@@ -14,7 +14,7 @@ nearest command's help.
 ./sc app run                           # …and run it, logs in this terminal
 ./sc screenshot                        # Picture the app's and a wrapp's screens for review, light and dark
 ./sc screenshot app --on-screen --state welcome --out docs/   # Retake the README's pictures
-./sc wrapp build stay-tuned            # Build a wrapp headlessly from installers/stay-tuned/
+./sc wrapp build stay-tuned            # Build a wrapp headlessly from its disc image in the installers store
 ./sc wrapp run stay-tuned              # Launch it (building it first if there's none)
 ./sc wrapp update stay-tuned           # Put the latest WrappTemplate into it
 ./sc wrapp wine stay-tuned -- regedit  # Run Wine inside its prefix
@@ -22,6 +22,7 @@ nearest command's help.
 ./sc test unit DocsTableTests          # Just that suite, wherever it's declared
 ./sc test integration stay-tuned       # Install, launch and quit one game for real
 ./sc test integration ghost-dogs --vm sc-sequoia  # …launching it in a tart VM
+./sc installers list                   # The disc images and downloads in this Mac's installers store
 ./sc test                              # Runs nothing: says to name unit, integration or all
 ./sc test all                          # Unit, then integration: hours
 ./sc release --dry-run                 # What the next release would contain
@@ -86,8 +87,10 @@ turns the options into the app's `INSTALLATION_SOURCE` and inputs. Adding a
 source is a new case and a new type — the same shape as the app's
 `WrappBuildStrategy`.
 
-`--from her-download` builds from `installers/<slug>/her-download*.exe` or
-`her-download*.dmg`, or from the file `--her-download` names. A game with more
+`--from disk` builds from the game's disc images in the
+[installers store](testing.md#the-installers-store), or from those `--disk`
+names; `--from her-download` from its Her edition's `installer.exe` or
+`installer.dmg` there, or from the file `--her-download` names. A game with more
 than one download needs `--her-download` to pick which
 ([her-download.md](her-download.md)).
 
@@ -311,6 +314,11 @@ test.
 gathers one table naming each row's Mac and session
 ([testing.md](testing.md#sharding-a-run-across-macs)).
 
+`sc installers list` shows which games' installers are in this Mac's
+[installers store](testing.md#the-installers-store), and `sc installers
+migrate` moves installers laid out by slug, as they were before it, to where
+their manifests say (a dry run unless given `--yes`).
+
 [testing.md](testing.md) covers the suites themselves.
 
 ## Lint
@@ -423,10 +431,10 @@ this Mac's build there, so only then are its products sent: any other
 command builds the app there anyway, and products copied while something
 here was rebuilding them arrived half-copied. `.env` stays behind because it holds each Mac's own
 settings, such as whether tests hide their windows there
-([testing.md](testing.md)). `installers/` is sent but protected from
-`--delete` (`Remote.protects`), so the other Mac keeps installers this one
-doesn't have. On the remote Mac, the GUI-session re-run applies as
-usual.
+([testing.md](testing.md)). A command that may read installers (one that
+builds, runs or tests games from a disc or a Her download) also sends this
+Mac's [installers store](testing.md#the-installers-store) to the other Mac's,
+below. On the remote Mac, the GUI-session re-run applies as usual.
 
 - **The sync is macOS's own rsync at both ends** (`/usr/bin/rsync -aE
   --rsync-path=/usr/bin/rsync`), so a remote Mac needs nothing installed.
@@ -446,6 +454,21 @@ usual.
 - **While a run is still going there, `--on` refuses to sync.** rsync would
   replace the build and the sc it is using. Attach to it, or stop it with
   `attach --stop`, first.
+- **Installers go store to store**, by an rsync of their own
+  (`Remote.installersSync`), into the other Mac's store at the usual place,
+  made first (writable by every user) if it has none. Never `--delete`: the
+  other Mac may hold installers this one doesn't. Links go as links, so a
+  disc image linked to one of its alternatives is linked the same there.
+  Files are compared by size, and no times or extended attributes are set:
+  the store's files belong to whoever put them there, and another user may
+  write them but not set those. The receiving rsync waits on a lock
+  (`lockf` on `/tmp/second-chance-installers-sync.lock`) so two syncs into
+  one Mac's store never write the same file at once; `sc installers
+  migrate` takes it too. Commands that read no installers (`session`,
+  `puppet`, `lint`, `installers`, … or a run whose every source downloads)
+  send none. Nor does a sync between a store in the old layout and one in
+  the new, which would hold every installer twice: it says which Mac to run
+  `sc installers migrate` on.
 
 ## The screen lease
 
@@ -579,15 +602,15 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   before its first login: left to run, it holds the session where no sc job
   can start (an Aqua LaunchAgent never runs) while `sc session` still says
   "logged in". A re-run frees a user stuck there, logging it out for the
-  keep-alive to log in again. Then it shares the checkout's installers (below)
+  keep-alive to log in again. Then it makes the Mac's installers store (below)
   and installs the keep-alive if it isn't running.
-- **Installers are shared per Mac**, in `/Users/Shared/second-chance/installers`,
-  writable by every user through an inherited ACL. `session add` moves the
-  checkout's `installers/` there when the store is empty, and links it back.
-  `--on` sends installers by an rsync of their own, folder to folder, which
-  follows a link at either end, and first links the checkout there to the
-  store when it has none, so a test user's first run doesn't copy every
-  installer into its home.
+- **Installers are kept once per Mac**, in the
+  [installers store](testing.md#the-installers-store),
+  `/Users/Shared/second-chance/installers`, writable by every user through an
+  inherited ACL, which every user's checkout reads: so a test user's first
+  run copies no installer into its home. `session add` makes it if the Mac
+  has none, and says to run `sc installers migrate` when the checkout still
+  has an `installers/` from before it.
 - `sc session` (or `list`) shows each: logged in or not, locked, and leased or
   free. Logins come from `ioreg`'s console users, which any user can read.
 - `sc session claim --purpose "<text>" [--for 2h] [<user>]` leases a free test

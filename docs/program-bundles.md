@@ -91,6 +91,12 @@ inputs are of its source's type, or choices. Every input the target reads
 with no default must be given, and every one given must be read: one nothing
 reads is a typo, or something asked for no reason.
 
+The bundle's id, an edition's `id` and an input's name are also where tests
+and `sc` find that input's file on a Mac: a `disc` or `her-download` input
+is `<bundle id>/<edition id>/<input name>.<ext>` in the installers store
+(`nancy-drew/old-clock/cd/disc-1.iso`), so renaming one moves where its
+installers are kept ([testing.md](testing.md#the-installers-store)).
+
 `allow-paths` names the folders of the bundle's own its Wrappfile may read
 files from, each relative to its folder and ending in `/`; a file is never
 readable for being beside the Wrappfile, and a path with `..` or starting `/`

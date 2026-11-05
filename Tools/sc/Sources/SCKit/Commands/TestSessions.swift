@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import WrappBuilder
 
 struct SessionCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -321,7 +322,7 @@ enum SessionKeepAlive {
 struct SessionAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add",
-        abstract: "Set this Mac up for test sessions: make test users, share installers, start the keep-alive.",
+        abstract: "Set this Mac up for test sessions: make test users and the installers store, start the keep-alive.",
         discussion: """
         Run it as the admin who uses the Mac's display, at the Mac or with \
         sc --on <host> session add from a terminal: it uses sudo, and keeps \
@@ -329,9 +330,8 @@ struct SessionAddCommand: AsyncParsableCommand {
         over SSH). It makes standard users named second-chance-testing-1, -2, … (or the \
         names given; an existing user whose password is in the keychain is \
         adopted), lets them in over SSH and Screen Sharing with this user's \
-        authorized keys, and adds them to the pool. Then it moves this \
-        checkout's installers into the store every user shares, and installs \
-        the keep-alive, which logs the new sessions in. Running it again \
+        authorized keys, and adds them to the pool. Then it makes the installers \
+        store every user reads, if the Mac has none, and installs the keep-alive, which logs the new sessions in. Running it again \
         fixes whatever is missing. See docs/dev-cli.md#test-sessions.
         """
     )
@@ -346,9 +346,6 @@ struct SessionAddCommand: AsyncParsableCommand {
 
     @Flag(help: "Give existing test users this user's authorized SSH keys too (new ones always get them).")
     var installKeys = false
-
-    @Flag(help: "Leave this checkout's installers where they are.")
-    var keepInstallers = false
 
     func validate() throws {
         for user in users where user.range(of: #"^[a-z][a-z0-9_-]{1,30}$"#, options: .regularExpression) == nil {
@@ -371,9 +368,7 @@ struct SessionAddCommand: AsyncParsableCommand {
         chmod(SessionPool.file.path, 0o666)
         session.ui.detail("The pool: \(pool.joined(separator: ", ")).")
 
-        if !keepInstallers {
-            session.ui.detail(try await SessionPool.shareInstallers(checkout: session.repo.root))
-        }
+        session.ui.detail(try await SessionPool.makeInstallersStore(store: InstallersStore.defaultRoot, checkout: session.repo.root))
         if await SessionKeepAliveCommand.isInstalled() {
             session.ui.detail("The keep-alive is running; it picks up new users within a minute.")
         } else {

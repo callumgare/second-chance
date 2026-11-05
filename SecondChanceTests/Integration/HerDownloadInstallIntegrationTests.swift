@@ -2,11 +2,12 @@
 //  HerDownloadInstallIntegrationTests.swift
 //  SecondChanceTests
 //
-//  Each Her Interactive download in installers/ built and launched for
-//  real: the Her counterpart of DiskInstallIntegrationTests. A game is
-//  tested once per download it has, as installers/<slug>/her-download*.exe
-//  (the Windows installer) or her-download*.dmg (the Mac download); the
-//  files are gitignored, so the suite disables itself when there are none.
+//  Each Her Interactive download in the installers store built and launched
+//  for real: the Her counterpart of DiskInstallIntegrationTests. A game is
+//  tested once per Her edition whose download is in the store,
+//  `<bundle id>/her-windows/installer.exe` (the Windows installer) or
+//  `<bundle id>/her-mac/installer.dmg` (the Mac download); the suite
+//  disables itself when there are none.
 //
 //  Run with `sc test integration --source her-download [<slug>…]`.
 
@@ -15,26 +16,29 @@ import Testing
 @testable import SecondChance
 import GameCatalog
 import SecondChanceKit
+import WrappBuilder
 
 /// One download of one game.
 struct HerDownloadCase: Sendable, CustomTestStringConvertible {
     let game: GameInfo
     let file: URL
-
-    var isMacDownload: Bool { file.pathExtension.lowercased() == "dmg" }
+    let edition: String
+    let isMacDownload: Bool
     /// The row `sc` shows: the slug, and "mac" for the Mac download.
     var label: String { isMacDownload ? "\(game.id) mac" : game.id }
-    var testDescription: String { "\(label) (\(file.lastPathComponent))" }
+    var testDescription: String { "\(label) (\(edition))" }
 
     /// Every download of the selected games.
     static let all: [HerDownloadCase] = TestGameFilter.selectedGames.flatMap { game in
-        InstallerPaths.herDownloads(for: game).map { HerDownloadCase(game: game, file: $0) }
+        InstallerPaths.herDownloads(for: game).compactMap { found in
+            found.files.first.map { HerDownloadCase(game: game, file: $0, edition: found.edition, isMacDownload: found.format == "mac") }
+        }
     }
 }
 
 @Suite(
     "Her download install — per game",
-    .enabled(if: !HerDownloadCase.all.isEmpty, "No her-download*.exe or .dmg in installers/<slug>/")
+    .enabled(if: !HerDownloadCase.all.isEmpty, "No Her downloads in the installers store")
 )
 struct HerDownloadInstallIntegrationTests {
     static let progress = ProgressFileWriter.fromEnvironment("PROGRESS_PATH")

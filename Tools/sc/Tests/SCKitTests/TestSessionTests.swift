@@ -108,15 +108,6 @@ struct TestSessionTests {
             == ["second-chance-testing-1", "second-chance-testing-3", "second-chance-testing-4"])
     }
 
-    @Test("Installers move into the shared store only when it has none, and are never merged")
-    func installersShare() {
-        #expect(SessionPool.installersShare(checkoutEntry: .typeSymbolicLink, linksToStore: true, storeHasFiles: true) == .linked)
-        #expect(SessionPool.installersShare(checkoutEntry: nil, linksToStore: false, storeHasFiles: true) == .link)
-        #expect(SessionPool.installersShare(checkoutEntry: .typeDirectory, linksToStore: false, storeHasFiles: false) == .move)
-        #expect(SessionPool.installersShare(checkoutEntry: .typeDirectory, linksToStore: false, storeHasFiles: true) == .both)
-        #expect(SessionPool.installersShare(checkoutEntry: .typeSymbolicLink, linksToStore: false, storeHasFiles: false) == .both)
-    }
-
     @Test("sc session add takes names, or a count of numbered ones")
     func addArguments() throws {
         let numbered = try #require(try SC.parseAsRoot(["session", "add", "--count", "3"]) as? SessionAddCommand)
@@ -171,6 +162,7 @@ struct PeekabooSetupTests {
         #expect(Remote.readsInstallers(["test", "integration", "royal-tower"]))
         #expect(!Remote.readsInstallers(["wrapp", "build", "skifree", "--from", "download"]))
         #expect(Remote.readsInstallers(["test", "integration", "--source", "all"]))
+        #expect(!Remote.readsInstallers(["installers", "migrate"]))
     }
 
     @Test("A program run in the GUI session hands its output back through a pipe, not a file")

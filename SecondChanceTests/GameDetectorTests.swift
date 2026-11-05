@@ -188,39 +188,37 @@ struct GameDetectorBeforeBundlesTests {
         #expect(GameDetector.shared.getGameSlugFromFingerprint(fingerprint) == BeforeBundles.slug(forFingerprint: fingerprint))
     }
 
-    @Test("Every disc image in installers/ gives the slug it gave before",
-          .enabled(if: !BeforeBundles.discImages.isEmpty, "no disc images in installers/"))
+    @Test("Every disc image in the installers store gives the slug it gave before",
+          .enabled(if: !BeforeBundles.discImages.isEmpty, "no disc images in the installers store"))
     func sameSlugForEveryDisc() async throws {
         let mounter = ISOMounter()
-        for image in BeforeBundles.discImages {
+        for (game, image, isFirst) in BeforeBundles.discImages {
             let folder = try await mounter.mount(image)
             let source = try await GameDetector.shared.discSource(folder)
             let before = BeforeBundles.slug(forFingerprint: source.fingerprint)
             let now = await Blocking.run { GameDetector.shippedIndex.detect(source) }
             let slug: String = if case .recognised(let match) = now { GameDetector.slug(of: match.bundleID) } else { GameInfo.unknownGame.id }
-            let game = image.deletingLastPathComponent().lastPathComponent
             // A program beyond Nancy Drew (one with a `program` id) came after
             // bundles: before them, its disc could only be unknown.
             let cameBefore = GameInfoProvider.shared.allGames().first { $0.id == game }?.program == nil
             if cameBefore {
                 #expect(slug == before, "\(game)/\(image.lastPathComponent): \(now), before \(before)")
             }
-            if image.lastPathComponent == "disk-1.iso" {
+            if isFirst {
                 #expect(slug == game, "\(game)'s first disc is \(slug)")
             }
             await mounter.unmountAll()
         }
     }
 
-    @Test("Every Her Interactive Windows download in installers/ gives the slug it gave before",
-          .enabled(if: !BeforeBundles.herInstallers.isEmpty, "no Her downloads in installers/"))
+    @Test("Every Her Interactive Windows download in the installers store gives the slug it gave before",
+          .enabled(if: !BeforeBundles.herInstallers.isEmpty, "no Her downloads in the installers store"))
     func sameSlugForEveryHerDownload() async throws {
-        for installer in BeforeBundles.herInstallers {
+        for (game, installer) in BeforeBundles.herInstallers {
             let embedded = try await Blocking.run { try GameDetector.embeddedInstallerSignals(in: installer) }
             let product = await Blocking.run { WindowsExecutable(contentsOf: installer)?.versionStrings["ProductName"] }
             let name = installer.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "_", with: " ")
             let fingerprint = ([name] + [product].compactMap { $0 } + embedded).joined(separator: " ")
-            let game = installer.deletingLastPathComponent().lastPathComponent
             let slug = try await GameDetector.shared.detectGame(fromHerInstaller: installer)
             #expect(slug == BeforeBundles.slug(forFingerprint: fingerprint), "\(game)/\(installer.lastPathComponent)")
             #expect(slug == game)
@@ -248,14 +246,17 @@ nonisolated enum BeforeBundles {
         return mostSpecific?.id ?? GameInfo.unknownGame.id
     }
 
-    /// Every `installers/<slug>/disk-N.iso`.
-    static let discImages: [URL] = GameInfoProvider.shared.allGames().flatMap { game in
-        (1...4).compactMap { InstallerPaths.diskISO(for: game, diskNumber: $0) }
+    /// Every game's disc images in the installers store, by its slug, each
+    /// saying whether it's the first.
+    static let discImages: [(game: String, image: URL, isFirst: Bool)] = GameInfoProvider.shared.allGames().flatMap { game in
+        (InstallerPaths.discs(for: game) ?? []).enumerated().map { (game: game.id, image: $0.element, isFirst: $0.offset == 0) }
     }
 
-    /// Every `installers/<slug>/her-download*.exe`.
-    static let herInstallers: [URL] = GameInfoProvider.shared.allGames().flatMap { game in
-        InstallerPaths.herDownloads(for: game).filter { $0.pathExtension.lowercased() == "exe" }
+    /// Every game's Her Windows installer in the installers store, by its slug.
+    static let herInstallers: [(game: String, installer: URL)] = GameInfoProvider.shared.allGames().flatMap { game in
+        InstallerPaths.herDownloads(for: game).filter { $0.format == "windows" }.compactMap { found in
+            found.files.first.map { (game: game.id, installer: $0) }
+        }
     }
 }
 

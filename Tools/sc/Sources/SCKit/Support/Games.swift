@@ -1,4 +1,5 @@
 import Foundation
+import WrappBuilder
 
 /// A game as offered in a prompt.
 struct GameChoice: Equatable, CustomStringConvertible {
@@ -8,28 +9,27 @@ struct GameChoice: Equatable, CustomStringConvertible {
 
 /// Turning what the user typed into a game, with errors that list what's available.
 enum Games {
-    /// Slugs with a `disk-1.iso` in the installers directory.
-    static func withInstallers(in installersDir: URL) -> [CatalogGame] {
-        Catalog.games.filter {
-            FileManager.default.fileExists(atPath: installersDir.appendingPathComponent("\($0.slug)/disk-1.iso").path)
-        }
+    /// The game's disc images in the installers store: its disc edition's
+    /// `disc-1`, `disc-2`…, in order; nil unless every one is there.
+    static func discs(for game: CatalogGame, repo: Repo) -> InstallersStore.Found? {
+        repo.manifest(of: game).flatMap { repo.installers.found($0, source: .disc).first }
     }
 
-    /// Her Interactive downloads in a game's installers folder: files named
-    /// `her-download*.exe` (the Windows installer) or `her-download*.dmg`
-    /// (the Mac download), the Windows one first.
-    static func herDownloads(for slug: String, in installersDir: URL) -> [URL] {
-        let dir = installersDir.appendingPathComponent(slug)
-        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-        return ["exe", "dmg"].flatMap { ext in
-            files.filter { $0.lastPathComponent.lowercased().hasPrefix("her-download") && $0.pathExtension.lowercased() == ext }
-                .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        }
+    /// Games whose disc images are all in the installers store.
+    static func withInstallers(repo: Repo) -> [CatalogGame] {
+        Catalog.games.filter { discs(for: $0, repo: repo) != nil }
     }
 
-    /// Slugs with a Her Interactive download in the installers directory.
-    static func withHerDownloads(in installersDir: URL) -> [CatalogGame] {
-        Catalog.games.filter { !herDownloads(for: $0.slug, in: installersDir).isEmpty }
+    /// The game's Her Interactive downloads in the installers store, one
+    /// for each of its Her editions there: the Windows installer (.exe) and
+    /// the Mac download (.dmg), in the manifest's order.
+    static func herDownloads(for game: CatalogGame, repo: Repo) -> [InstallersStore.Found] {
+        repo.manifest(of: game).map { repo.installers.found($0, source: .herDownload) } ?? []
+    }
+
+    /// Games with a Her Interactive download in the installers store.
+    static func withHerDownloads(repo: Repo) -> [CatalogGame] {
+        Catalog.games.filter { !herDownloads(for: $0, repo: repo).isEmpty }
     }
 
     static func withWrapps(in wrappsDir: URL, repo: Repo) -> [CatalogGame] {

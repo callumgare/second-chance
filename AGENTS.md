@@ -53,8 +53,8 @@ system picks for the package products, which made it work on some machines and
 fail on others.
 
 **Never run `./sc test all`** (or an unfiltered `xcodebuild test`) by accident:
-it runs the integration suite too, which with real ISOs in `installers/` takes
-hours. A bare `./sc test` runs nothing: it shows its help and fails, so name
+it runs the integration suite too, which with real disc images in the
+installers store takes hours. A bare `./sc test` runs nothing: it shows its help and fails, so name
 what to run — `./sc test unit`, or the game for an integration run,
 `./sc test integration <game-slug>`.
 
@@ -649,8 +649,11 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
   suite runs in `sc test unit` automatically — the unit run excludes a short
   list (`TestRunner.unitExclusions` in `Tools/sc`) rather than listing what to
   include. A slow or environment-dependent suite needs adding to that list.
-- **Integration tests** need real ISOs in `installers/<slug>/disk-1.iso` and run
-  the actual build flow; they disable themselves when the ISOs are absent.
+- **Integration tests** need real disc images in the Mac's installers store,
+  `/Users/Shared/second-chance/installers/<bundle id>/<edition>/<input>.iso`
+  (`nancy-drew/old-clock/cd/disc-1.iso`), where every checkout finds them
+  ([docs/testing.md](docs/testing.md#the-installers-store)), and run the
+  actual build flow; they disable themselves when the images are absent.
   Prefer unit tests for fast feedback. Games build side by side
   (`--build-concurrency`, as far as the disk has room) and launch one at a
   time; each source's suite goes through `IntegrationGameRun` and the gates in
@@ -677,7 +680,8 @@ filtering, how WrappPuppeteer drives a game and its exit codes, reports. In shor
   know about Nancy Drew, wrapps or engines; what is specific to driving a game
   lives in `WrappPuppeteer/NancyDrew/` and configures it through parameters.
   [docs/testing.md](docs/testing.md#wrapppuppeteer) has the details.
-- **Test fixtures** are in `TestFixtures/` and `installers/`. Make skips
+- **Test fixtures** are in `TestFixtures/`, and real installers in the
+  installers store. Make skips
   explicit rather than returning early, so a skipped test reads as skipped.
 - **Priority test targets** (untested but high-value): `WineDesktop`,
   `HerDownloadWrappBuilder`, `AutoItService`, `AppUpdater`, the installer's

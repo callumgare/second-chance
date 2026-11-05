@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import SCKit
+import WrappBuilder
 
 @Suite("Sharded integration runs")
 struct ShardedRunTests {
@@ -61,13 +62,15 @@ struct ShardedRunTests {
         #expect(plan.unrunnable.map(\.slug) == ["a"])
     }
 
-    @Test("An installers listing names first disc images and Her downloads, nothing else")
+    @Test("A store's listing names games whose disc edition is all there, and those with a Her download")
     func installerKeys() {
+        let manifests = InstallersStore.manifests(bundles: repoRoot.appendingPathComponent("Bundles"))
         let keys = ShardPlan.installerKeys(listing: [
-            "ghost-dogs/disk-1.iso", "ghost-dogs/disk-2.iso", "scarlet-hand/Her-Download-Win.EXE", "scarlet-hand/her-download.dmg",
-            "secrets-can-kill/notes.txt", "loose-file.iso",
-        ])
-        #expect(keys == ["disk/ghost-dogs", "her-download/scarlet-hand"])
+            "nancy-drew/ghost-dogs/cd/disc-1.iso", "nancy-drew/trail-of-the-twister/cd/disc-1.iso",
+            "nancy-drew/scarlet-hand/her-windows/installer.exe", "nancy-drew/scarlet-hand/extras/guide.pdf",
+            "nancy-drew/trail-of-the-twister/her-mac/installer.dmg", "loose-file.iso",
+        ], manifests: manifests)
+        #expect(keys == ["disk/ghost-dogs", "her-download/scarlet-hand", "her-download/trail-of-the-twister"])
     }
 
     @Test("Only the disc and Her suites need installers")
