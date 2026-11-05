@@ -145,7 +145,7 @@ enum PeekabooSetup {
         }
         guard missing.isEmpty else {
             throw SCError("\(host)/\(user)'s Peekaboo still lacks \(missing.joined(separator: " and ")) after 15 minutes.",
-                          hints: ["Run it again for that user: sc session setup --only peekaboo \(user)" + (mac.map { " --on \($0)" } ?? "")])
+                          hints: ["Run it again for that user: sc session setup --task peekaboo \(user)" + (mac.map { " --on \($0)" } ?? "")])
         }
     }
 

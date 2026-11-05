@@ -152,6 +152,8 @@ struct PeekabooSetupTests {
         #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(Remote.runsHere(["session", "view", "sctest"]))
         #expect(Remote.followUp(after: ["session", "add", "--count", "2"]) == ["session", "setup"])
+        let setup = try? SC.parseAsRoot(["session", "setup", "--task", "signing", "--task", "peekaboo"]) as? SessionSetupCommand
+        #expect(setup?.only == [.signing, .peekaboo])
         #expect(Remote.followUp(after: ["session", "add", "--no-setup"]) == nil)
         #expect(Remote.followUp(after: ["session", "list"]) == nil)
         #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "remove"]) }

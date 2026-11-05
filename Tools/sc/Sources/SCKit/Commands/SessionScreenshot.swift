@@ -42,7 +42,7 @@ struct SessionScreenshotCommand: AsyncParsableCommand {
             let taken = try await Proc.collect(shell[0], Array(shell.dropFirst()))
             guard taken.succeeded else {
                 throw SCError("Peekaboo couldn't picture \(name)'s screen: \(taken.error.trimmingCharacters(in: .whitespacesAndNewlines))",
-                              hints: ["Give it Peekaboo and its grants: sc session setup --only peekaboo" + (user.map { " \($0)" } ?? "")
+                              hints: ["Give it Peekaboo and its grants: sc session setup --task peekaboo" + (user.map { " \($0)" } ?? "")
                                       + (mac.map { " --on \($0)" } ?? ""),
                                       "Is someone logged in there, and is the screen unlocked? sc" + (mac.map { " --on \($0)" } ?? "") + " session list"])
             }

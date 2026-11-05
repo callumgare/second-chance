@@ -7,7 +7,7 @@ import Foundation
 struct SessionSetupCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "setup",
-        abstract: "Set test sessions up: your signing certificate, and Peekaboo with its grants (or only those named).",
+        abstract: "Set test sessions up: your signing certificate, and Peekaboo with its grants (or only the --task ones).",
         discussion: """
         Run it on the Mac you're at. With --on it sets up that Mac's test \
         sessions; without, this Mac's. Each task skips what's done already. \
@@ -29,7 +29,7 @@ struct SessionSetupCommand: AsyncParsableCommand {
     @Argument(help: "Test users. Default: every one in that Mac's pool.")
     var users: [String] = []
 
-    @Option(parsing: .upToNextOption, help: "Only these tasks: signing, peekaboo. Default: every one.")
+    @Option(name: .customLong("task"), help: "A task to do, signing or peekaboo; give it again for more. Default: every one.")
     var only: [Task] = []
 
     func run() async throws {
@@ -40,7 +40,7 @@ struct SessionSetupCommand: AsyncParsableCommand {
         if tasks.contains(.signing) {
             if let remote = Invocation.remote {
                 // The certificate is in the console user's keychain on that Mac.
-                let status = try await Remote.run(on: remote, arguments: ["session", "setup", "--only", "signing"] + users)
+                let status = try await Remote.run(on: remote, arguments: ["session", "setup", "--task", "signing"] + users)
                 if status != 0 { failed.append("signing") }
             } else {
                 await SessionAddCommand.installSigningIdentities(users.isEmpty ? SessionPool.users() : users, session: session)
@@ -56,7 +56,7 @@ struct SessionSetupCommand: AsyncParsableCommand {
         }
         if !failed.isEmpty {
             throw SCError("Set-up didn't finish: \(failed.joined(separator: ", ")).",
-                          hints: ["Run what's left again: sc session setup --only \(failed.joined(separator: " "))" + (mac.map { " --on \($0)" } ?? "")])
+                          hints: ["Run what's left again: sc session setup" + failed.map { " --task \($0)" }.joined() + (mac.map { " --on \($0)" } ?? "")])
         }
     }
 }

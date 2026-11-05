@@ -682,8 +682,8 @@ Peekaboo reads and drives Mac windows (system prompts, installers, Finder) where
 puppet helper only sees a game's window. Its Screen Recording and Accessibility grants
 are per user, and no script can give them: they live in the system's TCC database
 behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
-`sc session setup [<user>…] [--only signing|peekaboo …] [--on <host>]`, run on the Mac
-you're at, does every set-up task a test session needs, or those `--only` names, each
+`sc session setup [<user>…] [--task signing|peekaboo]… [--on <host>]`, run on the Mac
+you're at, does every set-up task a test session needs, or those each `--task` names, each
 skipping what's done: `signing` gives each test user the console user's signing
 certificate (above), done on the test Mac, where that certificate is; `peekaboo` makes the
 grants a minute each: with `--on`, for that Mac's test sessions, and without, this
