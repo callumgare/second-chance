@@ -28,6 +28,7 @@ public struct SC: AsyncParsableCommand {
             AttachCommand.self,
             LeaseCommand.self,
             SessionCommand.self,
+            PuppetCommand.self,
         ]
     )
 

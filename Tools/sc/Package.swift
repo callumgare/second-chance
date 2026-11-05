@@ -20,6 +20,8 @@ let package = Package(
         .package(path: "../../Packages/GameCatalog"),
         // Loading and checking program bundles, for `sc bundle`.
         .package(path: "../../Packages/WrappBuilder"),
+        // Ending a puppet session's Wine, for `sc puppet`.
+        .package(path: "../../Packages/WrappKit"),
     ],
     targets: [
         .executableTarget(
@@ -31,6 +33,7 @@ let package = Package(
             dependencies: [
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "WrappBuilder", package: "WrappBuilder"),
+                .product(name: "WineKit", package: "WrappKit"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Subprocess", package: "swift-subprocess"),
                 .product(name: "Noora", package: "Noora"),

@@ -87,6 +87,18 @@ enum Remote {
         "Packages/*/.build", "Packages/*/.swiftpm", "/build", ".DS_Store",
     ]
 
+    /// Local-only folders of gigabytes (the installers, the porting
+    /// workspace) that only commands building, running or testing games can
+    /// read. Anything else, such as driving a puppet session or claiming a test
+    /// session, leaves them out: a test user's first sync would otherwise copy
+    /// them all into its own home. Left out, they're never deleted there.
+    static let heavy = ["/installers", "/.local"]
+
+    static func heavyFilters(for arguments: [String]) -> [String] {
+        let light: Set = ["puppet", "session", "lease", "attach", "lint", "generate", "clean", "setup"]
+        return light.contains(arguments.first ?? "") ? heavy.flatMap { ["--exclude", $0] } : []
+    }
+
     /// Sent, but never deleted there: the other Mac may hold installers
     /// this one doesn't have, which `--delete` would otherwise remove.
     static let protects = ["/installers/***"]
@@ -131,6 +143,7 @@ enum Remote {
     /// `lease` only reads (or breaks) the screen lease.
     static func syncs(_ arguments: [String]) -> Bool {
         !["attach", "lease"].contains(arguments.first)
+            && !(arguments.first == "puppet" && arguments.dropFirst().first != "start")
     }
 
     /// Lists, one per line, the ids of the GUI-session jobs still running in
@@ -177,7 +190,7 @@ enum Remote {
             let protectRules: [String] = protects.flatMap { ["--filter", "P " + $0] }
             let excludeRules: [String] = excludes.flatMap { ["--exclude", $0] }
             let rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + protectRules + excludeRules
-                + derivedDataFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
+                + derivedDataFilters(for: arguments) + heavyFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
                     try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }

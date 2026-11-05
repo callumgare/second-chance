@@ -536,6 +536,39 @@ every user's. So a lookup by name must be this user's alone (`ProcessList`'s are
 and a log read filters on the line's user id. A game in a test session also loads
 the Mac like any other, so a console run's launches are slower while one plays.
 
+## Puppet sessions
+
+**`sc puppet` drives a program by hand,** for porting and debugging, where a
+test would script it. `sc puppet start <name> --wrapp <app>` starts a server
+(a LaunchAgent in this user's GUI session), which holds the screen lease,
+starts the wrapp with WrappPuppeteer's in-process helper armed
+([wine-in-process-helpers.md](wine-in-process-helpers.md#puppet-control)),
+gets past its save warning, and stops it when asked (`stop`), when it's been
+idle (`--idle`, 10 minutes) or after `--max` (2 hours). Stopping asks the game
+to quit, then ends the wrapp and anything left in its Wine prefix
+(`WineServer.kill`), and says when the screen was held. Each session keeps
+its files in `~/Library/Caches/SecondChance/puppet/<name>/`: its logs, its
+shots, and an app-support folder of its own, so the player's saves are
+never touched.
+
+The other verbs are clients, and `--on` doesn't sync for them:
+
+- `do <name> click|move|down|up|drag|key|type|focus …` acts, then says what
+  changed: the share of a 64x36 thumbnail that changed, captured before and
+  after (`--wait`), whether it's now black, which windows came or went, and
+  whether the program ended. So most actions need no picture.
+- `shot` saves a picture, at most 1280 pixels across by default, or a part
+  (`--region`, in points) at any `--scale`, and says what it costs to look at
+  and how to fetch it.
+- `text` reads the window's text with Apple's OCR, each line with where it
+  is in points, which a `do … click` can aim at.
+- `windows`, `status`, `log [--grep] [--count]` (identical lines counted, for
+  a log of hundreds of the same error) and `saves` (files written since the
+  start: where its saves go).
+
+Run it in a [test session](#test-sessions), `sc --on <user>@<mac> puppet …`,
+to leave the Mac's screen free.
+
 ## Changing sc
 
 Its code is in `Tools/sc/`:
