@@ -18,7 +18,6 @@ import Testing
 @testable import WrappFormat
 @testable import WrappLogging
 import GameCatalog
-import WrappBuilder
 
 // Rename the kevent C syscall so it doesn't collide with Swift's kevent struct init.
 @_silgen_name("kevent")
@@ -159,14 +158,8 @@ enum TestPaths {
             .deletingLastPathComponent()  // repo root
     }()
 
-    /// The Mac's installers store: `SECOND_CHANCE_INSTALLERS` (set by `sc
-    /// test` as `TEST_RUNNER_SECOND_CHANCE_INSTALLERS`), else
-    /// `/Users/Shared/second-chance/installers` (docs/testing.md#the-installers-store).
-    static let installers = InstallersStore.current()
-
-    /// The repo's program bundles' manifests, which say where in the
-    /// installers store each game's installers are.
-    static let manifests: [Manifest] = InstallersStore.manifests(bundles: repoRoot.appendingPathComponent("Bundles"))
+    /// The `installers/` directory at the repo root.
+    static let installersDir: URL = repoRoot.appendingPathComponent("installers")
 
     /// Where prebuilt wrapps live: `WRAPPS_DIR` (set by `sc test` as
     /// `TEST_RUNNER_WRAPPS_DIR` from its `--wrapps-dir`), else `built-apps/`.
@@ -178,50 +171,77 @@ enum TestPaths {
     }()
 }
 
-/// A game's installers in the installers store, found from its manifest.
+/// Resolves installer ISO paths for a given game.
 enum InstallerPaths {
-    static func manifest(of game: GameInfo) -> Manifest? {
-        TestPaths.manifests.first { $0.id == game.programID }
+    /// The path to `installers/<slug>/disk-N.iso`, or `nil` if it doesn't exist.
+    static func diskISO(for game: GameInfo, diskNumber: Int) -> URL? {
+        let isoURL = TestPaths.installersDir
+            .appendingPathComponent(game.id)
+            .appendingPathComponent("disk-\(diskNumber).iso")
+
+        return FileManager.default.fileExists(atPath: isoURL.path) ? isoURL : nil
     }
 
-    /// The game's disc images, its disc edition's `disc-1`, `disc-2`… in
-    /// order, or `nil` unless every one is there.
-    static func discs(for game: GameInfo) -> [URL]? {
-        manifest(of: game).flatMap { TestPaths.installers.found($0, source: .disc).first?.files }
+    /// The game's Her Interactive downloads: `installers/<slug>/her-download*`
+    /// with a `.exe` (Windows installer) or `.dmg` (Mac download) extension,
+    /// the Windows one first.
+    static func herDownloads(for game: GameInfo) -> [URL] {
+        let dir = TestPaths.installersDir.appendingPathComponent(game.id)
+        let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return ["exe", "dmg"].flatMap { ext in
+            files.filter { $0.lastPathComponent.lowercased().hasPrefix("her-download") && $0.pathExtension.lowercased() == ext }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        }
     }
 
-    /// Where the game's disc images go, for a message saying they aren't there.
-    static func discFolder(for game: GameInfo) -> String {
-        let edition = manifest(of: game)?.editions.first { $0.source == .disc }?.id ?? "cd"
-        return TestPaths.installers.folder(program: game.programID, edition: edition).path
-    }
+    /// The path to a directory containing the disk contents (as an alternative
+    /// to an ISO). Returns `nil` if no such directory exists.
+    static func diskDirectory(for game: GameInfo) -> URL? {
+        let dirURL = TestPaths.installersDir.appendingPathComponent(game.id)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: dirURL.path, isDirectory: &isDir),
+              isDir.boolValue else { return nil }
 
-    /// The game's Her Interactive downloads, one for each of its Her
-    /// editions in the store: the Windows installer and the Mac download,
-    /// in the manifest's order.
-    static func herDownloads(for game: GameInfo) -> [InstallersStore.Found] {
-        manifest(of: game).map { TestPaths.installers.found($0, source: .herDownload) } ?? []
+        // Only return it if it contains files (not just disk-N.iso at top level)
+        let contents = try? FileManager.default.contentsOfDirectory(atPath: dirURL.path)
+        return (contents?.isEmpty == false) ? dirURL : nil
     }
 }
 
-/// Whether any game's disc images are in the installers store. Used by the
+/// Whether any installer ISOs are present in `installers/`. Used by the
 /// `.disabled(if:)` trait so integration tests no-op cleanly on CI / machines
-/// without the real installers.
+/// without the (gitignored) real installers.
 enum InstallersPresent {
     /// Set by `sc test integration` (as `TEST_RUNNER_REQUIRE_INSTALLERS`) when the
-    /// integration suite was asked for by name. Then a missing image must fail
-    /// the run — the per-game `#require` reports where it looked —
+    /// integration suite was asked for by name. Then a missing ISO must fail
+    /// the run — the per-game `#require` reports the path it looked at —
     /// rather than disable the suite and let it pass having tested nothing.
     static let required = ProcessInfo.processInfo.environment["REQUIRE_INSTALLERS"] == "1"
 
     /// Whether the integration suite should run: always when required,
-    /// otherwise only if some game's disc images are in the store.
+    /// otherwise only if some `installers/<slug>/disk-1.iso` exists.
     static func shouldRun() -> Bool {
         required || check()
     }
 
     static func check() -> Bool {
-        TestPaths.manifests.contains { !TestPaths.installers.found($0, source: .disc).isEmpty }
+        let fm = FileManager.default
+        let entries: [String]
+        do {
+            entries = try fm.contentsOfDirectory(atPath: TestPaths.installersDir.path)
+        } catch {
+            TestConsole.echo(
+                Data("Cannot read \(TestPaths.installersDir.path): \(error.localizedDescription)\n".utf8),
+                title: "Installers directory"
+            )
+            return false
+        }
+        for entry in entries {
+            let dir = TestPaths.installersDir.appendingPathComponent(entry)
+            let iso = dir.appendingPathComponent("disk-1.iso")
+            if fm.fileExists(atPath: iso.path) { return true }
+        }
+        return false
     }
 }
 
@@ -434,11 +454,6 @@ enum AppPuppetRunner {
         ProcessInfo.processInfo.environment["RECORDING_LIMIT"].map { ["--screen-recording-limit", $0] } ?? []
     }
 
-        // WrappPuppeteer's whole log, as a file: the system log isn't
-        // readable by a standard user, as a test session's is.
-        let puppeteerLogFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("wrapp-puppeteer-log-\(UUID().uuidString).log")
-        defer { try? FileManager.default.removeItem(at: puppeteerLogFile) }
     private static func launchAndCollect(
         appBundle: URL,
         wrappURL: URL,
@@ -455,11 +470,15 @@ enum AppPuppetRunner {
         let exitCodeFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("wrapp-puppeteer-exit-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: exitCodeFile) }
-                environment: ["SECOND_CHANCE_LOG_FILE": puppeteerLogFile.path],
         // The whole screen as the game starts, if WrappPuppeteer has Screen
         // Recording: kept, as an attachment, when the launch fails or
         // WrappPuppeteer warns (a splash screen it no longer recognises is
         // only seen there), or always with `--keep-recordings`.
+        // WrappPuppeteer's whole log, as a file: the system log isn't
+        // readable by a standard user, as a test session's is.
+        let puppeteerLogFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("wrapp-puppeteer-log-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: puppeteerLogFile) }
         let screenRecording = FileManager.default.temporaryDirectory
             .appendingPathComponent("wrapp-puppeteer-screen-\(UUID().uuidString).mp4")
         // The same, with what happened marked in it.
@@ -476,6 +495,7 @@ enum AppPuppetRunner {
                 arguments: [wrappURL.path, "--max-runtime", String(Int(Self.maxRuntime)), "--exit-code-file", exitCodeFile.path,
                             "--parent-pid", String(getpid()), "--screen-recording", screenRecording.path]
                     + recordingLimitArguments + extraArguments,
+                environment: ["SECOND_CHANCE_LOG_FILE": puppeteerLogFile.path],
                 exitCodeFile: exitCodeFile
             )
 
@@ -699,9 +719,6 @@ enum AppPuppetRunner {
         var exitEvent = kevent()
         while true {
             let remaining = max(0, deadline.timeIntervalSinceNow)
-        // An app opened this way gets these and not the opener's, and passes
-        // none on to the apps it opens: the wrapp keeps its own launch log.
-        config.environment = environment
             var wait = timespec(tv_sec: Int(remaining), tv_nsec: 0)
             let waitResult = withUnsafeMutablePointer(to: &exitEvent) { event in
                 withUnsafePointer(to: &wait) { keventCall(kqueueDescriptor, nil, 0, event, 1, $0) }
@@ -722,6 +739,9 @@ enum AppPuppetRunner {
         let launchRequestTime = Date()
         let config = NSWorkspace.OpenConfiguration()
         config.arguments = arguments
+        // An app opened this way gets these and not the opener's, and passes
+        // none on to the apps it opens: the wrapp keeps its own launch log.
+        config.environment = environment
         config.activates = false
         config.createsNewApplicationInstance = true
 
