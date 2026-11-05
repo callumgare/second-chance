@@ -33,18 +33,15 @@ class WrappBuildHelper {
 
     private let fileManager = FileManager.default
     private let wineManager: WineManager
-    private let cacheManager: CacheManager
     private let engines: EngineStore
     let bus: EventBus<AppEvent>
 
     init(
         wineManager: WineManager = .shared,
-        cacheManager: CacheManager = .shared,
         engines: EngineStore = WrappBuildHelper.standardEngines,
         bus: EventBus<AppEvent> = .app
     ) {
         self.wineManager = wineManager
-        self.cacheManager = cacheManager
         self.engines = engines
         self.bus = bus
     }
@@ -357,11 +354,6 @@ class WrappBuildHelper {
 
     /// Install the Steam client in the wrapp (used by SteamWrappBuilder).
     func installSteamClient(in wrappPath: URL) async throws {
-        // Check cache first
-        if try cacheManager.restoreCache(stage: .steamClientInstalled, to: wrappPath) != nil {
-            return
-        }
-
         await bus.publishWrappBuild(.progress(.settingUpWrapp(substep: String(localized: "Installing Steam"))))
 
         let wine = Wine(wrapp: wrappPath)
@@ -378,9 +370,6 @@ class WrappBuildHelper {
             defer { wine.drives.takeBack() }
             try await wine.run(.program(installer.path, ["/S"]), timeout: 300)
         }
-
-        // Save to cache
-        try cacheManager.saveCache(wrappPath: wrappPath, stage: .steamClientInstalled)
     }
 
     // MARK: - Finalization

@@ -177,15 +177,17 @@ it. Building one is a _wrapp build_; the thing it is built from is a _source_
 Views (SwiftUI)  →  WrappBuildViewModel (@MainActor)  ←  CLIBuilder (headless)
                                          │
                                  WrappBuildStrategy
-                                                 │
-             ┌───────────────────────────────────┼───────────────────────────┐
-    DiskWrappBuilder              HerDownloadWrappBuilder          SteamWrappBuilder
-             └───────────────────────────────────┼───────────────────────────┘
-                                                 ↓
-                    WrappBuildHelper · GameInstallerRunner · ISOMounter
-                                                 ↓
-        WineManager · CacheManager · GameDetector · AutoItService
-                                                 ↓
+                                         │
+   Disk · HerDownload · Steam · BigFish · Download builders (UpdateWrappBuilder via Disk)
+     identify the game, choose the edition, give the plan its inputs
+                                         ↓
+     BuildPlanner (the bundle's Wrappfile + modules) → BuildPlan
+                                         ↓
+     PlanRunner (Packages/WrappBuilder): stage trees, layers, stores, signals,
+       each step by its module's executor (WineExecutor, InstallerExecutor, …)
+                                         ↓
+     WrappAssembler (template laid in) → WrappBuildHelper.completeBuild
+                                         ↓
                   Models (GameInfo, WrappBuildState, WrappSource, AppEvent, …)
 ```
 
@@ -270,7 +272,11 @@ The rules that keep it working:
   `build(input:) async throws -> URL`. **Adding a source means adding a builder
   that conforms to this**, not adding a branch to an existing one. The ViewModel
   dispatches through the protocol, and a headless run (`CLIBuilder`) builds
-  through the ViewModel too, so a new source needs no changes at either.
+  through the ViewModel too, so a new source needs no changes at either. A
+  builder only works out what to build (the game, the edition, the inputs);
+  the plan is carried out by **`PlanRunner`**, and what a step does is its
+  module's executor's ([docs/wrapp-build.md](docs/wrapp-build.md#the-runner)),
+  so a new kind of step is a module's instruction, not a builder's code.
 - **A builder owns its flow and its resources.** Whatever it creates — mounted
   ISOs, the temp wrapp — it tears down on the success _and_ error paths.
   `WrappBuildHelper` supplies cleanup _primitives_ (`removeTempWrapp`); it never
@@ -278,8 +284,8 @@ The rules that keep it working:
 - **Source-specific work stays out of the helper.** Disk layout and CD-ROM
   mounting live in `DiskWrappBuilder` because no other source uses them.
 - **`WrappBuildHelper`** (`Builders/WrappBuildHelper.swift`): the
-  source-independent operations every builder shares — base wrapp construction
-  from the template, engine cleanup, `Info.plist`/`AppSettings.plist`
+  source-independent operations every builder shares — the template and
+  engines the runner is given, engine cleanup, `Info.plist`/`AppSettings.plist`
   configuration, and the sign/save/launch tail.
 - **`WrappBuildInput`** (`Services/WrappBuildInput.swift`): all I/O for a build
   in one type, resolved env-var-first — when the env var is set it replaces the

@@ -149,7 +149,6 @@ class WrappBuildViewModel {
     private let bigFishBuilder: BigFishWrappBuilder
     /// Where this view model's builds report, and where it follows them.
     let bus: EventBus<AppEvent>
-    private let cacheManager = CacheManager.shared
     @ObservationIgnored private var busSubscriptionToken: EventBus<AppEvent>.Token?
     private let makeInput: WrappBuildInputFactory
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.WrappBuildViewModel")
