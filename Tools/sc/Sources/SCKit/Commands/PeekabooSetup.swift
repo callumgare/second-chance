@@ -39,8 +39,13 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let target = Remote.parse(mac, localRoot: session.repo.root)
         let host = target.host
-        try await install(on: host, ui: session.ui)
-        let pool = try await ssh(host, "cat \(SessionPool.file.path) 2>/dev/null").output
+        let installed = try await session.ui.progressStep("Checking Peekaboo on \(host)", success: "Peekaboo is on \(host)") { _ in
+            try await install(on: host)
+        }
+        installed.forEach { session.ui.detail("\(host): \($0)") }
+        let pool = try await session.ui.progressStep("Reading \(host)'s test sessions") { _ in
+            try await ssh(host, "cat \(SessionPool.file.path) 2>/dev/null").output
+        }
         let users = user.map { [$0] } ?? SessionPool.users(fromPool: pool)
         guard !users.isEmpty else { throw SCError("\(host) has no test sessions.", hints: ["Add some there: sc session add"]) }
         for user in users {
@@ -53,7 +58,8 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
 
     /// Peekaboo.app in /Applications and its CLI, from the release, checked
     /// against the release's checksums, unless they're there.
-    private func install(on host: String, ui: UI) async throws {
+    /// What it installed, a line each.
+    private func install(on host: String) async throws -> [String] {
         let base = "https://github.com/openclaw/Peekaboo/releases/download/v\(Self.version)"
         let script = """
         set -eu
@@ -82,7 +88,7 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
             throw SCError("Couldn't install Peekaboo \(Self.version) on \(host): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
                           hints: ["It downloads from GitHub and needs /Applications writable by the user sc logs in as there."])
         }
-        for line in result.output.split(separator: "\n") where line.hasPrefix("installed") { ui.detail("\(host): \(line)") }
+        return result.output.split(separator: "\n").filter { $0.hasPrefix("installed") }.map(String.init)
     }
 
     /// Where the CLI goes when Homebrew's isn't there: readable by every user.
@@ -93,44 +99,50 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     private func setUp(_ user: String, on target: Remote.Target, ui: UI) async throws {
         let host = target.host
         let destination = "\(user)@\(host)"
-        let started = try await ssh(destination, "bash -s", input: Self.bridgeScript)
-        guard started.succeeded else {
-            throw SCError("Couldn't start Peekaboo's bridge for \(user) on \(host): \(started.error.trimmingCharacters(in: .whitespacesAndNewlines))",
-                          hints: ["Is \(user) logged in? sc --on \(host) session list"])
+        var missing = try await ui.progressStep("Starting Peekaboo's bridge for \(host)/\(user)") { _ in
+            let started = try await ssh(destination, "bash -s", input: Self.bridgeScript)
+            guard started.succeeded else {
+                throw SCError("Couldn't start Peekaboo's bridge for \(user) on \(host): \(started.error.trimmingCharacters(in: .whitespacesAndNewlines))",
+                              hints: ["Is \(user) logged in? sc --on \(host) session list"])
+            }
+            return try await missingGrants(destination)
         }
-        var missing = try await missingGrants(destination)
         if missing.isEmpty {
             ui.detail("\(host)/\(user): Peekaboo already has its grants.")
             return
         }
-        ui.line("\(host)/\(user): Peekaboo needs \(missing.joined(separator: " and ")).")
-        try await openPane(for: missing[0], destination)
-        try await openScreenSharing(user, target)
-        ui.line("In the Screen Sharing window (choose \"Log in as yourself\" if asked), turn Peekaboo on in "
-                + "\(missing[0]); macOS asks for an admin's name and password. Waiting up to 15 minutes…")
-        var shown = missing[0]
-        let deadline = Date().addingTimeInterval(900)
-        while Date() < deadline {
-            try await Task.sleep(for: .seconds(3))
-            let now = try await missingGrants(destination)
-            if now.isEmpty { break }
-            if now.count < missing.count {
-                // A new grant takes effect when the app restarts, as System Settings says.
-                _ = try? await ssh(destination, "launchctl kickstart -k gui/$(id -u)/\(Self.bridgeLabel)")
-            }
-            if now[0] != shown {
-                shown = now[0]
-                try await openPane(for: shown, destination)
-                ui.line("Now \(shown): turn Peekaboo on there too.")
-            }
-            missing = now
+        try await ui.progressStep("Opening \(missing[0]) in \(host)/\(user)'s System Settings, and Screen Sharing here") { _ in
+            try await openPane(for: missing[0], destination)
+            try await openScreenSharing(user, target)
         }
-        missing = try await missingGrants(destination)
+        ui.line("In the Screen Sharing window (choose \"Log in as yourself\" if asked), turn Peekaboo on in \(missing[0]). "
+                + "macOS asks for an admin's name and password.")
+        missing = try await ui.progressStep("Waiting for Peekaboo's grants in \(host)/\(user) (up to 15 minutes)",
+                                            success: "\(host)/\(user): Peekaboo has its grants. You can close that Screen Sharing window.") { update in
+            var missing = missing
+            var shown = missing[0]
+            let deadline = Date().addingTimeInterval(900)
+            while Date() < deadline {
+                try await Task.sleep(for: .seconds(3))
+                let now = try await missingGrants(destination)
+                if now.count < missing.count {
+                    // A new grant takes effect when the app restarts, as System Settings says.
+                    _ = try? await ssh(destination, "launchctl kickstart -k gui/$(id -u)/\(Self.bridgeLabel)")
+                }
+                missing = now
+                if now.isEmpty { return now }
+                if now[0] != shown {
+                    shown = now[0]
+                    try await openPane(for: shown, destination)
+                }
+                update("Waiting for you to turn Peekaboo on in \(shown), in \(host)/\(user)'s System Settings")
+            }
+            return missing
+        }
         guard missing.isEmpty else {
             throw SCError("\(host)/\(user)'s Peekaboo still lacks \(missing.joined(separator: " and ")) after 15 minutes.",
                           hints: ["Run it again for that user: sc session setup-peekaboo \(user) --mac \(host)"])
         }
-        ui.detail("\(host)/\(user): Peekaboo has its grants. You can close that Screen Sharing window.")
     }
 
     /// The bridge as a LaunchAgent in the user's GUI session, as on the
@@ -151,6 +163,8 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
     </dict></plist>
     P
     launchctl print gui/$(id -u)/\(bridgeLabel) >/dev/null 2>&1 || launchctl bootstrap gui/$(id -u) "$plist"
+    # Bootstrapped over SSH, launchd loads the job but doesn't run it at load.
+    launchctl kickstart gui/$(id -u)/\(bridgeLabel) 2>/dev/null || true
     for i in $(seq 1 20); do [ -S ~/Library/Application\\ Support/Peekaboo/bridge.sock ] && exit 0; sleep 1; done
     echo "the bridge's socket didn't appear" >&2; exit 1
     """
