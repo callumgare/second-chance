@@ -751,10 +751,20 @@ struct DotEnvTests {
         #expect(Remote.excludes.contains("Packages/*/.build"))
     }
 
-    @Test("--on sends installers, but never deletes the other Mac's")
-    func installersProtected() {
-        #expect(Remote.protects.contains("/installers/***"))
-        #expect(!Remote.excludes.contains("installers"))
+    @Test("--on sends installers by a sync of their own, which follows links and never deletes the other Mac's")
+    func installersSync() {
+        #expect(Remote.installersExclude == ["--exclude", "/installers"])
+        let sync = Remote.installersSync(host: "mac", path: "~/sc")
+        #expect(sync.suffix(2) == ["installers/", "mac:~/sc/installers/"])
+        #expect(!sync.contains("--delete"))
+    }
+
+    @Test("Before sending installers, the checkout there links to the Mac's shared ones, if it has none of its own")
+    func linkInstallers() {
+        let command = Remote.linkInstallersCommand(path: "~/tmp/second chance")
+        #expect(command.hasPrefix("mkdir -p ~/'tmp/second chance' && cd ~/'tmp/second chance'"))
+        #expect(command.contains("[ -e installers ] || [ -L installers ]"))
+        #expect(command.hasSuffix("|| ln -s '/Users/Shared/second-chance/installers' installers; }"))
     }
 
     @Test("Of DerivedData, --on syncs only the built products")

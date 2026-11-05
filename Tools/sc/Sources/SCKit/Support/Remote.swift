@@ -99,9 +99,28 @@ enum Remote {
         return light.contains(arguments.first ?? "") ? heavy.flatMap { ["--exclude", $0] } : []
     }
 
-    /// Sent, but never deleted there: the other Mac may hold installers
-    /// this one doesn't have, which `--delete` would otherwise remove.
-    static let protects = ["/installers/***"]
+    /// Never in the main sync: installers go by a sync of their own
+    /// (`installersSync`), so a link at either end is followed, into the Mac's
+    /// shared installers, rather than replaced.
+    static let installersExclude = ["--exclude", "/installers"]
+
+    /// The installers' own sync, for commands that read them: the folder's
+    /// contents into the folder there, whether either is a link. Never
+    /// `--delete`: the other Mac may hold installers this one doesn't have.
+    static func installersSync(host: String, path: String) -> [String] {
+        ["-aE", "--rsync-path=/usr/bin/rsync", "installers/", "\(host):\(path)/installers/"]
+    }
+
+    /// Before a sync that sends installers: make the checkout there, and,
+    /// when that Mac has shared installers (`sc session add`) and the checkout
+    /// none, link its `installers` to them. Otherwise a test user's first run
+    /// would copy every installer into its own home.
+    static func linkInstallersCommand(path: String) -> String {
+        let dir = path.hasPrefix("~/") ? "~/" + quote(String(path.dropFirst(2))) : quote(path)
+        let store = SessionPool.installers.path
+        return "mkdir -p \(dir) && cd \(dir) && { [ -e installers ] || [ -L installers ] || [ ! -d \(quote(store)) ] "
+            + "|| ln -s \(quote(store)) installers; }"
+    }
 
     /// Of `DerivedData`, only what was built, `Build/Products`, is synced.
     /// The rest records this checkout's absolute path (Swift packages' state,
@@ -187,13 +206,24 @@ enum Remote {
             // on the flag: Apple's (openrsync, or 2.6.9 before macOS 15.4)
             // spells it -E and rejects -X, while rsync 3.x reads -E as
             // --executability and would drop them without a word.
-            let protectRules: [String] = protects.flatMap { ["--filter", "P " + $0] }
             let excludeRules: [String] = excludes.flatMap { ["--exclude", $0] }
-            let rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + protectRules + excludeRules
+            let rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + installersExclude + excludeRules
                 + derivedDataFilters(for: arguments) + heavyFilters(for: arguments) + ["./", "\(target.host):\(target.path)/"]
+            let sendsInstallers = heavyFilters(for: arguments).isEmpty
+                && FileManager.default.fileExists(atPath: repo.root.appendingPathComponent("installers").path)
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
-                    try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                    if sendsInstallers {
+                        let linked = try await Proc.collect("ssh", ["-T", target.host, linkInstallersCommand(path: target.path)])
+                        guard linked.succeeded else {
+                            throw SCError("Couldn't make \(target.path) on \(target.host): \(linked.error.trimmingCharacters(in: .whitespacesAndNewlines))")
+                        }
+                    }
+                    let status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                    guard status == 0, sendsInstallers else { return status }
+                    return try await Proc.stream("/usr/bin/rsync", installersSync(host: target.host, path: target.path), cwd: repo.root) {
+                        await sink.line($0)
+                    }
                 }
             } catch let error as SCError where error.alreadyReported {
                 throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
