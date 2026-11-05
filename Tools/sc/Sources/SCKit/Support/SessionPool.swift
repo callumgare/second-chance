@@ -31,6 +31,105 @@ enum SessionPool {
         pool.contains(user) ? "\(host)/\(user)" : host
     }
 
+    // MARK: Naming them
+
+    /// Test users are `sctest1`, `sctest2`, …, so a pool reads the same on
+    /// every Mac and scripts can count on the names.
+    static let namePrefix = "sctest"
+
+    /// The next `count` names in the scheme that no user on the Mac has.
+    static func nextNames(_ count: Int, taken: Set<String>) -> [String] {
+        var names: [String] = []
+        var number = 1
+        while names.count < count {
+            let name = "\(namePrefix)\(number)"
+            if !taken.contains(name) { names.append(name) }
+            number += 1
+        }
+        return names
+    }
+
+    /// Every user name on this Mac.
+    static func existingUsers() async -> Set<String> {
+        guard let result = try? await Proc.collect("/usr/bin/dscl", [".", "-list", "/Users"]), result.succeeded else { return [] }
+        return Set(result.output.split(whereSeparator: \.isNewline).map(String.init))
+    }
+
+    // MARK: The Mac's installers
+
+    /// Installers, kept once per Mac for every user's checkout: each
+    /// checkout's `installers` links here, so a test user's first run doesn't
+    /// copy tens of gigabytes into its own home, and `--on` syncs write
+    /// through the link.
+    static let installers = folder.appendingPathComponent("installers")
+
+    /// What every user may do in the shared installers, inherited by what's
+    /// made inside: each user's sync replaces files another user's left.
+    static let everyoneACL = "everyone allow list,add_file,search,delete,add_subdirectory,delete_child,readattr,writeattr,"
+        + "readextattr,writeextattr,readsecurity,read,write,append,execute,file_inherit,directory_inherit"
+
+    /// What sharing a checkout's installers will do, decided from what's
+    /// there now.
+    enum InstallersShare: Equatable {
+        /// Already a link to the store.
+        case linked
+        /// The checkout has none: link to the store.
+        case link
+        /// The checkout's own folder becomes the store (the store is empty
+        /// or missing), and the checkout links to it.
+        case move
+        /// Both hold installers: left alone, to be merged by hand.
+        case both
+    }
+
+    static func installersShare(checkoutEntry: FileAttributeType?, linksToStore: Bool, storeHasFiles: Bool) -> InstallersShare {
+        switch checkoutEntry {
+        case .typeSymbolicLink? where linksToStore: return .linked
+        case nil: return .link
+        case .typeDirectory?: return storeHasFiles ? .both : .move
+        default: return .both
+        }
+    }
+
+    /// Make the store if it isn't there, and link `checkout`'s installers to
+    /// it, moving the checkout's own folder in when the store is empty (one
+    /// rename, on the same volume). Returns what it did, for the person.
+    static func shareInstallers(checkout: URL) async throws -> String {
+        let fm = FileManager.default
+        let entry = checkout.appendingPathComponent("installers")
+        let attributes = try? fm.attributesOfItem(atPath: entry.path)
+        let type = attributes?[.type] as? FileAttributeType
+        let target = (try? fm.destinationOfSymbolicLink(atPath: entry.path)).map { URL(fileURLWithPath: $0, relativeTo: checkout).standardizedFileURL.path }
+        let storeFiles = ((try? fm.contentsOfDirectory(atPath: installers.path)) ?? []).filter { !$0.hasPrefix(".") }
+        switch installersShare(checkoutEntry: type, linksToStore: target == installers.path, storeHasFiles: !storeFiles.isEmpty) {
+        case .linked:
+            return "\(entry.path) already links to \(installers.path)."
+        case .both:
+            return "\(entry.path) and \(installers.path) both hold installers, so neither was changed. Move what's missing into "
+                + "\(installers.path), then replace the folder with a link: ln -s \(installers.path) \(entry.path)"
+        case .link:
+            try ScreenLease.makeFolder(folder)
+            if !fm.fileExists(atPath: installers.path) { try fm.createDirectory(at: installers, withIntermediateDirectories: false) }
+            try await allowEveryone(recursive: false)
+            try fm.createSymbolicLink(at: entry, withDestinationURL: installers)
+            return "\(entry.path) now links to \(installers.path), which every user on this Mac shares."
+        case .move:
+            try ScreenLease.makeFolder(folder)
+            if fm.fileExists(atPath: installers.path) { try fm.removeItem(at: installers) }  // empty
+            try fm.moveItem(at: entry, to: installers)
+            try fm.createSymbolicLink(at: entry, withDestinationURL: installers)
+            try await allowEveryone(recursive: true)
+            return "Moved \(entry.path) to \(installers.path), which every user on this Mac shares, and linked it back."
+        }
+    }
+
+    private static func allowEveryone(recursive: Bool) async throws {
+        let result = try await Proc.collect("/bin/chmod", (recursive ? ["-R"] : []) + ["+a", everyoneACL, installers.path])
+        guard result.succeeded else {
+            throw SCError("Couldn't let every user write to \(installers.path): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+    }
+
     // MARK: Sessions logged in now
 
     /// A GUI login, from the console users WindowServer lists.

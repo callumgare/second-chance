@@ -100,4 +100,28 @@ struct TestSessionTests {
                                 pid: 1, pidStarted: 0, started: Date())
         #expect(lease.hints(onHost: "mac/sctest", askingSession: nil).contains("Watch it: sc --on sctest@mac:/Users/sctest/tmp/second-chance attach"))
     }
+
+    @Test("New test users take the lowest sctest numbers no user has")
+    func names() {
+        #expect(SessionPool.nextNames(1, taken: []) == ["sctest1"])
+        #expect(SessionPool.nextNames(3, taken: ["sctest", "sctest2", "callumgare"]) == ["sctest1", "sctest3", "sctest4"])
+    }
+
+    @Test("Installers move into the shared store only when it has none, and are never merged")
+    func installersShare() {
+        #expect(SessionPool.installersShare(checkoutEntry: .typeSymbolicLink, linksToStore: true, storeHasFiles: true) == .linked)
+        #expect(SessionPool.installersShare(checkoutEntry: nil, linksToStore: false, storeHasFiles: true) == .link)
+        #expect(SessionPool.installersShare(checkoutEntry: .typeDirectory, linksToStore: false, storeHasFiles: false) == .move)
+        #expect(SessionPool.installersShare(checkoutEntry: .typeDirectory, linksToStore: false, storeHasFiles: true) == .both)
+        #expect(SessionPool.installersShare(checkoutEntry: .typeSymbolicLink, linksToStore: false, storeHasFiles: false) == .both)
+    }
+
+    @Test("sc session add takes names, or a count of numbered ones")
+    func addArguments() throws {
+        let numbered = try #require(try SC.parseAsRoot(["session", "add", "--count", "3"]) as? SessionAddCommand)
+        #expect(numbered.users.isEmpty && numbered.count == 3)
+        let named = try #require(try SC.parseAsRoot(["session", "add", "sctest", "sctest7"]) as? SessionAddCommand)
+        #expect(named.users == ["sctest", "sctest7"])
+        #expect(throws: (any Error).self) { try SC.parseAsRoot(["session", "add", "Bad Name"]) }
+    }
 }

@@ -155,6 +155,47 @@ struct SessionKeepAliveCommand: AsyncParsableCommand {
     var uninstall = false
 
     static let label = "au.gare.callum.second-chance.session-keep-alive"
+    static var plist: URL {
+        URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/LaunchAgents/\(label).plist")
+    }
+    static var domain: String { "gui/\(getuid())" }
+
+    /// Whether it's installed and launchd has it.
+    static func isInstalled() async -> Bool {
+        guard FileManager.default.fileExists(atPath: plist.path) else { return false }
+        return (try? await Proc.collect("/bin/launchctl", ["print", "\(domain)/\(label)"]))?.succeeded ?? false
+    }
+
+    static func uninstall() async throws {
+        _ = try await Proc.collect("/bin/launchctl", ["bootout", "\(domain)/\(label)"])
+        try? FileManager.default.removeItem(at: plist)
+    }
+
+    /// Install the LaunchAgent, run by `repo`'s sc, and start it. Returns its log.
+    static func install(repo: URL) async throws -> URL {
+        _ = try await Proc.collect("/bin/launchctl", ["bootout", "\(domain)/\(label)"])
+        let log = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/SecondChance/session-keep-alive.log")
+        try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let agent: [String: Any] = [
+            "Label": label,
+            "ProgramArguments": [repo.appendingPathComponent("sc").path, "session", "keep-alive"],
+            "WorkingDirectory": repo.path,
+            "RunAtLoad": true,
+            "KeepAlive": true,
+            "ThrottleInterval": 30,
+            "ProcessType": "Background",
+            "StandardOutPath": log.path,
+            "StandardErrorPath": log.path,
+        ]
+        try PropertyListSerialization.data(fromPropertyList: agent, format: .xml, options: 0).write(to: plist)
+        let result = try await Proc.collect("/bin/launchctl", ["bootstrap", domain, plist.path])
+        guard result.succeeded else {
+            throw SCError("launchctl couldn't start the keep-alive: \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
+                          hints: ["It must be installed by the user logged in at the Mac's display."])
+        }
+        return log
+    }
 
     func validate() throws {
         if install && uninstall { throw ValidationError("--install or --uninstall, not both.") }
@@ -162,35 +203,13 @@ struct SessionKeepAliveCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let plist = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/LaunchAgents/\(Self.label).plist")
-        let domain = "gui/\(getuid())"
-        if install || uninstall {
-            _ = try await Proc.collect("/bin/launchctl", ["bootout", "\(domain)/\(Self.label)"])
-            if uninstall {
-                try? FileManager.default.removeItem(at: plist)
-                session.ui.detail("The keep-alive is stopped and removed. Test sessions lock once their connection goes.")
-                return
-            }
-            let log = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs/SecondChance/session-keep-alive.log")
-            try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: plist.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let agent: [String: Any] = [
-                "Label": Self.label,
-                "ProgramArguments": [session.repo.root.appendingPathComponent("sc").path, "session", "keep-alive"],
-                "WorkingDirectory": session.repo.root.path,
-                "RunAtLoad": true,
-                "KeepAlive": true,
-                "ThrottleInterval": 30,
-                "ProcessType": "Background",
-                "StandardOutPath": log.path,
-                "StandardErrorPath": log.path,
-            ]
-            try PropertyListSerialization.data(fromPropertyList: agent, format: .xml, options: 0).write(to: plist)
-            let result = try await Proc.collect("/bin/launchctl", ["bootstrap", domain, plist.path])
-            guard result.succeeded else {
-                throw SCError("launchctl couldn't start the keep-alive: \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
-                              hints: ["It must be installed by the user logged in at the Mac's display."])
-            }
+        if uninstall {
+            try await Self.uninstall()
+            session.ui.detail("The keep-alive is stopped and removed. Test sessions lock once their connection goes.")
+            return
+        }
+        if install {
+            let log = try await Self.install(repo: session.repo.root)
             session.ui.detail("The keep-alive runs now and at every login. Its log: \(log.path)")
             return
         }
@@ -258,47 +277,85 @@ enum SessionKeepAlive {
 struct SessionAddCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "add",
-        abstract: "Make a test user (or adopt one) and add it to this Mac's pool. Needs an admin's password.",
+        abstract: "Set this Mac up for test sessions: make test users, share installers, start the keep-alive.",
         discussion: """
-        Run it at the Mac, in the console user's session, as an admin: it uses \
-        sudo, and keeps the new user's password in this user's keychain for \
-        the keep-alive. It creates a standard user with a random password (or \
-        adopts an existing one, whose password must already be in the \
-        keychain), lets it in over SSH and Screen Sharing, gives it this \
-        user's authorized SSH keys, and adds it to the pool.
+        Run it as the admin who uses the Mac's display, at the Mac or with \
+        sc --on <host> session add from a terminal: it uses sudo, and keeps \
+        each new user's password in this user's keychain (asking to unlock it \
+        over SSH). It makes standard users named sctest1, sctest2, … (or the \
+        names given; an existing user whose password is in the keychain is \
+        adopted), lets them in over SSH and Screen Sharing with this user's \
+        authorized keys, and adds them to the pool. Then it moves this \
+        checkout's installers into the store every user shares, and installs \
+        the keep-alive, which logs the new sessions in. Running it again \
+        fixes whatever is missing. See docs/dev-cli.md#test-sessions.
         """
     )
 
     @OptionGroup var global: GlobalOptions
 
-    @Argument(help: "The test user's short name, such as sctest2.")
-    var user: String
+    @Argument(help: "Test users' short names. Default: the next free sctest<n>.")
+    var users: [String] = []
 
-    @Option(help: "Its full name. Default: \"Second Chance Test\" and the number in its name.")
-    var fullName: String?
+    @Option(help: "How many to make when no names are given.")
+    var count: Int = 1
+
+    @Flag(help: "Leave this checkout's installers where they are.")
+    var keepInstallers = false
 
     func validate() throws {
-        guard user.range(of: #"^[a-z][a-z0-9_]{1,30}$"#, options: .regularExpression) != nil else {
-            throw ValidationError("A user's short name is lower-case letters and digits, starting with a letter.")
+        for user in users where user.range(of: #"^[a-z][a-z0-9_]{1,30}$"#, options: .regularExpression) == nil {
+            throw ValidationError("\(user): a user's short name is lower-case letters and digits, starting with a letter.")
         }
+        if !(1...9).contains(count) { throw ValidationError("--count is 1 to 9.") }
     }
 
     func run() async throws {
         let session = try Session.start(global)
-        let exists = getpwnam(user) != nil
-        if exists {
+        var pool = SessionPool.users()
+        let names = users.isEmpty
+            ? SessionPool.nextNames(count, taken: await SessionPool.existingUsers())
+            : users
+        try await Self.unlockKeychain(session)
+        for user in names {
+            try await add(user, session: session)
+            if !pool.contains(user) { pool.append(user) }
+        }
+        try ScreenLease.makeFolder(SessionPool.folder)
+        try (pool.joined(separator: "\n") + "\n").write(to: SessionPool.file, atomically: true, encoding: .utf8)
+        chmod(SessionPool.file.path, 0o666)
+        session.ui.detail("The pool: \(pool.joined(separator: ", ")).")
+
+        if !keepInstallers {
+            session.ui.detail(try await SessionPool.shareInstallers(checkout: session.repo.root))
+        }
+        if await SessionKeepAliveCommand.isInstalled() {
+            session.ui.detail("The keep-alive is running; it picks up new users within a minute.")
+        } else {
+            let log = try await SessionKeepAliveCommand.install(repo: session.repo.root)
+            session.ui.detail("Started the keep-alive, which logs test sessions in and keeps them drawing. Its log: \(log.path)")
+        }
+        let host = ScreenLease.shortHostName()
+        session.ui.success("\(names.map { "\(host)/\($0)" }.joined(separator: ", ")) ready.",
+                           takeaways: ["See them: sc session",
+                                       "Claim one: sc session claim --purpose \"…\"",
+                                       "Run in it: sc --on <user>@\(host):<path> test integration <game>"])
+    }
+
+    private func add(_ user: String, session: Session) async throws {
+        if getpwnam(user) != nil {
             _ = try await SessionPool.password(for: user)
             session.ui.detail("\(user) exists and its password is in the keychain: adopting it.")
         } else {
             let password = Self.newPassword()
-            let name = fullName ?? "Second Chance Test" + (user.last?.isNumber == true ? " \(user.last.map(String.init) ?? "")" : "")
+            let name = "Second Chance Test" + (user.last?.isNumber == true ? " " + String(user.reversed().prefix { $0.isNumber }.reversed()) : "")
             session.ui.detail("Creating \(user) (\(name)), a standard user. sudo may ask for your password.")
             try await sudo(["/usr/sbin/sysadminctl", "-addUser", user, "-fullName", name, "-password", password])
             let stored = try await Proc.collect("/usr/bin/security", ["add-generic-password", "-U", "-s", SessionPool.keychainService,
                                                                            "-a", user, "-w", password])
             guard stored.succeeded else {
-                throw SCError("Created \(user), but couldn't keep its password in the keychain, which is locked over SSH.",
-                              hints: ["Set a new one at the Mac and store it: sudo passwd \(user), then "
+                throw SCError("Created \(user), but couldn't keep its password in the keychain.",
+                              hints: ["Set a new one and store it: sudo passwd \(user), then "
                                       + "security add-generic-password -s \(SessionPool.keychainService) -a \(user) -w"])
             }
             try await sudo(["/usr/sbin/createhomedir", "-c", "-u", user])
@@ -314,15 +371,16 @@ struct SessionAddCommand: AsyncParsableCommand {
             try await sudo(["/usr/bin/install", "-d", "-o", user, "-g", "staff", "-m", "700", "\(home)/.ssh"])
             try await sudo(["/usr/bin/install", "-o", user, "-g", "staff", "-m", "600", keys.path, "\(home)/.ssh/authorized_keys"])
         }
-        var pool = SessionPool.users()
-        if !pool.contains(user) {
-            pool.append(user)
-            try ScreenLease.makeFolder(SessionPool.folder)
-            try (pool.joined(separator: "\n") + "\n").write(to: SessionPool.file, atomically: true, encoding: .utf8)
-            chmod(SessionPool.file.path, 0o666)
-        }
-        session.ui.success("\(SessionPool.screenName(of: user)) is in the pool.",
-                           takeaways: ["The keep-alive logs it in within a minute, if it's installed: sc session keep-alive --install"])
+    }
+
+    /// Over SSH the login keychain is locked: ask for the password once, as
+    /// `security` does, rather than fail after making the user.
+    static func unlockKeychain(_ session: Session) async throws {
+        let probe = try await Proc.collect("/usr/bin/security", ["show-keychain-info"])
+        guard !probe.succeeded else { return }
+        session.ui.detail("Your login keychain is locked (as over SSH). Unlock it to keep the test users' passwords:")
+        let status = try await Proc.inheritingTerminal("/usr/bin/security", ["unlock-keychain"])
+        guard status == 0 else { throw SCError("The keychain stayed locked, so nothing was changed.") }
     }
 
     private func sudo(_ arguments: [String]) async throws {
