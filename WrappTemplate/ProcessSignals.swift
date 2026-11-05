@@ -63,6 +63,7 @@ func installTerminationHandlers() {
         let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
         source.setEventHandler {
             mainLogger.notice("Received \(SubprocessWatch.signalName(sig)): quitting the game")
+            MainActor.assumeIsolated { (NSApp.delegate as? AppDelegate)?.cancelOpenAgain() }
             // Off the main queue, so it fires even if the main thread is stuck;
             // later on a busy Mac, whose quit gets longer (`quitPeriods`).
             DispatchQueue.global(qos: .userInitiated).async {

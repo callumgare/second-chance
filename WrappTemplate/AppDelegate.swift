@@ -61,6 +61,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// has finished, a fresh copy starts.
     var openAgainWhenClosed: Bool { closingState.withLock { $0.openAgain } }
 
+    /// Told to quit (a SIGTERM, SIGINT or SIGHUP): an opening queued while
+    /// the game closed is dropped, as the sender meant it to stop. A test
+    /// that relaunched a game while its Steam was closing, then ended it,
+    /// otherwise found a copy started again once its wrapp was gone.
+    func cancelOpenAgain() {
+        let was = closingState.withLock { state in defer { state.openAgain = false }; return state.openAgain }
+        if was { mainLogger.notice("Told to quit: not starting again, though it was opened while closing") }
+    }
+
     init(config: GameConfig, gameLauncher: GameLauncher?) {
         self.config = config
         self.gameLauncher = gameLauncher
