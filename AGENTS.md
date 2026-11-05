@@ -706,8 +706,9 @@ this order of preference:
    of its own ([docs/dev-cli.md](docs/dev-cli.md#test-sessions)). Claim one with
    `sc --on <host> session claim --purpose "…"` and run in it with
    `sc --on <user>@<host>:<path> …`, passing `--skip-app-build` with a build
-   made in the console user's account: a test user has no signing
-   certificate, so can't build the app. Prefer a Mac nobody is using to the one the
+   made in the console user's account, which sends it rather than building
+   again there (`sc session add` gives a test user the console user's
+   signing certificate, so it can build; without one it signs ad hoc). Prefer a Mac nobody is using to the one the
    person is at. Test sessions are made with `sc session add`, which needs an
    admin's password: if there are none, ask the person rather than taking a
    screen.
