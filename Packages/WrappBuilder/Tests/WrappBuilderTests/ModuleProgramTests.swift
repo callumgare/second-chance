@@ -46,6 +46,28 @@ struct ModuleProgramTests {
         await executor.finish()
     }
 
+    @Test("A module's program is sandboxed: it writes to the temporary folder, and nowhere else",
+          .enabled(if: FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec"), "macOS has sandbox-exec"))
+    func sandbox() throws {
+        func touches(_ file: URL) throws -> Bool {
+            let (sandbox, arguments) = try #require(ExternalExecutor.sandboxed(URL(fileURLWithPath: "/usr/bin/touch")))
+            let process = Process()
+            process.executableURL = sandbox
+            process.arguments = arguments + [file.path]
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        }
+        let inside = FileManager.default.temporaryDirectory.appendingPathComponent("module-sandbox-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: inside) }
+        #expect(try touches(inside))
+        let outside = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("module-sandbox-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: outside) }
+        #expect(try !touches(outside))
+        #expect(ExternalExecutor.sandboxed(URL(fileURLWithPath: "/usr/bin/true"), environment: ["SECOND_CHANCE_MODULE_SANDBOX": "0"]) == nil)
+    }
+
     @Test("A recipe problem in a program's step is the build's recipe problem")
     func recipeProblem() async throws {
         let program = Self.fixture

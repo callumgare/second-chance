@@ -8,6 +8,7 @@
 
 import Foundation
 import Logging
+import WrappFormat
 import ProcessKit
 import Synchronization
 
@@ -109,10 +110,57 @@ public nonisolated final class ExternalExecutor: ModuleExecutor {
     /// the build's process: ignored, so the write fails instead.
     private static let ignoringBrokenPipes: Void = { signal(SIGPIPE, SIG_IGN) }()
 
+    /// What a module's program may do (decision 10 of the builders plan;
+    /// docs/module-programs.md#the-sandbox): read as the person can, but
+    /// reach no network and write only to the temporary folder, where the
+    /// build's trees and session stores are, and the cache stores. What it
+    /// needs from outside it asks the build for (`input`, `fetch`). A
+    /// profile's paths are real ones: `/private/var/…`, not `/var/…`.
+    static let sandboxProfile = """
+        (version 1)
+        (allow default)
+        (deny network*)
+        (deny file-write*)
+        (allow file-write* (subpath (param "TEMP")) (subpath (param "CACHE_STORES"))
+               (literal "/dev/null") (literal "/dev/tty") (literal "/dev/dtracehelper"))
+        """
+
+    /// `sandbox-exec` and its arguments, which start `program` in the
+    /// sandbox; nil with `SECOND_CHANCE_MODULE_SANDBOX=0`, or where macOS
+    /// has no `sandbox-exec`.
+    static func sandboxed(_ program: URL, environment: [String: String] = ProcessInfo.processInfo.environment) -> (URL, [String])? {
+        let sandbox = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        guard environment["SECOND_CHANCE_MODULE_SANDBOX"] != "0", FileManager.default.isExecutableFile(atPath: sandbox.path) else { return nil }
+        let temp = realPath(FileManager.default.temporaryDirectory)
+        let stores = realPath(StoreLocations.realCaches.appendingPathComponent("SecondChance/stores"))
+        return (sandbox, ["-p", sandboxProfile, "-D", "TEMP=\(temp)", "-D", "CACHE_STORES=\(stores)", program.path])
+    }
+
+    /// `url`'s path with every link resolved, as the sandbox matches it
+    /// (`URL.resolvingSymlinksInPath` takes `/private` off again): as far as
+    /// it exists, the rest as written.
+    static func realPath(_ url: URL) -> String {
+        if let resolved = realpath(url.path, nil) {
+            defer { free(resolved) }
+            return String(cString: resolved)
+        }
+        let parent = url.deletingLastPathComponent()
+        guard parent.path != url.path else { return url.path }
+        return (realPath(parent) as NSString).appendingPathComponent(url.lastPathComponent)
+    }
+
     private func start() async throws -> Running {
         _ = Self.ignoringBrokenPipes
         let process = Process()
-        process.executableURL = program
+        if let (sandbox, arguments) = Self.sandboxed(program) {
+            process.executableURL = sandbox
+            process.arguments = arguments
+        } else {
+            let why = ProcessInfo.processInfo.environment["SECOND_CHANCE_MODULE_SANDBOX"] == "0"
+                ? "SECOND_CHANCE_MODULE_SANDBOX=0" : "this Mac has no sandbox-exec"
+            logger.warning("[\(module)] Its program runs unsandboxed: \(why)")
+            process.executableURL = program
+        }
         let input = Pipe(), output = Pipe(), errors = Pipe()
         process.standardInput = input
         process.standardOutput = output

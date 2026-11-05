@@ -76,6 +76,28 @@ checkpoints and events work as for any other.
 - **A broken pipe never ends the build**: writing to a program that has
   gone fails as an error rather than raising SIGPIPE.
 
+## The sandbox
+
+A module's program runs under `sandbox-exec` (`ExternalExecutor.sandboxed`):
+it reads what the person can, but reaches no network and writes only to the
+temporary folder, where the build's trees and session stores are, and the
+cache stores (`~/Library/Caches/SecondChance/stores/`). What it needs from
+outside it asks the build for (`input`, `fetch`), which isn't sandboxed. So
+a module someone adds can't change the person's files or send them
+anywhere, whatever their agreement to import it covered.
+
+- **The profile names real paths**: `/private/var/folders/…`, not the
+  `/var/folders/…` `FileManager` gives, or every write in the tree is
+  refused (`realPath`, as `URL.resolvingSymlinksInPath` takes `/private`
+  off again).
+- **Tried on macOS 15 and 26** (2026-11-05, the builders plan's sandbox
+  spike): the fixture program's step, `hello`, a write in the temporary
+  folder and a read anywhere work; a write to the home folder and a
+  connection out are refused. `sandbox-exec` is deprecated, but on both.
+- **`SECOND_CHANCE_MODULE_SANDBOX=0`** runs programs unsandboxed, for
+  finding whether the sandbox is what stops one. A Mac with no
+  `sandbox-exec` runs them unsandboxed too, and the log says so.
+
 ## Where added modules live
 
 `~/Library/Application Support/SecondChance/modules/<namespace>/<name>/`
@@ -103,7 +125,9 @@ replacing one of its id.
 `ModuleProgramTests` runs a fixture program, `wrapp-module-fixture`
 (`Packages/WrappBuilder/Tests/ModuleFixture/`, built with the package's
 tests), through the runner out of process: its step asks the build for its
-input and emits through it, and a recipe problem in it is the build's.
+input and emits through it, and a recipe problem in it is the build's; and
+the sandbox lets `touch` write in the temporary folder but not the home
+folder.
 `AddedModulesTests` imports and loads added modules, and refuses one built
 for one architecture.
 
