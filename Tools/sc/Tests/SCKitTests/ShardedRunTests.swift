@@ -153,4 +153,10 @@ struct ShardedRunTests {
     func parseMacs() {
         #expect(ShardCoordinator.parseMacs("one, two:~/tmp/x,") == ["one", "two:~/tmp/x"])
     }
+
+    @Test("Homebrew's folders join a bare PATH once, after what's there")
+    func homebrewPath() {
+        #expect(ToolPath.withHomebrew("/usr/bin:/bin") == "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin")
+        #expect(ToolPath.withHomebrew("/opt/homebrew/bin:/usr/bin") == "/opt/homebrew/bin:/usr/bin:/usr/local/bin")
+    }
 }

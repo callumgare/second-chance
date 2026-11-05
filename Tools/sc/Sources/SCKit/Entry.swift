@@ -4,6 +4,7 @@ import Foundation
 /// The `sc` executable's entry point.
 public enum Entry {
     public static func main() async -> Never {
+        ToolPath.addHomebrew()
         let (remote, arguments) = Remote.extractTarget(from: Array(CommandLine.arguments.dropFirst()))
         Invocation.arguments = arguments
         Invocation.remote = remote

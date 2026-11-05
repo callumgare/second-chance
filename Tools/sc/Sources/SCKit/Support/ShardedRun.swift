@@ -488,7 +488,7 @@ struct ShardCoordinator: Sendable {
         let collected = LineCollector()
         do {
             let (sink, _) = try ui.logOnly(log, observers: [])
-            let status = try await Proc.stream(sc, ["--logs", "raw"] + arguments, cwd: repo.root) { raw in
+            let status = try await Proc.stream(sc, arguments + ["--logs", "raw"], cwd: repo.root) { raw in
                 let line = raw.replacingOccurrences(of: "\r", with: "")
                 collected.append(line)
                 await sink.line(line)
