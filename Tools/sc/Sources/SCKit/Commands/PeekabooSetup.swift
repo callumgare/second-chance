@@ -38,10 +38,15 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
         // nil: this Mac, whose own steps run here without SSH.
         let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
         let host = mac ?? ScreenLease.shortHostName()
-        let installed = try await session.ui.progressStep("Checking Peekaboo on \(host)", success: "Peekaboo is on \(host)") { _ in
-            try await install(on: mac)
+        let present = try await session.ui.progressStep("Checking for Peekaboo on \(host)") { _ in
+            try await asConsoleUser(mac, "bash -s", input: Self.presentScript).output
         }
-        installed.forEach { session.ui.detail("\(host): \($0)") }
+        for part in Self.parts where !present.contains(part.marker) {
+            try await session.ui.progressStep("Downloading and installing \(part.name) (\(part.megabytes) MB) on \(host)",
+                                              success: "Installed \(part.name) on \(host)") { _ in
+                try await install(part, on: mac)
+            }
+        }
         let pool = try await session.ui.progressStep("Reading \(host)'s test sessions") { _ in
             try await asConsoleUser(mac, "cat \(SessionPool.file.path) 2>/dev/null").output
         }
@@ -55,40 +60,49 @@ struct SessionSetupPeekabooCommand: AsyncParsableCommand {
 
     // MARK: Installing
 
-    /// Peekaboo.app in /Applications and its CLI, from the release, checked
-    /// against the release's checksums, unless they're there.
-    /// What it installed, a line each.
-    private func install(on mac: String?) async throws -> [String] {
-        let base = "https://github.com/openclaw/Peekaboo/releases/download/v\(Self.version)"
-        let script = """
-        set -eu
-        cli=""
-        for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(Self.sharedCLI); do [ -x "$c" ] && cli=$c && break; done
-        if [ -d /Applications/Peekaboo.app ] && [ -n "$cli" ]; then echo "present $cli"; exit 0; fi
-        work=$(mktemp -d); trap 'rm -rf "$work"' EXIT; cd "$work"
-        if [ ! -d /Applications/Peekaboo.app ]; then
-          curl -fsSL --retry 4 --retry-all-errors --retry-delay 3 -o app.zip "\(base)/Peekaboo-\(Self.version).app.zip"
-          echo "\(Self.appZipSHA256)  app.zip" | shasum -a 256 -c - >/dev/null
-          ditto -x -k app.zip app && spctl -a -vv app/Peekaboo.app 2>&1 | grep -q accepted
-          ditto app/Peekaboo.app /Applications/Peekaboo.app
-          echo "installed /Applications/Peekaboo.app"
-        fi
-        if [ -z "$cli" ]; then
-          curl -fsSL --retry 4 --retry-all-errors --retry-delay 3 -o cli.tgz "\(base)/peekaboo-macos-universal.tar.gz"
-          echo "\(Self.cliSHA256)  cli.tgz" | shasum -a 256 -c - >/dev/null
-          mkdir cli && tar -xzf cli.tgz -C cli
-          found=$(find cli -type f -name peekaboo -perm -u+x | head -1)
-          mkdir -p "$(dirname \(Self.sharedCLI))" && cp "$found" \(Self.sharedCLI) && chmod 755 \(Self.sharedCLI)
-          echo "installed \(Self.sharedCLI)"
-        fi
-        """
+    /// Prints `app` and `cli` for the parts that are there.
+    static let presentScript = """
+    [ -d /Applications/Peekaboo.app ] && echo app
+    for c in /opt/homebrew/bin/peekaboo /usr/local/bin/peekaboo \(sharedCLI); do [ -x "$c" ] && echo cli && break; done
+    true
+    """
+
+    struct Part: Sendable {
+        let name: String
+        let marker: String
+        let megabytes: Int
+        let script: String
+    }
+
+    static var parts: [Part] {
+        let base = "https://github.com/openclaw/Peekaboo/releases/download/v\(version)"
+        let fetch = "curl -fsSL --retry 4 --retry-all-errors --retry-delay 3"
+        return [
+            Part(name: "Peekaboo.app", marker: "app", megabytes: 41, script: """
+            \(fetch) -o app.zip "\(base)/Peekaboo-\(version).app.zip"
+            echo "\(appZipSHA256)  app.zip" | shasum -a 256 -c - >/dev/null
+            ditto -x -k app.zip app && spctl -a -vv app/Peekaboo.app 2>&1 | grep -q accepted
+            ditto app/Peekaboo.app /Applications/Peekaboo.app
+            """),
+            Part(name: "Peekaboo's command-line tool", marker: "cli", megabytes: 30, script: """
+            \(fetch) -o cli.tgz "\(base)/peekaboo-macos-universal.tar.gz"
+            echo "\(cliSHA256)  cli.tgz" | shasum -a 256 -c - >/dev/null
+            mkdir cli && tar -xzf cli.tgz -C cli
+            found=$(find cli -type f -name peekaboo -perm -u+x | head -1)
+            mkdir -p "$(dirname \(sharedCLI))" && cp "$found" \(sharedCLI) && chmod 755 \(sharedCLI)
+            """),
+        ]
+    }
+
+    /// One part from the release, checked against the release's checksums.
+    private func install(_ part: Part, on mac: String?) async throws {
+        let script = "set -eu\nwork=$(mktemp -d); trap 'rm -rf \"$work\"' EXIT; cd \"$work\"\n" + part.script
         let result = try await asConsoleUser(mac, "bash -s", input: script)
         guard result.succeeded else {
-            throw SCError("Couldn't install Peekaboo \(Self.version) on \(mac ?? "this Mac"): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
+            throw SCError("Couldn't install \(part.name) \(Self.version) on \(mac ?? "this Mac"): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))",
                           hints: ["A 5xx from GitHub passes: run it again in a minute.",
                                   "It needs /Applications writable by " + (mac.map { "the user sc logs in as on \($0)" } ?? "you") + "."])
         }
-        return result.output.split(separator: "\n").filter { $0.hasPrefix("installed") }.map(String.init)
     }
 
     /// Where the CLI goes when Homebrew's isn't there: readable by every user.
