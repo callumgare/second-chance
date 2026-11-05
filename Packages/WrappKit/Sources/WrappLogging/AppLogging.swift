@@ -75,6 +75,11 @@ nonisolated public enum AppLogging {
         // the full log somewhere they choose (sc keeps it beside its step logs).
         if let path = ProcessInfo.processInfo.environment["SECOND_CHANCE_LOG_FILE"], !path.isEmpty {
             LogStore.shared.setDiskMirror(enabled: true, path: URL(fileURLWithPath: path))
+            // The file is this process's. What it starts keeps a log of its
+            // own: a wrapp WrappPuppeteer opens writes its launch log, which
+            // it skips when this is set, and LaunchServices passes the
+            // opener's environment on.
+            unsetenv("SECOND_CHANCE_LOG_FILE")
         } else if CommandLine.arguments.contains("--mirror-logs") {
             LogStore.shared.setDiskMirror(enabled: true)
         }

@@ -58,7 +58,8 @@ output (Wine, ScummVM, winetricks) is captured line-by-line via
 level `SubprocessLineClassifier` picks from its content rather than from the
 pipe it came down. Integration tests read WrappPuppeteer's and the wrapp's
 logs from files (`SystemLogReader`): WrappPuppeteer's from the one the test
-names in its `SECOND_CHANCE_LOG_FILE`, and the game's from the wrapp's launch
+names in its `SECOND_CHANCE_LOG_FILE` (bootstrap unsets it, so the wrapp
+WrappPuppeteer opens, which would inherit it, keeps its own launch log), and the game's from the wrapp's launch
 logs (`~/Library/Logs/SecondChance/<slug>/launch-*.log`) begun since the run
 started. Not `log show`: a standard user, as a test session's is, may not read
 the system log ("Could not open local log store: Operation not permitted"),
