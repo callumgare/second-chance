@@ -754,6 +754,41 @@ The other verbs are clients, and `--on` doesn't sync for them:
   a log of hundreds of the same error) and `saves` (files written since the
   start: where its saves go).
 
+Beyond a single picture:
+
+- `record [--seconds 10] [--width 960]` films the game window into a
+  QuickTime movie in the session's `recordings/`, from the helper's own
+  captures (no Screen Recording), two in flight at once: about 60 frames a
+  second, each timed as taken. Every `do` is noted in the session's
+  `actions.jsonl`, and a `do` sent while a recording runs becomes a chapter
+  of it, so run `record` in the background and act meanwhile. It's for a
+  person to watch, or for `sheet`.
+- `sheet [--since 14:05|90s] [--threshold 5] [--max 16]` sums a stretch of
+  recorded play up in one picture: a grid of the frames that changed by more
+  than `--threshold` % of the change thumbnail, spread evenly when more than
+  `--max` did, each with its time and the actions just before it. Like
+  `shot`, it says what the picture costs to look at (16 tiles at the default
+  320 pixels: about 1,500 tokens) and how to fetch it.
+- `audio [--seconds 5] [--raw]` says how loud the program is: peak and RMS
+  every 0.1 s, a row a second (`--raw`: every window), and one line: silent
+  (every window under -60 dBFS), sound, or clipping (samples at full scale).
+  It measures the samples from a Core Audio process tap on the session's
+  processes (macOS 14.2), because SDL and Wine keep their output open
+  playing silence, so "output running" says nothing. A tap needs macOS's
+  system-audio permission, which goes to apps, not command-line tools, so
+  the tap is a small app of its own: `SC Audio Tap`
+  (`Tools/sc/AudioTap/main.swift`), which `sc` builds with `swiftc` into
+  `~/Library/Application Support/SecondChance/sc-audio-tap/` on first use
+  and starts as its own responsible process. It's signed with the user's
+  Apple Development identity when there is one (test users get it from
+  `session setup`), so the permission outlasts a rebuild; signed ad hoc, a
+  rebuild (a change to its source) loses it. Denied, a tap hands over
+  silence rather than an error, so it checks first (TCC's private
+  preflight) and `audio` exits 6 until the permission is given: logged in
+  as that user, answer its prompt with Allow, or in System Settings ›
+  Privacy & Security › Screen & System Audio Recording, under "System Audio
+  Recording Only", turn SC Audio Tap on (+ adds it from that folder).
+
 Run it in a [test session](#test-sessions), `sc --on <user>@<mac> puppet …`,
 to leave the Mac's screen free.
 

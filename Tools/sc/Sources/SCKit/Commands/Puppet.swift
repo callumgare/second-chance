@@ -20,6 +20,7 @@ struct PuppetCommand: AsyncParsableCommand {
             PuppetActionCommand.self, PuppetShotCommand.self, PuppetTextCommand.self, PuppetWindowsCommand.self,
             PuppetWaitCommand.self, PuppetLogCommand.self, PuppetSavesCommand.self, PuppetServeCommand.self,
             PuppetControlsCommand.self, PuppetAutoItCommand.self,
+            PuppetRecordCommand.self, PuppetSheetCommand.self, PuppetAudioCommand.self,
             PuppetScreenCommand.self, PuppetNameCommand.self, PuppetExpectCommand.self,
         ]
     )
@@ -421,6 +422,7 @@ struct PuppetActionCommand: AsyncParsableCommand {
         if let hold { request += " hold=\(hold)" }
 
         let before = Probe(puppet)
+        puppet.noteAction(action.joined(separator: " "))
         _ = try puppet.ask(request)
         try await Task.sleep(for: .seconds(wait))
         let after = Probe(puppet)

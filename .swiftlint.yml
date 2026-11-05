@@ -8,6 +8,7 @@ included:
   - WrappPuppeteer
   - SecondChanceTests
   - Tools/sc/Sources
+  - Tools/sc/AudioTap
   - Tools/sc/Tests
 
 excluded:
