@@ -443,6 +443,11 @@ expires (`--for`, at most 8 hours; taking it again renews it). Commands from the
 same agent session (or, without one, the same user on the same Mac) go ahead under
 it, and anyone else's stop as for any lease. Breaking one only clears it, as there's
 no run to stop.
+`sc lease expiring --before 5m`, left running in the background after `take`, ends
+five minutes before the lease runs out and says so: the cue to renew it (`take`
+again) or finish up. An agent runs it as a background command, which wakes it when
+the command ends. It ends at once with exit 1 if the lease is no longer yours, and
+follows renewals.
 
 **Looking needs no lease.** Only what opens windows, takes the focus or sends
 input does. A screenshot, a window list, reading logs and `sc lease` itself never

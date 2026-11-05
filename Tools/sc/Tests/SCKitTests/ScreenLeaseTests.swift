@@ -164,6 +164,20 @@ struct ScreenLeaseTests {
         #expect(ScreenLease.parseDuration(text) == seconds)
     }
 
+    @Test("expiring follows a lease taken by hand: fine, then expiring, gone when not ours")
+    func expiry() {
+        var taken = lease()
+        taken.pid = 0
+        let now = Date()
+        taken.expires = now.addingTimeInterval(1800)
+        #expect(ScreenLease.expiryState(of: taken, for: holder(), warning: 300, now: now) == .fine)
+        #expect(ScreenLease.expiryState(of: taken, for: holder(), warning: 300, now: now.addingTimeInterval(1600)) == .expiring(taken.expires!))
+        #expect(ScreenLease.expiryState(of: taken, for: holder(), warning: 300, now: now.addingTimeInterval(1801)) == .gone)
+        #expect(ScreenLease.expiryState(of: taken, for: holder(session: "someone-else"), warning: 300, now: now) == .gone)
+        #expect(ScreenLease.expiryState(of: nil, for: holder(), warning: 300, now: now) == .gone)
+        #expect(ScreenLease.expiryState(of: lease(), for: holder(), warning: 300, now: now) == .gone)
+    }
+
     @Test("lease, like attach, doesn't sync")
     func leaseDoesNotSync() {
         #expect(!Remote.syncs(["lease"]))

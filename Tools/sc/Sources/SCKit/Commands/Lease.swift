@@ -12,7 +12,7 @@ struct LeaseCommand: AsyncParsableCommand {
         at the Mac) takes it by hand with `take` and gives it back with \
         `release`. Usually: sc --on <host> lease. See docs/dev-cli.md#the-screen-lease.
         """,
-        subcommands: [LeaseShowCommand.self, LeaseTakeCommand.self, LeaseReleaseCommand.self],
+        subcommands: [LeaseShowCommand.self, LeaseTakeCommand.self, LeaseReleaseCommand.self, LeaseExpiringCommand.self],
         defaultSubcommand: LeaseShowCommand.self
     )
 }
@@ -116,6 +116,50 @@ struct LeaseReleaseCommand: AsyncParsableCommand {
             session.ui.detail("Released: \(ScreenLease.shortHostName())'s screen is free.")
         } else {
             session.ui.detail("\(ScreenLease.shortHostName())'s screen wasn't leased.")
+        }
+    }
+}
+
+struct LeaseExpiringCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "expiring",
+        abstract: "Wait until the lease you took by hand is about to expire, then say so.",
+        discussion: """
+        Run it in the background after `sc lease take` (an agent: with \
+        run_in_background), and it ends --before the lease runs out, saying \
+        when: the cue to renew it (`sc lease take` again, with the same \
+        --purpose) or to finish up. It ends at once, with exit 1, if the lease \
+        is released, broken or taken over, and follows renewals.
+        """
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    @Option(help: ArgumentHelp("How long before expiry to end: 5m, 90s, or minutes.", valueName: "time"))
+    var before: String = "5m"
+
+    func validate() throws {
+        if ScreenLease.parseDuration(before) == nil {
+            throw ValidationError("--before takes a time such as 5m or 90s.")
+        }
+    }
+
+    func run() async throws {
+        let session = try Session.start(global)
+        let warning = ScreenLease.parseDuration(before) ?? 300
+        let holder = ScreenLease.currentHolder(repoRoot: session.repo.root, branch: await ScreenLease.branch(of: session.repo.root))
+        while true {
+            switch ScreenLease.expiryState(of: ScreenLease.read(ScreenLease.file()), for: holder, warning: warning) {
+            case .gone:
+                session.ui.line("The screen lease is no longer yours: released, broken, expired or taken over.")
+                throw ExitCode(1)
+            case .expiring(let expires):
+                session.ui.line("The screen lease expires at \(ScreenLease.clock(expires)). "
+                    + "Renew it with sc lease take --for <time> --purpose \"…\", or finish and sc lease release.")
+                return
+            case .fine:
+                try await Task.sleep(for: .seconds(15))
+            }
         }
     }
 }

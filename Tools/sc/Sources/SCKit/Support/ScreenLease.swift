@@ -238,6 +238,23 @@ struct ScreenLease: Codable, Equatable, Sendable {
         return true
     }
 
+    enum ExpiryState: Equatable {
+        /// Ours, and not yet within the warning.
+        case fine
+        /// Ours, and expiring within the warning, at this time.
+        case expiring(Date)
+        /// Not ours any more: released, broken, expired or taken over.
+        case gone
+    }
+
+    /// Where a lease taken by hand by `holder` stands, `warning` seconds ahead.
+    static func expiryState(of lease: ScreenLease?, for holder: Holder, warning: TimeInterval, now: Date = Date()) -> ExpiryState {
+        guard let lease, lease.isTakenByHand, lease.holder.isSame(as: holder), let expires = lease.expires, now < expires else {
+            return .gone
+        }
+        return expires.timeIntervalSince(now) <= warning ? .expiring(expires) : .fine
+    }
+
     /// Give the screen back, if this process has it and it's still ours.
     static func release() {
         guard let file = held else { return }
