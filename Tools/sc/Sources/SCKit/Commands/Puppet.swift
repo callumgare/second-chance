@@ -18,7 +18,7 @@ struct PuppetCommand: AsyncParsableCommand {
         subcommands: [
             PuppetStartCommand.self, PuppetStopCommand.self, PuppetListCommand.self, PuppetStatusCommand.self,
             PuppetActionCommand.self, PuppetShotCommand.self, PuppetTextCommand.self, PuppetWindowsCommand.self,
-            PuppetLogCommand.self, PuppetSavesCommand.self, PuppetServeCommand.self,
+            PuppetWaitCommand.self, PuppetLogCommand.self, PuppetSavesCommand.self, PuppetServeCommand.self,
         ]
     )
 }
@@ -37,7 +37,13 @@ struct PuppetStartCommand: AsyncParsableCommand {
     var name: String
 
     @Option(help: ArgumentHelp("The wrapp to run.", valueName: "app"))
-    var wrapp: String
+    var wrapp: String?
+
+    @Option(help: ArgumentHelp("The in-process helper to insert into a command (default: this checkout's build of it).", valueName: "dylib"))
+    var helper: String?
+
+    @Argument(parsing: .postTerminator, help: "Or a program to run by hand (an engine), after --: its path and arguments.")
+    var command: [String] = []
 
     @Option(help: ArgumentHelp("Stop it after this long with no command: 10m, 30m, 1h.", valueName: "time"))
     var idle: String = "10m"
@@ -47,6 +53,7 @@ struct PuppetStartCommand: AsyncParsableCommand {
 
     func validate() throws {
         guard PuppetSession.validName(name) else { throw ValidationError("A session's name is lower-case letters, digits and dashes.") }
+        guard (wrapp == nil) != command.isEmpty else { throw ValidationError("Give --wrapp <app>, or a command after --, not both.") }
         guard ScreenLease.parseDuration(idle) != nil, ScreenLease.parseDuration(max) != nil else {
             throw ValidationError("--idle and --max take a time such as 10m or 2h, of at most 8 hours.")
         }
@@ -54,16 +61,29 @@ struct PuppetStartCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
-        let app = URL(fileURLWithPath: (wrapp as NSString).expandingTildeInPath).standardizedFileURL
-        guard FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/MacOS/WrappTemplate").path) else {
-            throw SCError("\(app.path) isn't a wrapp (no Contents/MacOS/WrappTemplate).")
-        }
         if let existing = try? PuppetSession.load(name), existing.isRunning {
             throw SCError("\(name) is already running \(existing.app).", hints: ["Stop it first: sc puppet stop \(name)"])
         }
         try? FileManager.default.removeItem(at: PuppetSession.folder(name))
-        var puppet = PuppetSession(name: name, app: app.path, purpose: global.purpose, started: Date(),
-                                   idleMinutes: (ScreenLease.parseDuration(idle) ?? 600) / 60,
+        let app: URL
+        var program: [String]?
+        var helperPath: String?
+        if let wrapp {
+            app = URL(fileURLWithPath: (wrapp as NSString).expandingTildeInPath).standardizedFileURL
+            guard FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/MacOS/WrappTemplate").path) else {
+                throw SCError("\(app.path) isn't a wrapp (no Contents/MacOS/WrappTemplate).")
+            }
+        } else {
+            let found = try PuppetEngine.helper(helper, repo: session.repo.root)
+            helperPath = found.path
+            let executable = try await PuppetEngine.insertable(URL(fileURLWithPath: (command[0] as NSString).expandingTildeInPath),
+                                                               copyInto: PuppetSession.folder(name).appendingPathComponent("engine"),
+                                                               ui: session.ui)
+            app = executable
+            program = [executable.path] + command.dropFirst()
+        }
+        var puppet = PuppetSession(name: name, app: app.path, command: program, helper: helperPath, purpose: global.purpose,
+                                   started: Date(), idleMinutes: (ScreenLease.parseDuration(idle) ?? 600) / 60,
                                    maxMinutes: (ScreenLease.parseDuration(max) ?? 7200) / 60)
         try FileManager.default.createDirectory(at: puppet.shots, withIntermediateDirectories: true)
         try puppet.save()
@@ -118,7 +138,7 @@ struct PuppetStartCommand: AsyncParsableCommand {
         }
         let current = (try? PuppetSession.load(name)) ?? puppet
         let hello = (try? current.ask("hello")) ?? "error (an older helper: version 1)"
-        session.ui.line("\(name): \(app.lastPathComponent), wrapp pid \(current.wrappPID.map(String.init) ?? "?"), "
+        session.ui.line("\(name): \(app.lastPathComponent), pid \(current.wrappPID.map(String.init) ?? "?"), "
                         + "screen \(SessionPool.screenName()) leased; stops after \(idle) idle or \(max)")
         session.ui.line("helper: \(hello.replacingOccurrences(of: "ok ", with: ""))")
         session.ui.line("state: \(state.replacingOccurrences(of: "ok ", with: ""))")
@@ -164,12 +184,24 @@ struct PuppetServeCommand: AsyncParsableCommand {
         try FileManager.default.createDirectory(at: puppet.appSupport, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: puppet.wrappLog.path, contents: nil)
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: puppet.app).appendingPathComponent("Contents/MacOS/WrappTemplate")
         var environment = ProcessInfo.processInfo.environment
         environment["SECOND_CHANCE_PUPPET_DIR"] = puppet.sockets.path
-        environment["SECOND_CHANCE_APP_SUPPORT_DIR"] = puppet.appSupport.path
         environment["IN_PROCESS_HELPERS_LOG"] = puppet.helpersLog.path
         environment[ScreenLease.holderVariable] = nil
+        if let command = puppet.command, let helper = puppet.helper {
+            // An engine run by hand: the helper inserted as a wrapp inserts it
+            // into ScummVM and DOSBox, and a HOME of its own.
+            process.executableURL = URL(fileURLWithPath: command[0])
+            process.arguments = Array(command.dropFirst())
+            try FileManager.default.createDirectory(at: puppet.home, withIntermediateDirectories: true)
+            environment["HOME"] = puppet.home.path
+            environment["DYLD_INSERT_LIBRARIES"] = helper
+            environment["PUPPET_CONTROL_EXE"] = URL(fileURLWithPath: command[0]).lastPathComponent
+            process.currentDirectoryURL = URL(fileURLWithPath: command[0]).deletingLastPathComponent()
+        } else {
+            process.executableURL = URL(fileURLWithPath: puppet.app).appendingPathComponent("Contents/MacOS/WrappTemplate")
+            environment["SECOND_CHANCE_APP_SUPPORT_DIR"] = puppet.appSupport.path
+        }
         process.environment = environment
         let output = try FileHandle(forWritingTo: puppet.wrappLog)
         process.standardOutput = output
@@ -181,7 +213,7 @@ struct PuppetServeCommand: AsyncParsableCommand {
         log("started \(puppet.app), pid \(process.processIdentifier)")
 
         // Past the save warning, which a Wine wrapp waits on.
-        for _ in 0..<60 where process.isRunning {
+        for _ in 0..<(puppet.command == nil ? 60 : 0) where process.isRunning {
             if let info = try? HelperSocket.ask(puppet.wrappSocket, "info", timeout: 5) {
                 if info.contains("warning=1") { log("save warning: \((try? HelperSocket.ask(puppet.wrappSocket, "confirm")) ?? "?")") }
                 if info.contains("warning=") { break }
@@ -215,7 +247,7 @@ struct PuppetServeCommand: AsyncParsableCommand {
             if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
         let app = URL(fileURLWithPath: puppet.app)
-        if FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/SharedSupport/wine").path) {
+        if puppet.command == nil, FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/SharedSupport/wine").path) {
             let server = Wine(wrapp: app).server
             let left = server.programs()
             if !left.isEmpty {
@@ -401,7 +433,7 @@ enum PuppetReply {
         var effect = "\(action) → "
         if let a = before.thumbnail, let b = after.thumbnail {
             effect += "changed \(Frames.changed(a, b))%"
-            if Frames.black(b) >= 90 { effect += ", now black" }
+            if Frames.black(b) >= 99 { effect += ", now black" }
         } else {
             effect += "changed ? (no capture)"
         }
@@ -423,7 +455,7 @@ struct PuppetShotCommand: AsyncParsableCommand {
     @Argument var name: String
 
     @Option(help: ArgumentHelp("A part of the window, in points: x,y,w,h.", valueName: "x,y,w,h")) var region: String?
-    @Option(help: "Pixels a point. Default: the window's own, but no more than 1280 pixels across.") var scale: Double?
+    @Option(help: "Pixels a point, at most the window's own. Default: no more than 1280 pixels across.") var scale: Double?
 
     func run() async throws {
         let session = try Session.start(global)
@@ -435,7 +467,9 @@ struct PuppetShotCommand: AsyncParsableCommand {
             let n = r.split(separator: ",").compactMap { Double($0) }
             return n.count == 4 ? max(n[2], n[3]) : nil
         } ?? max(size.width, size.height)
-        let chosen = scale ?? min(size.scale, 1280 / max(longEdge, 1))
+        // Never above the window's own: asked for more, an OpenGL game's
+        // surface comes back at its own size in a corner of a bigger picture.
+        let chosen = min(scale ?? 1280 / max(longEdge, 1), size.scale)
         let number = ((try? FileManager.default.contentsOfDirectory(atPath: puppet.shots.path))?.filter { $0.hasSuffix(".png") && !$0.hasPrefix(".") }.count ?? 0) + 1
         let path = puppet.shots.appendingPathComponent(String(format: "%@-%03d.png", name, number))
         var request = "capture \(path.path) scale=\(String(format: "%.3f", chosen))"
@@ -483,13 +517,21 @@ struct PuppetTextCommand: AsyncParsableCommand {
         puppet.touch()
         let size = PuppetShotCommand.windowSize(puppet)
         // At least 2 pixels a point, so pixel fonts are big enough to read.
-        let scale = Swift.max(size.scale, 2)
         let path = puppet.shots.appendingPathComponent(".text-\(UUID().uuidString).png")
         defer { try? FileManager.default.removeItem(at: path) }
-        var request = "capture \(path.path) scale=\(scale)"
+        // At the window's own scale: asked for more, an OpenGL game's surface
+        // comes back at its own size in a corner of a bigger picture.
+        var request = "capture \(path.path) scale=\(size.scale)"
         if let region { request += " region=\(region)" }
         _ = try puppet.ask(request)
-        guard let image = Frames.image(at: path) else { throw SCError("Couldn't read the capture.") }
+        guard let captured = Frames.image(at: path) else { throw SCError("Couldn't read the capture.") }
+        // Enlarged, pixel for pixel, to at least 2 pixels a point: Vision
+        // misreads small pixel fonts.
+        let image = Frames.enlarged(captured, by: Int((2 / size.scale).rounded(.up))) ?? captured
+        // The scale it came back at: ScreenCaptureKit gives no more pixels
+        // than the display has, whatever was asked for.
+        let regionWidth = region.flatMap { r in r.split(separator: ",").compactMap { Double($0) }.dropFirst(2).first }
+        let scale = Double(image.width) / (regionWidth ?? size.width)
         let offset = region.map { $0.split(separator: ",").compactMap { Double($0) } } ?? []
         let lines = try Frames.text(in: image)
         if lines.isEmpty { session.ui.line("text: none found") }
@@ -575,7 +617,7 @@ struct PuppetSavesCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let puppet = try PuppetSession.load(name)
         let app = URL(fileURLWithPath: puppet.app)
-        let places = [puppet.appSupport, app.appendingPathComponent("Contents/SharedSupport/prefix/drive_c"),
+        let places = [puppet.appSupport, puppet.home, app.appendingPathComponent("Contents/SharedSupport/prefix/drive_c"),
                       app.appendingPathComponent("Contents/SharedSupport/prefix/user.reg").deletingLastPathComponent()]
         let found = Self.written(in: places, since: puppet.started)
         if found.isEmpty { session.ui.line("Nothing written since \(ScreenLease.clock(puppet.started)).") }
@@ -603,5 +645,133 @@ struct PuppetSavesCommand: AsyncParsableCommand {
             }
         }
         return found
+    }
+}
+
+// MARK: Waiting
+
+struct PuppetWaitCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "wait",
+        abstract: "Wait until the picture changes or goes still, some text shows, or the program ends.",
+        discussion: "Measures, never looks: thumbnails for change and stillness, OCR for text. Exit 3 on timeout, 4 if the program ended unasked."
+    )
+
+    @OptionGroup var global: GlobalOptions
+
+    @Argument var name: String
+
+    @Flag(help: "Until the picture changes (more than 5%).") var change = false
+    @Option(help: ArgumentHelp("Until the picture has been still this many seconds.", valueName: "seconds")) var still: Double?
+    @Option(help: ArgumentHelp("Until this text shows (OCR, ignoring case).", valueName: "text")) var text: String?
+    @Flag(help: "Until the program ends.") var exit = false
+    @Option(help: "Give up after this many seconds.") var timeout: Double = 60
+
+    func validate() throws {
+        guard [change, still != nil, text != nil, exit].filter({ $0 }).count == 1 else {
+            throw ValidationError("Wait for one thing: --change, --still <s>, --text <s> or --exit.")
+        }
+    }
+
+    func run() async throws {
+        let session = try Session.start(global)
+        let puppet = try PuppetSession.load(name)
+        let started = Date()
+        let first = Probe.thumbnail(puppet)
+        var last = first
+        var stillSince = Date()
+        while Date().timeIntervalSince(started) < timeout {
+            puppet.touch()
+            let running = puppet.wrappPID.map { kill($0, 0) == 0 } ?? false
+            if !running {
+                session.ui.line("the program ended after \(Self.seconds(started))")
+                if exit { return }
+                throw ExitCode(4)
+            }
+            if let wanted = text {
+                if let found = PuppetWaitCommand.findText(wanted, in: puppet) {
+                    session.ui.line("\"\(found)\" showed after \(Self.seconds(started))")
+                    return
+                }
+                try await Task.sleep(for: .seconds(1.5))
+                continue
+            }
+            try await Task.sleep(for: .seconds(0.5))
+            let now = Probe.thumbnail(puppet)
+            if change, let a = first, let b = now, Frames.changed(a, b) > 5 {
+                session.ui.line("changed \(Frames.changed(a, b))% after \(Self.seconds(started))")
+                return
+            }
+            if let seconds = still, let a = last, let b = now {
+                if Frames.changed(a, b) > 1 { stillSince = Date() }
+                if Date().timeIntervalSince(stillSince) >= seconds {
+                    session.ui.line("still for \(Int(seconds)) s after \(Self.seconds(started))")
+                    return
+                }
+            }
+            last = now
+        }
+        session.ui.line("timed out after \(Int(timeout)) s")
+        throw ExitCode(3)
+    }
+
+    static func seconds(_ since: Date) -> String { String(format: "%.1f s", Date().timeIntervalSince(since)) }
+
+    static func findText(_ wanted: String, in puppet: PuppetSession) -> String? {
+        let path = puppet.shots.appendingPathComponent(".wait-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: path) }
+        guard (try? puppet.ask("capture \(path.path) scale=2", timeout: 20)) != nil, let image = Frames.image(at: path),
+              let lines = try? Frames.text(in: image) else { return nil }
+        return lines.first { $0.text.localizedCaseInsensitiveContains(wanted) }?.text
+    }
+}
+
+extension Probe {
+    static func thumbnail(_ puppet: PuppetSession) -> [UInt8]? {
+        let path = puppet.shots.appendingPathComponent(".probe-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: path) }
+        guard (try? puppet.ask("capture \(path.path) scale=0.1", timeout: 20)) != nil, let image = Frames.image(at: path) else { return nil }
+        return Frames.thumbnail(image)
+    }
+}
+
+/// An engine run by hand under a puppet session.
+enum PuppetEngine {
+    /// The in-process helper: the one given, or this checkout's build of it.
+    static func helper(_ given: String?, repo: URL) throws -> URL {
+        let products = repo.appendingPathComponent("DerivedData/Build/Products/Debug")
+        let dylib = "Contents/Frameworks/in_process_helpers.dylib"
+        let candidates: [String?] = [given.map { ($0 as NSString).expandingTildeInPath },
+                                     products.appendingPathComponent("WrappTemplate.app/\(dylib)").path,
+                                     products.appendingPathComponent("Second Chance.app/Contents/Resources/WrappTemplate.app/\(dylib)").path]
+        guard let found = candidates.compactMap({ $0 }).first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            throw SCError("No in-process helper to insert: this checkout hasn't built the app.",
+                          hints: ["Name one: --helper <path>/in_process_helpers.dylib (any wrapp's Contents/Frameworks has it)",
+                                  "Or build it: sc app build"])
+        }
+        return URL(fileURLWithPath: found)
+    }
+
+    /// The executable to run with the helper inserted. Hardened runtime makes
+    /// dyld ignore inserted libraries, so an engine downloaded for an
+    /// experiment is copied into the session (its whole .app) and signed
+    /// ad hoc, which drops it: a copy, so the download stays as it came.
+    static func insertable(_ executable: URL, copyInto folder: URL, ui: UI) async throws -> URL {
+        guard FileManager.default.isExecutableFile(atPath: executable.path) else { throw SCError("\(executable.path) isn't a program.") }
+        let signature = try await Proc.collect("/usr/bin/codesign", ["-d", "--verbose", executable.path])
+        guard (signature.output + signature.error).contains("runtime") else { return executable }
+        guard let bundle = executable.pathComponents.lastIndex(where: { $0.hasSuffix(".app") }).map({ index in
+            URL(fileURLWithPath: NSString.path(withComponents: Array(executable.pathComponents[...index])))
+        }) else {
+            throw SCError("\(executable.lastPathComponent) has hardened runtime, which ignores the helper, and isn't in an app to copy and re-sign.")
+        }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let copy = folder.appendingPathComponent(bundle.lastPathComponent)
+        ui.detail("\(bundle.lastPathComponent) has hardened runtime, which ignores the helper: running a copy signed ad hoc.")
+        let copied = try await Proc.collect("/usr/bin/ditto", [bundle.path, copy.path])
+        guard copied.succeeded else { throw SCError("Couldn't copy \(bundle.path): \(copied.error)") }
+        let signed = try await Proc.collect("/usr/bin/codesign", ["--force", "--deep", "--sign", "-", copy.path])
+        guard signed.succeeded else { throw SCError("Couldn't re-sign the copy: \(signed.error)") }
+        return copy.appendingPathComponent(String(executable.path.dropFirst(bundle.path.count + 1)))
     }
 }

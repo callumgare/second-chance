@@ -9,8 +9,13 @@ import Vision
 /// share. See docs/dev-cli.md#puppet-sessions.
 struct PuppetSession: Codable {
     var name: String
-    /// The wrapp it runs.
+    /// The wrapp it runs, or the program a command starts.
     var app: String
+    /// A program run by hand (an engine) rather than a wrapp: its arguments,
+    /// the first the executable.
+    var command: [String]?
+    /// The in-process helper inserted into `command`.
+    var helper: String?
     var purpose: String?
     var started: Date
     var idleMinutes: Double
@@ -36,6 +41,9 @@ struct PuppetSession: Codable {
     var helpersLog: URL { folder.appendingPathComponent("helpers.log") }
     var appSupport: URL { folder.appendingPathComponent("app-support") }
     var shots: URL { folder.appendingPathComponent("shots") }
+    /// HOME for a command, so an engine's settings and saves start empty
+    /// and stay out of the user's own.
+    var home: URL { folder.appendingPathComponent("home") }
     /// Short, as a Unix socket's path must be (104 bytes with the helper's
     /// `game-<pid>.sock`), and private to this user.
     var sockets: URL { URL(fileURLWithPath: "/tmp/sc-puppet-\(getuid())-\(name)") }
@@ -161,6 +169,17 @@ enum Frames {
             return true
         }
         return drawn ? pixels : nil
+    }
+
+    /// `image` `factor` times bigger, each pixel a block: for reading pixel
+    /// fonts. nil when it needs no enlarging.
+    static func enlarged(_ image: CGImage, by factor: Int) -> CGImage? {
+        guard factor > 1, let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: image.width * factor, height: image.height * factor, bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.interpolationQuality = .none
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width * factor, height: image.height * factor))
+        return context.makeImage()
     }
 
     /// The share of the picture that changed, 0–100: the thumbnail's pixels
