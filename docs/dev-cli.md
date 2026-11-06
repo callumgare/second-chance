@@ -1032,7 +1032,9 @@ adds a folder looked in first.
   a `screen` needle of the whole picture, its bars trimmed (as
   WrappPuppeteer's splash references are); with `--region x,y,w,h` (points,
   as `text` gives them) a `region` needle of that part, searched for around
-  where it is now and sized to the window; with `--text`, a `text` needle of
+  where it is now and sized to the window, with a warning when that part is
+  nearly one colour (its brightness's spread under 6 of 255), as a flat patch
+  matches any patch like it; with `--text`, a `text` needle of
   the lines read there. It goes in the session's `needles/` (or `--out
   <folder>`, named the tag or `--as <name>`), which `screen` reads first, and
   is checked against the frame it was cut from. Copied into the bundle's

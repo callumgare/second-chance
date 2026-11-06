@@ -189,11 +189,11 @@ struct PuppetServeCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         var puppet = try PuppetSession.load(name)
         puppet.serverPID = getpid()
-        try puppet.save()
+        try puppet.saveServerState()
         func finish(_ reason: String) {
             puppet.stopped = Date()
             puppet.stopReason = reason
-            try? puppet.save()
+            try? puppet.saveServerState()
             try? FileManager.default.removeItem(at: puppet.sockets)
             log("stopped: \(reason)")
         }
@@ -246,7 +246,7 @@ struct PuppetServeCommand: AsyncParsableCommand {
         process.standardInput = FileHandle.nullDevice
         try process.run()
         puppet.wrappPID = process.processIdentifier
-        try puppet.save()
+        try puppet.saveServerState()
         log("started \(puppet.app), pid \(process.processIdentifier)")
 
         // Past the save warning, which a Wine wrapp waits on.

@@ -298,7 +298,7 @@ enum PuppetWineServer {
         if let winedebug = ProcessInfo.processInfo.environment["SECOND_CHANCE_WINEDEBUG"] { armed["WINEDEBUG"] = winedebug }
         let launcher = try wine.start(command, environment: armed, output: .log(logger))
         puppet.wrappPID = launcher.pid
-        try puppet.save()
+        try puppet.saveServerState()
         log("started \(setup.command.joined(separator: " ")) in \(prefix.path) (launcher pid \(launcher.pid))")
 
         var reason = ""
@@ -323,7 +323,7 @@ enum PuppetWineServer {
                 if let newest = own.max(by: { $0.pid < $1.pid }) {
                     quietChecks = 0
                     puppet.wrappPID = newest.pid
-                    try? puppet.save()
+                    try? puppet.saveServerState()
                     log("now following \(newest.name) (pid \(newest.pid))")
                 } else {
                     quietChecks += 1

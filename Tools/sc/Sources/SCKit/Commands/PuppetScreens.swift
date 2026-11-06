@@ -115,6 +115,7 @@ struct PuppetNameCommand: AsyncParsableCommand {
             try? FileManager.default.removeItem(at: png)
         }
         session.ui.line("\(cut.kind) needle \(base), tag \(tag): \(cut.summary)")
+        if let warning = cut.warning { session.ui.warning("\(warning)") }
         // Checked against the frame it was cut from, as `screen` would.
         let needle = try NeedleLibrary.needle(at: yaml)
         let check = PuppetScreens.identify(frame, needles: [needle])
@@ -480,12 +481,8 @@ enum PuppetScreens {
     /// WrappPuppeteer's `MainMenuScreen.matchOptions` makes of it.
     static func matchOptions(_ needle: Needle) -> TemplateMatchOptions {
         let region = needle.spec.region
-        return TemplateMatchOptions(
-            searchRegion: region?.search?.cgRect ?? CGRect(x: 0, y: 0, width: 1, height: 1),
-            templateHeightFraction: region?.heightFraction.map { CGFloat($0) },
-            scaleVariations: region?.scales.map { $0.map { CGFloat($0) } } ?? [1.0],
-            grayscale: region?.grayscale == "red-emphasis" ? .redEmphasis : .luminance
-        )
+        return TemplateMatchOptions(regionSearch: region?.search?.cgRect, heightFraction: region?.heightFraction,
+                                    scales: region?.scales, grayscale: region?.grayscale)
     }
 
     /// The screen's name for an action's reply: nil when there are no
@@ -542,7 +539,11 @@ enum PuppetNeedles {
             guard FileManager.default.fileExists(atPath: bundleFolder(given, repo: repo).appendingPathComponent("manifest.yaml").path) else {
                 throw SCError("No program bundle \(given) in \(repo.appendingPathComponent("Bundles").path).")
             }
-            try given.write(to: puppet.bundleFile, atomically: true, encoding: .utf8)
+            // Into the session as it is now on disk, which the server only
+            // ever changes its own fields of (`saveServerState`).
+            var stored = try PuppetSession.load(puppet.name)
+            stored.bundle = given
+            try stored.save()
         }
         let bundle = given ?? bundleID(of: puppet)
         var folders: [URL] = []
@@ -572,10 +573,7 @@ enum PuppetNeedles {
     /// The bundle remembered for the session, else its wrapp's
     /// (`Contents/Resources/WrappLock.json`).
     static func bundleID(of puppet: PuppetSession) -> String? {
-        if let remembered = try? String(contentsOf: puppet.bundleFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-           !remembered.isEmpty {
-            return remembered
-        }
+        if let remembered = puppet.bundle, !remembered.isEmpty { return remembered }
         let lock = URL(fileURLWithPath: puppet.app).appendingPathComponent("Contents/Resources/WrappLock.json")
         guard let data = try? Data(contentsOf: lock), let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let bundle = json["bundle"] as? [String: Any] else { return nil }
@@ -597,9 +595,6 @@ enum PuppetNeedles {
 extension PuppetSession {
     /// Needles cut from this session's screens (`sc puppet name`).
     var needlesFolder: URL { folder.appendingPathComponent("needles") }
-    /// The bundle `--bundle` named, remembered for later commands.
-    var bundleFile: URL { folder.appendingPathComponent("bundle") }
-
     /// The next numbered shot's path, as `shot` numbers them.
     func nextShot(suffix: String) -> URL {
         let number = ((try? FileManager.default.contentsOfDirectory(atPath: shots.path))?
@@ -615,6 +610,8 @@ struct NeedleCut {
     let yaml: String
     let image: CGImage?
     let summary: String
+    /// Something to tell whoever cut it before they rely on it.
+    var warning: String?
 
     /// The width a screen needle's picture is saved at, as WrappPuppeteer's
     /// `--make-splash-reference` saves one.
@@ -655,7 +652,15 @@ struct NeedleCut {
                   height-fraction: \(fraction(region.height / frame.height))
 
                 """
-            return NeedleCut(kind: "region", yaml: yaml, image: image, summary: "\(image.width)x\(image.height) pixels of \(PuppetFrame.describe(region))")
+            var cut = NeedleCut(kind: "region", yaml: yaml, image: image, summary: "\(image.width)x\(image.height) pixels of \(PuppetFrame.describe(region))")
+            // A template search finds a flat patch anywhere there's one like
+            // it, and its correlation is unsteady there, so it can't tell
+            // this screen from another.
+            if let spread = brightnessSpread(of: image), spread < flatSpread {
+                cut.warning = "\(PuppetFrame.describe(region)) is nearly one colour all over (brightness varies by \(Int(spread.rounded())) of 255), "
+                    + "so it would match any patch like it. Pick a part with an edge, a shape or text in it."
+            }
+            return cut
         }
         guard let content = ImageFingerprint.content(of: frame.image, width: screenWidth) else {
             throw SCError("The screen is blank (dark all over): nothing to know it by.")
@@ -666,6 +671,30 @@ struct NeedleCut {
 
             """
         return NeedleCut(kind: "screen", yaml: yaml, image: content, summary: "the picture, bars trimmed, \(content.width)x\(content.height)")
+    }
+
+    /// Below this spread of brightness (a standard deviation, 0–255) a
+    /// region is flat: a dark sky, a plain panel.
+    static let flatSpread = 6.0
+
+    /// How much an image's brightness varies: the standard deviation of its
+    /// grey levels, 0–255, read from a copy at most 64 pixels across.
+    static func brightnessSpread(of image: CGImage) -> Double? {
+        let scale = min(1, 64 / Double(max(image.width, image.height)))
+        let width = max(1, Int(Double(image.width) * scale)), height = max(1, Int(Double(image.height) * scale))
+        var grey = [UInt8](repeating: 0, count: width * height)
+        let drawn = grey.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                          bytesPerRow: width, space: CGColorSpaceCreateDeviceGray(),
+                                          bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            context.interpolationQuality = .medium
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+        let mean = grey.reduce(0.0) { $0 + Double($1) } / Double(grey.count)
+        let variance = grey.reduce(0.0) { $0 + (Double($1) - mean) * (Double($1) - mean) } / Double(grey.count)
+        return variance.squareRoot()
     }
 
     static func quoted(_ string: String) -> String {

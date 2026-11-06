@@ -26,6 +26,9 @@ struct PuppetSession: Codable {
     /// The screen was held from `started` to this, once it's stopped.
     var stopped: Date?
     var stopReason: String?
+    /// The program bundle whose needles name its screens, as `--bundle`
+    /// named it (`PuppetNeedles.library`); nil for the wrapp's own.
+    var bundle: String?
 
     static let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("SecondChance/puppet")
@@ -70,6 +73,19 @@ struct PuppetSession: Codable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(self).write(to: file, options: .atomic)
+    }
+
+    /// The server's own fields (its pid, the program's, when and why it
+    /// stopped) written over the session as it is on disk, so what a client
+    /// stored there meanwhile, such as `bundle`, isn't lost to the copy the
+    /// server has held since it started.
+    func saveServerState() throws {
+        var current = (try? Self.load(name)) ?? self
+        current.serverPID = serverPID
+        current.wrappPID = wrappPID
+        current.stopped = stopped
+        current.stopReason = stopReason
+        try current.save()
     }
 
     static func all() -> [PuppetSession] {

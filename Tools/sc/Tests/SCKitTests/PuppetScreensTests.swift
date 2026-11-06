@@ -148,4 +148,38 @@ struct PuppetScreensTests {
         #expect(NeedleCut.fraction(1) == "1")
         #expect(NeedleCut.fraction(0) == "0")
     }
+
+    @Test("A region needle cut from a flat patch warns that it would match any patch like it; one with an edge doesn't")
+    func flatRegionWarns() throws {
+        let frame = try Self.frame([(CGRect(x: 250, y: 200, width: 30, height: 16), (0.9, 0.8, 0.2))])
+        let flat = try NeedleCut.make(tag: "sky", from: frame, region: CGRect(x: 20, y: 20, width: 40, height: 30), text: false, origin: "a test")
+        #expect(flat.warning?.contains("nearly one colour") == true)
+        let edged = try NeedleCut.make(tag: "quit", from: frame, region: CGRect(x: 240, y: 190, width: 50, height: 36), text: false, origin: "a test")
+        #expect(edged.warning == nil)
+        let image = try #require(edged.image)
+        #expect(try #require(NeedleCut.brightnessSpread(of: image)) > NeedleCut.flatSpread)
+    }
+
+    @Test("The bundle a command names is kept in the session, and the server's saves keep it")
+    func bundleSurvivesServerSaves() throws {
+        let name = "test-\(UUID().uuidString.prefix(8).lowercased())"
+        let server = PuppetSession(name: name, app: "/Applications/Example.app", started: Date(), idleMinutes: 10, maxMinutes: 120)
+        try FileManager.default.createDirectory(at: server.folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: server.folder) }
+        try server.save()
+        // A client names the bundle, as `screen --bundle` does…
+        var client = try PuppetSession.load(name)
+        client.bundle = "freeware/skifree"
+        try client.save()
+        // …then the server, holding the copy it started with, saves its own fields.
+        var serving = server
+        serving.wrappPID = 4242
+        serving.stopReason = "asked to stop"
+        try serving.saveServerState()
+        let after = try PuppetSession.load(name)
+        #expect(after.bundle == "freeware/skifree")
+        #expect(after.wrappPID == 4242)
+        #expect(after.stopReason == "asked to stop")
+        #expect(PuppetNeedles.bundleID(of: after) == "freeware/skifree")
+    }
 }
