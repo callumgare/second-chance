@@ -110,10 +110,9 @@ class ISOMounter {
         let isDMG = isoPath.pathExtension.lowercased() == "dmg"
         // stdin is empty: a DMG with a licence agreement asks for it there,
         // and is answered no rather than waited on. Her Interactive's have none.
-        let attach = try await Process.output(
-            of: "/usr/bin/hdiutil",
-            ["attach", "-nobrowse", "-readonly"] + (isDMG ? ["-noverify"] : []) + [isoPath.path]
-        )
+        // Bounded: an attach that hangs is stopped and the image released
+        // (`DiskImage`), rather than holding the build and the Mac's disk service.
+        let attach = try await DiskImage.attach(isoPath, options: ["-nobrowse", "-readonly"] + (isDMG ? ["-noverify"] : []))
 
         guard attach.succeeded else {
             let errorOutput = (attach.output + attach.errorOutput).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,8 +156,7 @@ class ISOMounter {
     /// that fails too.
     private func mountISOSide(of isoPath: URL) async -> URL? {
         do {
-            let attach = try await Process.output(
-                of: "/usr/bin/hdiutil", ["attach", "-nomount", "-noverify", "-readonly", isoPath.path])
+            let attach = try await DiskImage.attach(isoPath, options: ["-nomount", "-noverify", "-readonly"])
             guard attach.succeeded,
                   let device = attach.output.split(separator: "\n").first?
                       .split(whereSeparator: \.isWhitespace).first.map(String.init),

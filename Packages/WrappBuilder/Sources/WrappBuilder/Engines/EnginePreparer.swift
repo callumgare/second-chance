@@ -98,6 +98,16 @@ public nonisolated struct EngineJob: Sendable {
         }
     }
 
+    /// Attach a disk image read-only at `mount`, giving up (and releasing
+    /// it) if the attach hangs (`DiskImage.attach`).
+    func attach(_ image: URL, at mount: URL) async throws {
+        let result = try await DiskImage.attach(image, options: ["-mountpoint", mount.path, "-nobrowse", "-readonly", "-noautoopen", "-quiet"])
+        guard result.succeeded else {
+            let said = result.errorOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw EngineError("hdiutil attach failed (\(result.status)): \(said)")
+        }
+    }
+
     /// Ad hoc sign `files`, one at a time, deepest first. Signing a
     /// framework's binary seals the framework: the hashes of every file in
     /// it go into its `_CodeSignature`, so its files must be signed before
@@ -227,8 +237,7 @@ nonisolated extension ScummVMBuild {
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         let mount = job.scratch.appendingPathComponent("mount")
         try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
-        try await job.run("/usr/bin/hdiutil", ["attach", try job.source("scummvm").path, "-mountpoint", mount.path,
-                                               "-nobrowse", "-readonly", "-noautoopen", "-quiet"])
+        try await job.attach(try job.source("scummvm"), at: mount)
         do {
             let app = mount.appendingPathComponent("ScummVM.app/Contents")
             let resources = job.tree.appendingPathComponent("Resources")

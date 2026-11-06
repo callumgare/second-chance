@@ -130,6 +130,19 @@ with a `DiscImageError` saying why, from the image's own bytes
 report's kind, so even a basic report says which; hdiutil's own words are in
 the log.
 
+**An attach that hangs is stopped, and its image released.** Every
+`hdiutil attach` (a disc here, an engine's disk image in `EnginePreparer`,
+a disc in `sc puppet`) goes through `DiskImage.attach`, which gives it three
+minutes. On a Mac where attaching had broken (even a new 5 MB image hung),
+each stuck attach also wedged the disk service for every user: `diskutil
+list` hung, and other mounts took minutes or failed, until the
+`diskimages-helper` serving the stuck image was killed; `hdiutil detach
+-force` hung too, and `hdiutil` ignored SIGTERM. So a hung attach is killed
+along with this user's helper for that image (found in `hdiutil info
+-plist`), and fails with `DiskImage.HungError`, leaving the Mac as it was. If
+attaches keep hanging, the Mac's disk service is stuck itself, and a restart
+clears it.
+
 **A hybrid Mac and PC disc mounts by its ISO 9660 side.** Its Apple
 partition map leads hdiutil to try only its HFS partition, which macOS can
 no longer mount, and refuse the image ("no mountable file systems"). An

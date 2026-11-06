@@ -24,8 +24,7 @@ nonisolated extension DOSBoxBuild {
     public static func prepare(_ job: EngineJob) async throws -> [URL] {
         let mount = job.scratch.appendingPathComponent("mount")
         try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
-        try await job.run("/usr/bin/hdiutil", ["attach", try job.source("dosbox").path, "-mountpoint", mount.path,
-                                               "-nobrowse", "-readonly", "-noautoopen", "-quiet"])
+        try await job.attach(try job.source("dosbox"), at: mount)
         do {
             let app = mount.appendingPathComponent("DOSBox Staging.app/Contents")
             let macOS = job.tree.appendingPathComponent("MacOS")

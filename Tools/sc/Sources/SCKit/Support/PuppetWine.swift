@@ -355,8 +355,9 @@ enum PuppetWineServer {
     /// Mount a disc image read-only, out of Finder's sight: its mount point
     /// and device.
     static func attach(_ image: String) async throws -> (mount: String, device: String) {
-        let result = try await Proc.collect("/usr/bin/hdiutil", ["attach", "-readonly", "-nobrowse", "-noverify", "-plist", image])
-        guard result.succeeded else { throw SCError("Couldn't mount \(image): \(result.error.trimmingCharacters(in: .whitespacesAndNewlines))") }
+        // Bounded: one that hangs is stopped and released (`DiskImage`).
+        let result = try await DiskImage.attach(URL(fileURLWithPath: image), options: ["-readonly", "-nobrowse", "-noverify", "-plist"])
+        guard result.succeeded else { throw SCError("Couldn't mount \(image): \(result.errorOutput.trimmingCharacters(in: .whitespacesAndNewlines))") }
         guard let found = mountPoint(plist: Data(result.output.utf8)) else { throw SCError("hdiutil mounted \(image) but named no mount point.") }
         return found
     }
