@@ -206,8 +206,15 @@ enum Frames {
 
     /// The lines of text Vision finds, with their boxes in the picture's
     /// pixels from the top left.
+    ///
+    /// Revision 2 of Vision's recogniser, which reads upright text only.
+    /// Revision 3 judges the page's orientation from all the text it sees, and
+    /// a picture full of glyph-like shapes, as Iji's menu, whose background
+    /// rains T and ⊥, tips it into reading every line upside down ("MAIN MENU"
+    /// came back as "ONEH NIHH") or not at all, on some frames and not others.
     static func text(in image: CGImage) throws -> [(text: String, box: CGRect)] {
         let request = VNRecognizeTextRequest()
+        request.revision = VNRecognizeTextRequestRevision2
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
         try VNImageRequestHandler(cgImage: image).perform([request])
