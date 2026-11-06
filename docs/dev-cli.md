@@ -499,6 +499,17 @@ of this checkout's gigabytes. It holds:
   `.local` link is resolved; links inside are sent as links, never followed
   (a Wine prefix's `z:` is `/`).
 
+**To another user on this Mac** (`<user>@localhost`, or this Mac's own name)
+the copy is cloned rather than sent: that user runs a script over ssh that
+clones it from this checkout with `ditto --clone` (`RuntimeCopy.cloneScript`),
+which takes seconds and next to no disk, as APFS shares the blocks until
+either side changes them. Test users can read the checkout, being in
+`staff`, and what they clone is theirs. `Bundles`, `Modules` and the Debug
+products are cloned beside the old and swapped in, so nothing stale is left;
+sc's own files are cloned over the old; the named `.local` paths are merged
+in, nothing there deleted. The installers store is the same one, so it isn't
+sent.
+
 `.env` stays behind, as it holds each Mac's own settings, such as whether
 tests hide their windows there ([testing.md](testing.md)). rsync neither sends
 nor deletes what's left out, so the copy keeps its own `built-apps/`,

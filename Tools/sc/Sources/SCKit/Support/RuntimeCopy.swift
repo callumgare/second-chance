@@ -56,4 +56,58 @@ enum RuntimeCopy {
                     "\(target.host):\(target.path)/\(path)" + (isDirectory ? "/" : "")]
         }
     }
+
+    // MARK: - On this Mac
+
+    /// Whether `host` (`[user@]host`) is this Mac: then the copy is cloned
+    /// rather than sent (`cloneScript`).
+    static func isThisMac(_ host: String, localNames: [String] = thisMacNames()) -> Bool {
+        let name = (host.split(separator: "@").last.map(String.init) ?? host).lowercased()
+        let short = name.split(separator: ".").first.map(String.init) ?? name
+        return ["localhost", "127.0.0.1", "::1"].contains(name) || localNames.contains(name) || localNames.contains(short)
+    }
+
+    static func thisMacNames() -> [String] {
+        let full = ProcessInfo.processInfo.hostName.lowercased()
+        return [full, full.split(separator: ".").first.map(String.init) ?? full]
+    }
+
+    /// A path for the clone script: `~/` as `$HOME/`, so the user running
+    /// it there gets their own home, the rest quoted.
+    static func scriptPath(_ path: String) -> String {
+        path.hasPrefix("~/") ? "\"$HOME\"/" + Remote.quote(String(path.dropFirst(2))) : Remote.quote(path)
+    }
+
+    /// The bash a user on this Mac runs to make its runtime copy from this
+    /// checkout with APFS clones (`ditto --clone`), taking next to no time
+    /// or disk, instead of an rsync of hundreds of megabytes into its own
+    /// home: test users can read the checkout (they're in `staff`), and what
+    /// they clone is theirs. `Bundles`, `Modules` and the Debug products are
+    /// cloned beside the old and swapped in, so nothing stale is left; sc's
+    /// own files are cloned over the old; the named `.local` paths are cloned
+    /// in with nothing there deleted, as `localSyncs` sends them.
+    static func cloneScript(root: URL, staging: URL, named: [String], targetPath: String, products: Bool) -> String {
+        let src = { (relative: String) in Remote.quote(root.appendingPathComponent(relative).path) }
+        let dst = { (relative: String) in scriptPath(targetPath + "/" + relative) }
+        var lines = ["set -e", "mkdir -p \(scriptPath(targetPath))"]
+        func swap(_ relative: String) {
+            lines.append("rm -rf \(dst(relative + ".new")) && mkdir -p \(dst((relative as NSString).deletingLastPathComponent))")
+            lines.append("ditto --clone \(src(relative)) \(dst(relative + ".new"))")
+            lines.append("rm -rf \(dst(relative)) && mv \(dst(relative + ".new")) \(dst(relative))")
+        }
+        for folder in Remote.dataFolders { swap(folder) }
+        if products {
+            swap("DerivedData/Build/Products/Debug")
+            lines.append("rm -f \(dst("DerivedData/Build/Products"))/*.xctestrun")
+            lines.append("for f in \(src("DerivedData/Build/Products"))/*.xctestrun; do [ -e \"$f\" ] && cp -c \"$f\" \(dst("DerivedData/Build/Products"))/; done")
+        }
+        lines.append("ditto --clone \(Remote.quote(staging.path)) \(scriptPath(targetPath))")
+        let local = root.appendingPathComponent(".local").resolvingSymlinksInPath()
+        for path in named {
+            let source = local.appendingPathComponent(String(path.dropFirst(".local/".count)))
+            lines.append("mkdir -p \(dst((path as NSString).deletingLastPathComponent))")
+            lines.append("ditto --clone \(Remote.quote(source.path)) \(dst(path))")
+        }
+        return lines.joined(separator: "\n") + "\n"
+    }
 }

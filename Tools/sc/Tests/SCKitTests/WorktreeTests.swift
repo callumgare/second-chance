@@ -117,6 +117,29 @@ struct WorktreeTests {
         #expect(!syncs.joined().contains { ["-L", "-k", "--copy-links", "--copy-dirlinks"].contains($0) })
     }
 
+    @Test("A user on this Mac gets the runtime copy cloned, by name or localhost")
+    func thisMac() {
+        #expect(RuntimeCopy.isThisMac("second-chance-testing-1@localhost"))
+        #expect(RuntimeCopy.isThisMac("kiya", localNames: ["kiya.local", "kiya"]))
+        #expect(RuntimeCopy.isThisMac("user@Kiya.local", localNames: ["kiya.local", "kiya"]))
+        #expect(!RuntimeCopy.isThisMac("meeka", localNames: ["kiya.local", "kiya"]))
+    }
+
+    @Test("The clone script swaps in the data and build, and merges the named .local paths")
+    func cloneScript() {
+        let script = RuntimeCopy.cloneScript(root: URL(fileURLWithPath: "/code/repo"), staging: URL(fileURLWithPath: "/code/repo/DerivedData/sc-runtime"),
+                                             named: [".local/porting/x/inputs"], targetPath: "~/tmp/sc", products: true)
+        #expect(script.hasPrefix("set -e\n"))
+        #expect(script.contains("ditto --clone '/code/repo/Bundles' \"$HOME\"/'tmp/sc/Bundles.new'"))
+        #expect(script.contains("rm -rf \"$HOME\"/'tmp/sc/DerivedData/Build/Products/Debug' && mv"))
+        #expect(script.contains("ditto --clone '/code/repo/DerivedData/sc-runtime' \"$HOME\"/'tmp/sc'"))
+        #expect(script.contains("ditto --clone '/code/repo/.local/porting/x/inputs' \"$HOME\"/'tmp/sc/.local/porting/x/inputs'"))
+        // A named path is merged, never removed first.
+        #expect(!script.contains("rm -rf \"$HOME\"/'tmp/sc/.local"))
+        #expect(!RuntimeCopy.cloneScript(root: URL(fileURLWithPath: "/r"), staging: URL(fileURLWithPath: "/r/s"), named: [],
+                                         targetPath: "/t", products: false).contains("Products"))
+    }
+
     @Test("git's porcelain listing is read, detached worktrees too")
     func parsesListing() {
         let listing = """

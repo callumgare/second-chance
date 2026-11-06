@@ -283,7 +283,10 @@ enum Remote {
             let runtimeArgs = ["-aE", "--rsync-path=/usr/bin/rsync", staging.path + "/", "\(target.host):\(target.path)/"]
             let named = localPaths(in: arguments, root: repo.root, cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             let localSyncs = RuntimeCopy.localSyncs(named, root: repo.root, target: target)
-            let sendsInstallers = readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
+            // On this Mac (another user here) the copy is cloned instead, and
+            // the installers store is the same one.
+            let thisMac = RuntimeCopy.isThisMac(target.host)
+            let sendsInstallers = !thisMac && readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
             // The copy there, the folders the named paths go into, and the
             // Mac's installers store, made first.
             var prepare = "mkdir -p \(shellPath(target.path))"
@@ -296,22 +299,30 @@ enum Remote {
             guard prepared.succeeded else {
                 throw SCError("Couldn't make \(target.path) on \(target.host): \(prepared.error.trimmingCharacters(in: .whitespacesAndNewlines))")
             }
-            do {
-                try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
-                    var status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
-                    if status == 0 {
-                        status = try await Proc.stream("/usr/bin/rsync", runtimeArgs, cwd: repo.root) { await sink.line($0) }
-                    }
-                    for localSync in localSyncs where status == 0 {
-                        status = try await Proc.stream("/usr/bin/rsync", localSync, cwd: repo.root) { await sink.line($0) }
-                    }
-                    guard status == 0, sendsInstallers else { return status }
-                    return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {
-                        await sink.line($0)
-                    }
+            if thisMac {
+                let script = RuntimeCopy.cloneScript(root: repo.root, staging: staging, named: named, targetPath: target.path,
+                                                     products: !buildlessCommands.contains(arguments.first ?? ""))
+                try await ui.logStep("Clone to \(target.host)", log: "sync", success: "Cloned to \(target.host):\(target.path)") { sink in
+                    try await Proc.stream("ssh", ["-T", target.host, "bash -c \(quote(script))"], cwd: repo.root) { await sink.line($0) }
                 }
-            } catch let error as SCError where error.alreadyReported {
-                throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
+            } else {
+                do {
+                    try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
+                        var status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                        if status == 0 {
+                            status = try await Proc.stream("/usr/bin/rsync", runtimeArgs, cwd: repo.root) { await sink.line($0) }
+                        }
+                        for localSync in localSyncs where status == 0 {
+                            status = try await Proc.stream("/usr/bin/rsync", localSync, cwd: repo.root) { await sink.line($0) }
+                        }
+                        guard status == 0, sendsInstallers else { return status }
+                        return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {
+                            await sink.line($0)
+                        }
+                    }
+                } catch let error as SCError where error.alreadyReported {
+                    throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
+                }
             }
         }
 
