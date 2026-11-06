@@ -33,18 +33,21 @@ final class BasiliskRuntime: GameStarting {
 
     var stopsOnQuit: Bool { true }
 
-    /// The wrapp is quitting while the Mac still runs: Basilisk II doesn't
-    /// end on SIGTERM, so it's asked, then made to after a few seconds, never
-    /// left running behind the app. (Shutting the Mac down from inside, so
-    /// its disk is left clean, is the module's to do: docs/wrapp-launch.md.)
+    /// The wrapp is quitting while the Mac still runs: the Mac is shut down
+    /// as its power key and Return would (SIGUSR2 to `basilisk_mac.m`), so
+    /// its disk, the person's files on it, is left clean and Basilisk II
+    /// exits. Only a Mac that hasn't shut down in 20 s is ended, never left
+    /// running behind the app (the next launch marks its disk clean).
     nonisolated func finishForQuit(onQuitStep: (@Sendable (InfoWindowViewModel.QuitStep) -> Void)?) {
         guard let pid = emulator.withLock({ $0 }), kill(pid, 0) == 0 else { return }
-        kill(pid, SIGTERM)
-        let deadline = Date().addingTimeInterval(3)
+        kill(pid, SIGUSR2)
+        let deadline = Date().addingTimeInterval(20)
         while Date() < deadline, kill(pid, 0) == 0 { usleep(100_000) }
         if kill(pid, 0) == 0 {
-            logger.warning("[Basilisk] Basilisk II didn't end when asked: ending it")
+            logger.warning("[Basilisk] The Mac didn't shut down: ending Basilisk II")
             kill(pid, SIGKILL)
+        } else {
+            logger.notice("[Basilisk] The Mac shut down")
         }
     }
 
@@ -106,23 +109,26 @@ final class BasiliskRuntime: GameStarting {
         return lines.joined(separator: "\n") + "\n"
     }
 
-    /// When WrappPuppeteer started the wrapp, what loads the in-process
-    /// helpers' puppet control into Basilisk II, as into dosbox: signed ad
-    /// hoc when it was prepared, so dyld inserts the dylib. Empty for every
-    /// player's launch.
-    private var puppetVariables: [String: String] {
-        guard Wine.puppetDirectory() != nil else { return [:] }
+    /// What loads the in-process helpers into Basilisk II (signed ad hoc
+    /// when it was prepared, so dyld inserts the dylib): on every launch,
+    /// `basilisk_mac.m`, which gets the Mac's window drawing and shuts the Mac
+    /// down when the wrapp quits; when WrappPuppeteer started the wrapp,
+    /// puppet control too, as in dosbox.
+    private var helperVariables: [String: String] {
         let dylib = config.appPath.appendingPathComponent("Contents/Frameworks/in_process_helpers.dylib").path
+        // dyld kills a process whose inserted dylib is missing.
         guard FileManager.default.fileExists(atPath: dylib) else {
-            logger.error("[Helpers] Puppet control can't be loaded into Basilisk II: \(dylib) is missing")
+            logger.error("[Helpers] The in-process helpers can't be loaded into Basilisk II: \(dylib) is missing")
             return [:]
         }
-        return ["DYLD_INSERT_LIBRARIES": dylib, "PUPPET_CONTROL_EXE": "BasiliskII"]
+        var variables = ["DYLD_INSERT_LIBRARIES": dylib, "BASILISK_MAC_EXE": "BasiliskII"]
+        if Wine.puppetDirectory() != nil { variables["PUPPET_CONTROL_EXE"] = "BasiliskII" }
+        return variables
     }
 
     func armWatchers(_ watchers: LaunchWatchers, gameExe: URL?) {
-        let variables = puppetVariables
-        guard !variables.isEmpty else { return }
+        let variables = helperVariables
+        guard variables["PUPPET_CONTROL_EXE"] != nil else { return }
         watchers.helperReport = InProcessHelperReport(armingVariables: variables, logger: logger)
     }
 
@@ -190,10 +196,7 @@ final class BasiliskRuntime: GameStarting {
         task.executableURL = URL(fileURLWithPath: launchInfo.executable)
         task.arguments = launchInfo.arguments
         task.currentDirectoryURL = config.appSupportPath
-        let puppetVariables = puppetVariables
-        if !puppetVariables.isEmpty {
-            task.environment = ProcessInfo.processInfo.environment.merging(puppetVariables) { $1 }
-        }
+        task.environment = ProcessInfo.processInfo.environment.merging(helperVariables) { $1 }
         let helperReport = launch.watchers.helperReport
         let activity = launch.watchers.activity
         task.onLine = { line in

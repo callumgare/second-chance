@@ -447,7 +447,16 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   Basilisk II starts with prefs written then: the ROM, that disk, the
   CDs, `--basilisk.screen` (640x480x8 unless said), no JIT (it crashes under
   Rosetta), and `delay 500`, without which QuickTime's movies stop on their first
-  frame.
+  frame. The in-process helpers are inserted on every launch, for
+  `basilisk_mac.m` (`BASILISK_MAC_EXE`), which:
+  - gets the window drawing: Basilisk II presents only when the Mac's screen
+    changes, and macOS drops what an occluded window presents (a background
+    login's always is), so it pictures the window once (and, in a background
+    login, twice a second) and sends SDL an "exposed" event for a full redraw;
+  - gives the Mac a first pointer position, without which the Finder never
+    draws its desktop;
+  - shuts the Mac down when the wrapp quits (SIGUSR2): the power key, then
+    Return on Shut Down, so the disk is left clean.
 
 ### The engine store
 
