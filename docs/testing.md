@@ -434,10 +434,15 @@ show as `infra failed`, with the reason and the end of its output. Nothing is
 retried, whether it failed that way or a test failed. The `.xcresult` and
 HTML report stay on the Mac that ran the shard, at the path the hints give.
 
-**One shard per Mac** for now: launches on one Mac never overlap, since how
-many games a Mac can launch at once before Wine slows sharply hasn't been
-measured. A `ShardPlan.Slot` is one session, so more sessions per Mac would
-be more slots with the Mac's name.
+**One shard per Mac** for now, so launches on one Mac never overlap. A Mac
+could take more: on an M1 Max (8 performance cores), launch-and-quit runs from
+up to four sessions at once each took as long as one alone, and from six on
+each took 1.5–3 times as long, every one still passing
+([measured](historical-plans/2026-11-06-puppet-toolkit.md#outcome)). So about
+one launch per two performance cores is a Mac's useful limit, and a build
+running beside them counts against it too. A `ShardPlan.Slot` is one
+session, so more shards per Mac would be more slots with the Mac's name, up
+to that limit; that isn't built.
 
 ## Filtering games
 

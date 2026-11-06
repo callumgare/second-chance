@@ -40,7 +40,11 @@ here.
 - **Screens:** each screen-taking subagent (player, bundler's integration test,
   or a debugger's on-screen experiment) works in a test account of its own: the
   lead claims one per subagent and names it in the handoff, and the lease
-  enforces it. With only one free, they take turns.
+  enforces it. With only one free, they take turns. A free account isn't free
+  CPU: every game running on a Mac, in any account and anyone's, slows the
+  rest once together they pass about one per two performance cores (a build
+  counts as one). So keep the subagents running games on one Mac within
+  what's left of that; `.local/AGENTS.md` gives this setup's numbers.
 
 ## The handoff
 
