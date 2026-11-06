@@ -11,7 +11,8 @@ IFS=$'\n\t'
 # work here -- wine-preloader reaches its entry point before dyld runs
 # initializers -- so instead Wine's Mac driver gets a weak dependency on the
 # dylib, added when Wine is prepared (WineBuild.prepare, MachOPatch). The
-# helpers share the one dylib: native_fullscreen.m (macOS fullscreen),
+# helpers share the one dylib: native_fullscreen.m (macOS fullscreen, when the
+# game asks for it, which ddraw_mode_watch.m tells it of a DirectDraw game),
 # display_below_notch.m (shows Wine a notched display without the notch's
 # strip, so a game in a fullscreen Space gets matching mouse positions),
 # cursor_lock.m (cnc-ddraw's cursor lock), emulated_mode_scaling.m (scales a
@@ -41,6 +42,7 @@ mkdir -p "${FRAMEWORKS_DIR}"
 clang -dynamiclib \
     -o "${DYLIB}" \
     "${HELPERS_DIR}/native_fullscreen.m" \
+    "${HELPERS_DIR}/ddraw_mode_watch.m" \
     "${HELPERS_DIR}/display_below_notch.m" \
     "${HELPERS_DIR}/cursor_lock.m" \
     "${HELPERS_DIR}/emulated_mode_scaling.m" \

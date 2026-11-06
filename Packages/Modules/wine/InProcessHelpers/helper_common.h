@@ -171,6 +171,17 @@ int windowIsEnteringFullscreen(NSWindow *window);
 /// can wedge, even one finished just before the move begins. Main thread only.
 int nativeFullscreenSettled(void);
 
+// ## Whether a DirectDraw game asked for fullscreen (ddraw_mode_watch.m)
+
+/// Start watching for the game setting a display mode through cnc-ddraw, if
+/// nothing has yet. Whether it's watching: 0 when win32u isn't as expected.
+int installDdrawModeWatch(void);
+
+/// The game's display mode request through cnc-ddraw: 0 while it has none
+/// (it never set a mode, or DirectDraw has let go of its window since), else
+/// a number that grows with each new one. Any thread.
+unsigned long ddrawModeRequest(void);
+
 // ## The display Wine sees
 //
 // display_below_notch.m may show Wine less of the main display than there

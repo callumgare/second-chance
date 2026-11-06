@@ -1,7 +1,9 @@
 //
 //  native_fullscreen.m
 //  Puts a Wine game window into real macOS fullscreen -- its own Space,
-//  notch-aware, swipe-compatible -- without any Accessibility permission.
+//  notch-aware, swipe-compatible -- without any Accessibility permission,
+//  when the game asks for fullscreen, and takes it out again when the game
+//  asks for a window (see "What the game asks for" below).
 //
 //  macOS only lets a process fullscreen its own NSWindow. Doing it from another
 //  process means the Accessibility API or synthetic keystrokes, both of which
@@ -303,7 +305,123 @@ static void adjustWineWindowLevels(void) {
     }
 }
 
-// MARK: - Choosing and entering
+// MARK: - What the game asks for
+//
+// A window goes into a Space when the game asks for fullscreen, and back out
+// when it asks for a window again:
+//
+// - A window covering the screen that Direct3D draws into is a Direct3D
+//   game in fullscreen mode. Its request lasts as long as the window.
+// - Any other window is cnc-ddraw's (or a program's own): it asks for
+//   fullscreen while the game has a display mode set through cnc-ddraw
+//   (ddraw_mode_watch.m), and for a window otherwise -- a DirectDraw game
+//   that asked for a normal window (DDSCL_NORMAL), a Direct3D game in its
+//   windowed mode, a program that draws with GDI.
+//
+// Each request has a number. A window the player took out of its Space stays
+// out until the game makes a new request (switches to a window and back);
+// one Wine closed the Space of goes back in when it's shown again.
+//
+// NATIVE_MACOS_FULLSCREEN_FORCE=1 (the launch's --wine.window=fullscreen)
+// makes every window that could go fullscreen ask, for a program this
+// misjudges; so does a win32u this can't watch, which is how native
+// fullscreen worked before it followed the game.
+
+static BOOL gForced = NO;
+/// Not forced, and the DirectDraw watch is in: follow what the game asks.
+static BOOL gFollowsGame = NO;
+
+/// The request a window covering the screen makes while it's adopted.
+static const unsigned long kCoversScreenRequest = ULONG_MAX;
+
+static char kEnteredRequestKey;  // the request the window last went into a Space for
+static char kLeftRequestKey;     // the request whose Space the window left, other than by Wine closing it
+
+static unsigned long windowRequestValue(NSWindow *window, const void *key) {
+    return [objc_getAssociatedObject(window, key) unsignedLongValue];
+}
+
+static void setWindowRequestValue(NSWindow *window, const void *key, unsigned long value) {
+    objc_setAssociatedObject(window, key, value ? @(value) : nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+/// What the game asks of `window`: 0 for a window, else the number of its
+/// request for fullscreen. Main thread only.
+static unsigned long fullscreenRequest(NSWindow *window) {
+    if (!gFollowsGame) return 1;
+    // Only a window Wine wouldn't let go fullscreen itself: borderless, as a
+    // Direct3D game's fullscreen window is. cnc-ddraw's captioned window can
+    // come to cover the screen too, and draws with OpenGL, when cnc-ddraw
+    // remembers it at the size of the Space.
+    BOOL wineLetsGo = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) != 0;
+    if (windowFlag(window, &kCoversScreenKey) || (!wineLetsGo && wineCoversScreen(window) && direct3DDrawsInto(window))) {
+        return kCoversScreenRequest;
+    }
+    return ddrawModeRequest();
+}
+
+/// Why the window is going into a Space, for the log.
+static const char *requestReason(unsigned long request) {
+    if (gForced) return " (as its launch says)";
+    if (!gFollowsGame) return "";
+    if (request == kCoversScreenRequest) return " (a window covering the screen)";
+    return " (the game set a display mode)";
+}
+
+static char kFrameBeforeKey;  // the window's frame before this file last put it into a Space
+static char kSizeBackKey;     // it left its Space at the game's asking: put it back at that frame once out
+
+/// Have Wine bring the window out of its Space at the frame it had before,
+/// rather than the one the game gave it meanwhile.
+///
+/// Wine takes a frame the game sets while its window is in a Space as the
+/// one to give it on leaving (nonFullscreenFrame, in cocoa_window.m). A game
+/// that switches to a window starts DirectDraw again while still in its
+/// Space, and cnc-ddraw sizes the window as it remembers it: the size of the
+/// Space, which AppKit's move into it told it. Left so, the window would
+/// come out bigger than the screen. This sets Wine's frame for the way out;
+/// cnc-ddraw can still set its own as the window moves, so
+/// putBackOldSize() checks once it's out. Main thread only.
+static void restoreFrameOnLeaving(NSWindow *window) {
+    NSValue *before = objc_getAssociatedObject(window, &kFrameBeforeKey);
+    if (!before) return;
+    setWindowFlag(window, &kSizeBackKey, YES);
+    Ivar ivar = class_getInstanceVariable(window.class, "nonFullscreenFrame");
+    const char *type = ivar ? ivar_getTypeEncoding(ivar) : NULL;
+    if (!type || strncmp(type, "{CGRect=", 8) != 0) return;
+    NSRect *nonFullscreenFrame = (NSRect *)((uint8_t *)(__bridge void *)window + ivar_getOffset(ivar));
+    *nonFullscreenFrame = before.rectValue;
+}
+
+/// Once a window that left its Space at the game's asking is out, give it
+/// the frame it had before, if it came out at another. Wine passes the
+/// change on wrapped in WM_ENTERSIZEMOVE and WM_EXITSIZEMOVE, as a player's
+/// resize, so cnc-ddraw remembers the size and redraws to fit. Main thread
+/// only.
+static void putBackOldSize(NSWindow *window) {
+    if (!windowFlag(window, &kSizeBackKey) || (window.styleMask & NSWindowStyleMaskFullScreen) ||
+        windowIsMovingSpaces(window)) return;
+    setWindowFlag(window, &kSizeBackKey, NO);
+    NSValue *before = objc_getAssociatedObject(window, &kFrameBeforeKey);
+    if (!before || NSEqualRects(window.frame, before.rectValue)) return;
+    NSRect frame = before.rectValue;
+    os_log(gLog, "[NativeFS] the window left its Space at %dx%d; putting it back at %dx%d",
+           (int)window.frame.size.width, (int)window.frame.size.height, (int)frame.size.width, (int)frame.size.height);
+    debugLog("the window left its Space at %dx%d; putting it back at %dx%d",
+             (int)window.frame.size.width, (int)window.frame.size.height, (int)frame.size.width, (int)frame.size.height);
+    [window setFrame:frame display:YES];
+}
+
+// MARK: - Choosing, entering and leaving
+
+/// Whether a window has held still for kSettleSeconds asking for a window,
+/// and whether that's been reported since the window last went into a Space.
+static volatile BOOL gDecidedWindowed = NO;
+static BOOL gReportedWindowed = NO;
+/// The window in a Space whose game has asked for a window, and since when.
+static NSWindow *gLeaving = nil;
+static double gLeavingSince = 0.0;
+static unsigned long gCandidateRequest = 0;
 
 /// The game's window: one Wine lets go fullscreen, or one covering the
 /// screen.
@@ -323,10 +441,6 @@ static NSWindow *findGameWindow(BOOL overridesInstalled) {
 
     for (NSWindow *window in NSApp.windows) {
         if (!window.isVisible) continue;
-
-        // Something is already fullscreen, so leave this process alone.
-        if (window.styleMask & NSWindowStyleMaskFullScreen) return nil;
-
         if (window.parentWindow) continue;
         BOOL eligible = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) ||
                         (overridesInstalled && (windowFlag(window, &kAdoptedKey) ||
@@ -345,38 +459,101 @@ static NSWindow *findGameWindow(BOOL overridesInstalled) {
     return best;
 }
 
+/// Whether a window is in a fullscreen Space; if it's one this file put
+/// there and the game has asked for a window since, take it out once that
+/// has held for kSettleSeconds. Main thread only.
+static BOOL handleFullscreenWindow(void) {
+    for (NSWindow *window in NSApp.windows) {
+        if (!(window.styleMask & NSWindowStyleMaskFullScreen)) continue;
+
+        // Something is fullscreen, so leave the rest of this process alone.
+        if (!gFollowsGame || !windowFlag(window, &kEnteredKey) || windowIsMovingSpaces(window) ||
+            fullscreenRequest(window) != 0) {
+            gLeaving = nil;
+            return YES;
+        }
+        if (window != gLeaving) {
+            gLeaving = window;
+            gLeavingSince = nowSeconds();
+            return YES;
+        }
+        if (nowSeconds() - gLeavingSince < kSettleSeconds) return YES;
+        gLeaving = nil;
+
+        const char *title = window.title.length ? window.title.UTF8String : "(untitled)";
+        os_log(gLog, "[NativeFS] leaving native fullscreen: the game asked for a window: %{public}s", title);
+        debugLog("leaving native fullscreen: the game asked for a window: '%s'", title);
+        helperReport("NativeFullscreen", "notice", "leaving native fullscreen: the game asked for a window: '%s'", title);
+        restoreFrameOnLeaving(window);
+        [window toggleFullScreen:nil];
+        return YES;
+    }
+    gLeaving = nil;
+    return NO;
+}
+
 static void attemptFullscreen(void) {
     BOOL overridesInstalled = installOverrides();
+    for (NSWindow *window in NSApp.windows) putBackOldSize(window);
+
+    if (handleFullscreenWindow()) {
+        gCandidate = nil;
+        return;
+    }
 
     NSWindow *window = findGameWindow(overridesInstalled);
-    if (!window) {
+    if (!window || windowIsMovingSpaces(window)) {
         gCandidate = nil;
         return;
     }
+    unsigned long request = fullscreenRequest(window);
 
-    // A window put into a Space before goes back only if Wine closed the
-    // Space -- not if the player left it -- and only once they're back in
-    // the game.
-    BOOL reentering = windowFlag(window, &kEnteredKey);
-    if (reentering && !(windowFlag(window, &kReenterKey) && NSApp.isActive)) {
-        gCandidate = nil;
-        return;
+    // A window goes back into a Space if Wine closed the Space -- once the
+    // player is back in the game -- but not if it was taken out of one,
+    // until the game asks again.
+    if (request != 0) {
+        BOOL reenter = windowFlag(window, &kReenterKey);
+        unsigned long left = windowRequestValue(window, &kLeftRequestKey);
+        if ((reenter && !NSApp.isActive) || (!reenter && left == request)) {
+            gCandidate = nil;
+            return;
+        }
     }
 
-    // Only toggle once the frame has held steady for kSettleSeconds.
+    // Only act once the frame and the request have held steady for
+    // kSettleSeconds.
     NSRect frame = window.frame;
-    if (window != gCandidate || !NSEqualRects(frame, gCandidateFrame)) {
+    if (window != gCandidate || !NSEqualRects(frame, gCandidateFrame) || request != gCandidateRequest) {
         gCandidate = window;
         gCandidateFrame = frame;
+        gCandidateRequest = request;
         gStableSince = nowSeconds();
         return;
     }
     if (nowSeconds() - gStableSince < kSettleSeconds) return;
 
+    const char *title = window.title.length ? window.title.UTF8String : "(untitled)";
+    if (request == 0) {
+        gDecidedWindowed = YES;
+        if (!gReportedWindowed) {
+            gReportedWindowed = YES;
+            os_log(gLog, "[NativeFS] the game asks for a window: leaving %{public}s %dx%d in it",
+                   title, (int)frame.size.width, (int)frame.size.height);
+            debugLog("the game asks for a window: leaving '%s' %dx%d in it", title, (int)frame.size.width, (int)frame.size.height);
+            helperReport("NativeFullscreen", "notice", "the game asks for a window: leaving '%s' %dx%d in it",
+                         title, (int)frame.size.width, (int)frame.size.height);
+        }
+        return;
+    }
+
     gCandidate = nil;
+    gReportedWindowed = NO;
+    BOOL reentering = windowFlag(window, &kEnteredKey);
     gEntered = YES;
     setWindowFlag(window, &kEnteredKey, YES);
     setWindowFlag(window, &kReenterKey, NO);
+    setWindowRequestValue(window, &kEnteredRequestKey, request);
+    objc_setAssociatedObject(window, &kFrameBeforeKey, [NSValue valueWithRect:frame], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     BOOL wineEligible = (window.collectionBehavior & NSWindowCollectionBehaviorFullScreenPrimary) != 0;
     if (overridesInstalled) {
@@ -387,9 +564,8 @@ static void attemptFullscreen(void) {
         adjustWineWindowLevels();
     }
 
-    const char *title = window.title.length ? window.title.UTF8String : "(untitled)";
     const char *kind = reentering ? "re-entering" : "entering";
-    const char *how = wineEligible ? "" : " (a window covering the screen)";
+    const char *how = wineEligible ? requestReason(request) : " (a window covering the screen)";
     os_log(gLog, "[NativeFS] %{public}s native fullscreen: %{public}s %dx%d%{public}s",
            kind, title, (int)frame.size.width, (int)frame.size.height, how);
     debugLog("%s native fullscreen: '%s' %dx%d%s", kind, title, (int)frame.size.width, (int)frame.size.height, how);
@@ -399,13 +575,22 @@ static void attemptFullscreen(void) {
     [window toggleFullScreen:nil];
 }
 
+/// A window left its Space: unless Wine closed it (and it goes back when
+/// shown), it stays out until the game makes a new request. Main thread.
+static void noteWindowLeftSpace(NSWindow *window) {
+    if (!windowFlag(window, &kEnteredKey) || windowFlag(window, &kReenterKey)) return;
+    setWindowRequestValue(window, &kLeftRequestKey, windowRequestValue(window, &kEnteredRequestKey));
+}
+
 /// Wine dedicates the process's main thread to a CFRunLoop (see __wine_main in
 /// ntdll) and runs the Windows code on other threads, so blocks queued onto the
 /// main run loop do get drained. This thread only schedules; every AppKit call
 /// happens on the main thread.
 ///
 /// It keeps watching after the first entry, for a window Wine closed the Space
-/// of, and for a new game window -- slower once the game is in its Space.
+/// of, for the game asking for a window or for fullscreen again, and for a new
+/// game window -- slower once the game is in its Space or in the window it
+/// asked for.
 static void *watcherMain(void *unused) {
     (void)unused;
 
@@ -431,11 +616,12 @@ static void *watcherMain(void *unused) {
             });
             CFRunLoopWakeUp(mainLoop);
         }
-        // Slower once in the Space, or once it has given up and the game
-        // stays in its window: only a new window is still worth catching.
-        usleep((useconds_t)((gEntered || gGaveUp ? kWatchInterval : kPollInterval) * USEC_PER_SEC));
+        // Slower once in the Space or the window the game asked for, or once
+        // it has given up and the game stays in its window: only a change is
+        // still worth catching.
+        usleep((useconds_t)((gEntered || gDecidedWindowed || gGaveUp ? kWatchInterval : kPollInterval) * USEC_PER_SEC));
 
-        if (!gEntered && !reportedGivingUp && nowSeconds() > giveUpAt) {
+        if (!gEntered && !gDecidedWindowed && !reportedGivingUp && nowSeconds() > giveUpAt) {
             reportedGivingUp = YES;
             gGaveUp = YES;
             os_log(gLog, "[NativeFS] no eligible window after %.0fs; staying windowed", kGiveUpSeconds);
@@ -456,10 +642,15 @@ static void nativeFullscreenInit(void) {
 
     if (!shouldActivate()) return;
 
+    const char *force = getenv("NATIVE_MACOS_FULLSCREEN_FORCE");
+    gForced = force && strcmp(force, "1") == 0;
+    gFollowsGame = !gForced && installDdrawModeWatch();
+
     os_log(gLog, "[NativeFS] armed");
-    debugLog("armed");
+    debugLog("armed%s", gForced ? ", forced" : gFollowsGame ? "" : ", not following the game");
     watchFullscreenTransitions();
-    helperReport("NativeFullscreen", "notice", "armed in %s", getenv("NATIVE_MACOS_FULLSCREEN_EXE"));
+    helperReport("NativeFullscreen", "notice", "armed in %s%s", getenv("NATIVE_MACOS_FULLSCREEN_EXE"),
+                 gForced ? ": fullscreen whatever the game asks, as its launch says" : "");
 
     pthread_t thread;
     if (pthread_create(&thread, NULL, watcherMain, NULL) == 0) {
@@ -512,6 +703,8 @@ void watchFullscreenTransitions(void) {
                             usingBlock:^(NSNotification *notification) {
                 [gEnteringWindows removeObject:notification.object];
                 [gExitingWindows removeObject:notification.object];
+                noteWindowLeftSpace(notification.object);
+                transitionLog("window %ld did exit fullscreen", (long)[notification.object windowNumber]);
             }];
         });
         CFRunLoopWakeUp(CFRunLoopGetMain());
@@ -532,9 +725,11 @@ int nativeFullscreenSettled(void) {
     if (!armed || gGaveUp) return 1;
     // gEntered is set just before -toggleFullScreen:, which posts the will-enter
     // notification before it returns, all on this thread: no gap between them.
-    if (!gEntered || !gAWindowEntered) return 0;
+    if (!(gEntered && gAWindowEntered) && !gDecidedWindowed) return 0;
     for (NSWindow *window in gEnteringWindows) {
         if (windowIsEnteringFullscreen(window)) return 0;
     }
-    return 1;
+    // On its way out of a Space, at the game's asking, a window is moving
+    // just as it is on its way in.
+    return gExitingWindows.allObjects.count == 0;
 }

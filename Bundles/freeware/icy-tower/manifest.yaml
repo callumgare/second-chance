@@ -30,6 +30,7 @@ editions:
 
 tests:
   scenario: "wine/starts-and-quits"
+  window: "windowed" # its own default, and a test starts with no saved settings
   parameters:
     sound: true # its title screen plays its music: a test that hears silence there fails
     quits: 2 # its first Quit only asks (on the title it moves to Exit); a second sees it through
@@ -39,4 +40,5 @@ notes:
   licence: "Its readme: freeware, to be distributed in its original form with credit to Free Lunch Design and a link to freelunchdesign.com; not in a compilation or commercial package without permission."
   exit: "It sometimes hangs as it exits, after saving (Allegro 4.0.3 waits on a timer thread's handle the C runtime has already closed): seen in about 3 of 11 exits on macOS 26, none of 41 on macOS 15."
   windowed: "Its Options > GFX > Fullscreen: No crashed it under cnc-ddraw, and every start fell back to fullscreen: Allegro's windowed DirectDraw driver checks its window is 640x480, and cnc-ddraw reported the made-up mode it took from the window's first size. Its exe's own ddraw.ini section now has fake_mode=640x480x16, so the window mode works: it starts in it (the game's default), and toggling Fullscreen both ways, a relaunch after No and the app's Quit were checked on 2026-11-06. In that mode cnc-ddraw doesn't hold the cursor; the game is played with the keyboard."
+  fullscreen: "It starts in a window, its own default, and Options > GFX > Fullscreen: Yes puts it in a fullscreen Space, No back in its 640x480 window, as native fullscreen follows the display mode it sets (docs/wine-in-process-helpers.md). The choice is kept in tower.cfg, in the saves store, written as it exits through its own menu: a relaunch starts as it was left. Checked by hand on 2026-11-06 (macOS 26): the windowed start, Yes, No, Yes again, a relaunch after each, and a window taken out of its Space by the player staying out until the game is switched to a window and back."
   checked: "2026-11-06: the 2006 Wayback capture of the makers' URL gives the file with this sha256 (every capture 2005-12 to 2006-10 has the same CDX digest, its SHA-1 a00aa6eb…)."

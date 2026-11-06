@@ -900,8 +900,10 @@ handlers:
   must reach a fullscreen Space, or `windowed`, it must stay out of one,
   checked for a few seconds once its window is up. Every Nancy Drew bundle
   says `fullscreen`, as do Lure of the Temptress and Tyrian 2000, and
-  LaserTank `windowed`. A bundle that says neither is expected fullscreen
-  unless its launch keeps it windowed (`--wine.window=windowed`).
+  LaserTank, Iji, Icy Tower and SkiFree `windowed` (Icy Tower starts in a
+  window unless its saved settings say fullscreen, and a test starts with
+  none). A bundle that says neither is expected fullscreen unless its
+  launch keeps it windowed (`--wine.window=windowed`).
 
 A program with no menu to quit from uses its engine module's
 `scenarios/starts-and-quits.yaml` (the wine, scummvm or dosbox module's):

@@ -7,7 +7,7 @@ wrapp does not have:
 
 | Helper | Source | What it does | Armed by | Off switch |
 | --- | --- | --- | --- | --- |
-| Native fullscreen | `Packages/Modules/wine/InProcessHelpers/native_fullscreen.m` | Puts the game window into a real macOS fullscreen Space | `NATIVE_MACOS_FULLSCREEN_EXE`, unless the launch says `--wine.window=windowed` ([below](#when-the-launch-says)) | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
+| Native fullscreen | `Packages/Modules/wine/InProcessHelpers/native_fullscreen.m`, with `ddraw_mode_watch.m` | Puts the game window into a real macOS fullscreen Space when the game asks for fullscreen, and takes it out when it asks for a window | `NATIVE_MACOS_FULLSCREEN_EXE`, unless the launch says `--wine.window=windowed` ([below](#when-the-launch-says)) | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Display below the notch | `Packages/Modules/wine/InProcessHelpers/display_below_notch.m` | On a display with a notch, shows Wine only the part below it, so a game in a fullscreen Space gets mouse positions that match its picture | `NATIVE_FULLSCREEN_BELOW_NOTCH=1`, in every Wine process of a wrapp | `SECOND_CHANCE_NATIVE_FULLSCREEN=0` |
 | Cursor lock | `Packages/Modules/wine/InProcessHelpers/cursor_lock.m` | Gets cnc-ddraw to take hold of the mouse without swallowing the player's first click | `CURSOR_LOCK_EXE`, when the launch asks for it (`--wine.cursor-lock`, [below](#which-games-get-it)) | `SECOND_CHANCE_CURSOR_LOCK=0` |
 | Mode scaling | `Packages/Modules/wine/InProcessHelpers/emulated_mode_scaling.m` | Scales a Direct3D game's picture up to the display when Wine is emulating the display mode the game switched to | `EMULATED_MODE_SCALING_EXE`, unless the game draws through cnc-ddraw ([below](#mode-scaling)) | `SECOND_CHANCE_MODE_SCALING=0` |
@@ -104,9 +104,11 @@ posts its middle clicks, sees no lock and leaves it.
 
 ## Native fullscreen
 
-It waits for the game's window to stop resizing, then calls
-`-toggleFullScreen:` on it, as the green title-bar button would. The game's
-window is one of two kinds:
+It puts the game's window into a fullscreen Space when the game asks for
+fullscreen, once the window stops resizing, by calling `-toggleFullScreen:`
+on it, as the green title-bar button would. When the game asks for a window
+again while it runs, it takes the window back out. The game's window is one
+of two kinds:
 
 - **A window Wine lets go fullscreen.** Wine's `adjustFullScreenBehavior:`
   marks resizable, parentless windows as fullscreen-capable. cnc-ddraw's
@@ -119,6 +121,61 @@ window is one of two kinds:
   A cnc-ddraw game's window can start out the size of the screen for a
   second or two before cnc-ddraw shrinks it, and cnc-ddraw attaches its
   OpenGL view only after that.
+
+### Whether the game asks for fullscreen
+
+- **A borderless window covering the screen that Direct3D draws into** asks
+  for fullscreen, for as long as it's there: that is a Direct3D game's
+  fullscreen mode. A Direct3D game in its windowed mode has a window with a
+  title bar, and stays in it.
+- **cnc-ddraw's window** asks for fullscreen while the game has set a
+  display mode through DirectDraw. Second Chance runs cnc-ddraw with
+  `windowed=true`, so a game asking DirectDraw for exclusive fullscreen and a
+  mode (`DDSCL_FULLSCREEN`, `SetDisplayMode`) gets the same resizable,
+  captioned window as one asking for a normal window (`DDSCL_NORMAL`): the
+  window's style, size and drawing are the same either way, and cnc-ddraw
+  blocks the game's own changes to its style. What differs is that when the
+  game itself sets the mode, cnc-ddraw ends by sending the window two
+  private messages, `WM_SIZE_DDRAW` and `WM_DISPLAYCHANGE_DDRAW` (`WM_APP`
+  +114 and +116, the depth and the size), and a mode it makes up for a
+  `DDSCL_NORMAL` game sends neither. `ddraw_mode_watch.m` sees that pair go
+  through `NtUserMessageCall`, a system call into `win32u.so` in the game's
+  process, by pointing that entry of win32u's system call table at a
+  wrapper. The request lasts until DirectDraw lets go of the window:
+  releasing it puts the game's window procedure back, and starting again
+  replaces it (`SetWindowLong(GWLP_WNDPROC)`, watched the same way). A game
+  switching to a window releases DirectDraw and starts again with
+  `DDSCL_NORMAL`; switching back, it starts again and sets a mode.
+- **Any other window** (a program drawing with GDI, SkiFree's) asks for a
+  window.
+
+Measured on 2026-11-06 on macOS 26 (helper log lines; the integration run's
+logs say the same of every DirectDraw game): Icy Tower's windowed start and
+its Options › GFX › Fullscreen: No send `WM_SIZE_DDRAW` alone (from its own
+`WM_SIZE`), never `WM_DISPLAYCHANGE_DDRAW`; Fullscreen: Yes sends both, and
+switching either way releases DirectDraw and starts it again. Every Nancy
+Drew DirectDraw game sets a mode as it starts.
+
+The table entry is found as the one place in `win32u.so`'s data holding each
+function's address. If there isn't exactly one, nothing is replaced, a
+warning says `win32u's system call table not found`, and every window that
+could go fullscreen does, as before the helper followed the game. The
+watched messages are cnc-ddraw's own (v7.0.0.0, the one winetricks installs):
+a cnc-ddraw that stopped sending them would leave every DirectDraw game in a
+window, which the integration tests' fullscreen check catches.
+
+Each request has a number. A window the player took out of its Space stays
+out until the game makes a new one (switching to a window and back), and a
+game changing resolution while fullscreen is the same request. Leaving a
+Space at the game's asking, the window goes back to the frame it had before.
+cnc-ddraw sizes its window, as it starts again in the Space, at the size it
+last saw, which was the Space's, and Wine would bring it out at that size,
+bigger than the screen. The helper sets Wine's frame for the way out
+(`nonFullscreenFrame`), and once out sets the old frame if the window came
+out at another. Wine passes that on to the game as a resize, as it would a
+player's, and cnc-ddraw redraws to fit.
+
+### Taking over Wine's window methods
 
 Wine decides which windows may go fullscreen from the game's Win32 window
 style, and it decides again whenever the window's style or state changes,
@@ -152,7 +209,8 @@ a warning and gives fullscreen only to the windows Wine already allows.
 
 The helper keeps watching after the first entry. A window whose Space Wine
 closed while the app was active goes back into one when it is shown again.
-A window the player took out of fullscreen themselves is left windowed.
+A window the player took out of fullscreen themselves is left windowed until
+the game asks for fullscreen anew.
 
 The header comment of `native_fullscreen.m` has the details.
 
@@ -160,18 +218,22 @@ The header comment of `native_fullscreen.m` has the details.
 
 A Wine launch can override native fullscreen with `--wine.window`
 ([wrappfile.md](wrappfile.md#the-launch-volumes-and-app)), for a program
-the wrapp gets wrong:
+the helper misjudges:
 
 - **`--wine.window=windowed`** leaves native fullscreen unarmed
   (`RecordedLaunch.keepsWindowed`), so the program stays in its window,
   whatever it asks for.
-- **`--wine.window=fullscreen`** arms it as usual and also sets
-  `NATIVE_MACOS_FULLSCREEN_FORCE=1` (`RecordedLaunch.forcesFullscreen`), to
-  make the window fullscreen whether or not the program asks. The helper
-  doesn't read it yet, so for now it does what leaving the option out does.
-- **Left out**, native fullscreen works as above, as it always has. What's
-  planned is for the helper to see when the program asks for fullscreen
-  itself, with the option kept for a program it misjudges.
+- **`--wine.window=fullscreen`** arms it and also sets
+  `NATIVE_MACOS_FULLSCREEN_FORCE=1` (`RecordedLaunch.forcesFullscreen`).
+  The helper then puts every window that could go fullscreen into a Space,
+  whether or not the program asks, and never takes it out: what it did
+  before it followed the game. It logs `armed in <exe>: fullscreen whatever
+  the game asks, as its launch says`.
+- **Left out**, the window goes fullscreen when the program asks for it, as
+  above. The helper logs what it decided: `entering native fullscreen: …
+  (the game set a display mode)` or `(a window covering the screen)`,
+  `the game asks for a window: leaving … in it`, and `leaving native
+  fullscreen: the game asked for a window`.
 
 ScummVM and DOSBox games are always fullscreen; the option is the wine
 module's. What window WrappPuppeteer expects a game to end up in is its

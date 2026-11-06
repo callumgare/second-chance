@@ -456,11 +456,14 @@ app keeps no Wine.
   the game draws with.
 - **`--wine.window=fullscreen` or `windowed`** overrides native fullscreen,
   for a program the wrapp gets wrong: `windowed` leaves it unarmed, keeping
-  the program in its window, and `fullscreen` is to make it fullscreen
-  whatever it asks for, though the helper doesn't act on that yet
-  ([wine-in-process-helpers.md](wine-in-process-helpers.md#native-fullscreen)).
-  Left out, native fullscreen works as it always has. Any other value is
-  refused when planning. ScummVM and DOSBox games are always fullscreen.
+  the program in its window, and `fullscreen` makes it fullscreen whatever
+  it asks for
+  ([wine-in-process-helpers.md](wine-in-process-helpers.md#when-the-launch-says)).
+  Left out, the program's window goes fullscreen when the program asks for
+  fullscreen (a Direct3D game's borderless window covering the screen, a
+  DirectDraw game setting a display mode) and stays a window otherwise. Any
+  other value is refused when planning. ScummVM and DOSBox games are always
+  fullscreen.
 - **`--wine.quit-key=<key>`** makes the app's Quit hold that key down in the
   program for 3 s, for one that ignores Wine's quit but quits on a key of its
   own, as Iji does on F12. Several keys, separated by spaces
