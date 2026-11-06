@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SecondChanceKit
 @testable import SecondChance
 
 @Suite("ISO image diagnosis")
@@ -57,5 +58,45 @@ struct ISOImageDiagnosisTests {
         let diagnosis = ISOMounter.diagnoseImage(at: url)
         #expect(diagnosis.problem == .wontOpen)
         #expect(diagnosis.description.contains("ISO 9660 image"))
+    }
+
+    @Test("Each mounter attaches an image as a copy of its own: a shadow file, read-only, under its own folder")
+    func attachOptions() {
+        let root = URL(fileURLWithPath: "/tmp/discs"), shadow = URL(fileURLWithPath: "/tmp/discs/a.shadow")
+        let iso = ISOMounter.attachOptions(dmg: false, root: root, shadow: shadow)
+        #expect(iso == ["-readonly", "-shadow", "/tmp/discs/a.shadow", "-nobrowse", "-mountroot", "/tmp/discs"])
+        #expect(ISOMounter.attachOptions(dmg: true, root: root, shadow: shadow).last == "-noverify")
+        let unmounted = ISOMounter.attachOptions(dmg: false, root: root, shadow: shadow, mount: false)
+        #expect(unmounted.contains("-nomount") && !unmounted.contains("-mountroot"))
+    }
+
+    @Test("Two builds mounting one disc image at once each get their own, named as the disc, and one leaving doesn't take the other's")
+    @MainActor
+    func twoMountsOfOneImage() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("disc-\(UUID().uuidString.prefix(8))")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data("on the disc".utf8).write(to: folder.appendingPathComponent("SETUP.TXT"))
+        let image = FileManager.default.temporaryDirectory.appendingPathComponent("disc-\(UUID().uuidString.prefix(8)).iso")
+        defer { try? FileManager.default.removeItem(at: image) }
+        let made = try await Process.output(of: "/usr/bin/hdiutil", ["makehybrid", "-iso", "-joliet", "-default-volume-name", "TESTDISC",
+                                                                     "-o", image.path, folder.path])
+        try #require(made.succeeded, "hdiutil makehybrid: \(made.errorOutput)")
+
+        let first = ISOMounter(), second = ISOMounter()
+        let one = try await first.mount(image)
+        let two = try await second.mount(image)
+        #expect(one != two)
+        #expect(one.lastPathComponent == "TESTDISC")
+        #expect(two.lastPathComponent == "TESTDISC")
+        #expect(try await first.mount(image) == one)
+
+        await first.unmountAll()
+        #expect(!FileManager.default.fileExists(atPath: one.path))
+        #expect(!FileManager.default.fileExists(atPath: one.deletingLastPathComponent().path))
+        #expect(try String(contentsOf: two.appendingPathComponent("SETUP.TXT"), encoding: .utf8) == "on the disc")
+
+        await second.unmountAll()
+        #expect(!FileManager.default.fileExists(atPath: two.deletingLastPathComponent().path))
     }
 }

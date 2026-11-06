@@ -13,27 +13,34 @@ import Logging
 
 /// Thread-safe tracker for mounted ISOs
 actor MountedISOTracker {
-    private var mountedISOs: Set<URL> = []
-    /// A hybrid disc's ISO 9660 side mounted by hand: its mount point, and
-    /// the device hdiutil attached it as, which must be unmounted first.
-    private var devices: [URL: String] = [:]
-
-    func insert(_ url: URL, device: String? = nil) {
-        mountedISOs.insert(url)
-        devices[url] = device
+    struct Mount {
+        /// The image it's a mount of.
+        let image: URL
+        /// A hybrid disc's ISO 9660 side mounted by hand: the device hdiutil
+        /// attached it as, which must be unmounted first.
+        let device: String?
+        /// The shadow file that made it a copy of its own (`ISOMounter.mount`).
+        let shadow: URL
     }
 
-    func getAll() -> Set<URL> {
-        return mountedISOs
+    private var mounts: [URL: Mount] = [:]
+
+    func insert(_ mountPoint: URL, image: URL, device: String? = nil, shadow: URL) {
+        mounts[mountPoint] = Mount(image: image, device: device, shadow: shadow)
     }
 
-    func device(of url: URL) -> String? {
-        devices[url]
+    func getAll() -> [URL: Mount] {
+        mounts
+    }
+
+    /// Where this mounter already mounted `image`, if it has.
+    func mountPoint(of image: URL) -> URL? {
+        let wanted = image.resolvingSymlinksInPath().path
+        return mounts.first { $0.value.image.resolvingSymlinksInPath().path == wanted }?.key
     }
 
     func removeAll() {
-        mountedISOs.removeAll()
-        devices.removeAll()
+        mounts.removeAll()
     }
 }
 
@@ -69,11 +76,38 @@ nonisolated enum DiscImageError: LocalizedError, Equatable {
 /// Owns the mounted-ISO tracking. The caller decides when mounting and
 /// unmounting happen — typically mount up front, `unmountAll()` on both the
 /// success and error paths of the enclosing build flow.
+///
+/// Every mount is this mounter's own, never one already there: a plain
+/// `hdiutil attach` of an image that's attached hands back that attachment,
+/// so two builds of one disc at once (in two test users' sessions) shared it,
+/// and the first to finish detached it from under the other. With a shadow
+/// file the same image attaches again as a device of its own (writes, of
+/// which a read-only mount makes none, would go to the shadow), mounted in
+/// a folder of this mounter's own under the volume's name, which detection
+/// reads.
 class ISOMounter {
     private let tracker = MountedISOTracker()
     private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.ISOMounter")
+    /// Where this mounter's volumes are mounted, and their shadow files kept.
+    private let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("second-chance-discs-\(UUID().uuidString.prefix(8))")
 
     init() {}
+
+    /// What `hdiutil attach` is given to attach `image` as a copy of its own,
+    /// its shadow file in `root`, mounted (unless `mount` is false) in `root`
+    /// under the volume's name.
+    nonisolated static func attachOptions(dmg: Bool, root: URL, shadow: URL, mount: Bool = true) -> [String] {
+        var options = ["-readonly", "-shadow", shadow.path]
+        options += mount ? ["-nobrowse", "-mountroot", root.path] : ["-nomount"]
+        if dmg || !mount { options.append("-noverify") }
+        return options
+    }
+
+    private func newShadow() throws -> URL {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root.appendingPathComponent("\(UUID().uuidString.prefix(8)).shadow")
+    }
 
     /// Whether the volume at `url` is a mounted disk image (an ISO or DMG)
     /// rather than a real disc: Disk Arbitration names a disk image's device
@@ -86,8 +120,8 @@ class ISOMounter {
             .trimmingCharacters(in: .whitespaces) == "Disk Image"
     }
 
-    /// Mount an ISO or DMG if it isn't already mounted, returning the mount
-    /// point.
+    /// Mount an ISO or DMG as a copy of this mounter's own (or return the
+    /// one it already made of that image), returning the mount point.
     ///
     /// A DMG is mounted without hdiutil's checksum pass, which takes more
     /// than half a minute for a 1 GB download; what is then read from it
@@ -100,25 +134,26 @@ class ISOMounter {
     /// - Parameter isoPath: the disc image or `.dmg` file to mount.
     /// - Returns: the mounted volume's URL.
     func mount(_ isoPath: URL) async throws -> URL {
-        // Check if this ISO is already mounted
-        if let existingMount = try? await findExistingMount(for: isoPath) {
-            logger.notice("ISO already mounted: \(existingMount.path)")
-            return existingMount
+        if let mounted = await tracker.mountPoint(of: isoPath) {
+            logger.notice("ISO already mounted by this build: \(mounted.path)")
+            return mounted
         }
 
         logger.notice("Mounting ISO: \(isoPath.lastPathComponent)")
         let isDMG = isoPath.pathExtension.lowercased() == "dmg"
+        let shadow = try newShadow()
         // stdin is empty: a DMG with a licence agreement asks for it there,
         // and is answered no rather than waited on. Her Interactive's have none.
         // Bounded: an attach that hangs is stopped and the image released
         // (`DiskImage`), rather than holding the build and the Mac's disk service.
-        let attach = try await DiskImage.attach(isoPath, options: ["-nobrowse", "-readonly"] + (isDMG ? ["-noverify"] : []))
+        let attach = try await DiskImage.attach(isoPath, options: Self.attachOptions(dmg: isDMG, root: root, shadow: shadow))
 
         guard attach.succeeded else {
             let errorOutput = (attach.output + attach.errorOutput).trimmingCharacters(in: .whitespacesAndNewlines)
             // hdiutil says "image not recognised" for a truncated ISO and for a
             // file that was never one; the image itself can tell them apart.
             let diagnosis = isDMG ? (.wontOpen, Self.describeSize(of: isoPath)) : Self.diagnoseImage(at: isoPath)
+            try? FileManager.default.removeItem(at: shadow)
             if diagnosis.problem == .wontOpen, !isDMG, let hybrid = await mountISOSide(of: isoPath) {
                 logger.notice("hdiutil couldn't mount \(isoPath.lastPathComponent) (\(errorOutput)); mounted its ISO 9660 side instead")
                 return hybrid
@@ -136,7 +171,7 @@ class ISOMounter {
                 let mountURL = URL(fileURLWithPath: mountPoint)
 
                 // Track that we mounted this
-                await tracker.insert(mountURL)
+                await tracker.insert(mountURL, image: isoPath, shadow: shadow)
                 logger.notice("Mounted: \(mountURL.path)")
                 return mountURL
             }
@@ -156,16 +191,17 @@ class ISOMounter {
     /// that fails too.
     private func mountISOSide(of isoPath: URL) async -> URL? {
         do {
-            let attach = try await DiskImage.attach(isoPath, options: ["-nomount", "-noverify", "-readonly"])
+            let shadow = try newShadow()
+            let attach = try await DiskImage.attach(isoPath, options: Self.attachOptions(dmg: false, root: root, shadow: shadow, mount: false))
             guard attach.succeeded,
                   let device = attach.output.split(separator: "\n").first?
                       .split(whereSeparator: \.isWhitespace).first.map(String.init),
                   device.hasPrefix("/dev/disk") else {
                 logger.error("Couldn't attach \(isoPath.lastPathComponent) without mounting it: \(attach.errorOutput)")
+                try? FileManager.default.removeItem(at: shadow)
                 return nil
             }
-            let mountPoint = FileManager.default.temporaryDirectory
-                .appendingPathComponent("disc-\(UUID().uuidString.prefix(8))")
+            let mountPoint = root.appendingPathComponent("disc-\(UUID().uuidString.prefix(8))")
             try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
             let mount = try await Process.output(
                 of: "/sbin/mount", ["-t", "cd9660", "-o", "rdonly,nobrowse", device, mountPoint.path])
@@ -173,9 +209,10 @@ class ISOMounter {
                 logger.error("Couldn't mount \(device) as ISO 9660: \(mount.errorOutput)")
                 _ = try? await Process.output(of: "/usr/bin/hdiutil", ["detach", device, "-quiet"])
                 try? FileManager.default.removeItem(at: mountPoint)
+                try? FileManager.default.removeItem(at: shadow)
                 return nil
             }
-            await tracker.insert(mountPoint, device: device)
+            await tracker.insert(mountPoint, image: isoPath, device: device, shadow: shadow)
             logger.notice("Mounted: \(mountPoint.path) (\(device), ISO 9660)")
             return mountPoint
         } catch {
@@ -230,26 +267,26 @@ class ISOMounter {
         return (.wontOpen, "it is a \(sizeText) ISO 9660 image whose header declares \(declaredText)")
     }
 
-    /// Unmount everything this mounter mounted. Safe to call when nothing is mounted.
+    /// Unmount everything this mounter mounted, and remove its shadow files
+    /// and folder. Safe to call when nothing is mounted.
     func unmountAll() async {
-        let mountedISOs = await tracker.getAll()
-        guard !mountedISOs.isEmpty else { return }
+        let mounted = await tracker.getAll()
+        guard !mounted.isEmpty else { return }
 
-        logger.notice("Unmounting \(mountedISOs.count) ISO(s)...")
+        logger.notice("Unmounting \(mounted.count) ISO(s)...")
 
-        for mountPoint in mountedISOs {
+        for (mountPoint, mount) in mounted {
             do {
                 // A hybrid disc's ISO side was mounted by hand: its device
                 // stays busy until that mount goes.
-                let device = await tracker.device(of: mountPoint)
-                if device != nil {
+                if mount.device != nil {
                     let unmount = try await Process.output(of: "/sbin/umount", [mountPoint.path])
                     if !unmount.succeeded {
                         logger.error("Failed to unmount \(mountPoint.path): \(unmount.errorOutput)")
                     }
                 }
-                let detach = try await Process.output(of: "/usr/bin/hdiutil", ["detach", device ?? mountPoint.path, "-quiet"])
-                if device != nil {
+                let detach = try await Process.output(of: "/usr/bin/hdiutil", ["detach", mount.device ?? mountPoint.path, "-quiet"])
+                if mount.device != nil {
                     do {
                         try FileManager.default.removeItem(at: mountPoint)
                     } catch {
@@ -258,6 +295,12 @@ class ISOMounter {
                 }
                 if detach.succeeded {
                     logger.notice("Unmounted: \(mountPoint.path)")
+                    // Kept while attached: the copy reads through it.
+                    do {
+                        try FileManager.default.removeItem(at: mount.shadow)
+                    } catch {
+                        logger.warning("Couldn't remove the shadow file \(mount.shadow.path): \(error)")
+                    }
                 } else {
                     logger.error("Failed to unmount \(mountPoint.path) (exit code: \(detach.status))")
                 }
@@ -267,73 +310,9 @@ class ISOMounter {
         }
 
         await tracker.removeAll()
-    }
-
-    /// Check if an ISO is already mounted and return its mount point
-    private func findExistingMount(for isoPath: URL) async throws -> URL? {
-        let info = try await Process.output(of: "/usr/bin/hdiutil", ["info", "-plist"])
-        if !info.errorOutput.isEmpty {
-            logger.critical("   hdiutil info error: \(info.errorOutput)")
+        // Only once it's empty: a folder still holding a mount is never removed.
+        if (try? FileManager.default.contentsOfDirectory(atPath: root.path))?.isEmpty == true {
+            try? FileManager.default.removeItem(at: root)
         }
-        let plistData = Data(info.output.utf8)
-
-        // Parse the plist
-        guard let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any],
-              let images = plist["images"] as? [[String: Any]] else {
-            logger.debug("   ℹ️ No mounted disk images found")
-            return nil
-        }
-
-        let fileManager = FileManager.default
-
-        // Resolve the canonical path of our ISO (in case it's a symlink)
-        let canonicalISOPath: String
-        if let resolved = try? fileManager.destinationOfSymbolicLink(atPath: isoPath.path) {
-            canonicalISOPath = (resolved as NSString).resolvingSymlinksInPath
-            logger.debug("   ℹ️ Resolved symlink: \(isoPath.path) -> \(canonicalISOPath)")
-        } else {
-            canonicalISOPath = (isoPath.path as NSString).resolvingSymlinksInPath
-        }
-
-        logger.debug("   ℹ️ Looking for mounted ISO: \(canonicalISOPath)")
-        logger.debug("   ℹ️ Found \(images.count) mounted disk image(s)")
-
-        // Find our ISO in the list of mounted images
-        for image in images {
-            guard let imagePath = image["image-path"] as? String else {
-                continue
-            }
-
-            let canonicalImagePath = (imagePath as NSString).resolvingSymlinksInPath
-
-            logger.debug("   ℹ️ Checking mounted image: \(canonicalImagePath)")
-
-            if canonicalImagePath == canonicalISOPath {
-                logger.debug("   ✓ Found matching mounted ISO")
-
-                // Found our ISO, now get the mount points
-                guard let systemEntities = image["system-entities"] as? [[String: Any]] else {
-                    logger.warning("   ⚠️ No system entities found for mounted ISO")
-                    continue
-                }
-
-                for entity in systemEntities {
-                    if let mountPoint = entity["mount-point"] as? String,
-                       !mountPoint.isEmpty {
-                        // Verify that the mount point actually exists as a directory
-                        var isDirectory: ObjCBool = false
-                        if fileManager.fileExists(atPath: mountPoint, isDirectory: &isDirectory), isDirectory.boolValue {
-                            logger.debug("   ✓ Mount point verified: \(mountPoint)")
-                            return URL(fileURLWithPath: mountPoint)
-                        } else {
-                            logger.warning("   ⚠️ Mount point doesn't exist or isn't a directory: \(mountPoint)")
-                        }
-                    }
-                }
-            }
-        }
-
-        logger.debug("   ℹ️ ISO not found in mounted images")
-        return nil
     }
 }

@@ -143,6 +143,20 @@ along with this user's helper for that image (found in `hdiutil info
 attaches keep hanging, the Mac's disk service is stuck itself, and a restart
 clears it.
 
+**Each build mounts a disc image as a copy of its own.** A plain `hdiutil
+attach` of an image that's already attached hands back that attachment,
+even another user's, so two builds of the same disc at once (in two test
+sessions) shared one mount, and the first to finish detached it from under
+the other ("couldn't be saved in the folder nancy-drew-installer"). So
+`ISOMounter` never reuses a mount it didn't make: it attaches with a shadow
+file (`-shadow`, which a read-only mount writes nothing to), giving the same
+image a device of its own, mounted with `-mountroot` in a folder of the
+mounter's own under the volume's name, which detection reads (`folderName`,
+`volumeName`). `unmountAll` detaches each and removes its shadow file and
+the folder. Layer keys don't change with the mount point: a disc input is
+keyed by its files' paths within the volume and their sizes
+([the layer cache](#the-layer-cache)).
+
 **A hybrid Mac and PC disc mounts by its ISO 9660 side.** Its Apple
 partition map leads hdiutil to try only its HFS partition, which macOS can
 no longer mount, and refuse the image ("no mountable file systems"). An
