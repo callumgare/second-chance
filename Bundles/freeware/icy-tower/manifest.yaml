@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../../manifest.schema.json
+format: 1
+id: "freeware/icy-tower"
+version: 1
+title: "Icy Tower"
+display-name: "Icy Tower"
+
+volumes:
+  saves:
+    display-name: "settings and high scores"
+  replays:
+    display-name: "saved replays"
+
+editions:
+  - id: "download"
+    source: "download"
+    build:
+      target: "download"
+      inputs:
+        game:
+          type: "download"
+          urls: # Free Lunch Design's own download host, gone: its 2006 Wayback copy
+            - "https://web.archive.org/web/20061006092817id_/http://www.dtek.chalmers.se:80/~d98peitz/fld/win32/icytower13_install.exe"
+          sha256: "e8a6ddc8a11d49b1e68484f725afc9204d9d15e0bf6cf90f0b14f0d1c9d24302"
+          size: 2647172
+          unpack: "none"
+          install: "none"
+    licence: "freeware-licensed" # its readme: "you are encouraged to distribute this game (in its original form)"
+    licence-from: "Free Lunch Design's readme, in the game"
+
+tests:
+  scenario: "wine/starts-and-quits"
+
+notes:
+  about: "Johan Peitz's 2001 platformer (Free Lunch Design), in its last freeware release, 1.3.1 (2005). An Allegro 4.0.3 game: DirectDraw, DirectInput, DirectSound. Free Lunch Design is now part of Apskeppet, which sells a new Icy Tower (2026); this is the old freeware one."
+  licence: "Its readme: freeware, to be distributed in its original form with credit to Free Lunch Design and a link to freelunchdesign.com; not in a compilation or commercial package without permission."
+  exit: "It sometimes hangs as it exits, after saving (Allegro 4.0.3 waits on a timer thread's handle the C runtime has already closed): seen in about 3 of 11 exits on macOS 26, none of 41 on macOS 15."
+  windowed: "Its Options > GFX > Fullscreen: No crashes it under cnc-ddraw (Allegro's windowed DirectDraw driver fails); the app's own fullscreen toggle stands in."
+  checked: "2026-11-06: the 2006 Wayback capture of the makers' URL gives the file with this sha256 (every capture 2005-12 to 2006-10 has the same CDX digest, its SHA-1 a00aa6eb…)."

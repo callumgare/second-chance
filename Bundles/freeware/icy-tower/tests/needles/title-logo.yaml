@@ -1,0 +1,9 @@
+# The title screen's "Icy Tower" logo, top right above its high scores.
+# Searched for only there, at its one size: a search of the whole screen
+# took 90 s.
+kind: "region"
+tags: ["running"]
+region:
+  search: { x: 0.35, y: 0, width: 0.65, height: 0.6 }
+  height-fraction: 0.4888
+  scales: [1.0]

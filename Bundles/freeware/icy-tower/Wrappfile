@@ -1,0 +1,23 @@
+# Icy Tower: its makers' Inno Setup installer, run silently into a folder of
+# our choosing, then removed. An Allegro 4 game that draws with DirectDraw
+# and reads only the keyboard. It keeps its settings and high scores in
+# tower.cfg beside itself, written as it exits, and replays in replays/, so
+# files mounts keep just those beside the program.
+
+INPUT game
+STORE saves
+STORE replays
+CONST install-dir = "C:/IcyTower"
+
+FROM --module=wine@10 prefix AS download
+DO wine.cnc-ddraw
+COPY --from=${input.game} . C:/icy-tower-setup/ # the installer, as it comes
+RUN "C:/icy-tower-setup/icytower13_install.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOICONS /DIR=C:\IcyTower
+REMOVE C:/icy-tower-setup
+# It ignores Wine's quit, and quits through its own menus: from a game,
+# Escape twice leaves for the menu, where Escape twice chooses Exit (a fifth
+# for a game paused with P, where the first resumes it).
+LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="tower.cfg" \
+    --mount=type=store,source=replays,target=${const.install-dir}/replays/,files="*.itr" \
+    --wine.graphics=direct-draw --wine.cursor-lock --wine.quit-key="escape escape escape escape escape" \
+    "${const.install-dir}/icytower13.exe"

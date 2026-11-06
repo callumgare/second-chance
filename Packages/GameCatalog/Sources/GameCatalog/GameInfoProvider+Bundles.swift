@@ -10,6 +10,15 @@ nonisolated extension GameInfoProvider {
     /// Every game a bundle describes, in the order lists show them.
     static let bundledGames: [GameInfo] = [
         GameInfo(
+            id: "icy-tower",
+            title: "Icy Tower",
+            diskCount: 1,
+            graphics: .directDraw,
+            internalGameExePath: "/IcyTower/icytower13.exe",
+            program: "freeware/icy-tower",
+            displayName: "Icy Tower"
+        ),
+        GameInfo(
             id: "iji",
             title: "Iji",
             diskCount: 1,
