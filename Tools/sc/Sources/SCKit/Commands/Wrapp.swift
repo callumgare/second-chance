@@ -11,6 +11,15 @@ struct WrappCommand: AsyncParsableCommand {
     )
 }
 
+extension ArgumentHelp {
+    /// The program argument the wrapp commands share.
+    static let programBundleID = ArgumentHelp(
+        "The program's bundle id, e.g. nancy-drew/blue-moon, or what follows its slash, blue-moon, when only one bundle's id ends so.",
+        discussion: "Asked for when omitted, or when several bundles' ids end so, in a terminal.",
+        valueName: "program-bundle-id"
+    )
+}
+
 struct WrappBuildCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "build",
@@ -27,15 +36,15 @@ struct WrappBuildCommand: AsyncParsableCommand {
     @OptionGroup var debug: WrappBuildDebugOptions
     @OptionGroup var wrapps: WrappsDirOptions
 
-    @Argument(help: "The game's slug, e.g. haunted-carousel. Asked for when omitted in a terminal.")
+    @Argument(help: .programBundleID)
     var game: String?
 
     func run() async throws {
         let session = try Session.start(global)
         try await GUISession.ensure(session, need: .windows)
         let game = try Games.resolve(
-            game, candidates: source.input.availableGames(repo: session.repo),
-            candidateKind: source.input.availabilityDescription, command: "wrapp build", ui: session.ui
+            game, candidates: source.availableGames(repo: session.repo),
+            candidateKind: source.availabilityDescription, command: "wrapp build", ui: session.ui
         )
         try await Xcode(session: session).ensureAppBuild(appBuild)
         let builder = WrappBuilder(session: session)
@@ -47,7 +56,7 @@ struct WrappBuildCommand: AsyncParsableCommand {
         if toggle.isOn {
             builder.launch(wrapp, debug: DebugEffect(), arguments: [])
         }
-        session.ui.success("Built \(game.wrappName)", takeaways: ["Run it with: sc wrapp run \(game.slug)"])
+        session.ui.success("Built \(game.wrappName)", takeaways: ["Run it with: sc wrapp run \(game.programID)"])
     }
 }
 
@@ -62,7 +71,7 @@ struct WrappUpdateCommand: AsyncParsableCommand {
     @OptionGroup var appBuild: AppBuildOptions
     @OptionGroup var wrapps: WrappsDirOptions
 
-    @Argument(help: "The game's slug. Asked for when omitted in a terminal.")
+    @Argument(help: .programBundleID)
     var game: String?
 
     func run() async throws {
@@ -102,7 +111,7 @@ struct WrappRunCommand: AsyncParsableCommand {
     @OptionGroup(title: "When a build is needed") var source: WrappSourceOptions
     @OptionGroup var wrapps: WrappsDirOptions
 
-    @Argument(help: "The game's slug. Asked for when omitted in a terminal.")
+    @Argument(help: .programBundleID)
     var game: String?
 
     @Argument(parsing: .postTerminator, help: "Arguments for the wrapp.")
@@ -115,11 +124,11 @@ struct WrappRunCommand: AsyncParsableCommand {
         let wrappsDir = wrapps.resolve(repo)
         let builder = WrappBuilder(session: session)
         let candidates = refreshWrapp == .full
-            ? source.input.availableGames(repo: repo)
+            ? source.availableGames(repo: repo)
             : Games.withWrapps(in: wrappsDir, repo: repo)
         let game = try Games.resolve(
             game, candidates: candidates,
-            candidateKind: refreshWrapp == .full ? source.input.availabilityDescription : "a wrapp",
+            candidateKind: refreshWrapp == .full ? source.availabilityDescription : "a wrapp",
             command: "wrapp run", ui: session.ui
         )
         let effect = try debug.effect()
@@ -161,7 +170,7 @@ struct WrappWineCommand: AsyncParsableCommand {
     @OptionGroup var global: GlobalOptions
     @OptionGroup var wrapps: WrappsDirOptions
 
-    @Argument(help: "The game's slug. Asked for when omitted in a terminal.")
+    @Argument(help: .programBundleID)
     var game: String?
 
     @Argument(parsing: .postTerminator, help: "Arguments for wine.")

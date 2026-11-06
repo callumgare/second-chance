@@ -13,6 +13,21 @@ enum WrappSourceKind: String, CaseIterable, ExpressibleByArgument, Sendable {
     case herDownload = "her-download"
     case bigFish = "big-fish"
     case download
+
+    /// The order a game's source is picked in when `--from` isn't given.
+    static let byPreference: [WrappSourceKind] = [.disk, .herDownload, .download, .steam, .bigFish]
+
+    /// Whether it builds from files in the installers store, so whether it
+    /// can build a game depends on what's there.
+    var readsInstallersStore: Bool { self == .disk || self == .herDownload }
+
+    /// The `source:` a bundle's edition from this source has.
+    var editionSource: String {
+        switch self {
+        case .disk: "disc"
+        default: rawValue
+        }
+    }
 }
 
 /// What a source contributes to a headless build: the app's
@@ -249,8 +264,14 @@ enum PatchFailurePolicy: String, CaseIterable, ExpressibleByArgument, Sendable {
 
 /// Everything about what a wrapp is built from.
 struct WrappSourceOptions: ParsableArguments {
-    @Option(help: "What to build the wrapp from: disk, steam, her-download, big-fish or download.")
-    var from: WrappSourceKind = .disk
+    @Option(help: ArgumentHelp(
+        "What to build the wrapp from: disk, steam, her-download, big-fish or download.",
+        discussion: """
+        Default: the first of disk, her-download, download, steam and big-fish the game \
+        has an edition for, though a disc or Her download in the installers store comes first.
+        """
+    ))
+    var from: WrappSourceKind?
 
     @OptionGroup(title: "Disk source")
     var disk: DiskSourceOptions
@@ -272,14 +293,53 @@ struct WrappSourceOptions: ParsableArguments {
 
     @OptionGroup var inputs: InputOptions
 
-    var input: WrappSourceInput {
-        switch from {
+    func input(_ kind: WrappSourceKind) -> WrappSourceInput {
+        switch kind {
         case .disk: disk
         case .steam: steam
         case .herDownload: herDownload
         case .bigFish: bigFish
         case .download: download
         }
+    }
+
+    /// The source `--from` names, or the one an option only it reads
+    /// (`--disk`, `--her-download`, `--big-fish-trial`) implies.
+    var namedKind: WrappSourceKind? {
+        if let from { return from }
+        if !disk.disks.isEmpty { return .disk }
+        if herDownload.download != nil { return .herDownload }
+        if bigFish.bigFishTrial { return .bigFish }
+        return nil
+    }
+
+    /// The source to build `game` from: the one named, else the first in
+    /// `WrappSourceKind.byPreference` it has an edition for — except that a
+    /// disc or Her download already in the installers store comes first, so
+    /// a game with only its download there doesn't fail for want of discs.
+    /// Disk when it has no edition at all.
+    func kind(for game: CatalogGame, repo: Repo) -> WrappSourceKind {
+        if let namedKind { return namedKind }
+        let supported = WrappSourceKind.byPreference.filter { game.hasEdition(source: $0.editionSource, repo: repo) }
+        let inStore = supported.first { $0.readsInstallersStore && input($0).availableGames(repo: repo).contains(game) }
+        return inStore ?? supported.first ?? .disk
+    }
+
+    func input(for game: CatalogGame, repo: Repo) -> WrappSourceInput {
+        input(kind(for: game, repo: repo))
+    }
+
+    /// Games to offer when none is named: those the named source can build,
+    /// or, with none named, those any source can.
+    func availableGames(repo: Repo) -> [CatalogGame] {
+        if let namedKind { return input(namedKind).availableGames(repo: repo) }
+        let buildable = WrappSourceKind.byPreference.map { Set(input($0).availableGames(repo: repo).map(\.slug)) }
+            .reduce(into: Set<String>()) { $0.formUnion($1) }
+        return Catalog.games.filter { buildable.contains($0.slug) }
+    }
+
+    var availabilityDescription: String {
+        namedKind.map { input($0).availabilityDescription } ?? "a source to build from"
     }
 }
 
@@ -311,7 +371,9 @@ struct WrappBuilder {
         toggle: LaunchToggle? = nil
     ) async throws -> URL {
         try repo.requireDebugApp()
-        var env = try source.input.environment(for: game, repo: repo)
+        let kind = source.kind(for: game, repo: repo)
+        if source.namedKind == nil { ui.detail("Building \(game.slug) from \(kind.rawValue) (pick another with --from).") }
+        var env = try source.input(kind).environment(for: game, repo: repo)
         try FileManager.default.createDirectory(at: wrappsDir, withIntermediateDirectories: true)
 
         let progressFile = FileManager.default.temporaryDirectory.appendingPathComponent("sc-progress-\(UUID().uuidString).jsonl")

@@ -82,9 +82,13 @@ app at all — launching a wrapp as it is doesn't need it.
 is the only place xcodebuild is run from; see AGENTS.md for why the flag is
 load-bearing.
 
-**Sources.** `wrapp build --from disk` (the default), `--from steam`,
+**Sources.** `wrapp build --from disk`, `--from steam`,
 `--from her-download`, `--from big-fish` or `--from download` (a free game, downloaded from where
-its bundle says: [wrapp-build.md](wrapp-build.md#the-download-source)). Each source is a case of `WrappSourceKind` with its own
+its bundle says: [wrapp-build.md](wrapp-build.md#the-download-source)). Without
+`--from`, the game builds from the first of disk, her-download, download, steam and
+big-fish its bundle has an edition for, except that a disc or Her download already
+in the installers store comes first; `--disk`, `--her-download` and
+`--big-fish-trial` each imply their source (`WrappSourceOptions.kind(for:repo:)`). Each source is a case of `WrappSourceKind` with its own
 options type conforming to `WrappSourceInput` (`Support/Wrapps.swift`), which
 turns the options into the app's `INSTALLATION_SOURCE` and inputs. Adding a
 source is a new case and a new type — the same shape as the app's
@@ -264,7 +268,12 @@ default `Terminal` exits with status 0 on Ctrl-C (sc passes
 `table(_:renderer:)` ignores its renderer (sc uses the updating table for every
 table).
 
-**Interactive only.** Prompts (pick a game when no slug is given, pick what to
+**Naming a program.** The wrapp commands take a program bundle's id,
+`nancy-drew/blue-moon`, or what follows its slash, `blue-moon`, which is taken
+as the one bundle whose id ends `/blue-moon` (`Games.resolve`). When several
+do, a terminal is asked which; without one, the command fails naming each.
+
+**Interactive only.** Prompts (pick a game when none is named or several match, pick what to
 `clean`) and the `l` key during a wrapp build only appear when there is a
 terminal to answer on; each has a flag equivalent.
 
@@ -901,8 +910,7 @@ skipping what's done. A user named who isn't logged in yet is waited for first, 
 to five minutes, as the keep-alive logs a new one in; one who isn't in that Mac's pool
 fails at once, naming the pool (a test user of another Mac wants `--on`). `screensaver` sets each test user's screen saver to never
 start (`defaults -currentHost write com.apple.screensaver idleTime -int 0`, as
-that user over SSH), which takes effect in the running session; it shows nothing,
-so it alone goes ahead in a session someone else has leased; `signing` gives each test user the console user's signing
+that user over SSH), which takes effect in the running session; `signing` gives each test user the console user's signing
 certificate (above), done on the test Mac, where that certificate is (it asks to unlock the
 keychain there, locked over SSH, which holds the test users' passwords too), only when one of
 them hasn't got it; neither shows anything in the session, so both go ahead in one someone

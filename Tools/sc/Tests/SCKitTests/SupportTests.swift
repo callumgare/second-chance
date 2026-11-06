@@ -390,6 +390,22 @@ struct GameTests {
         #expect(Catalog.games.count > 30)
     }
 
+    @Test("A program is named by its bundle id, or by what follows its slash when only one id ends so")
+    func programByBundleID() throws {
+        #expect(Games.matching("nancy-drew/blue-moon").map(\.programID) == ["nancy-drew/blue-moon"])
+        #expect(Games.matching("blue-moon").map(\.programID) == ["nancy-drew/blue-moon"])
+        #expect(Games.matching("freeware/laser-tank").map(\.programID) == ["freeware/laser-tank"])
+        #expect(Games.matching("lue-moon").isEmpty)
+        #expect(Games.matching("nancy-drew/nonexistent").isEmpty)
+        #expect(Games.closest(to: "nancy-drew/blu-moon")?.programID == "nancy-drew/blue-moon")
+
+        let games = try ["nancy-drew/blue-moon", "freeware/laser-tank"].map { try #require(Games.matching($0).first) }
+        let twin = CatalogGame(slug: "blue-moon-2", title: "Twin", diskCount: 0, engine: "wine", isOnSteam: false,
+                               offersSteamLaunchChoice: false, isOnBigFish: false, wrappName: "Twin.app", programID: "other/blue-moon")
+        #expect(Games.matching("blue-moon", in: games + [twin]).count == 2)
+        #expect(Games.matching("other/blue-moon", in: games + [twin]) == [twin])
+    }
+
     @Test("Disk sources find images in the store and refuse missing second disks")
     func diskSource() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-installers-\(UUID().uuidString)")
@@ -414,6 +430,27 @@ struct GameTests {
         #expect(try source.environment(for: twoDisk, repo: repo)["DISK_2_PATH"]?.hasSuffix("/cd/disc-2.iso") == true)
         source = try DiskSourceOptions.parse(["--disk", "/nonexistent.iso"])
         #expect(throws: SCError.self) { try source.environment(for: oneDisk, repo: repo) }
+    }
+
+    @Test("Without --from, a game builds from the first source it has, preferring one whose installer is in the store")
+    func defaultSource() throws {
+        let laserTank = try #require(Catalog.game(slug: "laser-tank"))
+        let whiteWolf = try #require(Catalog.game(slug: "white-wolf"))
+        let store = FileManager.default.temporaryDirectory.appendingPathComponent("sc-default-source-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: store) }
+        let repo = Repo(root: repoRoot, installers: InstallersStore(root: store))
+        let options = try WrappSourceOptions.parse([])
+        #expect(options.kind(for: laserTank, repo: repo) == .download)
+        #expect(options.kind(for: whiteWolf, repo: repo) == .disk)
+
+        let her = store.appendingPathComponent("\(whiteWolf.programID)/her-windows")
+        try FileManager.default.createDirectory(at: her, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: her.appendingPathComponent("installer.exe").path, contents: Data())
+        #expect(options.kind(for: whiteWolf, repo: repo) == .herDownload)
+
+        #expect(try WrappSourceOptions.parse(["--from", "steam"]).kind(for: whiteWolf, repo: repo) == .steam)
+        #expect(try WrappSourceOptions.parse(["--big-fish-trial"]).kind(for: whiteWolf, repo: repo) == .bigFish)
+        #expect(try WrappSourceOptions.parse(["--disk", "/x.iso"]).kind(for: laserTank, repo: repo) == .disk)
     }
 
     @Test("The Steam source names the game, and the launch choice only where there is one")
@@ -484,8 +521,8 @@ struct GameTests {
         #expect(try trial.environment(for: onBigFish, dotEnv: account)["BIG_FISH_PASSWORD"] == nil)
 
         let options = try WrappSourceOptions.parse(["--from", "big-fish", "--big-fish-trial"])
-        #expect(options.input is BigFishSourceOptions)
-        #expect(try options.input.environment(for: onBigFish, repo: repo)["BIG_FISH_TRIAL"] == "1")
+        #expect(options.input(for: onBigFish, repo: repo) is BigFishSourceOptions)
+        #expect(try options.input(for: onBigFish, repo: repo).environment(for: onBigFish, repo: repo)["BIG_FISH_TRIAL"] == "1")
     }
 
     @Test("The Big Fish suites test the games Big Fish sells, and only the owned one gets the account")

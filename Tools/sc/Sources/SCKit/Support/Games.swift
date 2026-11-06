@@ -4,7 +4,7 @@ import WrappBuilder
 /// A game as offered in a prompt.
 struct GameChoice: Equatable, CustomStringConvertible {
     let game: CatalogGame
-    var description: String { "\(game.title)  (\(game.slug))" }
+    var description: String { "\(game.title)  (\(game.programID))" }
 }
 
 /// Turning what the user typed into a game, with errors that list what's available.
@@ -36,41 +36,59 @@ enum Games {
         Catalog.games.filter { FileManager.default.fileExists(atPath: repo.wrapp(for: $0, in: wrappsDir).path) }
     }
 
-    /// Resolve a slug. With no slug, asks the user to pick from `candidates`
-    /// when there is a terminal to ask on, and otherwise explains what to pass.
+    /// Resolve a program bundle id, `nancy-drew/blue-moon`, or the part
+    /// after its last slash, `blue-moon`, when only one bundle's id ends so
+    /// (`matching(_:)`). When several do, or none is given, asks the user to
+    /// pick when there is a terminal to ask on, and otherwise explains what
+    /// to pass.
     static func resolve(
-        _ slug: String?,
+        _ id: String?,
         candidates: [CatalogGame],
         candidateKind: String,
         command: String,
         ui: UI
     ) throws -> CatalogGame {
-        guard let slug else {
-            if let choice = try ui.choose("Which game?", from: candidates.map(GameChoice.init)) {
+        let available = candidates.isEmpty
+            ? "No programs have \(candidateKind) yet."
+            : "Programs with \(candidateKind): \(candidates.map(\.programID).joined(separator: ", "))"
+        guard let id else {
+            if let choice = try ui.choose("Which program?", from: candidates.map(GameChoice.init)) {
                 return choice.game
             }
-            throw SCError(
-                "Name a game: sc \(command) <slug>.",
-                hints: candidates.isEmpty
-                    ? ["No games have \(candidateKind) yet."]
-                    : ["Games with \(candidateKind): \(candidates.map(\.slug).joined(separator: ", "))"]
-            )
+            throw SCError("Name a program: sc \(command) <program-bundle-id>.", hints: [available])
         }
-        if let game = Catalog.game(slug: slug) { return game }
+        let matches = matching(id)
+        if matches.count == 1, let game = matches.first { return game }
+        if matches.count > 1 {
+            // Those the command can use first, so the likelier pick is on top.
+            let ordered = matches.filter { candidates.contains($0) } + matches.filter { !candidates.contains($0) }
+            if let choice = try ui.choose("Which '\(id)'?", from: ordered.map(GameChoice.init)) {
+                return choice.game
+            }
+            throw SCError("More than one program is called '\(id)': \(ordered.map(\.programID).joined(separator: ", ")).",
+                          hints: ["Name one by its full id: sc \(command) \(ordered[0].programID)."])
+        }
 
         var hints: [String] = []
-        if let guess = closest(to: slug) { hints.append("Did you mean \(guess.slug)?") }
-        hints.append(candidates.isEmpty
-            ? "No games have \(candidateKind) yet."
-            : "Games with \(candidateKind): \(candidates.map(\.slug).joined(separator: ", "))")
-        throw SCError("No game called '\(slug)'.", hints: hints)
+        if let guess = closest(to: id) { hints.append("Did you mean \(guess.programID)?") }
+        hints.append(available)
+        throw SCError("No program called '\(id)'.", hints: hints)
     }
 
-    /// The known slug that most resembles `input`, if any is close.
+    /// The programs `id` names: the one whose bundle id it is, or else every
+    /// one whose bundle id ends in `/<id>`.
+    static func matching(_ id: String, in games: [CatalogGame] = Catalog.games) -> [CatalogGame] {
+        if let exact = games.first(where: { $0.programID == id }) { return [exact] }
+        return games.filter { $0.programID.hasSuffix("/" + id) }
+    }
+
+    /// The known program that most resembles `input`, by its full bundle
+    /// id when `input` has a slash and by the part after it when not.
     static func closest(to input: String) -> CatalogGame? {
-        let scored = Catalog.games.map { ($0, distance($0.slug, input)) }
+        let name: (CatalogGame) -> String = input.contains("/") ? { $0.programID } : { $0.slug }
+        let scored = Catalog.games.map { ($0, distance(name($0), input)) }
         guard let best = scored.min(by: { $0.1 < $1.1 }), best.1 <= max(2, input.count / 3) else {
-            return Catalog.games.first { $0.slug.contains(input) || input.contains($0.slug) }
+            return Catalog.games.first { name($0).contains(input) || input.contains(name($0)) }
         }
         return best.0
     }
