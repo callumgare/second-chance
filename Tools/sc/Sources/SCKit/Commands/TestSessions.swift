@@ -79,15 +79,41 @@ struct SessionClaimCommand: AsyncParsableCommand {
 
     func run() async throws {
         let session = try Session.start(global)
+        let holder = ScreenLease.currentHolder(repoRoot: session.repo.root, branch: await ScreenLease.branch(of: session.repo.root))
+        let (chosen, lease) = try await Self.claim(user, new: new, seconds: ScreenLease.parseDuration(duration) ?? 7200,
+                                                   session: session, policy: global.leasePolicy, purpose: global.purpose)
+        let host = ScreenLease.shortHostName()
+        let checkout = Self.homeRelative(session.repo.root.path)
+        session.ui.line("Claimed \(chosen)@\(host) until \(lease.expires.map(ScreenLease.clock) ?? "?").")
+        // Asked from this Mac (not through --on from another), it's reached
+        // as localhost, and released here.
+        let local = holder.host == host
+        session.ui.detail("Run in it: sc --on \(chosen)@\(local ? "localhost" : host):\(checkout) <command>")
+        session.ui.detail("Give it back: sc \(local ? "" : "--on \(host) ")session release \(chosen)")
+        if json {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = .sortedKeys
+            let claim = ShardCoordinator.Claim(host: host, user: chosen, expires: lease.expires)
+            FileHandle.standardOutput.write(try encoder.encode(claim) + Data("\n".utf8))
+        }
+    }
+
+    /// Lease one of this Mac's test sessions: `requested`, or the first free
+    /// one (or, unless `new`, one this holder took already, to renew it).
+    /// `session claim` and a sharded run's sessions on this Mac both claim
+    /// through it; on another Mac a sharded run runs `session claim` there.
+    static func claim(_ requested: String?, new: Bool, seconds: TimeInterval, session: Session,
+                      policy: ScreenLease.Policy, purpose: String?) async throws -> (user: String, lease: ScreenLease) {
         let statuses = await SessionPool.statuses()
         let holder = ScreenLease.currentHolder(repoRoot: session.repo.root, branch: await ScreenLease.branch(of: session.repo.root))
         let chosen: SessionPool.Status
-        if let user {
-            guard let status = statuses.first(where: { $0.user == user }) else {
-                throw SCError("\(user) isn't one of \(ScreenLease.shortHostName())'s test sessions (\(statuses.map(\.user).joined(separator: ", "))).")
+        if let requested {
+            guard let status = statuses.first(where: { $0.user == requested }) else {
+                throw SCError("\(requested) isn't one of \(ScreenLease.shortHostName())'s test sessions (\(statuses.map(\.user).joined(separator: ", "))).")
             }
             guard status.login != nil else {
-                throw SCError("\(SessionPool.screenName(of: user)) isn't logged in.",
+                throw SCError("\(SessionPool.screenName(of: requested)) isn't logged in.",
                               hints: ["The keep-alive logs it in: sc session keep-alive --install, in the console user's account."])
             }
             chosen = status
@@ -100,24 +126,8 @@ struct SessionClaimCommand: AsyncParsableCommand {
             }
             chosen = free
         }
-        let seconds = ScreenLease.parseDuration(duration) ?? 7200
-        let lease = try await ScreenLease.take(session, policy: global.leasePolicy, purpose: global.purpose,
-                                               duration: seconds, user: chosen.user)
-        let host = ScreenLease.shortHostName()
-        let checkout = Self.homeRelative(session.repo.root.path)
-        session.ui.line("Claimed \(host)/\(chosen.user) until \(lease.expires.map(ScreenLease.clock) ?? "?").")
-        // Asked from this Mac (not through --on from another), it's reached
-        // as localhost, and released here.
-        let local = holder.host == host
-        session.ui.detail("Run in it: sc --on \(chosen.user)@\(local ? "localhost" : host):\(checkout) <command>")
-        session.ui.detail("Give it back: sc \(local ? "" : "--on \(host) ")session release \(chosen.user)")
-        if json {
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = .sortedKeys
-            let claim = ShardCoordinator.Claim(host: host, user: chosen.user, expires: lease.expires)
-            FileHandle.standardOutput.write(try encoder.encode(claim) + Data("\n".utf8))
-        }
+        let lease = try await ScreenLease.take(session, policy: policy, purpose: purpose, duration: seconds, user: chosen.user)
+        return (chosen.user, lease)
     }
 
     static func homeRelative(_ path: String) -> String {
@@ -389,7 +399,7 @@ struct SessionAddCommand: AsyncParsableCommand {
             session.ui.detail("Started the keep-alive, which logs test sessions in and keeps them drawing. Its log: \(log.path)")
         }
         let host = ScreenLease.shortHostName()
-        session.ui.success("\(names.map { "\(host)/\($0)" }.joined(separator: ", ")) ready.",
+        session.ui.success("\(names.map { "\($0)@\(host)" }.joined(separator: ", ")) ready.",
                            takeaways: ["See them: sc session",
                                        "Claim one: sc session claim --purpose \"…\"",
                                        "Run in it: sc --on <user>@\(host):<path> test integration <game>"])

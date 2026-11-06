@@ -24,7 +24,7 @@ struct AudioTapSetupTests {
     @Test("A no macOS recorded is explained, with the switch and the reset that put it right")
     func deniedExplained() {
         let message = AudioTapSetup.deniedMessage(host: "meeka", user: "second-chance-testing-5")
-        #expect(message.contains("meeka/second-chance-testing-5") && message.contains("won't ask again"))
+        #expect(message.contains("second-chance-testing-5@meeka") && message.contains("won't ask again"))
         let fix = AudioTapSetup.deniedFix(user: "second-chance-testing-5", mac: "meeka")
         #expect(fix.contains("System Audio Recording Only"))
         #expect(fix.contains("ssh second-chance-testing-5@meeka 'tccutil reset AudioCapture au.gare.callum.second-chance.sc-audio-tap'"))

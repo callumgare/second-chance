@@ -444,8 +444,8 @@ struct ScreenLease: Codable, Equatable, Sendable {
             let to = currentAgentSession().name.map { "\($0) (uds:\(socket))" } ?? "uds:\(socket) (ListAgents shows its name)"
             hints.append("Ask that session when it'll be done: SendMessage to \(to).")
         }
-        // A test session's screen is named <mac>/<user>, reached as <user>@<mac>.
-        let target = host.split(separator: "/").reversed().joined(separator: "@")
+        // A test session's screen is named <user>@<mac>, as `--on` reaches it.
+        let target = host
         if !isTakenByHand { hints.append("Watch it: sc --on \(target):\(runCheckout) attach") }
         hints.append("Go ahead anyway, leaving the lease (windows may clash): add --ignore-screen-lease")
         hints.append(isTakenByHand ? "Clear their lease and take the screen: add --break-screen-lease"

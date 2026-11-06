@@ -45,14 +45,14 @@ struct SessionViewCommand: AsyncParsableCommand {
         if let lease = try? await SessionSetupCommand.othersLeases([chosen], on: mac, holder: holder).first?.lease {
             let purpose: String = lease.purpose.map { " for \"\($0)\"" } ?? ""
             let until: String = lease.expires.map { " until \(ScreenLease.clock($0))" } ?? ""
-            let message: String = "\(host)/\(chosen) is leased to \(lease.who)\(purpose)\(until): watch, but leave what runs there alone."
+            let message: String = "\(chosen)@\(host) is leased to \(lease.who)\(purpose)\(until): watch, but leave what runs there alone."
             session.ui.warning("\(message)")
         }
         defer {
             TestSessionAccess.tunnels.forEach { $0.terminate() }
             TestSessionAccess.tunnels.removeAll()
         }
-        try await session.ui.progressStep("Opening Screen Sharing into \(host)/\(chosen)", success: "Screen Sharing is open into \(host)/\(chosen)") { _ in
+        try await session.ui.progressStep("Opening Screen Sharing into \(chosen)@\(host)", success: "Screen Sharing is open into \(chosen)@\(host)") { _ in
             try await TestSessionAccess.openScreenSharing(chosen, on: mac)
         }
         guard mac == nil else { return }

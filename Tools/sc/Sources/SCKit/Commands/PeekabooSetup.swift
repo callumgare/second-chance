@@ -104,7 +104,7 @@ enum PeekabooSetup {
             TestSessionAccess.tunnels.removeAll()
         }
         if mac == nil { try await letThisMacIn(user, ui: ui) }
-        var missing = try await ui.progressStep("Starting Peekaboo's background helper in \(host)/\(user) and checking its permissions") { _ in
+        var missing = try await ui.progressStep("Starting Peekaboo's background helper in \(user)@\(host) and checking its permissions") { _ in
             let started = try await TestSessionAccess.ssh(destination, "bash -s", input: Self.bridgeScript)
             guard started.succeeded else {
                 throw SCError("Couldn't start Peekaboo's bridge for \(user) on \(host): \(started.error.trimmingCharacters(in: .whitespacesAndNewlines))",
@@ -113,17 +113,17 @@ enum PeekabooSetup {
             return try await missingGrants(destination)
         }
         if missing.isEmpty {
-            ui.detail("\(host)/\(user): Peekaboo already has its grants.")
+            ui.detail("\(user)@\(host): Peekaboo already has its grants.")
             return
         }
-        try await ui.progressStep("Opening \(missing[0]) in \(host)/\(user)'s System Settings, and Screen Sharing here") { _ in
+        try await ui.progressStep("Opening \(missing[0]) in \(user)@\(host)'s System Settings, and Screen Sharing here") { _ in
             try await openPane(for: missing[0], destination)
             try await TestSessionAccess.openScreenSharing(user, on: mac)
         }
         ui.line("In the Screen Sharing window (choose \"Log in as yourself\" if asked), turn Peekaboo on in \(missing[0]). "
                 + "macOS asks for an admin's name and password.")
-        missing = try await ui.progressStep("Waiting for Peekaboo's grants in \(host)/\(user) (up to 15 minutes)",
-                                            success: "\(host)/\(user): Peekaboo has its grants. You can close that Screen Sharing window.") { update in
+        missing = try await ui.progressStep("Waiting for Peekaboo's grants in \(user)@\(host) (up to 15 minutes)",
+                                            success: "\(user)@\(host): Peekaboo has its grants. You can close that Screen Sharing window.") { update in
             var missing = missing
             var shown = missing[0]
             let deadline = Date().addingTimeInterval(900)
@@ -139,12 +139,12 @@ enum PeekabooSetup {
                     shown = now[0]
                     try await openPane(for: shown, destination)
                 }
-                update("Waiting for you to turn Peekaboo on in \(shown), in \(host)/\(user)'s System Settings")
+                update("Waiting for you to turn Peekaboo on in \(shown), in \(user)@\(host)'s System Settings")
             }
             return missing
         }
         guard missing.isEmpty else {
-            throw SCError("\(host)/\(user)'s Peekaboo still lacks \(missing.joined(separator: " and ")) after 15 minutes.",
+            throw SCError("\(user)@\(host)'s Peekaboo still lacks \(missing.joined(separator: " and ")) after 15 minutes.",
                           hints: ["Run it again for that user: sc session setup --task peekaboo \(user)" + (mac.map { " --on \($0)" } ?? "")])
         }
     }

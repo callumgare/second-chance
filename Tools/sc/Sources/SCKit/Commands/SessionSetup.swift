@@ -133,7 +133,7 @@ struct SessionSetupCommand: AsyncParsableCommand {
         guard !leased.isEmpty else { return }
         let host = mac ?? ScreenLease.shortHostName()
         let lines = leased.map { user, lease in
-            "\(host)/\(user) is leased to \(lease.who)" + (lease.purpose.map { " for \"\($0)\"" } ?? "")
+            "\(user)@\(host) is leased to \(lease.who)" + (lease.purpose.map { " for \"\($0)\"" } ?? "")
                 + (lease.expires.map { " until \(ScreenLease.clock($0))" } ?? "")
         }
         for line in lines { session.ui.warning("\(line)") }

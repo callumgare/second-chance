@@ -43,10 +43,10 @@ enum SessionPool {
     }
 
     /// How a screen is named in messages: the Mac's for its own user, and
-    /// `<mac>/<user>` for a test session's.
+    /// `<user>@<mac>` for a test session's.
     static func screenName(of user: String = NSUserName(), host: String = ScreenLease.shortHostName(),
                            pool: [String] = users()) -> String {
-        pool.contains(user) ? "\(host)/\(user)" : host
+        pool.contains(user) ? "\(user)@\(host)" : host
     }
 
     // MARK: Naming them

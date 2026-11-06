@@ -40,16 +40,16 @@ enum ScreenSaverSetup {
             let destination = "\(user)@\(mac ?? "localhost")"
             let before = try await TestSessionAccess.ssh(destination, readCommand)
             if before.succeeded, isOff(before.output) {
-                session.ui.detail("\(host)/\(user): the screen saver is already off.")
+                session.ui.detail("\(user)@\(host): the screen saver is already off.")
                 continue
             }
             let set = try await TestSessionAccess.ssh(destination, "\(disableCommand) && \(readCommand)")
             if set.succeeded, isOff(set.output) {
-                session.ui.detail("\(host)/\(user): turned the screen saver off.")
+                session.ui.detail("\(user)@\(host): turned the screen saver off.")
             } else {
                 failed.append(user)
                 let reason = set.error.trimmingCharacters(in: .whitespacesAndNewlines)
-                session.ui.warning("\(host)/\(user): couldn't turn the screen saver off\(reason.isEmpty ? "" : ": \(reason)").")
+                session.ui.warning("\(user)@\(host): couldn't turn the screen saver off\(reason.isEmpty ? "" : ": \(reason)").")
             }
         }
         guard failed.isEmpty else {

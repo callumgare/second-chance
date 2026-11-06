@@ -267,6 +267,14 @@ struct TestIntegrationCommand: AsyncParsableCommand {
     var shardOn: String?
 
     @Option(help: ArgumentHelp(
+        "Split the run into shards, one in each of these test sessions: <user> (this Mac's) or <user>@<host>, comma-separated.",
+        discussion: "A session may end :<path> for its checkout there (default as --on's). Each is claimed by name; shards "
+            + "sharing a Mac build a game at a time (docs/testing.md#sharding-a-run-across-macs).",
+        valueName: "sessions"
+    ))
+    var shard: String?
+
+    @Option(help: ArgumentHelp(
         "With --shard-on, how many shards each Mac runs at once. Default: one per four of its performance cores.",
         discussion: "A shard builds and launches one game at a time when its Mac runs several "
             + "(docs/testing.md#sharding-a-run-across-macs).",
@@ -280,27 +288,40 @@ struct TestIntegrationCommand: AsyncParsableCommand {
     var resultsJSON: String?
 
     func validate() throws {
+        if shard != nil, shardOn != nil {
+            throw ValidationError("--shard names the sessions and --shard-on the Macs: give one or the other.")
+        }
         if let shardsPerMac {
             guard shardOn != nil else { throw ValidationError("--shards-per-mac goes with --shard-on.") }
             guard shardsPerMac >= 1 else { throw ValidationError("--shards-per-mac must be at least 1.") }
         }
-        guard let shardOn else { return }
-        if ShardCoordinator.parseMacs(shardOn).isEmpty { throw ValidationError("--shard-on needs at least one Mac.") }
-        if integration.vm != nil { throw ValidationError("--shard-on and --vm can't be combined.") }
-        if resultsJSON != nil { throw ValidationError("--shard-on and --results-json can't be combined: a shard doesn't shard again.") }
+        if let shard {
+            let sessions = ShardCoordinator.parseMacs(shard)
+            if sessions.isEmpty { throw ValidationError("--shard needs at least one test session.") }
+            if Set(sessions.map { $0.split(separator: ":").first.map(String.init) ?? $0 }).count != sessions.count {
+                throw ValidationError("--shard names a session twice.")
+            }
+        }
+        let sharding = shardOn ?? shard
+        guard let sharding else { return }
+        if shardOn != nil, ShardCoordinator.parseMacs(sharding).isEmpty { throw ValidationError("--shard-on needs at least one Mac.") }
+        let flag = shardOn != nil ? "--shard-on" : "--shard"
+        if integration.vm != nil { throw ValidationError("\(flag) and --vm can't be combined.") }
+        if resultsJSON != nil { throw ValidationError("\(flag) and --results-json can't be combined: a shard doesn't shard again.") }
     }
 
     func run() async throws {
         let session = try Session.start(global)
         let games = try TestCommandSupport.resolve(self.games, ui: session.ui)
-        if let shardOn {
+        if shardOn != nil || shard != nil {
             // Nothing runs here, so it needs no screen; but every shard runs
             // this Mac's test build, which a test user couldn't sign.
             try TestCommandSupport.requireTools()
             try await TestRunner(session: session).xcode.ensureTestBuild(appBuild)
             let coordinator = ShardCoordinator(session: session, sources: integration.sources,
                                                forwarded: ShardCoordinator.forwardedOptions(integration),
-                                               macs: ShardCoordinator.parseMacs(shardOn), shardsPerMac: shardsPerMac,
+                                               macs: ShardCoordinator.parseMacs(shardOn ?? ""), shardsPerMac: shardsPerMac,
+                                               sessions: ShardCoordinator.parseMacs(shard ?? ""),
                                                buildConcurrencyGiven: integration.buildConcurrency != nil)
             try await coordinator.run(games: games, stamp: UI.timestamp())
             return

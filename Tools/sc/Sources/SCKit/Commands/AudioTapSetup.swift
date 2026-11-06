@@ -50,25 +50,25 @@ enum AudioTapSetup {
             TestSessionAccess.tunnels.forEach { $0.terminate() }
             TestSessionAccess.tunnels.removeAll()
         }
-        let home = try await ui.progressStep("Installing \(AudioTapApp.name) in \(host)/\(user)") { _ in
+        let home = try await ui.progressStep("Installing \(AudioTapApp.name) in \(user)@\(host)") { _ in
             try await install(on: destination, user: user, host: host, stamp: stamp)
         }
         let executable = remoteExecutable(home: home)
         if try await permission(executable, destination) == "authorized" {
-            ui.detail("\(host)/\(user): \(AudioTapApp.name) already has its permission.")
+            ui.detail("\(user)@\(host): \(AudioTapApp.name) already has its permission.")
             return
         }
-        try await ui.progressStep("Opening Screen Sharing into \(host)/\(user)") { _ in
+        try await ui.progressStep("Opening Screen Sharing into \(user)@\(host)") { _ in
             try await TestSessionAccess.openScreenSharing(user, on: mac)
         }
         ui.line("In the Screen Sharing window (choose \"Log in as yourself\" if asked), click Allow when macOS asks whether "
                 + "\(AudioTapApp.name) may record system audio.")
         // Puts macOS's prompt on that session's screen, and waits a minute for an answer.
-        let asked = try await ui.progressStep("Asking macOS for \(AudioTapApp.name)'s permission in \(host)/\(user)") { _ in
+        let asked = try await ui.progressStep("Asking macOS for \(AudioTapApp.name)'s permission in \(user)@\(host)") { _ in
             try await TestSessionAccess.ssh(destination, "bash -s", input: TestSessionAccess.inGUISession([executable, "request"], timeout: 75))
         }
         if Self.permission(fromOutput: asked.output) == "authorized" {
-            ui.success("\(host)/\(user): \(AudioTapApp.name) has its permission. You can close that Screen Sharing window.")
+            ui.success("\(user)@\(host): \(AudioTapApp.name) has its permission. You can close that Screen Sharing window.")
             return
         }
         _ = try? await TestSessionAccess.ssh(destination, "bash -s", input: TestSessionAccess.inGUISession(["/usr/bin/open", Self.paneURL]))
@@ -79,25 +79,25 @@ enum AudioTapSetup {
         while true {
             // Steps out once if macOS records a no meanwhile, to say so, then waits on:
             // turning the tap on in System Settings still gives it.
-            let outcome = try await ui.progressStep("Waiting for \(AudioTapApp.name)'s permission in \(host)/\(user) (up to 15 minutes)") { update in
+            let outcome = try await ui.progressStep("Waiting for \(AudioTapApp.name)'s permission in \(user)@\(host) (up to 15 minutes)") { update in
                 while Date() < deadline {
                     try await Task.sleep(for: .seconds(5))
                     let state = try await permission(executable, destination)
                     if state == "authorized" { return WaitOutcome.granted }
                     if state == "denied", !warned { return WaitOutcome.denied }
-                    update("Waiting for you to allow \(AudioTapApp.name) in \(host)/\(user)'s session")
+                    update("Waiting for you to allow \(AudioTapApp.name) in \(user)@\(host)'s session")
                 }
                 return WaitOutcome.timedOut
             }
             switch outcome {
             case .granted:
-                ui.success("\(host)/\(user): \(AudioTapApp.name) has its permission. You can close that Screen Sharing window.")
+                ui.success("\(user)@\(host): \(AudioTapApp.name) has its permission. You can close that Screen Sharing window.")
                 return
             case .denied:
                 warned = true
                 ui.warning("\(Self.deniedMessage(host: host, user: user))", next: "\(Self.deniedFix(user: user, mac: mac))")
             case .timedOut:
-                throw SCError("\(host)/\(user)'s \(AudioTapApp.name) still has no permission to record system audio after 15 minutes.",
+                throw SCError("\(user)@\(host)'s \(AudioTapApp.name) still has no permission to record system audio after 15 minutes.",
                               hints: [Self.deniedFix(user: user, mac: mac)])
             }
         }
@@ -109,7 +109,7 @@ enum AudioTapSetup {
     /// closed, or answered Don't Allow, which macOS keeps rather than asking
     /// again.
     static func deniedMessage(host: String, user: String) -> String {
-        "macOS has recorded that \(AudioTapApp.name) may not record system audio in \(host)/\(user): its prompt was answered "
+        "macOS has recorded that \(AudioTapApp.name) may not record system audio in \(user)@\(host): its prompt was answered "
             + "Don't Allow, or closed (bringing System Settings to the front closes it), and macOS won't ask again."
     }
 

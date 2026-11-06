@@ -128,10 +128,38 @@ struct ShardedRunTests {
         #expect(ShardReport.merge([outcome], order: ["a", "b"]).rows.map(\.row.slug) == ["a", "a mac", "b"])
     }
 
-    @Test("The merged table puts the Mac and session first")
+    @Test("The merged table puts each row's session first, as <user>@<mac>")
     func table() {
         let rows = [ShardReport.Row(mac: "one", session: "s", row: row("a"))]
-        #expect(ShardReport.table(rows, showSource: false).headers.prefix(3) == ["Mac", "Session", "Game"])
+        let table = ShardReport.table(rows, showSource: false)
+        #expect(table.headers.prefix(2) == ["Session", "Game"])
+        #expect("\(table.rows[0][0])".contains("s@one"))
+    }
+
+    @Test("--shard's sessions: <user> is this Mac's, <user>@<host> another's, either with :<path>")
+    func parseSessions() {
+        let root = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("repos/second-chance")
+        let here = ShardCoordinator.parseSession("second-chance-testing-4", localRoot: root)
+        #expect(here.wantedUser == "second-chance-testing-4" && here.host == "localhost" && here.isThisMac)
+        #expect(here.path == "~/repos/second-chance")
+        #expect(here.sessionTarget("second-chance-testing-4") == "second-chance-testing-4@localhost:~/repos/second-chance")
+        #expect(here.consoleArguments.isEmpty)
+        let there = ShardCoordinator.parseSession("second-chance-testing-5@meeka:~/tmp/second-chance", localRoot: root)
+        #expect(there.wantedUser == "second-chance-testing-5" && there.host == "meeka" && !there.isThisMac)
+        #expect(there.path == "~/tmp/second-chance")
+        #expect(there.consoleArguments == ["--on", "meeka:~/tmp/second-chance"])
+        #expect(there.label("second-chance-testing-5") == "second-chance-testing-5@meeka")
+        let plan = ShardCoordinator.plan(["a", "b@meeka", "c", "d@meeka"].map { ShardCoordinator.parseSession($0, localRoot: root) })
+        #expect(plan.macs.map(\.host) == ["localhost", "meeka"])
+        #expect(plan.users == ["localhost": ["a", "c"], "meeka": ["b", "d"]])
+    }
+
+    @Test("--shard and --shard-on are one or the other, and a session is named once")
+    func shardOption() {
+        #expect((try? SC.parseAsRoot(["test", "integration", "--shard", "a,b@meeka"])) != nil)
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["test", "integration", "--shard", "a", "--shard-on", "meeka"]) }
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["test", "integration", "--shard", "a,a"]) }
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["test", "integration", "--shard", "a", "--shards-per-mac", "2"]) }
     }
 
     @Test("A shard's result survives the trip as JSON")

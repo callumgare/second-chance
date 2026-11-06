@@ -421,11 +421,12 @@ the Mac it's typed on, which only coordinates:
    within one, games build side by side and launch one at a time, as ever,
    except that a shard sharing its Mac builds one at a time
    (`--build-concurrency 1`, unless given here). The terminal
-   shows each shard's `▸` lines, prefixed with its Mac and session; each
+   shows each shard's `▸` lines, prefixed with its session (`<user>@<mac>`); each
    shard's full output is kept in `DerivedData/sc-logs/`.
 4. **Each shard writes its rows** (`--results-json`, a `ShardResult`) into
    its checkout's `test-results/`, and the coordinator reads them back over
-   SSH into one table with Mac and Session columns (`ShardReport.merge`).
+   SSH into one table whose first column names each row's session
+   (`ShardReport.merge`).
    The run fails if any game failed, any shard failed, or any game couldn't
    be run.
 5. **It releases every session it claimed**, whether the run passed, failed
@@ -438,6 +439,27 @@ lost, the app wouldn't build there) is an infrastructure failure: its games
 show as `infra failed`, with the reason and the end of its output. Nothing is
 retried, whether it failed that way or a test failed. The `.xcresult` and
 HTML report stay on the Mac that ran the shard, at the path the hints give.
+
+**Naming the sessions: `--shard <sessions>`** in place of `--shard-on`, a
+comma-separated list of test sessions, `<user>` for this Mac's and
+`<user>@<host>` for another's, either ending `:<path>` for its checkout there
+(default as `--on`'s):
+
+```sh
+./sc test integration --shard second-chance-testing-1,second-chance-testing-4@<host>,second-chance-testing-5@<host>
+```
+
+It claims exactly those, by name, and runs a shard in each; one that can't be
+claimed (someone else holds it, it isn't logged in) is left out with a
+warning. Shards that share a Mac build a game at a time, as below.
+
+**This Mac's sessions are handled here,** with or without `--shard`: claimed
+and released through `session claim`'s and `session release`'s own functions
+(`SessionClaimCommand.claim`, `ScreenLease.releaseTaken`), its installers
+read from its own store, and its cores counted here, so SSH to this Mac as
+yourself needn't work; only its test users are reached over SSH, as
+`<user>@localhost`. Another Mac's are claimed and released by those commands
+run there (`--on`), where its pool and leases are.
 
 ##### How many shards a Mac runs
 

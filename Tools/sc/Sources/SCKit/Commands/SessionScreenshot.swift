@@ -28,7 +28,7 @@ struct SessionScreenshotCommand: AsyncParsableCommand {
         let session = try Session.start(global)
         let mac = Invocation.remote.map { Remote.parse($0, localRoot: session.repo.root).host }
         let host = mac ?? ScreenLease.shortHostName()
-        let name = user.map { "\(host)/\($0)" } ?? host
+        let name = user.map { "\($0)@\(host)" } ?? host
         let destination = user.map { "\($0)@\(mac ?? "localhost")" } ?? mac
         let remote = "/tmp/sc-screen-\(UUID().uuidString).png"
         let output = URL(fileURLWithPath: out ?? "screen-\(name.replacingOccurrences(of: "/", with: "-")).png")

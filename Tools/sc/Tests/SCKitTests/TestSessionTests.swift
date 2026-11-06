@@ -61,7 +61,7 @@ struct TestSessionTests {
     @Test("The pool lists one user a line, without comments or blanks")
     func pool() {
         #expect(SessionPool.users(fromPool: "sctest\n\n  sctest2  # the second\n# off: sctest3\n") == ["sctest", "sctest2"])
-        #expect(SessionPool.screenName(of: "sctest2", host: "mac", pool: ["sctest2"]) == "mac/sctest2")
+        #expect(SessionPool.screenName(of: "sctest2", host: "mac", pool: ["sctest2"]) == "sctest2@mac")
         #expect(SessionPool.screenName(of: "person", host: "mac", pool: ["sctest2"]) == "mac")
     }
 
@@ -98,7 +98,7 @@ struct TestSessionTests {
                                               checkout: "/c", branch: nil),
                                 purpose: nil, command: "sc wrapp run skifree", runCheckout: "/Users/sctest/tmp/second-chance",
                                 pid: 1, pidStarted: 0, started: Date())
-        #expect(lease.hints(onHost: "mac/sctest", askingSession: nil).contains("Watch it: sc --on sctest@mac:/Users/sctest/tmp/second-chance attach"))
+        #expect(lease.hints(onHost: "sctest@mac", askingSession: nil).contains("Watch it: sc --on sctest@mac:/Users/sctest/tmp/second-chance attach"))
     }
 
     @Test("New test users take the lowest numbers no user has")

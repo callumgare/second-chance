@@ -314,8 +314,9 @@ test.
 
 `--shard-on <host>[:<path>][,…]` runs the integration suite in claimed
 [test sessions](#test-sessions) on those Macs instead, a shard per four of each
-Mac's performance cores (`--shards-per-mac` to choose), and gathers one table
-naming each row's Mac and session
+Mac's performance cores (`--shards-per-mac` to choose); `--shard <user>[@<host>],…`
+names the test sessions instead. Either gathers one table naming each row's
+session
 ([testing.md](testing.md#sharding-a-run-across-macs)).
 
 `sc installers list` shows which games' installers are in this Mac's
@@ -723,7 +724,7 @@ screen of their own (see [Test sessions](#test-sessions)). The lease is
 `/Users/Shared/second-chance/leases/<user>.json`, where every user can read
 and write it, or the file `SC_SCREEN_LEASE_FILE` names, with other users'
 beside it (`ScreenLease`). `sc lease --all` lists every lease on the Mac.
-A test session's screen is named `<mac>/<user>` in messages. A live lease in
+A test session's screen is named `<user>@<mac>` in messages, as `--on` reaches it. A live lease in
 the place older `sc` builds kept it, the user's
 `~/Library/Application Support/au.gare.callum.second-chance.sc/screen-lease.json`,
 is respected too, until every checkout has the change.
