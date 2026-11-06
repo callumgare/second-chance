@@ -1,9 +1,11 @@
 # The title screen's "Icy Tower" logo, top right above its high scores.
 # Searched for only there, at its one size: a search of the whole screen
-# took 90 s.
+# took 90 s. Sized for its window, where a test always finds it (it starts
+# windowed, with no saved settings): the capture is the 640x480 picture
+# plus the window's 32-point title bar.
 kind: "region"
 tags: ["running"]
 region:
-  search: { x: 0.35, y: 0, width: 0.65, height: 0.6 }
-  height-fraction: 0.4888
+  search: { x: 0.35, y: 0.04, width: 0.65, height: 0.56 }
+  height-fraction: 0.4692
   scales: [1.0]
