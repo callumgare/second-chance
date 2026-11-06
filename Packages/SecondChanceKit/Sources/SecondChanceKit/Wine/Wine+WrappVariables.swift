@@ -8,7 +8,11 @@
 
 import Foundation
 import GameCatalog
+import KeyNotation
+import Logging
 import WrappFormat
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.WrappTemplate.WrappVariables")
 
 nonisolated extension Wine {
     /// The directory WrappPuppeteer gave the wrapp for its control sockets,
@@ -115,12 +119,25 @@ nonisolated extension Wine {
         // lets the wrapp tell a game that quit before it drew anything from
         // a player quitting (GameQuitCheck).
         env["QUIT_WATCH_EXE"] = gameExe
-        // A launch that says --wine.quit-key has the quit watch hold that key
-        // when the app is asked to quit, and with --wine.quit-confirm-key,
-        // press those keys when it's asked again soon after.
-        if let key = launch?.quitKey, !key.isEmpty {
-            env["QUIT_KEY"] = key
-            if let confirm = launch?.quitConfirmKey, !confirm.isEmpty { env["QUIT_CONFIRM_KEY"] = confirm }
+        // A launch that says --wine.quit-key has the quit watch press those
+        // keys when the app is asked to quit, and with --wine.quit-confirm-key,
+        // press those when it's asked again soon after: in canonical form,
+        // every hold explicit, a single bare key held as it was before key
+        // sequences (RecordedLaunch.quitKeySequence), which the helper does
+        // exactly (docs/wine-in-process-helpers.md#quit-keys).
+        if let launch {
+            do {
+                if let keys = try launch.quitKeySequence() {
+                    env["QUIT_KEY"] = keys.canonical
+                    if let confirm = try launch.quitConfirmKeySequence() { env["QUIT_CONFIRM_KEY"] = confirm.canonical }
+                }
+            } catch {
+                // Planning refuses keys it can't read, so only a wrapp built
+                // by something else gets here: it quits as Wine does.
+                logger.error("The launch's quit keys can't be read, so Quit goes to the game as Wine's: \(error)")
+                env["QUIT_KEY"] = nil
+                env["QUIT_CONFIRM_KEY"] = nil
+            }
         }
         // Puppet control arms only when WrappPuppeteer started the wrapp,
         // which it marks by passing the directory for the helper's socket.

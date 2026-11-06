@@ -96,15 +96,19 @@ struct InProcessHelperVariablesTests {
         #expect(variables("fullscreen")["NATIVE_MACOS_FULLSCREEN_FORCE"] == "1")
     }
 
-    @Test("--wine.quit-key has the quit watch hold that key when the app is asked to quit")
+    @Test("--wine.quit-key gives the quit watch its keys in canonical form, a single bare key held as before")
     func theLaunchNamesAQuitKey() {
         func key(_ options: [String: String]) -> String? {
             let launch = RecordedLaunch(program: "wine:C:/Iji/iji.exe", options: options, format: RecordedLaunch.currentFormat)
             return Wine.inProcessHelperVariables(gameExe: "iji.exe", graphicsAPI: .direct3D, launch: launch, environment: [:])["QUIT_KEY"]
         }
-        #expect(key(["wine.quit-key": "f12"]) == "f12")
-        // Several keys, pressed in turn, go through as they are written
-        #expect(key(["wine.quit-key": "escape escape return"]) == "escape escape return")
+        #expect(key(["wine.quit-key": "f12"]) == "f12:hold=5000ms")
+        #expect(key(["wine.quit-key": "f12:hold"]) == "f12:hold=5000ms")
+        #expect(key(["wine.quit-key": "f12:hold=1.5s"]) == "f12:hold=1500ms")
+        // Several keys are pressed in turn, as written
+        #expect(key(["wine.quit-key": "escape esc return"]) == "escape escape return")
+        #expect(key(["wine.quit-key": "up return*2"]) == "up return*2")
+        #expect(key(["wine.quit-key": "f13"]) == nil)
         #expect(key([:]) == nil)
     }
 
@@ -117,6 +121,11 @@ struct InProcessHelperVariablesTests {
         let both = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape escape"])
         #expect(both["QUIT_KEY"] == "escape")
         #expect(both["QUIT_CONFIRM_KEY"] == "escape escape")
+        // A single bare confirm key is held, as before; the quit key pressed once.
+        let icy = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape"])
+        #expect(icy["QUIT_KEY"] == "escape")
+        #expect(icy["QUIT_CONFIRM_KEY"] == "escape:hold=5000ms")
+        #expect(variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold"])["QUIT_CONFIRM_KEY"] == "escape:hold=5000ms")
         #expect(variables(["wine.quit-confirm-key": "escape"])["QUIT_CONFIRM_KEY"] == nil)
     }
 }

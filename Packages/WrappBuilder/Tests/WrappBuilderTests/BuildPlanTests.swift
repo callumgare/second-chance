@@ -175,6 +175,27 @@ struct BuildPlanTests {
         #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.quit-confirm-key=escape") }
     }
 
+    @Test("Quit keys are recorded as written, and keys the notation refuses are refused when planning, naming the bad part")
+    func quitKeyNotation() throws {
+        func plan(_ options: String) throws -> BuildPlan {
+            let (planner, _, bundle) = try planner("""
+            FROM --module=wine@10 prefix AS only
+            LAUNCH --wine.graphics=direct-draw \(options) C:/Game/Game.exe
+            """)
+            return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
+                                    conditions: BuildConditions(arch: "arm64", macos: 15))
+        }
+        let icy = try plan("--wine.quit-key=escape --wine.quit-confirm-key=escape:hold")
+        #expect(icy.launch?.quitConfirmKey == "escape:hold")
+        #expect(try plan("--wine.quit-key=\"up return*2\"").launch?.quitKey == "up return*2")
+        #expect {
+            try plan("--wine.quit-key=f12:hold=40s")
+        } throws: { error in
+            "\(error)".contains("--wine.quit-key=f12:hold=40s") && "\(error)".contains("at most 30s")
+        }
+        #expect(throws: BuildPlanner.PlanError.self) { try plan("--wine.quit-key=escape --wine.quit-confirm-key=enter*0") }
+    }
+
     @Test("--wine.fullscreen-setting is recorded with ${…} filled in, and a bad one refused saying why")
     func fullscreenSetting() throws {
         func plan(_ setting: String) throws -> BuildPlan {

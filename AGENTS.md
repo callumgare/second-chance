@@ -227,7 +227,8 @@ needs, with nothing of Second Chance's own, one module each: `WrappLogging`
 running and logging subprocesses), `WindowsFormats` (`WindowsExecutable`,
 `MSISummary`, `CopyProtection`, `GameGraphicsAPI`, `TextFile`),
 `WrappFormat` (`WrappLayout`, `WrappSettings`, `WrappSource`),
-`WrappModules` (`Composition`, path types) and `WrappModuleKit` (what a
+`WrappModules` (`Composition`, path types), `KeyNotation` (`KeySequence`,
+the key notation quit keys, `sc puppet` and scenarios share) and `WrappModuleKit` (what a
 module's executor is written against: `ModuleExecutor`, `StepContext`,
 `BuildEvent`, `PlannedStep`, which `WrappBuilder` re-exports). It depends
 only on swift-log and `GameCatalog`, so the

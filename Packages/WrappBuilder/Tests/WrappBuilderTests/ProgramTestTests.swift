@@ -142,6 +142,14 @@ struct ScenarioKeyActionTests {
         let iji = try Scenario.load(id: "test", file: file, overrides: ["first-key": "escape"])
         #expect(iji.handlers[0].applies(with: iji.parameters))
         #expect(iji.handlers[0].actions == [.key("escape"), .quit(1)])
+        // Keys in the notation, checked when the scenario is loaded.
+        let sequence = try Scenario.load(id: "test", file: file, overrides: ["first-key": "up return*2"])
+        #expect(sequence.handlers[0].actions == [.key("up return*2"), .quit(1)])
+        #expect {
+            try Scenario.load(id: "test", file: file, overrides: ["first-key": "return*0"])
+        } throws: { error in
+            "\(error)".contains("return*0")
+        }
     }
 }
 

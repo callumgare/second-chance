@@ -142,6 +142,25 @@ struct WrappfileCheckerTests {
         #expect(found.warnings.contains { $0.contains("copy is a core instruction") })
     }
 
+    @Test("A single bare quit key, held as before key sequences, is warned of with its explicit form")
+    func bareQuitKey() throws {
+        let folder = bundlesRoot.appendingPathComponent("nancy-drew/old-clock")
+        let loader = try ProgramBundleLoader(root: bundlesRoot, modules: try shippedModules())
+        let manifest = try loader.load(folder).get().manifest
+        let checker = WrappfileChecker(manifest: manifest, bundleFolder: folder, modules: try shippedModules())
+        func warnings(_ options: String) throws -> [String] {
+            try checker.findings(WrappfileParser.parse("""
+            FROM --module=wine@10 prefix AS x
+            LAUNCH --wine.graphics=direct-3d \(options) C:/Game/Game.exe
+            """)).warnings
+        }
+        #expect(try warnings("--wine.quit-key=f12").contains { $0.contains("write --wine.quit-key=f12:hold") })
+        #expect(try warnings("--wine.quit-key=escape --wine.quit-confirm-key=escape")
+            .contains { $0.contains("write --wine.quit-confirm-key=escape:hold") })
+        #expect(try warnings("--wine.quit-key=f12:hold").allSatisfy { !$0.contains("quit-key") })
+        #expect(try warnings("--wine.quit-key=escape --wine.quit-confirm-key=escape:hold").allSatisfy { !$0.contains("quit") })
+    }
+
     @Test("Two modules claiming one short form clash in a stage; the full form settles it")
     func shortFormClash() throws {
         let folder = bundlesRoot.appendingPathComponent("nancy-drew/old-clock")

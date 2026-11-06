@@ -37,6 +37,7 @@ let package = Package(
         .library(name: "WrappFormat", targets: ["WrappFormat"]),
         .library(name: "WrappModules", targets: ["WrappModules"]),
         .library(name: "WrappModuleKit", targets: ["WrappModuleKit"]),
+        .library(name: "KeyNotation", targets: ["KeyNotation"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.15.0"),
@@ -78,6 +79,8 @@ let package = Package(
             name: "WrappFormat",
             dependencies: [
                 "WrappModules",
+                // A launch's quit keys (RecordedLaunch.quitKeySequence).
+                "KeyNotation",
                 // A game's settings file, read and written (FullscreenSetting).
                 "WindowsFormats",
                 .product(name: "GameCatalog", package: "GameCatalog"),
@@ -93,10 +96,17 @@ let package = Package(
             dependencies: [.product(name: "Logging", package: "swift-log")],
             swiftSettings: swiftSettings
         ),
+        // Keys to press, as a launch's quit keys, `sc puppet do … key` and a
+        // scenario's keys write them (KeySequence). Nothing but Foundation,
+        // so the puppet protocol can read it too.
+        .target(
+            name: "KeyNotation",
+            swiftSettings: swiftSettings
+        ),
         .testTarget(
             name: "WrappKitTests",
             dependencies: [
-                "WrappLogging", "ProcessKit", "WindowsFormats", "WrappFormat", "WrappModules", "WrappModuleKit",
+                "WrappLogging", "ProcessKit", "WindowsFormats", "WrappFormat", "WrappModules", "WrappModuleKit", "KeyNotation",
                 .product(name: "GameCatalog", package: "GameCatalog"),
                 .product(name: "Logging", package: "swift-log"),
             ],

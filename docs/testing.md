@@ -850,10 +850,12 @@ handlers:
   point of the window), `{ check: "menu" }` (the picture's bars, and
   switching away and back, below), `expect-end` (the click before it
   should end the game: once it has, only that handler runs again),
-  `{ key: "escape" }` (press a key, by the in-process helper's names, held
-  150 ms; several, space-separated, in turn, each waiting until the picture
-  changes, up to 10 s, so a key isn't lost while a screen it opened is still
-  coming up), `quit` (ask
+  `{ key: "escape" }` (press keys, in the
+  [key notation](wrappfile.md#key-sequences), checked when the scenario is
+  loaded: each press held 150 ms, the steps in turn and a `*N` step's presses
+  one at a time, each waiting until the picture changes, up to 10 s, so a
+  key isn't lost while a screen it opened is still coming up; a `:hold` step
+  is held by the helper, repeating), `quit` (ask
   the program to quit as its app's Quit does, and expect it to end) and
   `expect-sound` (listen, 3 s at a time, until the program is heard, a 0.1 s
   window above -60 dBFS, and fail the run if it isn't within 15 s; each
@@ -871,8 +873,8 @@ handlers:
   count from its `quits` parameter, 1 unless a bundle says otherwise: 2 for
   a launch whose first Quit only asks (`--wine.quit-confirm-key`,
   [wine-in-process-helpers.md](wine-in-process-helpers.md#quit-watch)), as
-  Icy Tower's does. A key's
-  name may be a parameter (`"${first-key}"`). The wine module's
+  Icy Tower's does. A key action's
+  keys may be a parameter (`"${first-key}"`). The wine module's
   `starts-and-quits` presses a bundle's `first-key` before it quits (a first
   screen that waits for a key). For a program that ignores ⌘Q and quits only
   from its own menu, its `quits-with-keys` presses the bundle's `first-keys`
@@ -880,7 +882,7 @@ handlers:
   show, its `quit-keys`, and expects it to end; a screen still showing 6 s
   after its keys gets them again (the program wasn't reading the keyboard
   yet). Iji's are `escape` at its windowed-or-fullscreen prompt, then
-  `up return return` at a main menu that shows by itself after a minute's
+  `up return*2` at a main menu that shows by itself after a minute's
   loading, which no key skips.
 - **`retry-after`** is how long a screen still showing after its handler
   clicked it waits before another click; **`once`** runs a handler once;

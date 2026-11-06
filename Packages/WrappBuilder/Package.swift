@@ -40,6 +40,7 @@ let package = Package(
                 .product(name: "WindowsFormats", package: "WrappKit"),
                 .product(name: "ProcessKit", package: "WrappKit"),
                 .product(name: "WrappFormat", package: "WrappKit"),
+                .product(name: "KeyNotation", package: "WrappKit"),
                 .product(name: "WrappModuleKit", package: "WrappKit"),
                 .product(name: "WrappLogging", package: "WrappKit"),
                 .product(name: "Logging", package: "swift-log"),

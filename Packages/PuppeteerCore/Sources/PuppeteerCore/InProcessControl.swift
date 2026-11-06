@@ -85,12 +85,15 @@ nonisolated public struct WindowControl: Sendable {
         send(.click(point))
     }
 
-    /// Press a key, by the helper's name for it (`escape`, `return`, `cmd+q`).
-    /// A helper from before keys (protocol 1) answers with an error.
+    /// Do one step of a key sequence (`escape`, `cmd+q`, `return*2`,
+    /// `f12:hold=1000ms`: docs/wrappfile.md#key-sequences), in canonical
+    /// form. A helper from before keys (protocol 1) answers with an error,
+    /// and one from before key sequences (4) for a step with `*N` or `:hold`.
     @discardableResult
-    public func press(_ key: String) -> Bool {
+    public func press(_ step: String) -> Bool {
         // Held long enough for a game that polls the keyboard each frame.
-        send(.key(key, hold: 150))
+        let request = PuppetRequest.key(step, hold: 150)
+        return send(request, timeout: request.timeout)
     }
 
     @discardableResult
@@ -122,8 +125,8 @@ nonisolated public struct WindowControl: Sendable {
         send(.yield(pid: pid))
     }
 
-    private func send(_ request: PuppetRequest) -> Bool {
-        let reply = socket.request(request)
+    private func send(_ request: PuppetRequest, timeout: TimeInterval = 40) -> Bool {
+        let reply = socket.request(request, timeout: timeout)
         guard let reply, reply.isOK else {
             logger.warning("\(request.verb) failed: \(reply?.text ?? "no reply")")
             return false

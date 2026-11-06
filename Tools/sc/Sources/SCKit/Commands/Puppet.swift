@@ -392,8 +392,9 @@ struct PuppetActionCommand: AsyncParsableCommand {
         discussion: """
         sc puppet do <name> click <x> <y> [--button right] [--count 2] · move <x> <y> · \
         drag <x> <y> <x2> <y2> · down|up <x> <y> · scroll <x> <y> up|down|left|right [<lines>] \
-        (3 lines unless told) · key <key>[+mods] (return, escape, \
-        f5, left, a, cmd+s) · type "<text>" · focus. Points are in the game window \
+        (3 lines unless told) · key <keys> (return, escape, \
+        f5, left, a, cmd+s; several in turn, up return*2; held, repeating, \
+        escape:hold=4s: docs/wrappfile.md#key-sequences) · type "<text>" · focus. Points are in the game window \
         from its top left: a shot's pixels divided by its scale. The reply measures \
         the picture before and after (--wait after), so it says whether anything \
         happened, and where, without a picture. --then runs more actions after it, \
@@ -476,16 +477,23 @@ struct PuppetActionCommand: AsyncParsableCommand {
             step.screen = PuppetScreens.replyName(puppet, repo: repo)
             return step
         }
-        let request: PuppetRequest
+        // Keys are a sequence (docs/wrappfile.md#key-sequences): a request a
+        // step, sent in turn.
+        let requests: [PuppetRequest]
         do {
-            request = try PuppetRequest.action([verb] + arguments, button: first ? button : nil,
-                                               count: first ? count : nil, hold: first ? hold : nil)
+            requests = verb == "key"
+                ? try PuppetRequest.keys(arguments.joined(separator: " "), hold: first ? hold : nil)
+                : [try PuppetRequest.action([verb] + arguments, button: first ? button : nil,
+                                            count: first ? count : nil, hold: first ? hold : nil)]
         } catch let error as PuppetProtocolError {
             throw ValidationError(error.description)
         }
         let before = Probe(puppet)
         puppet.noteAction(words.joined(separator: " "))
-        _ = try puppet.ask(request)
+        for (index, request) in requests.enumerated() {
+            if index > 0 { try await Task.sleep(for: PuppetRequest.keyStepGap) }
+            _ = try puppet.ask(request, timeout: request.timeout)
+        }
         try await Task.sleep(for: .seconds(wait))
         let after = Probe(puppet)
         var step = PuppetOutcome.step(described, before: before, after: after)

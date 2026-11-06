@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 21
+release: 22
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -76,10 +76,10 @@ build:
     # unknown), the log and line that say a non-zero exit was a clean quit,
     # cursor-lock, for a game cnc-ddraw draws, which would swallow its first
     # click, window (fullscreen or windowed), overriding what the program
-    # asks for when the wrapp gets it wrong, quit-key, a key the app's Quit
-    # holds down (or keys it presses in turn) in a program that ignores
-    # Wine's quit, and quit-confirm-key, the keys a second Quit soon after
-    # presses, for a program whose quit key first asks, and
+    # asks for when the wrapp gets it wrong, quit-key, the keys the app's
+    # Quit presses (key notation: f12:hold, up return*2) in a program that
+    # ignores Wine's quit, and quit-confirm-key, the keys a second Quit soon
+    # after presses, for a program whose quit key first asks, and
     # fullscreen-setting, where the program keeps its own fullscreen
     # setting (file=,format=,offset=,bytes=,fullscreen=,windowed=), set to
     # the player's choice when they last changed it with the window's

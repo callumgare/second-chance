@@ -6,6 +6,7 @@
 //  handlers, each waiting for a needle's tag, rather than a list of steps.
 
 import Foundation
+import KeyNotation
 
 /// A scenario (`<module>/scenarios/<name>.yaml`): handlers that each wait
 /// for a tag and say what to do when it shows, a goal and a time limit, and
@@ -64,9 +65,9 @@ public nonisolated struct Scenario: Sendable, Equatable {
         /// (`--wine.quit-confirm-key`), each Quit but the last checked to
         /// have left the program running. `quit` alone is once.
         case quit(Int)
-        /// Press a key (the helper's names: `escape`, `return`, `f5`,
-        /// `cmd+q`…), as a program waiting at a keyboard prompt needs, or
-        /// several, space-separated, in turn.
+        /// Press keys, as a program waiting at a keyboard prompt needs, in
+        /// the key notation (docs/wrappfile.md#key-sequences): `escape`,
+        /// `cmd+q`, `up return*2`, `f12:hold`.
         case key(String)
         /// Listen to the program until it is heard (a 0.1 s window above
         /// -60 dBFS), and fail if it isn't within the test runner's bound:
@@ -107,8 +108,18 @@ public nonisolated struct Scenario: Sendable, Equatable {
                            actions: try handler.do.map { raw throws(ScenarioError) -> Action in
                                let place = "\(id) \(handler.id)"
                                switch raw.action {
-                               case .ready(.key(let name)):
-                                   return .key(try substitute(name, parameters: parameters, in: place))
+                               case .ready(.key(let written)):
+                                   // Checked here, so a bundle's keys the notation
+                                   // refuses fail its check, not its test.
+                                   let keys = try substitute(written, parameters: parameters, in: place)
+                                   if !keys.isEmpty {
+                                       do {
+                                           _ = try KeySequence(parsing: keys)
+                                       } catch {
+                                           throw ScenarioError(description: "\(place): key \(keys): \(error) (docs/wrappfile.md#key-sequences)")
+                                       }
+                                   }
+                                   return .key(keys)
                                case .ready(let action):
                                    return action
                                case .quitTimes(let text):

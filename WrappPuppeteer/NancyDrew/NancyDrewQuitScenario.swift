@@ -938,16 +938,31 @@ struct NancyDrewQuitScenario {
                         remembered.acted = true
                         remembered.actedAt = Date()
                     case .key(let keys):
-                        // Several keys, space-separated, are pressed in turn
-                        // (a program's own menu, for one that ignores ⌘Q).
-                        for name in keys.split(separator: " ").map(String.init) {
-                            logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(name)...")
-                            let before = keyProbe(context)
-                            guard context.game.press(name) else {
-                                forceQuit(app)
-                                return "Couldn't press \(name) in the program (its helper may predate keys)"
+                        // Keys in the notation (docs/wrappfile.md#key-sequences),
+                        // done in turn (a program's own menu, for one that
+                        // ignores ⌘Q): each press of a step pressed several
+                        // times waits, as each step does, for the screen to
+                        // change; a held step is held by the helper.
+                        let sequence: KeySequence
+                        do {
+                            sequence = try KeySequence(parsing: keys)
+                        } catch {
+                            forceQuit(app)
+                            return "The scenario's keys \(keys) can't be pressed: \(error)"
+                        }
+                        for step in sequence.steps {
+                            let presses = step.holdMilliseconds == nil
+                                ? Array(repeating: KeySequence.Step(modifiers: step.modifiers, key: step.key), count: step.pressCount)
+                                : [step]
+                            for press in presses {
+                                logger.notice("  ✓ \(handler.id): found its \(handler.when), pressing \(press.canonical)...")
+                                let before = keyProbe(context)
+                                guard context.game.press(press.canonical) else {
+                                    forceQuit(app)
+                                    return "Couldn't press \(press.canonical) in the program (its helper may predate keys)"
+                                }
+                                waitForChange(from: before, after: press.canonical, context: context)
                             }
-                            waitForChange(from: before, after: name, context: context)
                         }
                         remembered.acted = true
                         remembered.actedAt = Date()

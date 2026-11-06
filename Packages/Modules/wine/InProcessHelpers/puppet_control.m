@@ -22,8 +22,8 @@
 //  window, top-left origin -- a capture's pixels divided by its `scale`.
 //  Options are `name=value` words after the arguments.
 //
-//    hello            -> ok version=4 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
-//                                       2 has no scroll, 3 no audio)
+//    hello            -> ok version=5 pid=<n> exe=<name> commands=<list>   (version 1 helpers say error;
+//                                       2 has no scroll, 3 no audio, 4 no key sequences' steps)
 //    state            -> ok window=<n> size=<w>x<h> scale=<s> fullscreen=0|1 native=0|1 key=0|1 active=0|1 onspace=0|1
 //                           cursor=held|free cursorlock=off|waiting|locked|not-locked
 //    windows          -> ok <n> windows, then a line each: id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0|1
@@ -40,11 +40,15 @@
 //    drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>] -> ok   press, moves along the line, release
 //    scroll <x> <y> <lines> [across=<n>] -> ok   a move there, then the wheel turned <lines> lines
 //                                       down (negative: up), and <n> right (negative: left)
-//    key [<mod>+...]<name> [hold=<ms>] -> ok   key down, held (60 ms), up, with the key's own
-//                                       keycode: a-z, 0-9, return, escape, tab, space, delete,
-//                                       left, right, up, down, f1-f12, home, end, pageup,
-//                                       pagedown, or a punctuation character; mods cmd, shift,
-//                                       opt, ctrl
+//    key <step> [hold=<ms>] [gap=<ms>] -> ok   one step of a key sequence in canonical form
+//                                       (key_names.m's helperKeySteps): [<mod>+...]<key>, then
+//                                       *<n> or :hold=<ms>ms. A press is down, held (60 ms, or
+//                                       hold=), up; *<n> presses n times, gap= (300) ms from each
+//                                       release to the next press; :hold= holds it down that long,
+//                                       repeating as a held Mac key does. Keys: a-z, 0-9, return,
+//                                       escape, tab, space, delete, left, right, up, down, f1-f12,
+//                                       home, end, pageup, pagedown, or a punctuation character;
+//                                       mods ctrl, alt, shift, cmd
 //    type <text>      -> ok             each character as its key (US layout), shift as needed;
 //                                       the text percent-encoded (%20 a space)
 //    focus            -> ok             the app active and the game window key
@@ -549,16 +553,22 @@ static NSString *scrollCommand(double x, double y, int lines, int across) {
 
 #pragma mark - Keys
 
+/// A held key repeats as a Mac keyboard's does by default, as the quit
+/// watch's does: the first repeat after this long, then one each
+/// kKeyRepeatMicroseconds.
+static const useconds_t kKeyRepeatDelayMicroseconds = 250 * 1000;
+static const useconds_t kKeyRepeatMicroseconds = 50 * 1000;
+/// From one press's release to the next's, for a step pressed several times
+/// (`return*2`), unless the request says (`gap=`).
+static const int kBetweenPressesMilliseconds = 300;
+
 /// Post a key's events on the game window: modifiers down (as flag changes,
-/// which is how Wine learns of them), the key down, held, up, the modifiers up.
-static NSString *postKey(int code, NSString *characters, NSEventModifierFlags flags, useconds_t hold) {
-    static const struct { NSEventModifierFlags flag; unsigned short code; } modifiers[] = {
-        {NSEventModifierFlagCommand, 55}, {NSEventModifierFlagShift, 56},
-        {NSEventModifierFlagOption, 58}, {NSEventModifierFlagControl, 59},
-    };
+/// which is how Wine learns of them), the key down, held, up, the modifiers
+/// up. With `repeat`, the hold repeats as a held Mac key does.
+static NSString *postKey(int code, NSString *characters, NSEventModifierFlags flags, useconds_t hold, BOOL repeat) {
     __block NSString *error = @"error no game window";
-    NSEvent *(^keyEvent)(NSEventType, NSEventModifierFlags, unsigned short, NSString *) =
-        ^NSEvent *(NSEventType type, NSEventModifierFlags held, unsigned short keyCode, NSString *chars) {
+    NSEvent *(^keyEvent)(NSEventType, NSEventModifierFlags, unsigned short, NSString *, BOOL) =
+        ^NSEvent *(NSEventType type, NSEventModifierFlags held, unsigned short keyCode, NSString *chars, BOOL isRepeat) {
             __block NSEvent *event = nil;
             onMainThread(^BOOL {
                 NSWindow *window = gameWindow();
@@ -566,47 +576,60 @@ static NSString *postKey(int code, NSString *characters, NSEventModifierFlags fl
                 event = [NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:held
                                         timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:window.windowNumber
                                           context:nil characters:chars charactersIgnoringModifiers:chars
-                                        isARepeat:NO keyCode:keyCode];
+                                        isARepeat:isRepeat keyCode:keyCode];
                 if (event) [NSApp postEvent:event atStart:NO];
                 return event != nil;
             });
             return event;
         };
     NSEventModifierFlags held = 0;
-    for (size_t i = 0; i < sizeof(modifiers) / sizeof(modifiers[0]); i++) {
-        if (!(flags & modifiers[i].flag)) continue;
-        held |= modifiers[i].flag;
-        if (!keyEvent(NSEventTypeFlagsChanged, held, modifiers[i].code, @"")) return error;
+    for (int i = 0; i < 4; i++) {
+        if (!(flags & helperModifierKeys[i].flag)) continue;
+        held |= helperModifierKeys[i].flag;
+        if (!keyEvent(NSEventTypeFlagsChanged, held, helperModifierKeys[i].code, @"", NO)) return error;
     }
-    if (!keyEvent(NSEventTypeKeyDown, held, (unsigned short)code, characters)) return error;
-    usleep(hold);
-    if (!keyEvent(NSEventTypeKeyUp, held, (unsigned short)code, characters)) return error;
-    for (size_t i = sizeof(modifiers) / sizeof(modifiers[0]); i-- > 0;) {
-        if (!(flags & modifiers[i].flag)) continue;
-        held &= ~modifiers[i].flag;
-        if (!keyEvent(NSEventTypeFlagsChanged, held, modifiers[i].code, @"")) return error;
+    if (!keyEvent(NSEventTypeKeyDown, held, (unsigned short)code, characters, NO)) return error;
+    // From here a window that's gone is the key doing its work -- a held
+    // Escape walking a game to its Exit -- not a failure: the game's own
+    // quit ends the hold, as it ends a player's.
+    if (repeat && hold > kKeyRepeatDelayMicroseconds) {
+        usleep(kKeyRepeatDelayMicroseconds);
+        for (useconds_t at = kKeyRepeatDelayMicroseconds; at < hold; at += kKeyRepeatMicroseconds) {
+            if (!keyEvent(NSEventTypeKeyDown, held, (unsigned short)code, characters, YES)) return nil;
+            usleep(MIN(kKeyRepeatMicroseconds, hold - at));
+        }
+    } else {
+        usleep(hold);
+    }
+    if (!keyEvent(NSEventTypeKeyUp, held, (unsigned short)code, characters, NO)) return nil;
+    for (int i = 3; i >= 0; i--) {
+        if (!(flags & helperModifierKeys[i].flag)) continue;
+        held &= ~helperModifierKeys[i].flag;
+        if (!keyEvent(NSEventTypeFlagsChanged, held, helperModifierKeys[i].code, @"", NO)) return nil;
     }
     return nil;
 }
 
+/// One step of a key sequence in canonical form (helperKeySteps,
+/// key_names.m): `cmd+s`, `return*2`, `escape:hold=4000ms`. A press is held
+/// `hold=` ms (kKeyHoldMilliseconds), and presses of a step pressed several
+/// times are `gap=` ms apart; a `:hold=` holds the key that long, repeating.
 static NSString *keyCommand(NSString *spec, NSDictionary<NSString *, NSString *> *options) {
-    // `+` alone is a key; otherwise the last part is the key and the rest its modifiers.
-    NSArray<NSString *> *parts = [spec isEqualToString:@"+"] ? @[@"+"] : [spec componentsSeparatedByString:@"+"];
-    NSEventModifierFlags flags = 0;
-    for (NSString *modifier in [parts subarrayWithRange:NSMakeRange(0, parts.count - 1)]) {
-        NSString *name = modifier.lowercaseString;
-        if ([name isEqualToString:@"cmd"]) flags |= NSEventModifierFlagCommand;
-        else if ([name isEqualToString:@"shift"]) flags |= NSEventModifierFlagShift;
-        else if ([name isEqualToString:@"opt"] || [name isEqualToString:@"alt"]) flags |= NSEventModifierFlagOption;
-        else if ([name isEqualToString:@"ctrl"]) flags |= NSEventModifierFlagControl;
-        else return [@"error unknown modifier: " stringByAppendingString:modifier];
+    NSString *problem = nil;
+    NSData *steps = helperKeySteps(spec, &problem);
+    if (!steps) return [@"error " stringByAppendingString:problem];
+    if (steps.length != sizeof(HelperKeyStep)) return @"error key takes one step";
+    HelperKeyStep step = *(const HelperKeyStep *)steps.bytes;
+    NSString *characters = helperKeyCharacters(@(step.name), step.code);
+    if (step.holdMilliseconds > 0) {
+        return postKey(step.code, characters, step.flags, (useconds_t)step.holdMilliseconds * 1000, YES) ?: @"ok";
     }
-    NSString *name = parts.lastObject;
-    BOOL shift = NO;
-    int code = helperKeyCode(name, &shift);
-    if (code < 0) return [@"error unknown key: " stringByAppendingString:name];
-    if (shift) flags |= NSEventModifierFlagShift;
-    return postKey(code, helperKeyCharacters(name, code), flags, milliseconds(options[@"hold"], kKeyHoldMilliseconds)) ?: @"ok";
+    for (int press = 0; press < step.presses; press++) {
+        if (press > 0) usleep(milliseconds(options[@"gap"], kBetweenPressesMilliseconds));
+        NSString *error = postKey(step.code, characters, step.flags, milliseconds(options[@"hold"], kKeyHoldMilliseconds), NO);
+        if (error) return error;
+    }
+    return @"ok";
 }
 
 static NSString *typeCommand(NSString *encoded) {
@@ -622,7 +645,7 @@ static NSString *typeCommand(NSString *encoded) {
             *stop = YES;
             return;
         }
-        error = postKey(code, character, shift ? NSEventModifierFlagShift : 0, kKeyHoldMilliseconds * 1000);
+        error = postKey(code, character, shift ? NSEventModifierFlagShift : 0, kKeyHoldMilliseconds * 1000, NO);
         if (error) *stop = YES;
         usleep(kBetweenKeysMicroseconds);
     }];
@@ -668,7 +691,7 @@ static NSString *focusCommand(void) {
 
 static NSString *helloCommand(void) {
     const char *exe = getprogname();
-    return [NSString stringWithFormat:@"ok version=4 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit,audio",
+    return [NSString stringWithFormat:@"ok version=5 pid=%d exe=%s commands=hello,state,windows,capture,click,move,down,up,drag,scroll,key,type,focus,yield,quit,audio",
             getpid(), exe ? exe : "?"];
 }
 

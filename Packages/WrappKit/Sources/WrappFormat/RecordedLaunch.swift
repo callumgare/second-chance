@@ -7,6 +7,7 @@
 
 import Foundation
 import GameCatalog
+import KeyNotation
 import WrappModules
 
 /// What a wrapp runs, recorded by the build from its plan
@@ -167,14 +168,59 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     /// fullscreen whether or not it asks to be.
     public var forcesFullscreen: Bool { options["wine.window"] == "fullscreen" }
 
-    /// `--wine.quit-key=<key>`: the key the app's Quit holds down in a
-    /// program that ignores Wine's quit but quits on a key of its own.
+    /// `--wine.quit-key=<keys>`, as written: the keys the app's Quit
+    /// presses in a program that ignores Wine's quit but quits on a key of
+    /// its own (docs/wrappfile.md#key-sequences).
     public var quitKey: String? { options["wine.quit-key"] }
 
-    /// `--wine.quit-confirm-key=<keys>`: the keys a second Quit soon after
-    /// the first presses, for a program whose quit key asks first (Icy
-    /// Tower's Escape); the first Quit then presses the quit key alone.
+    /// `--wine.quit-confirm-key=<keys>`, as written: the keys a second Quit
+    /// soon after the first presses, for a program whose quit key asks first
+    /// (Icy Tower's Escape); the first Quit then presses the quit key alone.
     public var quitConfirmKey: String? { options["wine.quit-confirm-key"] }
+
+    /// The quit keys, as the quit watch is to press them; nil without any.
+    /// A single key with nothing after it means what it meant before the
+    /// notation had `:hold`: held, unless confirm keys follow, when the first
+    /// Quit presses it once. Throws for keys planning would have refused.
+    public func quitKeySequence() throws(KeySequence.ParseError) -> KeySequence? {
+        guard let written = quitKey, !written.isEmpty else { return nil }
+        let keys = try KeySequence(parsing: written)
+        let confirming = !(quitConfirmKey ?? "").isEmpty
+        return confirming ? keys : Self.heldIfBare(keys)
+    }
+
+    /// The confirm keys, as the quit watch is to press them; nil without
+    /// any, or without quit keys. A single key with nothing after it is
+    /// held, as it was before the notation had `:hold`.
+    public func quitConfirmKeySequence() throws(KeySequence.ParseError) -> KeySequence? {
+        guard !(quitKey ?? "").isEmpty, let written = quitConfirmKey, !written.isEmpty else { return nil }
+        return Self.heldIfBare(try KeySequence(parsing: written))
+    }
+
+    /// A single bare key held for the default time; anything else as it is.
+    static func heldIfBare(_ keys: KeySequence) -> KeySequence {
+        guard keys.isSingleBareKey else { return keys }
+        var held = keys
+        held.steps[0].action = .hold(milliseconds: nil)
+        return held
+    }
+
+    /// What planning warns of in a launch's quit keys: a single key with
+    /// nothing after it, which is held for the default time as before the
+    /// notation had `:hold`, better written so (`f12:hold`).
+    public var quitKeyWarnings: [String] {
+        var warnings: [String] = []
+        let confirming = !(quitConfirmKey ?? "").isEmpty
+        if !confirming, let written = quitKey, let keys = try? KeySequence(parsing: written), keys.isSingleBareKey {
+            warnings.append("--wine.quit-key=\(written) holds \(keys.canonical) for \(KeySequence.defaultHoldMilliseconds / 1000)s, "
+                + "as it did before key sequences; write --wine.quit-key=\(keys.canonical):hold to say so, or \(keys.canonical)*1 to press it once")
+        }
+        if confirming, let written = quitConfirmKey, let keys = try? KeySequence(parsing: written), keys.isSingleBareKey {
+            warnings.append("--wine.quit-confirm-key=\(written) holds \(keys.canonical) for \(KeySequence.defaultHoldMilliseconds / 1000)s, "
+                + "as it did before key sequences; write --wine.quit-confirm-key=\(keys.canonical):hold to say so, or \(keys.canonical)*1 to press it once")
+        }
+        return warnings
+    }
 
     /// `--wine.fullscreen-setting=…`: where the program keeps its own
     /// fullscreen setting, which the wrapp sets to the player's choice when

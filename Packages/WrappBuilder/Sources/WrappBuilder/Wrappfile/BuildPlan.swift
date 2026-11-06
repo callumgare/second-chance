@@ -7,6 +7,7 @@
 import CryptoKit
 import Foundation
 import WrappModules
+import KeyNotation
 import WrappFormat
 // A plan's steps are the executors' API's: whoever plans one can run it.
 @_exported import WrappModuleKit
@@ -1006,6 +1007,14 @@ public nonisolated struct BuildPlanner {
                 }
                 if options["wine.quit-confirm-key"] != nil, options["wine.quit-key"] == nil {
                     throw PlanError(description: "\(origin): --wine.quit-confirm-key is pressed on a second Quit after --wine.quit-key's: name the quit key too")
+                }
+                for option in ["wine.quit-key", "wine.quit-confirm-key"] {
+                    guard let keys = options[option] else { continue }
+                    do {
+                        _ = try KeySequence(parsing: keys)
+                    } catch {
+                        throw PlanError(description: "\(origin): --\(option)=\(keys): \(error) (docs/wrappfile.md#key-sequences)")
+                    }
                 }
                 if let setting = options[FullscreenSetting.option] {
                     do {

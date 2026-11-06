@@ -58,6 +58,7 @@ let package = Package(
                 .product(name: "WineKit", package: "wine"),
                 .product(name: "WrappFormat", package: "WrappKit"),
                 .product(name: "WrappModules", package: "WrappKit"),
+                .product(name: "KeyNotation", package: "WrappKit"),
             ],
             swiftSettings: swiftSettings
         ),

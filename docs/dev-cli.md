@@ -1017,7 +1017,13 @@ The other verbs are clients, and `--on` doesn't sync for them:
   `changed <1% at 312,240 180x24` rather than nothing; whether it's now
   black, which windows came or went, and whether the program ended. So most
   actions need no picture. `scroll <x> <y> up|down|left|right [<lines>]` turns
-  the wheel there, 3 lines unless told. `--then "<action>"`, repeated,
+  the wheel there, 3 lines unless told. `key <keys>` takes the
+  [key notation](wrappfile.md#key-sequences), as a launch's quit keys do:
+  `key cmd+s`, `key up return*2` (steps in turn, 0.3 s apart, and a step's
+  presses 0.3 s apart too), `key escape:hold=4s` (held, repeating as a held
+  Mac key does). `--hold <ms>` is how long each press is held (60 ms
+  unless told). A step with `*N` or `:hold` needs a game whose helper speaks
+  puppet protocol 5. `--then "<action>"`, repeated,
   does more actions after it, each replied to in turn, and stops at one that
   fails or ends the program: a turn saved where no judgement is needed between
   steps (`do lure key escape --then "key return"`). `--json` replies with

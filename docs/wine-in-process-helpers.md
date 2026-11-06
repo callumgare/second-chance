@@ -678,43 +678,78 @@ Wine error is exact.
 Wine passes the app's Quit (⌘Q, the menu, a logout) on to a game as
 `WM_QUERYENDSESSION`, and some games ignore it. Iji, a Game Maker game, also
 ignores its window closing (`SC_CLOSE`, which is all Alt+F4 does) and Alt+F4
-itself, but quits on F12 held down. A launch that says `--wine.quit-key=f12`
-(`RecordedLaunch.quitKey`) sets `QUIT_KEY`, and then the quit watch, once it
-has reported `quit requested`, holds that key down in the game's window for
-5 s instead and cancels the quit; the game quits itself, and its exit counts
-as asked for. The hold repeats as a held Mac key does (the first repeat after
-0.25 s, then every 0.05 s): a posted key down doesn't repeat by itself, and a
-game that reads key presses rather than key state would see one press. Keys
-separated by spaces are pressed in turn instead, 2.5 s apart (a menu, back
-from a game, can take over a second to read keys again), for a game that
-needs different keys in a row.
+itself, but quits on F12 held down. A launch that says `--wine.quit-key=f12:hold`
+(`RecordedLaunch.quitKey`, in the [key notation](wrappfile.md#key-sequences))
+sets `QUIT_KEY`, and then the quit watch, once it has reported `quit
+requested`, presses those keys in the game's window instead and cancels the
+quit; the game quits itself, and its exit counts as asked for. It does
+exactly what the keys say: steps in turn, 2.5 s from one key's release to
+the next's press (a menu, back from a game, can take over a second to read
+keys again), `*N` pressed that many times so, and a `:hold` held down that
+long, repeating as a held Mac key does (the first repeat after 0.25 s, then
+every 0.05 s): a posted key down doesn't repeat by itself, and a game that
+reads key presses rather than key state would see one press. Modifiers go
+down before their key and up after it, as flag changes.
 
 A game whose quit key asks the player first takes a second set,
 `--wine.quit-confirm-key` (`QUIT_CONFIRM_KEY`). The first Quit then presses
-the quit key alone, once, and a Quit within 10 s of it holds the confirm key
-(or presses several in turn). In Icy Tower, an Allegro game,
-`--wine.quit-key=escape` shows its question in a game, and the confirm key is
-Escape, held: Allegro repeats a held key itself, so it steps through every
-screen to Exit as a player holding Escape would (from a game, two leave for
-its menu and two more choose its Exit; a game paused with P takes one more),
-about 3 s after the second Quit, most of it the menu's wait to read keys
-again. The game's high-score name box takes no Escape and stops it there,
-for the player to answer. A hold outlasting the game does nothing, as the
-helper holding it goes with it. Its integration test quits it the same
-way, with two Quits (`quits: 2`, [testing.md](testing.md#scenarios)).
+the quit keys, and a Quit within 10 s of it the confirm keys. In Icy Tower,
+an Allegro game, `--wine.quit-key=escape` shows its question in a game, and
+the confirm key is `escape:hold`: Allegro repeats a held key itself, so it
+steps through every screen to Exit as a player holding Escape would (from a
+game, two leave for its menu and two more choose its Exit; a game paused
+with P takes one more), about 3 s after the second Quit, most of it the
+menu's wait to read keys again. The game's high-score name box takes no
+Escape and stops it there, for the player to answer. A hold outlasting the
+game does nothing, as the helper holding it goes with it. Its integration
+test quits it the same way, with two Quits (`quits: 2`,
+[testing.md](testing.md#scenarios)).
 
 With a quit key, the game window's close button is a Quit too
 (`-[WineWindow windowShouldClose:]`): Wine would pass it to the game as its
 window closing, which these games ignore. Other windows close as Wine closes
 them.
 
-The keys are the ones puppet control presses (`key_names.m`): any letter,
-digit or unshifted punctuation, `escape`, `return`, `space`, `tab`, the
-arrows (`up`, `left`, …), `home`, `end`, `pageup`, `pagedown`, `delete` and
-`f1`–`f12`. One it can't press (an unknown name, or a character that needs
-shift) leaves the quit to Wine, with a warning. A logout the game holds up this way is cancelled, as macOS does whenever
-an app turns it down. Option-F4 does nothing in Wine's Mac driver, which
-doesn't take Option for Alt unless the prefix says so.
+#### Quit keys
+
+The wrapp (`Wine.inProcessHelperVariables`) hands the quit watch the keys in
+[canonical form](#the-canonical-key-sequence), made from the launch's own
+by `RecordedLaunch.quitKeySequence` and `quitConfirmKeySequence`. A single
+key with nothing after it keeps the meaning it had before the notation had
+`:hold`, so a wrapp built then quits as it did: as `--wine.quit-key` alone
+it's held for 5 s (`f12` is handed over as `f12:hold=5000ms`), as
+`--wine.quit-confirm-key` it's held too, and a quit key before confirm keys
+is pressed once. Keys the wrapp can't read (planning refuses them, so only a
+wrapp built by something else has them) leave the quit to Wine, as does
+anything the helper can't read, with a warning. A logout the game holds up
+this way is cancelled, as macOS does whenever an app turns it down.
+Option-F4 does nothing in Wine's Mac driver, which doesn't take Option for
+Alt unless the prefix says so.
+
+#### The canonical key sequence
+
+What people write ([wrappfile.md](wrappfile.md#key-sequences)) is read and
+checked in Swift, by `KeySequence`; the helpers are handed its `canonical`
+form, which the one small reader they share, `helperKeySteps`
+(`key_names.m`, declared in `helper_common.h`), turns into steps for the
+quit watch and puppet control alike. The canonical form is the contract
+between them:
+
+- steps separated by single spaces;
+- each `[<mod>+…]<key>`, then `*<n>` (n at least 2) or `:hold=<ms>ms`, or
+  nothing for one press;
+- modifiers in the short forms, in the order ⌃⌥⇧⌘ (`ctrl`, `alt`, `shift`,
+  `cmd`), each once;
+- a key's name as `key_names.m` knows it, an alias written as its main name
+  (`escape`, `return`, `delete`), or the character it types; `+` itself is
+  the last part after `++` or alone;
+- every hold its length in whole milliseconds: `:hold` is written
+  `:hold=5000ms`.
+
+`f12:hold=5000ms`, `up return*2`, `ctrl+shift+cmd+s`, `escape
+escape:hold=2000ms`. `KeySequence` reads its own canonical form back to the
+same keys (its tests check every example), and `KeyNamesTests` reads
+`key_names.m`'s table to keep the Swift list of names in step with it.
 
 A game that has started quitting and then hangs, its window up, using no CPU,
 isn't ignoring the quit: Icy Tower's, after its log says `Exiting Allegro`,
@@ -904,7 +939,7 @@ macOS 26 doesn't leave the surface undersized.
 
 | Request | Reply |
 | --- | --- |
-| `hello` | `ok version=4 pid=<n> exe=<name> commands=<list>`: older helpers in built wrapps answer `error unknown request`, which says they're version 1; version 2 has no `scroll`, 3 no `audio` |
+| `hello` | `ok version=5 pid=<n> exe=<name> commands=<list>`: older helpers in built wrapps answer `error unknown request`, which says they're version 1; version 2 has no `scroll`, 3 no `audio`, 4 no key sequences' steps in `key` |
 | `state` | `ok window=<n> size=<w>x<h> scale=<s> fullscreen=0\|1 native=0\|1 key=0\|1 active=0\|1 onspace=0\|1 cursor=held\|free cursorlock=off\|waiting\|locked\|not-locked` — `fullscreen` for a macOS fullscreen Space (`native`) or a borderless window exactly covering the screen, as Direct3D games draw; `onspace` whether the window is on the Space on screen; `cursor` whether cnc-ddraw holds the mouse now, and `cursorlock` how the [cursor lock](#cursor-lock) got on (`off` where it isn't armed, as in ScummVM) |
 | `windows` | `ok <n> windows`, then a line each: `id=<n> frame=<x>,<y>,<w>,<h> level=<n> visible=0\|1 key=0\|1 main=0\|1 kind=game\|panel\|other title=<percent-encoded>`, the frame from the screen's top left; `game` is the window the other requests act on |
 | `capture <path> [region=<x>,<y>,<w>,<h>] [scale=<s>]` | `ok <w>x<h>`, with a PNG of the game window at `<path>`: a part of it (in points) for `region`, and at `scale` pixels a point rather than the window's own |
@@ -913,7 +948,7 @@ macOS 26 doesn't leave the surface undersized.
 | `down <x> <y>`, `up <x> <y>` `[button=]` | `ok`: a press, or a release, alone |
 | `drag <x> <y> <x2> <y2> [steps=<n>] [hold=<ms>]` | `ok`: a press at the start, `steps` moves (10) along the line with the button down, a release at the end |
 | `scroll <x> <y> <lines> [across=<n>]` | `ok`: a mouse move to the point, 150 ms, then one scroll-wheel turn of `lines` lines down (negative: up) and `across` right (negative: left), as a wheel's notches are; a `CGEvent`, as AppKit can't make a scroll event, told the game window is under it |
-| `key [<mod>+…]<name> [hold=<ms>]` | `ok`: modifiers down, the key down, held 60 ms, up, modifiers up, each with its own virtual keycode (US layout), which is what Wine and SDL read. Names: `a`–`z`, `0`–`9`, punctuation, `return`, `escape`, `tab`, `space`, `delete`, the arrows `left` `right` `up` `down`, `f1`–`f12`, `home`, `end`, `pageup`, `pagedown`; modifiers `cmd`, `shift`, `opt`, `ctrl` |
+| `key <step> [hold=<ms>] [gap=<ms>]` | `ok`: one step of a key sequence in [canonical form](#the-canonical-key-sequence) (`cmd+s`, `return*2`, `escape:hold=4000ms`), each key with its own virtual keycode (US layout), which is what Wine and SDL read. A press is modifiers down, the key down, held 60 ms (or `hold=`), up, modifiers up; `*N` presses it N times, `gap=` ms (300) from each release to the next press; `:hold=` holds it that long, repeating as a held Mac key does. The reply comes once it's done; a game that goes once the key is down (a held Escape walking it to its Exit) ends it, with `ok`. Names and modifiers are [the notation's](wrappfile.md#key-sequences); a version 4 helper takes a plain chord alone |
 | `type <text>` | `ok`: each character as its key, with shift where it needs it, 40 ms apart; the text percent-encoded (`Hi%20there`) |
 | `focus` | `ok`: the app made active and the game window key |
 | `quit` | `ok`: the app is asked to quit as its Quit menu item (Wine's ⌘⌥Q) does, with `-[NSApplication terminate:]`, not waited for, since a hang would be inside it |

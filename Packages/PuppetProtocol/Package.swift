@@ -6,7 +6,8 @@
 // (WrappTemplate/PuppetServer.swift) — how each is written, and how their
 // replies are read. The one definition of both, used by WrappPuppeteer
 // (through PuppeteerCore, which re-exports it) and by `sc puppet`. Needs
-// nothing but Foundation, so sc can use it without PuppeteerCore's
+// nothing but Foundation and WrappKit's KeyNotation (the key notation its
+// `key` requests are made from), so sc can use it without PuppeteerCore's
 // SecondChanceKit and the Sentry that package fetches.
 
 import PackageDescription
@@ -27,8 +28,15 @@ let package = Package(
     products: [
         .library(name: "PuppetProtocol", targets: ["PuppetProtocol"]),
     ],
+    dependencies: [
+        .package(path: "../WrappKit"),
+    ],
     targets: [
-        .target(name: "PuppetProtocol", swiftSettings: swiftSettings),
+        .target(
+            name: "PuppetProtocol",
+            dependencies: [.product(name: "KeyNotation", package: "WrappKit")],
+            swiftSettings: swiftSettings
+        ),
         .testTarget(
             name: "PuppetProtocolTests",
             dependencies: ["PuppetProtocol"],

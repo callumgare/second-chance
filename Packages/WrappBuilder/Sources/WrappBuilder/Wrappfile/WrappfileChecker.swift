@@ -5,6 +5,7 @@
 //  Whether a Wrappfile makes sense for its bundle and the modules there are.
 
 import Foundation
+import WrappFormat
 import WrappModules
 
 /// Checks a bundle's Wrappfile against its manifest and the modules, before
@@ -173,6 +174,21 @@ public nonisolated struct WrappfileChecker {
         }
     }
 
+    /// A LAUNCH's quit keys, as written (planning refuses keys the
+    /// notation can't read): a single bare key that's held, as before key
+    /// sequences had `:hold`, is warned of with its explicit form.
+    func checkQuitKeys(_ instruction: Instruction, at: String, found: inout Findings) {
+        var options: [String: String] = [:]
+        for option in instruction.options {
+            guard let raw = option.value?.raw, !raw.contains("${") else { continue }
+            if option.name.hasSuffix(".quit-key") { options["wine.quit-key"] = raw }
+            if option.name.hasSuffix(".quit-confirm-key") { options["wine.quit-confirm-key"] = raw }
+        }
+        guard !options.isEmpty else { return }
+        let launch = RecordedLaunch(program: "", options: options)
+        for warning in launch.quitKeyWarnings { found.warnings.append("\(at): \(warning)") }
+    }
+
     // MARK: - Steps
 
     func check(_ steps: [Step], in scope: inout Scope, file: Wrappfile, scopes: [String: Scope], found: inout Findings,
@@ -210,6 +226,7 @@ public nonisolated struct WrappfileChecker {
             return
         }
         scope.pastTop = true
+        if instruction.keyword == "LAUNCH" { checkQuitKeys(instruction, at: at, found: &found) }
         switch instruction.keyword {
         case "USE":
             let words = instruction.arguments.map(\.raw)

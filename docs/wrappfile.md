@@ -464,20 +464,27 @@ app keeps no Wine.
   DirectDraw game setting a display mode) and stays a window otherwise. Any
   other value is refused when planning. ScummVM and DOSBox games are always
   fullscreen.
-- **`--wine.quit-key=<key>`** makes the app's Quit hold that key down in the
-  program for 3 s, for one that ignores Wine's quit but quits on a key of its
-  own, as Iji does on F12. Several keys, separated by spaces
-  (`--wine.quit-key="escape escape return"`), are pressed in turn instead,
-  for one that quits through its own menus. Either way the program's close
+- **`--wine.quit-key=<keys>`** makes the app's Quit press those keys in the
+  program, written in the [key notation](#key-sequences), for one that
+  ignores Wine's quit but quits on a key of its own: Iji's is
+  `--wine.quit-key=f12:hold`, F12 held down. Keys that quit through the
+  program's own menus are pressed in turn
+  (`--wine.quit-key="escape escape return"`). Either way the program's close
   button does the same as Quit
   ([wine-in-process-helpers.md](wine-in-process-helpers.md#a-game-that-ignores-the-apps-quit)).
 - **`--wine.quit-confirm-key=<keys>`**, beside a quit key, splits Quit in
   two, for a program whose quit key asks first: the first Quit presses the
-  quit key alone, once, and a second within 10 s presses these keys in turn,
-  as Icy Tower's (`--wine.quit-key=escape`, and Escape held to confirm). One
-  confirm key is held, repeating as a held key does; several are pressed in
-  turn.
-  Without `--wine.quit-key` it's refused when planning.
+  quit keys, and a second within 10 s presses these, as Icy Tower's
+  `--wine.quit-key=escape --wine.quit-confirm-key=escape:hold` (Escape asks,
+  and Escape held confirms). Without `--wine.quit-key` it's refused when
+  planning.
+- **Quit keys are checked when planning**, and keys the notation refuses
+  are refused, naming the bad part; they're recorded as written. A single
+  key with nothing after it keeps the meaning it had before the notation
+  had `:hold`: as `--wine.quit-key`, without confirm keys, it's held for
+  5 s, and as `--wine.quit-confirm-key` it's held too, while a quit key
+  before confirm keys is pressed once. `sc bundle check` warns of a held
+  one with its explicit form (`f12:hold`), which a bundle writes.
 - **`--wine.fullscreen-setting=<fields>`** names where the program keeps
   its own fullscreen setting, so the app can keep it in step with the
   window's green button: when the player last moved the window into or out
@@ -569,6 +576,42 @@ app keeps no Wine.
   which the app reads ([wrapp-launch.md](wrapp-launch.md)). A launch records
   its format, 2 now (`RecordedLaunch.format`), so the app can tell one
   recorded before an option it reads.
+
+### Key sequences
+
+Wherever keys are pressed for a program — a launch's quit keys
+(`--wine.quit-key`, `--wine.quit-confirm-key`), `sc puppet do <name> key`
+([dev-cli.md](dev-cli.md)) and a scenario's `{ key: … }`
+([testing.md](testing.md#scenarios)) — they're written the same way, and
+read by one parser, `KeySequence` (WrappKit's `KeyNotation`):
+
+- **Steps are separated by spaces** and done in turn: `up return`.
+- **Keys pressed together are joined with `+`**, modifiers first: `cmd+s`,
+  `ctrl+alt+delete`, `shift+tab`. The modifiers are `cmd`, `ctrl`, `alt`
+  and `shift` (`command`, `control`, `option` and `opt` are read too).
+- **A key's name** is one the in-process helpers know
+  (`Packages/Modules/wine/InProcessHelpers/key_names.m`): `escape` (`esc`),
+  `return` (`enter`), `space`, `tab`, `delete` (`backspace`),
+  `forwarddelete`, `home`, `end`, `pageup`, `pagedown`, `up`, `down`,
+  `left`, `right`, `f1`–`f12`, or the character a key types: a letter, a
+  digit or punctuation (an upper-case letter or a shifted character holds
+  shift). Names are read in any case.
+- **`*N` presses a step N times** (`return*2`, at most 100), each press down
+  and up, with the sequence's usual gap between presses.
+- **`:hold` holds a step down** for 5 s, repeating as a held Mac key does
+  (the first repeat after 0.25 s, then one each 0.05 s), so a program that
+  takes repeats as presses sees what a player holding the key would;
+  **`:hold=<duration>`** holds it that long, `500ms`, `2s` or `1.5s`, at
+  most 30 s. A step is pressed several times or held, not both.
+
+`f12:hold`, `escape:hold=5s`, `up return*2` and `cmd+q` are all sequences.
+An unknown key or modifier, `*0`, a bad duration, a hold over 30 s, `*N`
+with `:hold`, or nothing at all is refused, saying which part is wrong.
+What the sequence's usual gap is depends on who presses: 2.5 s from one
+release to the next press for quit keys, which a program changing screens
+needs, and 0.3 s for `sc puppet`. The in-process helpers are handed the
+sequence's canonical form, every step explicit
+([wine-in-process-helpers.md](wine-in-process-helpers.md#the-canonical-key-sequence)).
 
 ## What modules add
 

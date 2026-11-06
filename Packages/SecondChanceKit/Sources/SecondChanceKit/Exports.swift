@@ -7,6 +7,7 @@
 //  SecondChanceKit re-exports them, so an app imports SecondChanceKit alone
 //  and its code reads as it did before they moved.
 
+@_exported import KeyNotation
 @_exported import ProcessKit
 @_exported import WindowsFormats
 @_exported import WineKit

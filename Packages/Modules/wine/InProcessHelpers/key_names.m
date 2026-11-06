@@ -3,7 +3,10 @@
 //  The keys the helpers can press, by name: puppet control's keys (sc puppet,
 //  WrappPuppeteer) and the quit watch's quit keys (a launch's
 //  --wine.quit-key and --wine.quit-confirm-key). One table, so a key one of
-//  them can press the other can too, with the same characters.
+//  them can press the other can too, with the same characters; and one
+//  reader of a key sequence's canonical form (helperKeySteps), which both
+//  are handed. KeySequence (WrappKit's KeyNotation) parses what people
+//  write and mirrors this table's names, which KeyNamesTests keeps in step.
 //
 //  Built into in_process_helpers.dylib by build-in-process-helpers.sh; see
 //  docs/wine-in-process-helpers.md.
@@ -60,4 +63,97 @@ NSString *helperKeyCharacters(NSString *name, int code) {
         case 53: return @"\x1b";
         default: return @"";
     }
+}
+
+const HelperModifierKey helperModifierKeys[4] = {
+    {NSEventModifierFlagControl, 59}, {NSEventModifierFlagOption, 58},
+    {NSEventModifierFlagShift, 56}, {NSEventModifierFlagCommand, 55},
+};
+
+/// A modifier's flag by name; 0 for none. The canonical form writes the
+/// short names; the rest are read too, as people write them.
+static NSEventModifierFlags modifierFlag(NSString *name) {
+    static NSDictionary<NSString *, NSNumber *> *flags;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        flags = @{@"ctrl": @(NSEventModifierFlagControl), @"control": @(NSEventModifierFlagControl),
+                  @"alt": @(NSEventModifierFlagOption), @"opt": @(NSEventModifierFlagOption),
+                  @"option": @(NSEventModifierFlagOption), @"shift": @(NSEventModifierFlagShift),
+                  @"cmd": @(NSEventModifierFlagCommand), @"command": @(NSEventModifierFlagCommand)};
+    });
+    return flags[name.lowercaseString].unsignedIntegerValue;
+}
+
+/// The whole number `text` holds, or -1.
+static long wholeNumber(NSString *text) {
+    if (text.length == 0 || text.length > 9) return -1;
+    if ([text rangeOfCharacterFromSet:NSCharacterSet.decimalDigitCharacterSet.invertedSet].location != NSNotFound) return -1;
+    return text.integerValue;
+}
+
+/// One canonical step, `[<mod>+...]<key>[*<n>|:hold=<ms>ms]`, or why not.
+static NSString *readKeyStep(NSString *word, HelperKeyStep *step) {
+    memset(step, 0, sizeof(*step));
+    step->presses = 1;
+    NSString *chord = word;
+    NSRange hold = [word rangeOfString:@":hold=" options:NSBackwardsSearch];
+    NSRange star = [word rangeOfString:@"*" options:NSBackwardsSearch];
+    if (hold.location != NSNotFound && hold.location > 0) {
+        NSString *value = [word substringFromIndex:NSMaxRange(hold)];
+        long milliseconds = [value hasSuffix:@"ms"] ? wholeNumber([value substringToIndex:value.length - 2]) : -1;
+        if (milliseconds < 1) return [NSString stringWithFormat:@"%@: a hold is :hold=<n>ms", word];
+        step->holdMilliseconds = (int)milliseconds;
+        chord = [word substringToIndex:hold.location];
+    } else if (star.location != NSNotFound && star.location > 0 && wholeNumber([word substringFromIndex:star.location + 1]) >= 1) {
+        step->presses = (int)wholeNumber([word substringFromIndex:star.location + 1]);
+        chord = [word substringToIndex:star.location];
+    }
+    // The last part is the key, `+` itself when the chord ends `++` or is `+`.
+    NSString *key = chord;
+    NSString *modifiers = @"";
+    if ([chord isEqualToString:@"+"]) {
+        key = @"+";
+    } else if ([chord hasSuffix:@"++"]) {
+        key = @"+";
+        modifiers = [chord substringToIndex:chord.length - 2];
+    } else {
+        NSRange plus = [chord rangeOfString:@"+" options:NSBackwardsSearch];
+        if (plus.location != NSNotFound) {
+            key = [chord substringFromIndex:plus.location + 1];
+            modifiers = [chord substringToIndex:plus.location];
+        }
+    }
+    if (modifiers.length > 0) {
+        for (NSString *name in [modifiers componentsSeparatedByString:@"+"]) {
+            NSEventModifierFlags flag = modifierFlag(name);
+            if (!flag) return [NSString stringWithFormat:@"%@: %@ isn't a modifier", word, name];
+            step->flags |= flag;
+        }
+    }
+    BOOL shift = NO;
+    int code = helperKeyCode(key, &shift);
+    if (code < 0 || key.length >= sizeof(step->name)) return [NSString stringWithFormat:@"%@: %@ isn't a key", word, key];
+    if (shift) step->flags |= NSEventModifierFlagShift;
+    step->code = (unsigned short)code;
+    strlcpy(step->name, key.UTF8String, sizeof(step->name));
+    return nil;
+}
+
+NSData *helperKeySteps(NSString *canonical, NSString **error) {
+    NSMutableData *steps = [NSMutableData data];
+    for (NSString *word in [canonical componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet]) {
+        if (word.length == 0) continue;
+        HelperKeyStep step;
+        NSString *problem = readKeyStep(word, &step);
+        if (problem) {
+            if (error) *error = problem;
+            return nil;
+        }
+        [steps appendBytes:&step length:sizeof(step)];
+    }
+    if (steps.length == 0) {
+        if (error) *error = @"no keys";
+        return nil;
+    }
+    return steps;
 }

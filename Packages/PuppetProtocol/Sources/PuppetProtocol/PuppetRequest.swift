@@ -11,12 +11,14 @@
 
 import CoreGraphics
 import Foundation
+import KeyNotation
 
 /// The helper's protocol version, as `hello` says it: 1 (no `hello`), 2
 /// (`hello`, `windows`, `down`/`up`/`drag`, `key`, `type`, `focus`), 3
-/// (`scroll`), 4 (`audio`).
+/// (`scroll`), 4 (`audio`), 5 (`key` takes a key sequence's step: `*N`,
+/// `:hold=`, and `gap=`).
 nonisolated public enum PuppetProtocolVersion {
-    public static let current = 4
+    public static let current = 5
 }
 
 nonisolated public enum MouseButton: String, Sendable, CaseIterable {
@@ -51,9 +53,13 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
     /// A scroll wheel's turn at a point: `lines` down (negative: up), and
     /// `across` right (negative: left). Protocol 3.
     case scroll(CGPoint, lines: Int, across: Int? = nil)
-    /// A key by its name (`escape`, `return`, `f5`, `a`), modifiers first
-    /// (`cmd+s`), held `hold` ms (60).
-    case key(String, hold: Int? = nil)
+    /// One step of a key sequence, in canonical form (`KeySequence.Step`):
+    /// a key by its name (`escape`, `return`, `f5`, `a`), modifiers first
+    /// (`cmd+s`), pressed and held `hold` ms (60); `*N` presses it N times,
+    /// `gap` ms apart (300), and `:hold=<ms>ms` holds it, repeating as a
+    /// held Mac key does (protocol 5). `keys(_:hold:)` makes these from
+    /// what people write.
+    case key(String, hold: Int? = nil, gap: Int? = nil)
     /// Each character as its key, shift where it needs it.
     case type(String)
     /// The app active and the game window key.
@@ -123,9 +129,10 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
             point(at)
             words.append(String(lines))
             option("across", across)
-        case let .key(name, hold):
-            words.append(name)
+        case let .key(step, hold, gap):
+            words.append(step)
             option("hold", hold)
+            option("gap", gap)
         case let .type(text):
             words.append(Self.encoded(text))
         case let .yield(pid):
@@ -180,8 +187,11 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
             case .left: return .scroll(at, lines: 0, across: -amount)
             }
         case "key":
-            guard arguments.count == 1 else { throw PuppetProtocolError("key takes one key: \(usage["key"] ?? "key").") }
-            return .key(arguments[0], hold: hold)
+            let requests = try keys(arguments.joined(separator: " "), hold: hold)
+            guard requests.count == 1, let request = requests.first else {
+                throw PuppetProtocolError("key here takes one step; several are sent in turn with keys(_:): \(usage["key"] ?? "key").")
+            }
+            return request
         case "type":
             guard !arguments.isEmpty else { throw PuppetProtocolError("type takes the text: \(usage["type"] ?? "type").") }
             return .type(arguments.joined(separator: " "))
@@ -204,10 +214,37 @@ nonisolated public enum PuppetRequest: Sendable, Equatable {
         "up": "up <x> <y>",
         "drag": "drag <x> <y> <x2> <y2>",
         "scroll": "scroll <x> <y> up|down|left|right [<lines>, 3 unless given]",
-        "key": "key [<mod>+…]<name>",
+        "key": "key <keys>, as up return*2, cmd+s or escape:hold=2s",
         "type": "type <text>",
         "focus": "focus",
     ]
+
+    /// The requests that press keys as people write them
+    /// (docs/wrappfile.md#key-sequences): one `key` a step, in canonical
+    /// form, to be sent in turn, `keyStepGap` apart. A press is held `hold`
+    /// ms. Throws, naming the bad part, for keys the notation refuses.
+    public static func keys(_ text: String, hold: Int? = nil) throws -> [PuppetRequest] {
+        let sequence: KeySequence
+        do {
+            sequence = try KeySequence(parsing: text)
+        } catch {
+            throw PuppetProtocolError("\(error)")
+        }
+        return sequence.steps.map { .key($0.canonical, hold: hold) }
+    }
+
+    /// From one step's end to the next's start, as `keys(_:hold:)`'s
+    /// requests are sent: as long as the helper leaves between presses of
+    /// a step pressed several times.
+    public static let keyStepGap: Duration = .milliseconds(300)
+
+    /// How long to wait for its reply: a held key, or one pressed many
+    /// times, takes that long before it's answered.
+    public var timeout: TimeInterval {
+        guard case let .key(text, hold, gap) = self, let step = try? KeySequence(parsing: text).steps.first else { return 45 }
+        let pressing = Double(step.pressCount) * Double((hold ?? 60) + (gap ?? 300)) / 1000
+        return 20 + max(Double(step.holdMilliseconds ?? 0) / 1000, pressing)
+    }
 
     /// A region as people write it, `x,y,w,h` in points; nil unless it's four numbers.
     public static func region(_ text: String) -> CGRect? {
