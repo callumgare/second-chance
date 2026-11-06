@@ -55,7 +55,7 @@ struct PuppetScreensTests {
     @Test("The commands parse; a locator is one of --text or --needle, and --nth counts from 1")
     func parsing() throws {
         let screen = try #require(try SC.parseAsRoot(["puppet", "screen", "lure", "--bundle", "freeware/skifree"]) as? PuppetScreenCommand)
-        #expect(screen.source.bundle == "freeware/skifree")
+        #expect(screen.global.bundles == ["freeware/skifree"])
         let name = try #require(try SC.parseAsRoot(["puppet", "name", "lure", "title", "--region", "10,20,30,40", "--text"]) as? PuppetNameCommand)
         #expect(name.tag == "title" && name.text && name.region == "10,20,30,40")
         #expect(throws: (any Error).self) { try SC.parseAsRoot(["puppet", "name", "lure", "title", "--region", "10,20"]) }

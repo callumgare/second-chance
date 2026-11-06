@@ -97,6 +97,11 @@ turns the options into the app's `INSTALLATION_SOURCE` and inputs. Adding a
 source is a new case and a new type — the same shape as the app's
 `WrappBuildStrategy`.
 
+**A bundle beyond `Bundles/`.** `--bundle <folder>`, on every command, adds a
+program bundle from anywhere, such as a port's draft in `.local/porting/`, and
+a command that takes a program uses its program when none is named
+(`ExtraBundleOptions`, [program-bundles.md](program-bundles.md#extra-bundles)).
+
 `--from disk` builds from the game's disc images in the
 [installers store](testing.md#the-installers-store), or from those `--disk`
 names; `--from her-download` from its Her edition's `installer.exe` or
@@ -1127,8 +1132,11 @@ its fingerprint's distance, at most 0.08; a `region` one by the template
 search's correlation; a `text` one by its strings in OCR's lines). Its
 needles are the session's own, then its bundle's `tests/needles`, then those
 of the module its test scenario is in: the bundle is the wrapp's (its
-`WrappLock.json`), or the one `--bundle <id>` names, which the session then
-remembers (an engine run by hand has none of its own). `--needles <folder>`
+`WrappLock.json`), or the one `--bundle` names, a shipped bundle's id or a
+draft's folder ([program-bundles.md](program-bundles.md#extra-bundles)),
+which the session then remembers (an engine run by hand has none of its
+own); a draft's needles are found again only while `--bundle` names its
+folder. `--needles <folder>`
 adds a folder looked in first.
 
 - `screen <name>` says which tags (screens) the window matches, each with

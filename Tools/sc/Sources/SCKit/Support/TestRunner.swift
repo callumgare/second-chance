@@ -211,6 +211,10 @@ struct TestRunner {
         // Asked for by name, so missing ISOs are a failure, not a skip that
         // would report a pass having tested nothing.
         if sources.contains(.disk) { env["TEST_RUNNER_REQUIRE_INSTALLERS"] = "1" }
+        // `--bundle`'s bundles, for the test host and the WrappPuppeteer it starts.
+        if let extras = ProcessInfo.processInfo.environment[ExtraBundles.environmentVariable] {
+            env["TEST_RUNNER_\(ExtraBundles.environmentVariable)"] = extras
+        }
         if !requested.isEmpty { env["TEST_RUNNER_TEST_GAMES"] = requested.map(\.slug).joined(separator: ",") }
         if refresh != .full { env["TEST_RUNNER_SKIP_BUILD"] = "1" }
         if ignoreLoad { env["TEST_RUNNER_IGNORE_LOAD"] = "1" }

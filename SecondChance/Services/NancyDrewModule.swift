@@ -7,7 +7,10 @@
 import Foundation
 import GameCatalog
 import WrappBuilder
+import Logging
 import SecondChanceKit
+
+private nonisolated let logger = Logger(label: "au.gare.callum.second-chance.SecondChance.ShippedBundles")
 
 /// What every Nancy Drew game shares, from the `nancy-drew` module in Second
 /// Chance's resources (`Modules/nancy-drew`, docs/modules.md): Her
@@ -47,6 +50,26 @@ nonisolated enum DownloadCache {
 /// The program bundles Second Chance ships (`Contents/Resources/Bundles`,
 /// docs/program-bundles.md).
 nonisolated enum ShippedBundles {
+    /// The folder of the game `slug`'s bundle: an extra bundle's, when
+    /// `sc --bundle` named one with its id (`ExtraBundles`), else the
+    /// shipped one's in `resources`.
+    static func bundleFolder(ofGame slug: String, resources: URL) -> URL {
+        ExtraBundles.folder(of: programID(slug), shippedRoot: resources.appendingPathComponent("Bundles"))
+    }
+
+    /// Adds the extra bundles' games (`SECOND_CHANCE_EXTRA_BUNDLES`) to the
+    /// catalogue, so a build finds them as it does a shipped game's. At
+    /// start-up, before anything asks the catalogue for a game.
+    static func addExtraGames(in bundle: Bundle = .main) {
+        guard !ExtraBundles.folders().isEmpty, let resources = bundle.resourceURL else { return }
+        do {
+            let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
+            ExtraBundles.addGames(shippedRoot: resources.appendingPathComponent("Bundles"), modules: modules)
+        } catch {
+            logger.error("Couldn't load the modules, so leaving out the extra bundles: \(error)")
+        }
+    }
+
     /// The program bundle id of the game `slug`: `nancy-drew/<slug>`, or
     /// its own for a program beyond Nancy Drew.
     static func programID(_ slug: String) -> String {
@@ -66,9 +89,9 @@ nonisolated enum ShippedBundles {
         case .bigFish: .bigFish
         case .download: .download
         }
-        let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
+        let folder = bundleFolder(ofGame: slug, resources: resources)
         guard let loader = try? ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: nil),
-              let manifest = try? loader.load(folder).get().manifest else {
+              let manifest = try? loader.load(folder, anyFolder: true).get().manifest else {
             return WrappBuildHelper.edition(of: source)
         }
         let editions = manifest.editions.filter { $0.source == kind }
@@ -84,8 +107,8 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
-            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let folder = bundleFolder(ofGame: slug, resources: resources)
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder, anyFolder: true).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             var conditions = BuildConditions.thisMac
             conditions.choices = choices
@@ -113,8 +136,8 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
-            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let folder = bundleFolder(ofGame: slug, resources: resources)
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder, anyFolder: true).get()
             let plan = try plan(forGame: slug, edition: edition, in: bundle)
             let used = plan?.target?.modules ?? composition.modules.map(\.rawValue)
             // Each module's data files by hash, and its stages by what they
@@ -174,8 +197,8 @@ nonisolated enum ShippedBundles {
         let target = try lock(forGame: slug, edition: old.edition, source: source, composition: composition, in: bundle)
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
-            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let folder = bundleFolder(ofGame: slug, resources: resources)
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder, anyFolder: true).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             let planner = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules)
             let edition = old.edition
@@ -202,8 +225,8 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
-            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let folder = bundleFolder(ofGame: slug, resources: resources)
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder, anyFolder: true).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             var conditions = BuildConditions.thisMac
             conditions.updates = updates
@@ -225,8 +248,8 @@ nonisolated enum ShippedBundles {
         guard let resources = bundle.resourceURL else { throw WrappBuildError.buildRecipeProblem("no resources") }
         do {
             let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
-            let folder = resources.appendingPathComponent("Bundles/" + programID(slug))
-            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder).get()
+            let folder = bundleFolder(ofGame: slug, resources: resources)
+            let loaded = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules).load(folder, anyFolder: true).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             let planner = BuildPlanner(bundle: loaded, wrappfile: wrappfile, modules: modules)
             // A DirectDraw game's cnc-ddraw settings, which old apps' shared
@@ -263,9 +286,9 @@ nonisolated enum ShippedBundles {
         let modules = try ModuleLoader(root: resources.appendingPathComponent("Modules"), added: AddedModules.folder()).loadAll().get()
         let loader = try ProgramBundleLoader(root: resources.appendingPathComponent("Bundles"), modules: modules)
         return try GameInfoProvider.shared.allGames().flatMap { game -> [DownloadEdition] in
-            let folder = resources.appendingPathComponent("Bundles/" + game.programID)
+            let folder = ExtraBundles.folder(of: game.programID, shippedRoot: resources.appendingPathComponent("Bundles"))
             guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("manifest.yaml").path) else { return [] }
-            let bundle = try loader.load(folder).get()
+            let bundle = try loader.load(folder, anyFolder: true).get()
             let wrappfile = try WrappfileParser.parse(String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8))
             let planner = BuildPlanner(bundle: bundle, wrappfile: wrappfile, modules: modules)
             return bundle.manifest.editions.compactMap { edition in
@@ -279,8 +302,8 @@ nonisolated enum ShippedBundles {
 
     /// A file in the assets of the Nancy Drew game `slug`'s bundle, if it has it.
     static func asset(_ name: String, ofGame slug: String, in bundle: Bundle = .main) -> URL? {
-        guard let file = bundle.resourceURL?.appendingPathComponent("Bundles/\(programID(slug))/assets/\(name)"),
-              FileManager.default.fileExists(atPath: file.path) else { return nil }
-        return file
+        guard let resources = bundle.resourceURL else { return nil }
+        let file = bundleFolder(ofGame: slug, resources: resources).appendingPathComponent("assets/\(name)")
+        return FileManager.default.fileExists(atPath: file.path) ? file : nil
     }
 }

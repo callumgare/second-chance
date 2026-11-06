@@ -96,12 +96,15 @@ struct Repo: Sendable {
     var defaultWrappsDir: URL { root.appendingPathComponent("built-apps") }
 
     /// Every program bundle's manifest that loads, read once: what the
-    /// installers store is laid out by.
+    /// installers store is laid out by. Those `--bundle` named come first,
+    /// so one with a shipped bundle's id is found in its place.
     var manifests: [Manifest] {
         Self.manifestCache.withLock { cache in
-            if let found = cache[bundles.path] { return found }
-            let loaded = InstallersStore.manifests(bundles: bundles)
-            cache[bundles.path] = loaded
+            let key = bundles.path + "\n" + ExtraBundles.folders().map(\.path).joined(separator: ":")
+            if let found = cache[key] { return found }
+            let loaded = ExtraBundles.load(shippedRoot: bundles, modules: nil).map(\.manifest)
+                + InstallersStore.manifests(bundles: bundles)
+            cache[key] = loaded
             return loaded
         }
     }

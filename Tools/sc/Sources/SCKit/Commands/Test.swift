@@ -345,8 +345,13 @@ struct TestIntegrationCommand: AsyncParsableCommand {
 }
 
 enum TestCommandSupport {
+    /// The games `slugs` name; with none, those `--bundle` named, else none
+    /// (every game).
     static func resolve(_ slugs: [String], ui: UI) throws -> [CatalogGame] {
-        try slugs.map { slug in
+        if slugs.isEmpty {
+            return ExtraBundleOptions.ids.compactMap { id in Catalog.games.first { $0.programID == id } }
+        }
+        return try slugs.map { slug in
             guard let game = Catalog.game(slug: slug) else {
                 var hints: [String] = []
                 if let guess = Games.closest(to: slug) { hints.append("Did you mean \(guess.slug)?") }

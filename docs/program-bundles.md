@@ -289,6 +289,47 @@ title alone — "Nancy Drew - Secret of the Old Clock", "SkiFree".
 Loading and checking bundles lives in `Packages/WrappBuilder/`, the package that
 will hold everything that turns a bundle into a wrapp, kept apart from the app.
 
+## Extra bundles
+
+A bundle doesn't have to be in `Bundles/` to be built, run or tested: a
+port's draft can stay in `.local/porting/<program>/bundle/` until it works.
+`sc`'s `--bundle <folder>` names the bundle's own folder (the one holding
+its `manifest.yaml`), named anything, and a command that takes a program
+uses that bundle's when none is named:
+
+```bash
+./sc wrapp run --bundle .local/porting/<program>/bundle --disk <iso>
+./sc test integration --bundle .local/porting/<program>/bundle --source disk
+./sc bundle check --bundle .local/porting/<program>/bundle
+```
+
+Its id is its manifest's, and one with a shipped bundle's id is used in that
+bundle's place, so a change to a shipped game can be tried without editing
+`Bundles/`. Repeat `--bundle` for more: then the command asks which, or with
+nobody to ask, says to name one. `--bundle` also takes a shipped bundle's id,
+which names the program and adds nothing (as `sc puppet screen` uses it).
+
+`sc` checks each bundle as `sc bundle check` would, against the shipped
+`Bundles/manifest.schema.json` and modules, and stops on one with problems.
+It adds the bundle's game to its own catalogue, as `sc generate` would have
+made it, and passes the folders on as `SECOND_CHANCE_EXTRA_BUNDLES`
+(absolute paths separated by `:`) to everything it starts. Second Chance
+reads that at start-up (`ShippedBundles.addExtraGames`, `ExtraBundles` in
+`Packages/WrappBuilder`): their games join `GameInfoProvider`'s (through
+`add(_:)`), detection learns their matchers, and a build plans from their
+folders. WrappPuppeteer reads a test's needles from there too. A bundle the
+app can't load is logged and left out, as an added module is.
+
+Nothing is generated or copied: `sc generate`, the checked-in table and the
+app's own copy of `Bundles/` stay the shipped bundles', so a draft leaves
+the working tree clean. The other side of that is that a wrapp built from
+an extra bundle only finds it again while the variable is set: updating it
+from Second Chance started any other way finds no bundle for it.
+
+Over `--on`, a folder under `.local` is sent with the run, as any `.local`
+path a command names is
+([dev-cli.md](dev-cli.md#runtime-copies)), so name it from the repo's root.
+
 ## Commands
 
 ```bash

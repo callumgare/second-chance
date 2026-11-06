@@ -39,9 +39,10 @@ struct BundlePlanCommand: AsyncParsableCommand {
             throw SCError("\(bundle) isn't a bundle's id: name it in full, as <namespace>/<name> (nancy-drew/blue-moon).")
         }
         let id = bundle
-        let folder = session.repo.bundles.appendingPathComponent(id)
+        // `--bundle`'s, when it named one with this id.
+        let folder = ExtraBundles.folder(of: id, shippedRoot: session.repo.bundles)
         let loaded: ProgramBundle
-        switch try ProgramBundleLoader(root: session.repo.bundles, modules: modules).load(folder) {
+        switch try ProgramBundleLoader(root: session.repo.bundles, modules: modules).load(folder, anyFolder: true) {
         case .success(let found): loaded = found
         case .failure(let problems):
             for problem in problems.all { session.ui.line(problem.description) }
@@ -75,7 +76,10 @@ struct BundleCheckCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "check",
         abstract: "Check bundles against the manifest schema and plan every edition, without building them.",
-        discussion: "With no paths, checks every bundle in Bundles/. A path is a bundle's folder."
+        discussion: """
+        With no paths, checks every bundle in Bundles/, or only those --bundle names. A path is a bundle's folder; \
+        one outside Bundles/ can be named anything.
+        """
     )
 
     @OptionGroup var global: GlobalOptions
@@ -86,12 +90,18 @@ struct BundleCheckCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         let loader = try ProgramBundleLoader(root: session.repo.bundles, modules: try loadModules(session))
-        let folders = paths.isEmpty
-            ? try loader.bundleFolders()
-            : paths.map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL }
+        let extras = ExtraBundles.folders()
+        let folders = !paths.isEmpty ? paths.map { URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL }
+            : !extras.isEmpty ? extras
+            : try loader.bundleFolders()
+        // Only a shipped bundle's folder must be <namespace>/<name>, as its id says.
+        let shipped = session.repo.bundles.standardizedFileURL.path + "/"
+        func load(_ folder: URL) -> Result<ProgramBundle, ProgramBundleLoader.Problems> {
+            loader.load(folder, anyFolder: !folder.path.hasPrefix(shipped))
+        }
         var problems: [ProgramBundle.Problem] = []
         for folder in folders {
-            if case .failure(let found) = loader.load(folder) { problems += found.all }
+            if case .failure(let found) = load(folder) { problems += found.all }
             for warning in loader.warnings(folder) {
                 session.ui.line("\(session.repo.display(folder)): warning: \(warning)")
             }
@@ -100,7 +110,7 @@ struct BundleCheckCommand: AsyncParsableCommand {
         let vocabulary = try EmitVocabulary.load(session.repo.root.appendingPathComponent(EmitVocabularySource.vocabularyPath))
         let modules = try loadModules(session)
         for folder in folders {
-            guard case .success(let bundle) = loader.load(folder),
+            guard case .success(let bundle) = load(folder),
                   let text = try? String(contentsOf: folder.appendingPathComponent("Wrappfile"), encoding: .utf8),
                   let wrappfile = try? WrappfileParser.parse(text) else { continue }
             let planner = BuildPlanner(bundle: bundle, wrappfile: wrappfile, modules: modules)

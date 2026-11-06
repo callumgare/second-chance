@@ -166,7 +166,8 @@ enum TestPaths {
 
     /// The repo's program bundles' manifests, which say where in the
     /// installers store each game's installers are.
-    static let manifests: [Manifest] = InstallersStore.manifests(bundles: repoRoot.appendingPathComponent("Bundles"))
+    static let manifests: [Manifest] = ExtraBundles.load(shippedRoot: repoRoot.appendingPathComponent("Bundles"), modules: nil).map(\.manifest)
+        + InstallersStore.manifests(bundles: repoRoot.appendingPathComponent("Bundles"))
 
     /// Where prebuilt wrapps live: `WRAPPS_DIR` (set by `sc test` as
     /// `TEST_RUNNER_WRAPPS_DIR` from its `--wrapps-dir`), else `built-apps/`.

@@ -475,11 +475,15 @@ wrapp-builder build Wrappfile --target=<stage> --input game=<path> \
   Wrappfile.
 - One change per attempt, each with its result in the log.
 - **`wrapp-builder build` refuses any module's instruction** (it has no
-  executors yet, 2026-11), so a Wine program is built with `./sc wrapp
-  build <slug> --from download` once the bundle is in `Bundles/` and `sc
-  generate` has run. Don't pass `--skip-app-build` after changing the
-  bundle: Second Chance carries its own copy of `Bundles/` in the app, so
-  the build silently uses the old Wrappfile (Icy Tower, 2026-11).
+  executors yet, 2026-11), so a program is built with `./sc wrapp build
+  --bundle .local/porting/<program>/bundle` (and `--from`, `--disk` as the
+  edition needs), keeping the draft in the workspace until it works: no
+  `sc generate`, nothing in `Bundles/`
+  (`docs/program-bundles.md#extra-bundles`). `wrapp run`, `test
+  integration` and `bundle check` take `--bundle` the same way, over `--on`
+  too. A bundle in `Bundles/` is different: don't pass `--skip-app-build`
+  after changing one, as Second Chance carries its own copy of `Bundles/`
+  and the build silently uses the old Wrappfile (Icy Tower, 2026-11).
 - **A program that writes its own log** (Icy Tower's `log.txt` beside its
   exe) is the cheapest look there is: `tail` it after each key to see what
   the program did, before any picture.

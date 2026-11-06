@@ -35,7 +35,8 @@ enum TestData {
     /// The test of `program` (`nancy-drew/old-clock`).
     static func test(forProgram program: String) throws -> ProgramTest {
         guard let bundles, let modules else { throw ScenarioError(description: "no Bundles or Modules folder beside WrappPuppeteer") }
-        return try ProgramTest.load(bundleFolder: bundles.appendingPathComponent(program), modulesRoot: modules)
+        // An extra bundle's (`sc --bundle`) in place of the shipped one.
+        return try ProgramTest.load(bundleFolder: ExtraBundles.folder(of: program, shippedRoot: bundles), modulesRoot: modules)
     }
 
     /// The program a wrapp is of: its lock's bundle, or, for a wrapp from

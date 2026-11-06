@@ -37,7 +37,12 @@ class GameDetector {
             guard let root = Bundle.main.resourceURL?.appendingPathComponent("Bundles") else {
                 throw CocoaError(.fileNoSuchFile)
             }
-            return try DetectionIndex.load(bundlesAt: root)
+            // Extra bundles (`sc --bundle`) too, each in place of a shipped
+            // one with its id.
+            let extras = ExtraBundles.load(shippedRoot: root, modules: nil)
+            let shipped = try ProgramBundleLoader(root: root, modules: nil).loadAll().get()
+                .filter { bundle in !extras.contains { $0.manifest.id == bundle.manifest.id } }
+            return DetectionIndex(bundles: shipped + extras)
         } catch {
             logger.error("Couldn't load the shipped bundles' matchers, so recognising games by GameCatalog's titles alone: \(error)")
             return catalogueIndex(GameInfoProvider.shared.allGames())

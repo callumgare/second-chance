@@ -406,6 +406,34 @@ struct GameTests {
         #expect(Games.matching("other/blue-moon", in: games + [twin]) == [twin])
     }
 
+    @Test("With --bundle and no program named, the program is the bundle's, or one of theirs")
+    func programFromExtraBundles() throws {
+        let ui = UI(environment: TerminalEnvironment(isInteractive: false, isColored: false, canReadKeys: false),
+                    mode: .raw, logsDir: FileManager.default.temporaryDirectory)
+        let laserTank = try Games.resolve(nil, candidates: [], candidateKind: "a disc", command: "wrapp build", ui: ui,
+                                          extras: ["freeware/laser-tank"])
+        #expect(laserTank.programID == "freeware/laser-tank")
+        // A program named wins over --bundle's.
+        let blueMoon = try Games.resolve("blue-moon", candidates: [], candidateKind: "a disc", command: "wrapp build", ui: ui,
+                                         extras: ["freeware/laser-tank"])
+        #expect(blueMoon.programID == "nancy-drew/blue-moon")
+        // Several, with nobody to ask, says to name one.
+        #expect(throws: SCError.self) {
+            try Games.resolve(nil, candidates: [], candidateKind: "a disc", command: "wrapp build", ui: ui,
+                              extras: ["freeware/laser-tank", "nancy-drew/blue-moon"])
+        }
+    }
+
+    @Test("--bundle names a folder holding a manifest, from the working directory unless absolute, or a shipped bundle's id")
+    func extraBundleFolders() throws {
+        let shipped = repoRoot.appendingPathComponent("Bundles")
+        #expect(try ExtraBundleOptions.resolve("Bundles/freeware/skifree", cwd: repoRoot, shipped: shipped)
+            == .folder(repoRoot.appendingPathComponent("Bundles/freeware/skifree").standardizedFileURL))
+        #expect(try ExtraBundleOptions.resolve("freeware/skifree", cwd: repoRoot, shipped: shipped) == .shipped("freeware/skifree"))
+        #expect(throws: SCError.self) { try ExtraBundleOptions.resolve("Bundles/freeware", cwd: repoRoot, shipped: shipped) }
+        #expect(throws: SCError.self) { try ExtraBundleOptions.resolve("freeware/nonexistent", cwd: repoRoot, shipped: shipped) }
+    }
+
     @Test("Disk sources find images in the store and refuse missing second disks")
     func diskSource() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sc-installers-\(UUID().uuidString)")

@@ -27,6 +27,17 @@ struct GlobalOptions: ParsableArguments {
     ))
     var purpose: String?
 
+    @Option(name: .customLong("bundle"), help: ArgumentHelp(
+        "A program bundle's folder to use beside Bundles/, such as a port's draft. Repeat it for more.",
+        discussion: """
+        The folder holding its manifest.yaml, named anything; its id is the manifest's, and it is used in place of \
+        a shipped bundle with that id. A command that takes a program uses it when none is named \
+        (docs/program-bundles.md#extra-bundles).
+        """,
+        valueName: "folder"
+    ))
+    var bundles: [String] = []
+
     @Flag(help: "Open windows even though another run has leased the screen, leaving its lease in place.")
     var ignoreScreenLease = false
 
@@ -72,6 +83,7 @@ struct Session: Sendable {
         let terminal = TerminalEnvironment.detect()
         let mode = global.logs ?? terminal.defaultLogMode
         let repo = try Repo.locate()
+        try ExtraBundleOptions.use(global.bundles, repo: repo)
         let session = Session(
             repo: repo,
             ui: UI(environment: terminal, mode: mode, logsDir: repo.scLogs),

@@ -3,6 +3,7 @@
 
 import Foundation
 import GameCatalog
+import WrappBuilder
 
 public struct CatalogGame: Sendable, Hashable {
     /// The slug, e.g. `haunted-carousel`.
@@ -24,12 +25,13 @@ public struct CatalogGame: Sendable, Hashable {
 }
 
 public enum Catalog {
-    /// Every known game, in the app's canonical (chronological) order.
-    public static let games: [CatalogGame] = GameInfoProvider.shared.allGames().map {
+    /// Every known game, in the app's canonical (chronological) order, with
+    /// those `--bundle` added (`ExtraBundleOptions`).
+    public static var games: [CatalogGame] { GameInfoProvider.shared.allGames().map {
         CatalogGame(slug: $0.id, title: $0.title, diskCount: $0.diskCount, engine: $0.gameEngine.rawValue,
                     isOnSteam: $0.isOnSteam, offersSteamLaunchChoice: $0.offersSteamLaunchChoice, isOnBigFish: $0.isOnBigFish,
                     wrappName: $0.appBundleName, programID: $0.programID)
-    }
+    } }
 
     public static func game(slug: String) -> CatalogGame? {
         games.first { $0.slug == slug }
@@ -39,7 +41,7 @@ public enum Catalog {
 extension CatalogGame {
     /// Whether its bundle has an edition from `source` (`disc`, `download`).
     func hasEdition(source: String, repo: Repo) -> Bool {
-        let manifest = repo.bundles.appendingPathComponent(programID).appendingPathComponent("manifest.yaml")
+        let manifest = ExtraBundles.folder(of: programID, shippedRoot: repo.bundles).appendingPathComponent("manifest.yaml")
         return (try? String(contentsOf: manifest, encoding: .utf8))?.contains("source: \"\(source)\"") == true
     }
 }

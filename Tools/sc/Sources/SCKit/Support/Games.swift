@@ -40,18 +40,29 @@ enum Games {
     /// after its last slash, `blue-moon`, when only one bundle's id ends so
     /// (`matching(_:)`). When several do, or none is given, asks the user to
     /// pick when there is a terminal to ask on, and otherwise explains what
-    /// to pass.
+    /// to pass. With none given, a bundle `--bundle` named is the program,
+    /// and the one to pick from when it named several.
     static func resolve(
         _ id: String?,
         candidates: [CatalogGame],
         candidateKind: String,
         command: String,
-        ui: UI
+        ui: UI,
+        extras: [String] = ExtraBundleOptions.ids
     ) throws -> CatalogGame {
         let available = candidates.isEmpty
             ? "No programs have \(candidateKind) yet."
             : "Programs with \(candidateKind): \(candidates.map(\.programID).joined(separator: ", "))"
         guard let id else {
+            // `--bundle` without a program: the program is its bundle's, or
+            // one of theirs.
+            let extras = extras.compactMap { id in Catalog.games.first { $0.programID == id } }
+            if extras.count == 1, let only = extras.first { return only }
+            if extras.count > 1 {
+                if let choice = try ui.choose("Which program?", from: extras.map(GameChoice.init)) { return choice.game }
+                throw SCError("--bundle named more than one program, so name one: sc \(command) <program-bundle-id>.",
+                              hints: ["Programs --bundle named: \(extras.map(\.programID).joined(separator: ", "))"])
+            }
             if let choice = try ui.choose("Which program?", from: candidates.map(GameChoice.init)) {
                 return choice.game
             }

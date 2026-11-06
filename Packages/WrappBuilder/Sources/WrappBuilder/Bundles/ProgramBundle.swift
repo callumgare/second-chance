@@ -73,8 +73,10 @@ public nonisolated final class ProgramBundleLoader {
         try YAML12.load(String(contentsOf: folder.appendingPathComponent("manifest.yaml"), encoding: .utf8))
     }
 
-    /// The bundle in `folder`, or the problems that stop it loading.
-    public func load(_ folder: URL) -> Result<ProgramBundle, Problems> {
+    /// The bundle in `folder`, or the problems that stop it loading. Its
+    /// folder must be `<namespace>/<name>/` as its id says, unless
+    /// `anyFolder`: an extra bundle's can be anywhere (`ExtraBundles`).
+    public func load(_ folder: URL, anyFolder: Bool = false) -> Result<ProgramBundle, Problems> {
         let name = folder.path.hasPrefix(root.path + "/") ? String(folder.path.dropFirst(root.path.count + 1)) : folder.path
         func problems(_ messages: [String]) -> Result<ProgramBundle, Problems> {
             .failure(Problems(all: messages.map { ProgramBundle.Problem(bundle: name, message: $0) }))
@@ -101,7 +103,7 @@ public nonisolated final class ProgramBundleLoader {
         } catch {
             return problems(["manifest.yaml couldn't be read: \(error)"])
         }
-        var messages = Self.problems(with: manifest, in: folder)
+        var messages = Self.problems(with: manifest, in: folder, checkFolder: !anyFolder)
         if let modules {
             messages += wrappfileProblems(manifest, in: folder, modules: modules)
         }
@@ -171,10 +173,10 @@ public nonisolated final class ProgramBundleLoader {
     }
 
     /// What the schema can't check: rules across fields and the folder.
-    static func problems(with manifest: Manifest, in folder: URL) -> [String] {
+    static func problems(with manifest: Manifest, in folder: URL, checkFolder: Bool = true) -> [String] {
         var messages: [String] = []
         let expected = "\(folder.deletingLastPathComponent().lastPathComponent)/\(folder.lastPathComponent)"
-        if manifest.id != expected {
+        if checkFolder, manifest.id != expected {
             messages.append("its id is \(manifest.id), but its folder says \(expected)")
         }
         for (kind, ids) in [("edition", manifest.editions.map(\.id))] {

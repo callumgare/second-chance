@@ -113,6 +113,8 @@ struct SecondChanceApp: App {
         // (Stored-property initialisers that run before init()'s body — e.g.
         // @NSApplicationDelegateAdaptor's AppDelegate — construct no loggers.)
         AppLogging.bootstrap(subsystem: "au.gare.callum.second-chance.SecondChance")
+        // Bundles `sc --bundle` names join the catalogue before anything asks it for a game.
+        ShippedBundles.addExtraGames()
         // `sc screenshot`: draw the catalogued screens and quit, before any window.
         UIStateShots.runIfConfigured(app: "app") { UIStateCatalog.shots }
         MainThreadWatchdog.start()

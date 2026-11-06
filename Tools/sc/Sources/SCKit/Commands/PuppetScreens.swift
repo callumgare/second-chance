@@ -14,11 +14,10 @@ import WrappBuilder
 // MARK: Commands
 
 /// Where a command's needles come from, beyond the session's bundle.
+/// The needles' source beyond the session's own: the bundle is the shared
+/// `--bundle` (`GlobalOptions`), a shipped bundle's id or a draft's folder,
+/// remembered for the session.
 struct PuppetNeedleOptions: ParsableArguments {
-    @Option(help: ArgumentHelp("The program bundle whose needles name the screens (remembered for the session): freeware/skifree.",
-                               valueName: "id"))
-    var bundle: String?
-
     @Option(help: ArgumentHelp("Another folder of needles, looked in first.", valueName: "folder"))
     var needles: String?
 }
@@ -532,7 +531,7 @@ enum PuppetNeedles {
     /// same id, as a test's do. A bundle given is remembered for the
     /// session.
     static func library(_ puppet: PuppetSession, options: PuppetNeedleOptions, repo: URL) throws -> Library {
-        try library(puppet, bundle: options.bundle, needles: options.needles, repo: repo)
+        try library(puppet, bundle: ExtraBundleOptions.ids.first, needles: options.needles, repo: repo)
     }
 
     static func library(_ puppet: PuppetSession, bundle given: String?, needles extra: String?, repo: URL) throws -> Library {
@@ -565,11 +564,14 @@ enum PuppetNeedles {
 
     static func noNeedles(_ puppet: PuppetSession, _ library: Library) -> SCError {
         SCError("No needles to name \(puppet.name)'s screen by\(library.bundle.map { " (bundle \($0))" } ?? "").",
-                hints: [library.bundle == nil ? "Name its bundle: --bundle <id>" : "Its bundle has no tests/needles yet",
+                hints: [library.bundle == nil ? "Name its bundle: --bundle <id or folder>" : "Its bundle has no tests/needles yet",
                         "Cut one from this screen: sc puppet name \(puppet.name) <tag>"])
     }
 
-    static func bundleFolder(_ id: String, repo: URL) -> URL { repo.appendingPathComponent("Bundles").appendingPathComponent(id) }
+    /// The folder of bundle `id`: a draft's `--bundle` named, else the shipped one's.
+    static func bundleFolder(_ id: String, repo: URL) -> URL {
+        ExtraBundles.folder(of: id, shippedRoot: repo.appendingPathComponent("Bundles"))
+    }
 
     /// The bundle remembered for the session, else its wrapp's
     /// (`Contents/Resources/WrappLock.json`).
