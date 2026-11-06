@@ -58,7 +58,7 @@ jobs:
         # build downloads and checks against their pinned SHA-256s
         # (WrappTemplate/download-verified.sh): keyed by those pins, so a
         # changed one is fetched afresh.
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/Library/Caches/SecondChance
           key: downloads-${{ hashFiles('WrappTemplate/setup-*.sh', 'Modules/nancy-drew/patches.json') }}
