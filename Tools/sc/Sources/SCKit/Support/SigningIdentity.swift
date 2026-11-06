@@ -75,7 +75,7 @@ enum SigningIdentity {
         guard result.succeeded, let data = Data(base64Encoded: result.output.trimmingCharacters(in: .whitespacesAndNewlines)),
               let exported = try? JSONDecoder().decode(Exported.self, from: data) else {
             throw SCError("Couldn't export your signing certificate in the Mac's GUI session (nobody allowed it within 5 minutes?).",
-                          hints: ["Allow it when macOS asks on the Mac's screen (Screen Sharing to it shows the prompt), then run sc session add again."])
+                          hints: ["Allow it when macOS asks on the Mac's screen (Screen Sharing to it shows the prompt), then run sc session setup again."])
         }
         return (exported.p12, exported.intermediates)
     }

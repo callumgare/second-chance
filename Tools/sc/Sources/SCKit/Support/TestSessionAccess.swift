@@ -83,12 +83,12 @@ enum TestSessionAccess {
 
 extension Remote {
     /// What runs here once a command has finished, here or on another Mac:
-    /// `session add` sets the test sessions up (`session setup`: the signing
-    /// certificate, and Peekaboo, which opens Screen Sharing where the person
-    /// is), unless `--no-setup`.
+    /// `session add` sets up the test sessions it made or checked
+    /// (`session setup --just-added`: the signing certificate, and Peekaboo,
+    /// which opens Screen Sharing where the person is), unless `--no-setup`.
     static func followUp(after arguments: [String]) -> [String]? {
         guard Array(arguments.prefix(2)) == ["session", "add"], !arguments.contains("--no-setup") else { return nil }
-        return ["session", "setup"]
+        return ["session", "setup", "--just-added"]
     }
 
     /// Commands that take `--on` but run here and reach the other Mac

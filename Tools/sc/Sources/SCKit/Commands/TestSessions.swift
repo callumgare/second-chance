@@ -332,8 +332,9 @@ struct SessionAddCommand: AsyncParsableCommand {
         names given; an existing user whose password is in the keychain is \
         adopted), lets them in over SSH and Screen Sharing with this user's \
         authorized keys, and adds them to the pool. Then it makes the installers \
-        store every user reads, if the Mac has none, and installs the keep-alive, which logs the new sessions in. Running it again \
-        fixes whatever is missing. See docs/dev-cli.md#test-sessions.
+        store every user reads, if the Mac has none, and installs the keep-alive, which logs the new sessions in. When the Mac \
+        has test users already it lists them and asks before adding another; \
+        name one to put right what's missing in it. See docs/dev-cli.md#test-sessions.
         """
     )
 
@@ -345,7 +346,7 @@ struct SessionAddCommand: AsyncParsableCommand {
     @Flag(help: "Don't set the test sessions up afterwards (session setup: your signing certificate, and Peekaboo, which opens Screen Sharing where you are).")
     var noSetup = false
 
-    @Option(help: "How many new ones to make. Default: one when the pool is empty, else none (the pool's are checked).")
+    @Option(help: "How many new ones to make, without asking when the Mac has some already. Default: one.")
     var count: Int?
 
     @Flag(help: "Give existing test users this user's authorized SSH keys too (new ones always get them).")
@@ -361,7 +362,11 @@ struct SessionAddCommand: AsyncParsableCommand {
     func run() async throws {
         let session = try Session.start(global)
         var pool = SessionPool.users()
-        let names = Self.names(given: users, count: count, pool: pool, taken: await SessionPool.existingUsers())
+        let taken = await SessionPool.existingUsers()
+        if users.isEmpty, count == nil {
+            try confirmAnother(existing: Self.existingTestUsers(pool: pool, taken: taken), pool: pool, session: session)
+        }
+        let names = Self.names(given: users, count: count, taken: taken)
         try await Self.unlockKeychain(session)
         for user in names {
             try await add(user, session: session)
@@ -370,6 +375,7 @@ struct SessionAddCommand: AsyncParsableCommand {
         try ScreenLease.makeFolder(SessionPool.folder)
         try (pool.joined(separator: "\n") + "\n").write(to: SessionPool.file, atomically: true, encoding: .utf8)
         chmod(SessionPool.file.path, 0o666)
+        try SessionPool.writeJustAdded(names)
         session.ui.detail("The pool: \(pool.joined(separator: ", ")).")
 
         session.ui.detail(try await SessionPool.makeInstallersStore(store: InstallersStore.defaultRoot))
@@ -386,13 +392,41 @@ struct SessionAddCommand: AsyncParsableCommand {
                                        "Run in it: sc --on <user>@\(host):<path> test integration <game>"])
     }
 
-    /// Who to make or check: the names given; else `count` new ones; else,
-    /// run again on a Mac that has a pool, the pool's own (so it fixes what's
-    /// missing rather than making another); else one new one.
-    static func names(given: [String], count: Int?, pool: [String], taken: Set<String>) -> [String] {
+    /// Who to make or check: the names given, else `count` new ones, else one.
+    /// Putting an existing user right takes naming it; setting the sessions
+    /// up is `session setup`'s.
+    static func names(given: [String], count: Int?, taken: Set<String>) -> [String] {
         if !given.isEmpty { return given }
-        if let count { return SessionPool.nextNames(count, taken: taken) }
-        return pool.isEmpty ? SessionPool.nextNames(1, taken: taken) : pool
+        return SessionPool.nextNames(count ?? 1, taken: taken)
+    }
+
+    /// The Mac's test users: the pool's, and any account named as one that
+    /// isn't in it (taken out with `session remove`, its account kept).
+    static func existingTestUsers(pool: [String], taken: Set<String>) -> [String] {
+        let outside = taken.filter { $0.hasPrefix(SessionPool.namePrefix) && !pool.contains($0) }
+        return pool + outside.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    /// A bare `session add` on a Mac with test users asks before making
+    /// another, rather than taking a re-run as a request for one. Declined,
+    /// it stops (as a cancel, so the `session setup` that follows doesn't run).
+    private func confirmAnother(existing: [String], pool: [String], session: Session) throws {
+        guard !existing.isEmpty else { return }
+        let host = ScreenLease.shortHostName()
+        session.ui.line("\(host) has test users already:")
+        for user in existing {
+            session.ui.line("  \(user)" + (pool.contains(user) ? "" : " (not in the pool)"))
+        }
+        let hints = ["Add one without asking: sc session add --count 1",
+                     "Put one right: sc session add <user>",
+                     "Set them up: sc session setup"]
+        guard let answer = try session.ui.confirm("Add another?", default: true) else {
+            throw SCError("\(host) has test users already, and there's no terminal to ask whether to add another.", hints: hints)
+        }
+        guard answer else {
+            session.ui.line("Nothing added. To set the existing ones up: sc session setup" + (ProcessInfo.processInfo.environment["SSH_CONNECTION"] == nil ? "" : " --on \(host)"))
+            throw CancellationError()
+        }
     }
 
     private func add(_ user: String, session: Session) async throws {
@@ -458,7 +492,7 @@ struct SessionAddCommand: AsyncParsableCommand {
         let found = SigningIdentity.development()
         guard !found.isEmpty else {
             session.ui.warning("You have no Apple Development certificate to give the test users, so their builds will be signed ad hoc.",
-                               next: "Sign in to Xcode with your Apple account (Settings → Accounts), then run sc session add again.")
+                               next: "Sign in to Xcode with your Apple account (Settings → Accounts), then run sc session setup again.")
             return
         }
         let hashes = found.map(\.hash)
@@ -472,7 +506,7 @@ struct SessionAddCommand: AsyncParsableCommand {
                     continue
                 case 3:
                     session.ui.warning("\(user) hasn't logged in yet, so it has no keychain for your signing certificate.",
-                                       next: "Run sc session add again once sc session shows it logged in.")
+                                       next: "Run sc session setup again once sc session shows it logged in.")
                     continue
                 case 255:
                     throw SCError("This Mac can't reach \(user) over SSH.",

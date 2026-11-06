@@ -117,14 +117,21 @@ struct TestSessionTests {
         #expect(throws: (any Error).self) { try SC.parseAsRoot(["session", "add", "Bad Name"]) }
     }
 
-    @Test("sc session add run again checks the pool rather than making another, unless a count says so")
-    func addAgain() {
-        let pool = ["second-chance-testing-1", "second-chance-testing-2"]
-        let taken = Set(pool)
-        #expect(SessionAddCommand.names(given: [], count: nil, pool: pool, taken: taken) == pool)
-        #expect(SessionAddCommand.names(given: [], count: nil, pool: [], taken: []) == ["second-chance-testing-1"])
-        #expect(SessionAddCommand.names(given: [], count: 1, pool: pool, taken: taken) == ["second-chance-testing-3"])
-        #expect(SessionAddCommand.names(given: ["sctest"], count: nil, pool: pool, taken: taken) == ["sctest"])
+    @Test("sc session add makes the next free name, or the count given, or checks the names given")
+    func addNames() {
+        let taken: Set = ["second-chance-testing-1", "second-chance-testing-2"]
+        #expect(SessionAddCommand.names(given: [], count: nil, taken: taken) == ["second-chance-testing-3"])
+        #expect(SessionAddCommand.names(given: [], count: nil, taken: []) == ["second-chance-testing-1"])
+        #expect(SessionAddCommand.names(given: [], count: 2, taken: taken) == ["second-chance-testing-3", "second-chance-testing-4"])
+        #expect(SessionAddCommand.names(given: ["sctest"], count: nil, taken: taken) == ["sctest"])
+    }
+
+    @Test("sc session add counts the pool's users and accounts named as test users outside it as existing")
+    func existingTestUsers() {
+        let taken: Set = ["callum", "sctest", "second-chance-testing-1", "second-chance-testing-10", "second-chance-testing-2"]
+        #expect(SessionAddCommand.existingTestUsers(pool: ["sctest", "second-chance-testing-1"], taken: taken)
+                == ["sctest", "second-chance-testing-1", "second-chance-testing-2", "second-chance-testing-10"])
+        #expect(SessionAddCommand.existingTestUsers(pool: [], taken: ["callum"]).isEmpty)
     }
 
     @Test("An SCError shown with localizedDescription says its message")
@@ -151,9 +158,11 @@ struct PeekabooSetupTests {
         #expect(Remote.runsHere(["session", "setup", "sctest"]))
         #expect(Remote.runsHere(["session", "screenshot"]))
         #expect(Remote.runsHere(["session", "view", "sctest"]))
-        #expect(Remote.followUp(after: ["session", "add", "--count", "2"]) == ["session", "setup"])
+        #expect(Remote.followUp(after: ["session", "add", "--count", "2"]) == ["session", "setup", "--just-added"])
         let setup = try? SC.parseAsRoot(["session", "setup", "--task", "signing", "--task", "peekaboo"]) as? SessionSetupCommand
         #expect(setup?.only == [.signing, .peekaboo])
+        #expect((try? SC.parseAsRoot(["session", "setup", "--just-added"]) as? SessionSetupCommand)?.justAdded == true)
+        #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "setup", "--just-added", "sctest"]) }
         #expect(Remote.followUp(after: ["session", "add", "--no-setup"]) == nil)
         #expect(Remote.followUp(after: ["session", "list"]) == nil)
         #expect(throws: (any Error).self) { _ = try SC.parseAsRoot(["session", "remove"]) }

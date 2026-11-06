@@ -11,6 +11,9 @@ enum SessionPool {
     /// Where the console user's keychain keeps each test user's password, as
     /// a generic password with the user's name as its account.
     static let keychainService = "second-chance-session"
+    /// The users the last `session add` made or checked, one a line, for
+    /// the `session setup --just-added` that follows it.
+    static let justAddedFile = folder.appendingPathComponent("just-added")
 
     static func users(fromPool text: String) -> [String] {
         text.split(whereSeparator: \.isNewline).compactMap { line in
@@ -25,6 +28,13 @@ enum SessionPool {
         try ScreenLease.makeFolder(folder)
         try (users.joined(separator: "\n") + (users.isEmpty ? "" : "\n")).write(to: file, atomically: true, encoding: .utf8)
         chmod(file.path, 0o666)
+    }
+
+    /// Record who `session add` made or checked.
+    static func writeJustAdded(_ users: [String]) throws {
+        try ScreenLease.makeFolder(folder)
+        try (users.joined(separator: "\n") + "\n").write(to: justAddedFile, atomically: true, encoding: .utf8)
+        chmod(justAddedFile.path, 0o666)
     }
 
     static func users() -> [String] {

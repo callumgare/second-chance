@@ -664,21 +664,26 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
   `second-chance-testing-<n>` unless named, each with a random password kept in
   the keychain; lets them in over SSH and Screen Sharing; gives new ones the
   console user's authorized SSH keys (existing ones only with `--install-keys`);
-  and adds them to the pool. An existing user whose password is in the keychain
-  is adopted, and a step already done is skipped, so running it again fixes only
-  what's missing. A step needing `sudo` with no terminal fails at once rather
+  and adds them to the pool. On a Mac that has test users already (the pool's,
+  or accounts named as test users outside it), a bare `session add` lists them
+  and asks before adding another (no terminal is a failure; `--count` adds
+  without asking). Declined, it stops before anything else, `session setup`
+  included. Naming an existing user puts it right instead: one whose password
+  is in the keychain is adopted, and a step already done is skipped, so only
+  what's missing is fixed. A step needing `sudo` with no terminal fails at once rather
   than wait for a password. A new user's Setup Assistant is marked done
   before its first login: left to run, it holds the session where no sc job
   can start (an Aqua LaunchAgent never runs) while `sc session` still says
   "logged in". A re-run frees a user stuck there, logging it out for the
-  keep-alive to log in again. It gives each test user the console user's
+  keep-alive to log in again (name the user to re-run it on one). Then it makes the Mac's installers store (below) and
+  installs the keep-alive if it isn't running. It records the users it made or
+  checked, and last, unless `--no-setup`, the `sc` you ran sets those up
+  (`session setup --just-added`, with `--on` if `add` ran there: below), first
+  waiting up to five minutes for the keep-alive to log new ones in. That gives each the console user's
   [signing certificate](#signing-in-test-sessions): over SSH macOS can't ask to
   allow exporting the key, so it exports it in the GUI session instead, where
   macOS asks on that Mac's screen (reach it over Screen Sharing; Always Allow
-  stops it asking again). Then it makes the Mac's installers store (below) and
-  installs the keep-alive if it isn't running. Last, unless `--no-setup`, the
-  `sc` you ran sets the test sessions up (`session setup`, with `--on` if `add`
-  ran there: below).
+  stops it asking again).
 - `sc session logout [--force] [<user>…]` logs the test sessions out (all
   the pool's, unless named), so the Mac shuts down or restarts without asking
   about other users. It stops the keep-alive first, which would log them in
@@ -743,8 +748,8 @@ developer's login keychain. Without one, sc signs ad hoc (as it does on CI),
 and says so in the build's output. That builds, but an ad-hoc signature changes
 with every build, so macOS forgets each build's permissions at the next.
 
-So `sc session add` copies the console user's valid Apple Development
-identities (`SigningIdentity`) into each test user's login keychain, with the
+So `sc session setup` (which `session add` runs last) copies the console
+user's valid Apple Development identities (`SigningIdentity`) into each test user's login keychain, with the
 intermediate certificates their chains need: Xcode keeps Apple's WWDR
 certificate in the login keychain, not the system's. It exports the
 identities as one PKCS #12 file and the intermediates as certificates of
@@ -757,9 +762,9 @@ a user that already has every identity, exporting nothing. A login keychain is
 unlocked in the user's GUI session, where test runs build (`GUISession.ensure`
 comes first), but not over plain SSH: a build there fails with
 `errSecInternalComponent`, so build through `in-gui-session` there. A user that has never logged in has no
-login keychain yet: run `session add` again once it has. A failure here is a
+login keychain yet: run `session setup` again once it has. A failure here is a
 warning, and the rest of the set-up goes ahead. A renewed certificate reaches
-the test users the next time `session add` runs.
+the test users the next time `session setup` runs.
 
 ### Peekaboo in test sessions
 
@@ -767,10 +772,11 @@ Peekaboo reads and drives Mac windows (system prompts, installers, Finder) where
 puppet helper only sees a game's window. Its Screen Recording and Accessibility grants
 are per user, and no script can give them: they live in the system's TCC database
 behind SIP, and even an MDM profile can't pre-approve Screen Recording. So
-`sc session setup [<user>…] [--task signing|peekaboo]… [--on <host>]`, run on the Mac
-you're at, does every set-up task a test session needs, or those each `--task` names, each
+`sc session setup [<user>… | --just-added] [--task signing|peekaboo]… [--on <host>]`, run
+on the Mac you're at, does every set-up task a test session needs, or those each `--task` names, each
 skipping what's done: `signing` gives each test user the console user's signing
-certificate (above), done on the test Mac, where that certificate is; `peekaboo` makes the
+certificate (above), done on the test Mac, where that certificate is (it asks to unlock the
+keychain there, locked over SSH, which holds the test users' passwords too); `peekaboo` makes the
 grants a minute each: with `--on`, for that Mac's test sessions, and without, this
 Mac's. Unlike other commands it doesn't run on the other Mac (`Remote.runsHere`): it
 reaches the test sessions over SSH itself, since the Screen Sharing window has to open
