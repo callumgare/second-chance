@@ -160,6 +160,13 @@ to the current user's setup such as file paths outside the source code repo or r
 Reach for a doc when the material is one feature deep; reach for `AGENTS.md`
 when it applies across the repo. Link between them rather than repeating.
 
+**The porting skill is in the repo**: `.claude/skills/port-program/` (making a
+program run as a wrapp: its procedure, references and scripts), with its
+subagents in `.claude/agents/porting-*.md`. It follows the rule above for
+committed files: this setup's Macs and accounts are named in `.local/AGENTS.md`,
+not in it. A port's workspace stays in `.local/porting/`. The rest of `.claude`
+(Claude Code's worktrees, settings) is ignored.
+
 ## Tech Stack
 
 - **Swift 6** language mode for every target, the tests and the packages.
@@ -567,8 +574,8 @@ direct assignment.
   a script that launches one waits for ever on an unattended Mac. How to skip
   it, and keep the player's saves out of an experiment, is in
   [docs/wrapp-launch.md](docs/wrapp-launch.md#the-save-warning-when-scripting-a-launch).
-- **A worktree shares `.local`, `.env` and `.claude`'s agents and skills
-  with the main checkout through links**, and starts its caches as APFS
+- **A worktree shares `.local` and `.env` with the main checkout through
+  links**, and starts its caches as APFS
   clones of the main checkout's, once `sc setup` has installed the
   post-checkout hook that prepares every new one (Claude Code's too). Make
   them with `sc worktree add`, and remove them with `sc worktree remove`,

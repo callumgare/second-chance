@@ -8,7 +8,10 @@ xcuserdata/
 /DerivedData
 /build
 
-.claude
+# Claude Code's own files stay out; the porting skill and its agents are the repo's.
+.claude/*
+!.claude/skills/
+!.claude/agents/
 
 /installers
 /built-apps

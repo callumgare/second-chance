@@ -1,0 +1,78 @@
+#!/bin/bash
+# Start, inspect or stop a command in a remote Mac's GUI session, for engine
+# experiments (ScummVM, an emulator, a wrapp) that need WindowServer.
+#
+#   gui-run <host> start <name> '<shell command>'   start it as a one-off LaunchAgent; output to /tmp/gui-run-<name>.log
+#   gui-run <host> log <name>                        print its log so far
+#   gui-run <host> stop <name>                       stop it (launchctl bootout: SIGTERM, then SIGKILL)
+#   gui-run <host> status <name>                     running or not
+#
+# Over SSH a program has no WindowServer (launchd's Background session); a
+# LaunchAgent bootstrapped into gui/<uid> does, like sc's in-gui-session.
+# The command runs under bash -lc in the remote home; give paths there.
+# Look at what it shows with ./sc session screenshot [<user>] --on <host>.
+set -euo pipefail
+host=${1:?usage: gui-run <host> start|log|stop|status <name> [command]}
+action=${2:?}
+name=${3:?}
+label=gui-run-$name
+case "$action" in
+start)
+  cmd=${4:?a command to run}
+  ssh "$host" "bash -s" <<REMOTE
+set -eu
+uid=\$(id -u)
+launchctl bootout gui/\$uid/$label 2>/dev/null || true
+cat > /tmp/$label.sh <<'CMD'
+$cmd
+CMD
+cat > /tmp/$label.plist <<P
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>$label</string>
+<key>ProgramArguments</key><array><string>/bin/bash</string><string>-lc</string><string>cd ~ &amp;&amp; exec bash /tmp/$label.sh</string></array>
+<key>StandardOutPath</key><string>/tmp/$label.log</string>
+<key>StandardErrorPath</key><string>/tmp/$label.log</string>
+<key>RunAtLoad</key><true/>
+</dict></plist>
+P
+: > /tmp/$label.log
+launchctl bootstrap gui/\$uid /tmp/$label.plist
+echo "started $label; log at /tmp/$label.log"
+REMOTE
+  ;;
+log) ssh "$host" "cat /tmp/$label.log" ;;
+status) ssh "$host" "launchctl print gui/\$(id -u)/$label 2>/dev/null | grep -E '^\s*(state|pid|last exit code)' || echo 'not loaded'" ;;
+stop)
+  # bootout alone ends the job's shell but can leave what it started (an
+  # engine reparented to launchd, still holding the screen): find the
+  # job's whole process tree first, end it by pid, and check none is left.
+  ssh "$host" "bash -s" <<REMOTE
+uid=\$(id -u)
+root=\$(launchctl print gui/\$uid/$label 2>/dev/null | awk '\$1=="pid" && \$2=="=" {print \$3}')
+pids=""
+if [ -n "\$root" ]; then
+  pids=\$root; frontier=\$root
+  while [ -n "\$frontier" ]; do
+    next=""
+    for p in \$frontier; do next="\$next \$(ps -axo pid=,ppid= | awk -v p=\$p '\$2==p {print \$1}')"; done
+    frontier=\$(echo \$next); pids="\$pids \$frontier"
+  done
+fi
+# A process left from an earlier run of this job, already reparented
+pids="\$pids \$(cat /tmp/$label.pids 2>/dev/null)"
+launchctl bootout gui/\$uid/$label 2>/dev/null
+for p in \$pids; do kill \$p 2>/dev/null; done
+sleep 2
+for p in \$pids; do ps -p \$p >/dev/null 2>&1 && kill -9 \$p 2>/dev/null; done
+sleep 1
+left=""
+for p in \$pids; do ps -p \$p >/dev/null 2>&1 && left="\$left \$p"; done
+rm -f /tmp/$label.pids
+if [ -n "\$left" ]; then echo "still running:\$left"; exit 1; fi
+echo "stopped (pids:\$pids)"
+REMOTE
+  ;;
+*) echo "unknown action $action" >&2; exit 2 ;;
+esac

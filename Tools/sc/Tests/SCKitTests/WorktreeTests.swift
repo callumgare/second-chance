@@ -47,11 +47,9 @@ struct WorktreeTests {
         let main = dirs.main.path
         try dirs.write("notes", to: ".local/AGENTS.md", in: dirs.main)
         try dirs.write("KEY=1", to: ".env", in: dirs.main)
-        try dirs.write("agent", to: ".claude/agents/a.md", in: dirs.main)
-        // Left empty by a tool: replaced. Not empty: the worktree's own.
+        // Left empty by a tool: replaced. There already: the worktree's own.
         try FileManager.default.createDirectory(at: dirs.worktree.appendingPathComponent(".local"), withIntermediateDirectories: true)
-        try dirs.write("its own", to: ".claude/skills/s.md", in: dirs.worktree)
-        try dirs.write("skill", to: ".claude/skills/s.md", in: dirs.main)
+        try dirs.write("ITS=own", to: ".env", in: dirs.worktree)
 
         try dirs.write(#"{"path": "\#(main)/DerivedData/SourcePackages/artifacts/x"}"#, to: "DerivedData/SourcePackages/workspace-state.json", in: dirs.main)
         try dirs.write("url = \(main)/DerivedData/SourcePackages/repositories/Yams", to: "DerivedData/SourcePackages/checkouts/Yams/.git/config", in: dirs.main)
@@ -63,10 +61,10 @@ struct WorktreeTests {
         try dirs.write("index", to: "Packages/Kit/.build/index-build/x", in: dirs.main)
 
         let report = Worktrees.prepare(dirs.worktree, main: dirs.main, packages: ["Packages/Kit", "Packages/Other"])
-        #expect(Set(report.linked) == [".local", ".env", ".claude/agents"])
+        #expect(Set(report.linked) == [".local"])
         #expect(report.notes.count == 1)
         #expect(try dirs.read(".local/AGENTS.md", in: dirs.worktree) == "notes")
-        #expect(try dirs.read(".claude/skills/s.md", in: dirs.worktree) == "its own")
+        #expect(try dirs.read(".env", in: dirs.worktree) == "ITS=own")
 
         let worktree = dirs.worktree.path
         #expect(try dirs.read("DerivedData/SourcePackages/workspace-state.json", in: dirs.worktree)

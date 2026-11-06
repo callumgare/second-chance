@@ -380,8 +380,9 @@ new worktree with a null old HEAD, and it runs the main checkout's
 instead. `prepare` does only what a worktree lacks, so it's safe to run again,
 on a worktree made before the hook or after a clean.
 
-- **Ignored files it needs are links to the main checkout's**: `.local`,
-  `.env`, `.claude/agents` and `.claude/skills` (`Worktrees.linked`). One copy,
+- **Ignored files it needs are links to the main checkout's**: `.local` and
+  `.env` (`Worktrees.linked`). (`.claude`'s porting skill and agents are in
+  the repo, so a worktree has them from git.) One copy,
   so nothing drifts, and a note written in a worktree is in every other. An
   empty folder left where one goes is replaced; one with files is left as the
   worktree's own.

@@ -1,0 +1,231 @@
+{
+  "_about": [
+    "What refs.py draft maps a CrossOver CrossTie or a Porting Kit .wsi3 recipe to, in Second Chance's Wrappfile syntax (docs/wrappfile.md).",
+    "An entry is a mapping: 'verbs' (winetricks verbs, each a WINE.WINETRICKS line), 'lines' (Wrappfile lines as written), 'launch' (LAUNCH options), 'uses' (modules the lines need), 'note' (said beside the line, or why there's nothing).",
+    "'noop': true says there's nothing to do, and that's fine (Wine's default, or the prefix has it already): draft says so in its header. An entry with none of verbs, lines or launch, and not noop, is a thing it can't map: draft lists it with its note. 'expand': true says to map the component's own dependencies instead.",
+    "Every verb must be one our winetricks has (Packages/Modules/wine/Sources/WineExecutor/Resources/winetricks); refs.py draft --check-map says which aren't.",
+    "Add to this as recipes show things it doesn't know."
+  ],
+
+  "windows-versions": {
+    "_about": "CrossOver's bottletemplate, or a Porting Kit 'compatibility' / winetricks version verb, to our winetricks verb. _64 is the bottle's architecture: ours is always a 64-bit (WoW64) prefix.",
+    "win98": { "verbs": ["win98"], "note": "winetricks says win98 doesn't work in a 64-bit prefix, which ours is; try winxp, or an AppDefaults Version for the one program" },
+    "win95": { "verbs": ["win95"], "note": "winetricks says win95 doesn't work in a 64-bit prefix, which ours is" },
+    "winme": { "verbs": ["winme"], "note": "winetricks says winme doesn't work in a 64-bit prefix, which ours is" },
+    "win2000": { "verbs": ["win2k"] },
+    "win2k": { "verbs": ["win2k"] },
+    "winxp": { "verbs": ["winxp"] },
+    "winxp_64": { "verbs": ["winxp"] },
+    "winvista": { "verbs": ["vista"] },
+    "winvista_64": { "verbs": ["vista"] },
+    "vista": { "verbs": ["vista"] },
+    "win7": { "verbs": ["win7"] },
+    "win7_64": { "verbs": ["win7"] },
+    "win8": { "verbs": ["win8"] },
+    "win8_64": { "verbs": ["win8"] },
+    "win81": { "verbs": ["win81"] },
+    "win10": { "noop": true, "note": "Wine 10's own default: nothing to set" },
+    "win10_64": { "noop": true, "note": "Wine 10's own default: nothing to set" },
+    "win11": { "verbs": ["win11"] },
+    "win11_64": { "verbs": ["win11"] }
+  },
+
+  "crossover-components": {
+    "_about": "A CrossTie dependency (predependency, postdependency), by its app id's number. 'name' is CrossOver's, for reading this file; draft prints the index's.",
+    "15":    { "name": "Internet Explorer 6", "verbs": ["ie6"], "note": "heavy: try without it first" },
+    "597":   { "name": "Microsoft .NET Framework 1.1", "verbs": ["dotnet11"] },
+    "1491":  { "name": "Internet Explorer 7", "verbs": ["ie7"], "note": "heavy: try without it first" },
+    "1543":  { "name": "Microsoft Data Access Components (MDAC) 2.8 Service Pack 1", "verbs": ["mdac28"] },
+    "1578":  { "name": "Microsoft .NET Framework 2.0", "verbs": ["dotnet20"] },
+    "1650":  { "name": "QuickTime 7", "verbs": ["quicktime76"] },
+    "3883":  { "name": "Java 6", "note": "no winetricks verb: a Java runtime would be installed as a program" },
+    "4099":  { "name": "DirectX for Pre-Windows XP Games", "note": "the Feb 2010 DirectX redistributable: Wine's own DirectX usually does; try d3dx9 or directmusic only if the program asks for them" },
+    "4225":  { "name": "Internet Explorer 8", "verbs": ["ie8"], "note": "heavy: try without it first" },
+    "4662":  { "name": "Microsoft .NET Framework 3.5", "verbs": ["dotnet35"] },
+    "5211":  { "name": "Microsoft XML Parser (MSXML) 4.0 SP3", "verbs": ["msxml4"] },
+    "5369":  { "name": "Microsoft Visual C++ 2008 (9.0) Redistributable", "verbs": ["vcrun2008"] },
+    "5917":  { "name": "Microsoft .NET Framework 4.0", "verbs": ["dotnet40"] },
+    "6268":  { "name": "Big Fish Games Manager", "note": "a Big Fish game: the big-fish module's manager stage and BIG-FISH.INSTALL (docs/big-fish.md)" },
+    "6458":  { "name": "Flash Player 10", "note": "no winetricks verb, and Flash is gone" },
+    "6849":  { "name": "Microsoft XML Parser (MSXML) 3.0", "verbs": ["msxml3"] },
+    "6850":  { "name": "Microsoft Visual C++ 2005 (8.0) Redistributable", "verbs": ["vcrun2005"] },
+    "6851":  { "name": "Microsoft Visual C++ 6.0 (4.2 & 6.0) Redistributable", "verbs": ["vcrun6"] },
+    "6894":  { "name": "Microsoft Visual Basic 6 Runtime Service Pack 6", "verbs": ["vb6run"] },
+    "6923":  { "name": "Microsoft Jet 4.0 Service Pack 8", "verbs": ["jet40"] },
+    "6936":  { "name": "Windows OLE (COM) Components", "verbs": ["ole32"], "note": "native ole32: try without it first" },
+    "6945":  { "name": "Microsoft .NET Framework 2.0 Service Pack 2", "verbs": ["dotnet20sp2"] },
+    "6946":  { "name": "Japanese Ume Font Package", "verbs": ["cjkfonts"] },
+    "6947":  { "name": "Chinese Arphic Font Package", "verbs": ["cjkfonts"] },
+    "6949":  { "name": "TrueType font: Arial", "verbs": ["arial"] },
+    "6950":  { "name": "TrueType font: Arial Black", "verbs": ["arial"] },
+    "6951":  { "name": "TrueType font: Comic Sans MS", "verbs": ["comicsans"] },
+    "6952":  { "name": "TrueType font: Courier New", "verbs": ["courier"] },
+    "6953":  { "name": "TrueType font: Georgia", "verbs": ["georgia"] },
+    "6954":  { "name": "TrueType font: Impact", "verbs": ["impact"] },
+    "6955":  { "name": "TrueType font: Times New Roman", "verbs": ["times"] },
+    "6956":  { "name": "TrueType font: Trebuchet MS", "verbs": ["trebuchet"] },
+    "6957":  { "name": "TrueType font: Verdana", "verbs": ["verdana"] },
+    "6958":  { "name": "TrueType font: Webdings", "verbs": ["webdings"] },
+    "6959":  { "name": "Core Fonts", "verbs": ["corefonts"] },
+    "6969":  { "name": "Droid Fonts", "verbs": ["droid"] },
+    "7536":  { "name": "NVIDIA PhysX", "verbs": ["physx"] },
+    "7558":  { "name": "DirectX End-User Runtime Web Installer", "verbs": ["d3dx9"], "note": "the web installer's D3DX 9 DLLs; add d3dx10, xact or xinput if the program asks" },
+    "7798":  { "name": "Japanese Font Override", "verbs": ["fakejapanese"] },
+    "7828":  { "name": "CrossOver HTML engine", "note": "Wine's own Gecko is its equivalent: nothing to add unless the program shows web pages" },
+    "7854":  { "name": "Microsoft HTML Rendering Engine 7", "verbs": ["ie7"], "note": "heavy: try without it first" },
+    "7856":  { "name": "Flash 10 ActiveX Control", "note": "no winetricks verb, and Flash is gone" },
+    "7857":  { "name": "msls31", "verbs": ["msls31"] },
+    "7886":  { "name": "Windows Script 5.7", "verbs": ["wsh57"] },
+    "7938":  { "name": "Adobe AIR", "note": "no winetricks verb: AIR would be installed as a program" },
+    "8036":  { "name": "Microsoft Visual C++ 2003 (7.1) Redistributable", "verbs": ["vcrun2003"] },
+    "8227":  { "name": "Windows GDI+ (x86)", "verbs": ["gdiplus"] },
+    "8402":  { "name": "OpenAL", "verbs": ["openal"] },
+    "8477":  { "name": "Big Fish Games Install Helper", "note": "a Big Fish game: BIG-FISH.INSTALL does what this helper did (docs/big-fish.md)" },
+    "8501":  { "name": "Microsoft Media Player Sound Engine 6", "note": "no winetricks verb for Media Player 6; wmp9 is the nearest" },
+    "8705":  { "name": "Microsoft Media Player Sound Engine 9", "verbs": ["wmp9"] },
+    "8743":  { "name": "Ligos Indeo Codecs", "verbs": ["icodecs"] },
+    "8779":  { "name": "Microsoft Visual C++ 2005 (8.0) SP1 Redistributable", "verbs": ["vcrun2005"] },
+    "8829":  { "name": "Windows Imaging Component", "verbs": ["windowscodecs"] },
+    "8882":  { "name": "Taskkill", "note": "CrossOver's own helper: nothing to add" },
+    "9029":  { "name": "TrueType font: Andale Mono", "verbs": ["andale"] },
+    "9087":  { "name": "Microsoft Visual C++ 4.0 (4.0) Redistributable", "verbs": ["mfc40"] },
+    "9155":  { "name": "Microsoft Visual Basic 6 Runtime Service Pack 4", "verbs": ["vb6run"] },
+    "9471":  { "name": "Microsoft .NET Framework 3.5 Service Pack 1", "verbs": ["dotnet35sp1"] },
+    "9489":  { "name": "XNA Framework 4.0", "verbs": ["xna40"] },
+    "9545":  { "name": "CrossOver Explorer", "note": "CrossOver's own: nothing to add" },
+    "9611":  { "name": "Microsoft Visual Basic 6.0 Common Controls", "verbs": ["comctl32ocx"] },
+    "9679":  { "name": "Java 7", "note": "no winetricks verb: a Java runtime would be installed as a program" },
+    "10032": { "name": "Akamai NetSession Interface", "note": "a download helper: nothing to add" },
+    "10596": { "name": "Wine Mono", "note": "Wine's own .NET: nothing to add" },
+    "10744": { "name": "Flash Player for Internet Explorer (ActiveX)", "note": "no winetricks verb, and Flash is gone" },
+    "10937": { "name": "Mac Driver", "note": "Second Chance's Wine uses the Mac driver already" },
+    "11368": { "name": "Microsoft Visual C++ 2012 (11.0) Redistributable Runtime", "verbs": ["vcrun2012"] },
+    "11462": { "name": "Microsoft Rich Edit 2.0", "verbs": ["riched20"] },
+    "11714": { "name": "Direct Music", "verbs": ["directmusic"] },
+    "11839": { "name": "Mac X11 Driver", "note": "Second Chance's Wine uses only the Mac driver" },
+    "12102": { "name": "Microsoft Rich Edit 4.1 (Msftedit.dll)", "verbs": ["msftedit"] },
+    "12317": { "name": "Microsoft File Patch Application API", "verbs": ["mspatcha"] },
+    "12615": { "name": "Xact Engine 2010", "verbs": ["xact"] },
+    "12616": { "name": "Microsoft Visual C++ 2013 (12.0) Redistributable Runtime", "verbs": ["vcrun2013"] },
+    "13115": { "name": "Java 8", "note": "no winetricks verb: a Java runtime would be installed as a program" },
+    "13529": { "name": "Microsoft Visual C++ 2010 (10.0) Redistributable (64-bit)", "verbs": ["vcrun2010"] },
+    "14037": { "name": "DirectX for Modern Games", "verbs": ["d3dx9"], "note": "the June 2010 redistributable; d3dx9 is its D3DX 9 DLLs: add d3dx10, d3dcompiler_43, xact or xinput if the program asks" },
+    "14307": { "name": "Microsoft Visual C++ 2005 (8.0) Redistributable (64-bit)", "verbs": ["vcrun2005"] },
+    "14308": { "name": "Microsoft Visual C++ 2005 (8.0) SP1 Redistributable (64-bit)", "verbs": ["vcrun2005"] },
+    "14310": { "name": "Microsoft Visual C++ 2008 (9.0) Redistributable (64-bit)", "verbs": ["vcrun2008"] },
+    "14327": { "name": "Microsoft Visual C++ 2015 (14.0) Redistributable Runtime", "verbs": ["vcrun2015"] },
+    "14340": { "name": "Microsoft Visual C++ 2012 (11.0) Redistributable Runtime (64-bit)", "verbs": ["vcrun2012"] },
+    "14341": { "name": "Microsoft Visual C++ 2013 (12.0) Redistributable Runtime (64-bit)", "verbs": ["vcrun2013"] },
+    "14425": { "name": "Microsoft Visual C++ 2015 (14.0) Redistributable Runtime (64-bit)", "verbs": ["vcrun2015"] },
+    "14510": { "name": "Microsoft .NET Framework 4.6.1", "verbs": ["dotnet461"] },
+    "14605": { "name": "Adobe Source Han Sans Simplified Chinese Font Package", "verbs": ["sourcehansans"] },
+    "14606": { "name": "Adobe Source Han Sans Japanese Font Package", "verbs": ["sourcehansans"] },
+    "14608": { "name": "Adobe Source Han Sans Traditional Chinese Font Package", "verbs": ["sourcehansans"] },
+    "14609": { "name": "Adobe Source Han Sans Korean Font Package", "verbs": ["sourcehansans"] },
+    "14628": { "name": "Asian Fonts Component", "verbs": ["sourcehansans"] },
+    "14717": { "name": "Carlito Font", "note": "no winetricks verb (calibri is the font it stands in for)" },
+    "14748": { "name": "Asana-Math Font", "note": "no winetricks verb" },
+    "14864": { "name": "Microsoft HTML Rendering Engine 8", "verbs": ["ie8"], "note": "heavy: try without it first" },
+    "14904": { "name": "Microsoft .NET Framework 4.5.2", "verbs": ["dotnet452"] },
+    "15248": { "name": "Microsoft XML Parser (MSXML) 6.0 SP2", "verbs": ["msxml6"] },
+    "15520": { "name": "Microsoft .NET Framework 4.6.2", "verbs": ["dotnet462"] },
+    "15862": { "name": "Microsoft Yahei font", "note": "no winetricks verb; cjkfonts has others" },
+    "16158": { "name": "Microsoft .NET Framework 4.7.2", "verbs": ["dotnet472"] },
+    "16255": { "name": "Microsoft .NET Framework 4.8", "verbs": ["dotnet48"] },
+    "16284": { "name": "Setting bottle's language to Simplified Chinese", "note": "a locale, not a component: LAUNCH --env LANG=zh_CN.UTF-8 may do" },
+    "16523": { "name": "Microsoft Visual C++ Redistributable (latest) (32-bit)", "verbs": ["vcrun2022"] },
+    "16524": { "name": "Microsoft Visual C++ Redistributable (latest) (64-bit)", "verbs": ["vcrun2022"] },
+    "16542": { "name": "64-bit Dependencies", "expand": true },
+    "17117": { "name": "DXVK (Builtin)", "note": "DXVK needs Vulkan; Second Chance's Wine draws Direct3D with OpenGL (wined3d): leave it out" },
+    "17389": { "name": "Microsoft Visual C++ 2017 Redistributable Runtime", "verbs": ["vcrun2017"] },
+    "17390": { "name": "Microsoft Visual C++ 2017 Redistributable Runtime (64bit)", "verbs": ["vcrun2017"] },
+    "17759": { "name": "Microsoft Visual C++ 2019 Redistributable Runtime (64bit)", "verbs": ["vcrun2019"] },
+    "19364": { "name": "d3dcompiler_47 (64-bit)", "verbs": ["d3dcompiler_47"] },
+    "19373": { "name": "Microsoft Edge WebView2", "note": "no winetricks verb" },
+    "206":   { "name": "Steam", "note": "a Steam game: FROM --module=steam@1 client, then DO steam.install (docs/steam.md)" },
+    "21822": { "name": "Game Launcher Dependencies", "expand": true }
+  },
+
+  "registry-keys": {
+    "_about": "A registry key in full to the short name the wine module knows (WineExecutor.registryKey). Any other is written in full: never short, as an unknown short name means the X11 Driver key.",
+    "HKEY_CURRENT_USER\\Software\\Wine\\Direct3D": "direct3d",
+    "HKEY_CURRENT_USER\\Software\\Wine\\Mac Driver": "mac-driver",
+    "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver": "x11-driver"
+  },
+
+  "registry-unmapped": {
+    "_about": "Keys whose values don't carry over, with why. Matched as a prefix of the key, case-insensitively.",
+    "HKEY_CURRENT_USER\\Software\\Wine\\Explorer": "a virtual desktop: a wrapp starts Wine's desktop itself (docs/wrapp-launch.md#wines-desktop)",
+    "HKEY_CURRENT_USER\\Software\\Wine\\TaskManager": "Wine's task manager's window: nothing to do with the program",
+    "HKEY_CURRENT_USER\\Control Panel\\Colors": "Windows' colours: cosmetic",
+    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\ThemeManager": "Windows' theme: cosmetic"
+  },
+
+  "registry-values": {
+    "_about": "A value of one key that means something of ours instead. Key, then the value's name (lower case), then the data (lower case, or * for any).",
+    "HKEY_CURRENT_USER\\Software\\Wine\\X11 Driver": {
+      "emulatemodeset": { "*": { "noop": true, "note": "the wine module's prefix-settings already sets EmulateModeset Y" } }
+    }
+  },
+
+  "pk-winetricks": {
+    "_about": "A Porting Kit installWinetrick verb that means something other than itself to us. Any other verb our winetricks knows becomes a WINE.WINETRICKS line as it is.",
+    "cnc_ddraw": { "lines": ["DO wine.cnc-ddraw"], "launch": ["--wine.cursor-lock", "--wine.graphics=direct-draw"], "note": "the wine module's cnc-ddraw function: winetricks' cnc_ddraw with our ddraw.ini, and the cursor lock it needs" },
+    "isolate_home": { "noop": true, "note": "the wine module's prefix-settings already runs it" },
+    "steam": { "note": "a Steam game: FROM --module=steam@1 client, then DO steam.install (docs/steam.md)" },
+    "dxvk": { "note": "DXVK needs Vulkan; Second Chance's Wine draws Direct3D with OpenGL (wined3d): leave it out" },
+    "d9vk": { "note": "needs Vulkan; Second Chance's Wine draws Direct3D with OpenGL (wined3d): leave it out" },
+    "ddr=gdi": { "verbs": ["renderer=gdi"], "note": "winetricks' old name for renderer=gdi" },
+    "ddr=opengl": { "verbs": ["renderer=gl"], "note": "winetricks' old name for renderer=gl, Wine's default" },
+    "macdriver=mac": { "noop": true, "note": "Second Chance's Wine uses the Mac driver already" },
+    "macdriver=x11": { "note": "Second Chance's Wine uses only the Mac driver" },
+    "graphics=x11": { "note": "Second Chance's Wine uses only the Mac driver" },
+    "graphics=mac": { "noop": true, "note": "Second Chance's Wine uses the Mac driver already" }
+  },
+
+  "pk-dependencies": {
+    "_about": "A Porting Kit installDependency, by its id.",
+    "steam": { "note": "a Steam game: FROM --module=steam@1 client, then DO steam.install (docs/steam.md)" },
+    "bigfish": { "note": "a Big Fish game: the big-fish module's manager stage and BIG-FISH.INSTALL (docs/big-fish.md)" }
+  },
+
+  "pk-properties": {
+    "_about": "A Porting Kit setProperties key, then its value as JSON text ('true', 'false').",
+    "csmt": {
+      "true": { "noop": true, "note": "Wine's default: nothing to set" },
+      "false": { "verbs": ["csmt=off"] }
+    },
+    "msync": {
+      "true": { "noop": true, "note": "Second Chance's Wine uses msync already" },
+      "false": { "note": "SECOND_CHANCE_WINE_SYNC=esync or none turns msync off for a test; no Wrappfile setting" }
+    },
+    "esync": {
+      "true": { "noop": true, "note": "Second Chance's Wine uses msync, which replaces esync" },
+      "false": { "noop": true, "note": "nothing to set" }
+    },
+    "mapOptionAsAlt": {
+      "true": { "lines": ["WINE.REGISTRY --set mac-driver:LeftOptionIsAlt Y", "WINE.REGISTRY --set mac-driver:RightOptionIsAlt Y"] },
+      "false": { "noop": true, "note": "Wine's default: nothing to set" }
+    },
+    "mapCommandAsCtrl": {
+      "true": { "lines": ["WINE.REGISTRY --set mac-driver:LeftCommandIsCtrl Y", "WINE.REGISTRY --set mac-driver:RightCommandIsCtrl Y"] },
+      "false": { "noop": true, "note": "Wine's default: nothing to set" }
+    },
+    "singleCpuMode": {
+      "true": { "note": "no Wrappfile setting runs a program on one CPU" },
+      "false": { "noop": true, "note": "nothing to set" }
+    },
+    "maxFiles10240": {
+      "true": { "note": "no Wrappfile setting raises the open-files limit" },
+      "false": { "noop": true, "note": "nothing to set" }
+    }
+  },
+
+  "pk-renderers": {
+    "_about": "A Porting Kit setRenderer.",
+    "gl": { "noop": true, "note": "Wine's default: nothing to set" },
+    "gdi": { "verbs": ["renderer=gdi"] },
+    "no3d": { "verbs": ["renderer=no3d"] },
+    "vulkan": { "note": "Vulkan needs MoltenVK, which Second Chance's Wine doesn't use: leave it at Wine's OpenGL" }
+  }
+}

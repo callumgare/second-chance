@@ -11,9 +11,9 @@ enum Worktrees {
 
     /// Ignored files a worktree reads from the main checkout's, as links:
     /// one copy, so a note written in a worktree is there in every other,
-    /// and none goes stale. `.env` is this Mac's settings; `.claude`'s are
-    /// agents and skills kept out of the repo.
-    static let linked = [".local", ".env", ".claude/agents", ".claude/skills"]
+    /// and none goes stale. `.env` is this Mac's settings. (`.claude`'s
+    /// agents and skills are in the repo, so a worktree has its own.)
+    static let linked = [".local", ".env"]
 
     /// Parts of `DerivedData` cloned from the main checkout's. Neither
     /// depends on where the checkout is: the packages Xcode resolved (their
