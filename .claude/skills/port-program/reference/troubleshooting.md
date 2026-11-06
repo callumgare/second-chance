@@ -49,9 +49,26 @@ says where). Wine's `err:` lines usually name the cause. For more,
 
 ## ScummVM
 
+**Look inside with ScummVM's debugger first**, for any ScummVM game and any
+engine: an error, a hang, a scene that never comes, a puzzle that won't
+take a click. Run the wrapp under `sc puppet start <name> --wrapp <app>`.
+An engine error opens the console by itself, and Ctrl+Alt+D opens it at
+any time (after `sc puppet do <name> focus`). Type commands with `sc puppet
+do <name> type "<command>" --then "key return"`, and read what they print
+with `sc puppet log <name> --grep '  ScummVM  '`, which has all of it,
+however many screens long (`docs/dev-cli.md#scummvms-debugger`). `help`
+lists the engine's own commands (each engine has its own: Director's
+`bt`, `v`, `disasm`, `xl` and breakpoints; others show rooms, scripts,
+inventory or flags), and every engine has `debugflag_list`,
+`debugflag_enable <channel>` and `debuglevel <n>` (a channel prints
+nothing until the level is high enough: 5 is a lot), which turn its debug
+channels on into the same log from that moment, so what happens next is
+traced.
+
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | `--detect` finds nothing | Wrong folder, Mac files without resource forks, or an unknown release | `--recursive`; for Mac data use MacBinary or `dumper-companion`; ScummVM's "unknown variant" message gives md5s to compare with its detection table |
+| A Director game's Lingo error ("Builtin 'count' did not return value!", "… should be of type ARRAY …, not VOID") | A builtin was given VOID: usually what an Xtra or file call returned for something ScummVM doesn't do | At the error, in ScummVM's debugger (above): `bt` for the handler, `v` for the VOID, `disasm <script>:<handler>` for the call that gave it; then that Xtra's or builtin's source in ScummVM (`engines/director/lingo/xtras/`, `lingo-builtins.cpp`). Ingenious: FileXtra's `DirectoryToList` gives VOID for a folder that isn't there |
 | "Unable to locate the '….dat' engine data file" | The Wrappfile's `SCUMMVM.KEEP-DATA` took that file out | Name it in `SCUMMVM.KEEP-DATA` too |
 | A warning that the game is unstable/unsupported | ScummVM's support level for it (every Director game is `ADGF_UNSTABLE`) | Keep it: the player should know a game isn't fully supported, and save often. Test how far it plays; say in the manifest's `notes` what works. The integration test must click past it (a needle for the dialog's button in the bundle's `tests/needles/`) |
 | Detected, starts, then exits 1 after seconds: `ERROR: Builtin '…' did not return value!` (Lingo) | The director engine can't yet run something the game's scripts do (Ingenious under 2026.3.0, 2026-11) | `--detect` isn't "it runs": always launch to the title. Try a newer ScummVM (its releases, or a daily build) by hand, under the ground rule on engines from their makers, and, if fixed, propose the scummvm module's update. Otherwise the next route (Wine) |
@@ -71,6 +88,10 @@ says where). Wine's `err:` lines usually name the cause. For more,
 | No sound | Sound card settings in the game's own setup | Run its `SETUP.EXE`/`INSTALL.EXE` in DOSBox once and keep the config file it writes |
 
 ## Director games under ScummVM: getting at a failing scene
+
+At a running game's error, ScummVM's debugger (above) is quicker than a
+trace: `bt`, `v` and `disasm` at the moment it fails. What follows is for
+getting to that moment without playing there.
 
 - **Skip the menus:** `--start-movie=<movie>` (e.g. `Game/01_entry.dcr`) with a windowless
   run goes straight to the movie under test, no clicks needed.

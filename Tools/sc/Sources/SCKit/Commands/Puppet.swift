@@ -238,6 +238,11 @@ struct PuppetServeCommand: AsyncParsableCommand {
         } else {
             process.executableURL = URL(fileURLWithPath: puppet.app).appendingPathComponent("Contents/MacOS/WrappTemplate")
             environment["SECOND_CHANCE_APP_SUPPORT_DIR"] = puppet.appSupport.path
+            // Its log, the game's output in it, into wrapp.log for `log`: the
+            // wrapp copies it to stderr only when that's a terminal, and here
+            // it's a file. ScummVM's debugger console prints there too, so a
+            // `bt` or `v` too long to scroll through is read with `log`.
+            environment["SECOND_CHANCE_LOG_STDERR"] = "1"
         }
         process.environment = environment
         let output = try FileHandle(forWritingTo: puppet.wrappLog)

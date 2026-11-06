@@ -46,7 +46,7 @@ an emulator almost always: no ROM, no OS to install.
 | --- | --- | --- | --- |
 | wine | Sikarugir's Wine 10 build (x86_64) | `wine@10` | 32-bit programs through WoW64 under Rosetta; cnc-ddraw; `EmulateModeset` on. Direct3D through wined3d over OpenGL 4.1 (DX ≤ 9 is fine; 10/11 limited) |
 | dosbox | DOSBox | see module | `LAUNCH C:/…` on DOSBox's C:, `--dosbox.overlay` volumes |
-| scummvm | ScummVM 2026.4.0 (2026.3.0 kept for pinning) | see module | Installed with every data file ScummVM has; once the game runs, keep only what it needs with `SCUMMVM.KEEP-DATA <file>…` (`nancy.dat`; a Mac or Director game may need `classicmacfonts.dat`, `macgui.dat`) |
+| scummvm | ScummVM 2026.4.0 (2026.3.0 kept for pinning) | see module | Installed with every data file ScummVM has; once the game runs, keep only what it needs with `SCUMMVM.KEEP-DATA <file>…` (`nancy.dat`; a Mac or Director game may need `classicmacfonts.dat`, `macgui.dat`). To see inside a game, its debugger console, driven through `sc puppet` (`reference/troubleshooting.md#scummvm`) |
 
 Run the module's engines by hand for experiments:
 `~/Library/Caches/SecondChance/engines/<prepared hash>/MacOS/scummvm`

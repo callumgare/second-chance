@@ -1123,6 +1123,42 @@ Wine programs need the GUI session, which an SSH shell isn't in, so the
 session's server runs AutoIt for these commands: they hand it the script
 through files in the session's folder.
 
+### ScummVM's debugger
+
+ScummVM has a debugger console of its own, for every engine it runs: an
+engine error opens it by itself, and Ctrl+Alt+D opens it at any time
+(after `do <name> focus`: a key reaches only the key window). A session drives it like any
+other window, and reads it from the log rather than the screen: the
+console's output goes to ScummVM's stdout as well, which the wrapp logs, and
+the puppet server has the wrapp copy its log into the session's `wrapp.log`
+(`SECOND_CHANCE_LOG_STDERR=1`), so `log` has it, `bt`, `v` and `disasm`
+however many screens long:
+
+```bash
+sc puppet do ing focus --then "type bt" --then "key return" --then "type v" --then "key return"
+sc puppet log ing --lines 400 --grep '  ScummVM  '   # the game's own lines, not the helper's
+```
+
+- `help` lists the engine's commands: each engine has its own, besides
+  ScummVM's (`debugflag_list`, `debugflag_enable <channel>` and
+  `debuglevel <n>`, which turn an engine's debug channels on into the same
+  log, so what happens next is traced; a channel prints nothing until the
+  level is high enough). Director's: `bt` is the call stack, `sf` the frame it stopped
+  in, `v` its local and global variables, `disasm <script>:<handler>` the
+  handler's bytecode (`disasm 18:PersistenceMgr_loadAllAgentData`), `xl` the
+  XObjects and Xtras loaded, and breakpoints (`bpset`, `bpvar`).
+- **`p` loses double quotes**: the console splits its line into words and
+  strips the quotes from them, so Lingo with a string in it (`set the
+  traceLogFile to "x.txt"`) goes through `repl`, which hands Lingo the line
+  as it is (`lingo off` to leave it). A `--then "type …"` loses quotes the
+  same way: type such a line with a `do … type '…'` of its own.
+- The console's text can also be selected (a `drag`) and copied (`key
+  cmd+c`), and read with `pbpaste` in that login, but only what's on
+  screen; the log needs no scrolling.
+
+`log` lists `wrapp.log`, then the helper's log: `--grep '  ScummVM  '`
+keeps the game's lines.
+
 ### Named screens, needles and locators
 
 A session names what's on the screen with the same
