@@ -438,9 +438,13 @@ in-process helpers load into it, and the system disk as `SharedSupport/basilisk/
   (`cdrom-<n>.iso`): a disc input built from an image gives it as `disc-1.image`.
 - **Its path type**, `basilisk:`, is a path on the emulated Mac in Mac OS's own form
   (`basilisk:Ingenious CD:Ingenious`); it has no place in the app (`BasiliskPaths`).
-- **In the wrapp** (`BasiliskRuntime`): the startup disk is copied to the program's
-  folder of the person's files on its first launch, so what the Mac writes stays the
-  person's, and Basilisk II starts with prefs written then: the ROM, that disk, the
+- **In the wrapp** (`BasiliskRuntime`): the startup disk is the person's, a store
+  the launch mounts at `basilisk:disk/` (`STORE basilisk-disk`), copied from the app's
+  on the first launch, so what the Mac writes there (a program's Preferences, its
+  saves) stays theirs. A launch that ended without the Mac shutting down leaves the
+  disk marked as not shut down cleanly, and the next boot would stop to say so: the
+  runtime marks it clean first (the HFS Master Directory Block's `drAtrb` bit 8).
+  Basilisk II starts with prefs written then: the ROM, that disk, the
   CDs, `--basilisk.screen` (640x480x8 unless said), no JIT (it crashes under
   Rosetta), and `delay 500`, without which QuickTime's movies stop on their first
   frame.

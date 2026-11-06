@@ -26,4 +26,11 @@ struct WrappSettingsTests {
         #expect(settings.launch.program == "wine:C:/Game/Game.exe")
         #expect(settings.composition == Composition(launcher: .wine))
     }
+
+    @Test("A classic Mac's startup disk store is where its program saves")
+    func basiliskDiskIsTheSaves() {
+        let launch = RecordedLaunch(program: "basilisk:Ingenious CD:Ingenious",
+                                    mounts: [.init(store: "app:basilisk-disk", target: "basilisk:disk/")])
+        #expect(launch.savesVolume == "basilisk-disk")
+    }
 }

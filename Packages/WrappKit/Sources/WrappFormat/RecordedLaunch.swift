@@ -191,7 +191,7 @@ nonisolated public struct RecordedLaunch: Codable, Sendable, Equatable {
     public var savesVolume: String? {
         mounts.first { mount in
             mount.target.hasPrefix("wine:C:/users/") || mount.target == "scummvm:saves/"
-                || mount.options["dosbox.overlay"] != nil
+                || mount.options["dosbox.overlay"] != nil || mount.target == "basilisk:disk/"
         }?.name
     }
 

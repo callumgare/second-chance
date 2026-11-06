@@ -148,7 +148,32 @@ final class BasiliskRuntime: GameStarting {
             try files.copyItem(at: Self.folder(config).appendingPathComponent("boot.hfv"), to: disk)
             logger.notice("[Basilisk] The Mac's startup disk is now the person's: \(disk.path)")
         }
+        Self.markCleanlyUnmounted(disk, logger: logger)
         try Self.prefs(config).write(to: Self.prefsFile(config), atomically: true, encoding: .utf8)
+    }
+
+    /// The startup disk marked as shut down cleanly, as Mac OS marks it at
+    /// Shut Down: after a launch that ended otherwise (the app quit while the
+    /// Mac ran), the next boot would say the Mac "may not have been shut
+    /// down properly" and hold up its startup items until someone clicks OK.
+    /// The bit is the HFS Master Directory Block's `drAtrb` bit 8, at byte
+    /// 1034 of a bare HFS volume (`BD` at 1024); anything else is left alone.
+    nonisolated static func markCleanlyUnmounted(_ disk: URL, logger: Logger) {
+        guard let handle = try? FileHandle(forUpdating: disk) else { return }
+        defer { try? handle.close() }
+        do {
+            try handle.seek(toOffset: 1024)
+            guard let header = try handle.read(upToCount: 12), header.count == 12,
+                  header[0] == 0x42, header[1] == 0x44 else { return }
+            let attributes = UInt16(header[10]) << 8 | UInt16(header[11])
+            guard attributes & 0x0100 == 0 else { return }
+            let marked = attributes | 0x0100
+            try handle.seek(toOffset: 1034)
+            try handle.write(contentsOf: Data([UInt8(marked >> 8), UInt8(marked & 0xFF)]))
+            logger.notice("[Basilisk] The Mac's disk wasn't shut down cleanly last time: marked clean")
+        } catch {
+            logger.warning("[Basilisk] Couldn't check the Mac's disk was left clean: \(error)")
+        }
     }
 
     func startGame(_ launch: LaunchContext) async -> LaunchResult {
