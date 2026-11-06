@@ -5,6 +5,11 @@ import Foundation
 public enum Entry {
     public static func main() async -> Never {
         ToolPath.addHomebrew()
+        // The Debug apps are built with coverage on, and one started without
+        // this writes default.profraw where it runs: a copy's root, or a
+        // snapshot's (docs/dev-cli.md#snapshots). `xcodebuild test` sets its own.
+        setenv("LLVM_PROFILE_FILE", "/dev/null", 0)
+        RuntimeSnapshot.markStarted()
         let (remote, arguments) = Remote.extractTarget(from: Array(CommandLine.arguments.dropFirst()))
         Invocation.arguments = arguments
         Invocation.remote = remote

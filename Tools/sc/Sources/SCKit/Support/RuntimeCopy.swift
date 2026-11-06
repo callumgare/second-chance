@@ -31,12 +31,46 @@ enum RuntimeCopy {
         let binary = binaries.appendingPathComponent("sc")
         if fm.fileExists(atPath: binary.path) { try fm.removeItem(at: binary) }
         try fm.copyItem(at: URL(fileURLWithPath: executable), to: binary)
+        // Its time is the stamp's (`stamp(of:)`), so it must be the original's.
+        if let modified = try fm.attributesOfItem(atPath: executable)[.modificationDate] {
+            try fm.setAttributes([.modificationDate: modified], ofItemAtPath: binary.path)
+        }
         let script = staging.appendingPathComponent("sc")
         try launcher.write(to: script, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
         try "A runtime copy made by sc --on; see docs/dev-cli.md#runtime-copies.\n"
             .write(to: staging.appendingPathComponent(Repo.runtimeMarker), atomically: true, encoding: .utf8)
         return staging
+    }
+
+    /// sc's own binary, which a copy there runs.
+    static func ownExecutable() throws -> URL {
+        guard let executable = Bundle.main.executablePath else {
+            throw SCError("Couldn't find sc's own executable to send.")
+        }
+        return URL(fileURLWithPath: executable)
+    }
+
+    /// A binary's size and modification time, as `stat -f '%z %m'` prints
+    /// them: whether a copy there already runs this sc, since the sync and
+    /// the clone keep the time `stage` gives it. Comparing them saves
+    /// syncing, or hashing, the binary for a command that needs nothing else.
+    static func stamp(of binary: URL) throws -> String {
+        let attributes = try FileManager.default.attributesOfItem(atPath: binary.path)
+        guard let size = attributes[.size] as? NSNumber, let modified = attributes[.modificationDate] as? Date else {
+            throw SCError("Couldn't read the size and time of \(binary.path).")
+        }
+        return "\(size.int64Value) \(Int(modified.timeIntervalSince1970))"
+    }
+
+    /// Where a copy keeps the binaries sent beside a run still going there
+    /// (`Remote.sendBinaryBeside`): one folder each, by stamp, removed by the
+    /// next sync, which only happens once nothing runs there.
+    static let versionsFolder = ".sc/versions"
+
+    /// The binary with this stamp, relative to the copy's root.
+    static func versionPath(stamp: String) -> String {
+        "\(versionsFolder)/\(stamp.replacingOccurrences(of: " ", with: "-"))/sc"
     }
 
     /// The rsyncs that send the paths under `.local` a command names

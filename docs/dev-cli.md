@@ -540,9 +540,19 @@ which needs no project.
   once that's done.
 - **If the connection drops,** sc says so: ssh's exit 255. Pick the run up
   with `sc --on <host>[:<path>] attach`, which doesn't sync.
-- **While a run is still going there, `--on` refuses to sync.** rsync would
-  replace the build and the sc it is using. Attach to it, or stop it with
-  `attach --stop`, first.
+- **While a run is still going there, `--on` doesn't sync over it**: rsync
+  would replace the build and the sc it is using. A command that needs the
+  build runs in a [snapshot](#snapshots) beside it instead.
+- **A command that needs no build (`session`, `lease`, `clean`,
+  `installers`, `setup`) runs beside one.** One ssh before any sync reads
+  the size and time of the copy's `.sc/sc` (`Remote.probeCommand`); when
+  they are this sc's (`RuntimeCopy.stamp`, the time `stage` keeps), nothing
+  is sent at all. When they differ and a run is going, this sc alone goes
+  to `.sc/versions/<size>-<time>/sc` and runs from there with
+  `SC_REPO_ROOT` set to the copy, so it sees the copy's jobs and logs as
+  `./sc` would (`Remote.syncPlan`). Those binaries stay until the next full
+  sync, which happens only once nothing runs there, as a command one runs
+  may re-run it in the GUI session.
 - **Installers go store to store**, by an rsync of their own
   (`Remote.installersSync`), into the other Mac's store at the usual place,
   made first (writable by every user) if it has none. Never `--delete`: the
@@ -555,6 +565,53 @@ which needs no project.
   one Mac's store never write the same file at once. Commands that read no
   installers (`session`, `puppet`, `lint`, `installers`, … or a run whose
   every source downloads) send none.
+
+### Snapshots
+
+A command that needs the build, sent with `--on` while a run is still
+going in that copy, runs in a snapshot of the copy rather than waiting
+(`RuntimeSnapshot`, `Remote.SyncPlan.snapshot`):
+
+1. The copy's build, data and sc (`RuntimeSnapshot.clonedItems`: the
+   marker, `sc`, `.sc/sc`, the audio tap, `Bundles`, `Modules`,
+   `DerivedData/Build`) are cloned into `.sc/snapshots/<id>/` with
+   `ditto --clone`. Being APFS clones, that takes about a second for a
+   full Debug build and next to no disk.
+2. What runs keep, or later commands read, is linked back to the copy's own
+   (`linkedItems`: `.local`, `built-apps`, `test-results`,
+   `DerivedData/sc-jobs`, `DerivedData/sc-logs`, and `.env` when there is
+   one). So `sc --on <host>:<path> attach` finds a run started in a
+   snapshot, and a wrapp built there is in the copy's `built-apps/` for the
+   next `wrapp run`.
+3. The snapshot is synced into as the copy would be, so only what changed
+   is sent, then each file's time and size is noted
+   (`.sc/snapshot-manifest`), and the command runs there.
+
+Every full sync, into the copy or a new snapshot, first removes the
+snapshots nothing runs from: a process of that user whose command line
+names the snapshot (its sc does, being run by its full path) keeps it, as
+does `.sc/snapshot-pending`, which is there until the snapshot's sc starts
+(`RuntimeSnapshot.markStarted`), or for an hour if it never does.
+
+**A run that leaves changes in its snapshot says so as it ends.** Once the
+command returns, `--on` compares the snapshot with its manifest (one ssh,
+under a second: a snapshot holds about ten thousand files) and warns,
+listing up to twenty of the files that differ; the command's exit status is
+its own. A run followed again with `attach` is checked when it finishes, as
+each GUI-session job records the root it runs in (`root` in its job
+folder). A connection that drops with nobody attaching again, or a process
+the command left running that writes later, is caught by the next sync
+instead.
+
+**A snapshot with changes of its own stops the sync.** Nothing a run makes
+should land in one, outside the linked folders, so a snapshot whose files
+differ from its manifest is kept, and the sync fails naming the files that
+differ. Save what is worth keeping, remove the snapshot by hand (the error
+says how), then find what wrote there and make it write somewhere linked,
+or add that place to `linkedItems`. The first such find: the Debug apps
+are built with code coverage on, and one started without
+`LLVM_PROFILE_FILE` writes `default.profraw` where it runs, so sc sets it to
+`/dev/null` for everything it starts (`xcodebuild test` sets its own).
 
 ## The screen lease
 

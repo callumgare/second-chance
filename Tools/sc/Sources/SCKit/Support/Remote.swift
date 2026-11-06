@@ -69,16 +69,22 @@ enum Remote {
     /// environment), as one base64 word.
     /// The agent sessions running here go too, so a lease one of them holds
     /// there is shown by its title now (`AgentSessionInfo.current`).
+    /// `executable`, a binary sent beside a run still going there
+    /// (`RuntimeCopy.versionPath`), runs instead of the copy's `./sc`, told
+    /// the copy is its root as the launcher would.
     static func remoteCommand(path: String, arguments: [String], leaseHolder: ScreenLease.Holder? = nil,
-                              agentSessions: [String: AgentSessionInfo] = [:]) -> String {
+                              agentSessions: [String: AgentSessionInfo] = [:], executable: String? = nil) -> String {
         let dir = path.hasPrefix("~/") ? "~/" + quote(String(path.dropFirst(2))) : quote(path)
         var variables: [String] = []
         if let leaseHolder { variables.append("\(ScreenLease.holderVariable)=\(ScreenLease.encodeHolder(leaseHolder))") }
         if !agentSessions.isEmpty {
             variables.append("\(AgentSessionInfo.snapshotVariable)=\(AgentSessionInfo.encodeSnapshot(agentSessions))")
         }
+        // "$PWD" reads the same in bash, zsh and fish.
+        if executable != nil { variables.append("SC_REPO_ROOT=\"$PWD\"") }
         let env = variables.isEmpty ? "" : "env " + variables.joined(separator: " ") + " "
-        return "cd \(dir) && \(env)./sc " + arguments.map(quote).joined(separator: " ")
+        let program = executable.map(quote) ?? "./sc"
+        return "cd \(dir) && \(env)\(program) " + arguments.map(quote).joined(separator: " ")
     }
 
     /// A checkout's path for a remote command line: quoted, but with `~/`
@@ -243,15 +249,71 @@ enum Remote {
     /// Lists, one per line, the ids of the GUI-session jobs still running in
     /// the remote checkout (`LaunchAgentJob`). bash, whatever the login shell.
     static func runningJobsCommand(path: String) -> String {
-        let dir = path.hasPrefix("~/") ? "~/" + quote(String(path.dropFirst(2))) : quote(path)
-        let script = """
-        for dir in DerivedData/sc-jobs/*/; do
-          [ -d "$dir" ] && [ ! -e "$dir/exit-code" ] || continue
-          job=$(basename "$dir")
-          launchctl print "gui/$(id -u)/\(LaunchAgentJob.labelPrefix)$job" 2>/dev/null | grep -q "pid = " && echo "$job"
-        done
-        """
-        return "cd \(dir) 2>/dev/null && bash -c \(quote(script))"
+        "cd \(shellPath(path)) 2>/dev/null && bash -c \(quote(runningJobsScript))"
+    }
+
+    static let runningJobsScript = """
+    for dir in DerivedData/sc-jobs/*/; do
+      [ -d "$dir" ] && [ ! -e "$dir/exit-code" ] || continue
+      job=$(basename "$dir")
+      launchctl print "gui/$(id -u)/\(LaunchAgentJob.labelPrefix)$job" 2>/dev/null | grep -q "pid = " && echo "$job"
+    done
+    """
+
+    /// What the copy there holds before a sync, in one ssh: the stamp of its
+    /// sc (`RuntimeCopy.stamp`), on a line of its own, then the ids of the
+    /// jobs still running there, as `runningJobsCommand` lists them.
+    static func probeCommand(path: String) -> String {
+        let script = "[ -f .sc/sc ] && stat -f '\(probeStampPrefix)%z %m' .sc/sc\n" + runningJobsScript
+        return "cd \(shellPath(path)) 2>/dev/null && bash -c \(quote(script))"
+    }
+
+    static let probeStampPrefix = "sc-binary "
+
+    struct Probe: Equatable {
+        /// The copy's sc's stamp; nil when it has none (no copy yet).
+        var stamp: String?
+        var runningJobs: [String]
+    }
+
+    static func parseProbe(_ output: String) -> Probe {
+        var probe = Probe(stamp: nil, runningJobs: [])
+        for line in output.split(separator: "\n").map({ $0.trimmingCharacters(in: .whitespaces) }) where !line.isEmpty {
+            if line.hasPrefix(probeStampPrefix) {
+                probe.stamp = String(line.dropFirst(probeStampPrefix.count))
+            } else {
+                probe.runningJobs.append(line)
+            }
+        }
+        return probe
+    }
+
+    /// What `--on` sends before running a command there.
+    enum SyncPlan: Equatable {
+        /// The copy as the command needs it: the build and data too, or for
+        /// a buildless command sc and the data.
+        case sync
+        /// Nothing: a buildless command, and the copy's sc is this one.
+        case nothing
+        /// A buildless command while a run still goes there: this sc alone,
+        /// beside the copy's (`RuntimeCopy.versionPath`), run from there.
+        case binaryBeside
+        /// A command that needs the build while a run still goes there: a
+        /// snapshot of the copy (`RuntimeSnapshot`), synced into and run
+        /// from, leaving the run's build alone.
+        case snapshot
+    }
+
+    /// What to send: a command that needs the build isn't synced over a run
+    /// still using it, but into a snapshot beside it. A buildless command
+    /// (`buildlessCommands`) reads nothing of the copy's but sc, so one
+    /// whose sc is already there sends nothing, and one whose sc differs
+    /// gets this sc beside the run's rather than over it.
+    static func syncPlan(arguments: [String], probe: Probe, localStamp: String) -> SyncPlan {
+        let buildless = buildlessCommands.contains(arguments.first ?? "")
+        if buildless, probe.stamp == localStamp { return .nothing }
+        guard !probe.runningJobs.isEmpty else { return .sync }
+        return buildless ? .binaryBeside : .snapshot
     }
 
     static func run(on rawTarget: String, arguments: [String]) async throws -> Int32 {
@@ -279,85 +341,125 @@ enum Remote {
         }
         let forwarded = Invocation.forwarding(logs: mode, arguments)
 
+        var executable: String?
+        var runIn = target
         if syncs(arguments) {
             // Syncing deletes and replaces files under a run still going
             // there (its build in DerivedData, the sc it runs).
-            let running = try await Proc.collect("ssh", ["-T", target.host, runningJobsCommand(path: target.path)])
-                .output.split(separator: "\n").map(String.init)
-            if !running.isEmpty {
-                throw SCError("A run is still going in \(target.host):\(target.path) (\(running.joined(separator: ", "))), so it can't be synced over.",
-                              hints: ["Follow it with: sc --on \(rawTarget) attach",
-                                      "Or stop it: sc --on \(rawTarget) attach --stop"])
-            }
-            // macOS's own rsync at both ends, whatever else is on either PATH.
-            // Extended attributes must survive (the template's non-Mach-O files
-            // keep their code signatures in them), and the two rsyncs disagree
-            // on the flag: Apple's (openrsync, or 2.6.9 before macOS 15.4)
-            // spells it -E and rejects -X, while rsync 3.x reads -E as
-            // --executability and would drop them without a word. Links stay
-            // links (never -L, -k): a Wine prefix's z: is a link to /.
-            let staging = try RuntimeCopy.stage(in: repo)
-            // `puppet audio` there needs the tap, which a copy can't build.
-            if arguments.first == "puppet" { try await AudioTapApp.stage(into: staging, repo: repo.root, ui: ui) }
-            var rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + syncFilters(for: arguments)
-            rsyncArgs += ["./", "\(target.host):\(target.path)/"]
-            let runtimeArgs = ["-aE", "--rsync-path=/usr/bin/rsync", staging.path + "/", "\(target.host):\(target.path)/"]
-            let named = localPaths(in: arguments, root: repo.root, cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-            let localSyncs = RuntimeCopy.localSyncs(named, root: repo.root, target: target)
-            // On this Mac (another user here) the copy is cloned instead, and
-            // the installers store is the same one.
-            let thisMac = RuntimeCopy.isThisMac(target.host)
-            let sendsInstallers = !thisMac && readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
-            // The copy there, the folders the named paths go into, and the
-            // Mac's installers store, made first.
-            var prepare = "mkdir -p \(shellPath(target.path))"
-            for path in named {
-                let parent = (path as NSString).deletingLastPathComponent
-                prepare += " && mkdir -p \(shellPath(target.path + "/" + parent))"
-            }
-            if sendsInstallers { prepare += " && \(SharedFolders.makeCommand(InstallersStore.defaultRoot))" }
-            let prepared = try await Proc.collect("ssh", ["-T", target.host, prepare])
-            guard prepared.succeeded else {
-                throw SCError("Couldn't make \(target.path) on \(target.host): \(prepared.error.trimmingCharacters(in: .whitespacesAndNewlines))")
-            }
-            if thisMac {
-                let script = RuntimeCopy.cloneScript(root: repo.root, staging: staging, named: named, targetPath: target.path,
-                                                     products: !buildlessCommands.contains(arguments.first ?? ""))
-                try await ui.logStep("Clone to \(target.host)", log: "sync", success: "Cloned to \(target.host):\(target.path)") { sink in
-                    try await Proc.stream("ssh", ["-T", target.host, "bash -c \(quote(script))"], cwd: repo.root) { await sink.line($0) }
-                }
-            } else {
-                do {
-                    try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
-                        var status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
-                        if status == 0 {
-                            status = try await Proc.stream("/usr/bin/rsync", runtimeArgs, cwd: repo.root) { await sink.line($0) }
-                        }
-                        for localSync in localSyncs where status == 0 {
-                            status = try await Proc.stream("/usr/bin/rsync", localSync, cwd: repo.root) { await sink.line($0) }
-                        }
-                        guard status == 0, sendsInstallers else { return status }
-                        return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {
-                            await sink.line($0)
-                        }
-                    }
-                } catch let error as SCError where error.alreadyReported {
-                    throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
-                }
+            let probe = parseProbe(try await Proc.collect("ssh", ["-T", target.host, probeCommand(path: target.path)]).output)
+            let localStamp = try RuntimeCopy.stamp(of: RuntimeCopy.ownExecutable())
+            switch syncPlan(arguments: arguments, probe: probe, localStamp: localStamp) {
+            case .nothing:
+                break
+            case .binaryBeside:
+                executable = try await sendBinaryBeside(target: target, stamp: localStamp, ui: ui, repo: repo)
+            case .sync:
+                try await RuntimeSnapshot.collect(target: target)
+                try await sync(target: target, rawTarget: rawTarget, arguments: arguments, repo: repo, ui: ui)
+            case .snapshot:
+                try await RuntimeSnapshot.collect(target: target)
+                runIn = try await RuntimeSnapshot.create(target: target)
+                ui.detail("A run is still going in \(target.host):\(target.path) (\(probe.runningJobs.joined(separator: ", "))), "
+                          + "so this runs in a snapshot of it: \(runIn.path)")
+                try await sync(target: runIn, rawTarget: rawTarget, arguments: arguments, repo: repo, ui: ui)
+                try await RuntimeSnapshot.record(snapshot: runIn)
             }
         }
 
         ui.line(ui.format("\(.primary("▸ On \(target.host): sc \(arguments.joined(separator: " "))"))"))
         let holder = ScreenLease.currentHolder(repoRoot: repo.root, branch: await ScreenLease.branch(of: repo.root))
-        let command = remoteCommand(path: target.path, arguments: forwarded, leaseHolder: holder,
-                                    agentSessions: AgentSessionInfo.snapshot())
+        let command = remoteCommand(path: runIn.path, arguments: forwarded, leaseHolder: holder,
+                                    agentSessions: AgentSessionInfo.snapshot(), executable: executable)
         let sshArgs = (terminal.isInteractive ? ["-t"] : ["-T"]) + [target.host, command]
         let status = try await Proc.inheritingTerminal("ssh", sshArgs)
+        if runIn != target, status != 255 {
+            await RuntimeSnapshot.warnOfChanges(in: runIn, ui: ui)
+        }
         if status == 255 {
             // ssh's own failure, not the command's: most often the connection dropped.
             ui.warning("Lost the connection to \(target.host). A command running in its GUI session carries on there.",
                        next: "Pick it up with: sc --on \(rawTarget) attach")
         }
         return status
+    }
+
+    /// Send this sc alone beside the copy's, for a buildless command while a
+    /// run still goes there (`SyncPlan.binaryBeside`), and return its path
+    /// in the copy. It stays until the next sync, as a command it runs may
+    /// re-run it in the GUI session or copy it.
+    static func sendBinaryBeside(target: Target, stamp: String, ui: UI, repo: Repo) async throws -> String {
+        let path = RuntimeCopy.versionPath(stamp: stamp)
+        let folder = (path as NSString).deletingLastPathComponent
+        let made = try await Proc.collect("ssh", ["-T", target.host, "mkdir -p \(shellPath(target.path + "/" + folder))"])
+        guard made.succeeded else {
+            throw SCError("Couldn't make \(target.path)/\(folder) on \(target.host): \(made.error.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+        let binary = try RuntimeCopy.ownExecutable()
+        try await ui.logStep("Send sc to \(target.host)", log: "sync", success: "Sent sc beside the run going on \(target.host)") { sink in
+            try await Proc.stream("/usr/bin/rsync", ["-aE", "--rsync-path=/usr/bin/rsync", binary.path, "\(target.host):\(target.path)/\(path)"],
+                                  cwd: repo.root) { await sink.line($0) }
+        }
+        return path
+    }
+
+    /// Sync the runtime copy there (`SyncPlan.sync`): nothing runs there.
+    static func sync(target: Target, rawTarget: String, arguments: [String], repo: Repo, ui: UI) async throws {
+        // macOS's own rsync at both ends, whatever else is on either PATH.
+        // Extended attributes must survive (the template's non-Mach-O files
+        // keep their code signatures in them), and the two rsyncs disagree
+        // on the flag: Apple's (openrsync, or 2.6.9 before macOS 15.4)
+        // spells it -E and rejects -X, while rsync 3.x reads -E as
+        // --executability and would drop them without a word. Links stay
+        // links (never -L, -k): a Wine prefix's z: is a link to /.
+        let staging = try RuntimeCopy.stage(in: repo)
+        // `puppet audio` there needs the tap, which a copy can't build.
+        if arguments.first == "puppet" { try await AudioTapApp.stage(into: staging, repo: repo.root, ui: ui) }
+        var rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + syncFilters(for: arguments)
+        rsyncArgs += ["./", "\(target.host):\(target.path)/"]
+        let runtimeArgs = ["-aE", "--rsync-path=/usr/bin/rsync", staging.path + "/", "\(target.host):\(target.path)/"]
+        let named = localPaths(in: arguments, root: repo.root, cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        let localSyncs = RuntimeCopy.localSyncs(named, root: repo.root, target: target)
+        // On this Mac (another user here) the copy is cloned instead, and
+        // the installers store is the same one.
+        let thisMac = RuntimeCopy.isThisMac(target.host)
+        let sendsInstallers = !thisMac && readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
+        // The copy there, the folders the named paths go into, and the
+        // Mac's installers store, made first.
+        // Binaries sent beside a run (`sendBinaryBeside`) go too: none runs now.
+        var prepare = "mkdir -p \(shellPath(target.path)) && rm -rf \(shellPath(target.path + "/" + RuntimeCopy.versionsFolder))"
+        for path in named {
+            let parent = (path as NSString).deletingLastPathComponent
+            prepare += " && mkdir -p \(shellPath(target.path + "/" + parent))"
+        }
+        if sendsInstallers { prepare += " && \(SharedFolders.makeCommand(InstallersStore.defaultRoot))" }
+        let prepared = try await Proc.collect("ssh", ["-T", target.host, prepare])
+        guard prepared.succeeded else {
+            throw SCError("Couldn't make \(target.path) on \(target.host): \(prepared.error.trimmingCharacters(in: .whitespacesAndNewlines))")
+        }
+        if thisMac {
+            let script = RuntimeCopy.cloneScript(root: repo.root, staging: staging, named: named, targetPath: target.path,
+                                                 products: !buildlessCommands.contains(arguments.first ?? ""))
+            try await ui.logStep("Clone to \(target.host)", log: "sync", success: "Cloned to \(target.host):\(target.path)") { sink in
+                try await Proc.stream("ssh", ["-T", target.host, "bash -c \(quote(script))"], cwd: repo.root) { await sink.line($0) }
+            }
+        } else {
+            do {
+                try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
+                    var status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
+                    if status == 0 {
+                        status = try await Proc.stream("/usr/bin/rsync", runtimeArgs, cwd: repo.root) { await sink.line($0) }
+                    }
+                    for localSync in localSyncs where status == 0 {
+                        status = try await Proc.stream("/usr/bin/rsync", localSync, cwd: repo.root) { await sink.line($0) }
+                    }
+                    guard status == 0, sendsInstallers else { return status }
+                    return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {
+                        await sink.line($0)
+                    }
+                }
+            } catch let error as SCError where error.alreadyReported {
+                throw syncFailure(host: target.host, rawTarget: rawTarget, arguments: arguments, status: error.exitCode)
+            }
+        }
     }
 }

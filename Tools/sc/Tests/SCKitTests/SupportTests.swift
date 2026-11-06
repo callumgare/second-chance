@@ -209,6 +209,51 @@ struct RemoteTests {
         #expect(Remote.syncs(["test", "integration"]))
     }
 
+    @Test("A buildless command sends nothing when the copy's sc is this one, and its sc alone beside a run")
+    func syncPlan() {
+        let idle = Remote.Probe(stamp: "100 5", runningJobs: [])
+        let busy = Remote.Probe(stamp: "100 5", runningJobs: ["20261106-142527-35988"])
+        #expect(Remote.syncPlan(arguments: ["session", "list"], probe: idle, localStamp: "100 5") == .nothing)
+        #expect(Remote.syncPlan(arguments: ["session", "list"], probe: busy, localStamp: "100 5") == .nothing)
+        #expect(Remote.syncPlan(arguments: ["session", "list"], probe: idle, localStamp: "200 6") == .sync)
+        #expect(Remote.syncPlan(arguments: ["session", "list"], probe: busy, localStamp: "200 6") == .binaryBeside)
+        #expect(Remote.syncPlan(arguments: ["session", "list"], probe: Remote.Probe(stamp: nil, runningJobs: []), localStamp: "1 1") == .sync)
+        // A command that needs the build syncs it, into a snapshot beside a run.
+        #expect(Remote.syncPlan(arguments: ["wrapp", "run", "x"], probe: idle, localStamp: "100 5") == .sync)
+        #expect(Remote.syncPlan(arguments: ["wrapp", "run", "x"], probe: busy, localStamp: "100 5") == .snapshot)
+    }
+
+    @Test("The probe reads the copy's sc's stamp and its running jobs")
+    func probe() throws {
+        #expect(Remote.parseProbe("sc-binary 123 456\njob-1\n\njob-2\n") == Remote.Probe(stamp: "123 456", runningJobs: ["job-1", "job-2"]))
+        #expect(Remote.parseProbe("") == Remote.Probe(stamp: nil, runningJobs: []))
+
+        // Run against a copy whose sc is a known file, it prints that file's stamp.
+        let checkout = FileManager.default.temporaryDirectory.appendingPathComponent("sc probe \(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: checkout) }
+        let binary = checkout.appendingPathComponent(".sc/sc")
+        try FileManager.default.createDirectory(at: binary.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "not really sc".write(to: binary, atomically: true, encoding: .utf8)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", Remote.probeCommand(path: checkout.path)]
+        let output = Pipe()
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+        let result = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        #expect(Remote.parseProbe(result) == Remote.Probe(stamp: try RuntimeCopy.stamp(of: binary), runningJobs: []))
+    }
+
+    @Test("A binary sent beside a run runs with the copy as its root")
+    func remoteCommandWithBinaryBeside() {
+        let path = RuntimeCopy.versionPath(stamp: "123 456")
+        #expect(path == ".sc/versions/123-456/sc")
+        #expect(Remote.remoteCommand(path: "~/sc", arguments: ["session", "list"], executable: path)
+            == "cd ~/'sc' && env SC_REPO_ROOT=\"$PWD\" '.sc/versions/123-456/sc' 'session' 'list'")
+        #expect(Remote.remoteCommand(path: "~/sc", arguments: ["session", "list"]) == "cd ~/'sc' && ./sc 'session' 'list'")
+    }
+
     @Test("The running-jobs check is valid shell and skips jobs that aren't running")
     func runningJobsCommand() throws {
         let checkout = FileManager.default.temporaryDirectory.appendingPathComponent("sc remote \(UUID().uuidString)")

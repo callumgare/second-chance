@@ -98,7 +98,7 @@ enum GUISession {
             return try await Proc.inheritingTerminal(command[0], Array(command.dropFirst()), cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         }
 
-        let job = try LaunchAgentJob(command: command, in: session.repo.scJobs)
+        let job = try LaunchAgentJob(command: command, in: session.repo.scJobs, root: session.repo.root)
         session.ui.detail("Running in \(user)'s GUI session (job \(job.id))…")
         try job.start()
         return try await follow(job, session: session)
@@ -169,6 +169,9 @@ final class LaunchAgentJob: @unchecked Sendable {
     var inputFIFO: URL { workDir.appendingPathComponent("input") }
     /// The command line, for `sc attach --list`.
     var commandFile: URL { workDir.appendingPathComponent("command") }
+    /// The copy, or snapshot of one, it runs in: `attach` checks a
+    /// snapshot's changes when the run ends (`RuntimeSnapshot`).
+    var rootFile: URL { workDir.appendingPathComponent("root") }
     private var plist: URL { workDir.appendingPathComponent("\(label).plist") }
     private var fifoHolder: FileHandle?
 
@@ -179,7 +182,7 @@ final class LaunchAgentJob: @unchecked Sendable {
     }
 
     /// A new job for `command`, not yet started.
-    convenience init(command: [String], in jobsDir: URL, now: Date = Date()) throws {
+    convenience init(command: [String], in jobsDir: URL, root: URL? = nil, now: Date = Date()) throws {
         Self.prune(in: jobsDir)
         let stamp = DateFormatter()
         stamp.locale = Locale(identifier: "en_US_POSIX")
@@ -190,6 +193,7 @@ final class LaunchAgentJob: @unchecked Sendable {
             throw SCError("Couldn't create the input pipe for the GUI session.")
         }
         try command.joined(separator: " ").write(to: commandFile, atomically: true, encoding: .utf8)
+        if let root { try root.path.write(to: rootFile, atomically: true, encoding: .utf8) }
 
         // The job script recreates this process's environment and directory,
         // then runs the command and records its exit status.
@@ -295,6 +299,11 @@ final class LaunchAgentJob: @unchecked Sendable {
 
     var command: String {
         (try? String(contentsOf: commandFile, encoding: .utf8)) ?? "?"
+    }
+
+    /// The root it ran in, when recorded (jobs from before it was aren't).
+    var root: URL? {
+        (try? String(contentsOf: rootFile, encoding: .utf8)).map { URL(fileURLWithPath: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
     /// Every job in `jobsDir`, oldest first (ids start with the time).

@@ -48,6 +48,10 @@ struct AttachCommand: AsyncParsableCommand {
             return
         }
         let status = try await GUISession.follow(job, session: session)
+        // A run in a snapshot that has finished: say now what it left there.
+        if status != GUISession.detachedStatus, let root = job.root, RuntimeSnapshot.isSnapshot(root) {
+            await RuntimeSnapshot.warnOfChanges(in: root, ui: session.ui)
+        }
         throw ExitCode(status)
     }
 
