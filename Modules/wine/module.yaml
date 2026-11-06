@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../module.schema.json
 format: 1
 id: "wine"
-release: 23
+release: 24
 native: "wine"                               # its Swift: Packages/Modules/wine (WineKit, WineExecutor), WineRuntime, WineBuild
 versions:
   # Sikarugir's Wine 10.0, packaging 8, with the frameworks of its wrapper
@@ -79,7 +79,7 @@ build:
     # is swallowed) or free (it never takes it: devmode, set for the exe, for
     # a game played with the keyboard), window (fullscreen or windowed),
     # overriding what the program asks for when the wrapp gets it wrong,
-    # quit-key, the keys the app's Quit presses (key notation: f12:hold, up
+    # quit-key, the keys the app's Quit presses (key notation: f12:hold=5s, up
     # return*2) in a program that ignores Wine's quit, and quit-confirm-key,
     # the keys a second Quit soon after presses, for a program whose quit key
     # first asks, and

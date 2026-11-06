@@ -683,15 +683,15 @@ Wine error is exact.
 Wine passes the app's Quit (⌘Q, the menu, a logout) on to a game as
 `WM_QUERYENDSESSION`, and some games ignore it. Iji, a Game Maker game, also
 ignores its window closing (`SC_CLOSE`, which is all Alt+F4 does) and Alt+F4
-itself, but quits on F12 held down. A launch that says `--wine.quit-key=f12:hold`
+itself, but quits on F12 held down. A launch that says `--wine.quit-key=f12:hold=5s`
 (`RecordedLaunch.quitKey`, in the [key notation](wrappfile.md#key-sequences))
 sets `QUIT_KEY`, and then the quit watch, once it has reported `quit
 requested`, presses those keys in the game's window instead and cancels the
 quit; the game quits itself, and its exit counts as asked for. It does
 exactly what the keys say: steps in turn, 2.5 s from one key's release to
 the next's press (a menu, back from a game, can take over a second to read
-keys again), `*N` pressed that many times so, and a `:hold` held down that
-long, repeating as a held Mac key does (the first repeat after 0.25 s, then
+keys again), `*N` pressed that many times so, and a `:hold=<duration>` held
+down that long, repeating as a held Mac key does (the first repeat after 0.25 s, then
 every 0.05 s): a posted key down doesn't repeat by itself, and a game that
 reads key presses rather than key state would see one press. Modifiers go
 down before their key and up after it, as flag changes.
@@ -700,7 +700,7 @@ A game whose quit key asks the player first takes a second set,
 `--wine.quit-confirm-key` (`QUIT_CONFIRM_KEY`). The first Quit then presses
 the quit keys, and a Quit within 10 s of it the confirm keys. In Icy Tower,
 an Allegro game, `--wine.quit-key=escape` shows its question in a game, and
-the confirm key is `escape:hold`: Allegro repeats a held key itself, so it
+the confirm key is `escape:hold=5s`: Allegro repeats a held key itself, so it
 steps through every screen to Exit as a player holding Escape would (from a
 game, two leave for its menu and two more choose its Exit; a game paused
 with P takes one more), about 3 s after the second Quit, most of it the
@@ -721,7 +721,7 @@ The wrapp (`Wine.inProcessHelperVariables`) hands the quit watch the keys in
 [canonical form](#the-canonical-key-sequence), made from the launch's own
 by `RecordedLaunch.quitKeySequence` and `quitConfirmKeySequence`, exactly
 as written: a key with nothing after it is pressed once, and one held says
-`:hold` (`f12:hold` is handed over as `f12:hold=5000ms`). Keys the wrapp can't read (planning refuses them, so only a
+how long (`f12:hold=5s` is handed over as `f12:hold=5000ms`). Keys the wrapp can't read (planning refuses them, so only a
 wrapp built by something else has them) leave the quit to Wine, as does
 anything the helper can't read, with a warning. A logout the game holds up
 this way is cancelled, as macOS does whenever an app turns it down.
@@ -745,7 +745,7 @@ between them:
 - a key's name as `key_names.m` knows it, an alias written as its main name
   (`escape`, `return`, `delete`), or the character it types; `+` itself is
   the last part after `++` or alone;
-- every hold its length in whole milliseconds: `:hold` is written
+- every hold its length in whole milliseconds: `:hold=5s` is written
   `:hold=5000ms`.
 
 `f12:hold=5000ms`, `up return*2`, `ctrl+shift+cmd+s`, `escape

@@ -16,4 +16,4 @@ COPY --from=${input.game} . ${const.install-dir}/ # the zip's files: the game, i
 # Iji sat on "Loading, please wait" for over 6 minutes. Microsoft's own.
 WINE.WINETRICKS directmusic
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="*.ini;*.sav;*.cfg" \
-    --wine.graphics=direct-3d --wine.window=windowed --wine.quit-key=f12:hold "${const.install-dir}/iji.exe"
+    --wine.graphics=direct-3d --wine.window=windowed --wine.quit-key=f12:hold=5s "${const.install-dir}/iji.exe"

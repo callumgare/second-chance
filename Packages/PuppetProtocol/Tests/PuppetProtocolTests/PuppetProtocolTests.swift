@@ -43,7 +43,7 @@ struct PuppetRequestTests {
         #expect(try PuppetRequest.keys("escape:hold=4s") == [.key("escape:hold=4000ms")])
         #expect(PuppetRequest.key("escape:hold=4000ms").line == "key escape:hold=4000ms")
         #expect(PuppetRequest.key("return*2", gap: 500).line == "key return*2 gap=500")
-        #expect(try PuppetRequest.action(["key", "f12:hold"]) == .key("f12:hold=5000ms"))
+        #expect(try PuppetRequest.action(["key", "f12:hold=5s"]) == .key("f12:hold=5000ms"))
         #expect(throws: PuppetProtocolError.self) { try PuppetRequest.keys("escape:hold=40s") }
         #expect(throws: PuppetProtocolError.self) { try PuppetRequest.action(["key", "up", "down"]) }
         // A held key's reply comes once it's let go.

@@ -32,7 +32,7 @@ tests:
   scenario: "wine/quits-with-keys"
   parameters:
     # The test quits it from its own menu; the relaunch checks the app's Quit,
-    # which holds F12 (--wine.quit-key=f12:hold). Escape at its first
+    # which holds F12 (--wine.quit-key=f12:hold=5s). Escape at its first
     # screen's prompt runs it windowed; its main menu shows by itself after a
     # minute's loading, then Up (to Quit) and Return twice (Yes).
     first-keys: "escape"

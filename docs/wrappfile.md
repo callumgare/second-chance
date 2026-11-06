@@ -476,7 +476,7 @@ app keeps no Wine.
 - **`--wine.quit-key=<keys>`** makes the app's Quit press those keys in the
   program, written in the [key notation](#key-sequences), for one that
   ignores Wine's quit but quits on a key of its own: Iji's is
-  `--wine.quit-key=f12:hold`, F12 held down. Keys that quit through the
+  `--wine.quit-key=f12:hold=5s`, F12 held down. Keys that quit through the
   program's own menus are pressed in turn
   (`--wine.quit-key="escape escape return"`). Either way the program's close
   button does the same as Quit
@@ -484,13 +484,13 @@ app keeps no Wine.
 - **`--wine.quit-confirm-key=<keys>`**, beside a quit key, splits Quit in
   two, for a program whose quit key asks first: the first Quit presses the
   quit keys, and a second within 10 s presses these, as Icy Tower's
-  `--wine.quit-key=escape --wine.quit-confirm-key=escape:hold` (Escape asks,
+  `--wine.quit-key=escape --wine.quit-confirm-key=escape:hold=5s` (Escape asks,
   and Escape held confirms). Without `--wine.quit-key` it's refused when
   planning.
 - **Quit keys are checked when planning**, and keys the notation refuses
   are refused, naming the bad part; they're recorded, and pressed, as
   written: a key with nothing after it is pressed once, so a game that
-  quits on a held key says so (`f12:hold`).
+  quits on a held key says so, and how long (`f12:hold=5s`).
 - **`--wine.fullscreen-setting=<fields>`** names where the program keeps
   its own fullscreen setting, so the app can keep it in step with the
   window's green button: when the player last moved the window into or out
@@ -604,15 +604,17 @@ read by one parser, `KeySequence` (WrappKit's `KeyNotation`):
   shift). Names are read in any case.
 - **`*N` presses a step N times** (`return*2`, at most 100), each press down
   and up, with the sequence's usual gap between presses.
-- **`:hold` holds a step down** for 5 s, repeating as a held Mac key does
-  (the first repeat after 0.25 s, then one each 0.05 s), so a program that
-  takes repeats as presses sees what a player holding the key would;
-  **`:hold=<duration>`** holds it that long, `500ms`, `2s` or `1.5s`, at
-  most 30 s. A step is pressed several times or held, not both.
+- **`:hold=<duration>` holds a step down** that long (`500ms`, `2s`,
+  `1.5s`, at most 30 s), repeating as a held Mac key does (the first repeat
+  after 0.25 s, then one each 0.05 s), so a program that takes repeats as
+  presses sees what a player holding the key would. A hold always says how
+  long, as nothing ends one early (one that outlasts the program ends with
+  it). A step is pressed several times or held, not both.
 
-`f12:hold`, `escape:hold=5s`, `up return*2` and `cmd+q` are all sequences.
-An unknown key or modifier, `*0`, a bad duration, a hold over 30 s, `*N`
-with `:hold`, or nothing at all is refused, saying which part is wrong.
+`f12:hold=5s`, `escape:hold=2s`, `up return*2` and `cmd+q` are all sequences.
+An unknown key or modifier, `*0`, `:hold` without a duration, a bad
+duration, a hold over 30 s, `*N` with `:hold`, or nothing at all is
+refused, saying which part is wrong.
 What the sequence's usual gap is depends on who presses: 2.5 s from one
 release to the next press for quit keys, which a program changing screens
 needs, and 0.3 s for `sc puppet`. The in-process helpers are handed the

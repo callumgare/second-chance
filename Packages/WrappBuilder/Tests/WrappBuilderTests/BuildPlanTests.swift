@@ -213,8 +213,8 @@ struct BuildPlanTests {
             return try planner.plan(edition: bundle.manifest.editions[0].id, target: "only",
                                     conditions: BuildConditions(arch: "arm64", macos: 15))
         }
-        let icy = try plan("--wine.quit-key=escape --wine.quit-confirm-key=escape:hold")
-        #expect(icy.launch?.quitConfirmKey == "escape:hold")
+        let icy = try plan("--wine.quit-key=escape --wine.quit-confirm-key=escape:hold=5s")
+        #expect(icy.launch?.quitConfirmKey == "escape:hold=5s")
         #expect(try plan("--wine.quit-key=\"up return*2\"").launch?.quitKey == "up return*2")
         #expect {
             try plan("--wine.quit-key=f12:hold=40s")

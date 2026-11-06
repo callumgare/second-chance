@@ -4,9 +4,9 @@
 //
 //  Keys to press, as people write them: steps separated by spaces, done in
 //  turn; keys pressed together joined with `+`, modifiers first (`cmd+s`);
-//  `*N` to press a step N times (`return*2`), `:hold` to hold it down for
-//  the default time, repeating as a held Mac key does, or `:hold=<duration>`
-//  for that long (`escape:hold=5s`). A launch's quit keys
+//  `*N` to press a step N times (`return*2`), `:hold=<duration>` to hold it
+//  down that long, repeating as a held Mac key does (`escape:hold=5s`): a
+//  hold always says how long, as nothing can end one early. A launch's quit keys
 //  (`--wine.quit-key`), `sc puppet do … key` and a scenario's `{ key: … }`
 //  all read it here (docs/wrappfile.md#key-sequences).
 //
@@ -48,10 +48,9 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
         case press
         /// `*N`: down and up N times, the sequence's usual gap between.
         case presses(Int)
-        /// `:hold` (nil: the default, `defaultHoldMilliseconds`) or
         /// `:hold=<duration>`: held down that long, repeating as a held Mac
         /// key does.
-        case hold(milliseconds: Int?)
+        case hold(milliseconds: Int)
     }
 
     /// One step: keys pressed together, and what's done with them.
@@ -76,7 +75,7 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
 
         /// How long it's held, in ms; nil when it's pressed.
         public var holdMilliseconds: Int? {
-            if case .hold(let milliseconds) = action { return milliseconds ?? KeySequence.defaultHoldMilliseconds }
+            if case .hold(let milliseconds) = action { return milliseconds }
             return nil
         }
 
@@ -90,18 +89,13 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
             switch action {
             case .press: chord
             case .presses(let count): count == 1 ? chord : "\(chord)*\(count)"
-            case .hold: "\(chord):hold=\(holdMilliseconds ?? KeySequence.defaultHoldMilliseconds)ms"
+            case .hold(let milliseconds): "\(chord):hold=\(milliseconds)ms"
             }
         }
 
         public var description: String { canonical }
     }
 
-    /// How long `:hold` holds a key: long enough for a game that wants it
-    /// held (Iji quits on F12 held for about a second), and for one that
-    /// takes the key's repeats as presses to reach its Exit (Icy Tower's
-    /// Escape, held from a game, reaches it in about 3 s).
-    public static let defaultHoldMilliseconds = 5000
     /// The longest hold it takes.
     public static let longestHoldMilliseconds = 30000
     /// The most presses `*N` takes.
@@ -121,7 +115,7 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
         public init(_ description: String) { self.description = description }
     }
 
-    /// Parse the notation: `up return*2`, `cmd+q`, `f12:hold`, `escape:hold=5s`.
+    /// Parse the notation: `up return*2`, `cmd+q`, `f12:hold=2s`, `escape:hold=5s`.
     public init(parsing text: String) throws(ParseError) {
         let words = text.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !words.isEmpty else { throw ParseError("no keys: write at least one, such as escape or cmd+q") }
@@ -141,7 +135,8 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
             chord = String(word[..<colon])
             let suffix = String(word[word.index(after: colon)...])
             if suffix == "hold" {
-                action = .hold(milliseconds: nil)
+                // Nothing can end a hold early, so it says how long.
+                throw ParseError("\(word): a hold says how long, such as \(chord):hold=2s")
             } else {
                 let duration = String(suffix.dropFirst("hold=".count))
                 if duration.contains("*") {
@@ -170,7 +165,7 @@ nonisolated public struct KeySequence: Sendable, Equatable, CustomStringConverti
             }
             action = .presses(count)
         } else if let colon = word.lastIndex(of: ":"), colon > word.startIndex, word.index(after: colon) < word.endIndex {
-            throw ParseError("\(word): a hold is written :hold or :hold=<duration>, such as :hold=2s")
+            throw ParseError("\(word): a hold is written :hold=<duration>, such as :hold=2s")
         }
         var (modifiers, key) = try Self.chord(chord, in: word)
         guard let name = Self.keyName(key) else {

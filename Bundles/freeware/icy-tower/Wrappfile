@@ -44,6 +44,6 @@ REMOVE C:/icy-tower-setup
 LAUNCH --mount=type=store,source=saves,target=${const.install-dir}/,files="tower.cfg" \
     --mount=type=store,source=replays,target=${const.install-dir}/replays/,files="*.itr" \
     --wine.graphics=direct-draw --wine.mouse=free --wine.quit-key=escape \
-    --wine.quit-confirm-key=escape:hold \
+    --wine.quit-confirm-key=escape:hold=5s \
     --wine.fullscreen-setting="file=${const.install-dir}/tower.cfg,format=allegro-packfile,offset=16,bytes=4,fullscreen=-1,windowed=0,checksum-offset=96,checksum-scale=17" \
     "${const.install-dir}/icytower13.exe"

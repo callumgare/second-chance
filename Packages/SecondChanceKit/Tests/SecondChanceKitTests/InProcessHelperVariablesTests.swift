@@ -106,7 +106,7 @@ struct InProcessHelperVariablesTests {
             return Wine.inProcessHelperVariables(gameExe: "iji.exe", graphicsAPI: .direct3D, launch: launch, environment: [:])["QUIT_KEY"]
         }
         #expect(key(["wine.quit-key": "f12"]) == "f12")
-        #expect(key(["wine.quit-key": "f12:hold"]) == "f12:hold=5000ms")
+        #expect(key(["wine.quit-key": "f12:hold=5s"]) == "f12:hold=5000ms")
         #expect(key(["wine.quit-key": "f12:hold=1.5s"]) == "f12:hold=1500ms")
         // Several keys are pressed in turn, as written
         #expect(key(["wine.quit-key": "escape esc return"]) == "escape escape return")
@@ -125,10 +125,9 @@ struct InProcessHelperVariablesTests {
         #expect(both["QUIT_KEY"] == "escape")
         #expect(both["QUIT_CONFIRM_KEY"] == "escape escape")
         // Icy Tower's: the quit key pressed once, the confirm key held.
-        let icy = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold"])
+        let icy = variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold=5s"])
         #expect(icy["QUIT_KEY"] == "escape")
         #expect(icy["QUIT_CONFIRM_KEY"] == "escape:hold=5000ms")
-        #expect(variables(["wine.quit-key": "escape", "wine.quit-confirm-key": "escape:hold"])["QUIT_CONFIRM_KEY"] == "escape:hold=5000ms")
         #expect(variables(["wine.quit-confirm-key": "escape"])["QUIT_CONFIRM_KEY"] == nil)
     }
 }
