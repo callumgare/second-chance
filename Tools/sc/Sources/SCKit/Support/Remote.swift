@@ -176,13 +176,24 @@ enum Remote {
     static let installersSyncLock = "/tmp/second-chance-installers-sync.lock"
     static let installersReceiver = "/usr/bin/lockf -k \(installersSyncLock) /usr/bin/rsync"
 
-    /// Why a sync that stopped partway failed, and what to do. What was sent
-    /// is there and the rest isn't, so the copy's build may be half-copied
-    /// until a sync completes.
+    /// Why a sync that stopped partway failed, and what to do, by rsync's
+    /// exit status. What was sent is there and the rest isn't, so the copy's
+    /// build may be half-copied until a sync completes.
     static func syncFailure(host: String, rawTarget: String, arguments: [String], status: Int32) -> SCError {
-        SCError("Copying the build to \(host) stopped partway, so nothing was run there.",
-                hints: ["Files here most likely changed while they were being copied: a build here. Run it again once that's done."],
-                exitCode: status)
+        let hint: String
+        switch status {
+        case 255, 12, 10, 35, 30:
+            // ssh failed, or the connection broke or timed out.
+            hint = "The connection to \(host) failed or dropped (rsync's exit \(status)). Check `ssh \(host) true` works, then run it again."
+        case 24:
+            hint = "Files here vanished while they were being copied: a build here. Run it again once that's done."
+        case 23:
+            hint = "Some files couldn't be copied (rsync's exit 23): files here that changed while being copied, or ones \(host) "
+                + "couldn't write. The sync's log in DerivedData/sc-logs says which."
+        default:
+            hint = "rsync exited \(status). The sync's log in DerivedData/sc-logs says why."
+        }
+        return SCError("Copying the build to \(host) stopped partway, so nothing was run there.", hints: [hint], exitCode: status)
     }
 
     /// Commands that need the sources, so make no sense run on a copy.

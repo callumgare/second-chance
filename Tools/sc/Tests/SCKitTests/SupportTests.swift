@@ -816,6 +816,15 @@ struct DotEnvTests {
         #expect(failure.exitCode == 23)
         #expect(!failure.alreadyReported)
     }
+
+    @Test("A sync that loses its connection says so, not that files changed")
+    func syncFailureByStatus() {
+        let hint = { (status: Int32) in Remote.syncFailure(host: "mac", rawTarget: "mac", arguments: [], status: status).hints.joined() }
+        #expect(hint(255).contains("connection to mac"))
+        #expect(hint(12).contains("connection to mac"))
+        #expect(hint(24).contains("vanished"))
+        #expect(!hint(255).contains("changed"))
+    }
 }
 
 @Suite("Test VMs")
