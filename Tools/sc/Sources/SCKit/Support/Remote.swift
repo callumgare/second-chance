@@ -83,49 +83,58 @@ enum Remote {
         "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// Not synced. `.env` holds each Mac's own settings, such as whether
-    /// tests hide their windows there. Agents' worktrees are other
-    /// checkouts, each with its own build, and come and go mid-sync. A
-    /// package's `.build` and `.swiftpm`, like `DerivedData`'s
-    /// intermediates, record this checkout's absolute path; `build/` is
-    /// release artifacts.
-    static let excludes = [
-        ".git", ".env", "built-apps", "test-results", "tmp", "Tools/sc/.build", "Tools/sc/.swiftpm", "Tools/sc/.run", ".claude/worktrees",
-        "Packages/*/.build", "Packages/*/.swiftpm", "/build", ".DS_Store",
-    ]
+    /// What every runtime copy holds besides the build: the data sc reads
+    /// there (program bundles' manifests and needles, modules), which the
+    /// app also carries inside itself.
+    static let dataFolders = ["Bundles", "Modules"]
 
-    /// Local-only folders of gigabytes (the porting workspace) that only
-    /// commands building, running or testing games can read. Anything else,
-    /// such as driving a puppet session or claiming a test session, leaves
-    /// them out: a test user's first sync would otherwise copy them all into
-    /// its own home. Left out, they're never deleted there.
-    static let heavy = ["/.local"]
+    /// Commands that need no build there: they claim, lease, list or clean.
+    static let buildlessCommands: Set = ["session", "lease", "attach", "clean", "installers", "setup"]
 
-    /// Commands that read none of the heavy folders, nor installers.
-    static let lightCommands: Set = ["puppet", "session", "lease", "attach", "lint", "generate", "clean", "setup", "installers"]
-
-    static func heavyFilters(for arguments: [String]) -> [String] {
-        lightCommands.contains(arguments.first ?? "") ? heavy.flatMap { ["--exclude", $0] } : []
-    }
-
-    /// A worktree's links to the main checkout's files (`Worktrees.linked`)
-    /// mean nothing on another Mac, so the sync leaves them out; and it
-    /// can't follow them, as what they hold has links of its own that must
-    /// stay links (a Wine prefix's `z:` is `/`).
-    static func linkExcludes(_ links: [(name: String, target: URL)]) -> [String] {
-        links.flatMap { ["--exclude", "/\($0.name)"] }
-    }
-
-    /// The rsyncs that send what a worktree's links hold, as the main
-    /// checkout's sync sends its own: only the heavy folders a command can
-    /// read (`.local`), into the folder the link stands for there.
-    static func linkedSyncs(_ links: [(name: String, target: URL)], arguments: [String], target: Target) -> [[String]] {
-        guard !lightCommands.contains(arguments.first ?? "") else { return [] }
-        return links.filter { heavy.contains("/\($0.name)") }.map { link in
-            ["-aE", "--delete", "--rsync-path=/usr/bin/rsync", "--exclude", ".DS_Store",
-             link.target.path + "/", "\(target.host):\(target.path)/\(link.name)/"]
+    /// The rsync rules for the main sync. Only what's named is sent; the
+    /// rest of a copy there (an older full checkout's files, its own
+    /// `built-apps`, `test-results`, logs and jobs) is left as it is, since
+    /// rsync neither sends nor deletes what's excluded. Of the build, the
+    /// Debug products and the test build's `.xctestrun`: the rest of
+    /// `DerivedData` records this checkout's absolute path, and Release's
+    /// products are gigabytes nothing there runs.
+    static func syncFilters(for arguments: [String]) -> [String] {
+        var rules = ["--exclude", ".DS_Store"]
+        for folder in dataFolders { rules += ["--include", "/\(folder)/"] }
+        if !buildlessCommands.contains(arguments.first ?? "") {
+            rules += ["--include", "/DerivedData/", "--include", "/DerivedData/Build/",
+                      "--exclude", "/DerivedData/Build/Products/Release/",
+                      "--include", "/DerivedData/Build/Products/",
+                      "--exclude", "/DerivedData/Build/*", "--exclude", "/DerivedData/*"]
         }
+        return rules + ["--exclude", "/*"]
     }
+
+    /// The paths under `.local` (the porting workspaces) a command names, as
+    /// they read from the checkout's root: an argument, or the value of an
+    /// `--option=value`, that is such a path and exists. Only those are
+    /// sent: `.local` holds gigabytes no other command reads.
+    static func localPaths(in arguments: [String], root: URL, cwd: URL) -> [String] {
+        let local = root.appendingPathComponent(".local").standardizedFileURL.path + "/"
+        var found: [String] = []
+        for argument in arguments {
+            var candidates = [argument]
+            if argument.hasPrefix("--"), let equals = argument.firstIndex(of: "=") {
+                candidates.append(String(argument[argument.index(after: equals)...]))
+            }
+            for candidate in candidates where !candidate.isEmpty && !candidate.hasPrefix("-") {
+                let url = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : cwd.appendingPathComponent(candidate)
+                let path = url.standardizedFileURL.path
+                guard path.hasPrefix(local), FileManager.default.fileExists(atPath: path) else { continue }
+                let relative = String(path.dropFirst(root.standardizedFileURL.path.count + 1))
+                if !found.contains(relative) { found.append(relative) }
+            }
+        }
+        return found
+    }
+
+    /// Commands that read no installers.
+    static let lightCommands: Set = ["puppet", "session", "lease", "attach", "lint", "generate", "clean", "setup", "installers"]
 
     /// Whether the command may read installers: not a light command, and
     /// not one whose every source (`--source` for a test run, `--from` for
@@ -144,10 +153,6 @@ enum Remote {
         let sources = values.flatMap { $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() } }
         return sources.isEmpty || !sources.allSatisfy(fetched.contains)
     }
-
-    /// Never in the main sync: a checkout's `installers/` from before the
-    /// installers store.
-    static let installersExclude = ["--exclude", "/installers"]
 
     /// The installers' own sync, for commands that read them: this Mac's
     /// store into the other Mac's, which is at the usual place there
@@ -171,47 +176,41 @@ enum Remote {
     static let installersSyncLock = "/tmp/second-chance-installers-sync.lock"
     static let installersReceiver = "/usr/bin/lockf -k \(installersSyncLock) /usr/bin/rsync"
 
-    /// Before a sync that sends installers: make the checkout there and,
-    /// when that Mac has no installers store yet, the store, writable by
-    /// every user (as `sc session add` makes it).
-    static func prepareInstallersCommand(path: String) -> String {
-        let dir = shellPath(path)
-        return "mkdir -p \(dir) && \(SharedFolders.makeCommand(InstallersStore.defaultRoot)) "
-    }
-
-    /// Of `DerivedData`, only what was built, `Build/Products`, is synced.
-    /// The rest records this checkout's absolute path (Swift packages' state,
-    /// the build's intermediates), so a build there in a checkout elsewhere
-    /// failed looking for files here; and Xcode's compilation cache is sparse
-    /// files tens of gigabytes long that rsync would send in full. rsync
-    /// neither sends nor deletes what these leave out, so the remote Mac's
-    /// own build state, logs and jobs stay as they are there.
-    static let derivedDataFilters = [
-        "--include", "/DerivedData/Build/", "--include", "/DerivedData/Build/Products/",
-        "--exclude", "/DerivedData/Build/*", "--exclude", "/DerivedData/*",
-    ]
-
-    /// The DerivedData rules for a command. Only `--skip-app-build` runs
-    /// this Mac's build there, so only then are its products sent. Any other
-    /// command builds the app there, where products sent first would only
-    /// be in the way, and half-sent whenever something here was rebuilding
-    /// them meanwhile.
-    static func derivedDataFilters(for arguments: [String]) -> [String] {
-        arguments.contains("--skip-app-build") ? derivedDataFilters : ["--exclude", "/DerivedData"]
-    }
-
     /// Why a sync that stopped partway failed, and what to do. What was sent
-    /// is there and the rest isn't, so with `--skip-app-build` the other
-    /// Mac's app is likely half-copied; its own build won't put that right,
-    /// since its build state says the template's set-up is already done.
+    /// is there and the rest isn't, so the copy's build may be half-copied
+    /// until a sync completes.
     static func syncFailure(host: String, rawTarget: String, arguments: [String], status: Int32) -> SCError {
-        var hints = ["Files here most likely changed while they were being copied: another build or worktree here. "
-            + "Run it again once that's done."]
-        if arguments.contains("--skip-app-build") {
-            hints.append("\(host)'s copy of the app may be half-copied. Before using it again, clear it and let it build: "
-                + "sc --on \(rawTarget) clean build -y, then run without --skip-app-build.")
-        }
-        return SCError("Copying this checkout to \(host) stopped partway, so nothing was run there.", hints: hints, exitCode: status)
+        SCError("Copying the build to \(host) stopped partway, so nothing was run there.",
+                hints: ["Files here most likely changed while they were being copied: a build here. Run it again once that's done."],
+                exitCode: status)
+    }
+
+    /// Commands that need the sources, so make no sense run on a copy.
+    static func needsSources(_ arguments: [String]) -> Bool {
+        let first = arguments.first ?? ""
+        let second = arguments.dropFirst().first ?? ""
+        return ["lint", "generate", "release", "worktree", "module", "bundle"].contains(first)
+            || (first == "app" && second == "build")
+            || (first == "test" && ["unit", "all"].contains(second))
+    }
+
+    /// What to build here before running there, when the command would
+    /// build first and wasn't told not to: a test build for `test`, else
+    /// the app. nil when it takes no `--skip-app-build` or was given it.
+    enum LocalBuild { case app, tests }
+    static func localBuild(for arguments: [String]) -> LocalBuild? {
+        guard !arguments.contains("--skip-app-build") else { return nil }
+        let end = arguments.firstIndex(of: "--") ?? arguments.endIndex
+        let probe = Array(arguments[..<end]) + ["--skip-app-build"] + Array(arguments[end...])
+        guard (try? SC.parseAsRoot(probe)) != nil else { return nil }
+        return arguments.first == "test" ? .tests : .app
+    }
+
+    /// The arguments with `--skip-app-build` added (before any `--`), once
+    /// the build has been made here.
+    static func skippingAppBuild(_ arguments: [String]) -> [String] {
+        let end = arguments.firstIndex(of: "--") ?? arguments.endIndex
+        return Array(arguments[..<end]) + ["--skip-app-build"] + Array(arguments[end...])
     }
 
     /// Whether the command needs this repo synced there first. `attach`
@@ -245,6 +244,20 @@ enum Remote {
         Session.active = Session(repo: repo, ui: ui, terminal: terminal, mode: mode)
         let target = parse(rawTarget, localRoot: repo.root)
 
+        if needsSources(arguments) {
+            throw SCError("sc \(arguments.prefix(2).joined(separator: " ")) works on the sources, which --on doesn't send.",
+                          hints: ["Run it here, without --on."])
+        }
+        var arguments = arguments
+        // Everything is built here; the other Mac or user only runs it.
+        if let build = localBuild(for: arguments) {
+            let xcode = Xcode(session: Session(repo: repo, ui: ui, terminal: terminal, mode: mode))
+            switch build {
+            case .tests: try await xcode.buildForTesting()
+            case .app: try await xcode.buildApp()
+            }
+            arguments = skippingAppBuild(arguments)
+        }
         let forwarded = Invocation.forwarding(logs: mode, arguments)
 
         if syncs(arguments) {
@@ -262,26 +275,35 @@ enum Remote {
             // keep their code signatures in them), and the two rsyncs disagree
             // on the flag: Apple's (openrsync, or 2.6.9 before macOS 15.4)
             // spells it -E and rejects -X, while rsync 3.x reads -E as
-            // --executability and would drop them without a word.
-            let excludeRules: [String] = excludes.flatMap { ["--exclude", $0] }
-            let links = Worktrees.links(in: repo.root)
-            var rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + installersExclude + excludeRules
-            rsyncArgs += linkExcludes(links) + derivedDataFilters(for: arguments) + heavyFilters(for: arguments)
+            // --executability and would drop them without a word. Links stay
+            // links (never -L, -k): a Wine prefix's z: is a link to /.
+            let staging = try RuntimeCopy.stage(in: repo)
+            var rsyncArgs: [String] = ["-aE", "--delete", "--rsync-path=/usr/bin/rsync"] + syncFilters(for: arguments)
             rsyncArgs += ["./", "\(target.host):\(target.path)/"]
-            let linkSyncs = linkedSyncs(links, arguments: arguments, target: target)
+            let runtimeArgs = ["-aE", "--rsync-path=/usr/bin/rsync", staging.path + "/", "\(target.host):\(target.path)/"]
+            let named = localPaths(in: arguments, root: repo.root, cwd: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+            let localSyncs = RuntimeCopy.localSyncs(named, root: repo.root, target: target)
             let sendsInstallers = readsInstallers(arguments) && FileManager.default.fileExists(atPath: repo.installers.root.path)
-            // The checkout there, and its Mac's store, made first.
-            if sendsInstallers {
-                let prepared = try await Proc.collect("ssh", ["-T", target.host, prepareInstallersCommand(path: target.path)])
-                guard prepared.succeeded else {
-                    throw SCError("Couldn't make \(target.path) on \(target.host): \(prepared.error.trimmingCharacters(in: .whitespacesAndNewlines))")
-                }
+            // The copy there, the folders the named paths go into, and the
+            // Mac's installers store, made first.
+            var prepare = "mkdir -p \(shellPath(target.path))"
+            for path in named {
+                let parent = (path as NSString).deletingLastPathComponent
+                prepare += " && mkdir -p \(shellPath(target.path + "/" + parent))"
+            }
+            if sendsInstallers { prepare += " && \(SharedFolders.makeCommand(InstallersStore.defaultRoot))" }
+            let prepared = try await Proc.collect("ssh", ["-T", target.host, prepare])
+            guard prepared.succeeded else {
+                throw SCError("Couldn't make \(target.path) on \(target.host): \(prepared.error.trimmingCharacters(in: .whitespacesAndNewlines))")
             }
             do {
                 try await ui.logStep("Sync to \(target.host)", log: "sync", success: "Synced to \(target.host):\(target.path)") { sink in
                     var status = try await Proc.stream("/usr/bin/rsync", rsyncArgs, cwd: repo.root) { await sink.line($0) }
-                    for linkSync in linkSyncs where status == 0 {
-                        status = try await Proc.stream("/usr/bin/rsync", linkSync, cwd: repo.root) { await sink.line($0) }
+                    if status == 0 {
+                        status = try await Proc.stream("/usr/bin/rsync", runtimeArgs, cwd: repo.root) { await sink.line($0) }
+                    }
+                    for localSync in localSyncs where status == 0 {
+                        status = try await Proc.stream("/usr/bin/rsync", localSync, cwd: repo.root) { await sink.line($0) }
                     }
                     guard status == 0, sendsInstallers else { return status }
                     return try await Proc.stream("/usr/bin/rsync", installersSync(from: repo.installers.root, host: target.host), cwd: repo.root) {

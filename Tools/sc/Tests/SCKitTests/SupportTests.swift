@@ -764,16 +764,22 @@ struct DotEnvTests {
         #expect(TestRunner.hostEnvironment(dotEnv: [:]).isEmpty)
     }
 
-    @Test("Each Mac keeps its own: --on doesn't sync it")
-    func notSynced() {
-        #expect(Remote.excludes.contains(".env"))
-        // Absolute-path build state, like DerivedData's intermediates.
-        #expect(Remote.excludes.contains("Packages/*/.build"))
+    @Test("--on sends the runtime copy's folders and nothing else of the checkout")
+    func syncFilters() throws {
+        let filters = Remote.syncFilters(for: ["test", "integration", "old-clock"])
+        #expect(filters.contains("/Bundles/") && filters.contains("/Modules/"))
+        // rsync takes the first rule that matches: Release's products are left
+        // out before the products are let in, and they before the catch-all.
+        let release = try #require(filters.firstIndex(of: "/DerivedData/Build/Products/Release/"))
+        let products = try #require(filters.firstIndex(of: "/DerivedData/Build/Products/"))
+        #expect(release < products)
+        #expect(filters.suffix(2) == ["--exclude", "/*"])
+        // A command that runs nothing there gets no build.
+        #expect(!Remote.syncFilters(for: ["session", "claim"]).contains("/DerivedData/Build/Products/"))
     }
 
     @Test("--on sends this Mac's installers store to the other Mac's, links as links, never deleting what's there")
     func installersSync() {
-        #expect(Remote.installersExclude == ["--exclude", "/installers"])
         let sync = Remote.installersSync(from: URL(fileURLWithPath: "/stores/installers"), host: "mac")
         #expect(sync.suffix(2) == ["/stores/installers/", "mac:/Users/Shared/second-chance/installers/"])
         #expect(!sync.contains("--delete"))
@@ -785,39 +791,30 @@ struct DotEnvTests {
         #expect(sync.contains("--rsync-path=/usr/bin/lockf -k /tmp/second-chance-installers-sync.lock /usr/bin/rsync"))
     }
 
-    @Test("Before sending installers, the other Mac's store is made if it has none")
-    func prepareInstallers() {
-        let command = Remote.prepareInstallersCommand(path: "~/tmp/second chance")
-        #expect(command.hasPrefix("mkdir -p ~/'tmp/second chance' && \(SharedFolders.makeCommand(InstallersStore.defaultRoot))"))
-        #expect(command.contains("[ -d '/Users/Shared/second-chance/installers' ] ||"))
-        #expect(command.contains("chmod +a 'everyone allow"))
+    @Test("A command that would build first builds here, and runs there with --skip-app-build")
+    func buildsHere() {
+        #expect(Remote.localBuild(for: ["test", "integration", "old-clock"]) == .tests)
+        #expect(Remote.localBuild(for: ["wrapp", "build", "old-clock"]) == .app)
+        #expect(Remote.localBuild(for: ["test", "integration", "--skip-app-build"]) == nil)
+        #expect(Remote.localBuild(for: ["session", "claim"]) == nil)
+        #expect(Remote.skippingAppBuild(["wrapp", "run", "x", "--", "-a"]) == ["wrapp", "run", "x", "--skip-app-build", "--", "-a"])
     }
 
-    @Test("Of DerivedData, --on syncs only the built products")
-    func derivedDataFilters() throws {
-        let filters = Remote.derivedDataFilters
-        // rsync takes the first rule that matches, so each include must come
-        // before the exclude that would otherwise cover it.
-        let include = try #require(filters.firstIndex(of: "/DerivedData/Build/Products/"))
-        let exclude = try #require(filters.firstIndex(of: "/DerivedData/Build/*"))
-        #expect(include < exclude)
-        #expect(filters.suffix(2) == ["--exclude", "/DerivedData/*"])
+    @Test("Commands that work on the sources aren't sent to a runtime copy")
+    func needsSources() {
+        #expect(Remote.needsSources(["lint"]))
+        #expect(Remote.needsSources(["app", "build"]))
+        #expect(Remote.needsSources(["test", "unit"]))
+        #expect(!Remote.needsSources(["app", "run"]))
+        #expect(!Remote.needsSources(["test", "integration"]))
+        #expect(!Remote.needsSources(["puppet", "start", "x"]))
     }
 
-    @Test("Built products are sent only for --skip-app-build, which runs them")
-    func productsOnlyWhenSkipping() {
-        #expect(Remote.derivedDataFilters(for: ["test", "integration", "--skip-app-build"]) == Remote.derivedDataFilters)
-        #expect(Remote.derivedDataFilters(for: ["test", "integration", "old-clock"]) == ["--exclude", "/DerivedData"])
-    }
-
-    @Test("A sync that stops partway says so, and warns of a half-copied app only when one was sent")
+    @Test("A sync that stops partway says so, keeping its status")
     func syncFailure() {
-        let skipping = Remote.syncFailure(host: "mac", rawTarget: "mac:~/sc", arguments: ["test", "--skip-app-build"], status: 23)
-        #expect(skipping.exitCode == 23)
-        #expect(!skipping.alreadyReported)
-        #expect(skipping.hints.contains { $0.contains("clean build") })
-        let building = Remote.syncFailure(host: "mac", rawTarget: "mac:~/sc", arguments: ["test"], status: 23)
-        #expect(!building.hints.contains { $0.contains("clean build") })
+        let failure = Remote.syncFailure(host: "mac", rawTarget: "mac:~/sc", arguments: ["test", "--skip-app-build"], status: 23)
+        #expect(failure.exitCode == 23)
+        #expect(!failure.alreadyReported)
     }
 }
 

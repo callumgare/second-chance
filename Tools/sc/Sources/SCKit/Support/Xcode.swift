@@ -57,9 +57,18 @@ struct Xcode {
 
     private static let environment: [String: String?] = ["NSUnbufferedIO": "YES"]
 
+    /// A runtime copy (`Repo.isRuntimeCopy`) has nothing to build from:
+    /// what it runs was built on the Mac that sent it.
+    private func refuseInRuntimeCopy(_ what: String) throws {
+        guard repo.isRuntimeCopy else { return }
+        throw SCError("This is a copy sc --on made to run in, with no sources, so it can't \(what).",
+                      hints: ["Build on the Mac with the checkout, and run it here with sc --on: it sends that build."])
+    }
+
     /// Build Second Chance.app (and WrappTemplate.app inside it, WrappPuppeteer
     /// and the tests' dependencies) incrementally.
     func buildApp(configuration: String = "Debug") async throws {
+        try refuseInRuntimeCopy("build the app")
         try Proc.require("xcbeautify", brew: "xcbeautify")
         noteAdHocSigning()
         let args = arguments(configuration: configuration) + ["build"]
@@ -75,7 +84,7 @@ struct Xcode {
     /// The app build every command that needs the app starts with, unless
     /// `--skip-app-build` says to use what's already there.
     func ensureAppBuild(_ options: AppBuildOptions) async throws {
-        if options.skipAppBuild {
+        if options.skipAppBuild || repo.isRuntimeCopy {
             try repo.requireDebugApp()
             ui.detail("Using the existing app build (--skip-app-build).")
         } else {
@@ -87,8 +96,20 @@ struct Xcode {
         ["-scheme", Self.scheme, "-destination", Self.destination, "-derivedDataPath", repo.derivedData.path]
     }
 
+    /// What runs tests from an existing build: the scheme in a checkout, the
+    /// build's `.xctestrun` file in a runtime copy, which has no project.
+    private func testRunArguments() throws -> [String] {
+        guard repo.isRuntimeCopy else { return testArguments }
+        guard let xctestrun = repo.xctestrun else {
+            throw SCError("This copy has no test build to run (no .xctestrun in \(repo.display(repo.derivedData))/Build/Products).",
+                          hints: ["Run it with sc --on from the Mac with the checkout, which builds for testing there and sends it."])
+        }
+        return ["-xctestrun", xctestrun.path, "-destination", Self.destination]
+    }
+
     /// Build the app and the test bundle.
     func buildForTesting() async throws {
+        try refuseInRuntimeCopy("build for testing")
         try Proc.require("xcbeautify", brew: "xcbeautify")
         noteAdHocSigning()
         let args = ["build-for-testing"] + testArguments + ["ONLY_ACTIVE_ARCH=NO"] + Self.signingOverrides
@@ -98,7 +119,7 @@ struct Xcode {
     }
 
     func ensureTestBuild(_ options: AppBuildOptions) async throws {
-        if options.skipAppBuild {
+        if options.skipAppBuild || repo.isRuntimeCopy {
             guard FileManager.default.isDirectory(repo.testBundle) else {
                 throw SCError(
                     "The existing build has no tests in it (\(repo.display(repo.testBundle)) is missing).",
@@ -115,7 +136,7 @@ struct Xcode {
     func countTests(selection: [String]) async throws -> Int? {
         let output = FileManager.default.temporaryDirectory.appendingPathComponent("sc-enumerate-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: output) }
-        let args = ["test-without-building"] + testArguments + selection + [
+        let args = ["test-without-building"] + (try testRunArguments()) + selection + [
             "-enumerate-tests", "-test-enumeration-format", "json",
             "-test-enumeration-style", "hierarchical", "-test-enumeration-output-path", output.path,
         ]
@@ -133,7 +154,7 @@ struct Xcode {
         resultBundle: URL,
         sink: LogSink
     ) async throws -> Int32 {
-        let args = ["test-without-building"] + testArguments + ["-resultBundlePath", resultBundle.path] + selection
+        let args = ["test-without-building"] + (try testRunArguments()) + ["-resultBundlePath", resultBundle.path] + selection
         var env = Self.environment
         for (key, value) in environment { env[key] = value }
         return try await Proc.stream("xcodebuild", args, env: env, cwd: repo.root) { await sink.line($0) }

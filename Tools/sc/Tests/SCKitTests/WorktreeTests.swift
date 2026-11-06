@@ -91,16 +91,30 @@ struct WorktreeTests {
         #expect(again.linked.isEmpty && again.cloned.isEmpty && again.configured == 0)
     }
 
-    @Test("A worktree's links are left out of the sync, and .local is sent from where it points for commands that read it")
-    func syncsLinks() {
-        let links = [(name: ".local", target: URL(fileURLWithPath: "/code/repo/.local")),
-                     (name: ".env", target: URL(fileURLWithPath: "/code/repo/.env"))]
-        #expect(Remote.linkExcludes(links) == ["--exclude", "/.local", "--exclude", "/.env"])
-        let target = Remote.Target(host: "mac", path: "~/wt")
-        let syncs = Remote.linkedSyncs(links, arguments: ["wrapp", "build"], target: target)
-        #expect(syncs.count == 1)
-        #expect(syncs.first?.suffix(2) == ["/code/repo/.local/", "mac:~/wt/.local/"])
-        #expect(Remote.linkedSyncs(links, arguments: ["lint"], target: target).isEmpty)
+    @Test("--on sends the paths under .local a command names, from where a worktree's link points")
+    func sendsNamedLocalPaths() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("sc-local-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: base) }
+        let main = base.appendingPathComponent("main/.local")
+        let worktree = base.appendingPathComponent("wt")
+        try fm.createDirectory(at: main.appendingPathComponent("porting/x/inputs"), withIntermediateDirectories: true)
+        try fm.createDirectory(at: main.appendingPathComponent("porting/x/bundle"), withIntermediateDirectories: true)
+        try Data().write(to: main.appendingPathComponent("porting/x/inputs/setup.exe"))
+        try fm.createDirectory(at: worktree, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: worktree.appendingPathComponent(".local"), withDestinationURL: main)
+
+        let arguments = ["puppet", "start", "p", "--wrapp=.local/porting/x/bundle", "--", ".local/porting/x/inputs/setup.exe",
+                         ".local/porting/missing.exe", "Bundles/x"]
+        let named = Remote.localPaths(in: arguments, root: worktree, cwd: worktree)
+        #expect(named == [".local/porting/x/bundle", ".local/porting/x/inputs/setup.exe"])
+
+        let syncs = RuntimeCopy.localSyncs(named, root: worktree, target: Remote.Target(host: "mac", path: "~/wt"))
+        let resolved = main.resolvingSymlinksInPath().path
+        #expect(syncs.first?.suffix(2) == ["\(resolved)/porting/x/bundle/", "mac:~/wt/.local/porting/x/bundle/"])
+        #expect(syncs.last?.suffix(2) == ["\(resolved)/porting/x/inputs/setup.exe", "mac:~/wt/.local/porting/x/inputs/setup.exe"])
+        // Links inside are sent as links: nothing that follows them.
+        #expect(!syncs.joined().contains { ["-L", "-k", "--copy-links", "--copy-dirlinks"].contains($0) })
     }
 
     @Test("git's porcelain listing is read, detached worktrees too")

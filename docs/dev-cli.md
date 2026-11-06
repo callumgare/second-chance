@@ -460,29 +460,54 @@ Each run keeps its job script, output, exit code and input pipe in
 pipe is held open by the job itself, so it survives the sc that started it.
 The newest 10 finished runs are kept.
 
-**`--on <host>[:<path>]` runs a command on another Mac.** It rsyncs the repo
-there (excluding `.git`, `.env`, `built-apps`, `test-results`, `tmp`, `build`,
-the packages' and sc's own `.build` and `.swiftpm`, and all of `DerivedData`,
-or all but what was built, `Build/Products`, with `--skip-app-build`) and runs
-`./sc` with the same
+**`--on <host>[:<path>]` runs a command on another Mac** (or as another user,
+`<user>@<host>`). Everything is built here; the other side only runs it.
+A command that would build the app first builds it here (a test build for
+`sc test`) and runs there with `--skip-app-build`. Then sc sends a [runtime
+copy](#runtime-copies) to `<path>` and runs `./sc` there with the same
 arguments over `ssh` (`-t` when interactive). Output stays there: a test run's
-results and report are in the remote Mac's `test-results/`, and the terminal
-shows the summary table. `<path>` defaults to this repo's path relative to
-your home directory. The rest of `DerivedData` stays behind because it
-records this checkout's absolute path (Swift packages' state, the build's
-intermediates), so a build on the other Mac, in a checkout elsewhere, failed
-looking for files here; and it holds Xcode's compilation cache, sparse files
-tens of gigabytes long that rsync would send in full. rsync neither sends nor
-deletes what it leaves out, so the other Mac keeps its own build state, logs
-and jobs, and a build there is incremental. Only `--skip-app-build` runs
-this Mac's build there, so only then are its products sent: any other
-command builds the app there anyway, and products copied while something
-here was rebuilding them arrived half-copied. `.env` stays behind because it holds each Mac's own
-settings, such as whether tests hide their windows there
-([testing.md](testing.md)). A command that may read installers (one that
-builds, runs or tests games from a disc or a Her download) also sends this
-Mac's [installers store](testing.md#the-installers-store) to the other Mac's,
-below. On the remote Mac, the GUI-session re-run applies as usual.
+results and report are in that copy's `test-results/`, and the terminal shows
+the summary table. `<path>` defaults to this repo's path relative to your home
+directory. Commands that work on the sources (`lint`, `generate`, `release`,
+`worktree`, `module`, `bundle`, `app build`, `test unit`) aren't sent: run
+them here. A command that may read installers (one that builds, runs or tests
+games from a disc or a Her download) also sends this Mac's [installers
+store](testing.md#the-installers-store) to the other Mac's, below. On the
+remote Mac, the GUI-session re-run applies as usual.
+
+### Runtime copies
+
+What `--on` sends is a runtime copy, not the checkout: nothing compiles on
+the other side, so the sc and app there are exactly what was built and
+tested here, and a test user needs no toolchain set up, no sources, and none
+of this checkout's gigabytes. It holds:
+
+- **sc itself:** this sc's binary as `.sc/sc`, and a `./sc` that runs it
+  without building (`RuntimeCopy.launcher`), with the marker `.sc-runtime`
+  that says what the folder is (`Repo.isRuntimeCopy`).
+- **The build:** `DerivedData/Build/Products/Debug` (Second Chance with its
+  template, WrappPuppeteer, the in-process helpers, AutoIt, the test bundle)
+  and the test build's `.xctestrun` file. The rest of `DerivedData` records
+  this checkout's absolute path and holds Xcode's sparse caches, and
+  `Release`'s products are gigabytes nothing there runs.
+- **The data sc reads there:** `Bundles/` and `Modules/` (manifests, needles),
+  as the app carries them inside itself.
+- **Only the paths under `.local` the command names**, such as a porting
+  workspace's installer in `puppet start --wine <wrapp> --
+  .local/porting/<program>/inputs/setup.exe` (`Remote.localPaths`), each to
+  the same place there and nothing deleted around it. From a worktree, its
+  `.local` link is resolved; links inside are sent as links, never followed
+  (a Wine prefix's `z:` is `/`).
+
+`.env` stays behind, as it holds each Mac's own settings, such as whether
+tests hide their windows there ([testing.md](testing.md)). rsync neither sends
+nor deletes what's left out, so the copy keeps its own `built-apps/`,
+`test-results/`, logs and jobs, and the files of a full checkout synced there
+before runtime copies stay until removed by hand (they're stale, and the
+marker makes it a runtime copy all the same). In a runtime copy sc refuses
+to build (`Xcode`), uses the build it has whether or not `--skip-app-build`
+was given, and runs tests with `xcodebuild test-without-building -xctestrun`,
+which needs no project.
 
 - **The sync is macOS's own rsync at both ends** (`/usr/bin/rsync -aE
   --rsync-path=/usr/bin/rsync`), so a remote Mac needs nothing installed.
@@ -491,20 +516,9 @@ below. On the remote Mac, the GUI-session re-run applies as usual.
   fails to sign. Apple's rsync spells that `-E` and rejects `-X`; Homebrew's
   rsync 3.x reads `-E` as `--executability` and would drop them silently,
   which is why the remote end is named rather than left to its `PATH`.
-- **From a worktree, its links are left out and `.local` is sent from
-  where it points.** A worktree's `.local`, `.env` and `.claude` agents and
-  skills are links to the main checkout's ([Worktrees](#worktrees)), which
-  would mean nothing on the other Mac, and rsync can't follow them:
-  `.local` holds links of its own that must stay links (a Wine prefix's
-  `z:` is `/`, so following every link sends the whole disk). So the sync
-  excludes them, and a command that reads `.local` gets a second rsync of
-  the folder the link points to, into `.local` there.
 - **A sync that stops partway runs nothing there**, and sc says so: most
-  often files here changed while being copied (another build, or an agent's
-  worktree, which isn't synced). With `--skip-app-build` the other Mac's app
-  may be left half-copied, and its own build won't mend it, since its build
-  state says the template's Wine and ScummVM are already set up; sc says to
-  run `sc --on <host> clean build -y` and build there.
+  often files here changed while being copied (a build here). Run it again
+  once that's done.
 - **If the connection drops,** sc says so: ssh's exit 255. Pick the run up
   with `sc --on <host>[:<path>] attach`, which doesn't sync.
 - **While a run is still going there, `--on` refuses to sync.** rsync would
@@ -701,8 +715,9 @@ locked over SSH, so the keep-alive only works as a LaunchAgent in the GUI sessio
 
 **Running in one** is `--on` with the test user: `sc --on <user>@<mac>:<path>
 <command>`. The lease travels with `--on`, so your commands go ahead under the
-claim, and anyone else's stop. Each test user has its own checkout and its own
-copies of wrapps, since Wine refuses a prefix another user owns
+claim, and anyone else's stop. Each test user has its own [runtime
+copy](#runtime-copies), built here, and its own copies of wrapps, since Wine
+refuses a prefix another user owns
 ([wrapps for every user](plans-for-consideration/wrapps-for-every-user.md)).
 
 **Sessions share the Mac's processes and system log.** `ps` and `log show` see

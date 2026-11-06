@@ -8,12 +8,19 @@ import WrappFormat
 /// The root comes from `SC_REPO_ROOT` (set by the `./sc` shim), else by walking
 /// up from the current directory to the one holding `SecondChance.xcodeproj`,
 /// so `sc` works from any directory inside the repo.
+///
+/// It may instead be a runtime copy (`isRuntimeCopy`): what `--on` sends to
+/// another Mac or user, with sc's binary, the build products and the data
+/// they read, but no sources, so nothing is built there.
 struct Repo: Sendable {
     let root: URL
     /// The Mac's installers store (`$SECOND_CHANCE_INSTALLERS`, else
     /// `/Users/Shared/second-chance/installers`): every checkout's, and no
     /// checkout's own (docs/testing.md#the-installers-store).
     var installers: InstallersStore = .current()
+
+    /// The file that marks a runtime copy's root (`RuntimeCopy`).
+    static let runtimeMarker = ".sc-runtime"
 
     static func locate() throws -> Repo {
         let env = ProcessInfo.processInfo.environment
@@ -22,7 +29,8 @@ struct Repo: Sendable {
         }
         var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
         while true {
-            if FileManager.default.fileExists(atPath: dir.appendingPathComponent("SecondChance.xcodeproj").path) {
+            if FileManager.default.fileExists(atPath: dir.appendingPathComponent("SecondChance.xcodeproj").path)
+                || FileManager.default.fileExists(atPath: dir.appendingPathComponent(runtimeMarker).path) {
                 return Repo(root: dir.standardizedFileURL)
             }
             let parent = dir.deletingLastPathComponent()
@@ -31,6 +39,26 @@ struct Repo: Sendable {
                               hints: ["Run sc from the repo, or set SC_REPO_ROOT."])
             }
             dir = parent
+        }
+    }
+
+    /// A copy `--on` made to run in: sc refuses to build here, and runs
+    /// tests from the build's `.xctestrun` file. The marker decides, so a
+    /// full checkout synced before runtime copies, whose sources are still
+    /// there but stale, is one too once `--on` has reached it.
+    var isRuntimeCopy: Bool {
+        FileManager.default.fileExists(atPath: root.appendingPathComponent(Self.runtimeMarker).path)
+    }
+
+    /// What a test build writes for running its tests without the project:
+    /// the newest of `Build/Products/*.xctestrun`.
+    var xctestrun: URL? {
+        let products = derivedData.appendingPathComponent("Build/Products")
+        let files = (try? FileManager.default.contentsOfDirectory(at: products, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        return files.filter { $0.pathExtension == "xctestrun" }.max {
+            let a = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let b = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return a < b
         }
     }
 
